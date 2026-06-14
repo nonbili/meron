@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   build:
+    name: Build ${{ matrix.artifact }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - os: ubuntu-22.04
@@ -173,6 +174,11 @@ jobs:
           mkdir -p dist
           tar -C build/bin -czf "dist/${{ matrix.artifact }}.tar.gz" meron
 
+      - name: resize appicon for Linux
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          convert build/appicon.png -resize 512x512 build/appicon_512.png
+
       - name: package linux AppImage
         if: startsWith(matrix.os, 'ubuntu')
         env:
@@ -194,7 +200,7 @@ jobs:
           ./linuxdeploy --appdir AppDir \
             --executable AppDir/usr/bin/meron \
             --desktop-file build/linux/meron.desktop \
-            --icon-file build/appicon.png \
+            --icon-file build/appicon_512.png \
             --icon-filename meron \
             --plugin gtk \
             --output appimage
@@ -206,7 +212,7 @@ jobs:
           mkdir -p snap/local
           cp build/bin/meron snap/local/meron
           cp build/linux/meron.desktop snap/local/meron.desktop
-          cp build/appicon.png snap/local/meron.png
+          cp build/appicon_512.png snap/local/meron.png
 
       - name: package linux snap
         if: startsWith(matrix.os, 'ubuntu')
