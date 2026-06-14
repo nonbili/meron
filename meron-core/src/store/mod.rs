@@ -1456,6 +1456,19 @@ pub fn has_cached_body(conn: &Connection, account: &str, folder: &str, uid: u32)
     Ok(found)
 }
 
+pub fn has_message(conn: &Connection, account: &str, folder: &str, uid: u32) -> Result<bool> {
+    let found = conn
+        .query_row(
+            "SELECT 1 FROM messages
+             WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+            params![account, folder, uid],
+            |_| Ok(()),
+        )
+        .ok()
+        .is_some();
+    Ok(found)
+}
+
 /// Render a stored recipient list (JSON `[{name, addr}]`) as a comma-separated
 /// "Name <addr>" / "addr" string. Empty/missing/malformed input yields "".
 fn format_recipient_list(json: Option<&str>) -> String {

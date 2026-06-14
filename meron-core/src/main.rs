@@ -701,7 +701,8 @@ async fn prefetch_bodies(
                     let db = engine.db.lock().unwrap();
                     uids.into_iter()
                         .filter(|uid| {
-                            !store::has_cached_body(&db, &account, &folder, *uid).unwrap_or(false)
+                            store::has_message(&db, &account, &folder, *uid).unwrap_or(false)
+                                && !store::has_cached_body(&db, &account, &folder, *uid).unwrap_or(false)
                         })
                         .collect()
                 };

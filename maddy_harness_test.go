@@ -116,6 +116,12 @@ func startMaddy(t *testing.T) *maddyServer {
 		"-p", fmt.Sprintf("127.0.0.1:%d:587", server.smtpPort),
 		maddyImage, "run")
 	t.Cleanup(func() {
+		logs, err := exec.Command(docker, "logs", server.container).CombinedOutput()
+		if err == nil {
+			t.Logf("--- MADDY CONTAINER LOGS ---\n%s\n--- END MADDY LOGS ---", string(logs))
+		} else {
+			t.Logf("failed to get maddy logs: %v", err)
+		}
 		out, err := exec.Command(docker, "stop", server.container).CombinedOutput()
 		if err != nil {
 			t.Logf("docker stop %s: %v\n%s", server.container, err, out)
