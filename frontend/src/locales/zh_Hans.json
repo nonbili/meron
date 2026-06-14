@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "主题",
+    "change": "更改",
+    "import": "导入",
+    "export": "导出",
+    "loading": "正在加载...",
+    "markdown": "Markdown",
+    "copied": "已复制",
+    "more": "更多",
+    "clearSearch": "清除搜索",
+    "showLess": "显示更少",
+    "moreCount": "+{{count}} 更多"
+  },
+  "buttons": {
+    "cancel": "取消",
+    "save": "保存",
+    "send": "发送",
+    "discard": "放弃",
+    "edit": "编辑",
+    "close": "关闭",
+    "delete": "删除",
+    "done": "完成",
+    "back": "返回"
+  },
+  "layout": {
+    "resizeConversation": "调整会话大小",
+    "resizeThreadList": "调整会话列表大小"
+  },
+  "filters": {
+    "label": "筛选",
+    "all": "全部",
+    "allFeeds": "所有订阅源",
+    "unread": "未读",
+    "starred": "星标"
+  },
+  "empty": {
+    "welcomeTitle": "欢迎使用 Meron",
+    "mailSetupText": "添加传统的 IMAP/SMTP 账户，将您的邮箱同步为 聊天风格的消息会话线索。",
+    "noStarredItems": "无星标项目",
+    "noStarredItemsText": "为邮件或订阅源项目加星标以在此处收集它们。",
+    "noFeeds": "无订阅源",
+    "noChats": "无聊天",
+    "addFeedToStart": "添加订阅源以开始阅读。",
+    "noArchivedThreads": "未找到归档会话。",
+    "inboxEmpty": "您的收件箱是空的。",
+    "noColumns": "无看板列",
+    "noColumnsText": "为此看板添加文件夹或标签列。",
+    "kanbanSetupText": "添加账户以使用看板视图。",
+    "noConversationSelected": "未选择会话",
+    "noConversationSelectedText": "从侧边栏列表中选择一个消息会话来查看其内容、回复或管理附件。"
+  },
+  "app": {
+    "logoAlt": "Meron 标志"
+  },
+  "palette": {
+    "label": "命令面板",
+    "placeholder": "输入命令或搜索...",
+    "noMatches": "没有匹配的命令。",
+    "hints": {
+      "run": "运行",
+      "navigate": "导航",
+      "close": "关闭"
+    }
+  },
+  "accounts": {
+    "unified": "统一",
+    "rssFeeds": "RSS 订阅源",
+    "rssAtomFeeds": "RSS / Atom 订阅源",
+    "thisAccount": "此账户",
+    "setup": {
+      "connectMailAccount": "连接邮件账户",
+      "chooseProvider": "选择服务商进行连接。",
+      "feedAccountHint": "立即创建账户；随时使用订阅源列表上方的 \"+\" 添加更多订阅源。"
+    },
+    "providers": {
+      "gmailDescription": "Google 账户",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "任意邮件服务器",
+      "rssDescription": "订阅源"
+    },
+    "fields": {
+      "accountName": "账户名称",
+      "firstFeedUrl": "首个订阅源 URL (可选)",
+      "emailAddress": "电子邮件地址",
+      "senderNameOutgoing": "发件人名称 (发件)",
+      "password": "密码",
+      "displayNameMeronOnly": "显示名称 (仅在 Meron 中显示)",
+      "imapHost": "IMAP 主机",
+      "smtpHost": "SMTP 主机",
+      "port": "端口",
+      "username": "用户名"
+    },
+    "discovery": {
+      "lookingUp": "正在查询服务器设置..."
+    },
+    "oauth": {
+      "configureOutlook": "请在连接 Outlook 之前，先在 Shell 环境中配置 MERON_OUTLOOK_CLIENT_ID。",
+      "configureGmail": "请在连接 Gmail 之前，先在 Shell 环境中配置 MERON_GOOGLE_CLIENT_ID 和 MERON_GOOGLE_CLIENT_SECRET。",
+      "signInWith": "使用 {{provider}} 登录",
+      "waitingForSignIn": "等待 {{provider}} 登录完成..."
+    },
+    "appPasswordHint": "{{provider}} 需要应用专用密码 - 您普通的账户密码在此处无法使用。<action>为 {{provider}} 生成一个应用密码</action>，然后将其粘贴在上方。",
+    "advancedServerSettings": "高级服务器设置",
+    "actions": {
+      "addAccount": "添加账户",
+      "addAccountTitle": "添加账户",
+      "saveAccount": "保存账户",
+      "collapseAccount": "折叠账户",
+      "expandAccount": "展开账户"
+    }
+  },
+  "feeds": {
+    "fallbackName": "RSS 订阅源",
+    "added": "订阅源已添加",
+    "addFailed": "无法添加订阅源",
+    "url": "订阅源 URL",
+    "urlHint": "粘贴订阅源 URL，或输入网站地址以自动发现其订阅源。",
+    "subscribeUnder": "在 {{account}} 下订阅新订阅源。",
+    "manageSubscription": "管理此订阅源订阅。",
+    "copyUrl": "复制 URL",
+    "deleteHint": "取消订阅此订阅源并删除其缓存项目。此操作无法撤销。",
+    "actions": {
+      "addFeed": "添加订阅源",
+      "syncFeeds": "同步订阅源",
+      "syncingFeeds": "正在同步订阅源...",
+      "addToAccount": "添加订阅源到此账户",
+      "deleteFeed": "删除订阅源",
+      "confirmDelete": "确认删除"
+    }
+  },
+  "folders": {
+    "loading": "正在加载文件夹...",
+    "noneAvailable": "无可用文件夹",
+    "createdMissing": "文件夹已创建，但未返回。",
+    "nameRequired": "文件夹名称必填。",
+    "alreadyExists": "该文件夹已存在。",
+    "createFailed": "无法创建文件夹。",
+    "newFolderOrLabel": "新建文件夹或标签",
+    "namePlaceholder": "文件夹或标签名称",
+    "create": "创建文件夹"
+  },
+  "composer": {
+    "fields": {
+      "from": "发件人",
+      "to": "收件人",
+      "cc": "抄送",
+      "bcc": "密送",
+      "subject": "主题"
+    },
+    "placeholders": {
+      "recipient": "recipient@example.com",
+      "commaSeparated": "用英文逗号分隔",
+      "message": "撰写您的邮件...",
+      "quickMessage": "写条消息..."
+    },
+    "actions": {
+      "attachFiles": "添加附件",
+      "insertInlineImage": "插入正文图片",
+      "switchToPlainText": "切换为纯文本",
+      "switchToRichText": "切换为富文本",
+      "sendWithShortcut": "发送 ({{shortcut}})",
+      "removeAttachment": "移除附件",
+      "hideCcBcc": "隐藏抄送/密送",
+      "ccBcc": "抄送/密送",
+      "newMessage": "新消息",
+      "openFullEditor": "打开完整编辑器",
+      "sendMessageWithShortcut": "发送消息 ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "富文本",
+      "plainText": "纯文本"
+    },
+    "status": {
+      "savingDraft": "正在保存草稿...",
+      "savedToServer": "已保存到服务器",
+      "draftAutosaveFailed": "草稿自动保存失败",
+      "sending": "正在发送..."
+    },
+    "toolbar": {
+      "bold": "加粗",
+      "italic": "斜体",
+      "underline": "下划线",
+      "strikethrough": "删除线",
+      "heading": "标题",
+      "bulletList": "无序列表",
+      "numberedList": "有序列表",
+      "quote": "引用",
+      "link": "链接",
+      "markdown": "Markdown",
+      "markdownHint": "在输入时键入这些即可自动格式化"
+    },
+    "imageResize": {
+      "topLeft": "拖动以调整大小 (左上)",
+      "topRight": "拖动以调整大小 (右上)",
+      "bottomLeft": "拖动以调整大小 (左下)",
+      "bottomRight": "拖动以调整大小 (右下)"
+    }
+  },
+  "threads": {
+    "searchMessages": "搜索邮件...",
+    "searchFeeds": "搜索订阅源...",
+    "backToInbox": "返回收件箱",
+    "actions": {
+      "title": "会话操作",
+      "syncMailbox": "同步邮箱",
+      "syncing": "正在同步...",
+      "markAllAsRead": "全部标记为已读",
+      "loadMore": "加载更多",
+      "openInNewTab": "在新标签页中打开",
+      "markAsRead": "标记为已读",
+      "markAsUnread": "标记为未读",
+      "starThread": "星标会话",
+      "unstarThread": "取消星标会话",
+      "archiveThread": "归档会话",
+      "moveTo": "移动到...",
+      "copyTo": "复制到...",
+      "deleteForever": "永久删除",
+      "discardDraft": "放弃草稿",
+      "moveToTrash": "移至废纸篓"
+    }
+  },
+  "chat": {
+    "backToChats": "返回聊天",
+    "closeConversationEsc": "关闭会话 (Esc)",
+    "closeEsc": "关闭 (Esc)",
+    "searchThread": "搜索会话线索",
+    "closeThreadSearch": "关闭会话线索搜索",
+    "previousMatch": "上一个匹配",
+    "nextMatch": "下一个匹配",
+    "feedDetails": "订阅源详情",
+    "conversationDetails": "会话详情",
+    "moreActions": "更多操作",
+    "moreMessageActions": "更多消息操作",
+    "viewAsHtml": "查看 HTML",
+    "viewAsPlainText": "查看纯文本",
+    "star": "星标",
+    "unstar": "取消星标",
+    "currentConversation": "当前会话",
+    "current": "当前",
+    "closeTab": "关闭标签页",
+    "branchNotice": "此会话是从已更改主题行的分支分出来的。",
+    "viewOriginalTopic": "查看原始主题",
+    "hideDetails": "隐藏详情",
+    "showDetails": "显示详情",
+    "failedToSendRetry": "发送失败 - 点击重试",
+    "retry": "重试",
+    "openExternalPlayer": "在外部播放器中打开",
+    "showImages_one": "显示图片",
+    "showImages_other": "显示 {{count}} 张图片",
+    "saveFile": "保存 {{filename}}",
+    "copyCode": "复制代码",
+    "previousImage": "上一张图片",
+    "nextImage": "下一张图片",
+    "media": "媒体",
+    "files": "文件",
+    "noMedia": "此会话中没有媒体文件。",
+    "noFiles": "此会话中没有文件。",
+    "copyEmailAddress": "复制电子邮件地址",
+    "mediaItems_one": "{{count}} 个媒体项目",
+    "mediaItems_other": "{{count}} 个媒体项目",
+    "fileItems_one": "{{count}} 个文件",
+    "fileItems_other": "{{count}} 个文件",
+    "people_one": "{{count}} 人",
+    "people_other": "{{count}} 人",
+    "noParticipants": "此会话中没有参与者。",
+    "you": "您",
+    "newMessageTo": "给 {{email}} 的新邮件",
+    "htmlView": "HTML 视图",
+    "plainView": "纯文本视图",
+    "copyFullAddress": "复制完整地址",
+    "messageHtml": "邮件 HTML",
+    "actions": {
+      "openLink": "打开链接",
+      "copyLinkAddress": "复制链接地址",
+      "forward": "转发",
+      "editAsNewMessage": "作为新邮件编辑",
+      "deleteMessage": "删除消息",
+      "saveImage": "保存图片...",
+      "copyImage": "复制图片"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "视图与主题",
+      "hideFromSidebar": "从侧边栏隐藏"
+    }
+  },
+  "about": {
+    "title": "关于 Meron",
+    "aboutProduct": "关于 {{product}}",
+    "version": "版本 {{version}}",
+    "supportDevelopment": "支持开发"
+  },
+  "kanban": {
+    "searchBoard": "搜索看板...",
+    "searchBoardAction": "搜索看板",
+    "addColumnsHint": "选择文件夹以显示为看板列。",
+    "columns": {
+      "unifiedInbox": "统一收件箱",
+      "unifiedStarred": "统一星标"
+    },
+    "searchScope": {
+      "label": "搜索范围",
+      "allColumns": "所有列"
+    },
+    "actions": {
+      "hideColumn": "隐藏列",
+      "addBoard": "添加看板",
+      "addBoardShort": "添加看板",
+      "addColumn": "添加列",
+      "addColumns": "添加多列",
+      "boardOptions": "看板选项",
+      "dragToReorderColumn": "拖动以调整列顺序",
+      "minimize": "最小化",
+      "expand": "展开",
+      "showFilterInAllColumns": "在所有列中显示 {{filter}}"
+    },
+    "board": {
+      "label": "看板",
+      "defaultName": "看板",
+      "name": "看板名称",
+      "namePlaceholder": "显示在看板标题中",
+      "background": "看板背景",
+      "chooseImage": "选择看板图片",
+      "chooseImageFailed": "无法选择看板图片",
+      "uploadImageFailed": "上传看板图片失败",
+      "changeImage": "更改看板图片",
+      "subtitle_one": "看板 · {{count}} 列",
+      "subtitle_other": "看板 · {{count}} 列",
+      "deleteTitle": "删除看板？",
+      "deleteMessage": "\"{{name}}\" 将从看板栏中移除。",
+      "delete": "删除看板",
+      "settings": "看板设置..."
+    }
+  },
+  "wallpaper": {
+    "plain": "纯色",
+    "plainDefault": "纯色 (默认)",
+    "customBackground": "自定义背景",
+    "chatTitle": "聊天壁纸 - {{name}}",
+    "boardTitle": "看板壁纸 - {{name}}",
+    "chooseImage": "选择壁纸图片",
+    "uploadFailed": "上传背景失败",
+    "uploading": "正在上传...",
+    "uploadCustom": "上传自定义壁纸"
+  },
+  "avatar": {
+    "edit": "编辑头像",
+    "save": "保存头像",
+    "renderFailed": "无法渲染剪裁后的头像",
+    "cropFailed": "裁剪头像失败",
+    "loadFailed": "无法加载头像图片",
+    "zoom": "缩放头像",
+    "zoomOut": "缩小",
+    "zoomIn": "放大",
+    "resetCrop": "重置裁剪"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键"
+  },
+  "theme": {
+    "custom": "自定义",
+    "customTheme": "自定义主题",
+    "delete": "删除主题",
+    "deleteMessage": "确定要删除自定义主题 \"{{name}}\" 吗？此操作无法撤销。",
+    "edit": "编辑主题",
+    "new": "新建主题",
+    "save": "保存主题",
+    "namePlaceholder": "主题名称",
+    "light": "浅色",
+    "dark": "深色",
+    "pickColor": "选择 {{label}} 颜色",
+    "fields": {
+      "background": "背景色",
+      "backgroundHint": "所有元素背后的窗口背景色",
+      "surface": "板面色",
+      "surfaceHint": "会话列表、页眉和撰写面板的颜色",
+      "sidebar": "侧边栏",
+      "sidebarHint": "左侧的账户栏",
+      "accent": "强调色",
+      "accentHint": "按钮、链接和发送的消息气泡的颜色",
+      "text": "文本",
+      "textHint": "主要文本颜色"
+    }
+  },
+  "settings": {
+    "label": "设置",
+    "sections": {
+      "general": "常规",
+      "mailAccounts": "邮件账户",
+      "feedAccounts": "订阅源账户",
+      "kanbanBoards": "看板",
+      "noMailAccounts": "尚无邮件账户。",
+      "noFeedAccounts": "尚无订阅源账户。",
+      "noBoards": "尚无看板。",
+      "sidebar": "侧边栏",
+      "kanban": "看板",
+      "composer": "编辑器",
+      "subscriptions": "订阅管理",
+      "storage": "存储"
+    },
+    "pages": {
+      "appearance": "外观"
+    },
+    "language": {
+      "label": "语言",
+      "hint": "选择一种语言或使用系统语言。",
+      "system": "系统"
+    },
+    "appearance": {
+      "showSenderImages": "显示发件人头像",
+      "showSenderImagesHint": "从 Gravatar 获取发件人头像，并以域名 favicon 作为备选。"
+    },
+    "sidebar": {
+      "showUnifiedInbox": "显示统一收件箱",
+      "showStarred": "显示星标"
+    },
+    "kanban": {
+      "columnWidth": "列宽"
+    },
+    "composer": {
+      "sendMessageWith": "发送消息方式",
+      "sendShortcutEnterHint": "按 Enter 发送，Shift+Enter 换行。",
+      "sendShortcutModHint": "按 {{shortcut}} 发送，Enter 换行。"
+    },
+    "account": {
+      "changeAvatar": "更改头像",
+      "chooseAvatarImage": "选择头像图片",
+      "chooseAvatarFailed": "选择头像失败",
+      "removeAccount": "移除账户",
+      "profile": "个人档案",
+      "displayName": "显示名称",
+      "displayNameHint": "仅在 Meron 内部显示。",
+      "displayNamePlaceholder": "在 Meron 内部显示",
+      "senderName": "发件人名称",
+      "senderNameHint": "发件时显示的“发件人”名称。",
+      "senderNamePlaceholder": "发件人名称",
+      "visibility": "可见性",
+      "showInUnifiedInbox": "在统一收件箱中显示",
+      "showInUnifiedInboxHint": "您仍然可以直接打开该账户。",
+      "showInLeftSidebar": "在左侧边栏中显示",
+      "showInLeftSidebarHint": "隐藏的账户仍可在“设置”中访问。",
+      "notificationsSync": "通知与同步",
+      "muteNotifications": "静音通知",
+      "unmuteNotifications": "取消静音通知",
+      "muteNotificationsHint": "消息仍会到达并进行同步；但不会有桌面通知。",
+      "pauseAccount": "暂停账户",
+      "resumeChecking": "恢复检查",
+      "pauseAccountHint": "停止检查新消息；现有消息仍可读取。",
+      "syncInterval": "同步间隔",
+      "content": "内容",
+      "loadRemoteImages": "加载远程图片",
+      "loadRemoteImagesHint": "电子邮件默认关闭，以避免追踪像素。",
+      "conversationView": "会话视图",
+      "conversationPlain": "纯文本",
+      "chatBackground": "聊天背景",
+      "sending": "发送中",
+      "aliases": "别名",
+      "aliasesHint": "您可以使用其他别名地址发送邮件。收到发往别名的邮件后回复时，默认会使用该别名地址。",
+      "addAlias": "添加别名",
+      "aliasNamePlaceholder": "名称 (可选)",
+      "removeAlias": "移除别名",
+      "accountSettings": "账户设置..."
+    },
+    "feeds": {
+      "opmlFile": "OPML 文件",
+      "opmlHint": "导入或导出此账户的订阅源。"
+    },
+    "storage": {
+      "usageTitle": "已用存储空间",
+      "usageHint": "缓存附件和本地数据库占用的磁盘空间。",
+      "cacheLabel": "缓存",
+      "databaseLabel": "数据库",
+      "clearTitle": "清除缓存",
+      "clearHint": "删除缓存的附件和图片。您的邮件将被保留。",
+      "clearButton": "清除",
+      "clearConfirm": "确定？",
+      "clearedToast": "缓存已清除"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "无法连接到邮件服务器。将在下次同步时重试…"
+  }
+}

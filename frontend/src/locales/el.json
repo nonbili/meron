@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Θέμα",
+    "change": "Αλλαγή",
+    "import": "Εισαγωγή",
+    "export": "Εξαγωγή",
+    "loading": "Φόρτωση...",
+    "markdown": "Markdown",
+    "copied": "Αντιγράφηκε",
+    "more": "Περισσότερα",
+    "clearSearch": "Καθαρισμός αναζήτησης",
+    "showLess": "Εμφάνιση λιγότερων",
+    "moreCount": "+{{count}} ακόμη"
+  },
+  "buttons": {
+    "cancel": "Ακύρωση",
+    "save": "Αποθήκευση",
+    "send": "Αποστολή",
+    "discard": "Απόρριψη",
+    "edit": "Επεξεργασία",
+    "close": "Κλείσιμο",
+    "delete": "Διαγραφή",
+    "done": "Τέλος",
+    "back": "Πίσω"
+  },
+  "layout": {
+    "resizeConversation": "Αλλαγή μεγέθους συνομιλίας",
+    "resizeThreadList": "Αλλαγή μεγέθους λίστας νημάτων"
+  },
+  "filters": {
+    "label": "Φίλτρο",
+    "all": "Όλα",
+    "allFeeds": "Όλες οι ροές",
+    "unread": "Μη αναγνωσμένα",
+    "starred": "Με αστέρι"
+  },
+  "empty": {
+    "welcomeTitle": "Καλώς ορίσατε στο Meron",
+    "mailSetupText": "Προσθέστε έναν παραδοσιακό λογαριασμό IMAP/SMTP για να συγχρονίσετε το γραμματοκιβώτιό σας σε ένα νήμα μηνυμάτων τύπου chat.",
+    "noStarredItems": "Δεν υπάρχουν στοιχεία με αστέρι",
+    "noStarredItemsText": "Προσθέστε αστέρι σε μηνύματα ή στοιχεία ροής για να τα συγκεντρώσετε εδώ.",
+    "noFeeds": "Δεν υπάρχουν ροές",
+    "noChats": "Δεν υπάρχουν συνομιλίες",
+    "addFeedToStart": "Προσθέστε μια ροή για να ξεκινήσετε την ανάγνωση.",
+    "noArchivedThreads": "Δεν βρέθηκαν αρχειοθετημένα νήματα.",
+    "inboxEmpty": "Τα εισερχόμενά σας είναι άδεια.",
+    "noColumns": "Δεν υπάρχουν στήλες",
+    "noColumnsText": "Προσθέστε μια στήλη φακέλου ή ετικέτας σε αυτόν τον πίνακα.",
+    "kanbanSetupText": "Προσθέστε έναν λογαριασμό για να χρησιμοποιήσετε την προβολή kanban.",
+    "noConversationSelected": "Δεν έχει επιλεγεί συνομιλία",
+    "noConversationSelectedText": "Επιλέξτε ένα νήμα μηνυμάτων από τη λίστα της πλευρικής στήλης για να δείτε τα περιεχομένά του, να απαντήσετε ή να διαχειριστείτε συνημμένα."
+  },
+  "app": {
+    "logoAlt": "Λογότυπο Meron"
+  },
+  "palette": {
+    "label": "Παλέτα εντολών",
+    "placeholder": "Πληκτρολογήστε μια εντολή ή αναζήτηση...",
+    "noMatches": "Δεν βρέθηκαν εντολές που να ταιριάζουν.",
+    "hints": {
+      "run": "εκτέλεση",
+      "navigate": "πλοήγηση",
+      "close": "κλείσιμο"
+    }
+  },
+  "accounts": {
+    "unified": "Ενοποιημένα",
+    "rssFeeds": "Ροές RSS",
+    "rssAtomFeeds": "Ροές RSS / Atom",
+    "thisAccount": "αυτός ο λογαριασμός",
+    "setup": {
+      "connectMailAccount": "Σύνδεση λογαριασμού email",
+      "chooseProvider": "Επιλέξτε έναν πάροχο για σύνδεση.",
+      "feedAccountHint": "Δημιουργήστε τον λογαριασμό τώρα. Μπορείτε να προσθέσετε περισσότερες ροές ανά πάσα στιγμή με το \"+\" πάνω από τη λίστα ροών."
+    },
+    "providers": {
+      "gmailDescription": "Λογαριασμός Google",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Οποιοσδήποτε διακομιστής αλληλογραφίας",
+      "rssDescription": "Εγγραφή σε ροές"
+    },
+    "fields": {
+      "accountName": "Όνομα λογαριασμού",
+      "firstFeedUrl": "URL πρώτης ροής (προαιρετικό)",
+      "emailAddress": "Διεύθυνση email",
+      "senderNameOutgoing": "Όνομα αποστολέα (εξερχόμενα)",
+      "password": "Κωδικός πρόσβασης",
+      "displayNameMeronOnly": "Όνομα εμφάνισης (μόνο στο Meron)",
+      "imapHost": "Διακομιστής IMAP",
+      "smtpHost": "Διακομιστής SMTP",
+      "port": "Θύρα",
+      "username": "Όνομα χρήστη"
+    },
+    "discovery": {
+      "lookingUp": "Αναζήτηση ρυθμίσεων διακομιστή..."
+    },
+    "oauth": {
+      "configureOutlook": "Παρακαλούμε ρυθμίστε το MERON_OUTLOOK_CLIENT_ID στο περιβάλλον του κελύφους σας (shell) πριν συνδέσετε το Outlook.",
+      "configureGmail": "Παρακαλούμε ρυθμίστε τα MERON_GOOGLE_CLIENT_ID και MERON_GOOGLE_CLIENT_SECRET στο περιβάλλον του κελύφους σας (shell) πριν συνδέσετε το Gmail.",
+      "signInWith": "Σύνδεση με {{provider}}",
+      "waitingForSignIn": "Αναμονή για την ολοκλήρωση της σύνδεσης με {{provider}}..."
+    },
+    "appPasswordHint": "Το {{provider}} απαιτεί έναν κωδικό πρόσβασης ειδικό για την εφαρμογή - ο κανονικός κωδικός πρόσβασης του λογαριασμού σας δεν θα λειτουργήσει εδώ. <action>Δημιουργήστε έναν για το {{provider}}</action> και, στη συνέχεια, επικολλήστε τον παραπάνω.",
+    "advancedServerSettings": "Προχωρημένες ρυθμίσεις διακομιστή",
+    "actions": {
+      "addAccount": "Προσθήκη λογαριασμού",
+      "addAccountTitle": "Προσθήκη λογαριασμού",
+      "saveAccount": "Αποθήκευση λογαριασμού",
+      "collapseAccount": "Σύμπτυξη λογαριασμού",
+      "expandAccount": "Ανάπτυξη λογαριασμού"
+    }
+  },
+  "feeds": {
+    "fallbackName": "Ροή RSS",
+    "added": "Η ροή προστέθηκε",
+    "addFailed": "Αδυναμία προσθήκης ροής",
+    "url": "URL ροής",
+    "urlHint": "Επικολλήστε ένα URL ροής ή μια διεύθυνση ιστότοπου για αυτόματο εντοπισμό της ροής του.",
+    "subscribeUnder": "Εγγραφή σε νέα ροή υπό τον λογαριασμό {{account}}.",
+    "manageSubscription": "Διαχείριση αυτής της εγγραφής ροής.",
+    "copyUrl": "Αντιγραφή URL",
+    "deleteHint": "Κατάργηση εγγραφής από αυτήν τη ροή και αφαίρεση των προσωρινά αποθηκευμένων στοιχείων της. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+    "actions": {
+      "addFeed": "Προσθήκη ροής",
+      "syncFeeds": "Συγχρονισμός ροών",
+      "syncingFeeds": "Συγχρονισμός ροών...",
+      "addToAccount": "Προσθήκη ροής σε αυτόν τον λογαριασμό",
+      "deleteFeed": "Διαγραφή ροής",
+      "confirmDelete": "Επιβεβαίωση διαγραφής"
+    }
+  },
+  "folders": {
+    "loading": "Φόρτωση φακέλων...",
+    "noneAvailable": "Δεν υπάρχουν διαθέσιμοι φάκελοι",
+    "createdMissing": "Ο φάκελος δημιουργήθηκε αλλά δεν επιστράφηκε.",
+    "nameRequired": "Το όνομα του φακέλου είναι υποχρεωτικό.",
+    "alreadyExists": "Αυτός ο φάκελος υπάρχει ήδη.",
+    "createFailed": "Αδυναμία δημιουργίας φακέλου.",
+    "newFolderOrLabel": "Νέος φάκελος ή ετικέτα",
+    "namePlaceholder": "Όνομα φακέλου ή ετικέτας",
+    "create": "Δημιουργία φακέλου"
+  },
+  "composer": {
+    "fields": {
+      "from": "Από",
+      "to": "Προς",
+      "cc": "Κοιν.",
+      "bcc": "Κρυφή κοιν.",
+      "subject": "Θέμα"
+    },
+    "placeholders": {
+      "recipient": "recipient@example.com",
+      "commaSeparated": "χωρισμένα με κόμμα",
+      "message": "Γράψτε το μήνυμά σας...",
+      "quickMessage": "Γράψτε ένα μήνυμα..."
+    },
+    "actions": {
+      "attachFiles": "Επισύναψη αρχείων",
+      "insertInlineImage": "Εισαγωγή ενσωματωμένης εικόνας",
+      "switchToPlainText": "Μετάβαση σε απλό κείμενο",
+      "switchToRichText": "Μετάβαση σε εμπλουτισμένο κείμενο",
+      "sendWithShortcut": "Αποστολή ({{shortcut}})",
+      "removeAttachment": "Αφαίρεση συνημμένου",
+      "hideCcBcc": "Απόκρυψη Κοιν./Κρυφής κοιν.",
+      "ccBcc": "Κοιν./Κρυφή κοιν.",
+      "newMessage": "Νέο μήνυμα",
+      "openFullEditor": "Άνοιγμα πλήρους επεξεργαστή",
+      "sendMessageWithShortcut": "Αποστολή μηνύματος ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Εμπλουτισμένο κείμενο",
+      "plainText": "Απλό κείμενο"
+    },
+    "status": {
+      "savingDraft": "Αποθήκευση προσχεδίου...",
+      "savedToServer": "Αποθηκεύτηκε στον διακομιστή",
+      "draftAutosaveFailed": "Η αυτόματη αποθήκευση προσχεδίου απέτυχε",
+      "sending": "Αποστολή..."
+    },
+    "toolbar": {
+      "bold": "Έντονα",
+      "italic": "Πλάγια",
+      "underline": "Υπογράμμιση",
+      "strikethrough": "Διακριτή διαγραφή",
+      "heading": "Επικεφαλίδα",
+      "bulletList": "Λίστα με κουκκίδες",
+      "numberedList": "Αριθμημένη λίστα",
+      "quote": "Παράθεση",
+      "link": "Σύνδεσμος",
+      "markdown": "Markdown",
+      "markdownHint": "Πληκτρολογήστε αυτά και θα μορφοποιηθούν καθώς γράφετε"
+    },
+    "imageResize": {
+      "topLeft": "Σύρετε για αλλαγή μεγέθους (πάνω-αριστερά)",
+      "topRight": "Σύρετε για αλλαγή μεγέθους (πάνω-δεξιά)",
+      "bottomLeft": "Σύρετε για αλλαγή μεγέθους (κάτω-αριστερά)",
+      "bottomRight": "Σύρετε για αλλαγή μεγέθους (κάτω-δεξιά)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Αναζήτηση μηνυμάτων...",
+    "searchFeeds": "Αναζήτηση ροών...",
+    "backToInbox": "Επιστροφή στα Εισερχόμενα",
+    "actions": {
+      "title": "Ενέργειες νήματος",
+      "syncMailbox": "Συγχρονισμός γραμματοκιβωτίου",
+      "syncing": "Συγχρονισμός...",
+      "markAllAsRead": "Σήμανση όλων ως αναγνωσμένα",
+      "loadMore": "Φόρτωση περισσότερων",
+      "openInNewTab": "Άνοιγμα σε νέα καρτέλα",
+      "markAsRead": "Σήμανση ως αναγνωσμένο",
+      "markAsUnread": "Σήμανση ως μη αναγνωσμένο",
+      "starThread": "Προσθήκη αστεριού στο νήμα",
+      "unstarThread": "Κατάργηση αστεριού από το νήμα",
+      "archiveThread": "Αρχειοθέτηση νήματος",
+      "moveTo": "Μετακίνηση σε...",
+      "copyTo": "Αντιγραφή σε...",
+      "deleteForever": "Οριστική διαγραφή",
+      "discardDraft": "Απόρριψη προσχεδίου",
+      "moveToTrash": "Μετακίνηση στα Απορρίμματα"
+    }
+  },
+  "chat": {
+    "backToChats": "Επιστροφή στις Συνομιλίες",
+    "closeConversationEsc": "Κλείσιμο συνομιλίας (Esc)",
+    "closeEsc": "Κλείσιμο (Esc)",
+    "searchThread": "Αναζήτηση νήματος",
+    "closeThreadSearch": "Κλείσιμο αναζήτησης νήματος",
+    "previousMatch": "Προηγούμενη αντιστοίχιση",
+    "nextMatch": "Επόμενη αντιστοίχιση",
+    "feedDetails": "Λεπτομέρειες ροής",
+    "conversationDetails": "Λεπτομέρειες συνομιλίας",
+    "moreActions": "Περισσότερες ενέργειες",
+    "moreMessageActions": "Περισσότερες ενέργειες μηνύματος",
+    "viewAsHtml": "Προβολή ως HTML",
+    "viewAsPlainText": "Προβολή ως απλό κείμενο",
+    "star": "Προσθήκη αστεριού",
+    "unstar": "Κατάργηση αστεριού",
+    "currentConversation": "Τρέχουσα συνομιλία",
+    "current": "Τρέχον",
+    "closeTab": "Κλείσιμο καρτέλας",
+    "branchNotice": "Αυτή η συνομιλία είναι ένας κλάδος από ένα τροποποιημένο θέμα.",
+    "viewOriginalTopic": "Προβολή αρχικού θέματος",
+    "hideDetails": "Απόκρυψη λεπτομερειών",
+    "showDetails": "Εμφάνιση λεπτομερειών",
+    "failedToSendRetry": "Αποτυχία αποστολής - κάντε κλικ για επαναδοκιμή",
+    "retry": "Επαναδοκιμή",
+    "openExternalPlayer": "Άνοιγμα σε εξωτερικό πρόγραμμα αναπαραγωγής",
+    "showImages_one": "Εμφάνιση εικόνας",
+    "showImages_other": "Εμφάνιση {{count}} εικόνων",
+    "saveFile": "Αποθήκευση {{filename}}",
+    "copyCode": "Αντιγραφή κώδικα",
+    "previousImage": "Προηγούμενη εικόνα",
+    "nextImage": "Επόμενη εικόνα",
+    "media": "Πολυμέσα",
+    "files": "Αρχεία",
+    "noMedia": "Δεν υπάρχουν πολυμέσα σε αυτήν τη συνομιλία.",
+    "noFiles": "Δεν υπάρχουν αρχεία σε αυτήν τη συνομιλία.",
+    "copyEmailAddress": "Αντιγραφή διεύθυνσης email",
+    "mediaItems_one": "{{count}} στοιχείο πολυμέσων",
+    "mediaItems_other": "{{count}} στοιχεία πολυμέσων",
+    "fileItems_one": "{{count}} αρχείο",
+    "fileItems_other": "{{count}} αρχεία",
+    "people_one": "{{count}} άτομο",
+    "people_other": "{{count}} άτομα",
+    "noParticipants": "Δεν υπάρχουν συμμετέχοντες σε αυτήν τη συνομιλία.",
+    "you": "Εσείς",
+    "newMessageTo": "Νέο μήνυμα προς {{email}}",
+    "htmlView": "Προβολή HTML",
+    "plainView": "Προβολή απλού κειμένου",
+    "copyFullAddress": "Αντιγραφή πλήρους διεύθυνσης",
+    "messageHtml": "HTML μηνύματος",
+    "actions": {
+      "openLink": "Άνοιγμα συνδέσμου",
+      "copyLinkAddress": "Αντιγραφή διεύθυνσης συνδέσμου",
+      "forward": "Προώθηση",
+      "editAsNewMessage": "Επεξεργασία ως νέο μήνυμα",
+      "deleteMessage": "Διαγραφή μηνύματος",
+      "saveImage": "Αποθήκευση εικόνας...",
+      "copyImage": "Αντιγραφή εικόνας"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Προβολή & θέμα",
+      "hideFromSidebar": "Απόκρυψη από την πλευρική στήλη"
+    }
+  },
+  "about": {
+    "title": "Σχετικά με το Meron",
+    "aboutProduct": "Σχετικά με το {{product}}",
+    "version": "Έκδοση {{version}}",
+    "supportDevelopment": "Υποστήριξη ανάπτυξης"
+  },
+  "kanban": {
+    "searchBoard": "Αναζήτηση πίνακα...",
+    "searchBoardAction": "Αναζήτηση πίνακα",
+    "addColumnsHint": "Επιλέξτε φακέλους για εμφάνιση ως στήλες kanban.",
+    "columns": {
+      "unifiedInbox": "Ενοποιημένα εισερχόμενα",
+      "unifiedStarred": "Ενοποιημένα με αστέρι"
+    },
+    "searchScope": {
+      "label": "Εύρος αναζήτησης",
+      "allColumns": "Όλες οι στήλες"
+    },
+    "actions": {
+      "hideColumn": "Απόκρυψη στήλης",
+      "addBoard": "Προσθήκη πίνακα kanban",
+      "addBoardShort": "Προσθήκη πίνακα",
+      "addColumn": "Προσθήκη στήλης",
+      "addColumns": "Προσθήκη στηλών",
+      "boardOptions": "Επιλογές πίνακα",
+      "dragToReorderColumn": "Σύρετε για αναδιάταξη στήλης",
+      "minimize": "Ελαχιστοποίηση",
+      "expand": "Ανάπτυξη",
+      "showFilterInAllColumns": "Εμφάνιση {{filter}} σε όλες τις στήλες"
+    },
+    "board": {
+      "label": "Πίνακας",
+      "defaultName": "Πίνακας Kanban",
+      "name": "Όνομα πίνακα",
+      "namePlaceholder": "Εμφανίζεται στην κεφαλίδα του πίνακα",
+      "background": "Φόντο πίνακα",
+      "chooseImage": "Επιλογή εικόνας πίνακα",
+      "chooseImageFailed": "Αποτυχία επιλογής εικόνας πίνακα",
+      "uploadImageFailed": "Αποτυχία μεταφόρτωσης εικόνας πίνακα",
+      "changeImage": "Αλλαγή εικόνας πίνακα",
+      "subtitle_one": "Πίνακας Kanban · {{count}} στήλη",
+      "subtitle_other": "Πίνακας Kanban · {{count}} στήλες",
+      "deleteTitle": "Διαγραφή πίνακα;",
+      "deleteMessage": "\"{{name}}\" θα αφαιρεθεί από τη γραμμή kanban.",
+      "delete": "Διαγραφή πίνακα",
+      "settings": "Ρυθμίσεις πίνακα..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Απλό",
+    "plainDefault": "Απλό (Προεπιλογή)",
+    "customBackground": "Προσαρμοσμένο φόντο",
+    "chatTitle": "Ταπετσαρία συνομιλίας - {{name}}",
+    "boardTitle": "Ταπετσαρία πίνακα - {{name}}",
+    "chooseImage": "Επιλογή εικόνας ταπετσαρίας",
+    "uploadFailed": "Αποτυχία μεταφόρτωσης φόντου",
+    "uploading": "Μεταφόρτωση...",
+    "uploadCustom": "Μεταφόρτωση προσαρμοσμένου"
+  },
+  "avatar": {
+    "edit": "Επεξεργασία άβαταρ",
+    "save": "Αποθήκευση άβαταρ",
+    "renderFailed": "Αδυναμία απόδοσης περικομμένου άβαταρ",
+    "cropFailed": "Αποτυχία περικοπής άβαταρ",
+    "loadFailed": "Αδυναμία φόρτωσης εικόνας άβαταρ",
+    "zoom": "Μεγέθυνση άβαταρ",
+    "zoomOut": "Σμίκρυνση",
+    "zoomIn": "Μεγέθυνση",
+    "resetCrop": "Επαναφορά περικοπής"
+  },
+  "shortcuts": {
+    "title": "Συντομεύσεις πληκτρολογίου"
+  },
+  "theme": {
+    "custom": "Προσαρμοσμένο",
+    "customTheme": "Προσαρμοσμένο θέμα",
+    "delete": "Διαγραφή θέματος",
+    "deleteMessage": "Διαγραφή του προσαρμοσμένου θέματος \"{{name}}\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+    "edit": "Επεξεργασία θέματος",
+    "new": "Νέο θέμα",
+    "save": "Αποθήκευση θέματος",
+    "namePlaceholder": "Όνομα θέματος",
+    "light": "Φωτεινό",
+    "dark": "Σκούρο",
+    "pickColor": "Επιλογή χρώματος {{label}}",
+    "fields": {
+      "background": "Φόντο",
+      "backgroundHint": "Φόντο παραθύρου πίσω από όλα",
+      "surface": "Επιφάνεια",
+      "surfaceHint": "Λίστα νημάτων, κεφαλίδα και πλαίσια σύνταξης",
+      "sidebar": "Πλευρική στήλη",
+      "sidebarHint": "Η γραμμή λογαριασμών στα αριστερά",
+      "accent": "Χρώμα έμφασης",
+      "accentHint": "Κουμπιά, σύνδεσμοι και φυσαλίδες εξερχομένων",
+      "text": "Κείμενο",
+      "textHint": "Κύριο χρώμα κειμένου"
+    }
+  },
+  "settings": {
+    "label": "Ρυθμίσεις",
+    "sections": {
+      "general": "Γενικά",
+      "mailAccounts": "Λογαριασμοί αλληλογραφίας",
+      "feedAccounts": "Λογαριασμοί ροών",
+      "kanbanBoards": "Πίνακες Kanban",
+      "noMailAccounts": "Δεν υπάρχουν ακόμη λογαριασμοί αλληλογραφίας.",
+      "noFeedAccounts": "Δεν υπάρχουν ακόμη λογαριασμοί ροών.",
+      "noBoards": "Δεν υπάρχουν ακόμη πίνακες.",
+      "sidebar": "Πλευρική στήλη",
+      "kanban": "Kanban",
+      "composer": "Σύνταξη",
+      "subscriptions": "Εγγραφές",
+      "storage": "Αποθηκευτικός χώρος"
+    },
+    "pages": {
+      "appearance": "Εμφάνιση"
+    },
+    "language": {
+      "label": "Γλώσσα",
+      "hint": "Επιλέξτε μια γλώσσα ή ακολουθήστε τη γλώσσα του συστήματος.",
+      "system": "Σύστημα"
+    },
+    "appearance": {
+      "showSenderImages": "Εμφάνιση εικόνων αποστολέα",
+      "showSenderImagesHint": "Ανακτά εικόνες αποστολέα από το Gravatar, με εικονίδια ιστοτόπου (favicons) ως εναλλακτική."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Εμφάνιση ενοποιημένων εισερχομένων",
+      "showStarred": "Εμφάνιση με αστέρι"
+    },
+    "kanban": {
+      "columnWidth": "Πλάτος στήλης"
+    },
+    "composer": {
+      "sendMessageWith": "Αποστολή μηνύματος με",
+      "sendShortcutEnterHint": "Το Enter στέλνει, το Shift+Enter προσθέτει νέα γραμμή.",
+      "sendShortcutModHint": "Το {{shortcut}} στέλνει, το Enter προσθέτει νέα γραμμή."
+    },
+    "account": {
+      "changeAvatar": "Αλλαγή άβαταρ",
+      "chooseAvatarImage": "Επιλογή εικόνας άβαταρ",
+      "chooseAvatarFailed": "Αποτυχία επιλογής άβαταρ",
+      "removeAccount": "Αφαίρεση λογαριασμού",
+      "profile": "Προφίλ",
+      "displayName": "Όνομα εμφάνισης",
+      "displayNameHint": "Εμφανίζεται μόνο μέσα στο Meron.",
+      "displayNamePlaceholder": "Εμφανίζεται μέσα στο Meron",
+      "senderName": "Όνομα αποστολέα",
+      "senderNameHint": "Το όνομα αποστολέα (Από) στα εξερχόμενα μηνύματα.",
+      "senderNamePlaceholder": "Όνομα αποστολέα εξερχόμενης αλληλογραφίας",
+      "visibility": "Ορατότητα",
+      "showInUnifiedInbox": "Εμφάνιση στα ενοποιημένα εισερχόμενα",
+      "showInUnifiedInboxHint": "Μπορείτε ακόμα να ανοίξετε τον λογαριασμό απευθείας.",
+      "showInLeftSidebar": "Εμφάνιση στην αριστερή πλευρική στήλη",
+      "showInLeftSidebarHint": "Οι κρυφοί λογαριασμοί παραμένουν διαθέσιμοι εδώ στις Ρυθμίσεις.",
+      "notificationsSync": "Ειδοποιήσεις & Συγχρονισμός",
+      "muteNotifications": "Σίγαση ειδοποιήσεων",
+      "unmuteNotifications": "Κατάργηση σίγασης ειδοποιήσεων",
+      "muteNotificationsHint": "Τα μηνύματα εξακολουθούν να φτάνουν και να συγχρονίζονται, χωρίς ειδοποίηση στην επιφάνεια εργασίας.",
+      "pauseAccount": "Παύση λογαριασμού",
+      "resumeChecking": "Συνέχιση ελέγχου",
+      "pauseAccountHint": "Σταματά τον έλεγχο για νέα μηνύματα. Τα υπάρχοντα παραμένουν αναγνώσιμα.",
+      "syncInterval": "Διάστημα συγχρονισμού",
+      "content": "Περιεχόμενο",
+      "loadRemoteImages": "Φόρτωση απομακρυσμένων εικόνων",
+      "loadRemoteImagesHint": "Απενεργοποιημένο από προεπιλογή για τα email για την αποφυγή pixel παρακολούθησης.",
+      "conversationView": "Προβολή συνομιλίας",
+      "conversationPlain": "Απλή",
+      "chatBackground": "Φόντο συνομιλίας",
+      "sending": "Αποστολή",
+      "aliases": "Ψευδώνυμα",
+      "aliasesHint": "Πρόσθετες διευθύνσεις από τις οποίες μπορείτε να στείλετε. Οι απαντήσεις σε μηνύματα που λαμβάνονται σε ένα ψευδώνυμο αποστέλλονται από αυτήν τη διεύθυνση από προεπιλογή.",
+      "addAlias": "Προσθήκη ψευδωνύμου",
+      "aliasNamePlaceholder": "Όνομα (προαιρετικό)",
+      "removeAlias": "Αφαίρεση ψευδωνύμου",
+      "accountSettings": "Ρυθμίσεις λογαριασμού..."
+    },
+    "feeds": {
+      "opmlFile": "Αρχείο OPML",
+      "opmlHint": "Εισαγωγή ή εξαγωγή των εγγραφών ροής αυτού του λογαριασμού."
+    },
+    "storage": {
+      "usageTitle": "Χρησιμοποιούμενος χώρος",
+      "usageHint": "Χώρος στο δίσκο που χρησιμοποιείται από τα αποθηκευμένα συνημμένα και την τοπική βάση δεδομένων.",
+      "cacheLabel": "Προσωρινή μνήμη",
+      "databaseLabel": "Βάση δεδομένων",
+      "clearTitle": "Εκκαθάριση προσωρινής μνήμης",
+      "clearHint": "Διαγραφή αποθηκευμένων συνημμένων και εικόνων. Τα μηνύματά σας διατηρούνται.",
+      "clearButton": "Εκκαθάριση",
+      "clearConfirm": "Επιβεβαίωση;",
+      "clearedToast": "Η προσωρινή μνήμη εκκαθαρίστηκε"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "Δεν ήταν δυνατή η σύνδεση με τον διακομιστή αλληλογραφίας. Επανάληψη στην επόμενη σύνδεση..."
+  }
+}

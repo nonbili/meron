@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Tema",
+    "change": "Alterar",
+    "import": "Importar",
+    "export": "Exportar",
+    "loading": "Carregando...",
+    "markdown": "Markdown",
+    "copied": "Copiado",
+    "more": "Mais",
+    "clearSearch": "Limpar pesquisa",
+    "showLess": "Mostrar menos",
+    "moreCount": "+{{count}} mais"
+  },
+  "buttons": {
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "send": "Enviar",
+    "discard": "Descartar",
+    "edit": "Editar",
+    "close": "Fechar",
+    "delete": "Excluir",
+    "done": "Concluído",
+    "back": "Voltar"
+  },
+  "layout": {
+    "resizeConversation": "Redimensionar conversa",
+    "resizeThreadList": "Redimensionar lista de conversas"
+  },
+  "filters": {
+    "label": "Filtro",
+    "all": "Todos",
+    "allFeeds": "Todos os feeds",
+    "unread": "Não lidas",
+    "starred": "Com estrela"
+  },
+  "empty": {
+    "welcomeTitle": "Bem-vindo ao Meron",
+    "mailSetupText": "Adicione uma conta IMAP/SMTP tradicional para sincronizar sua caixa de correio em uma conversa estilo chat.",
+    "noStarredItems": "Nenhum item com estrela",
+    "noStarredItemsText": "Marque mensagens ou itens de feed com estrela para coletá-los aqui.",
+    "noFeeds": "Nenhum feed",
+    "noChats": "Nenhuma conversa",
+    "addFeedToStart": "Adicione um feed para começar a ler.",
+    "noArchivedThreads": "Nenhuma conversa arquivada encontrada.",
+    "inboxEmpty": "Sua caixa de entrada está vazia.",
+    "noColumns": "Sem colunas",
+    "noColumnsText": "Adicione uma coluna de pasta ou marcador a este quadro.",
+    "kanbanSetupText": "Adicione uma conta para usar a visualização kanban.",
+    "noConversationSelected": "Nenhuma conversa selecionada",
+    "noConversationSelectedText": "Selecione uma conversa na lista da barra lateral para ver seu conteúdo, responder ou gerenciar anexos."
+  },
+  "app": {
+    "logoAlt": "Logo do Meron"
+  },
+  "palette": {
+    "label": "Paleta de comandos",
+    "placeholder": "Digite um comando ou pesquise...",
+    "noMatches": "Nenhum comando correspondente.",
+    "hints": {
+      "run": "executar",
+      "navigate": "navegar",
+      "close": "fechar"
+    }
+  },
+  "accounts": {
+    "unified": "Unificado",
+    "rssFeeds": "Feeds RSS",
+    "rssAtomFeeds": "Feeds RSS / Atom",
+    "thisAccount": "esta conta",
+    "setup": {
+      "connectMailAccount": "Conectar uma conta de e-mail",
+      "chooseProvider": "Escolha um provedor para se conectar.",
+      "feedAccountHint": "Crie a conta agora; adicione mais feeds a qualquer momento com o \"+\" acima da lista de feeds."
+    },
+    "providers": {
+      "gmailDescription": "Conta do Google",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Qualquer servidor de e-mail",
+      "rssDescription": "Inscrever-se em feeds"
+    },
+    "fields": {
+      "accountName": "Nome da conta",
+      "firstFeedUrl": "URL do primeiro feed (opcional)",
+      "emailAddress": "Endereço de e-mail",
+      "senderNameOutgoing": "Nome do remetente (e-mails enviados)",
+      "password": "Senha",
+      "displayNameMeronOnly": "Nome de exibição (apenas no Meron)",
+      "imapHost": "Servidor IMAP",
+      "smtpHost": "Servidor SMTP",
+      "port": "Porta",
+      "username": "Nome de usuário"
+    },
+    "discovery": {
+      "lookingUp": "Buscando configurações do servidor..."
+    },
+    "oauth": {
+      "configureOutlook": "Configure MERON_OUTLOOK_CLIENT_ID no seu ambiente de shell antes de conectar o Outlook.",
+      "configureGmail": "Configure MERON_GOOGLE_CLIENT_ID e MERON_GOOGLE_CLIENT_SECRET no seu ambiente de shell antes de conectar o Gmail.",
+      "signInWith": "Entrar com {{provider}}",
+      "waitingForSignIn": "Aguardando conclusão do login no {{provider}}..."
+    },
+    "appPasswordHint": "O {{provider}} requer uma senha específica de aplicativo - sua senha normal de conta não funcionará aqui. <action>Gere uma para o {{provider}}</action> e cole-a acima.",
+    "advancedServerSettings": "Configurações avançadas do servidor",
+    "actions": {
+      "addAccount": "Adicionar conta",
+      "addAccountTitle": "Adicionar Conta",
+      "saveAccount": "Salvar Conta",
+      "collapseAccount": "Recolher conta",
+      "expandAccount": "Expandir conta"
+    }
+  },
+  "feeds": {
+    "fallbackName": "Feed RSS",
+    "added": "Feed adicionado",
+    "addFailed": "Não foi possível adicionar o feed",
+    "url": "URL do feed",
+    "urlHint": "Cole a URL do feed ou o endereço de um site para descobrir seu feed automaticamente.",
+    "subscribeUnder": "Inscrever um novo feed em {{account}}.",
+    "manageSubscription": "Gerenciar inscrição deste feed.",
+    "copyUrl": "Copiar URL",
+    "deleteHint": "Cancelar a inscrição deste feed e remover seus itens armazenados em cache. Esta ação não pode ser desfeita.",
+    "actions": {
+      "addFeed": "Adicionar feed",
+      "syncFeeds": "Sincronizar feeds",
+      "syncingFeeds": "Sincronizando feeds...",
+      "addToAccount": "Adicionar feed a esta conta",
+      "deleteFeed": "Excluir feed",
+      "confirmDelete": "Confirmar exclusão"
+    }
+  },
+  "folders": {
+    "loading": "Carregando pastas...",
+    "noneAvailable": "Nenhuma pasta disponível",
+    "createdMissing": "A pasta foi criada, mas não foi retornada.",
+    "nameRequired": "O nome da pasta é obrigatório.",
+    "alreadyExists": "Essa pasta já existe.",
+    "createFailed": "Não foi possível criar a pasta.",
+    "newFolderOrLabel": "Nova pasta ou marcador",
+    "namePlaceholder": "Nome da pasta ou marcador",
+    "create": "Criar pasta"
+  },
+  "composer": {
+    "fields": {
+      "from": "De",
+      "to": "Para",
+      "cc": "Cc",
+      "bcc": "Cco",
+      "subject": "Assunto"
+    },
+    "placeholders": {
+      "recipient": "destinatario@exemplo.com",
+      "commaSeparated": "separados por vírgula",
+      "message": "Escreva sua mensagem...",
+      "quickMessage": "Escreva uma mensagem..."
+    },
+    "actions": {
+      "attachFiles": "Anexar arquivos",
+      "insertInlineImage": "Inserir imagem embutida",
+      "switchToPlainText": "Alterar para texto simples",
+      "switchToRichText": "Alterar para texto formatado",
+      "sendWithShortcut": "Enviar ({{shortcut}})",
+      "removeAttachment": "Remover anexo",
+      "hideCcBcc": "Ocultar Cc/Cco",
+      "ccBcc": "Cc/Cco",
+      "newMessage": "Nova mensagem",
+      "openFullEditor": "Abrir editor completo",
+      "sendMessageWithShortcut": "Enviar mensagem ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Texto formatado",
+      "plainText": "Texto simples"
+    },
+    "status": {
+      "savingDraft": "Salvando rascunho...",
+      "savedToServer": "Salvo no servidor",
+      "draftAutosaveFailed": "Falha no salvamento automático do rascunho",
+      "sending": "Enviando..."
+    },
+    "toolbar": {
+      "bold": "Negrito",
+      "italic": "Itálico",
+      "underline": "Sublinhado",
+      "strikethrough": "Tachado",
+      "heading": "Título",
+      "bulletList": "Lista com marcadores",
+      "numberedList": "Lista numerada",
+      "quote": "Citação",
+      "link": "Link",
+      "markdown": "Markdown",
+      "markdownHint": "Digite estes caracteres e eles serão formatados ao escrever"
+    },
+    "imageResize": {
+      "topLeft": "Arraste para redimensionar (superior esquerdo)",
+      "topRight": "Arraste para redimensionar (superior direito)",
+      "bottomLeft": "Arraste para redimensionar (inferior esquerdo)",
+      "bottomRight": "Arraste para redimensionar (inferior direito)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Pesquisar mensagens...",
+    "searchFeeds": "Pesquisar feeds...",
+    "backToInbox": "Voltar para Caixa de Entrada",
+    "actions": {
+      "title": "Ações da conversa",
+      "syncMailbox": "Sincronizar caixa de correio",
+      "syncing": "Sincronizando...",
+      "markAllAsRead": "Marcar todas como lidas",
+      "loadMore": "Carregar mais",
+      "openInNewTab": "Abrir em nova aba",
+      "markAsRead": "Marcar como lida",
+      "markAsUnread": "Marcar como não lida",
+      "starThread": "Marcar conversa com estrela",
+      "unstarThread": "Remover estrela da conversa",
+      "archiveThread": "Arquivar conversa",
+      "moveTo": "Mover para...",
+      "copyTo": "Copiar para...",
+      "deleteForever": "Excluir definitivamente",
+      "discardDraft": "Descartar rascunho",
+      "moveToTrash": "Mover para a Lixeira"
+    }
+  },
+  "chat": {
+    "backToChats": "Voltar para Conversas",
+    "closeConversationEsc": "Fechar conversa (Esc)",
+    "closeEsc": "Fechar (Esc)",
+    "searchThread": "Pesquisar conversa",
+    "closeThreadSearch": "Fechar pesquisa de conversa",
+    "previousMatch": "Correspondência anterior",
+    "nextMatch": "Próxima correspondência",
+    "feedDetails": "Detalhes do feed",
+    "conversationDetails": "Detalhes da conversa",
+    "moreActions": "Mais ações",
+    "moreMessageActions": "Mais ações da mensagem",
+    "viewAsHtml": "Visualizar como HTML",
+    "viewAsPlainText": "Visualizar como texto simples",
+    "star": "Marcar com estrela",
+    "unstar": "Remover estrela",
+    "currentConversation": "Conversa atual",
+    "current": "Atual",
+    "closeTab": "Fechar aba",
+    "branchNotice": "Esta conversa é uma ramificação de um assunto alterado.",
+    "viewOriginalTopic": "Ver tópico original",
+    "hideDetails": "Ocultar detalhes",
+    "showDetails": "Mostrar detalhes",
+    "failedToSendRetry": "Falha ao enviar - clique para tentar novamente",
+    "retry": "Tentar novamente",
+    "openExternalPlayer": "Abrir no player externo",
+    "showImages_one": "Mostrar imagem",
+    "showImages_other": "Mostrar {{count}} imagens",
+    "saveFile": "Salvar {{filename}}",
+    "copyCode": "Copiar código",
+    "previousImage": "Imagem anterior",
+    "nextImage": "Próxima imagem",
+    "media": "Mídia",
+    "files": "Arquivos",
+    "noMedia": "Nenhuma mídia nesta conversa.",
+    "noFiles": "Nenhum arquivo nesta conversa.",
+    "copyEmailAddress": "Copiar endereço de e-mail",
+    "mediaItems_one": "{{count}} item de mídia",
+    "mediaItems_other": "{{count}} itens de mídia",
+    "fileItems_one": "{{count}} arquivo",
+    "fileItems_other": "{{count}} arquivos",
+    "people_one": "{{count}} pessoa",
+    "people_other": "{{count}} pessoas",
+    "noParticipants": "Nenhum participante nesta conversa.",
+    "you": "Você",
+    "newMessageTo": "Nova mensagem para {{email}}",
+    "htmlView": "Visualização em HTML",
+    "plainView": "Visualização em texto simples",
+    "copyFullAddress": "Copiar endereço completo",
+    "messageHtml": "HTML da mensagem",
+    "actions": {
+      "openLink": "Abrir link",
+      "copyLinkAddress": "Copiar endereço do link",
+      "forward": "Encaminhar",
+      "editAsNewMessage": "Editar como nova mensagem",
+      "deleteMessage": "Excluir mensagem",
+      "saveImage": "Salvar imagem...",
+      "copyImage": "Copiar imagem"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Visualização e tema",
+      "hideFromSidebar": "Ocultar da barra lateral"
+    }
+  },
+  "about": {
+    "title": "Sobre o Meron",
+    "aboutProduct": "Sobre o {{product}}",
+    "version": "Versão {{version}}",
+    "supportDevelopment": "Apoiar o desenvolvimento"
+  },
+  "kanban": {
+    "searchBoard": "Pesquisar no quadro...",
+    "searchBoardAction": "Pesquisar no quadro",
+    "addColumnsHint": "Escolha pastas para exibir como colunas do kanban.",
+    "columns": {
+      "unifiedInbox": "Caixa de entrada unificada",
+      "unifiedStarred": "Itens com estrela unificados"
+    },
+    "searchScope": {
+      "label": "Escopo da pesquisa",
+      "allColumns": "Todas as colunas"
+    },
+    "actions": {
+      "hideColumn": "Ocultar coluna",
+      "addBoard": "Adicionar quadro kanban",
+      "addBoardShort": "Adicionar quadro",
+      "addColumn": "Adicionar coluna",
+      "addColumns": "Adicionar colunas",
+      "boardOptions": "Opções do quadro",
+      "dragToReorderColumn": "Arrastar para reordenar coluna",
+      "minimize": "Minimizar",
+      "expand": "Expandir",
+      "showFilterInAllColumns": "Mostrar {{filter}} em todas as colunas"
+    },
+    "board": {
+      "label": "Quadro",
+      "defaultName": "Quadro kanban",
+      "name": "Nome do quadro",
+      "namePlaceholder": "Exibido no cabeçalho do quadro",
+      "background": "Fundo do quadro",
+      "chooseImage": "Escolha uma imagem para o quadro",
+      "chooseImageFailed": "Falha ao escolher a imagem do quadro",
+      "uploadImageFailed": "Falha ao enviar a imagem do quadro",
+      "changeImage": "Alterar imagem do quadro",
+      "subtitle_one": "Quadro kanban · {{count}} coluna",
+      "subtitle_other": "Quadro kanban · {{count}} colunas",
+      "deleteTitle": "Excluir quadro?",
+      "deleteMessage": "\"{{name}}\" será removido da barra de kanban.",
+      "delete": "Excluir quadro",
+      "settings": "Configurações do quadro..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Simples",
+    "plainDefault": "Simples (Padrão)",
+    "customBackground": "Plano de fundo personalizado",
+    "chatTitle": "Papel de parede da conversa - {{name}}",
+    "boardTitle": "Papel de parede do quadro - {{name}}",
+    "chooseImage": "Escolher imagem de papel de parede",
+    "uploadFailed": "Falha ao enviar plano de fundo",
+    "uploading": "Enviando...",
+    "uploadCustom": "Enviar personalizado"
+  },
+  "avatar": {
+    "edit": "Editar avatar",
+    "save": "Salvar avatar",
+    "renderFailed": "Não foi possível renderizar o avatar recortado",
+    "cropFailed": "Falha ao recortar o avatar",
+    "loadFailed": "Não foi possível carregar a imagem do avatar",
+    "zoom": "Zoom do avatar",
+    "zoomOut": "Diminuir zoom",
+    "zoomIn": "Aumentar zoom",
+    "resetCrop": "Redefinir recorte"
+  },
+  "shortcuts": {
+    "title": "Atalhos de teclado"
+  },
+  "theme": {
+    "custom": "Personalizado",
+    "customTheme": "Tema personalizado",
+    "delete": "Excluir tema",
+    "deleteMessage": "Excluir o tema personalizado \"{{name}}\"? Esta ação não pode ser desfeita.",
+    "edit": "Editar tema",
+    "new": "Novo tema",
+    "save": "Salvar tema",
+    "namePlaceholder": "Nome do tema",
+    "light": "Claro",
+    "dark": "Escuro",
+    "pickColor": "Escolher cor para {{label}}",
+    "fields": {
+      "background": "Plano de fundo",
+      "backgroundHint": "Plano de fundo da janela por trás de tudo",
+      "surface": "Superfície",
+      "surfaceHint": "Lista de conversas, cabeçalho e painéis do compositor",
+      "sidebar": "Barra lateral",
+      "sidebarHint": "A barra de contas à esquerda",
+      "accent": "Destaque",
+      "accentHint": "Botões, links e balões de envio",
+      "text": "Texto",
+      "textHint": "Cor primária do texto"
+    }
+  },
+  "settings": {
+    "label": "Configurações",
+    "sections": {
+      "general": "Geral",
+      "mailAccounts": "Contas de e-mail",
+      "feedAccounts": "Contas de feed",
+      "kanbanBoards": "Quadros kanban",
+      "noMailAccounts": "Nenhuma conta de e-mail ainda.",
+      "noFeedAccounts": "Nenhuma conta de feed ainda.",
+      "noBoards": "Nenhum quadro ainda.",
+      "sidebar": "Barra lateral",
+      "kanban": "Kanban",
+      "composer": "Compositor",
+      "subscriptions": "Inscrições",
+      "storage": "Armazenamento"
+    },
+    "pages": {
+      "appearance": "Aparência"
+    },
+    "language": {
+      "label": "Idioma",
+      "hint": "Escolha um idioma ou siga o idioma do sistema.",
+      "system": "Sistema"
+    },
+    "appearance": {
+      "showSenderImages": "Exibir imagens dos remetentes",
+      "showSenderImagesHint": "Busca imagens dos remetentes no Gravatar, usando favicons de domínio como alternativa."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Exibir caixa de entrada unificada",
+      "showStarred": "Exibir itens com estrela"
+    },
+    "kanban": {
+      "columnWidth": "Largura da coluna"
+    },
+    "composer": {
+      "sendMessageWith": "Enviar mensagem com",
+      "sendShortcutEnterHint": "Enter envia, Shift+Enter adiciona uma nova linha.",
+      "sendShortcutModHint": "{{shortcut}} envia, Enter adiciona uma nova linha."
+    },
+    "account": {
+      "changeAvatar": "Alterar avatar",
+      "chooseAvatarImage": "Escolher imagem do avatar",
+      "chooseAvatarFailed": "Falha ao escolher o avatar",
+      "removeAccount": "Remover conta",
+      "profile": "Perfil",
+      "displayName": "Nome de exibição",
+      "displayNameHint": "Exibido apenas dentro do Meron.",
+      "displayNamePlaceholder": "Exibido dentro do Meron",
+      "senderName": "Nome do remetente",
+      "senderNameHint": "O nome no campo 'De' dos e-mails enviados.",
+      "senderNamePlaceholder": "Nome de envio nos e-mails",
+      "visibility": "Visibilidade",
+      "showInUnifiedInbox": "Exibir na caixa de entrada unificada",
+      "showInUnifiedInboxHint": "Você ainda poderá abrir a conta diretamente.",
+      "showInLeftSidebar": "Exibir na barra lateral esquerda",
+      "showInLeftSidebarHint": "Contas ocultas permanecem disponíveis aqui nas Configurações.",
+      "notificationsSync": "Notificações e Sincronização",
+      "muteNotifications": "Silenciar notificações",
+      "unmuteNotifications": "Desativar silenciamento de notificações",
+      "muteNotificationsHint": "As mensagens continuam chegando e sincronizando; sem notificações na área de trabalho.",
+      "pauseAccount": "Pausar conta",
+      "resumeChecking": "Retomar verificação",
+      "pauseAccountHint": "Para de verificar novas mensagens; as existentes continuam legíveis.",
+      "syncInterval": "Intervalo de sincronização",
+      "content": "Conteúdo",
+      "loadRemoteImages": "Carregar imagens remotas",
+      "loadRemoteImagesHint": "Desativado por padrão para e-mails para evitar rastreamento por pixels.",
+      "conversationView": "Visualização da conversa",
+      "conversationPlain": "Simples",
+      "chatBackground": "Plano de fundo da conversa",
+      "sending": "Enviando",
+      "aliases": "Aliases",
+      "aliasesHint": "Endereços extras dos quais você pode enviar. Respostas a e-mails recebidos em um alias usam esse endereço por padrão.",
+      "addAlias": "Adicionar alias",
+      "aliasNamePlaceholder": "Nome (opcional)",
+      "removeAlias": "Remover alias",
+      "accountSettings": "Configurações da conta..."
+    },
+    "feeds": {
+      "opmlFile": "Arquivo OPML",
+      "opmlHint": "Importar ou exportar as inscrições de feed desta conta."
+    },
+    "storage": {
+      "usageTitle": "Armazenamento usado",
+      "usageHint": "Espaço em disco usado por anexos em cache e pelo banco de dados local.",
+      "cacheLabel": "Cache",
+      "databaseLabel": "Banco de dados",
+      "clearTitle": "Limpar cache",
+      "clearHint": "Excluir anexos e imagens em cache. Seus e-mails são mantidos.",
+      "clearButton": "Limpar",
+      "clearConfirm": "Confirmar?",
+      "clearedToast": "Cache limpa"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "Não foi possível conectar ao servidor de e-mail. Tentando novamente na próxima sincronização..."
+  }
+}

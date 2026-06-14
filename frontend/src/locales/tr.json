@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Tema",
+    "change": "Değiştir",
+    "import": "İçe aktar",
+    "export": "Dışa aktar",
+    "loading": "Yükleniyor...",
+    "markdown": "Markdown",
+    "copied": "Kopyalandı",
+    "more": "Daha fazla",
+    "clearSearch": "Aramayı temizle",
+    "showLess": "Daha az göster",
+    "moreCount": "+{{count}} daha"
+  },
+  "buttons": {
+    "cancel": "İptal et",
+    "save": "Kaydet",
+    "send": "Gönder",
+    "discard": "Vazgeç",
+    "edit": "Düzenle",
+    "close": "Kapat",
+    "delete": "Sil",
+    "done": "Bitti",
+    "back": "Geri"
+  },
+  "layout": {
+    "resizeConversation": "Konuşma boyutunu ayarla",
+    "resizeThreadList": "İleti dizisi listesi boyutunu ayarla"
+  },
+  "filters": {
+    "label": "Filtre",
+    "all": "Tümü",
+    "allFeeds": "Tüm beslemeler",
+    "unread": "Okunmamış",
+    "starred": "Yıldızlı"
+  },
+  "empty": {
+    "welcomeTitle": "Meron'a Hoş Geldiniz",
+    "mailSetupText": "Posta kutunuzu sohbet tarzı bir ileti dizisiyle senkronize etmek için geleneksel bir IMAP/SMTP hesabı ekleyin.",
+    "noStarredItems": "Yıldızlı öge yok",
+    "noStarredItemsText": "Mesajları veya besleme ögelerini burada toplamak için yıldız ekleyin.",
+    "noFeeds": "Besleme yok",
+    "noChats": "Sohbet yok",
+    "addFeedToStart": "Okumaya başlamak için bir besleme ekleyin.",
+    "noArchivedThreads": "Arşivlenmiş ileti dizisi bulunamadı.",
+    "inboxEmpty": "Gelen kutunuz boş.",
+    "noColumns": "Sütun yok",
+    "noColumnsText": "Bu panoya bir klasör veya etiket sütunu ekleyin.",
+    "kanbanSetupText": "Kanban görünümünü kullanmak için bir hesap ekleyin.",
+    "noConversationSelected": "Hiçbir Konuşma Seçilmedi",
+    "noConversationSelectedText": "İçeriğini görüntülemek, yanıtlamak veya ekleri yönetmek için kenar çubuğu listesinden bir ileti dizisi seçin."
+  },
+  "app": {
+    "logoAlt": "Meron Logosu"
+  },
+  "palette": {
+    "label": "Komut paleti",
+    "placeholder": "Bir komut yazın veya arayın...",
+    "noMatches": "Eşleşen komut yok.",
+    "hints": {
+      "run": "çalıştır",
+      "navigate": "gezin",
+      "close": "kapat"
+    }
+  },
+  "accounts": {
+    "unified": "Birleşik",
+    "rssFeeds": "RSS Beslemeleri",
+    "rssAtomFeeds": "RSS / Atom Beslemeleri",
+    "thisAccount": "bu hesap",
+    "setup": {
+      "connectMailAccount": "Bir E-posta Hesabı Bağlayın",
+      "chooseProvider": "Bağlanmak için bir sağlayıcı seçin.",
+      "feedAccountHint": "Hesabı şimdi oluşturun; besleme listesinin üzerindeki \"+\" simgesiyle istediğiniz zaman daha fazla besleme ekleyin."
+    },
+    "providers": {
+      "gmailDescription": "Google hesabı",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Herhangi bir e-posta sunucusu",
+      "rssDescription": "Beslemelere abone ol"
+    },
+    "fields": {
+      "accountName": "Hesap Adı",
+      "firstFeedUrl": "İlk Besleme URL'si (isteğe bağlı)",
+      "emailAddress": "E-posta Adresi",
+      "senderNameOutgoing": "Gönderen Adı (giden posta)",
+      "password": "Şifre",
+      "displayNameMeronOnly": "Görünen Ad (yalnızca Meron)",
+      "imapHost": "IMAP Sunucusu",
+      "smtpHost": "SMTP Sunucusu",
+      "port": "Port",
+      "username": "Kullanıcı Adı"
+    },
+    "discovery": {
+      "lookingUp": "Sunucu ayarları aranıyor..."
+    },
+    "oauth": {
+      "configureOutlook": "Lütfen Outlook'u bağlamadan önce kabuk ortamınızda MERON_OUTLOOK_CLIENT_ID değişkenini yapılandırın.",
+      "configureGmail": "Lütfen Gmail'i bağlamadan önce kabuk ortamınızda MERON_GOOGLE_CLIENT_ID ve MERON_GOOGLE_CLIENT_SECRET değişkenlerini yapılandırın.",
+      "signInWith": "{{provider}} ile oturum aç",
+      "waitingForSignIn": "{{provider}} oturum açma işleminin tamamlanması bekleniyor..."
+    },
+    "appPasswordHint": "{{provider}} uygulama şifresi gerektirir - normal hesap şifreniz burada çalışmaz. <action>{{provider}} için bir tane oluşturun</action> ve ardından yukarıya yapıştırın.",
+    "advancedServerSettings": "Gelişmiş sunucu ayarları",
+    "actions": {
+      "addAccount": "Hesap ekle",
+      "addAccountTitle": "Hesap Ekle",
+      "saveAccount": "Hesabı Kaydet",
+      "collapseAccount": "Hesabı daralt",
+      "expandAccount": "Hesabı genişlet"
+    }
+  },
+  "feeds": {
+    "fallbackName": "RSS beslemesi",
+    "added": "Besleme eklendi",
+    "addFailed": "Besleme eklenemedi",
+    "url": "Besleme URL'si",
+    "urlHint": "Bir besleme URL'si veya beslemesini otomatik keşfetmek için bir site adresi yapıştırın.",
+    "subscribeUnder": "{{account}} altında yeni bir beslemeye abone olun.",
+    "manageSubscription": "Bu besleme aboneliğini yönetin.",
+    "copyUrl": "URL'yi kopyala",
+    "deleteHint": "Bu besleme aboneliğini iptal edin ve önbelleğe alınmış ögelerini kaldırın. Bu işlem geri alınamaz.",
+    "actions": {
+      "addFeed": "Besleme Ekle",
+      "syncFeeds": "Beslemeleri senkronize et",
+      "syncingFeeds": "Beslemeler senkronize ediliyor...",
+      "addToAccount": "Beslemeyi bu hesaba ekle",
+      "deleteFeed": "Beslemeyi sil",
+      "confirmDelete": "Silmeyi onayla"
+    }
+  },
+  "folders": {
+    "loading": "Klasörler yükleniyor...",
+    "noneAvailable": "Kullanılabilir klasör yok",
+    "createdMissing": "Klasör oluşturuldu ancak döndürülmedi.",
+    "nameRequired": "Klasör adı gerekli.",
+    "alreadyExists": "Bu klasör zaten var.",
+    "createFailed": "Klasör oluşturulamadı.",
+    "newFolderOrLabel": "Yeni klasör veya etiket",
+    "namePlaceholder": "Klasör veya etiket adı",
+    "create": "Klasör oluştur"
+  },
+  "composer": {
+    "fields": {
+      "from": "Kimden",
+      "to": "Kime",
+      "cc": "Bilgi",
+      "bcc": "Gizli",
+      "subject": "Konu"
+    },
+    "placeholders": {
+      "recipient": "recipient@example.com",
+      "commaSeparated": "virgülle ayrılmış",
+      "message": "Mesajınızı yazın...",
+      "quickMessage": "Bir mesaj yazın..."
+    },
+    "actions": {
+      "attachFiles": "Dosya ekle",
+      "insertInlineImage": "Satır içi resim ekle",
+      "switchToPlainText": "Düz metne geç",
+      "switchToRichText": "Zengin metne geç",
+      "sendWithShortcut": "Gönder ({{shortcut}})",
+      "removeAttachment": "Eki kaldır",
+      "hideCcBcc": "Bilgi/Gizli alanını gizle",
+      "ccBcc": "Bilgi/Gizli",
+      "newMessage": "Yeni mesaj",
+      "openFullEditor": "Tam düzenleyiciyi aç",
+      "sendMessageWithShortcut": "Mesajı gönder ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Zengin metin",
+      "plainText": "Düz metin"
+    },
+    "status": {
+      "savingDraft": "Taslak kaydediliyor...",
+      "savedToServer": "Sunucuya Kaydedildi",
+      "draftAutosaveFailed": "Taslak otomatik kaydetme başarısız oldu",
+      "sending": "Gönderiliyor..."
+    },
+    "toolbar": {
+      "bold": "Kalın",
+      "italic": "İtalik",
+      "underline": "Altı çizili",
+      "strikethrough": "Üstü çizili",
+      "heading": "Başlık",
+      "bulletList": "Maddeli liste",
+      "numberedList": "Numaralı liste",
+      "quote": "Alıntı",
+      "link": "Bağlantı",
+      "markdown": "Markdown",
+      "markdownHint": "Bunları yazdıkça otomatik olarak biçimlendirilirler"
+    },
+    "imageResize": {
+      "topLeft": "Boyutlandırmak için sürükleyin (sol üst)",
+      "topRight": "Boyutlandırmak için sürükleyin (sağ üst)",
+      "bottomLeft": "Boyutlandırmak için sürükleyin (sol alt)",
+      "bottomRight": "Boyutlandırmak için sürükleyin (sağ alt)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Mesajlarda ara...",
+    "searchFeeds": "Beslemelerde ara...",
+    "backToInbox": "Gelen Kutusu'na Dön",
+    "actions": {
+      "title": "İleti dizisi eylemleri",
+      "syncMailbox": "Posta kutusunu senkronize et",
+      "syncing": "Senkronize ediliyor...",
+      "markAllAsRead": "Tümünü okundu olarak işaretle",
+      "loadMore": "Daha fazla yükle",
+      "openInNewTab": "Yeni sekmede aç",
+      "markAsRead": "Okundu olarak işaretle",
+      "markAsUnread": "Okunmamış olarak işaretle",
+      "starThread": "İleti dizisine yıldız ekle",
+      "unstarThread": "İleti dizisinden yıldızı kaldır",
+      "archiveThread": "İleti dizisini arşivle",
+      "moveTo": "Taşı...",
+      "copyTo": "Kopyala...",
+      "deleteForever": "Kalıcı olarak sil",
+      "discardDraft": "Taslağı sil",
+      "moveToTrash": "Çöp Kutusuna Taşı"
+    }
+  },
+  "chat": {
+    "backToChats": "Sohbetlere Dön",
+    "closeConversationEsc": "Konuşmayı kapat (Esc)",
+    "closeEsc": "Kapat (Esc)",
+    "searchThread": "İleti dizisinde ara",
+    "closeThreadSearch": "İleti dizisi aramasını kapat",
+    "previousMatch": "Önceki eşleşme",
+    "nextMatch": "Sonraki eşleşme",
+    "feedDetails": "Besleme detayları",
+    "conversationDetails": "Konuşma detayları",
+    "moreActions": "Daha fazla eylem",
+    "moreMessageActions": "Daha fazla mesaj eylemi",
+    "viewAsHtml": "HTML olarak görüntüle",
+    "viewAsPlainText": "Düz metin olarak görüntüle",
+    "star": "Yıldızla",
+    "unstar": "Yıldızı kaldır",
+    "currentConversation": "Mevcut konuşma",
+    "current": "Mevcut",
+    "closeTab": "Sekmeyi kapat",
+    "branchNotice": "Bu konuşma, değiştirilmiş bir konu satırından ayrılan bir daldır.",
+    "viewOriginalTopic": "Orijinal konuyu görüntüle",
+    "hideDetails": "Detayları gizle",
+    "showDetails": "Detayları göster",
+    "failedToSendRetry": "Gönderilemedi - yeniden denemek için tıklayın",
+    "retry": "Yeniden dene",
+    "openExternalPlayer": "Harici oynatıcıda aç",
+    "showImages_one": "Resmi göster",
+    "showImages_other": "{{count}} resmi göster",
+    "saveFile": "{{filename}} dosyasını kaydet",
+    "copyCode": "Kodu kopyala",
+    "previousImage": "Önceki resim",
+    "nextImage": "Sonraki resim",
+    "media": "Medya",
+    "files": "Dosyalar",
+    "noMedia": "Bu konuşmada medya yok.",
+    "noFiles": "Bu konuşmada dosya yok.",
+    "copyEmailAddress": "E-posta adresini kopyala",
+    "mediaItems_one": "{{count}} medya ögesi",
+    "mediaItems_other": "{{count}} medya ögesi",
+    "fileItems_one": "{{count}} dosya",
+    "fileItems_other": "{{count}} dosya",
+    "people_one": "{{count}} kişi",
+    "people_other": "{{count}} kişi",
+    "noParticipants": "Bu konuşmada katılımcı yok.",
+    "you": "Siz",
+    "newMessageTo": "{{email}} adresine yeni mesaj",
+    "htmlView": "HTML görünümü",
+    "plainView": "Düz görünüm",
+    "copyFullAddress": "Tam adresi kopyala",
+    "messageHtml": "Mesaj HTML'i",
+    "actions": {
+      "openLink": "Bağlantıyı aç",
+      "copyLinkAddress": "Bağlantı adresini kopyala",
+      "forward": "İlet",
+      "editAsNewMessage": "Yeni mesaj olarak düzenle",
+      "deleteMessage": "Mesajı sil",
+      "saveImage": "Resmi kaydet...",
+      "copyImage": "Resmi kopyala"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Görünüm ve tema",
+      "hideFromSidebar": "Kenar çubuğundan gizle"
+    }
+  },
+  "about": {
+    "title": "Meron Hakkında",
+    "aboutProduct": "{{product}} Hakkında",
+    "version": "Sürüm {{version}}",
+    "supportDevelopment": "Geliştirmeyi destekle"
+  },
+  "kanban": {
+    "searchBoard": "Panoda ara...",
+    "searchBoardAction": "Panoda ara",
+    "addColumnsHint": "Kanban sütunları olarak gösterilecek klasörleri seçin.",
+    "columns": {
+      "unifiedInbox": "Birleşik gelen kutusu",
+      "unifiedStarred": "Birleşik yıldızlılar"
+    },
+    "searchScope": {
+      "label": "Arama kapsamı",
+      "allColumns": "Tüm Sütunlar"
+    },
+    "actions": {
+      "hideColumn": "Sütunu gizle",
+      "addBoard": "Kanban panosu ekle",
+      "addBoardShort": "Pano ekle",
+      "addColumn": "Sütun ekle",
+      "addColumns": "Sütun ekle",
+      "boardOptions": "Pano seçenekleri",
+      "dragToReorderColumn": "Sütunu yeniden sıralamak için sürükleyin",
+      "minimize": "Küçült",
+      "expand": "Genişlet",
+      "showFilterInAllColumns": "Tüm sütunlarda {{filter}} göster"
+    },
+    "board": {
+      "label": "Pano",
+      "defaultName": "Kanban panosu",
+      "name": "Pano Adı",
+      "namePlaceholder": "Pano başlığında gösterilir",
+      "background": "Pano Arka Planı",
+      "chooseImage": "Pano resmi seç",
+      "chooseImageFailed": "Pano resmi seçilemedi",
+      "uploadImageFailed": "Pano resmi yüklenemedi",
+      "changeImage": "Pano resmini değiştir",
+      "subtitle_one": "Kanban panosu · {{count}} sütun",
+      "subtitle_other": "Kanban panosu · {{count}} sütun",
+      "deleteTitle": "Pano silinsin mi?",
+      "deleteMessage": "\"{{name}}\" kanban rayından kaldırılacak.",
+      "delete": "Panoyu sil",
+      "settings": "Pano ayarları..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Düz",
+    "plainDefault": "Düz (Varsayılan)",
+    "customBackground": "Özel Arka Plan",
+    "chatTitle": "Sohbet Duvar Kağıdı - {{name}}",
+    "boardTitle": "Pano Duvar Kağıdı - {{name}}",
+    "chooseImage": "Duvar kağıdı resmi seç",
+    "uploadFailed": "Arka plan yüklenemedi",
+    "uploading": "Yükleniyor...",
+    "uploadCustom": "Özel Yükle"
+  },
+  "avatar": {
+    "edit": "Avatarı düzenle",
+    "save": "Avatarı kaydet",
+    "renderFailed": "Kırpılmış avatar oluşturulamadı",
+    "cropFailed": "Avatar kırpılamadı",
+    "loadFailed": "Avatar resmi yüklenemedi",
+    "zoom": "Avatarı yakınlaştır",
+    "zoomOut": "Uzaklaştır",
+    "zoomIn": "Yakınlaştır",
+    "resetCrop": "Kırpmayı sıfırla"
+  },
+  "shortcuts": {
+    "title": "Klavye kısayolları"
+  },
+  "theme": {
+    "custom": "Özel",
+    "customTheme": "Özel tema",
+    "delete": "Temayı sil",
+    "deleteMessage": "\"{{name}}\" özel teması silinsin mi? Bu işlem geri alınamaz.",
+    "edit": "Temayı düzenle",
+    "new": "Yeni tema",
+    "save": "Temayı kaydet",
+    "namePlaceholder": "Tema adı",
+    "light": "Açık",
+    "dark": "Koyu",
+    "pickColor": "{{label}} rengini seç",
+    "fields": {
+      "background": "Arka Plan",
+      "backgroundHint": "Her şeyin arkasındaki pencere arka planı",
+      "surface": "Yüzey",
+      "surfaceHint": "İleti dizisi listesi, başlık ve yazıcı panelleri",
+      "sidebar": "Kenar Çubuğu",
+      "sidebarHint": "Soldaki hesap rayı",
+      "accent": "Vurgu",
+      "accentHint": "Butonlar, bağlantılar ve giden baloncukları",
+      "text": "Metin",
+      "textHint": "Birincil metin rengi"
+    }
+  },
+  "settings": {
+    "label": "Ayarlar",
+    "sections": {
+      "general": "Genel",
+      "mailAccounts": "E-posta Hesapları",
+      "feedAccounts": "Besleme Hesapları",
+      "kanbanBoards": "Kanban Panoları",
+      "noMailAccounts": "Henüz e-posta hesabı yok.",
+      "noFeedAccounts": "Henüz besleme hesabı yok.",
+      "noBoards": "Henüz pano yok.",
+      "sidebar": "Kenar Çubuğu",
+      "kanban": "Kanban",
+      "composer": "E-posta Yazıcısı",
+      "subscriptions": "Abonelikler",
+      "storage": "Depolama"
+    },
+    "pages": {
+      "appearance": "Görünüm"
+    },
+    "language": {
+      "label": "Dil",
+      "hint": "Bir dil seçin veya sistem dilini kullanın.",
+      "system": "Sistem"
+    },
+    "appearance": {
+      "showSenderImages": "Gönderen Resimlerini Göster",
+      "showSenderImagesHint": "Gönderen resimlerini Gravatar'dan çeker, domain favicon'larını yedek olarak kullanır."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Birleşik Gelen Kutusu'nu Göster",
+      "showStarred": "Yıldızlıları Göster"
+    },
+    "kanban": {
+      "columnWidth": "Sütun Genişliği"
+    },
+    "composer": {
+      "sendMessageWith": "Mesajı Şununla Gönder",
+      "sendShortcutEnterHint": "Enter gönderir, Shift+Enter yeni satır ekler.",
+      "sendShortcutModHint": "{{shortcut}} gönderir, Enter yeni satır ekler."
+    },
+    "account": {
+      "changeAvatar": "Avatarı değiştir",
+      "chooseAvatarImage": "Avatar resmi seç",
+      "chooseAvatarFailed": "Avatar seçilemedi",
+      "removeAccount": "Hesabı kaldır",
+      "profile": "Profil",
+      "displayName": "Görünen Ad",
+      "displayNameHint": "Yalnızca Meron içinde gösterilir.",
+      "displayNamePlaceholder": "Meron içinde gösterilir",
+      "senderName": "Gönderen Adı",
+      "senderNameHint": "Giden postalardaki Gönderen adı.",
+      "senderNamePlaceholder": "Giden posta Gönderen adı",
+      "visibility": "Görünürlük",
+      "showInUnifiedInbox": "Birleşik Gelen Kutusu'nda Göster",
+      "showInUnifiedInboxHint": "Hesabı yine de doğrudan açabilirsiniz.",
+      "showInLeftSidebar": "Sol Kenar Çubuğunda Göster",
+      "showInLeftSidebarHint": "Gizli hesaplar burada, Ayarlar'da kullanılabilir kalır.",
+      "notificationsSync": "Bildirimler ve Senkronizasyon",
+      "muteNotifications": "Bildirimleri Sessize Al",
+      "unmuteNotifications": "Bildirimlerin sesini aç",
+      "muteNotificationsHint": "Mesajlar gelmeye ve senkronize edilmeye devam eder; masaüstü bildirimi gösterilmez.",
+      "pauseAccount": "Hesabı Duraklat",
+      "resumeChecking": "Kontrol etmeye devam et",
+      "pauseAccountHint": "Yeni mesajların kontrol edilmesini durdurur; mevcut mesajlar okunabilir kalır.",
+      "syncInterval": "Senkronizasyon Sıklığı",
+      "content": "İçerik",
+      "loadRemoteImages": "Uzak Resimleri Yükle",
+      "loadRemoteImagesHint": "Takip piksellerini önlemek için e-postalar için varsayılan olarak kapalıdır.",
+      "conversationView": "Konuşma Görünümü",
+      "conversationPlain": "Düz",
+      "chatBackground": "Sohbet Arka Planı",
+      "sending": "Gönderiliyor",
+      "aliases": "Takma Adlar",
+      "aliasesHint": "Gönderebileceğiniz ekstra adresler. Bir takma ada gelen postaların yanıtları varsayılan olarak o adrese gider.",
+      "addAlias": "Takma ad ekle",
+      "aliasNamePlaceholder": "Ad (isteğe bağlı)",
+      "removeAlias": "Takma adı kaldır",
+      "accountSettings": "Hesap ayarları..."
+    },
+    "feeds": {
+      "opmlFile": "OPML Dosyası",
+      "opmlHint": "Bu hesabın besleme aboneliklerini içe veya dışa aktarın."
+    },
+    "storage": {
+      "usageTitle": "Kullanılan depolama",
+      "usageHint": "Önbelleğe alınmış ekler ve yerel veri tabanı tarafından kullanılan disk alanı.",
+      "cacheLabel": "Önbellek",
+      "databaseLabel": "Veri tabanı",
+      "clearTitle": "Önbelleği temizle",
+      "clearHint": "Önbelleğe alınmış ekleri ve resimleri siler. E-postalarınız korunur.",
+      "clearButton": "Temizle",
+      "clearConfirm": "Onayla?",
+      "clearedToast": "Önbellek temizlendi"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "E-posta sunucusuna erişilemedi. Bir sonraki eşitlemede tekrar denenecek..."
+  }
+}

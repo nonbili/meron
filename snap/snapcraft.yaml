@@ -1,0 +1,58 @@
+name: meron
+title: Meron
+base: core22
+adopt-info: meron
+summary: Modern mail and feed client
+description: |
+  Meron is a modern mail and feed client. It speaks IMAP/SMTP and reads RSS
+  feeds, with a fast Rust core engine bundled as a sidecar.
+
+grade: stable
+confinement: strict
+compression: lzo
+
+# The wails app (build/bin/meron) and the desktop/icon assets are produced by
+# the GitHub Actions workflow before snapcraft runs. The `dump` part just stages
+# the prebuilt files into the snap; no compilation happens inside snapcraft.
+parts:
+  meron:
+    plugin: dump
+    source: snap/local
+    # Track the version declared in wails.json so the snap version always
+    # follows the app version without editing this file.
+    override-build: |
+      craftctl default
+      version="$(sed -n 's/.*"productVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CRAFT_PROJECT_DIR/wails.json")"
+      craftctl set version="$version"
+    organize:
+      meron: bin/meron
+      meron.desktop: usr/share/applications/meron.desktop
+      meron.png: usr/share/icons/hicolor/512x512/apps/meron.png
+    stage-packages:
+      - libgtk-3-0
+      - libwebkit2gtk-4.1-0
+      - libgles2
+
+apps:
+  meron:
+    command: bin/meron
+    extensions: [gnome]
+    desktop: usr/share/applications/meron.desktop
+    plugs:
+      - home
+      - network
+      - network-bind
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - unity7
+      - browser-support
+      - password-manager-service
+      - audio-playback
+
+slots:
+  meron:
+    interface: dbus
+    bus: session
+    name: org.meron.Meron

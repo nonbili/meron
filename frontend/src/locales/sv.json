@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Tema",
+    "change": "Ändra",
+    "import": "Importera",
+    "export": "Exportera",
+    "loading": "Laddar...",
+    "markdown": "Markdown",
+    "copied": "Kopierad",
+    "more": "Mer",
+    "clearSearch": "Rensa sökning",
+    "showLess": "Visa mindre",
+    "moreCount": "+{{count}} till"
+  },
+  "buttons": {
+    "cancel": "Avbryt",
+    "save": "Spara",
+    "send": "Skicka",
+    "discard": "Släng",
+    "edit": "Redigera",
+    "close": "Stäng",
+    "delete": "Ta bort",
+    "done": "Klar",
+    "back": "Tillbaka"
+  },
+  "layout": {
+    "resizeConversation": "Ändra storlek på konversation",
+    "resizeThreadList": "Ändra storlek på trådlista"
+  },
+  "filters": {
+    "label": "Filter",
+    "all": "Alla",
+    "allFeeds": "Alla flöden",
+    "unread": "Olästa",
+    "starred": "Stjärnmärkta"
+  },
+  "empty": {
+    "welcomeTitle": "Välkommen till Meron",
+    "mailSetupText": "Lägg till ett vanligt IMAP/SMTP-konto för att synkronisera din brevlåda till en meddelandetråd i chat-stil.",
+    "noStarredItems": "Inga stjärnmärkta objekt",
+    "noStarredItemsText": "Stjärnmärk meddelanden eller flödesobjekt för att samla dem här.",
+    "noFeeds": "Inga flöden",
+    "noChats": "Inga chattar",
+    "addFeedToStart": "Lägg till ett flöde för att börja läsa.",
+    "noArchivedThreads": "Inga arkiverade trådar hittades.",
+    "inboxEmpty": "Din inkorg är tom.",
+    "noColumns": "Inga kolumner",
+    "noColumnsText": "Lägg till en mapp- eller etikettkolumn till den här tavlan.",
+    "kanbanSetupText": "Lägg till ett konto för att använda kanban-vyn.",
+    "noConversationSelected": "Ingen konversation vald",
+    "noConversationSelectedText": "Välj en meddelandetråd från sidofältet för att visa dess innehåll, svara eller hantera bilagor."
+  },
+  "app": {
+    "logoAlt": "Meron-logotyp"
+  },
+  "palette": {
+    "label": "Kommandopalett",
+    "placeholder": "Skriv ett kommando eller sök...",
+    "noMatches": "Inga matchande kommandon.",
+    "hints": {
+      "run": "kör",
+      "navigate": "navigera",
+      "close": "stäng"
+    }
+  },
+  "accounts": {
+    "unified": "Samlad",
+    "rssFeeds": "RSS-flöden",
+    "rssAtomFeeds": "RSS- / Atom-flöden",
+    "thisAccount": "detta konto",
+    "setup": {
+      "connectMailAccount": "Anslut ett e-postkonto",
+      "chooseProvider": "Välj en leverantör att ansluta.",
+      "feedAccountHint": "Skapa kontot nu; lägg till fler flöden när som helst med \"+\" ovanför flödeslistan."
+    },
+    "providers": {
+      "gmailDescription": "Google-konto",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Valfri e-postserver",
+      "rssDescription": "Prenumerera på flöden"
+    },
+    "fields": {
+      "accountName": "Kontonamn",
+      "firstFeedUrl": "Första flödets URL (valfritt)",
+      "emailAddress": "E-postadress",
+      "senderNameOutgoing": "Avsändarnamn (utgående e-post)",
+      "password": "Lösenord",
+      "displayNameMeronOnly": "Visningsnamn (endast Meron)",
+      "imapHost": "IMAP-värd",
+      "smtpHost": "SMTP-värd",
+      "port": "Port",
+      "username": "Användarnamn"
+    },
+    "discovery": {
+      "lookingUp": "Söker efter serverinställningar..."
+    },
+    "oauth": {
+      "configureOutlook": "Konfigurera MERON_OUTLOOK_CLIENT_ID i din skalmiljö innan du ansluter Outlook.",
+      "configureGmail": "Konfigurera MERON_GOOGLE_CLIENT_ID och MERON_GOOGLE_CLIENT_SECRET i din skalmiljö innan du ansluter Gmail.",
+      "signInWith": "Logga in med {{provider}}",
+      "waitingForSignIn": "Väntar på att inloggning med {{provider}} ska slutföras..."
+    },
+    "appPasswordHint": "{{provider}} kräver ett appspecifikt lösenord - ditt vanliga kontolösenord fungerar inte här. <action>Skapa ett för {{provider}}</action> och klistra sedan in det ovan.",
+    "advancedServerSettings": "Avancerade serverinställningar",
+    "actions": {
+      "addAccount": "Lägg till konto",
+      "addAccountTitle": "Lägg till konto",
+      "saveAccount": "Spara konto",
+      "collapseAccount": "Minimera konto",
+      "expandAccount": "Expandera konto"
+    }
+  },
+  "feeds": {
+    "fallbackName": "RSS-flöde",
+    "added": "Flöde tillagt",
+    "addFailed": "Kunde inte lägga till flöde",
+    "url": "Flödes-URL",
+    "urlHint": "Klistra in en flödes-URL, eller en webbplatsadress för att automatiskt hitta dess flöde.",
+    "subscribeUnder": "Prenumerera på ett nytt flöde under {{account}}.",
+    "manageSubscription": "Hantera denna flödesprenumeration.",
+    "copyUrl": "Kopiera URL",
+    "deleteHint": "Avsluta prenumerationen på detta flöde och ta bort dess cachade objekt. Detta kan inte ångras.",
+    "actions": {
+      "addFeed": "Lägg till flöde",
+      "syncFeeds": "Synkronisera flöden",
+      "syncingFeeds": "Synkroniserar flöden...",
+      "addToAccount": "Lägg till flöde till detta konto",
+      "deleteFeed": "Ta bort flöde",
+      "confirmDelete": "Bekräfta borttagning"
+    }
+  },
+  "folders": {
+    "loading": "Laddar mappar...",
+    "noneAvailable": "Inga mappar tillgängliga",
+    "createdMissing": "Mappen skapades men returnerades inte.",
+    "nameRequired": "Mappnamn krävs.",
+    "alreadyExists": "Den mappen finns redan.",
+    "createFailed": "Kunde inte skapa mapp.",
+    "newFolderOrLabel": "Ny mapp eller etikett",
+    "namePlaceholder": "Mapp- eller etikettnamn",
+    "create": "Skapa mapp"
+  },
+  "composer": {
+    "fields": {
+      "from": "Från",
+      "to": "Till",
+      "cc": "Kopia",
+      "bcc": "Dold kopia",
+      "subject": "Ämne"
+    },
+    "placeholders": {
+      "recipient": "mottagare@example.com",
+      "commaSeparated": "kommaseparerad",
+      "message": "Skriv ditt meddelande...",
+      "quickMessage": "Skriv ett meddelande..."
+    },
+    "actions": {
+      "attachFiles": "Bifoga filer",
+      "insertInlineImage": "Infoga bild",
+      "switchToPlainText": "Växla till vanlig text",
+      "switchToRichText": "Växla till formaterad text",
+      "sendWithShortcut": "Skicka ({{shortcut}})",
+      "removeAttachment": "Ta bort bilaga",
+      "hideCcBcc": "Dölj kopia/dold kopia",
+      "ccBcc": "Kopia/Dold kopia",
+      "newMessage": "Nytt meddelande",
+      "openFullEditor": "Öppna fullständig redigerare",
+      "sendMessageWithShortcut": "Skicka meddelande ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Formaterad text",
+      "plainText": "Vanlig text"
+    },
+    "status": {
+      "savingDraft": "Sparar utkast...",
+      "savedToServer": "Sparad på servern",
+      "draftAutosaveFailed": "Automatisk sparande av utkast misslyckades",
+      "sending": "Skickar..."
+    },
+    "toolbar": {
+      "bold": "Fet",
+      "italic": "Kursiv",
+      "underline": "Understruken",
+      "strikethrough": "Genomstruken",
+      "heading": "Rubrik",
+      "bulletList": "Punktlista",
+      "numberedList": "Numrerad lista",
+      "quote": "Citat",
+      "link": "Länk",
+      "markdown": "Markdown",
+      "markdownHint": "Skriv dessa så formateras de medan du skriver"
+    },
+    "imageResize": {
+      "topLeft": "Dra för att ändra storlek (övre vänstra)",
+      "topRight": "Dra för att ändra storlek (övre högra)",
+      "bottomLeft": "Dra för att ändra storlek (nedre vänstra)",
+      "bottomRight": "Dra för att ändra storlek (nedre högra)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Sök meddelanden...",
+    "searchFeeds": "Sök flöden...",
+    "backToInbox": "Tillbaka till inkorgen",
+    "actions": {
+      "title": "Trådåtgärder",
+      "syncMailbox": "Synkronisera brevlåda",
+      "syncing": "Synkroniserar...",
+      "markAllAsRead": "Markera alla som lästa",
+      "loadMore": "Ladda fler",
+      "openInNewTab": "Öppna i ny flik",
+      "markAsRead": "Markera som läst",
+      "markAsUnread": "Markera som oläst",
+      "starThread": "Stjärnmärk tråd",
+      "unstarThread": "Ta bort stjärnmarkering för tråd",
+      "archiveThread": "Arkivera tråd",
+      "moveTo": "Flytta till...",
+      "copyTo": "Kopiera till...",
+      "deleteForever": "Ta bort permanent",
+      "discardDraft": "Släng utkast",
+      "moveToTrash": "Flytta till papperskorgen"
+    }
+  },
+  "chat": {
+    "backToChats": "Tillbaka till chattar",
+    "closeConversationEsc": "Stäng konversation (Esc)",
+    "closeEsc": "Stäng (Esc)",
+    "searchThread": "Sök i tråd",
+    "closeThreadSearch": "Stäng trådsökning",
+    "previousMatch": "Föregående matchning",
+    "nextMatch": "Nästa matchning",
+    "feedDetails": "Flödesdetaljer",
+    "conversationDetails": "Konversationsdetaljer",
+    "moreActions": "Fler åtgärder",
+    "moreMessageActions": "Fler meddelandeåtgärder",
+    "viewAsHtml": "Visa som HTML",
+    "viewAsPlainText": "Visa som vanlig text",
+    "star": "Stjärnmärk",
+    "unstar": "Ta bort stjärnmarkering",
+    "currentConversation": "Aktuell konversation",
+    "current": "Aktuell",
+    "closeTab": "Stäng flik",
+    "branchNotice": "Denna konversation är en förgrening på grund av ett ändrat ämne.",
+    "viewOriginalTopic": "Visa ursprungligt ämne",
+    "hideDetails": "Dölj detaljer",
+    "showDetails": "Visa detaljer",
+    "failedToSendRetry": "Kunde inte skicka - klicka för att försöka igen",
+    "retry": "Försök igen",
+    "openExternalPlayer": "Öppna i extern spelare",
+    "showImages_one": "Visa bild",
+    "showImages_other": "Visa {{count}} bilder",
+    "saveFile": "Spara {{filename}}",
+    "copyCode": "Kopiera kod",
+    "previousImage": "Föregående bild",
+    "nextImage": "Nästa bild",
+    "media": "Media",
+    "files": "Filer",
+    "noMedia": "Ingen media i denna konversation.",
+    "noFiles": "Inga filer i denna konversation.",
+    "copyEmailAddress": "Kopiera e-postadress",
+    "mediaItems_one": "{{count}} medieobjekt",
+    "mediaItems_other": "{{count}} medieobjekt",
+    "fileItems_one": "{{count}} fil",
+    "fileItems_other": "{{count}} filer",
+    "people_one": "{{count}} person",
+    "people_other": "{{count}} personer",
+    "noParticipants": "Inga deltagare i denna konversation.",
+    "you": "Du",
+    "newMessageTo": "Nytt meddelande till {{email}}",
+    "htmlView": "HTML-vy",
+    "plainView": "Textvy",
+    "copyFullAddress": "Kopiera fullständig adress",
+    "messageHtml": "Meddelande-HTML",
+    "actions": {
+      "openLink": "Öppna länk",
+      "copyLinkAddress": "Kopiera länkadress",
+      "forward": "Vidarebefordra",
+      "editAsNewMessage": "Redigera som nytt meddelande",
+      "deleteMessage": "Ta bort meddelande",
+      "saveImage": "Spara bild...",
+      "copyImage": "Kopiera bild"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Vy & tema",
+      "hideFromSidebar": "Dölj från sidofältet"
+    }
+  },
+  "about": {
+    "title": "Om Meron",
+    "aboutProduct": "Om {{product}}",
+    "version": "Version {{version}}",
+    "supportDevelopment": "Stöd utvecklingen"
+  },
+  "kanban": {
+    "searchBoard": "Sök på tavla...",
+    "searchBoardAction": "Sök på tavla",
+    "addColumnsHint": "Välj mappar att visa som kanban-kolumner.",
+    "columns": {
+      "unifiedInbox": "Samlad inkorg",
+      "unifiedStarred": "Samlad stjärnmärkt"
+    },
+    "searchScope": {
+      "label": "Sökomfång",
+      "allColumns": "Alla kolumner"
+    },
+    "actions": {
+      "hideColumn": "Dölj kolumn",
+      "addBoard": "Lägg till kanban-tavla",
+      "addBoardShort": "Lägg till tavla",
+      "addColumn": "Lägg till kolumn",
+      "addColumns": "Lägg till kolumner",
+      "boardOptions": "Tavelalternativ",
+      "dragToReorderColumn": "Dra för att ändra ordning på kolumn",
+      "minimize": "Minimera",
+      "expand": "Expandera",
+      "showFilterInAllColumns": "Visa {{filter}} i alla kolumner"
+    },
+    "board": {
+      "label": "Tavla",
+      "defaultName": "Kanban-tavla",
+      "name": "Tavelnamn",
+      "namePlaceholder": "Visas i tavelhuvudet",
+      "background": "Tavelbakgrund",
+      "chooseImage": "Välj tavelbild",
+      "chooseImageFailed": "Kunde inte välja tavelbild",
+      "uploadImageFailed": "Kunde inte ladda upp tavelbild",
+      "changeImage": "Ändra tavelbild",
+      "subtitle_one": "Kanban-tavla · {{count}} kolumn",
+      "subtitle_other": "Kanban-tavla · {{count}} kolumner",
+      "deleteTitle": "Ta bort tavla?",
+      "deleteMessage": "\"{{name}}\" kommer att tas bort från kanban-spåret.",
+      "delete": "Ta bort tavla",
+      "settings": "Tavelinställningar..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Enkel",
+    "plainDefault": "Enkel (Standard)",
+    "customBackground": "Anpassad bakgrund",
+    "chatTitle": "Chattbakgrund - {{name}}",
+    "boardTitle": "Tavelbakgrund - {{name}}",
+    "chooseImage": "Välj bakgrundsbild",
+    "uploadFailed": "Kunde inte ladda upp bakgrund",
+    "uploading": "Laddar upp...",
+    "uploadCustom": "Ladda upp anpassad"
+  },
+  "avatar": {
+    "edit": "Redigera avatar",
+    "save": "Spara avatar",
+    "renderFailed": "Kunde inte återge beskuren avatar",
+    "cropFailed": "Kunde inte beskära avatar",
+    "loadFailed": "Kunde inte ladda avatarbild",
+    "zoom": "Zooma avatar",
+    "zoomOut": "Zooma ut",
+    "zoomIn": "Zooma in",
+    "resetCrop": "Återställ beskärning"
+  },
+  "shortcuts": {
+    "title": "Tangentbordsgenvägar"
+  },
+  "theme": {
+    "custom": "Anpassat",
+    "customTheme": "Anpassat tema",
+    "delete": "Ta bort tema",
+    "deleteMessage": "Ta bort det anpassade temat \"{{name}}\"? Detta kan inte ångras.",
+    "edit": "Redigera tema",
+    "new": "Nytt tema",
+    "save": "Spara tema",
+    "namePlaceholder": "Temanamn",
+    "light": "Ljust",
+    "dark": "Mörkt",
+    "pickColor": "Välj färg för {{label}}",
+    "fields": {
+      "background": "Bakgrund",
+      "backgroundHint": "Fönsterbakgrund bakom allt",
+      "surface": "Yta",
+      "surfaceHint": "Trådlista, rubrik och paneler för skrivfönstret",
+      "sidebar": "Sidofält",
+      "sidebarHint": "Kontofältet till vänster",
+      "accent": "Accentfärg",
+      "accentHint": "Knappar, länkar och utgående bubblor",
+      "text": "Text",
+      "textHint": "Primär textfärg"
+    }
+  },
+  "settings": {
+    "label": "Inställningar",
+    "sections": {
+      "general": "Allmänt",
+      "mailAccounts": "E-postkonton",
+      "feedAccounts": "Flödeskonton",
+      "kanbanBoards": "Kanban-tavlor",
+      "noMailAccounts": "Inga e-postkonton än.",
+      "noFeedAccounts": "Inga flödeskonton än.",
+      "noBoards": "Inga tavlor än.",
+      "sidebar": "Sidofält",
+      "kanban": "Kanban",
+      "composer": "Skrivfönster",
+      "subscriptions": "Prenumerationer",
+      "storage": "Lagring"
+    },
+    "pages": {
+      "appearance": "Utseende"
+    },
+    "language": {
+      "label": "Språk",
+      "hint": "Välj ett språk eller följ systemspråket.",
+      "system": "System"
+    },
+    "appearance": {
+      "showSenderImages": "Visa avsändarbilder",
+      "showSenderImagesHint": "Hämtar avsändarbilder från Gravatar, med domän-faviconer som reserv."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Visa samlad inkorg",
+      "showStarred": "Visa stjärnmärkta"
+    },
+    "kanban": {
+      "columnWidth": "Kolumnbredd"
+    },
+    "composer": {
+      "sendMessageWith": "Skicka meddelande med",
+      "sendShortcutEnterHint": "Enter skickar, Shift+Enter lägger till en ny rad.",
+      "sendShortcutModHint": "{{shortcut}} skickar, Enter lägger till en ny rad."
+    },
+    "account": {
+      "changeAvatar": "Ändra avatar",
+      "chooseAvatarImage": "Välj avatarbild",
+      "chooseAvatarFailed": "Kunde inte välja avatar",
+      "removeAccount": "Ta bort konto",
+      "profile": "Profil",
+      "displayName": "Visningsnamn",
+      "displayNameHint": "Visas endast inuti Meron.",
+      "displayNamePlaceholder": "Visas inuti Meron",
+      "senderName": "Avsändarnamn",
+      "senderNameHint": "Från-namnet på utgående e-post.",
+      "senderNamePlaceholder": "Från-namn för utgående e-post",
+      "visibility": "Synlighet",
+      "showInUnifiedInbox": "Visa i samlad inkorg",
+      "showInUnifiedInboxHint": "Du kan fortfarande öppna kontot direkt.",
+      "showInLeftSidebar": "Visa i vänster sidofält",
+      "showInLeftSidebarHint": "Dolda konton förblir tillgängliga här i inställningarna.",
+      "notificationsSync": "Aviseringar & synkronisering",
+      "muteNotifications": "Stäng av aviseringar",
+      "unmuteNotifications": "Slå på aviseringar",
+      "muteNotificationsHint": "Meddelanden tas fortfarande emot och synkroniseras; ingen skrivbordsavisering.",
+      "pauseAccount": "Pausa konto",
+      "resumeChecking": "Återuppta hämtning",
+      "pauseAccountHint": "Stoppar hämtning av nya meddelanden; befintliga förblir läsbara.",
+      "syncInterval": "Synkroniseringsintervall",
+      "content": "Innehåll",
+      "loadRemoteImages": "Ladda externa bilder",
+      "loadRemoteImagesHint": "Inaktiverat som standard för e-post för att undvika spårningspixlar.",
+      "conversationView": "Konversationsvy",
+      "conversationPlain": "Enkel",
+      "chatBackground": "Chattbakgrund",
+      "sending": "Skickar",
+      "aliases": "Aliaser",
+      "aliasesHint": "Extra adresser du kan skicka från. Svar på e-post som tagits emot på ett alias skickas från den adressen som standard.",
+      "addAlias": "Lägg till alias",
+      "aliasNamePlaceholder": "Namn (valfritt)",
+      "removeAlias": "Ta bort alias",
+      "accountSettings": "Kontoinställningar..."
+    },
+    "feeds": {
+      "opmlFile": "OPML-fil",
+      "opmlHint": "Importera eller exportera detta kontos flödesprenumerationer."
+    },
+    "storage": {
+      "usageTitle": "Använt lagringsutrymme",
+      "usageHint": "Diskutrymme som används av cachade bilagor och den lokala databasen.",
+      "cacheLabel": "Cache",
+      "databaseLabel": "Databas",
+      "clearTitle": "Rensa cache",
+      "clearHint": "Ta bort cachade bilagor och bilder. Din e-post behålls.",
+      "clearButton": "Rensa",
+      "clearConfirm": "Bekräfta?",
+      "clearedToast": "Cache rensad"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "Kunde inte nå e-postservern. Försöker igen vid nästa synkronisering..."
+  }
+}

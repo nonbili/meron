@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "dev": "wails dev",
+    "dev:core": "cargo watch -w meron-core/src -x \"build --manifest-path meron-core/Cargo.toml\"",
+    "build:core": "cargo build --manifest-path meron-core/Cargo.toml",
+    "build": "wails build",
+    "build:release": "./scripts/build.sh",
+    "generate": "wails generate module",
+    "test": "bun run test:go && bun run test:rust && bun run test:frontend",
+    "test:go": "go test ./...",
+    "test:rust": "cargo test --manifest-path meron-core/Cargo.toml",
+    "test:frontend": "cd frontend && bun test",
+    "test:integration": "cargo build --manifest-path meron-core/Cargo.toml && go test -tags integration -v -timeout 10m ."
+  },
+  "dependencies": {}
+}

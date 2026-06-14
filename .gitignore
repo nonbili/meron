@@ -1,0 +1,32 @@
+# Wails build outputs and generated frontend bindings.
+/build/bin/
+# Sidecar staged for embedding by scripts/build.sh.
+/build/sidecar/
+/frontend/wailsjs/
+/frontend/package.json.md5
+
+# Local binaries produced by ad-hoc `go build`.
+/meron
+
+# Release workflow staging/outputs.
+/snap/local/
+/dist/
+/*.snap
+/*.AppImage
+
+# Dependencies and build caches.
+/frontend/node_modules/
+/frontend/dist/
+/node_modules/
+/meron-core/target/
+
+# Local environment.
+/.env.local
+
+# macOS Finder metadata.
+.DS_Store
+
+# AI assistant workspace files.
+/.antigravitycli/
+/.claude/
+

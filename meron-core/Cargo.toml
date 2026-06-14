@@ -1,0 +1,41 @@
+[package]
+name = "meron-core"
+version = "0.1.0"
+edition = "2024"
+description = "Meron core engine sidecar (mail IMAP/SMTP/MIME, RSS, storage) driven over JSON-lines stdio"
+
+[[bin]]
+name = "meron-core"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-imap = { version = "0.11.2", default-features = false, features = ["runtime-tokio"] }
+socket2 = "0.6.3"
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23.40", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1.0.7"
+futures = "0.3.32"
+mailparse = "0.16.1"
+html-to-markdown-rs = { version = "3.4.1", default-features = false }
+anyhow = "1.0.102"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
+async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio"] }
+mail-builder = "0.4.4"
+base64 = "0.22.1"
+ureq = "3.3.0"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+feed-rs = "2.3.1"
+quick-xml = "0.37.5"
+scraper = "0.27.0"
+ammonia = "4.1.2"
+sha2 = "0.11.0"
+chrono = "0.4.44"
+url = "2.5.8"
+uuid = { version = "1.23.1", features = ["v4"] }
+
+# Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
+[patch.crates-io]
+async-imap = { git = "https://github.com/nonbili/async-imap.git", rev = "d04be74" }

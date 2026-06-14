@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Meron
+GenericName=Mail Client
+Comment=Modern mail and feed client
+Exec=meron %u
+Icon=meron
+Terminal=false
+Categories=Network;Email;Feed;
+MimeType=x-scheme-handler/mailto;
+StartupNotify=true
+StartupWMClass=meron
+Keywords=Email;Mail;Feed;RSS;

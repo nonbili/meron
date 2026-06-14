@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Motīvs",
+    "change": "Mainīt",
+    "import": "Importēt",
+    "export": "Eksportēt",
+    "loading": "Ielādē...",
+    "markdown": "Markdown",
+    "copied": "Kopēts",
+    "more": "Vairāk",
+    "clearSearch": "Notīrīt meklēšanu",
+    "showLess": "Rādīt mazāk",
+    "moreCount": "+{{count}} vairāk"
+  },
+  "buttons": {
+    "cancel": "Atcelt",
+    "save": "Saglabāt",
+    "send": "Sūtīt",
+    "discard": "Atmest",
+    "edit": "Rediģēt",
+    "close": "Aizvērt",
+    "delete": "Dzēst",
+    "done": "Gatavs",
+    "back": "Atpakaļ"
+  },
+  "layout": {
+    "resizeConversation": "Mainīt sarunas izmēru",
+    "resizeThreadList": "Mainīt pavedienu saraksta izmēru"
+  },
+  "filters": {
+    "label": "Filtrs",
+    "all": "Visi",
+    "allFeeds": "Visas plūsmas",
+    "unread": "Nelasītie",
+    "starred": "Ar zvaigznīti"
+  },
+  "empty": {
+    "welcomeTitle": "Laipni lūdzam Meron",
+    "mailSetupText": "Pievienojiet tradicionālo IMAP/SMTP kontu, lai sinhronizētu savu pastkasti tērzēšanas stila ziņojumu pavedienā.",
+    "noStarredItems": "Nav vienumu ar zvaigznīti",
+    "noStarredItemsText": "Atzīmējiet ziņojumus vai plūsmu vienumus ar zvaigznīti, lai tos apkopotu šeit.",
+    "noFeeds": "Nav plūsmu",
+    "noChats": "Nav tērzēšanu",
+    "addFeedToStart": "Pievienojiet plūsmu, lai sāktu lasīšanu.",
+    "noArchivedThreads": "Netika atrasts neviens arhivēts pavediens.",
+    "inboxEmpty": "Jūsu iesūtne ir tukša.",
+    "noColumns": "Nav kolonnu",
+    "noColumnsText": "Pievienojiet šai tāfelei mapes vai etiķetes kolonnu.",
+    "kanbanSetupText": "Pievienojiet kontu, lai izmantotu Kanban skatu.",
+    "noConversationSelected": "Nav atlasīta neviena saruna",
+    "noConversationSelectedText": "Sānjoslas sarakstā atlasiet ziņojumu pavedienu, lai skatītu tā saturu, atbildētu vai pārvaldītu pielikumus."
+  },
+  "app": {
+    "logoAlt": "Meron logotips"
+  },
+  "palette": {
+    "label": "Komandu palete",
+    "placeholder": "Ierakstiet komandu vai meklējiet...",
+    "noMatches": "Nav atbilstošu komandu.",
+    "hints": {
+      "run": "palaist",
+      "navigate": "naviģēt",
+      "close": "aizvērt"
+    }
+  },
+  "accounts": {
+    "unified": "Apvienotais",
+    "rssFeeds": "RSS plūsmas",
+    "rssAtomFeeds": "RSS / Atom plūsmas",
+    "thisAccount": "šis konts",
+    "setup": {
+      "connectMailAccount": "Pievienot pasta kontu",
+      "chooseProvider": "Izvēlieties pakalpojumu sniedzēju, lai izveidotu savienojumu.",
+      "feedAccountHint": "Izveidojiet kontu tagad; pievienojiet vairāk plūsmu jebkurā laikā, izmantojot \"+\" virs plūsmu saraksta."
+    },
+    "providers": {
+      "gmailDescription": "Google konts",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Jebkurš pasta serveris",
+      "rssDescription": "Abonēt plūsmas"
+    },
+    "fields": {
+      "accountName": "Konta nosaukums",
+      "firstFeedUrl": "Pirmās plūsmas URL (pēc izvēles)",
+      "emailAddress": "E-pasta adrese",
+      "senderNameOutgoing": "Sūtītāja vārds (izejošajam pastam)",
+      "password": "Parole",
+      "displayNameMeronOnly": "Displeja nosaukums (tikai Meron)",
+      "imapHost": "IMAP resursdators",
+      "smtpHost": "SMTP resursdators",
+      "port": "Ports",
+      "username": "Lietotājvārds"
+    },
+    "discovery": {
+      "lookingUp": "Meklē servera iestatījumus..."
+    },
+    "oauth": {
+      "configureOutlook": "Pirms Outlook pievienošanas, lūdzu, konfigurējiet MERON_OUTLOOK_CLIENT_ID savā čaulas (shell) vidē.",
+      "configureGmail": "Pirms Gmail pievienošanas, lūdzu, konfigurējiet MERON_GOOGLE_CLIENT_ID un MERON_GOOGLE_CLIENT_SECRET savā čaulas (shell) vidē.",
+      "signInWith": "Pierakstīties ar {{provider}}",
+      "waitingForSignIn": "Gaida, kamēr pabeigs pierakstīšanos ar {{provider}}..."
+    },
+    "appPasswordHint": "{{provider}} nepieciešama lietotnei specifiska parole — jūsu parastā konta parole šeit nedarbosies. <action>Ģenerējiet to {{provider}}</action>, pēc tam ielīmējiet to augstāk.",
+    "advancedServerSettings": "Papildu servera iestatījumi",
+    "actions": {
+      "addAccount": "Pievienot kontu",
+      "addAccountTitle": "Pievienot kontu",
+      "saveAccount": "Saglabāt kontu",
+      "collapseAccount": "Sakļaut kontu",
+      "expandAccount": "Izvērst kontu"
+    }
+  },
+  "feeds": {
+    "fallbackName": "RSS plūsma",
+    "added": "Plūsma pievienota",
+    "addFailed": "Neizdevās pievienot plūsmu",
+    "url": "Plūsmas URL",
+    "urlHint": "Ielīmējiet plūsmas URL vai vietnes adresi, lai automātiski atklātu tās plūsmu.",
+    "subscribeUnder": "Abonēt jaunu plūsmu zem {{account}}.",
+    "manageSubscription": "Pārvaldīt šo plūsmas abonementu.",
+    "copyUrl": "Kopēt URL",
+    "deleteHint": "Atteikties no šīs plūsmas abonēšanas un noņemt tās kešatmiņā saglabātos vienumus. Šo darbību nevar atsaukt.",
+    "actions": {
+      "addFeed": "Pievienot plūsmu",
+      "syncFeeds": "Sinhronizēt plūsmas",
+      "syncingFeeds": "Sinhronizē plūsmas...",
+      "addToAccount": "Pievienot plūsmu šim kontam",
+      "deleteFeed": "Dzēst plūsmu",
+      "confirmDelete": "Apstiprināt dzēšanu"
+    }
+  },
+  "folders": {
+    "loading": "Ielādē mapes...",
+    "noneAvailable": "Nav pieejamu mapju",
+    "createdMissing": "Mape tika izveidota, bet netika atgriezta.",
+    "nameRequired": "Nepieciešams mapes nosaukums.",
+    "alreadyExists": "Šāda mape jau eksistē.",
+    "createFailed": "Neizdevās izveidot mapi.",
+    "newFolderOrLabel": "Jauna mape vai etiķete",
+    "namePlaceholder": "Mapes vai etiķetes nosaukums",
+    "create": "Izveidot mapi"
+  },
+  "composer": {
+    "fields": {
+      "from": "No",
+      "to": "Kam",
+      "cc": "Kopija",
+      "bcc": "Slēptā kopija",
+      "subject": "Temats"
+    },
+    "placeholders": {
+      "recipient": "saņēmējs@example.com",
+      "commaSeparated": "atdalīti ar komatiem",
+      "message": "Rakstiet savu ziņojumu...",
+      "quickMessage": "Rakstiet ziņojumu..."
+    },
+    "actions": {
+      "attachFiles": "Pievienot failus",
+      "insertInlineImage": "Ievietot attēlu tekstā",
+      "switchToPlainText": "Pārslēgties uz vienkāršu tekstu",
+      "switchToRichText": "Pārslēgties uz bagātinātu tekstu",
+      "sendWithShortcut": "Sūtīt ({{shortcut}})",
+      "removeAttachment": "Noņemt pielikumu",
+      "hideCcBcc": "Slēpt Kopiju/Slēpto kopiju",
+      "ccBcc": "Kopija/Slēptā kopija",
+      "newMessage": "Jauns ziņojums",
+      "openFullEditor": "Atvērt pilno redaktoru",
+      "sendMessageWithShortcut": "Sūtīt ziņojumu ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Bagātināts teksts",
+      "plainText": "Vienkāršs teksts"
+    },
+    "status": {
+      "savingDraft": "Saglabā melnrakstu...",
+      "savedToServer": "Saglabāts serverī",
+      "draftAutosaveFailed": "Melnraksta automātiskā saglabāšana neizdevās",
+      "sending": "Sūta..."
+    },
+    "toolbar": {
+      "bold": "Treknraksts",
+      "italic": "Slīpraksts",
+      "underline": "Pasvītrots",
+      "strikethrough": "Pārsvītrots",
+      "heading": "Virsraksts",
+      "bulletList": "Saraksts ar aizzīmēm",
+      "numberedList": "Numurēts saraksts",
+      "quote": "Citāts",
+      "link": "Saite",
+      "markdown": "Markdown",
+      "markdownHint": "Ierakstiet tos, un tie tiks formatēti rakstīšanas laikā"
+    },
+    "imageResize": {
+      "topLeft": "Velciet, lai mainītu izmēru (augšā pa kreisi)",
+      "topRight": "Velciet, lai mainītu izmēru (augšā pa labi)",
+      "bottomLeft": "Velciet, lai mainītu izmēru (apakšā pa kreisi)",
+      "bottomRight": "Velciet, lai mainītu izmēru (apakšā pa labi)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Meklēt ziņojumus...",
+    "searchFeeds": "Meklēt plūsmas...",
+    "backToInbox": "Atpakaļ uz iesūtni",
+    "actions": {
+      "title": "Pavediena darbības",
+      "syncMailbox": "Sinhronizēt pastkasti",
+      "syncing": "Sinhronizē...",
+      "markAllAsRead": "Atzīmēt visu kā lasītu",
+      "loadMore": "Ielādēt vairāk",
+      "openInNewTab": "Atvērt jaunā cilnē",
+      "markAsRead": "Atzīmēt kā lasītu",
+      "markAsUnread": "Atzīmēt kā nelasītu",
+      "starThread": "Pievienot zvaigznīti pavedienam",
+      "unstarThread": "Noņemt zvaigznīti pavedienam",
+      "archiveThread": "Arhivēt pavedienu",
+      "moveTo": "Pārvietot uz...",
+      "copyTo": "Kopēt uz...",
+      "deleteForever": "Dzēst uz visiem laikiem",
+      "discardDraft": "Atmest melnrakstu",
+      "moveToTrash": "Pārvietot uz miskasti"
+    }
+  },
+  "chat": {
+    "backToChats": "Atpakaļ uz tērzēšanām",
+    "closeConversationEsc": "Aizvērt sarunu (Esc)",
+    "closeEsc": "Aizvērt (Esc)",
+    "searchThread": "Meklēt pavedienā",
+    "closeThreadSearch": "Aizvērt pavediena meklēšanu",
+    "previousMatch": "Iepriekšējā sakritība",
+    "nextMatch": "Nākamā sakritība",
+    "feedDetails": "Plūsmas informācija",
+    "conversationDetails": "Sarunas informācija",
+    "moreActions": "Vairāk darbību",
+    "moreMessageActions": "Vairāk ziņojumu darbību",
+    "viewAsHtml": "Skatīt kā HTML",
+    "viewAsPlainText": "Skatīt kā vienkāršu tekstu",
+    "star": "Atzīmēt ar zvaigznīti",
+    "unstar": "Noņemt zvaigznīti",
+    "currentConversation": "Pašreizējā saruna",
+    "current": "Pašreizējais",
+    "closeTab": "Aizvērt cilni",
+    "branchNotice": "Šī saruna ir atzars no mainīta temata.",
+    "viewOriginalTopic": "Skatīt sākotnējo tēmu",
+    "hideDetails": "Slēpt informāciju",
+    "showDetails": "Rādīt informāciju",
+    "failedToSendRetry": "Neizdevās nosūtīt — noklikšķiniet, lai mēģinātu vēlreiz",
+    "retry": "Mēģināt vēlreiz",
+    "openExternalPlayer": "Atvērt ārējā atskaņotājā",
+    "showImages_one": "Rādīt attēlu",
+    "showImages_other": "Rādīt {{count}} attēlus",
+    "saveFile": "Saglabāt {{filename}}",
+    "copyCode": "Kopēt kodu",
+    "previousImage": "Iepriekšējais attēls",
+    "nextImage": "Nākamais attēls",
+    "media": "Mediji",
+    "files": "Faili",
+    "noMedia": "Šajā sarunā nav mediju.",
+    "noFiles": "Šajā sarunā nav failu.",
+    "copyEmailAddress": "Kopēt e-pasta adresi",
+    "mediaItems_one": "{{count}} mediju vienums",
+    "mediaItems_other": "{{count}} mediju vienumi",
+    "fileItems_one": "{{count}} fails",
+    "fileItems_other": "{{count}} faili",
+    "people_one": "{{count}} persona",
+    "people_other": "{{count}} personas",
+    "noParticipants": "Šajā sarunā nav dalībnieku.",
+    "you": "Jūs",
+    "newMessageTo": "Jauns ziņojums lietotājam {{email}}",
+    "htmlView": "HTML skats",
+    "plainView": "Vienkāršs skats",
+    "copyFullAddress": "Kopēt pilnu adresi",
+    "messageHtml": "Ziņojuma HTML",
+    "actions": {
+      "openLink": "Atvērt saiti",
+      "copyLinkAddress": "Kopēt saites adresi",
+      "forward": "Pārsūtīt",
+      "editAsNewMessage": "Rediģēt kā jaunu ziņojumu",
+      "deleteMessage": "Dzēst ziņojumu",
+      "saveImage": "Saglabāt attēlu...",
+      "copyImage": "Kopēt attēlu"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Skats un motīvs",
+      "hideFromSidebar": "Paslēpt no sānjoslas"
+    }
+  },
+  "about": {
+    "title": "Par Meron",
+    "aboutProduct": "Par {{product}}",
+    "version": "Versija {{version}}",
+    "supportDevelopment": "Atbalstīt izstrādi"
+  },
+  "kanban": {
+    "searchBoard": "Meklēt tāfelē...",
+    "searchBoardAction": "Meklēt tāfelē",
+    "addColumnsHint": "Izvēlieties mapes, kuras rādīt kā Kanban kolonnas.",
+    "columns": {
+      "unifiedInbox": "Apvienotā iesūtne",
+      "unifiedStarred": "Apvienotie ar zvaigznīti"
+    },
+    "searchScope": {
+      "label": "Meklēšanas apgabals",
+      "allColumns": "Visas kolonnas"
+    },
+    "actions": {
+      "hideColumn": "Paslēpt kolonnu",
+      "addBoard": "Pievienot Kanban tāfeli",
+      "addBoardShort": "Pievienot tāfeli",
+      "addColumn": "Pievienot kolonnu",
+      "addColumns": "Pievienot kolonnas",
+      "boardOptions": "Tāfeles opcijas",
+      "dragToReorderColumn": "Velciet, lai pārkārtotu kolonnu",
+      "minimize": "Minimizēt",
+      "expand": "Izvērst",
+      "showFilterInAllColumns": "Rādīt {{filter}} visās kolonnās"
+    },
+    "board": {
+      "label": "Tāfele",
+      "defaultName": "Kanban tāfele",
+      "name": "Tāfeles nosaukums",
+      "namePlaceholder": "Tiek rādīts tāfeles galvenē",
+      "background": "Tāfeles fons",
+      "chooseImage": "Izvēlēties tāfeles attēlu",
+      "chooseImageFailed": "Neizdevās izvēlēties tāfeles attēlu",
+      "uploadImageFailed": "Neizdevās augšupielādēt tāfeles attēlu",
+      "changeImage": "Mainīt tāfeles attēlu",
+      "subtitle_one": "Kanban tāfele · {{count}} kolonna",
+      "subtitle_other": "Kanban tāfele · {{count}} kolonnas",
+      "deleteTitle": "Dzēst tāfeli?",
+      "deleteMessage": "\"{{name}}\" tiks noņemts no Kanban sliedes.",
+      "delete": "Dzēst tāfeli",
+      "settings": "Tāfeles iestatījumi..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Vienkāršs",
+    "plainDefault": "Vienkāršs (noklusējums)",
+    "customBackground": "Pielāgots fons",
+    "chatTitle": "Tērzēšanas fona attēls - {{name}}",
+    "boardTitle": "Tāfeles fona attēls - {{name}}",
+    "chooseImage": "Izvēlēties fona attēlu",
+    "uploadFailed": "Neizdevās augšupielādēt fonu",
+    "uploading": "Augšupielādē...",
+    "uploadCustom": "Augšupielādēt pielāgotu"
+  },
+  "avatar": {
+    "edit": "Rediģēt iemiesojumu",
+    "save": "Saglabāt iemiesojumu",
+    "renderFailed": "Neizdevās renderēt apgriezto iemiesojumu",
+    "cropFailed": "Neizdevās apgriezt iemiesojumu",
+    "loadFailed": "Neizdevās ielādēt iemiesojuma attēlu",
+    "zoom": "Tuvināt iemiesojumu",
+    "zoomOut": "Attālināt",
+    "zoomIn": "Tuvināt",
+    "resetCrop": "Atiestatīt apgriešanu"
+  },
+  "shortcuts": {
+    "title": "Tastatūras saīsnes"
+  },
+  "theme": {
+    "custom": "Pielāgots",
+    "customTheme": "Pielāgots motīvs",
+    "delete": "Dzēst motīvu",
+    "deleteMessage": "Vai dzēst pielāgoto motīvu \"{{name}}\"? Šo darbību nevar atsaukt.",
+    "edit": "Rediģēt motīvu",
+    "new": "Jauns motīvs",
+    "save": "Saglabāt motīvu",
+    "namePlaceholder": "Motīva nosaukums",
+    "light": "Gaišs",
+    "dark": "Tumšs",
+    "pickColor": "Izvēlēties {{label}} krāsu",
+    "fields": {
+      "background": "Fons",
+      "backgroundHint": "Loga fons aiz visa",
+      "surface": "Virsma",
+      "surfaceHint": "Pavedienu saraksta, galvenes un rakstītāja paneļi",
+      "sidebar": "Sānjosla",
+      "sidebarHint": "Konta sliede kreisajā pusē",
+      "accent": "Akcents",
+      "accentHint": "Pogas, saites un izejošie burbuļi",
+      "text": "Teksts",
+      "textHint": "Galvenā teksta krāsa"
+    }
+  },
+  "settings": {
+    "label": "Iestatījumi",
+    "sections": {
+      "general": "Vispārīgie",
+      "mailAccounts": "Pasta konti",
+      "feedAccounts": "Plūsmu konti",
+      "kanbanBoards": "Kanban tāfeles",
+      "noMailAccounts": "Vēl nav pasta kontu.",
+      "noFeedAccounts": "Vēl nav plūsmu kontu.",
+      "noBoards": "Vēl nav tāfeļu.",
+      "sidebar": "Sānjosla",
+      "kanban": "Kanban",
+      "composer": "Rakstītājs",
+      "subscriptions": "Abonementi",
+      "storage": "Krātuve"
+    },
+    "pages": {
+      "appearance": "Izskats"
+    },
+    "language": {
+      "label": "Valoda",
+      "hint": "Izvēlieties valodu vai izmantojiet sistēmas valodu.",
+      "system": "Sistēmas"
+    },
+    "appearance": {
+      "showSenderImages": "Rādīt sūtītāja attēlus",
+      "showSenderImagesHint": "Iegūst sūtītāja attēlus no Gravatar, kā rezerves variantu izmantojot domēna favikonu."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Rādīt apvienoto iesūtni",
+      "showStarred": "Rādīt atzīmētos ar zvaigznīti"
+    },
+    "kanban": {
+      "columnWidth": "Kolonnas platums"
+    },
+    "composer": {
+      "sendMessageWith": "Sūtīt ziņojumu ar",
+      "sendShortcutEnterHint": "Enter nosūta, Shift+Enter pievieno jaunu rindu.",
+      "sendShortcutModHint": "{{shortcut}} nosūta, Enter pievieno jaunu rindu."
+    },
+    "account": {
+      "changeAvatar": "Mainīt iemiesojumu",
+      "chooseAvatarImage": "Izvēlēties iemiesojuma attēlu",
+      "chooseAvatarFailed": "Neizdevās izvēlēties iemiesojumu",
+      "removeAccount": "Noņemt kontu",
+      "profile": "Profils",
+      "displayName": "Displeja nosaukums",
+      "displayNameHint": "Tiek rādīts tikai Meron iekšienē.",
+      "displayNamePlaceholder": "Rādīts Meron iekšienē",
+      "senderName": "Sūtītāja vārds",
+      "senderNameHint": "Vārds laukā 'No' izejošajā pastā.",
+      "senderNamePlaceholder": "Izejošā pasta lauka 'No' vārds",
+      "visibility": "Redzamība",
+      "showInUnifiedInbox": "Rādīt apvienotajā iesūtnē",
+      "showInUnifiedInboxHint": "Jūs joprojām varat atvērt kontu tieši.",
+      "showInLeftSidebar": "Rādīt kreisajā sānjoslā",
+      "showInLeftSidebarHint": "Slēptie konti joprojām ir pieejami šeit, Iestatījumos.",
+      "notificationsSync": "Paziņojumi un sinhronizācija",
+      "muteNotifications": "Izslēgt paziņojumu skaņu",
+      "unmuteNotifications": "Ieslēgt paziņojumu skaņu",
+      "muteNotificationsHint": "Ziņojumi joprojām pienāk un tiek sinhronizēti; nav darbvirsmas paziņojumu.",
+      "pauseAccount": "Apturēt kontu",
+      "resumeChecking": "Atsākt pārbaudi",
+      "pauseAccountHint": "Aptur jaunu ziņojumu pārbaudi; esošie joprojām ir lasāmi.",
+      "syncInterval": "Sinhronizācijas intervāls",
+      "content": "Saturs",
+      "loadRemoteImages": "Ielādēt attālos attēlus",
+      "loadRemoteImagesHint": "Pēc noklusējuma izslēgts e-pastam, lai izvairītos no izsekošanas pikseļiem.",
+      "conversationView": "Sarunas skats",
+      "conversationPlain": "Vienkāršs",
+      "chatBackground": "Tērzēšanas fons",
+      "sending": "Sūtīšana",
+      "aliases": "Aizstājvārdi",
+      "aliasesHint": "Papildu adreses, no kurām varat sūtīt. Atbildes uz e-pastiem, kas saņemti uz aizstājvārdu, pēc noklusējuma tiek sūtītas no šīs adreses.",
+      "addAlias": "Pievienot aizstājvārdu",
+      "aliasNamePlaceholder": "Vārds (pēc izvēles)",
+      "removeAlias": "Noņemt aizstājvārdu",
+      "accountSettings": "Konta iestatījumi..."
+    },
+    "feeds": {
+      "opmlFile": "OPML fails",
+      "opmlHint": "Importēt vai eksportēt šī konta plūsmas abonementus."
+    },
+    "storage": {
+      "usageTitle": "Izmantotā krātuve",
+      "usageHint": "Diska vieta, ko izmanto kešatmiņā saglabātie pielikumi un vietējā datubāze.",
+      "cacheLabel": "Kešatmiņa",
+      "databaseLabel": "Datubāze",
+      "clearTitle": "Notīrīt kešatmiņu",
+      "clearHint": "Dzēst kešatmiņā saglabātos pielikumus un attēlus. Jūsu e-pasts tiks saglabāts.",
+      "clearButton": "Notīrīt",
+      "clearConfirm": "Apstiprināt?",
+      "clearedToast": "Kešatmiņa notīrīta"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "Neizdevās sasniegt pasta serveri. Tiks mēģināts vēlreiz nākamajā sinhronizācijā..."
+  }
+}

@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Motyw",
+    "change": "Zmień",
+    "import": "Importuj",
+    "export": "Eksportuj",
+    "loading": "Ładowanie...",
+    "markdown": "Markdown",
+    "copied": "Skopiowano",
+    "more": "Więcej",
+    "clearSearch": "Wyczyść wyszukiwanie",
+    "showLess": "Pokaż mniej",
+    "moreCount": "+{{count}} więcej"
+  },
+  "buttons": {
+    "cancel": "Anuluj",
+    "save": "Zapisz",
+    "send": "Wyślij",
+    "discard": "Odrzuć",
+    "edit": "Edytuj",
+    "close": "Zamknij",
+    "delete": "Usuń",
+    "done": "Gotowe",
+    "back": "Wstecz"
+  },
+  "layout": {
+    "resizeConversation": "Zmień rozmiar konwersacji",
+    "resizeThreadList": "Zmień rozmiar listy wątków"
+  },
+  "filters": {
+    "label": "Filtr",
+    "all": "Wszystkie",
+    "allFeeds": "Wszystkie kanały",
+    "unread": "Nieprzeczytane",
+    "starred": "Oznaczone gwiazdką"
+  },
+  "empty": {
+    "welcomeTitle": "Witaj w Meron",
+    "mailSetupText": "Dodaj tradycyjne konto IMAP/SMTP, aby zsynchronizować swoją skrzynkę pocztową w wątek wiadomości w stylu czatu.",
+    "noStarredItems": "Brak elementów oznaczonych gwiazdką",
+    "noStarredItemsText": "Oznacz wiadomości lub elementy kanałów gwiazdką, aby je tutaj gromadzić.",
+    "noFeeds": "Brak kanałów",
+    "noChats": "Brak czatów",
+    "addFeedToStart": "Dodaj kanał, aby zacząć czytanie.",
+    "noArchivedThreads": "Nie znaleziono zarchiwizowanych wątków.",
+    "inboxEmpty": "Twoja skrzynka odbiorcza jest pusta.",
+    "noColumns": "Brak kolumn",
+    "noColumnsText": "Dodaj kolumnę folderu lub etykiety do tej tablicy.",
+    "kanbanSetupText": "Dodaj konto, aby korzystać z widoku Kanban.",
+    "noConversationSelected": "Nie wybrano konwersacji",
+    "noConversationSelectedText": "Wybierz wątek wiadomości z listy na pasku bocznym, aby wyświetlić jego zawartość, odpowiedzieć lub zarządzać załącznikami."
+  },
+  "app": {
+    "logoAlt": "Logo Meron"
+  },
+  "palette": {
+    "label": "Paleta komend",
+    "placeholder": "Wpisz polecenie lub wyszukaj...",
+    "noMatches": "Brak pasujących poleceń.",
+    "hints": {
+      "run": "uruchom",
+      "navigate": "nawiguj",
+      "close": "zamknij"
+    }
+  },
+  "accounts": {
+    "unified": "Wspólne",
+    "rssFeeds": "Kanały RSS",
+    "rssAtomFeeds": "Kanały RSS / Atom",
+    "thisAccount": "to konto",
+    "setup": {
+      "connectMailAccount": "Połącz konto pocztowe",
+      "chooseProvider": "Wybierz dostawcę, aby się połączyć.",
+      "feedAccountHint": "Utwórz konto teraz; możesz dodać więcej kanałów w dowolnym momencie za pomocą „+” nad listą kanałów."
+    },
+    "providers": {
+      "gmailDescription": "Konto Google",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Dowolny serwer pocztowy",
+      "rssDescription": "Subskrybuj kanały"
+    },
+    "fields": {
+      "accountName": "Nazwa konta",
+      "firstFeedUrl": "URL pierwszego kanału (opcjonalnie)",
+      "emailAddress": "Adres e-mail",
+      "senderNameOutgoing": "Nazwa nadawcy (poczta wychodząca)",
+      "password": "Hasło",
+      "displayNameMeronOnly": "Nazwa wyświetlana (tylko Meron)",
+      "imapHost": "Host IMAP",
+      "smtpHost": "Host SMTP",
+      "port": "Port",
+      "username": "Nazwa użytkownika"
+    },
+    "discovery": {
+      "lookingUp": "Wyszukiwanie ustawień serwera..."
+    },
+    "oauth": {
+      "configureOutlook": "Przed połączeniem z Outlookiem skonfiguruj MERON_OUTLOOK_CLIENT_ID w swoim środowisku powłoki.",
+      "configureGmail": "Przed połączeniem z Gmailem skonfiguruj MERON_GOOGLE_CLIENT_ID i MERON_GOOGLE_CLIENT_SECRET w swoim środowisku powłoki.",
+      "signInWith": "Zaloguj się przez {{provider}}",
+      "waitingForSignIn": "Oczekiwanie na zakończenie logowania do {{provider}}..."
+    },
+    "appPasswordHint": "{{provider}} wymaga hasła dedykowanego do aplikacji - Twoje standardowe hasło do konta tutaj nie zadziała. <action>Wygeneruj je dla {{provider}}</action>, a następnie wklej powyżej.",
+    "advancedServerSettings": "Zaawansowane ustawienia serwera",
+    "actions": {
+      "addAccount": "Dodaj konto",
+      "addAccountTitle": "Dodaj konto",
+      "saveAccount": "Zapisz konto",
+      "collapseAccount": "Zwiń konto",
+      "expandAccount": "Rozwiń konto"
+    }
+  },
+  "feeds": {
+    "fallbackName": "Kanał RSS",
+    "added": "Dodano kanał",
+    "addFailed": "Nie udało się dodać kanału",
+    "url": "URL kanału",
+    "urlHint": "Wklej URL kanału lub adres witryny, aby automatycznie wykryć jej kanał.",
+    "subscribeUnder": "Zasubskrybuj nowy kanał pod kontem {{account}}.",
+    "manageSubscription": "Zarządzaj tą subskrypcją kanału.",
+    "copyUrl": "Kopiuj URL",
+    "deleteHint": "Anuluj subskrypcję tego kanału i usuń jego elementy z pamięci podręcznej. Tego kroku nie można cofnąć.",
+    "actions": {
+      "addFeed": "Dodaj kanał",
+      "syncFeeds": "Synchronizuj kanały",
+      "syncingFeeds": "Synchronizowanie kanałów...",
+      "addToAccount": "Dodaj kanał do tego konta",
+      "deleteFeed": "Usuń kanał",
+      "confirmDelete": "Potwierdź usunięcie"
+    }
+  },
+  "folders": {
+    "loading": "Ładowanie folderów...",
+    "noneAvailable": "Brak dostępnych folderów",
+    "createdMissing": "Folder został utworzony, ale nie został zwrócony.",
+    "nameRequired": "Nazwa folderu jest wymagana.",
+    "alreadyExists": "Ten folder już istnieje.",
+    "createFailed": "Nie udało się utworzyć folderu.",
+    "newFolderOrLabel": "Nowy folder lub etykieta",
+    "namePlaceholder": "Nazwa folderu lub etykiety",
+    "create": "Utwórz folder"
+  },
+  "composer": {
+    "fields": {
+      "from": "Od",
+      "to": "Do",
+      "cc": "DW",
+      "bcc": "UDW",
+      "subject": "Temat"
+    },
+    "placeholders": {
+      "recipient": "odbiorca@example.com",
+      "commaSeparated": "oddzielone przecinkami",
+      "message": "Napisz swoją wiadomość...",
+      "quickMessage": "Napisz wiadomość..."
+    },
+    "actions": {
+      "attachFiles": "Załącz pliki",
+      "insertInlineImage": "Wstaw obraz w tekście",
+      "switchToPlainText": "Przełącz na zwykły tekst",
+      "switchToRichText": "Przełącz na sformatowany tekst",
+      "sendWithShortcut": "Wyślij ({{shortcut}})",
+      "removeAttachment": "Usuń załącznik",
+      "hideCcBcc": "Ukryj DW/UDW",
+      "ccBcc": "DW/UDW",
+      "newMessage": "Nowa wiadomość",
+      "openFullEditor": "Otwórz pełny edytor",
+      "sendMessageWithShortcut": "Wyślij wiadomość ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Sformatowany tekst",
+      "plainText": "Zwykły tekst"
+    },
+    "status": {
+      "savingDraft": "Zapisywanie wersji roboczej...",
+      "savedToServer": "Zapisano na serwerze",
+      "draftAutosaveFailed": "Automatyczne zapisywanie wersji roboczej nie powiodło się",
+      "sending": "Wysyłanie..."
+    },
+    "toolbar": {
+      "bold": "Pogrubienie",
+      "italic": "Kursywa",
+      "underline": "Podkreślenie",
+      "strikethrough": "Przekreślenie",
+      "heading": "Nagłówek",
+      "bulletList": "Lista punktowana",
+      "numberedList": "Lista numerowana",
+      "quote": "Cytat",
+      "link": "Link",
+      "markdown": "Markdown",
+      "markdownHint": "Wpisz je, a zostaną sformatowane podczas pisania"
+    },
+    "imageResize": {
+      "topLeft": "Przeciągnij, aby zmienić rozmiar (lewy górny róg)",
+      "topRight": "Przeciągnij, aby zmienić rozmiar (prawy górny róg)",
+      "bottomLeft": "Przeciągnij, aby zmienić rozmiar (lewy dolny róg)",
+      "bottomRight": "Przeciągnij, aby zmienić rozmiar (prawy dolny róg)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Szukaj wiadomości...",
+    "searchFeeds": "Szukaj kanałów...",
+    "backToInbox": "Powrót do skrzynki odbiorczej",
+    "actions": {
+      "title": "Działania na wątku",
+      "syncMailbox": "Synchronizuj skrzynkę pocztową",
+      "syncing": "Synchronizowanie...",
+      "markAllAsRead": "Oznacz wszystkie jako przeczytane",
+      "loadMore": "Wczytaj więcej",
+      "openInNewTab": "Otwórz w nowej karcie",
+      "markAsRead": "Oznacz jako przeczytane",
+      "markAsUnread": "Oznacz jako nieprzeczytane",
+      "starThread": "Dodaj gwiazdkę do wątku",
+      "unstarThread": "Usuń gwiazdkę z wątku",
+      "archiveThread": "Archiwizuj wątek",
+      "moveTo": "Przenieś do...",
+      "copyTo": "Kopiuj do...",
+      "deleteForever": "Usuń na zawsze",
+      "discardDraft": "Odrzuć wersję roboczą",
+      "moveToTrash": "Przenieś do kosza"
+    }
+  },
+  "chat": {
+    "backToChats": "Powrót do czatów",
+    "closeConversationEsc": "Zamknij konwersację (Esc)",
+    "closeEsc": "Zamknij (Esc)",
+    "searchThread": "Przeszukaj wątek",
+    "closeThreadSearch": "Zamknij wyszukiwanie w wątku",
+    "previousMatch": "Poprzednie dopasowanie",
+    "nextMatch": "Następne dopasowanie",
+    "feedDetails": "Szczegóły kanału",
+    "conversationDetails": "Szczegóły konwersacji",
+    "moreActions": "Więcej działań",
+    "moreMessageActions": "Więcej działań na wiadomościach",
+    "viewAsHtml": "Wyświetl jako HTML",
+    "viewAsPlainText": "Wyświetl jako zwykły tekst",
+    "star": "Dodaj gwiazdkę",
+    "unstar": "Usuń gwiazdkę",
+    "currentConversation": "Bieżąca konwersacja",
+    "current": "Bieżący",
+    "closeTab": "Zamknij kartę",
+    "branchNotice": "Ta konwersacja jest gałęzią powstałą ze zmiany tematu.",
+    "viewOriginalTopic": "Wyświetl oryginalny temat",
+    "hideDetails": "Ukryj szczegóły",
+    "showDetails": "Pokaż szczegóły",
+    "failedToSendRetry": "Nie udało się wysłać - kliknij, aby spróbować ponownie",
+    "retry": "Spróbuj ponownie",
+    "openExternalPlayer": "Otwórz w odtwarzaczu zewnętrznym",
+    "showImages_one": "Pokaż obraz",
+    "showImages_other": "Pokaż obrazy ({{count}})",
+    "saveFile": "Zapisz {{filename}}",
+    "copyCode": "Kopiuj kod",
+    "previousImage": "Poprzedni obraz",
+    "nextImage": "Następny obraz",
+    "media": "Multimedia",
+    "files": "Pliki",
+    "noMedia": "Brak multimediów w tej konwersacji.",
+    "noFiles": "Brak plików w tej konwersacji.",
+    "copyEmailAddress": "Kopiuj adres e-mail",
+    "mediaItems_one": "{{count}} element multimedialny",
+    "mediaItems_other": "{{count}} elementów multimedialnych",
+    "fileItems_one": "{{count}} plik",
+    "fileItems_other": "{{count}} plików",
+    "people_one": "{{count}} osoba",
+    "people_other": "{{count}} osób",
+    "noParticipants": "Brak uczestników w tej konwersacji.",
+    "you": "Ty",
+    "newMessageTo": "Nowa wiadomość do {{email}}",
+    "htmlView": "Widok HTML",
+    "plainView": "Zwykły widok",
+    "copyFullAddress": "Kopiuj pełny adres",
+    "messageHtml": "HTML wiadomości",
+    "actions": {
+      "openLink": "Otwórz link",
+      "copyLinkAddress": "Kopiuj adres odnośnika",
+      "forward": "Przekaż dalej",
+      "editAsNewMessage": "Edytuj jako nową wiadomość",
+      "deleteMessage": "Usuń wiadomość",
+      "saveImage": "Zapisz obraz...",
+      "copyImage": "Kopiuj obraz"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Widok i motyw",
+      "hideFromSidebar": "Ukryj z paska bocznego"
+    }
+  },
+  "about": {
+    "title": "O programie Meron",
+    "aboutProduct": "O programie {{product}}",
+    "version": "Wersja {{version}}",
+    "supportDevelopment": "Wesprzyj rozwój"
+  },
+  "kanban": {
+    "searchBoard": "Przeszukaj tablicę...",
+    "searchBoardAction": "Przeszukaj tablicę",
+    "addColumnsHint": "Wybierz foldery, które mają być wyświetlane jako kolumny Kanban.",
+    "columns": {
+      "unifiedInbox": "Wspólna skrzynka odbiorcza",
+      "unifiedStarred": "Wspólne oznaczone gwiazdką"
+    },
+    "searchScope": {
+      "label": "Zakres wyszukiwania",
+      "allColumns": "Wszystkie kolumny"
+    },
+    "actions": {
+      "hideColumn": "Ukryj kolumnę",
+      "addBoard": "Dodaj tablicę Kanban",
+      "addBoardShort": "Dodaj tablicę",
+      "addColumn": "Dodaj kolumnę",
+      "addColumns": "Dodaj kolumny",
+      "boardOptions": "Opcje tablicy",
+      "dragToReorderColumn": "Przeciągnij, aby zmienić kolejność kolumn",
+      "minimize": "Minimalizuj",
+      "expand": "Rozwiń",
+      "showFilterInAllColumns": "Pokaż {{filter}} we wszystkich kolumnach"
+    },
+    "board": {
+      "label": "Tablica",
+      "defaultName": "Tablica Kanban",
+      "name": "Nazwa tablicy",
+      "namePlaceholder": "Wyświetlana w nagłówku tablicy",
+      "background": "Tło tablicy",
+      "chooseImage": "Wybierz obraz tablicy",
+      "chooseImageFailed": "Nie udało się wybrać obrazu tablicy",
+      "uploadImageFailed": "Nie udało się przesłać obrazu tablicy",
+      "changeImage": "Zmień obraz tablicy",
+      "subtitle_one": "Tablica Kanban · {{count}} kolumna",
+      "subtitle_other": "Tablica Kanban · {{count}} kolumny",
+      "deleteTitle": "Usunąć tablicę?",
+      "deleteMessage": "„{{name}}” zostanie usunięta z paska Kanban.",
+      "delete": "Usuń tablicę",
+      "settings": "Ustawienia tablicy..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Jednolite",
+    "plainDefault": "Jednolite (domyślne)",
+    "customBackground": "Własne tło",
+    "chatTitle": "Tapeta czatu - {{name}}",
+    "boardTitle": "Tapeta tablicy - {{name}}",
+    "chooseImage": "Wybierz obraz tapety",
+    "uploadFailed": "Nie udało się przesłać tła",
+    "uploading": "Przesyłanie...",
+    "uploadCustom": "Prześlij własne"
+  },
+  "avatar": {
+    "edit": "Edytuj awatar",
+    "save": "Zapisz awatar",
+    "renderFailed": "Nie udało się wyrenderować przyciętego awatara",
+    "cropFailed": "Nie udało się przyciąć awatara",
+    "loadFailed": "Nie udało się wczytać obrazu awatara",
+    "zoom": "Powiększenie awatara",
+    "zoomOut": "Pomniejsz",
+    "zoomIn": "Powiększ",
+    "resetCrop": "Resetuj przycinanie"
+  },
+  "shortcuts": {
+    "title": "Skróty klawiszowe"
+  },
+  "theme": {
+    "custom": "Własny",
+    "customTheme": "Własny motyw",
+    "delete": "Usuń motyw",
+    "deleteMessage": "Usunąć własny motyw „{{name}}”? Tego kroku nie można cofnąć.",
+    "edit": "Edytuj motyw",
+    "new": "Nowy motyw",
+    "save": "Zapisz motyw",
+    "namePlaceholder": "Nazwa motywu",
+    "light": "Jasny",
+    "dark": "Ciemny",
+    "pickColor": "Wybierz kolor elementu {{label}}",
+    "fields": {
+      "background": "Tło",
+      "backgroundHint": "Tło okna pod całą zawartością",
+      "surface": "Powierzchnia",
+      "surfaceHint": "Lista wątków, nagłówek i panele edytora",
+      "sidebar": "Pasek boczny",
+      "sidebarHint": "Pasek kont po lewej stronie",
+      "accent": "Akcent",
+      "accentHint": "Przyciski, linki i dymki wiadomości wychodzących",
+      "text": "Tekst",
+      "textHint": "Główny kolor tekstu"
+    }
+  },
+  "settings": {
+    "label": "Ustawienia",
+    "sections": {
+      "general": "Ogólne",
+      "mailAccounts": "Konta pocztowe",
+      "feedAccounts": "Konta kanałów",
+      "kanbanBoards": "Tablice Kanban",
+      "noMailAccounts": "Brak kont pocztowych.",
+      "noFeedAccounts": "Brak kont kanałów.",
+      "noBoards": "Brak tablic.",
+      "sidebar": "Pasek boczny",
+      "kanban": "Kanban",
+      "composer": "Tworzenie wiadomości",
+      "subscriptions": "Subskrypcje",
+      "storage": "Przechowywanie"
+    },
+    "pages": {
+      "appearance": "Wygląd"
+    },
+    "language": {
+      "label": "Język",
+      "hint": "Wybierz język lub użyj języka systemowego.",
+      "system": "Systemowy"
+    },
+    "appearance": {
+      "showSenderImages": "Pokaż zdjęcia nadawców",
+      "showSenderImagesHint": "Pobiera zdjęcia nadawców z Gravatara, a jako zapasowe używa ikon domen (favicon)."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Pokaż wspólną skrzynkę odbiorczą",
+      "showStarred": "Pokaż oznaczone gwiazdką"
+    },
+    "kanban": {
+      "columnWidth": "Szerokość kolumny"
+    },
+    "composer": {
+      "sendMessageWith": "Wyślij wiadomość za pomocą",
+      "sendShortcutEnterHint": "Enter wysyła, Shift+Enter wstawia nową linię.",
+      "sendShortcutModHint": "{{shortcut}} wysyła, Enter wstawia nową linię."
+    },
+    "account": {
+      "changeAvatar": "Zmień awatar",
+      "chooseAvatarImage": "Wybierz obraz awatara",
+      "chooseAvatarFailed": "Nie udało się wybrać awatara",
+      "removeAccount": "Usuń konto",
+      "profile": "Profil",
+      "displayName": "Nazwa wyświetlana",
+      "displayNameHint": "Wyświetlana tylko wewnątrz programu Meron.",
+      "displayNamePlaceholder": "Wyświetlana w programie Meron",
+      "senderName": "Nazwa nadawcy",
+      "senderNameHint": "Nazwa nadawcy (Od) w wiadomościach wychodzących.",
+      "senderNamePlaceholder": "Nazwa nadawcy poczty wychodzącej",
+      "visibility": "Widoczność",
+      "showInUnifiedInbox": "Pokaż we wspólnej skrzynce odbiorczej",
+      "showInUnifiedInboxHint": "Nadal możesz otworzyć konto bezpośrednio.",
+      "showInLeftSidebar": "Pokaż na lewym pasku bocznym",
+      "showInLeftSidebarHint": "Ukryte konta pozostają dostępne tutaj, w Ustawieniach.",
+      "notificationsSync": "Powiadomienia i synchronizacja",
+      "muteNotifications": "Wycisz powiadomienia",
+      "unmuteNotifications": "Wyłącz wyciszenie powiadomień",
+      "muteNotificationsHint": "Wiadomości nadal będą docierać i się synchronizować, ale bez powiadomień na pulpicie.",
+      "pauseAccount": "Wstrzymaj konto",
+      "resumeChecking": "Wznów sprawdzanie",
+      "pauseAccountHint": "Zatrzymuje sprawdzanie nowych wiadomości; istniejące wiadomości pozostają czytelne.",
+      "syncInterval": "Częstotliwość synchronizacji",
+      "content": "Zawartość",
+      "loadRemoteImages": "Wczytuj obrazy z sieci",
+      "loadRemoteImagesHint": "Domyślnie wyłączone dla poczty e-mail w celu uniknięcia pikseli śledzących.",
+      "conversationView": "Widok konwersacji",
+      "conversationPlain": "Zwykły",
+      "chatBackground": "Tło czatu",
+      "sending": "Wysyłanie",
+      "aliases": "Aliasy",
+      "aliasesHint": "Dodatkowe adresy, z których możesz wysyłać wiadomości. Odpowiedzi na pocztę otrzymaną na dany alias są domyślnie wysyłane z tego adresu.",
+      "addAlias": "Dodaj alias",
+      "aliasNamePlaceholder": "Nazwa (opcjonalnie)",
+      "removeAlias": "Usuń alias",
+      "accountSettings": "Ustawienia konta..."
+    },
+    "feeds": {
+      "opmlFile": "Plik OPML",
+      "opmlHint": "Importuj lub eksportuj subskrypcje kanałów tego konta."
+    },
+    "storage": {
+      "usageTitle": "Użycie pamięci",
+      "usageHint": "Miejsce na dysku zajmowane przez buforowane załączniki i lokalną bazę danych.",
+      "cacheLabel": "Pamięć podręczna",
+      "databaseLabel": "Baza danych",
+      "clearTitle": "Wyczyść pamięć podręczną",
+      "clearHint": "Usuń zapisane w pamięci podręcznej załączniki i obrazy. Poczta zostanie zachowana.",
+      "clearButton": "Wyczyść",
+      "clearConfirm": "Potwierdzić?",
+      "clearedToast": "Pamięć podręczna wyczyszczona"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "Nie udało się połączyć z serwerem poczty. Ponowna próba przy następnej synchronizacji..."
+  }
+}

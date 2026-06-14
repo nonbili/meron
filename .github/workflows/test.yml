@@ -1,0 +1,60 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Wails (package main) links against GTK/WebKitGTK via cgo.
+      - name: Install GTK/WebKitGTK headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: go test -tags webkit2_41 ./...
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: meron-core
+      - run: cargo test --manifest-path meron-core/Cargo.toml
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+        working-directory: frontend
+      - run: bun test
+        working-directory: frontend
+
+  # Full-stack suite: Rust sidecar against a real maddy mail server in Docker.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: meron-core
+      - name: Install GTK/WebKitGTK headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: docker pull foxcpp/maddy:0.8
+      - run: cargo build --manifest-path meron-core/Cargo.toml
+      - run: go test -tags 'integration webkit2_41' -v -timeout 10m .
+        env:
+          # No Secret Service on CI runners; the sidecar's keyring no-op mode.
+          MERON_KEYRING: 'off'

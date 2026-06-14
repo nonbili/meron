@@ -1,0 +1,340 @@
+name: Build desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux/amd64
+            target: x86_64-unknown-linux-gnu
+            artifact: meron-linux-amd64
+            tags: 'embed_sidecar webkit2_41'
+          - os: windows-latest
+            platform: windows/amd64
+            target: x86_64-pc-windows-msvc
+            artifact: meron-windows-amd64
+            tags: 'embed_sidecar'
+          - os: macos-15-intel
+            platform: darwin/amd64
+            target: x86_64-apple-darwin
+            artifact: meron-darwin-amd64
+            tags: 'embed_sidecar'
+          - os: macos-15
+            platform: darwin/arm64
+            target: aarch64-apple-darwin
+            artifact: meron-darwin-arm64
+            tags: 'embed_sidecar'
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: meron-core
+
+      - name: install linux deps
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libdbus-1-dev \
+            pkg-config \
+            libfuse2
+
+      - name: install wails
+        shell: bash
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: build and stage sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --manifest-path meron-core/Cargo.toml --target ${{ matrix.target }}
+          mkdir -p build/sidecar
+          SRC="meron-core/target/${{ matrix.target }}/release/meron-core"
+          if [ -f "$SRC.exe" ]; then SRC="$SRC.exe"; fi
+          # The go:embed directive expects build/sidecar/meron-core (no extension)
+          # on every platform; extension handling is the app's concern at runtime.
+          cp "$SRC" build/sidecar/meron-core
+
+      # ---------------------------------------------------------------- macOS
+      - name: import mac signing cert
+        if: startsWith(matrix.os, 'macos')
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CSC_LINK:-}" ]; then
+            echo "CSC_LINK not set — skipping signing cert import"
+            exit 0
+          fi
+          CERTIFICATE_P12="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+
+          case "$CSC_LINK" in
+            http://*|https://*) curl -fsSL "$CSC_LINK" -o "$CERTIFICATE_P12" ;;
+            file://*)           cp "${CSC_LINK#file://}" "$CERTIFICATE_P12" ;;
+            *)                  printf '%s' "$CSC_LINK" | base64 -D > "$CERTIFICATE_P12" ;;
+          esac
+
+          security import "$CERTIFICATE_P12" -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: build wails app
+        shell: bash
+        run: wails build -clean -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}"
+
+      - name: package macOS dmg
+        if: startsWith(matrix.os, 'macos')
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP_PATH="build/bin/meron.app"
+          DMG_ROOT="$RUNNER_TEMP/dmg-root"
+          DMG_PATH="dist/${{ matrix.artifact }}.dmg"
+          mkdir -p dist
+          rm -rf "$DMG_ROOT" && mkdir -p "$DMG_ROOT"
+
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${TEAM_ID:-}" ]; then
+            SIGNING_IDENTITY="Developer ID Application: Nonbili Inc. ($TEAM_ID)"
+            codesign --force --options runtime --timestamp --deep \
+              --entitlements build/darwin/Entitlements.plist \
+              --keychain "$KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" "$APP_PATH"
+            codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          else
+            echo "::warning::macOS signing secrets not set — producing an unsigned DMG"
+          fi
+
+          ditto "$APP_PATH" "$DMG_ROOT/Meron.app"
+          ln -s /Applications "$DMG_ROOT/Applications"
+          hdiutil create -volname "Meron" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
+
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${TEAM_ID:-}" ]; then
+            SIGNING_IDENTITY="Developer ID Application: Nonbili Inc. ($TEAM_ID)"
+            codesign --force --timestamp --keychain "$KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" "$DMG_PATH"
+            codesign --verify --verbose=4 "$DMG_PATH"
+            if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
+              xcrun notarytool submit "$DMG_PATH" --apple-id "$APPLE_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$TEAM_ID" --wait
+              xcrun stapler staple "$DMG_PATH"
+              xcrun stapler validate "$DMG_PATH"
+            else
+              echo "::warning::notarization secrets not set — skipping notarization"
+            fi
+          fi
+
+      # ---------------------------------------------------------------- Linux
+      - name: package linux tarball
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -C build/bin -czf "dist/${{ matrix.artifact }}.tar.gz" meron
+
+      - name: package linux AppImage
+        if: startsWith(matrix.os, 'ubuntu')
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          OUTPUT: dist/${{ matrix.artifact }}.AppImage
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          base="https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous"
+          gtkbase="https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master"
+          curl -fsSL -o linuxdeploy "$base/linuxdeploy-x86_64.AppImage"
+          curl -fsSL -o linuxdeploy-plugin-gtk.sh "$gtkbase/linuxdeploy-plugin-gtk.sh"
+          chmod +x linuxdeploy linuxdeploy-plugin-gtk.sh
+          # linuxdeploy discovers plugins by name (linuxdeploy-plugin-gtk) on PATH.
+          export PATH="$PWD:$PATH"
+
+          rm -rf AppDir && mkdir -p AppDir/usr/bin
+          cp build/bin/meron AppDir/usr/bin/meron
+          ./linuxdeploy --appdir AppDir \
+            --executable AppDir/usr/bin/meron \
+            --desktop-file build/linux/meron.desktop \
+            --icon-file build/appicon.png \
+            --icon-filename meron \
+            --plugin gtk \
+            --output appimage
+
+      - name: stage snap payload
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          set -euo pipefail
+          mkdir -p snap/local
+          cp build/bin/meron snap/local/meron
+          cp build/linux/meron.desktop snap/local/meron.desktop
+          cp build/appicon.png snap/local/meron.png
+
+      - name: package linux snap
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: snapcore/action-build@v1
+        id: snapcraft
+        with:
+          path: .
+
+      - name: stage snap artifact
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "${{ steps.snapcraft.outputs.snap }}" "dist/${{ matrix.artifact }}.snap"
+
+      # -------------------------------------------------------------- Windows
+      - name: package windows zip
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          7z a "dist/${{ matrix.artifact }}.zip" ./build/bin/meron.exe
+
+      - name: package windows appx
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        env:
+          APPX_CERT: ${{ secrets.WINDOWS_APPX_CERT }}
+          APPX_CERT_PASSWORD: ${{ secrets.WINDOWS_APPX_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          $version = (Get-Content wails.json -Raw | ConvertFrom-Json).info.productVersion
+          $appxVersion = "$version.0"
+
+          # Stage the package payload.
+          $stage = Join-Path $env:RUNNER_TEMP 'appx'
+          $assets = Join-Path $stage 'Assets'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          Copy-Item build/bin/meron.exe (Join-Path $stage 'meron.exe')
+
+          # Generate the tile/logo assets from the 1024px app icon.
+          choco install imagemagick.app --no-progress -y | Out-Null
+          $magick = "magick"
+          $sizes = @{
+            'Square44x44Logo.png'   = '44x44';
+            'Square71x71Logo.png'   = '71x71';
+            'Square150x150Logo.png' = '150x150';
+            'Square310x310Logo.png' = '310x310';
+            'StoreLogo.png'         = '50x50';
+          }
+          foreach ($name in $sizes.Keys) {
+            & $magick build/appicon.png -resize $sizes[$name] (Join-Path $assets $name)
+          }
+          # Wide tile: fit the icon centered on a transparent 310x150 canvas.
+          & $magick build/appicon.png -resize 150x150 -background none -gravity center -extent 310x150 (Join-Path $assets 'Wide310x150Logo.png')
+
+          # Stamp the version into the manifest (Publisher must match the signing
+          # cert subject; override it in build/windows/appx/AppxManifest.xml or via
+          # signtool's cert when signing for a real Store/sideload identity).
+          [xml]$m = Get-Content build/windows/appx/AppxManifest.xml
+          $m.Package.Identity.Version = $appxVersion
+          $m.Save((Join-Path $stage 'AppxManifest.xml'))
+
+          # Locate the Windows SDK tools.
+          $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\bin'
+          $sdkBin = Get-ChildItem $sdkRoot -Directory |
+            Where-Object { $_.Name -match '^10\.' } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          $makeappx = Join-Path $sdkBin.FullName 'x64\makeappx.exe'
+          $signtool = Join-Path $sdkBin.FullName 'x64\signtool.exe'
+
+          $appx = "dist/${{ matrix.artifact }}.appx"
+          & $makeappx pack /d $stage /p $appx /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx failed" }
+
+          if ($env:APPX_CERT) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'appx-cert.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:APPX_CERT))
+            & $signtool sign /fd SHA256 /a /f $pfx /p $env:APPX_CERT_PASSWORD $appx
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+          } else {
+            Write-Host "::warning::WINDOWS_APPX_CERT not set — producing an unsigned .appx (Store re-signs on submission; sideloading requires a trusted signature)"
+          }
+
+      # --------------------------------------------------------------- upload
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: resolve tag
+        run: |
+          set -euo pipefail
+          VER=$(jq -r '.info.productVersion' wails.json)
+          WAILS_TAG="v$VER"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=$WAILS_TAG" >> "$GITHUB_ENV"
+          else
+            if [ "$GITHUB_REF_NAME" != "$WAILS_TAG" ]; then
+              echo "Tag $GITHUB_REF_NAME does not match wails.json version $WAILS_TAG."
+              exit 1
+            fi
+            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          fi
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          generate_release_notes: true
+          files: dist/*

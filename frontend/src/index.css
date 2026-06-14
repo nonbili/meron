@@ -1,0 +1,669 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import 'tailwindcss';
+
+/* Theme is driven by the `.dark` class on <html> (see states/settings.ts), not
+   the OS media query. Tailwind v4 defaults `dark:` to prefers-color-scheme, so
+   without this the `dark:` utilities ignore the app's chosen theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-app: var(--me-bg-app);
+  --color-chat: var(--me-bg-chat);
+  --color-chat-overlay: var(--me-bg-chat-overlay);
+  --color-sidebar: var(--me-bg-sidebar);
+  --color-chats: var(--me-bg-chats);
+  --color-header: var(--me-bg-header);
+  --color-hover: var(--me-bg-hover);
+  --color-raised: var(--me-bg-raised);
+  --color-active: var(--me-bg-active);
+  --color-border: var(--me-border);
+  --color-primary: var(--me-text-primary);
+  --color-secondary: var(--me-text-secondary);
+  --color-accent: var(--me-accent);
+  --color-accent-hover: var(--me-accent-hover);
+  --color-bubble-in: var(--me-bubble-in);
+  --color-bubble-in-text: var(--me-bubble-in-text);
+  --color-bubble-out: var(--me-bubble-out);
+  --color-bubble-out-text: var(--me-bubble-out-text);
+  --color-composer-bg: var(--me-composer-bg);
+  --color-composer-border: var(--me-composer-border);
+
+  --shadow-bubble-in: var(--me-bubble-shadow-in);
+  --shadow-bubble-out: var(--me-bubble-shadow-out);
+
+  /* Inter has no CJK glyphs, so CJK codepoints fall through to --font-cjk. That
+     var is switched per active locale via :lang() below — naming the regional
+     CJK face is what selects the correct Han glyph shapes, since the same
+     codepoints render differently across zh/ja. Each locale lists the native
+     family per platform (macOS / Windows / Linux), and only the installed one
+     matches — macOS has no Noto Sans CJK, Linux has no PingFang, etc. The
+     <html lang> attribute that drives :lang() is set in settings bootstrap. */
+  --font-sans:
+    'Inter', var(--font-cjk), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Default CJK stack (Simplified Chinese), overridden by locale below. */
+:root {
+  --font-cjk: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+}
+:root:lang(zh-Hant) {
+  --font-cjk: 'PingFang TC', 'PingFang HK', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+}
+:root:lang(ja) {
+  --font-cjk: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', sans-serif;
+}
+:root:lang(ko) {
+  --font-cjk: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', sans-serif;
+}
+
+/* These two blocks are the default "Indigo" / "Indigo Dark" themes and the no-JS
+   fallback paint. Other themes override the vars inline on <html> (see
+   applyTheme in states/settings.ts). Keep values in sync with the INDIGO_LIGHT /
+   INDIGO_DARK registries in lib/themes.ts. */
+:root {
+  --me-bg-app: #f1f5f9;
+  --me-bg-chat: #f8fafc;
+  --me-bg-chat-overlay: rgba(248, 250, 252, 0.94);
+  --me-bg-sidebar: #0f172a;
+  --me-bg-chats: #ffffff;
+  --me-bg-header: #ffffff;
+  --me-bg-hover: #f1f5f9;
+  --me-bg-raised: #f8fafc;
+  --me-bg-active: #e2e8f0;
+  --me-border: #e2e8f0;
+  --me-text-primary: #0f172a;
+  --me-text-secondary: #64748b;
+  --me-accent: #4f46e5;
+  --me-accent-hover: #4338ca;
+  --me-bubble-in: #ffffff;
+  --me-bubble-in-text: #0f172a;
+  --me-bubble-out: #e0e7ff;
+  --me-bubble-out-text: #312e81;
+  --me-composer-bg: #ffffff;
+  --me-composer-border: #e2e8f0;
+  --me-bubble-shadow-in: 0 2px 8px -2px rgba(15, 23, 42, 0.08), 0 1px 3px -1px rgba(15, 23, 42, 0.04);
+  --me-bubble-shadow-out: 0 2px 8px -2px rgba(79, 70, 229, 0.12), 0 1px 3px -1px rgba(79, 70, 229, 0.06);
+  --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 50%, transparent);
+
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+.dark {
+  --me-bg-app: #090d16;
+  --me-bg-chat: #090d16;
+  --me-bg-chat-overlay: rgba(9, 13, 22, 0.95);
+  --me-bg-sidebar: #05070c;
+  --me-bg-chats: #0f172a;
+  --me-bg-header: #0f172a;
+  --me-bg-hover: rgba(30, 41, 59, 0.6);
+  --me-bg-raised: rgba(15, 23, 42, 0.4);
+  --me-bg-active: #1e293b;
+  --me-border: #1e293b;
+  --me-text-primary: #f8fafc;
+  --me-text-secondary: #94a3b8;
+  --me-accent: #6366f1;
+  --me-accent-hover: #818cf8;
+  --me-bubble-in: #1e293b;
+  --me-bubble-in-text: #f8fafc;
+  --me-bubble-out: #312e81;
+  --me-bubble-out-text: #e0e7ff;
+  --me-composer-bg: #0f172a;
+  --me-composer-border: #1e293b;
+  --me-bubble-shadow-in: 0 4px 12px -3px rgba(0, 0, 0, 0.3), 0 1px 4px -2px rgba(0, 0, 0, 0.2);
+  --me-bubble-shadow-out: 0 4px 12px -3px rgba(0, 0, 0, 0.4), 0 1px 4px -2px rgba(0, 0, 0, 0.3);
+  --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--me-bg-app);
+  color: var(--me-text-primary);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+  font-feature-settings: inherit;
+  outline: none;
+}
+
+/* Enable the native right-click menu (cut/copy/paste) on text fields. Wails
+   disables the default context menu in production builds unless an element
+   opts back in via this CSS property. */
+input,
+textarea,
+[contenteditable] {
+  --default-contextmenu: show;
+}
+
+.selectable-text {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.15);
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Custom patterns */
+.me-wallpaper {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='rgba%2899, 102, 241, 0.08%29' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 25 C15 32, 20 35, 25 35 C30 35, 35 32, 35 25 L35 15 L28 19 L22 19 L15 15 Z M20 26 H22 M28 26 H30 M24 29 L26 29 M12 26 H10 M12 29 L10 30 M38 26 H40 M38 29 L40 30'/%3E%3Cpath d='M75 30 L105 18 L95 48 L87 38 Z M87 38 L105 18'/%3E%3Cpath d='M140 25 C140 18, 150 15, 160 15 C170 15, 180 18, 180 25 C180 32, 170 35, 160 35 L155 40 L157 35 C148 35, 140 32, 140 25 Z'/%3E%3Cpath d='M215 25 L218 33 L226 35 L220 41 L222 49 L215 45 L208 49 L210 41 L204 35 L212 33 Z'/%3E%3Cpath d='M15 90 C15 83, 25 80, 35 80 C45 80, 55 83, 55 90 C55 97, 50 100, 45 100 L43 95 H27 L25 100 C20 100, 15 97, 15 90 Z M22 90 H28 M25 87 V93 M45 90 A 2 2 0 1 0 45 86 A 2 2 0 1 0 45 90'/%3E%3Cpath d='M88 87 H112 V103 H88 Z M88 87 L100 95 L112 87'/%3E%3Cpath d='M155 80 H175 V93 C175 98, 170 102, 160 102 H155 C150 102, 145 98, 145 93 V80 Z M175 85 H180 C183 85, 183 91, 180 91 H175'/%3E%3Cpath d='M220 97 C215 87, 200 87, 200 102 C200 117, 220 132, 220 132 C220 132, 240 117, 240 102 C240 87, 225 87, 220 97 Z'/%3E%3Cpath d='M35 145 L38 153 L46 155 L40 161 L42 169 L35 165 L28 169 L30 161 L24 155 L32 153 Z'/%3E%3Ccircle cx='90' cy='150' r='6'/%3E%3Ccircle cx='106' cy='150' r='6'/%3E%3Cpath d='M96 150 H100 M84 150 H80 L80 144 M112 150 H116 L116 144'/%3E%3Cpath d='M150 147 C158 147, 165 153, 165 161 C165 167, 160 172, 154 174 C160 170, 160 158, 150 155 Z'/%3E%3Ccircle cx='210' cy='157' r='3'/%3E%3Cpath d='M213 157 V142 L225 138 V153'/%3E%3Ccircle cx='222' cy='153' r='3'/%3E%3Cpath d='M20 215 C20 207, 28 199, 36 207 C36 215, 28 223, 20 215 Z M20 215 L36 207'/%3E%3Cpath d='M82 218 L96 204 L100 208 L86 222 Z M82 218 L79 223 L86 222 M94 206 L98 210'/%3E%3Ccircle cx='150' cy='210' r='8'/%3E%3Cpath d='M137 212 C137 212, 142 216, 150 216 C158 216, 163 212, 163 212 M137 208 C137 208, 142 204, 150 204 C158 204, 163 208, 163 208'/%3E%3Ccircle cx='60' cy='60' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='120' cy='60' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='180' cy='65' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='60' cy='120' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='135' cy='120' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='185' cy='120' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='65' cy='180' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='125' cy='185' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='185' cy='180' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='60' cy='230' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='120' cy='235' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='180' cy='230' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #eef2ff 0%, #fef2f2 50%, #f5f3ff 100%);
+  background-size:
+    240px 240px,
+    auto;
+}
+
+.dark .me-wallpaper {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='rgba%28165, 180, 252, 0.04%29' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 25 C15 32, 20 35, 25 35 C30 35, 35 32, 35 25 L35 15 L28 19 L22 19 L15 15 Z M20 26 H22 M28 26 H30 M24 29 L26 29 M12 26 H10 M12 29 L10 30 M38 26 H40 M38 29 L40 30'/%3E%3Cpath d='M75 30 L105 18 L95 48 L87 38 Z M87 38 L105 18'/%3E%3Cpath d='M140 25 C140 18, 150 15, 160 15 C170 15, 180 18, 180 25 C180 32, 170 35, 160 35 L155 40 L157 35 C148 35, 140 32, 140 25 Z'/%3E%3Cpath d='M215 25 L218 33 L226 35 L220 41 L222 49 L215 45 L208 49 L210 41 L204 35 L212 33 Z'/%3E%3Cpath d='M15 90 C15 83, 25 80, 35 80 C45 80, 55 83, 55 90 C55 97, 50 100, 45 100 L43 95 H27 L25 100 C20 100, 15 97, 15 90 Z M22 90 H28 M25 87 V93 M45 90 A 2 2 0 1 0 45 86 A 2 2 0 1 0 45 90'/%3E%3Cpath d='M88 87 H112 V103 H88 Z M88 87 L100 95 L112 87'/%3E%3Cpath d='M155 80 H175 V93 C175 98, 170 102, 160 102 H155 C150 102, 145 98, 145 93 V80 Z M175 85 H180 C183 85, 183 91, 180 91 H175'/%3E%3Cpath d='M220 97 C215 87, 200 87, 200 102 C200 117, 220 132, 220 132 C220 132, 240 117, 240 102 C240 87, 225 87, 220 97 Z'/%3E%3Cpath d='M35 145 L38 153 L46 155 L40 161 L42 169 L35 165 L28 169 L30 161 L24 155 L32 153 Z'/%3E%3Ccircle cx='90' cy='150' r='6'/%3E%3Ccircle cx='106' cy='150' r='6'/%3E%3Cpath d='M96 150 H100 M84 150 H80 L80 144 M112 150 H116 L116 144'/%3E%3Cpath d='M150 147 C158 147, 165 153, 165 161 C165 167, 160 172, 154 174 C160 170, 160 158, 150 155 Z'/%3E%3Ccircle cx='210' cy='157' r='3'/%3E%3Cpath d='M213 157 V142 L225 138 V153'/%3E%3Ccircle cx='222' cy='153' r='3'/%3E%3Cpath d='M20 215 C20 207, 28 199, 36 207 C36 215, 28 223, 20 215 Z M20 215 L36 207'/%3E%3Cpath d='M82 218 L96 204 L100 208 L86 222 Z M82 218 L79 223 L86 222 M94 206 L98 210'/%3E%3Ccircle cx='150' cy='210' r='8'/%3E%3Cpath d='M137 212 C137 212, 142 216, 150 216 C158 216, 163 212, 163 212 M137 208 C137 208, 142 204, 150 204 C158 204, 163 208, 163 208'/%3E%3Ccircle cx='60' cy='60' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='120' cy='60' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='180' cy='65' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='60' cy='120' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='135' cy='120' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='185' cy='120' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='65' cy='180' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='125' cy='185' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='185' cy='180' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='60' cy='230' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='120' cy='235' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='180' cy='230' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #0b0f19 0%, #06080f 50%, #110e26 100%);
+  background-size:
+    240px 240px,
+    auto;
+}
+
+.wallpaper-preset-doodle {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='rgba%2899, 102, 241, 0.08%29' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 25 C15 32, 20 35, 25 35 C30 35, 35 32, 35 25 L35 15 L28 19 L22 19 L15 15 Z M20 26 H22 M28 26 H30 M24 29 L26 29 M12 26 H10 M12 29 L10 30 M38 26 H40 M38 29 L40 30'/%3E%3Cpath d='M75 30 L105 18 L95 48 L87 38 Z M87 38 L105 18'/%3E%3Cpath d='M140 25 C140 18, 150 15, 160 15 C170 15, 180 18, 180 25 C180 32, 170 35, 160 35 L155 40 L157 35 C148 35, 140 32, 140 25 Z'/%3E%3Cpath d='M215 25 L218 33 L226 35 L220 41 L222 49 L215 45 L208 49 L210 41 L204 35 L212 33 Z'/%3E%3Cpath d='M15 90 C15 83, 25 80, 35 80 C45 80, 55 83, 55 90 C55 97, 50 100, 45 100 L43 95 H27 L25 100 C20 100, 15 97, 15 90 Z M22 90 H28 M25 87 V93 M45 90 A 2 2 0 1 0 45 86 A 2 2 0 1 0 45 90'/%3E%3Cpath d='M88 87 H112 V103 H88 Z M88 87 L100 95 L112 87'/%3E%3Cpath d='M155 80 H175 V93 C175 98, 170 102, 160 102 H155 C150 102, 145 98, 145 93 V80 Z M175 85 H180 C183 85, 183 91, 180 91 H175'/%3E%3Cpath d='M220 97 C215 87, 200 87, 200 102 C200 117, 220 132, 220 132 C220 132, 240 117, 240 102 C240 87, 225 87, 220 97 Z'/%3E%3Cpath d='M35 145 L38 153 L46 155 L40 161 L42 169 L35 165 L28 169 L30 161 L24 155 L32 153 Z'/%3E%3Ccircle cx='90' cy='150' r='6'/%3E%3Ccircle cx='106' cy='150' r='6'/%3E%3Cpath d='M96 150 H100 M84 150 H80 L80 144 M112 150 H116 L116 144'/%3E%3Cpath d='M150 147 C158 147, 165 153, 165 161 C165 167, 160 172, 154 174 C160 170, 160 158, 150 155 Z'/%3E%3Ccircle cx='210' cy='157' r='3'/%3E%3Cpath d='M213 157 V142 L225 138 V153'/%3E%3Ccircle cx='222' cy='153' r='3'/%3E%3Cpath d='M20 215 C20 207, 28 199, 36 207 C36 215, 28 223, 20 215 Z M20 215 L36 207'/%3E%3Cpath d='M82 218 L96 204 L100 208 L86 222 Z M82 218 L79 223 L86 222 M94 206 L98 210'/%3E%3Ccircle cx='150' cy='210' r='8'/%3E%3Cpath d='M137 212 C137 212, 142 216, 150 216 C158 216, 163 212, 163 212 M137 208 C137 208, 142 204, 150 204 C158 204, 163 208, 163 208'/%3E%3Ccircle cx='60' cy='60' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='120' cy='60' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='180' cy='65' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='60' cy='120' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='135' cy='120' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='185' cy='120' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='65' cy='180' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='125' cy='185' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='185' cy='180' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='60' cy='230' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='120' cy='235' r='1' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3Ccircle cx='180' cy='230' r='1.5' fill='rgba%2899, 102, 241, 0.08%29'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #eef2ff 0%, #fef2f2 50%, #f5f3ff 100%);
+  background-size:
+    240px 240px,
+    auto;
+}
+
+.dark .wallpaper-preset-doodle {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='rgba%28165, 180, 252, 0.04%29' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 25 C15 32, 20 35, 25 35 C30 35, 35 32, 35 25 L35 15 L28 19 L22 19 L15 15 Z M20 26 H22 M28 26 H30 M24 29 L26 29 M12 26 H10 M12 29 L10 30 M38 26 H40 M38 29 L40 30'/%3E%3Cpath d='M75 30 L105 18 L95 48 L87 38 Z M87 38 L105 18'/%3E%3Cpath d='M140 25 C140 18, 150 15, 160 15 C170 15, 180 18, 180 25 C180 32, 170 35, 160 35 L155 40 L157 35 C148 35, 140 32, 140 25 Z'/%3E%3Cpath d='M215 25 L218 33 L226 35 L220 41 L222 49 L215 45 L208 49 L210 41 L204 35 L212 33 Z'/%3E%3Cpath d='M15 90 C15 83, 25 80, 35 80 C45 80, 55 83, 55 90 C55 97, 50 100, 45 100 L43 95 H27 L25 100 C20 100, 15 97, 15 90 Z M22 90 H28 M25 87 V93 M45 90 A 2 2 0 1 0 45 86 A 2 2 0 1 0 45 90'/%3E%3Cpath d='M88 87 H112 V103 H88 Z M88 87 L100 95 L112 87'/%3E%3Cpath d='M155 80 H175 V93 C175 98, 170 102, 160 102 H155 C150 102, 145 98, 145 93 V80 Z M175 85 H180 C183 85, 183 91, 180 91 H175'/%3E%3Cpath d='M220 97 C215 87, 200 87, 200 102 C200 117, 220 132, 220 132 C220 132, 240 117, 240 102 C240 87, 225 87, 220 97 Z'/%3E%3Cpath d='M35 145 L38 153 L46 155 L40 161 L42 169 L35 165 L28 169 L30 161 L24 155 L32 153 Z'/%3E%3Ccircle cx='90' cy='150' r='6'/%3E%3Ccircle cx='106' cy='150' r='6'/%3E%3Cpath d='M96 150 H100 M84 150 H80 L80 144 M112 150 H116 L116 144'/%3E%3Cpath d='M150 147 C158 147, 165 153, 165 161 C165 167, 160 172, 154 174 C160 170, 160 158, 150 155 Z'/%3E%3Ccircle cx='210' cy='157' r='3'/%3E%3Cpath d='M213 157 V142 L225 138 V153'/%3E%3Ccircle cx='222' cy='153' r='3'/%3E%3Cpath d='M20 215 C20 207, 28 199, 36 207 C36 215, 28 223, 20 215 Z M20 215 L36 207'/%3E%3Cpath d='M82 218 L96 204 L100 208 L86 222 Z M82 218 L79 223 L86 222 M94 206 L98 210'/%3E%3Ccircle cx='150' cy='210' r='8'/%3E%3Cpath d='M137 212 C137 212, 142 216, 150 216 C158 216, 163 212, 163 212 M137 208 C137 208, 142 204, 150 204 C158 204, 163 208, 163 208'/%3E%3Ccircle cx='60' cy='60' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='120' cy='60' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='180' cy='65' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='60' cy='120' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='135' cy='120' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='185' cy='120' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='65' cy='180' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='125' cy='185' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='185' cy='180' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='60' cy='230' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='120' cy='235' r='1' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3Ccircle cx='180' cy='230' r='1.5' fill='rgba%28165, 180, 252, 0.04%29'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #0b0f19 0%, #06080f 50%, #110e26 100%);
+  background-size:
+    240px 240px,
+    auto;
+}
+
+.wallpaper-preset-aurora {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/aurora.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-nebula {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/nebula.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-topography {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Topographical contour vector lines */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='rgba%28100, 116, 139, 0.20%29' stroke-width='0.8'%3E%3Cpath d='M 70 80 C 60 60, 110 50, 120 70 C 130 90, 80 100, 70 80 Z'/%3E%3Cpath d='M 60 80 C 45 50, 120 35, 135 65 C 150 95, 75 110, 60 80 Z'/%3E%3Cpath d='M 50 80 C 30 40, 130 20, 150 60 C 170 100, 70 120, 50 80 Z'/%3E%3Cpath d='M 40 80 C 15 30, 140 5, 165 55 C 190 105, 65 130, 40 80 Z'/%3E%3Cpath d='M 30 80 C 0 20, 150 -10, 180 50 C 210 110, 60 140, 30 80 Z'/%3E%3Cpath d='M 140 140 C 130 130, 160 120, 165 135 C 170 150, 150 155, 140 140 Z'/%3E%3Cpath d='M 130 140 C 115 120, 170 105, 180 130 C 190 155, 145 170, 130 140 Z'/%3E%3Cpath d='M 120 140 C 100 110, 180 90, 195 125 C 210 160, 140 185, 120 140 Z'/%3E%3Cpath d='M 110 140 C 85 100, 190 75, 210 120 C 230 165, 135 200, 110 140 Z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+  background-size:
+    auto,
+    200px 200px,
+    auto;
+}
+
+.dark .wallpaper-preset-topography {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='rgba%28148, 163, 184, 0.14%29' stroke-width='0.8'%3E%3Cpath d='M 70 80 C 60 60, 110 50, 120 70 C 130 90, 80 100, 70 80 Z'/%3E%3Cpath d='M 60 80 C 45 50, 120 35, 135 65 C 150 95, 75 110, 60 80 Z'/%3E%3Cpath d='M 50 80 C 30 40, 130 20, 150 60 C 170 100, 70 120, 50 80 Z'/%3E%3Cpath d='M 40 80 C 15 30, 140 5, 165 55 C 190 105, 65 130, 40 80 Z'/%3E%3Cpath d='M 30 80 C 0 20, 150 -10, 180 50 C 210 110, 60 140, 30 80 Z'/%3E%3Cpath d='M 140 140 C 130 130, 160 120, 165 135 C 170 150, 150 155, 140 140 Z'/%3E%3Cpath d='M 130 140 C 115 120, 170 105, 180 130 C 190 155, 145 170, 130 140 Z'/%3E%3Cpath d='M 120 140 C 100 110, 180 90, 195 125 C 210 160, 140 185, 120 140 Z'/%3E%3Cpath d='M 110 140 C 85 100, 190 75, 210 120 C 230 165, 135 200, 110 140 Z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  background-size:
+    auto,
+    200px 200px,
+    auto;
+}
+
+.wallpaper-preset-constellation {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='rgba%2899, 102, 241, 0.4%29'%3E%3Ccircle cx='30' cy='40' r='2'/%3E%3Ccircle cx='70' cy='20' r='1.5'/%3E%3Ccircle cx='110' cy='50' r='2.5'/%3E%3Ccircle cx='150' cy='30' r='1.5'/%3E%3Ccircle cx='50' cy='120' r='2'/%3E%3Ccircle cx='90' cy='150' r='2.5'/%3E%3Ccircle cx='130' cy='110' r='1.5'/%3E%3Ccircle cx='170' cy='140' r='2'/%3E%3C/g%3E%3Cg stroke='rgba%2899, 102, 241, 0.15%29' stroke-width='0.6'%3E%3Cline x1='30' y1='40' x2='70' y2='20'/%3E%3Cline x1='70' y1='20' x2='110' y2='50'/%3E%3Cline x1='110' y1='50' x2='150' y2='30'/%3E%3Cline x1='50' y1='120' x2='90' y2='150'/%3E%3Cline x1='90' y1='150' x2='130' y2='110'/%3E%3Cline x1='130' y1='110' x2='170' y2='140'/%3E%3Cline x1='30' y1='40' x2='50' y2='120'/%3E%3Cline x1='110' y1='50' x2='130' y2='110'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #e0f2fe 0%, #e0e7ff 100%);
+  background-size:
+    200px 200px,
+    auto;
+}
+
+.dark .wallpaper-preset-constellation {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='rgba%28165, 180, 252, 0.4%29'%3E%3Ccircle cx='30' cy='40' r='2'/%3E%3Ccircle cx='70' cy='20' r='1.5'/%3E%3Ccircle cx='110' cy='50' r='2.5'/%3E%3Ccircle cx='150' cy='30' r='1.5'/%3E%3Ccircle cx='50' cy='120' r='2'/%3E%3Ccircle cx='90' cy='150' r='2.5'/%3E%3Ccircle cx='130' cy='110' r='1.5'/%3E%3Ccircle cx='170' cy='140' r='2'/%3E%3C/g%3E%3Cg stroke='rgba%28165, 180, 252, 0.08%29' stroke-width='0.6'%3E%3Cline x1='30' y1='40' x2='70' y2='20'/%3E%3Cline x1='70' y1='20' x2='110' y2='50'/%3E%3Cline x1='110' y1='50' x2='150' y2='30'/%3E%3Cline x1='50' y1='120' x2='90' y2='150'/%3E%3Cline x1='90' y1='150' x2='130' y2='110'/%3E%3Cline x1='130' y1='110' x2='170' y2='140'/%3E%3Cline x1='30' y1='40' x2='50' y2='120'/%3E%3Cline x1='110' y1='50' x2='130' y2='110'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #090514 0%, #030712 100%);
+  background-size:
+    200px 200px,
+    auto;
+}
+
+.wallpaper-preset-hexagon {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='96' viewBox='0 0 56 96'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z M28 96 L56 80 L56 64 L28 48 L0 64 L0 80 Z' fill='none' stroke='rgba%2899, 102, 241, 0.08%29' stroke-width='0.6'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  background-size:
+    56px 96px,
+    auto;
+}
+
+.dark .wallpaper-preset-hexagon {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='96' viewBox='0 0 56 96'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z M28 96 L56 80 L56 64 L28 48 L0 64 L0 80 Z' fill='none' stroke='rgba%2845, 212, 191, 0.06%29' stroke-width='0.6'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #021a1e 0%, #042f2e 100%);
+  background-size:
+    56px 96px,
+    auto;
+}
+
+.wallpaper-preset-isometric {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='104' viewBox='0 0 60 104'%3E%3Cg stroke='rgba%28100, 116, 139, 0.08%29' stroke-width='0.6' fill='none'%3E%3Cpath d='M30 0 L60 17 L30 34 L0 17 Z'/%3E%3Cpath d='M0 17 L30 34 L30 69 L0 52 Z'/%3E%3Cpath d='M60 17 L30 34 L30 69 L60 52 Z'/%3E%3Cpath d='M0 69 L30 86 L30 104 L0 86 Z'/%3E%3Cpath d='M60 69 L30 86 L30 104 L60 86 Z'/%3E%3Cpath d='M30 52 L60 69 L30 86 L0 69 Z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  background-size:
+    60px 104px,
+    auto;
+}
+
+.dark .wallpaper-preset-isometric {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='104' viewBox='0 0 60 104'%3E%3Cg stroke='rgba%28255, 255, 255, 0.025%29' stroke-width='0.6' fill='none'%3E%3Cpath d='M30 0 L60 17 L30 34 L0 17 Z'/%3E%3Cpath d='M0 17 L30 34 L30 69 L0 52 Z'/%3E%3Cpath d='M60 17 L30 34 L30 69 L60 52 Z'/%3E%3Cpath d='M0 69 L30 86 L30 104 L0 86 Z'/%3E%3Cpath d='M60 69 L30 86 L30 104 L60 86 Z'/%3E%3Cpath d='M30 52 L60 69 L30 86 L0 69 Z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #0f172a 0%, #090d16 100%);
+  background-size:
+    60px 104px,
+    auto;
+}
+
+.wallpaper-preset-waves {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='rgba%2814, 165, 183, 0.08%29' stroke-width='0.8'%3E%3Cpath d='M-20 40 C 40 80, 60 0, 120 40 C 180 80, 200 20, 240 60'/%3E%3Cpath d='M-20 80 C 40 120, 60 40, 120 80 C 180 120, 200 60, 240 100'/%3E%3Cpath d='M-20 120 C 40 160, 60 80, 120 120 C 180 160, 200 100, 240 140'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%);
+  background-size:
+    200px 200px,
+    auto;
+}
+
+.dark .wallpaper-preset-waves {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='rgba%286, 182, 212, 0.04%29' stroke-width='0.8'%3E%3Cpath d='M-20 40 C 40 80, 60 0, 120 40 C 180 80, 200 20, 240 60'/%3E%3Cpath d='M-20 80 C 40 120, 60 40, 120 80 C 180 120, 200 60, 240 100'/%3E%3Cpath d='M-20 120 C 40 160, 60 80, 120 120 C 180 160, 200 100, 240 140'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #020d1a 0%, #051424 100%);
+  background-size:
+    200px 200px,
+    auto;
+}
+
+.wallpaper-preset-dots {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(99, 102, 241, 0.12) 1px, transparent 1px),
+    linear-gradient(135deg, #fafaf9 0%, #f5f5f4 50%, #f5f5f7 100%);
+  background-size:
+    20px 20px,
+    auto;
+}
+
+.dark .wallpaper-preset-dots {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(165, 180, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(135deg, #121212 0%, #0a0a0a 50%, #171717 100%);
+  background-size:
+    20px 20px,
+    auto;
+}
+
+.wallpaper-preset-grid {
+  background:
+    linear-gradient(rgba(99, 102, 241, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.08) 1px, transparent 1px),
+    linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  background-size:
+    24px 24px,
+    24px 24px,
+    auto;
+}
+
+.dark .wallpaper-preset-grid {
+  background:
+    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(135deg, #090e1a 0%, #020617 100%);
+  background-size:
+    24px 24px,
+    24px 24px,
+    auto;
+}
+
+.wallpaper-preset-stripes {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg stroke='rgba%2816, 185, 129, 0.06%29' stroke-width='1.2'%3E%3Cline x1='0' y1='40' x2='40' y2='0'/%3E%3Cline x1='-10' y1='10' x2='10' y2='-10'/%3E%3Cline x1='30' y1='50' x2='50' y2='30'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  background-size:
+    auto,
+    40px 40px,
+    auto;
+}
+
+.dark .wallpaper-preset-stripes {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg stroke='rgba%2852, 211, 153, 0.04%29' stroke-width='1.2'%3E%3Cline x1='0' y1='40' x2='40' y2='0'/%3E%3Cline x1='-10' y1='10' x2='10' y2='-10'/%3E%3Cline x1='30' y1='50' x2='50' y2='30'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #04120e 0%, #020706 100%);
+  background-size:
+    auto,
+    40px 40px,
+    auto;
+}
+
+.wallpaper-preset-sunset {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/sunset.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-forest {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/forest.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-desert {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/desert.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-ocean {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/ocean.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-mountain {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/mountain.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-breeze {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/breeze.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-galaxy {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/galaxy.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-shapes {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/shapes.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-sakura {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/sakura.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-vintage {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/vintage.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-raindrops {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/raindrops.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-marble {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url('./assets/wallpapers/marble.png') no-repeat center/cover;
+}
+
+.wallpaper-preset-cyberpunk {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Cyberpunk grid lines */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M 80 0 L 0 0 0 80' fill='none' stroke='rgba%286, 182, 212, 0.07%29' stroke-width='1'/%3E%3Cpath d='M 40 0 L 40 80 M 0 40 L 80 40' fill='none' stroke='rgba%28236, 72, 153, 0.03%29' stroke-width='0.5'/%3E%3C/svg%3E"),
+    /* Ambient neon glows */ radial-gradient(circle at 80% 20%, rgba(236, 72, 153, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 10% 80%, rgba(6, 182, 212, 0.15) 0%, transparent 60%),
+    linear-gradient(180deg, #07040d 0%, #0f0a1c 100%);
+  background-size:
+    auto,
+    80px 80px,
+    auto,
+    auto,
+    auto;
+}
+
+.wallpaper-preset-matrix {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Falling Japanese Matrix code stream */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='150' viewBox='0 0 100 150'%3E%3Cg font-family='monospace' font-size='9' font-weight='bold'%3E%3Ctext x='10' y='20' fill='rgba%2834, 197, 94, 0.25%29'%3E%26%23xFF67%3B%3C/text%3E%3Ctext x='10' y='40' fill='rgba%2834, 197, 94, 0.15%29'%3E%26%23xFF76%3B%3C/text%3E%3Ctext x='10' y='70' fill='rgba%2834, 197, 94, 0.08%29'%3E%26%23xFF84%3B%3C/text%3E%3Ctext x='35' y='15' fill='rgba%2834, 197, 94, 0.08%29'%3E%26%23xFF71%3B%3C/text%3E%3Ctext x='35' y='55' fill='rgba%2834, 197, 94, 0.2%29'%3E%26%23xFF80%3B%3C/text%3E%3Ctext x='35' y='95' fill='rgba%2834, 197, 94, 0.1%29'%3E%26%23xFF92%3B%3C/text%3E%3Ctext x='35' y='125' fill='rgba%28220, 252, 231, 0.35%29'%3E%26%23xFF8D%3B%3C/text%3E%3Ctext x='65' y='30' fill='rgba%2834, 197, 94, 0.15%29'%3E%26%23xFF82%3B%3C/text%3E%3Ctext x='65' y='60' fill='rgba%2834, 197, 94, 0.05%29'%3E%26%23xFF6B%3B%3C/text%3E%3Ctext x='65' y='100' fill='rgba%2834, 197, 94, 0.25%29'%3E%26%23xFF78%3B%3C/text%3E%3Ctext x='85' y='25' fill='rgba%2834, 197, 94, 0.05%29'%3E%26%23xFF85%3B%3C/text%3E%3Ctext x='85' y='80' fill='rgba%2834, 197, 94, 0.18%29'%3E%26%23xFF90%3B%3C/text%3E%3Ctext x='85' y='140' fill='rgba%2834, 197, 94, 0.28%29'%3E%26%23xFF7C%3B%3C/text%3E%3C/g%3E%3C/svg%3E"),
+    /* Top-down neon glow */ linear-gradient(180deg, rgba(34, 197, 94, 0.07) 0%, transparent 60%),
+    #02040a;
+  background-size:
+    auto,
+    100px 150px,
+    auto;
+}
+
+.wallpaper-preset-autumn {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Fallen autumn leaves vector pattern */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M 35 25 C 25 15, 40 10, 45 22 C 48 12, 60 20, 48 30 C 42 42, 22 35, 35 25 Z' fill='rgba%28249, 115, 22, 0.08%29' stroke='rgba%28249, 115, 22, 0.15%29' stroke-width='0.8'/%3E%3Cpath d='M 110 50 C 105 40, 115 35, 120 45 C 122 37, 132 42, 122 50 C 118 58, 105 52, 110 50 Z' fill='rgba%28234, 179, 8, 0.07%29' stroke='rgba%28234, 179, 8, 0.12%29' stroke-width='0.8'/%3E%3Cpath d='M 60 110 C 50 100, 62 95, 68 105 C 70 97, 80 102, 70 110 C 66 118, 52 112, 60 110 Z' fill='rgba%28239, 68, 68, 0.06%29' stroke='rgba%28239, 68, 68, 0.12%29' stroke-width='0.8'/%3E%3Cpath d='M 125 120 C 115 110, 125 105, 130 115 C 132 107, 142 112, 132 120 C 128 128, 115 122, 125 120 Z' fill='rgba%28249, 115, 22, 0.05%29' stroke='rgba%28249, 115, 22, 0.1%29' stroke-width='0.8'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #fffbeb 0%, #fef3c7 40%, #ffedd5 100%);
+  background-size:
+    auto,
+    160px 160px,
+    auto;
+}
+
+.dark .wallpaper-preset-autumn {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Fall leaves pattern for dark mode */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M 35 25 C 25 15, 40 10, 45 22 C 48 12, 60 20, 48 30 C 42 42, 22 35, 35 25 Z' fill='rgba%28249, 115, 22, 0.04%29' stroke='rgba%28249, 115, 22, 0.08%29' stroke-width='0.8'/%3E%3Cpath d='M 110 50 C 105 40, 115 35, 120 45 C 122 37, 132 42, 122 50 C 118 58, 105 52, 110 50 Z' fill='rgba%28234, 179, 8, 0.04%29' stroke='rgba%28234, 179, 8, 0.08%29' stroke-width='0.8'/%3E%3Cpath d='M 60 110 C 50 100, 62 95, 68 105 C 70 97, 80 102, 70 110 C 66 118, 52 112, 60 110 Z' fill='rgba%28239, 68, 68, 0.03%29' stroke='rgba%28239, 68, 68, 0.07%29' stroke-width='0.8'/%3E%3Cpath d='M 125 120 C 115 110, 125 105, 130 115 C 132 107, 142 112, 132 120 C 128 128, 115 122, 125 120 Z' fill='rgba%28249, 115, 22, 0.03%29' stroke='rgba%28249, 115, 22, 0.06%29' stroke-width='0.8'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(135deg, #1c0d02 0%, #2e1505 50%, #170700 100%);
+  background-size:
+    auto,
+    160px 160px,
+    auto;
+}
+
+.wallpaper-preset-nordic {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M 0 20 L 40 20 M 20 0 L 20 40' stroke='rgba%28100%2C 116%2C 139%2C 0.06%29' stroke-width='0.6'/%3E%3Cpath d='M 15 15 L 25 25 M 25 15 L 15 25' stroke='rgba%2899%2C 102%2C 241%2C 0.1%29' stroke-width='0.8'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  background-size:
+    auto,
+    40px 40px,
+    auto;
+}
+
+.dark .wallpaper-preset-nordic {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M 0 20 L 40 20 M 20 0 L 20 40' stroke='rgba%28255%2C 255%2C 255%2C 0.02%29' stroke-width='0.6'/%3E%3Cpath d='M 15 15 L 25 25 M 25 15 L 15 25' stroke='rgba%28165%2C 180%2C 252%2C 0.05%29' stroke-width='0.8'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  background-size:
+    auto,
+    40px 40px,
+    auto;
+}
+
+.wallpaper-preset-nightsky {
+  background:
+    linear-gradient(var(--me-wallpaper-overlay), var(--me-wallpaper-overlay)),
+    /* Star patterns and constellations */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='20' cy='30' r='0.8' opacity='0.4'/%3E%3Ccircle cx='75' cy='15' r='1.2' opacity='0.7'/%3E%3Ccircle cx='145' cy='45' r='0.6' opacity='0.3'/%3E%3Ccircle cx='40' cy='95' r='1' opacity='0.5'/%3E%3Ccircle cx='110' cy='120' r='1.5' opacity='0.8'/%3E%3Ccircle cx='160' cy='105' r='0.7' opacity='0.4'/%3E%3Ccircle cx='85' cy='165' r='1' opacity='0.6'/%3E%3Ccircle cx='25' cy='150' r='0.8' opacity='0.3'/%3E%3C/g%3E%3Cpath d='M 75 15 L 110 120 M 40 95 L 85 165' stroke='rgba%28255, 255, 255, 0.04%29' stroke-width='0.5' fill='none'/%3E%3C/svg%3E"),
+    /* Cosmic / aurora glows */ radial-gradient(circle at 75% 30%, rgba(139, 92, 246, 0.15) 0%, transparent 60%),
+    radial-gradient(circle at 25% 80%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
+    linear-gradient(135deg, #020617 0%, #0b0f19 50%, #050510 100%);
+  background-size:
+    auto,
+    180px 180px,
+    auto,
+    auto,
+    auto;
+}
+
+.wallpaper-preset-plain {
+  background: var(--me-bg-chat);
+}
+
+.me-wallpaper-custom {
+  background-color: var(--me-bg-chat);
+  background-position: center;
+  background-size: cover;
+}
+
+.message-scroll > * {
+  overflow-anchor: none;
+}
+
+.message-scroll-anchor {
+  overflow-anchor: auto;
+}
+
+/* Custom animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  /* No `forwards`: the keyframe end state matches the element's base style, so
+     retaining it would leave a lingering `transform` that creates a stacking
+     context — trapping popovers (e.g. the message meta panel) behind later
+     siblings and breaking `position: fixed` backdrops. */
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out forwards;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Tiptap rich-text body — restore formatting stripped by Tailwind preflight. */
+.tiptap-body > * + * {
+  margin-top: 0.6em;
+}
+.tiptap-body h1 {
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.tiptap-body h2 {
+  font-size: 1.25em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.tiptap-body ul {
+  list-style: disc;
+  padding-left: 1.5em;
+}
+.tiptap-body ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+}
+.tiptap-body li > p {
+  margin: 0;
+}
+.tiptap-body blockquote {
+  border-left: 3px solid var(--me-border);
+  padding-left: 0.9em;
+  color: var(--me-text-secondary);
+}
+.tiptap-body a {
+  color: var(--me-accent);
+  text-decoration: underline;
+}
+.tiptap-body code {
+  background: rgba(127, 127, 127, 0.16);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+.tiptap-body p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--me-text-secondary);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

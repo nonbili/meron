@@ -1,0 +1,485 @@
+{
+  "common": {
+    "theme": "Kujundus",
+    "change": "Muuda",
+    "import": "Impordi",
+    "export": "Ekspordi",
+    "loading": "Laadimine...",
+    "markdown": "Markdown",
+    "copied": "Kopeeritud",
+    "more": "Rohkem",
+    "clearSearch": "Puhasta otsing",
+    "showLess": "Näita vähem",
+    "moreCount": "+{{count}} veel"
+  },
+  "buttons": {
+    "cancel": "Katkesta",
+    "save": "Salvesta",
+    "send": "Saada",
+    "discard": "Hülga",
+    "edit": "Muuda",
+    "close": "Sulge",
+    "delete": "Kustuta",
+    "done": "Tehtud",
+    "back": "Tagasi"
+  },
+  "layout": {
+    "resizeConversation": "Muuda vestluse suurust",
+    "resizeThreadList": "Muuda lõimeloendi suurust"
+  },
+  "filters": {
+    "label": "Filter",
+    "all": "Kõik",
+    "allFeeds": "Kõik vood",
+    "unread": "Lugemata",
+    "starred": "Tärniga"
+  },
+  "empty": {
+    "welcomeTitle": "Tere tulemast Meronisse",
+    "mailSetupText": "Lisa tavapärane IMAP/SMTP konto, et sünkroonida oma postkast jututoa stiilis sõnumivestluseks.",
+    "noStarredItems": "Tärniga märgitud üksusi pole",
+    "noStarredItemsText": "Märgi sõnumid või voo üksused tärniga, et need siia koguda.",
+    "noFeeds": "Vooge pole",
+    "noChats": "Vestlusi pole",
+    "addFeedToStart": "Lugemise alustamiseks lisa voog.",
+    "noArchivedThreads": "Arhiivitud lõimi ei leitud.",
+    "inboxEmpty": "Sinu postkast on tühi.",
+    "noColumns": "Veerge pole",
+    "noColumnsText": "Lisa sellele stendile kausta- või sildiveerg.",
+    "kanbanSetupText": "Kanban-vaate kasutamiseks lisa konto.",
+    "noConversationSelected": "Vestlust pole valitud",
+    "noConversationSelectedText": "Vali külgribalt sõnumilõim, et vaadata selle sisu, vastata või hallata manuseid."
+  },
+  "app": {
+    "logoAlt": "Meroni logo"
+  },
+  "palette": {
+    "label": "Käsupalett",
+    "placeholder": "Kirjuta käsk või otsi...",
+    "noMatches": "Kattuvaid käske ei leitud.",
+    "hints": {
+      "run": "käivita",
+      "navigate": "navigeeri",
+      "close": "sulge"
+    }
+  },
+  "accounts": {
+    "unified": "Ühendatud",
+    "rssFeeds": "RSS-vood",
+    "rssAtomFeeds": "RSS / Atom vood",
+    "thisAccount": "see konto",
+    "setup": {
+      "connectMailAccount": "Ühenda e-posti konto",
+      "chooseProvider": "Vali ühendamiseks teenusepakkuja.",
+      "feedAccountHint": "Loo konto nüüd; saad lisada vooge igal ajal voo loendi kohal oleva nupu \"+\" abil."
+    },
+    "providers": {
+      "gmailDescription": "Google konto",
+      "outlookDescription": "Microsoft 365",
+      "customDescription": "Mis tahes meiliserver",
+      "rssDescription": "Telli vooge"
+    },
+    "fields": {
+      "accountName": "Konto nimi",
+      "firstFeedUrl": "Esimese voo URL (mittekohustuslik)",
+      "emailAddress": "E-posti aadress",
+      "senderNameOutgoing": "Saatja nimi (väljuv meil)",
+      "password": "Parool",
+      "displayNameMeronOnly": "Kuvatav nimi (ainult Meronis)",
+      "imapHost": "IMAP host",
+      "smtpHost": "SMTP host",
+      "port": "Port",
+      "username": "Kasutajanimi"
+    },
+    "discovery": {
+      "lookingUp": "Serveri seadete otsimine..."
+    },
+    "oauth": {
+      "configureOutlook": "Palun seadista oma kesta keskkonnas MERON_OUTLOOK_CLIENT_ID enne Outlooki ühendamist.",
+      "configureGmail": "Palun seadista oma kesta keskkonnas MERON_GOOGLE_CLIENT_ID ja MERON_GOOGLE_CLIENT_SECRET enne Gmaili ühendamist.",
+      "signInWith": "Logi sisse teenusega {{provider}}",
+      "waitingForSignIn": "Oodatakse sisselogimise lõpuleviimist teenuses {{provider}}..."
+    },
+    "appPasswordHint": "{{provider}} nõuab rakendusepõhist parooli – sinu tavaline konto parool siin ei toimi. <action>Loo parool teenuse {{provider}} jaoks</action> ja kopeeri see ülalolevale väljale.",
+    "advancedServerSettings": "Serveri täpsemad seaded",
+    "actions": {
+      "addAccount": "Lisa konto",
+      "addAccountTitle": "Lisa konto",
+      "saveAccount": "Salvesta konto",
+      "collapseAccount": "Ahenda konto",
+      "expandAccount": "Laienda konto"
+    }
+  },
+  "feeds": {
+    "fallbackName": "RSS-voog",
+    "added": "Voog lisatud",
+    "addFailed": "Voo lisamine ebaõnnestus",
+    "url": "Voo URL",
+    "urlHint": "Kleebi voo URL või saidi aadress, et selle voog automaatselt tuvastada.",
+    "subscribeUnder": "Telli uus voog konto {{account}} alla.",
+    "manageSubscription": "Halda selle voo tellimust.",
+    "copyUrl": "Kopeeri URL",
+    "deleteHint": "Tühista selle voo tellimus ja eemalda selle puhverdatud üksused. Seda tegevust ei saa tagasi võtta.",
+    "actions": {
+      "addFeed": "Lisa voog",
+      "syncFeeds": "Sünkrooni vood",
+      "syncingFeeds": "Voogude sünkroonimine...",
+      "addToAccount": "Lisa voog sellele kontole",
+      "deleteFeed": "Kustuta voog",
+      "confirmDelete": "Kinnita kustutamine"
+    }
+  },
+  "folders": {
+    "loading": "Kaustade laadimine...",
+    "noneAvailable": "Kaustu pole saadaval",
+    "createdMissing": "Kaust loodi, kuid seda ei tagastatud.",
+    "nameRequired": "Kausta nimi on kohustuslik.",
+    "alreadyExists": "See kaust on juba olemas.",
+    "createFailed": "Kausta loomine ebaõnnestus.",
+    "newFolderOrLabel": "Uus kaust või silt",
+    "namePlaceholder": "Kausta või sildi nimi",
+    "create": "Loo kaust"
+  },
+  "composer": {
+    "fields": {
+      "from": "Saatja",
+      "to": "Saaja",
+      "cc": "Koopia",
+      "bcc": "Pimekoopia",
+      "subject": "Teema"
+    },
+    "placeholders": {
+      "recipient": "saaja@example.com",
+      "commaSeparated": "eraldatud komadega",
+      "message": "Kirjuta oma sõnum...",
+      "quickMessage": "Kirjuta sõnum..."
+    },
+    "actions": {
+      "attachFiles": "Lisa manuseid",
+      "insertInlineImage": "Lisa tekstisisene pilt",
+      "switchToPlainText": "Lülitu lihttekstile",
+      "switchToRichText": "Lülitu vormindatud tekstile",
+      "sendWithShortcut": "Saada ({{shortcut}})",
+      "removeAttachment": "Eemalda manus",
+      "hideCcBcc": "Peida Koopia/Pimekoopia",
+      "ccBcc": "Koopia/Pimekoopia",
+      "newMessage": "Uus sõnum",
+      "openFullEditor": "Ava täisredaktor",
+      "sendMessageWithShortcut": "Saada sõnum ({{shortcut}})"
+    },
+    "modes": {
+      "richText": "Vormindatud tekst",
+      "plainText": "Lihttekst"
+    },
+    "status": {
+      "savingDraft": "Mustandi salvestamine...",
+      "savedToServer": "Serverisse salvestatud",
+      "draftAutosaveFailed": "Mustandi automaatne salvestamine ebaõnnestus",
+      "sending": "Saatmine..."
+    },
+    "toolbar": {
+      "bold": "Paks",
+      "italic": "Kursiiv",
+      "underline": "Allakriipsutatud",
+      "strikethrough": "Läbikriipsutatud",
+      "heading": "Pealkiri",
+      "bulletList": "Punktloend",
+      "numberedList": "Numberloend",
+      "quote": "Tsitaat",
+      "link": "Link",
+      "markdown": "Markdown",
+      "markdownHint": "Kirjuta need sümbolid ja tekst vormindatakse kirjutamise ajal"
+    },
+    "imageResize": {
+      "topLeft": "Lohista suuruse muutmiseks (ülevalt vasakult)",
+      "topRight": "Lohista suuruse muutmiseks (ülevalt paremalt)",
+      "bottomLeft": "Lohista suuruse muutmiseks (alt vasakult)",
+      "bottomRight": "Lohista suuruse muutmiseks (alt paremalt)"
+    }
+  },
+  "threads": {
+    "searchMessages": "Otsi sõnumeid...",
+    "searchFeeds": "Otsi vooge...",
+    "backToInbox": "Tagasi postkasti",
+    "actions": {
+      "title": "Lõime toimingud",
+      "syncMailbox": "Sünkrooni postkast",
+      "syncing": "Sünkroonimine...",
+      "markAllAsRead": "Märgi kõik loetuks",
+      "loadMore": "Laadi rohkem",
+      "openInNewTab": "Ava uuel vahekaardil",
+      "markAsRead": "Märgi loetuks",
+      "markAsUnread": "Märgi lugemata",
+      "starThread": "Märgi lõim tärniga",
+      "unstarThread": "Eemalda lõimelt tärn",
+      "archiveThread": "Arhiveeri lõim",
+      "moveTo": "Teisalda...",
+      "copyTo": "Kopeeri...",
+      "deleteForever": "Kustuta jäädavalt",
+      "discardDraft": "Hülga mustand",
+      "moveToTrash": "Teisalda prügikasti"
+    }
+  },
+  "chat": {
+    "backToChats": "Tagasi vestlustesse",
+    "closeConversationEsc": "Sulge vestlus (Esc)",
+    "closeEsc": "Sulge (Esc)",
+    "searchThread": "Otsi lõimest",
+    "closeThreadSearch": "Sulge lõime otsing",
+    "previousMatch": "Eelmine vaste",
+    "nextMatch": "Järgmine vaste",
+    "feedDetails": "Voo üksikasjad",
+    "conversationDetails": "Vestluse üksikasjad",
+    "moreActions": "Veel toiminguid",
+    "moreMessageActions": "Veel sõnumi toiminguid",
+    "viewAsHtml": "Vaata HTML-ina",
+    "viewAsPlainText": "Vaata lihttekstina",
+    "star": "Märgi tärniga",
+    "unstar": "Eemalda tärn",
+    "currentConversation": "Praegune vestlus",
+    "current": "Praegune",
+    "closeTab": "Sulge vahekaart",
+    "branchNotice": "See vestlus on haru muutunud teemareast.",
+    "viewOriginalTopic": "Vaata algset teemat",
+    "hideDetails": "Peida üksikasjad",
+    "showDetails": "Näita üksikasju",
+    "failedToSendRetry": "Saatmine ebaõnnestus – klõpsa uuesti proovimiseks",
+    "retry": "Proovi uuesti",
+    "openExternalPlayer": "Ava välises mängijas",
+    "showImages_one": "Näita pilti",
+    "showImages_other": "Näita {{count}} pilti",
+    "saveFile": "Salvesta {{filename}}",
+    "copyCode": "Kopeeri kood",
+    "previousImage": "Eelmine pilt",
+    "nextImage": "Järgmine pilt",
+    "media": "Meedia",
+    "files": "Failid",
+    "noMedia": "Selles vestluses pole meediat.",
+    "noFiles": "Selles vestluses pole faile.",
+    "copyEmailAddress": "Kopeeri e-posti aadress",
+    "mediaItems_one": "{{count}} meediaüksus",
+    "mediaItems_other": "{{count}} meediaüksust",
+    "fileItems_one": "{{count}} fail",
+    "fileItems_other": "{{count}} faili",
+    "people_one": "{{count}} inimene",
+    "people_other": "{{count}} inimest",
+    "noParticipants": "Selles vestluses pole osalejaid.",
+    "you": "Sina",
+    "newMessageTo": "Uus sõnum aadressile {{email}}",
+    "htmlView": "HTML-vaade",
+    "plainView": "Lihttekstivaade",
+    "copyFullAddress": "Kopeeri täielik aadress",
+    "messageHtml": "Sõnumi HTML",
+    "actions": {
+      "openLink": "Ava link",
+      "copyLinkAddress": "Kopeeri lingi aadress",
+      "forward": "Edasta",
+      "editAsNewMessage": "Muuda uue sõnumina",
+      "deleteMessage": "Kustuta sõnum",
+      "saveImage": "Salvesta pilt...",
+      "copyImage": "Kopeeri pilt"
+    }
+  },
+  "sidebar": {
+    "actions": {
+      "viewAndTheme": "Vaade ja kujundus",
+      "hideFromSidebar": "Peida külgribalt"
+    }
+  },
+  "about": {
+    "title": "Teave Meroni kohta",
+    "aboutProduct": "Teave {{product}} kohta",
+    "version": "Versioon {{version}}",
+    "supportDevelopment": "Toeta arendust"
+  },
+  "kanban": {
+    "searchBoard": "Otsi stendilt...",
+    "searchBoardAction": "Otsi stendilt",
+    "addColumnsHint": "Vali kaustad, mida näidata kanban-veergudena.",
+    "columns": {
+      "unifiedInbox": "Ühendatud postkast",
+      "unifiedStarred": "Ühendatud tärniga märgitud"
+    },
+    "searchScope": {
+      "label": "Otsingu ulatus",
+      "allColumns": "Kõik veerud"
+    },
+    "actions": {
+      "hideColumn": "Peida veerg",
+      "addBoard": "Lisa kanban-stend",
+      "addBoardShort": "Lisa stend",
+      "addColumn": "Lisa veerg",
+      "addColumns": "Lisa veerud",
+      "boardOptions": "Stendi valikud",
+      "dragToReorderColumn": "Lohista veeru ümberjärjestamiseks",
+      "minimize": "Minimeeri",
+      "expand": "Laienda",
+      "showFilterInAllColumns": "Näita {{filter}} kõigis veergudes"
+    },
+    "board": {
+      "label": "Stend",
+      "defaultName": "Kanban-stend",
+      "name": "Stendi nimi",
+      "namePlaceholder": "Kuvatakse stendi päises",
+      "background": "Stendi taust",
+      "chooseImage": "Vali stendi pilt",
+      "chooseImageFailed": "Stendi pildi valimine ebaõnnestus",
+      "uploadImageFailed": "Stendi pildi üleslaadimine ebaõnnestus",
+      "changeImage": "Muuda stendi pilti",
+      "subtitle_one": "Kanban-stend · {{count}} veerg",
+      "subtitle_other": "Kanban-stend · {{count}} veergu",
+      "deleteTitle": "Kas kustutada stend?",
+      "deleteMessage": "\"{{name}}\" eemaldatakse kanban-siinilt.",
+      "delete": "Kustuta stend",
+      "settings": "Stendi seaded..."
+    }
+  },
+  "wallpaper": {
+    "plain": "Tavaline",
+    "plainDefault": "Tavaline (vaikimisi)",
+    "customBackground": "Kohandatud taust",
+    "chatTitle": "Vestluse taustapilt - {{name}}",
+    "boardTitle": "Stendi taustapilt - {{name}}",
+    "chooseImage": "Vali taustapilt",
+    "uploadFailed": "Tausta üleslaadimine ebaõnnestus",
+    "uploading": "Üleslaadimine...",
+    "uploadCustom": "Laadi üles kohandatud"
+  },
+  "avatar": {
+    "edit": "Muuda avatari",
+    "save": "Salvesta avatar",
+    "renderFailed": "Kärbitud avatari renderdamine ebaõnnestus",
+    "cropFailed": "Avatari kärpimine ebaõnnestus",
+    "loadFailed": "Avatari pildi laadimine ebaõnnestus",
+    "zoom": "Suurenda/vähenda avatari",
+    "zoomOut": "Vähenda",
+    "zoomIn": "Suurenda",
+    "resetCrop": "Lähtesta kärpimine"
+  },
+  "shortcuts": {
+    "title": "Kiirklahvid"
+  },
+  "theme": {
+    "custom": "Kohandatud",
+    "customTheme": "Kohandatud kujundus",
+    "delete": "Kustuta kujundus",
+    "deleteMessage": "Kas kustutada kohandatud kujundus \"{{name}}\"? Seda toimingut ei saa tagasi võtta.",
+    "edit": "Muuda kujundust",
+    "new": "Uus kujundus",
+    "save": "Salvesta kujundus",
+    "namePlaceholder": "Kujunduse nimi",
+    "light": "Hele",
+    "dark": "Tume",
+    "pickColor": "Vali värv: {{label}}",
+    "fields": {
+      "background": "Taust",
+      "backgroundHint": "Akna taust kõige taga",
+      "surface": "Pind",
+      "surfaceHint": "Lõimeloend, päis ja koostaja paneelid",
+      "sidebar": "Külgriba",
+      "sidebarHint": "Vasakpoolne kontoriba",
+      "accent": "Aktsent",
+      "accentHint": "Nupud, lingid ja väljuvad jutumullid",
+      "text": "Tekst",
+      "textHint": "Peamine teksti värv"
+    }
+  },
+  "settings": {
+    "label": "Seaded",
+    "sections": {
+      "general": "Üldine",
+      "mailAccounts": "E-posti kontod",
+      "feedAccounts": "Voogude kontod",
+      "kanbanBoards": "Kanban-stendid",
+      "noMailAccounts": "E-posti kontosid veel pole.",
+      "noFeedAccounts": "Voogude kontosid veel pole.",
+      "noBoards": "Stende veel pole.",
+      "sidebar": "Külgriba",
+      "kanban": "Kanban",
+      "composer": "Koostaja",
+      "subscriptions": "Tellimused",
+      "storage": "Salvestusruum"
+    },
+    "pages": {
+      "appearance": "Välimus"
+    },
+    "language": {
+      "label": "Keel",
+      "hint": "Vali keel või kasuta süsteemi keelt.",
+      "system": "Süsteem"
+    },
+    "appearance": {
+      "showSenderImages": "Näita saatja pilte",
+      "showSenderImagesHint": "Laadib saatja pildid Gravatarist, kasutades varulahendusena domeeni ikoone (favicon)."
+    },
+    "sidebar": {
+      "showUnifiedInbox": "Näita ühendatud postkasti",
+      "showStarred": "Näita tärniga märgitud üksusi"
+    },
+    "kanban": {
+      "columnWidth": "Veeru laius"
+    },
+    "composer": {
+      "sendMessageWith": "Sõnumi saatmine klahviga",
+      "sendShortcutEnterHint": "Enter saadab, Shift+Enter lisab uue rea.",
+      "sendShortcutModHint": "{{shortcut}} saadab, Enter lisab uue rea."
+    },
+    "account": {
+      "changeAvatar": "Muuda avatari",
+      "chooseAvatarImage": "Vali avatari pilt",
+      "chooseAvatarFailed": "Avatari valimine ebaõnnestus",
+      "removeAccount": "Eemalda konto",
+      "profile": "Profiil",
+      "displayName": "Kuvatav nimi",
+      "displayNameHint": "Kuvatakse ainult Meronis.",
+      "displayNamePlaceholder": "Kuvatakse Meronis",
+      "senderName": "Saatja nimi",
+      "senderNameHint": "Väljuva e-kirja saatja nimi.",
+      "senderNamePlaceholder": "Väljuva kirja saatja nimi",
+      "visibility": "Nähtavus",
+      "showInUnifiedInbox": "Näita ühendatud postkastis",
+      "showInUnifiedInboxHint": "Saad kontot ikkagi otse avada.",
+      "showInLeftSidebar": "Näita vasakul külgribal",
+      "showInLeftSidebarHint": "Peidetud kontod jäävad siin seadetes kättesaadavaks.",
+      "notificationsSync": "Teavitused ja sünkroonimine",
+      "muteNotifications": "Vaigista teavitused",
+      "unmuteNotifications": "Lülita teavitused sisse",
+      "muteNotificationsHint": "Sõnumid saabuvad ja sünkroonitakse ikka, kuid töölauateavitust ei näidata.",
+      "pauseAccount": "Peata konto töö",
+      "resumeChecking": "Jätka kontrollimist",
+      "pauseAccountHint": "Peatab uute sõnumite kontrollimise; olemasolevad jäävad loetavaks.",
+      "syncInterval": "Sünkroonimise välp",
+      "content": "Sisu",
+      "loadRemoteImages": "Laadi välised pildid",
+      "loadRemoteImagesHint": "Vaikimisi e-kirjades keelatud, et vältida jälgimispiksleid.",
+      "conversationView": "Vestluse vaade",
+      "conversationPlain": "Tavaline",
+      "chatBackground": "Vestluse taust",
+      "sending": "Saatmine",
+      "aliases": "Aliased",
+      "aliasesHint": "Täiendavad aadressid, millelt saad saata. Aliasele saabunud kirjale vastates kasutatakse vaikimisi seda aadressi.",
+      "addAlias": "Lisa alias",
+      "aliasNamePlaceholder": "Nimi (mittekohustuslik)",
+      "removeAlias": "Eemalda alias",
+      "accountSettings": "Konto seaded..."
+    },
+    "feeds": {
+      "opmlFile": "OPML-fail",
+      "opmlHint": "Impordi või ekspordi selle konto vootellimused."
+    },
+    "storage": {
+      "usageTitle": "Kasutatud salvestusruum",
+      "usageHint": "Vahemällu salvestatud manuste ja kohaliku andmebaasi kasutatav kettaruum.",
+      "cacheLabel": "Vahemälu",
+      "databaseLabel": "Andmebaas",
+      "clearTitle": "Tühjenda vahemälu",
+      "clearHint": "Kustuta vahemällu salvestatud manused ja pildid. Sinu e-kirjad säilitatakse.",
+      "clearButton": "Tühjenda",
+      "clearConfirm": "Kinnita?",
+      "clearedToast": "Vahemälu tühjendatud"
+    }
+  },
+  "connectivity": {
+    "syncFailed": "E-posti serveriga ei saadud ühendust. Uus katse järgmisel sünkroonimisel..."
+  }
+}
