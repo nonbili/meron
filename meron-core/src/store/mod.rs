@@ -1129,16 +1129,32 @@ pub fn get_thread_reference_gaps(
 /// Each header carries its source `folder` so the reader can fetch the body
 /// from the right mailbox. Ordered by `date` ASC (UIDs are folder-scoped, so
 /// they aren't comparable across folders).
+///
+/// A self-addressed message is delivered to both Sent and the Inbox, so the
+/// same RFC `Message-ID` lands as two rows under one `thread_key` (distinct
+/// per-folder UIDs sidestep the `UNIQUE(account, folder, msg_id)` constraint).
+/// We collapse those to a single bubble by keeping, per non-empty
+/// `Message-ID`, only the lowest-`id` row. Rows without a `Message-ID` (e.g.
+/// drafts) are never collapsed — a NULL `Message-ID` never equates in SQL.
 pub fn get_thread_headers_all_folders(
     conn: &Connection,
     account: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
     let mut stmt = conn.prepare(
-        "SELECT uid, folder, subject, from_name, from_addr, date, seen, starred, thread_key FROM messages
-         WHERE account = ?1 AND uid <> 0
-           AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?2
-         ORDER BY date ASC, uid ASC",
+        "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key
+         FROM messages m
+         WHERE m.account = ?1 AND m.uid <> 0
+           AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
+           AND NOT EXISTS (
+             SELECT 1 FROM messages dup
+             WHERE dup.account = m.account
+               AND COALESCE(NULLIF(dup.thread_key, ''), 'uid:' || dup.uid) = ?2
+               AND COALESCE(json_extract(m.json, '$.message_id'), '') <> ''
+               AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
+               AND dup.id < m.id
+           )
+         ORDER BY m.date ASC, m.uid ASC",
     )?;
     let rows = stmt.query_map(params![account, thread_key], |row| {
         let uid: u32 = row.get(0)?;
@@ -2339,6 +2355,49 @@ mod tests {
         let headers = get_thread_headers_all_folders(&conn, "acct", "topic-key").unwrap();
         let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
         assert_eq!(uids, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn get_thread_headers_all_folders_dedupes_self_sent_by_message_id() {
+        let conn = test_conn();
+        // A message sent to yourself lands in both Sent and the Inbox with the
+        // same RFC Message-ID but distinct per-folder UIDs. The thread view must
+        // collapse the pair into one bubble.
+        conn.execute(
+            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, thread_key, json)
+             VALUES('acct', '[Gmail]/Sent Mail', '462', 462, 'test', 'Me', 'me@example.com', 100, 'self-key',
+                      '{\"message_id\":\"mid@host\"}'),
+                   ('acct', 'INBOX', '1440', 1440, 'test', 'Me', 'me@example.com', 100, 'self-key',
+                      '{\"message_id\":\"mid@host\"}'),
+                   ('acct', 'INBOX', '1441', 1441, 'reply', 'Them', 'them@example.com', 200, 'self-key',
+                      '{\"message_id\":\"other@host\"}')",
+            [],
+        )
+        .unwrap();
+
+        let headers = get_thread_headers_all_folders(&conn, "acct", "self-key").unwrap();
+        let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
+        // The self-sent pair collapses to the lowest-id row (the Sent copy,
+        // inserted first); the distinct reply stays.
+        assert_eq!(uids, vec![462, 1441]);
+    }
+
+    #[test]
+    fn get_thread_headers_all_folders_keeps_rows_without_message_id() {
+        let conn = test_conn();
+        // Rows lacking a Message-ID (e.g. drafts) must never be collapsed into
+        // each other — a NULL Message-ID never equates in SQL.
+        conn.execute(
+            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, thread_key, json)
+             VALUES('acct', 'Drafts', '10', 10, 'draft a', 'Me', 'me@example.com', 100, 'k', '{}'),
+                   ('acct', 'Drafts', '11', 11, 'draft b', 'Me', 'me@example.com', 200, 'k', '{}')",
+            [],
+        )
+        .unwrap();
+
+        let headers = get_thread_headers_all_folders(&conn, "acct", "k").unwrap();
+        let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
+        assert_eq!(uids, vec![10, 11]);
     }
 
     #[test]
