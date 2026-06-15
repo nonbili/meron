@@ -459,7 +459,28 @@ struct FetchedParsed {
     resolved_url: String,
     feed_title: String,
     site_url: String,
+    /// Feed-supplied icon/logo URL (favicon preferred over banner logo), empty
+    /// when the feed declared neither. Stored in the subscription `json`.
+    icon_url: String,
     items: Vec<ParsedItem>,
+}
+
+/// The best icon URL a feed declares for itself: prefer `<icon>` (a square
+/// favicon, what an avatar wants) over `<logo>` (a wide banner), empty when
+/// neither is present.
+fn feed_icon_url(feed: &feed_rs::model::Feed) -> String {
+    feed.icon
+        .as_ref()
+        .or(feed.logo.as_ref())
+        .map(|img| img.uri.trim().to_string())
+        .unwrap_or_default()
+}
+
+/// Serialize a subscription's `json` extras column: the feed-declared icon URL
+/// and, once downloaded, its cached media key. New per-feed metadata can be
+/// added as fields here without a schema migration.
+fn subscription_json(icon_url: &str, icon_key: &str) -> String {
+    json!({ "icon_url": icon_url, "icon_key": icon_key }).to_string()
 }
 
 fn fetch_parsed(feed_url: &str) -> Result<FetchedParsed> {
@@ -482,11 +503,13 @@ fn fetch_parsed(feed_url: &str) -> Result<FetchedParsed> {
         .first()
         .map(|l| l.href.clone())
         .unwrap_or_default();
+    let icon_url = feed_icon_url(&feed);
     let items = parse_items(&feed, now_unix());
     Ok(FetchedParsed {
         resolved_url: resolved,
         feed_title,
         site_url,
+        icon_url,
         items,
     })
 }
@@ -495,17 +518,27 @@ fn store_parsed_feed(tx: &Connection, account: &str, parsed: &FetchedParsed) -> 
     let sub_id = rss_subscription_id(&parsed.resolved_url);
     let now = now_unix();
     tx.execute(
-        "INSERT INTO subscriptions(id, account, url, title, site_url, feed_title, enabled, created_at, updated_at)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)
+        "INSERT INTO subscriptions(id, account, url, title, site_url, feed_title, json, enabled, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?8)
          ON CONFLICT(id) DO UPDATE SET
            account = excluded.account,
            url = excluded.url,
            title = excluded.title,
            site_url = excluded.site_url,
            feed_title = excluded.feed_title,
+           json = excluded.json,
            enabled = 1,
            updated_at = excluded.updated_at",
-        params![sub_id, account, parsed.resolved_url, parsed.feed_title, parsed.site_url, parsed.feed_title, now],
+        params![
+            sub_id,
+            account,
+            parsed.resolved_url,
+            parsed.feed_title,
+            parsed.site_url,
+            parsed.feed_title,
+            subscription_json(&parsed.icon_url, ""),
+            now
+        ],
     )?;
     for item in &parsed.items {
         // Initial feed load: store items, but don't treat them as "new" arrivals.
@@ -581,6 +614,11 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
         .first()
         .map(|l| l.href.clone())
         .unwrap_or_default();
+    let icon_url = feed_icon_url(&feed);
+    // Cache the feed's own icon to disk (off the DB lock) so the avatar renders
+    // from /media with no remote fetch. Unconditional: it's first-party branding,
+    // not the third-party content the remote-images gate is meant to hold back.
+    let icon_key = cache_feed_icon(&sub.account, &sub.id, &icon_url).unwrap_or_default();
     let title = if sub.title.is_empty() {
         feed_title.trim().to_string()
     } else {
@@ -606,8 +644,8 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
     }
     tx.execute(
         "UPDATE subscriptions
-         SET title = ?2, url = ?3, site_url = ?4, feed_title = ?5,
-             etag = ?6, last_modified = ?7, last_sync_at = ?8, last_error = '', updated_at = ?8
+         SET title = ?2, url = ?3, site_url = ?4, feed_title = ?5, json = ?6,
+             etag = ?7, last_modified = ?8, last_sync_at = ?9, last_error = '', updated_at = ?9
          WHERE id = ?1",
         params![
             sub.id,
@@ -615,6 +653,7 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
             fetched.resolved_url,
             site_url,
             feed_title.trim(),
+            subscription_json(&icon_url, &icon_key),
             fetched.etag,
             fetched.last_modified,
             now
@@ -641,7 +680,8 @@ pub fn recent(conn: &Connection, account: &str, query: &str, limit: i64) -> Resu
            COALESCE((SELECT json_extract(lm.json,'$.summary') FROM messages lm WHERE lm.account = s.account AND lm.folder = s.id
               ORDER BY COALESCE(NULLIF(json_extract(lm.json,'$.published_at'),0),
                                 NULLIF(json_extract(lm.json,'$.updated_at'),0),
-                                json_extract(lm.json,'$.fetched_at')) DESC LIMIT 1), '') AS latest_summary
+                                json_extract(lm.json,'$.fetched_at')) DESC LIMIT 1), '') AS latest_summary,
+           s.json AS sub_json
          FROM subscriptions s
          LEFT JOIN messages m ON m.account = s.account AND m.folder = s.id
          WHERE s.account = ?1 AND s.enabled = 1",
@@ -667,12 +707,18 @@ pub fn recent(conn: &Connection, account: &str, query: &str, limit: i64) -> Resu
             row.get::<_, i64>(5)?,                                // unread_count
             row.get::<_, String>(6)?,                             // latest_title
             row.get::<_, Option<String>>(7)?.unwrap_or_default(), // latest_summary
+            row.get::<_, Option<String>>(8)?.unwrap_or_default(), // sub json extras
         ))
     })?;
 
     let mut out = Vec::new();
     for row in rows {
-        let (sub_id, acct, url, title, latest_at, unread, latest_title, latest_summary) = row?;
+        let (sub_id, acct, url, title, latest_at, unread, latest_title, latest_summary, sub_json) =
+            row?;
+        let icon_key = serde_json::from_str::<Value>(&sub_json)
+            .ok()
+            .and_then(|v| v["icon_key"].as_str().map(str::to_string))
+            .unwrap_or_default();
         out.push(thread_message(
             &acct,
             &sub_id,
@@ -682,6 +728,7 @@ pub fn recent(conn: &Connection, account: &str, query: &str, limit: i64) -> Resu
             unread,
             &latest_title,
             &latest_summary,
+            &icon_key,
         ));
     }
     Ok(out)
@@ -978,6 +1025,7 @@ fn thread_message(
     unread: i64,
     latest_title: &str,
     latest_summary: &str,
+    icon_key: &str,
 ) -> Value {
     let mut preview = latest_title.trim().to_string();
     if !latest_summary.is_empty() {
@@ -995,6 +1043,7 @@ fn thread_message(
         "from_name": title,
         "from_addr": feed_host_label(url),
         "feed_url": url,
+        "feed_icon": icon_key,
         "subject": title,
         "preview": preview,
         "date": latest_at,
@@ -1655,6 +1704,82 @@ fn cache_feed_images(account: &str, sub_id: &str, items: &mut [ParsedItem]) {
             }
         }
     }
+}
+
+/// Download and cache a feed's declared icon into the media dir, returning its
+/// media key. Best-effort and idempotent: an already-cached icon (same URL) is
+/// reused without re-fetching, and any failure (empty/bad URL, non-image bytes)
+/// yields `None` so the caller leaves the key empty. Network only — no DB lock.
+fn cache_feed_icon(account: &str, sub_id: &str, icon_url: &str) -> Option<String> {
+    let icon_url = icon_url.trim();
+    if icon_url.is_empty() {
+        return None;
+    }
+    let root = crate::parse::media_root();
+    if let Some(key) = existing_icon_key(&root, account, sub_id, icon_url) {
+        return Some(key);
+    }
+    let resp = http_get(icon_url, "", "").ok()?;
+    if resp.status != 200 || resp.body.is_empty() {
+        return None;
+    }
+    // Same byte-sniffing guard as inline images: only cache genuine image bytes,
+    // never a text error page served with HTTP 200.
+    let ext = sniff_image_ext(&resp.body)?;
+    write_feed_icon(&root, account, sub_id, icon_url, ext, &resp.body)
+}
+
+/// The relative dir holding a subscription's cached feed icon. Shares the
+/// `<account>/<sub>` prefix with the per-item image dirs; the icon is a file
+/// directly in it (`icon-<urlhash>.<ext>`), so it never collides with the
+/// `<item_key>/` subdirectories below it.
+fn feed_icon_dir(account: &str, sub_id: &str) -> String {
+    use crate::parse::sanitize_segment as san;
+    format!("{}/{}", san(account), san(sub_id))
+}
+
+/// If the feed icon for `icon_url` is already on disk, return its media key. The
+/// filename embeds a hash of the URL so a changed icon misses and re-downloads
+/// (the stale file is left for the size-cap pruner). Heals non-image poison.
+fn existing_icon_key(root: &Path, account: &str, sub_id: &str, icon_url: &str) -> Option<String> {
+    let rel_dir = feed_icon_dir(account, sub_id);
+    let prefix = format!("icon-{}.", stable_hash(icon_url));
+    for entry in std::fs::read_dir(root.join(&rel_dir)).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with(&prefix) {
+            continue;
+        }
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if is_image_ext(ext) {
+            return Some(format!("{rel_dir}/{name}"));
+        }
+        let _ = std::fs::remove_file(entry.path());
+    }
+    None
+}
+
+/// Write feed-icon bytes under `<account>/<sub>/icon-<urlhash>.<ext>`, returning
+/// the media key, or `None` if the write fails.
+fn write_feed_icon(
+    root: &Path,
+    account: &str,
+    sub_id: &str,
+    icon_url: &str,
+    ext: &str,
+    bytes: &[u8],
+) -> Option<String> {
+    let key = format!(
+        "{}/icon-{}.{}",
+        feed_icon_dir(account, sub_id),
+        stable_hash(icon_url),
+        ext
+    );
+    let path = root.join(&key);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok()?;
+    }
+    std::fs::write(&path, bytes).ok()?;
+    Some(key)
 }
 
 /// The relative dir holding one item's cached images.

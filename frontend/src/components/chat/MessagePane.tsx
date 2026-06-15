@@ -234,7 +234,9 @@ export function MessagePane() {
             files={fileItems}
             participants={participants}
             scopeTitle={activeThread.subject || '(no subject)'}
-            scopeSubtitle={activeThread.from_name || activeThread.from_addr}
+            // For RSS, from_name duplicates the subject (both the feed title), so
+            // show the feed host instead; otherwise show the sender name.
+            scopeSubtitle={isRSS ? activeThread.from_addr : activeThread.from_name || activeThread.from_addr}
             loading={showThreadLoading}
             onOpenImage={(index) => thread$.galleryIndex.set(index)}
             onComposeTo={(person) =>

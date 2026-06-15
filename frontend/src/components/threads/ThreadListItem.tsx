@@ -39,6 +39,9 @@ export function ThreadListItem({
   const badgeLabel = threadAccount ? threadAccount.display_name || threadAccount.email : ''
   const accountBadgeVisible = showAccountBadge ?? selectedAccount === 'unified'
   const threadTitle = thread.subject || '(no subject)'
+  // RSS feed rows carry a feed_url (and, once cached, a feed_icon). For those,
+  // skip the email-based gravatar/favicon resolution and use the feed's icon.
+  const isRSS = !!thread.feed_url
   const unread = thread.unread
 
   return (
@@ -67,7 +70,11 @@ export function ThreadListItem({
         title={threadTitle}
       >
         <div className="relative shrink-0">
-          <Avatar name={thread.from_name || thread.from_addr} email={thread.from_addr} />
+          <Avatar
+            name={thread.from_name || thread.from_addr}
+            email={isRSS ? undefined : thread.from_addr}
+            src={isRSS && thread.feed_icon ? `/media/${thread.feed_icon}` : undefined}
+          />
           {accountBadgeVisible && threadAccount && (
             <div className="absolute -bottom-1 -left-1 rounded-full ring-2 ring-chats overflow-hidden">
               <Avatar name={badgeLabel} src={threadAccount.avatar_url} size={16} />

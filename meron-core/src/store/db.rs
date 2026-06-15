@@ -174,6 +174,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 1 {
         migrate_v1(conn)?;
     }
+    if version < 2 {
+        migrate_v2(conn)?;
+    }
 
     Ok(())
 }
@@ -184,6 +187,17 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
     tx.execute_batch(MESSAGES_DDL)?;
     tx.execute_batch(SCHEMA)?;
     tx.execute_batch("PRAGMA user_version = 1;")?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Per-subscription extra metadata that doesn't warrant its own typed column
+/// (feed icon/logo, …), stored as a JSON object. Mirrors the `messages.json`
+/// approach; defaults to an empty object so existing rows stay valid.
+fn migrate_v2(conn: &Connection) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch("ALTER TABLE subscriptions ADD COLUMN json TEXT NOT NULL DEFAULT '{}';")?;
+    tx.execute_batch("PRAGMA user_version = 2;")?;
     tx.commit()?;
     Ok(())
 }

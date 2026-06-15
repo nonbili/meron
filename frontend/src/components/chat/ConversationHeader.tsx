@@ -87,7 +87,11 @@ export function ConversationHeader({
         </button>
       )}
 
-      <Avatar name={activeThread.from_name || activeThread.from_addr} email={activeThread.from_addr} />
+      <Avatar
+        name={activeThread.from_name || activeThread.from_addr}
+        email={isRSS ? undefined : activeThread.from_addr}
+        src={isRSS && activeThread.feed_icon ? `/media/${activeThread.feed_icon}` : undefined}
+      />
 
       <div className="min-w-0 flex-1">
         <h2
@@ -96,12 +100,20 @@ export function ConversationHeader({
         >
           {activeThread.subject}
         </h2>
-        <p
-          className="truncate text-[11.5px] text-secondary mt-0.5 font-medium"
-          title={`${activeThread.from_name} (${activeThread.from_addr})`}
-        >
-          {activeThread.from_name} <span className="opacity-70">({activeThread.from_addr})</span>
-        </p>
+        {isRSS ? (
+          // RSS subject == from_name (both the feed title), so showing the name
+          // again would just duplicate the title above. Show the feed host only.
+          <p className="truncate text-[11.5px] text-secondary mt-0.5 font-medium" title={activeThread.from_addr}>
+            {activeThread.from_addr}
+          </p>
+        ) : (
+          <p
+            className="truncate text-[11.5px] text-secondary mt-0.5 font-medium"
+            title={`${activeThread.from_name} (${activeThread.from_addr})`}
+          >
+            {activeThread.from_name} <span className="opacity-70">({activeThread.from_addr})</span>
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

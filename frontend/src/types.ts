@@ -112,6 +112,9 @@ export type Message = {
   attachments?: Attachment[]
   /** Source feed URL; present on RSS feed threads only. */
   feed_url?: string
+  /** Cached feed-icon media key (served at `/media/<key>`); present on RSS feed
+   * threads only, empty when the feed declared no icon or it isn't cached yet. */
+  feed_icon?: string
   original_thread_id?: string
   /** On an outbound thread card, the count of recipients beyond the one shown,
    * rendered as a "+N" hint. Absent/0 for inbound or single-recipient threads. */
