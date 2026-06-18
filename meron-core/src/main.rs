@@ -1954,6 +1954,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             let mut messages = Vec::with_capacity(headers.len());
+            let mut seen_message_ids = HashSet::new();
             for header in headers {
                 // Use the header's folder when present (cross-folder query
                 // populates it); fall back to the requested folder otherwise.
@@ -1964,6 +1965,15 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 };
                 let message =
                     read_cached_or_fetch(engine, &account, msg_folder, header.uid).await?;
+                // Newly synced envelope rows do not have json.message_id yet, so
+                // the SQL-level cross-folder dedupe cannot collapse a
+                // self-addressed Sent/Inbox pair on the first thread read. Once
+                // read_cached_or_fetch has fetched and cached the full message,
+                // collapse later copies before returning the response.
+                let message_id_key = message.message_id.trim().to_ascii_lowercase();
+                if !message_id_key.is_empty() && !seen_message_ids.insert(message_id_key) {
+                    continue;
+                }
                 messages.push(json!({
                     "uid": header.uid,
                     "seen": header.seen,
