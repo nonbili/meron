@@ -107,6 +107,17 @@ fn pool_debug(account: &str, what: &str) {
     }
 }
 
+fn creds_have_required_secret(creds: &imap::Creds) -> bool {
+    if creds.is_oauth() {
+        creds
+            .refresh_token
+            .as_deref()
+            .is_some_and(|s| !s.is_empty())
+    } else {
+        !creds.password.is_empty()
+    }
+}
+
 /// Return a session to `account`'s free-list, or drop it if already at
 /// `max_pooled` (the transient-overflow case). Pure for testability.
 fn pool_return<S>(
@@ -139,7 +150,13 @@ impl Engine {
         let conn = store::open()?;
         let mut accounts: HashMap<String, imap::Creds> = HashMap::new();
         for (id, mut creds) in store::load_accounts(&conn)? {
-            let stored = secrets::load(&id)?;
+            let stored = match secrets::load(&id) {
+                Ok(stored) => stored,
+                Err(err) => {
+                    eprintln!("meron-core: could not load keychain secret for {id}: {err:#}");
+                    secrets::Secrets::default()
+                }
+            };
             if stored.is_empty() {
                 // Legacy row from a build that stored secrets in SQLite: migrate
                 // whatever's there into the keychain, then scrub the plaintext.
@@ -150,6 +167,10 @@ impl Engine {
                 }
             } else {
                 stored.apply_to(&mut creds);
+            }
+            if !creds_have_required_secret(&creds) {
+                eprintln!("meron-core: account {id} needs reconnect; no keychain secret found");
+                continue;
             }
             accounts.insert(id, creds);
         }
@@ -178,7 +199,7 @@ impl Engine {
         let mut accounts = self.accounts.lock().await;
         let creds = accounts
             .get_mut(account)
-            .ok_or_else(|| anyhow::anyhow!("unknown account: {account}"))?;
+            .ok_or_else(|| anyhow::anyhow!("account needs reconnect: {account}"))?;
 
         if creds.is_oauth() {
             let now = std::time::SystemTime::now()
@@ -1360,7 +1381,33 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
         // All accounts (mail + rss) as bridge-shaped JSON, from the one DB.
         "account.list" => {
-            let accounts = store::list_accounts(&engine.db.lock().unwrap())?;
+            let mut accounts = store::list_accounts(&engine.db.lock().unwrap())?;
+            let live_accounts = engine.accounts.lock().await;
+            for account in &mut accounts {
+                if account
+                    .get("auth_type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|auth_type| auth_type == "rss")
+                {
+                    continue;
+                }
+                let Some(id) = account
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                else {
+                    continue;
+                };
+                if let Some(obj) = account.as_object_mut() {
+                    let needs_reconnect = live_accounts
+                        .get(&id)
+                        .is_none_or(|creds| !creds_have_required_secret(creds));
+                    obj.insert(
+                        "needs_reconnect".to_string(),
+                        json!(needs_reconnect),
+                    );
+                }
+            }
             Ok(json!({ "accounts": accounts }))
         }
 

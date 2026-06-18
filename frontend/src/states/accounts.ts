@@ -22,7 +22,7 @@ export function getActiveAccount() {
 }
 
 export function isSendableAccount(acc: Account | undefined | null): boolean {
-  return !!acc && acc.provider !== 'rss' && acc.auth_type !== 'rss'
+  return !!acc && acc.provider !== 'rss' && acc.auth_type !== 'rss' && acc.needs_reconnect !== true
 }
 
 // All send-as identities for an account: the primary address first (carrying the

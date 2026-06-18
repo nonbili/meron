@@ -34,6 +34,8 @@ export type Account = {
   muted?: boolean
   /** Whether automatic checking for new messages is paused (default false). */
   paused?: boolean
+  /** True when account metadata was restored but the OS keychain secret is missing. */
+  needs_reconnect?: boolean
   /** RSS automatic sync interval in minutes (default 60). */
   rss_sync_interval_minutes?: number
   feed_url?: string

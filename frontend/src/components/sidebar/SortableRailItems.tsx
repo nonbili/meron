@@ -1,4 +1,4 @@
-import { Columns3, Pause, BellOff } from 'lucide-react'
+import { Columns3, Pause, BellOff, KeyRound } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { DragEvent } from 'react'
@@ -98,6 +98,7 @@ export function SortableAccount({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: account.id })
 
   const isRSS = account.provider === 'rss' || account.auth_type === 'rss'
+  const needsReconnect = account.needs_reconnect === true
   const isPaused = account.paused ?? false
   const isMuted = account.muted ?? false
   const baseTooltip = isRSS
@@ -105,7 +106,7 @@ export function SortableAccount({
     : account.display_name
       ? `${account.display_name} (${account.email})`
       : account.email
-  const stateSuffix = isPaused ? ' — Paused' : isMuted ? ' — Muted' : ''
+  const stateSuffix = needsReconnect ? ' — Needs reconnect' : isPaused ? ' — Paused' : isMuted ? ' — Muted' : ''
 
   return (
     <div
@@ -125,7 +126,7 @@ export function SortableAccount({
         className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
           active
             ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidebar scale-105'
-            : isPaused
+            : isPaused || needsReconnect
               ? 'opacity-100 hover:scale-105'
               : 'opacity-75 hover:opacity-100 hover:scale-105'
         }`}
@@ -134,14 +135,18 @@ export function SortableAccount({
           name={accountLabel(account)}
           src={account.avatar_url}
           size={44}
-          className={`!rounded-2xl pointer-events-none transition-all ${isPaused ? 'grayscale opacity-40' : ''}`}
+          className={`!rounded-2xl pointer-events-none transition-all ${
+            isPaused || needsReconnect ? 'grayscale opacity-40' : ''
+          }`}
         />
-        {(isPaused || isMuted) && (
+        {(needsReconnect || isPaused || isMuted) && (
           <span
-            className="absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-sidebar"
-            title={isPaused ? 'Paused' : 'Muted'}
+            className={`absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white/90 ring-2 ring-sidebar ${
+              needsReconnect ? 'bg-amber-600' : 'bg-black/60 text-white/80'
+            }`}
+            title={needsReconnect ? 'Needs reconnect' : isPaused ? 'Paused' : 'Muted'}
           >
-            {isPaused ? <Pause size={9} className="fill-current" /> : <BellOff size={9} />}
+            {needsReconnect ? <KeyRound size={10} /> : isPaused ? <Pause size={9} className="fill-current" /> : <BellOff size={9} />}
           </span>
         )}
       </div>

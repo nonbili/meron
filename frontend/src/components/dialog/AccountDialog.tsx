@@ -23,6 +23,7 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
   const isSetup = variant === 'setup'
   const ctl = useAccountDialog()
   const { mode, setMode } = ctl
+  const reconnecting = !!ctl.reconnectAccount
   const classes = dialogClasses(isSetup)
 
   // OAuth providers sign in *and* save in one step (pollProfile saves the account
@@ -33,6 +34,7 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
 
   const onClose = () => {
     if (isSetup) return
+    ui$.reconnectAccountId.set('')
     ui$.setupOpen.set(false)
   }
 
@@ -91,16 +93,17 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
         {/* Header */}
         <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border/70 shrink-0">
           <h2 className="text-[15px] font-bold tracking-tight leading-tight">
-            {t('accounts.actions.addAccountTitle')}
+            {reconnecting
+              ? t('accounts.actions.reconnectAccountTitle', { defaultValue: 'Reconnect account' })
+              : t('accounts.actions.addAccountTitle')}
           </h2>
           <IconButton icon={X} iconSize={15} label={t('buttons.close')} size="sm" onClick={onClose} />
         </div>
 
-        {/* Body: provider rail + form. Fixed height so swapping providers (whose
-            forms differ in length) doesn't make the dialog jump; the form column
-            scrolls internally instead. */}
+        {/* Body: add-account shows provider selection; reconnect already knows
+            the provider, so it uses the full width for the active form. */}
         <div className="flex h-[360px]">
-          <AccountProviderRail mode={mode} setMode={setMode} />
+          {!reconnecting && <AccountProviderRail mode={mode} setMode={setMode} />}
           <div className="flex-1 min-w-0 overflow-y-auto p-5 flex flex-col gap-4">
             <div>
               <h3 className="text-[13px] font-bold tracking-tight leading-tight">{active?.label}</h3>
@@ -177,7 +180,7 @@ function AccountDialogError({ error }: { error: string }) {
 
 function SaveButton({ ctl, isSetup }: { ctl: AccountDialogController; isSetup: boolean }) {
   const { t } = useTranslation()
-  const { save, saveDisabled, loading } = ctl
+  const { save, saveDisabled, loading, reconnectAccount } = ctl
   return (
     <button
       onClick={save}
@@ -193,7 +196,11 @@ function SaveButton({ ctl, isSetup }: { ctl: AccountDialogController; isSetup: b
       }`}
     >
       {loading && <RefreshCw size={11} className="animate-spin" />}
-      <span>{t('accounts.actions.saveAccount')}</span>
+      <span>
+        {reconnectAccount
+          ? t('accounts.actions.reconnectAccount', { defaultValue: 'Reconnect' })
+          : t('accounts.actions.saveAccount')}
+      </span>
     </button>
   )
 }

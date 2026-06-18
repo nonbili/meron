@@ -105,6 +105,8 @@
     "actions": {
       "addAccount": "Add account",
       "addAccountTitle": "Add Account",
+      "reconnectAccount": "Reconnect",
+      "reconnectAccountTitle": "Reconnect account",
       "saveAccount": "Save Account",
       "collapseAccount": "Collapse account",
       "expandAccount": "Expand account"
@@ -461,7 +463,11 @@
       "addAlias": "Add alias",
       "aliasNamePlaceholder": "Name (optional)",
       "removeAlias": "Remove alias",
-      "accountSettings": "Account settings..."
+      "accountSettings": "Account settings...",
+      "reconnectTitle": "Reconnect",
+      "reconnectAccount": "Reconnect account",
+      "reconnectHint": "Restore the missing keychain credential for this account.",
+      "reconnectButton": "Reconnect"
     },
     "feeds": {
       "opmlFile": "OPML File",

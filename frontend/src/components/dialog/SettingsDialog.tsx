@@ -15,6 +15,7 @@ import {
   Columns3,
   Star,
   Globe,
+  KeyRound,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -61,6 +62,12 @@ const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
 
 function isRssAccount(account: Account) {
   return account.provider === 'rss' || account.auth_type === 'rss'
+}
+
+function reconnectMode(account: Account): SetupMode {
+  if (account.auth_type === 'outlook_oauth' || account.provider === 'outlook') return 'outlook'
+  if (account.auth_type === 'gmail_oauth' || account.provider === 'gmail') return 'gmail'
+  return 'custom'
 }
 
 function accountMeta(account: Account, t: ReturnType<typeof useTranslation>['t']) {
@@ -515,6 +522,12 @@ function AccountPanel({ account }: { account: Account }) {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const { avatarBusy, persistAvatarFile } = useAccountAvatar(account.id)
 
+  const reconnectAccount = () => {
+    ui$.reconnectAccountId.set(account.id)
+    ui$.setupMode.set(reconnectMode(account))
+    ui$.setupOpen.set(true)
+  }
+
   const pickAvatarFile = async () => {
     try {
       setAvatarFile(await pickImageFile(t('settings.account.chooseAvatarImage')))
@@ -557,6 +570,27 @@ function AccountPanel({ account }: { account: Account }) {
           <p className="text-[10.5px] text-secondary mt-0.5 font-medium truncate">{subtitle}</p>
         </div>
       </div>
+
+      {account.needs_reconnect && !isRSS && (
+        <SettingsGroup title={t('settings.account.reconnectTitle', { defaultValue: 'Reconnect' })}>
+          <SettingRow
+            title={t('settings.account.reconnectAccount', { defaultValue: 'Reconnect account' })}
+            hint={t('settings.account.reconnectHint', {
+              defaultValue: 'Restore the missing keychain credential for this account.',
+            })}
+            control={
+              <button
+                type="button"
+                onClick={reconnectAccount}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-accent hover:bg-accent-hover text-white font-bold text-[10px] cursor-pointer transition-colors"
+              >
+                <KeyRound size={12} />
+                {t('settings.account.reconnectButton', { defaultValue: 'Reconnect' })}
+              </button>
+            }
+          />
+        </SettingsGroup>
+      )}
 
       <AccountProfileGroup account={account} isRSS={isRSS} />
       <SettingsGroup title={t('settings.pages.appearance')}>

@@ -41,6 +41,7 @@ export const ui$ = observable({
   // Modals / panels.
   setupOpen: false,
   setupMode: 'gmail' as SetupMode,
+  reconnectAccountId: '',
   settingsOpen: false,
   aboutOpen: false,
   // Account id whose per-account settings panel is open ("" = closed).

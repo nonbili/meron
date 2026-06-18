@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from '../../lib/bridge'
 import { boot } from '../../boot'
@@ -15,6 +15,8 @@ type AddAccountResult = { account?: { id?: string } }
 export function useAccountDialog() {
   const mode = useValue(ui$.setupMode)
   const system = useValue(ui$.system)
+  const reconnectAccountId = useValue(ui$.reconnectAccountId)
+  const reconnectAccount = useValue(accounts$).find((account) => account.id === reconnectAccountId) ?? null
   const gmailConfigured = !!system?.gmail_oauth_configured
   const outlookConfigured = !!system?.outlook_oauth_configured
 
@@ -44,6 +46,7 @@ export function useAccountDialog() {
   const [appPasswordHint, setAppPasswordHint] = useState<{ provider: string; url: string } | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [waitingForGoogle, setWaitingForGoogle] = useState(false)
+  const autoBeginOAuthKeyRef = useRef('')
   const [exchangedTokens, setExchangedTokens] = useState<null | {
     access_token: string
     refresh_token: string
@@ -72,7 +75,30 @@ export function useAccountDialog() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!reconnectAccount) return
+    setForm({
+      email: reconnectAccount.email,
+      display_name: reconnectAccount.display_name || '',
+      sender_name: reconnectAccount.sender_name || '',
+      imap_host: reconnectAccount.imap_host || '',
+      imap_port: String(reconnectAccount.imap_port || 993),
+      smtp_host: reconnectAccount.smtp_host || '',
+      smtp_port: String(reconnectAccount.smtp_port || 465),
+      username: reconnectAccount.email,
+      password: '',
+      auth_code: '',
+      feed_url: reconnectAccount.feed_url || '',
+    })
+    setError('')
+    setExchangedTokens(null)
+    setAppPasswordHint(null)
+    setDiscoverNote('')
+    setAdvancedOpen(reconnectAccount.auth_type === 'password')
+  }, [reconnectAccount])
+
   const setMode = (newMode: SetupMode) => {
+    ui$.reconnectAccountId.set('')
     ui$.setupMode.set(newMode)
     setAdvancedOpen(false)
     setAppPasswordHint(null)
@@ -122,6 +148,7 @@ export function useAccountDialog() {
           refresh_token: res.profile.refresh_token,
           expires_in: res.profile.expires_in,
         })
+        ui$.reconnectAccountId.set('')
         ui$.setupOpen.set(false)
         await boot()
         selectCreatedAccount(before, added.account?.id)
@@ -156,6 +183,14 @@ export function useAccountDialog() {
       setError(errorMessage(err, `Failed to begin ${oauthLabel} sign in`))
     }
   }
+
+  useEffect(() => {
+    if (!reconnectAccount || (mode !== 'gmail' && mode !== 'outlook') || !oauthConfigured || waitingForGoogle) return
+    const key = `${reconnectAccount.id}:${mode}`
+    if (autoBeginOAuthKeyRef.current === key) return
+    autoBeginOAuthKeyRef.current = key
+    void beginOAuth()
+  }, [reconnectAccount, mode, oauthConfigured, waitingForGoogle])
 
   async function runDiscovery(email: string) {
     if (!email.includes('@') || email.endsWith('@')) return
@@ -239,6 +274,7 @@ export function useAccountDialog() {
         createdId = added.account?.id ?? ''
       }
       ui$.setupOpen.set(false)
+      ui$.reconnectAccountId.set('')
       await boot()
       const created = selectCreatedAccount(before, createdId)
       // When the dialog was opened from within Settings, drop straight into the
@@ -282,6 +318,7 @@ export function useAccountDialog() {
     beginOAuth,
     save,
     saveDisabled,
+    reconnectAccount,
   }
 }
 
