@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { Folder } from '../../types'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { Checkbox } from '../field/Checkbox'
 import { AccountSection } from './AccountSection'
 import { buildFolderTree, type AccountGroup } from './folderTree'
 
@@ -73,9 +74,7 @@ export function AddColumnDialog({
                 key={option.key}
                 className="mb-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover"
               >
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 shrink-0 cursor-pointer accent-accent"
+                <Checkbox
                   checked={selected.has(option.key)}
                   onChange={(event) => toggle([option.key], event.target.checked)}
                 />

@@ -151,6 +151,58 @@ textarea,
   --default-contextmenu: show;
 }
 
+.app-checkbox {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--me-border) 78%, var(--me-text-secondary));
+  border-radius: 0.3125rem;
+  background-color: var(--me-bg-chats);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0.75rem 0.75rem;
+  box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03), 0 1px 1px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.app-checkbox:hover {
+  border-color: color-mix(in srgb, var(--me-accent) 62%, var(--me-border));
+  background-color: var(--me-bg-raised);
+}
+
+.app-checkbox:focus-visible {
+  border-color: var(--me-accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--me-accent) 18%, transparent),
+    inset 0 1px 1px rgba(15, 23, 42, 0.03);
+}
+
+.app-checkbox:checked,
+.app-checkbox:indeterminate {
+  border-color: var(--me-accent);
+  background-color: var(--me-accent);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--me-accent) 22%, transparent);
+}
+
+.app-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2.2 6.2 4.8 8.6 9.8 3.4' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.app-checkbox:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6h6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.app-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .selectable-text {
   -webkit-user-select: text;
   user-select: text;

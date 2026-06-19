@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Folder as FolderIcon } from 'lucide-react'
+import { Checkbox } from '../field/Checkbox'
 import { collectKeys, type TreeNode } from './folderTree'
 
 // One folder node in the column picker tree: an expander, a tri-state checkbox
@@ -56,10 +57,8 @@ export function FolderTreeRow({
           <ChevronRight size={14} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </button>
         <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-          <input
+          <Checkbox
             ref={checkboxRef}
-            type="checkbox"
-            className="h-4 w-4 shrink-0 cursor-pointer accent-accent"
             checked={allChecked}
             disabled={descendantKeys.length === 0}
             onChange={(event) => onToggle(descendantKeys, event.target.checked)}
