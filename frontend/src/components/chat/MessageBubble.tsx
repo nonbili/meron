@@ -15,8 +15,8 @@ import {
 } from 'lucide-react'
 
 import { openExternal } from '../../lib/native'
-import { downloadAttachment, getActiveThread } from '../../states/mail'
-import { openMessageTab, retrySend } from '../../states/compose'
+import { downloadAttachment, getActiveThread, isDraftFolder } from '../../states/mail'
+import { openDraftCompose, openMessageTab, retrySend } from '../../states/compose'
 import { accountIdentities, accounts$ } from '../../states/accounts'
 import type { Message } from '../../types'
 import { revealRemote, thread$ } from '../../states/thread'
@@ -57,6 +57,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
   const outgoing =
     !!message.send_status ||
     (!!account && accountIdentities(account).some((identity) => identity.email.trim().toLowerCase() === fromEmail))
+  const isDraft = isDraftFolder(message.folder_id)
   const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null
   const isRSS = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
   const showOriginalDate = isRSS
@@ -95,22 +96,31 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
     const rect = event.currentTarget.getBoundingClientRect()
     onOpenContextMenu({ x: rect.right, y: rect.bottom + 4, message, hideOpenInNewTab: true })
   }
+  const openMessageOrDraftTab = () => {
+    if (isDraft) {
+      void openDraftCompose(message)
+      return
+    }
+    openMessageTab(message)
+  }
 
   return (
     <div className={`flex w-full animate-slide-up ${outgoing ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`group/message-bubble relative ${useHtmlBody ? 'w-[70%]' : 'max-w-[70%]'} min-w-[100px] p-3.5 border transition-shadow duration-200 ${
-          outgoing
-            ? 'bg-bubble-out text-bubble-out-text border-border/35 rounded-2xl rounded-tr-sm shadow-bubble-out'
+          isDraft
+            ? 'bg-bubble-out/55 text-bubble-out-text/80 border-dashed border-accent/45 rounded-2xl rounded-tr-sm shadow-none'
+            : outgoing
+              ? 'bg-bubble-out text-bubble-out-text border-border/35 rounded-2xl rounded-tr-sm shadow-bubble-out'
             : 'bg-bubble-in text-bubble-in-text border-border/40 rounded-2xl rounded-tl-sm shadow-bubble-in'
         }`}
       >
         <div className="absolute right-2 -top-3.5 z-20 flex items-center gap-1 rounded-full border border-border/40 bg-header/95 p-0.5 text-secondary opacity-0 shadow-sm transition-opacity group-hover/message-bubble:opacity-100 focus-within:opacity-100">
           <button
             type="button"
-            title={t('threads.actions.openInNewTab')}
-            aria-label={t('threads.actions.openInNewTab')}
-            onClick={() => openMessageTab(message)}
+            title={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
+            aria-label={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
+            onClick={openMessageOrDraftTab}
             className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-hover hover:text-primary cursor-pointer transition-colors"
           >
             <ExternalLink size={13} />
@@ -156,9 +166,15 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
             )}
           </div>
           <div className="flex items-center gap-1 text-[10.5px] text-secondary/80 select-none shrink-0">
+            {isDraft && (
+              <span className="rounded-full border border-accent/35 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-accent">
+                {t('chat.draft')}
+              </span>
+            )}
             {message.starred && <Star size={11} className="fill-amber-500 text-amber-500" />}
             <span title={formatFullTimestamp(message.date)}>{formatMessageStamp(message.date, showOriginalDate)}</span>
             {outgoing &&
+              !isDraft &&
               (message.send_status === 'sending' ? (
                 <Loader2 size={12} className="text-secondary/70 animate-spin" />
               ) : message.send_status === 'failed' ? (

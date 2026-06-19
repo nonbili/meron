@@ -164,4 +164,30 @@ describe('openThreadTabById', () => {
       },
     })
   })
+
+  it('reuses the open compose tab for repeated Drafts row clicks', async () => {
+    const draft = message({
+      id: 'acc-notification#Drafts#42#99',
+      folder_id: 'Drafts',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'me@example.com',
+      to: 'you@example.com',
+      message_id: 'draft-id@example.com',
+      subject: 'Draft subject',
+      body: 'saved body',
+    })
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [draft] }
+      return {}
+    }
+
+    await openDraftCompose(draft)
+    const firstTabId = compose$.activeTab.get()
+    await openDraftCompose(draft)
+
+    expect(compose$.tabs.get()).toHaveLength(1)
+    expect(compose$.activeTab.get()).toBe(firstTabId)
+    expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
+  })
 })

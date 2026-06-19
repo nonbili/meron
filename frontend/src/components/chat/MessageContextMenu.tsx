@@ -1,7 +1,7 @@
-import { Copy, ExternalLink, Forward, Link2, Mail, MailOpen, Star, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Forward, Link2, Mail, MailOpen, SquarePen, Star, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { openMessageTab, editAsNewMessage, forwardMessage } from '../../states/compose'
-import { deleteMessage, markMessageReadState, starMessage } from '../../states/mail'
+import { openMessageTab, editAsNewMessage, forwardMessage, openDraftCompose } from '../../states/compose'
+import { deleteMessage, isDraftFolder, markMessageReadState, starMessage } from '../../states/mail'
 import { openExternal } from '../../lib/native'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
@@ -31,6 +31,7 @@ export function MessageContextMenu({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const isDraft = isDraftFolder(state.message.folder_id)
   return (
     <FloatingContextMenu
       x={state.x}
@@ -65,11 +66,21 @@ export function MessageContextMenu({
         <>
           {!state.hideOpenInNewTab && (
             <MenuItem
-              icon={<ExternalLink size={13} className="text-accent" />}
-              label={t('threads.actions.openInNewTab')}
+              icon={
+                isDraft ? (
+                  <SquarePen size={13} className="text-accent" />
+                ) : (
+                  <ExternalLink size={13} className="text-accent" />
+                )
+              }
+              label={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
               className="whitespace-nowrap"
               onClick={() => {
-                openMessageTab(state.message)
+                if (isDraft) {
+                  void openDraftCompose(state.message)
+                } else {
+                  openMessageTab(state.message)
+                }
                 onClose()
               }}
             />
@@ -102,7 +113,7 @@ export function MessageContextMenu({
               void starMessage(message, !message.starred)
             }}
           />
-          {!isRSS && !headerOnly && (
+          {!isDraft && !isRSS && !headerOnly && (
             <MenuItem
               icon={<Forward size={13} className="text-accent" />}
               label={t('chat.actions.forward')}
@@ -114,7 +125,7 @@ export function MessageContextMenu({
               }}
             />
           )}
-          {!isRSS && !headerOnly && (
+          {!isDraft && !isRSS && !headerOnly && (
             <MenuItem
               icon={<Copy size={13} className="text-accent" />}
               label={t('chat.actions.editAsNewMessage')}
@@ -130,7 +141,7 @@ export function MessageContextMenu({
             <MenuItem
               danger
               icon={<Trash2 size={13} />}
-              label={t('chat.actions.deleteMessage')}
+              label={isDraft ? t('chat.actions.discardDraft') : t('chat.actions.deleteMessage')}
               className="whitespace-nowrap"
               onClick={() => {
                 const message = state.message

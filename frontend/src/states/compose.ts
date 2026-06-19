@@ -533,6 +533,22 @@ function composeFromDraftMessage(message: Message): Partial<ComposeDraft> & { ti
   }
 }
 
+function activateOpenDraftCompose(draft: Message): boolean {
+  const existing = compose$.tabs
+    .get()
+    .find(
+      (tab) =>
+        tab.kind === 'compose' &&
+        tab.compose?.sourceDraft &&
+        (tab.compose.sourceDraft.messageId === draft.id ||
+          (!!draft.message_id && tab.compose.draftMessageId === draft.message_id) ||
+          (tab.compose.sourceDraft.threadId === draft.thread_id && tab.compose.sourceDraft.folderId === draft.folder_id)),
+    )
+  if (!existing) return false
+  compose$.activeTab.set(existing.id)
+  return true
+}
+
 // Restore a saved server-side Drafts row into the full composer. Drafts are
 // stored as normal IMAP messages, but clicking one should resume editing rather
 // than open a read-only conversation.
@@ -543,9 +559,12 @@ export async function openDraftCompose(thread: Message) {
     return true
   }
 
+  if (activateOpenDraftCompose(thread)) return true
+
   try {
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
     const draft = newestMessage((result.messages ?? []).filter((message) => isDraftFolder(message.folder_id))) ?? thread
+    if (activateOpenDraftCompose(draft)) return true
     const id = openComposeTab(composeFromDraftMessage(draft))
     if (!id) return true
 

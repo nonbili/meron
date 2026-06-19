@@ -245,6 +245,7 @@
     "viewOriginalTopic": "View original topic",
     "hideDetails": "Hide details",
     "showDetails": "Show details",
+    "draft": "Draft",
     "failedToSendRetry": "Failed to send - click to retry",
     "retry": "Retry",
     "openExternalPlayer": "Open in external player",
@@ -275,8 +276,10 @@
     "actions": {
       "openLink": "Open link",
       "copyLinkAddress": "Copy link address",
+      "openDraft": "Open draft",
       "forward": "Forward",
       "editAsNewMessage": "Edit as new message",
+      "discardDraft": "Discard draft",
       "deleteMessage": "Delete message",
       "saveImage": "Save image...",
       "copyImage": "Copy image"
