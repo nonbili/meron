@@ -19,12 +19,15 @@ import { discardSavedDraftCopy } from '../../states/mail'
 import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
 import { ResizableImage } from './composerImage'
 import {
+  clipboardHasImageMarkup,
   createInlineId,
   extractClipboardImages,
   inlineRichStyles,
   prepareInlineImages,
   readClipboardImages,
+  readNativeClipboardImage,
   textToHtml,
+  type NativeClipboardImage,
 } from './composerHelpers'
 
 // All of the Composer's behaviour: the tiptap editor, attachment handling
@@ -65,7 +68,13 @@ export function useComposer(tabId: string) {
       },
       handlePaste: (_view, event) => {
         const imageFiles = extractClipboardImages(event.clipboardData)
-        if (imageFiles.length === 0) return false
+        if (imageFiles.length === 0) {
+          if (!clipboardHasImageMarkup(event.clipboardData)) return false
+          event.preventDefault()
+          pasteImageFromClipboard(Date.now(), { inline: true })
+          return true
+        }
+        event.preventDefault()
         lastImagePasteAtRef.current = Date.now()
         addFiles(imageFiles, { inline: true })
         return true
@@ -194,6 +203,35 @@ export function useComposer(tabId: string) {
     }
   }
 
+  const addNativeClipboardImage = (image: NativeClipboardImage, options: { inline?: boolean } = {}) => {
+    const shouldInline = !!options.inline && image.mime.toLowerCase().startsWith('image/') && !!editor
+    const next: ComposerAttachment = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      filename: image.filename,
+      mime: image.mime || 'application/octet-stream',
+      size: image.size,
+      data: image.data,
+      inlineId: shouldInline ? createInlineId() : undefined,
+    }
+    update({
+      attachments: [...(compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []), next],
+    })
+    if (shouldInline) {
+      invoke<string>('composer.writeMediaFile', { data: image.data, filename: image.filename })
+        .then((url) => {
+          editor!.chain().focus().setImage({ src: url, alt: image.filename }).run()
+        })
+        .catch((err) => {
+          console.error('Failed to write media file:', err)
+          editor!
+            .chain()
+            .focus()
+            .setImage({ src: `data:${image.mime || 'image/png'};base64,${image.data}`, alt: image.filename })
+            .run()
+        })
+    }
+  }
+
   const pickAttachmentFiles = async () => {
     try {
       const files = await pickFiles('Attach files')
@@ -218,6 +256,9 @@ export function useComposer(tabId: string) {
       e.preventDefault()
       lastImagePasteAtRef.current = Date.now()
       addFiles(imageFiles)
+    } else if (clipboardHasImageMarkup(e.clipboardData)) {
+      e.preventDefault()
+      pasteImageFromClipboard(Date.now(), { inline: false })
     }
   }
 
@@ -228,14 +269,32 @@ export function useComposer(tabId: string) {
     const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')
     if (!isPaste) return
 
-    const pasteStartedAt = Date.now()
+    pasteImageFromClipboard(Date.now(), { inline: !!draft?.rich })
+  }
+
+  const pasteImageFromClipboard = (pasteStartedAt: number, options: { inline: boolean }) => {
     void readClipboardImages()
       .then((images) => {
-        if (images.length === 0 || lastImagePasteAtRef.current >= pasteStartedAt) return
+        if (lastImagePasteAtRef.current >= pasteStartedAt) return
+        if (images.length === 0) {
+          return readNativeClipboardImage().then((image) => {
+            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
+            lastImagePasteAtRef.current = Date.now()
+            addNativeClipboardImage(image, options)
+          })
+        }
         lastImagePasteAtRef.current = Date.now()
-        addFiles(images, { inline: !!draft?.rich })
+        addFiles(images, options)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        void readNativeClipboardImage()
+          .then((image) => {
+            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
+            lastImagePasteAtRef.current = Date.now()
+            addNativeClipboardImage(image, options)
+          })
+          .catch(() => undefined)
+      })
   }
 
   const setLink = () => {

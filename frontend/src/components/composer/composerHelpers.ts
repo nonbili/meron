@@ -1,4 +1,5 @@
 import type { ComposerAttachment } from '../../types'
+import { invoke } from '../../lib/bridge'
 
 export function textToHtml(text: string): string {
   if (!text.trim()) return ''
@@ -168,6 +169,14 @@ export function extractClipboardImages(data: DataTransfer | null): File[] {
   return out
 }
 
+export function clipboardHasImageMarkup(data: DataTransfer | null): boolean {
+  if (!data) return false
+  const types = Array.from(data.types ?? []).map((type) => type.toLowerCase())
+  if (types.some((type) => type.startsWith('image/'))) return true
+  if (!types.includes('text/html')) return false
+  return /<img[\s>]/i.test(data.getData('text/html'))
+}
+
 export async function readClipboardImages(): Promise<File[]> {
   if (!navigator.clipboard?.read) return []
   const items = await navigator.clipboard.read()
@@ -180,4 +189,15 @@ export async function readClipboardImages(): Promise<File[]> {
     images.push(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imgType }))
   }
   return images
+}
+
+export type NativeClipboardImage = {
+  filename: string
+  mime: string
+  size: number
+  data: string
+}
+
+export async function readNativeClipboardImage(): Promise<NativeClipboardImage | null> {
+  return invoke<NativeClipboardImage | null>('composer.readClipboardImage', {})
 }

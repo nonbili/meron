@@ -12,12 +12,13 @@ export function ComposerAttachments({
   onRemove: (id: string) => void
 }) {
   const { t } = useTranslation()
+  const visibleAttachments = attachments.filter((att) => !att.inlineId)
 
-  if (attachments.length === 0) return null
+  if (visibleAttachments.length === 0) return null
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2 border-t border-border px-4 py-2 select-none">
-      {attachments.map((att) => {
+      {visibleAttachments.map((att) => {
         const AttIcon = fileIconFor(att.filename, att.mime)
         return (
           <div
