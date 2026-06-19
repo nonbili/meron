@@ -14,6 +14,7 @@ import {
 import { upsertCustomTheme } from '../../states/settings'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { TextInput } from '../field/Field'
 
 // Custom theme editor, layered over Settings (same pattern as
 // AvatarCropDialog: z-[70] overlay + capture-phase Esc so the Settings dialog
@@ -96,12 +97,13 @@ export function ThemeEditorDialog({
 
         <div className="flex flex-col gap-4 px-5 py-4 max-h-[65vh] overflow-y-auto">
           <div className="flex items-center gap-2">
-            <input
+            <TextInput
               type="text"
               value={name}
               placeholder={t('theme.namePlaceholder')}
               onChange={(event) => setName(event.target.value)}
-              className="flex-1 min-w-0 text-xs font-semibold bg-raised text-primary px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-accent transition-colors"
+              surface="raised"
+              className="flex-1 rounded-xl px-3 py-2 font-semibold"
             />
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-active/70 p-0.5">
               {(['light', 'dark'] as const).map((mode) => (
@@ -175,14 +177,13 @@ function ColorRow({
           title={t('theme.pickColor', { label: label.toLowerCase() })}
           className="h-7 w-8 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
         />
-        <input
+        <TextInput
           type="text"
           value={value}
           spellCheck={false}
           onChange={(event) => onChange(event.target.value)}
-          className={`w-24 text-[11px] font-mono font-semibold bg-chats text-primary px-2 py-1.5 rounded-lg border focus:outline-none transition-colors ${
-            invalid ? 'border-rose-400 focus:border-rose-500' : 'border-border focus:border-accent'
-          }`}
+          invalid={invalid}
+          className="w-24 px-2 py-1.5 text-[11px] font-mono font-semibold"
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
 import { InfoTip } from '../tooltip/InfoTip'
+import { SelectInput, TextInput } from '../field/Field'
 
 // iOS/chat-style switch, matching the look used across the settings UI.
 function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -142,14 +142,14 @@ export function NumberRow({
       hint={hint}
       control={
         <label className="flex items-center gap-1.5">
-          <input
+          <TextInput
             type="number"
             min={min}
             max={max}
             step={step}
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="w-20 text-xs font-semibold bg-chats text-primary px-2.5 py-1 rounded-lg border border-border focus:outline-none focus:border-accent transition-colors"
+            className="w-20 font-semibold"
           />
           <span className="text-[10.5px] font-bold text-secondary">{suffix}</span>
         </label>
@@ -179,12 +179,12 @@ export function TextRow({
       title={title}
       hint={hint}
       control={
-        <input
+        <TextInput
           type="text"
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
-          className="w-44 text-xs font-semibold bg-chats text-primary px-2.5 py-1 rounded-lg border border-border focus:outline-none focus:border-accent transition-colors"
+          className="w-44 font-semibold"
         />
       }
     />
@@ -212,22 +212,17 @@ export function SelectRow({
       title={title}
       hint={hint}
       control={
-        <div className="relative flex items-center">
-          <select
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            className="appearance-none text-xs font-semibold bg-chats text-primary pl-3 pr-8 py-1.5 rounded-xl border border-border focus:outline-none focus:border-accent transition-colors cursor-pointer outline-none w-44"
-          >
-            {options.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-chats text-primary">
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute right-2.5 flex items-center text-secondary">
-            <ChevronDown size={12} />
-          </div>
-        </div>
+        <SelectInput
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-44 rounded-xl py-1.5 pl-3 font-semibold"
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value} className="bg-chats text-primary">
+              {opt.label}
+            </option>
+          ))}
+        </SelectInput>
       }
     />
   )

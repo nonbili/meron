@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { createKanbanBoard } from '../../states/kanban'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { TextInput } from '../field/Field'
 
 export type BoardDialogState = { mode: 'create'; name: string }
 
@@ -42,11 +43,13 @@ export function BoardDialog({
         <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-secondary">
           {t('kanban.board.name')}
         </label>
-        <input
+        <TextInput
           autoFocus
           value={state.name}
           onChange={(event) => onChange({ ...state, name: event.target.value })}
-          className="mb-4 w-full rounded-lg border border-border bg-app px-3 py-2 text-sm font-semibold text-primary outline-none focus:border-accent"
+          fieldSize="md"
+          surface="app"
+          className="mb-4 w-full font-semibold"
         />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>

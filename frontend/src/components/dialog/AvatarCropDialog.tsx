@@ -241,7 +241,7 @@ export function AvatarCropDialog({
               onChange={(event) => setClampedZoom(Number(event.target.value))}
               disabled={disabled}
               aria-label={t('avatar.zoom')}
-              className="h-2 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
+              className="app-range flex-1"
             />
             <IconButton
               icon={Plus}

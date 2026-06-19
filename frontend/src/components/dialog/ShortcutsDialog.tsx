@@ -34,7 +34,7 @@ export function ShortcutsDialog() {
       }}
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-2xl dark:bg-[#1e293b]"
+        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-chats shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label={t('shortcuts.title')}

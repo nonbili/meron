@@ -6,6 +6,7 @@ import type { Folder } from '../../types'
 import { kanbanColumnKey } from '../../states/kanban'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
+import { TextInput } from '../field/Field'
 import { FolderTreeRow } from './FolderTreeRow'
 import type { AccountGroup, TreeNode } from './folderTree'
 
@@ -110,7 +111,7 @@ export function AccountSection({
               }}
             >
               <div className="flex items-center gap-1.5 rounded-lg bg-hover p-1">
-                <input
+                <TextInput
                   ref={inputRef}
                   value={name}
                   onChange={(event) => {
@@ -119,7 +120,7 @@ export function AccountSection({
                   }}
                   placeholder={t('folders.namePlaceholder')}
                   disabled={creating}
-                  className="h-7 min-w-0 flex-1 rounded-md border border-border bg-chats px-2 text-xs font-medium text-primary outline-none focus:border-accent disabled:opacity-60"
+                  className="h-7 flex-1 rounded-md px-2 font-medium"
                 />
                 <IconButton
                   icon={creating ? undefined : Plus}

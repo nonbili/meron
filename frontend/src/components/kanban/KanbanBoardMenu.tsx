@@ -88,7 +88,7 @@ export function BoardMenu({
       />
       {open && (
         <div
-          className="absolute right-0 mt-1.5 z-50 min-w-[180px] w-max rounded-xl border border-border bg-white dark:bg-[#1e293b] p-1 shadow-2xl animate-fade-in select-none"
+          className="absolute right-0 mt-1.5 z-50 min-w-[180px] w-max rounded-xl border border-border bg-chats p-1 shadow-2xl animate-fade-in select-none"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="@min-[640px]:hidden">
