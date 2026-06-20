@@ -124,3 +124,19 @@ func TestOutlookOAuthConfiguredFalseWithoutClientID(t *testing.T) {
 		t.Fatal("outlookOAuthConfigured = true, want false")
 	}
 }
+
+func TestOutlookOAuthConfiguredFromBakedClientID(t *testing.T) {
+	t.Setenv("MERON_OUTLOOK_CLIENT_ID", "")
+
+	old := outlookClientIDObf
+	t.Cleanup(func() {
+		outlookClientIDObf = old
+	})
+
+	if got := outlookClientID(); got == "" {
+		t.Fatal("outlookClientID = empty with baked client id")
+	}
+	if !outlookOAuthConfigured() {
+		t.Fatal("outlookOAuthConfigured = false with baked client id")
+	}
+}

@@ -10,10 +10,12 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { accounts$, reorderAccountIds } from '../../states/accounts'
 import { moveFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
 import { closeKanbanBoard, kanban$, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
+import { mail$, inboxUnread } from '../../states/mail'
 import { settings$, setUnifiedInboxSidebarVisible, setStarredSidebarVisible } from '../../states/settings'
 import { ui$ } from '../../states/ui'
 import { QuickSettingsMenu } from './QuickSettingsMenu'
 import { SortableBoard, SortableAccount } from './SortableRailItems'
+import { UnreadCountBadge } from './UnreadCountBadge'
 import { RailContextMenu, RailMenuItem } from './RailContextMenu'
 import { AccountContextMenu } from './AccountContextMenu'
 import { BoardContextMenu } from './BoardContextMenu'
@@ -27,6 +29,8 @@ export function AccountSwitcher() {
   const hiddenSidebarAccounts = useValue(settings$.hiddenSidebarAccounts)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSidebar)
   const showStarred = useValue(settings$.showStarredInSidebar)
+  const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
+  const foldersByAccount = useValue(mail$.foldersByAccount)
   const activeBoardId = useValue(kanban$.activeBoardId)
   const selectedAccount = useValue(ui$.selectedAccount)
   // Right-click context menu anchored at the cursor for one account.
@@ -42,6 +46,13 @@ export function AccountSwitcher() {
 
   const isUnifiedActive = !activeBoardId && selectedAccount === 'unified'
   const isStarredActive = !activeBoardId && selectedAccount === 'starred'
+  const unifiedUnread = showUnreadBadge
+    ? accounts.reduce(
+        (sum, account) =>
+          account.included_in_unified !== false ? sum + inboxUnread(foldersByAccount[account.id]) : sum,
+        0,
+      )
+    : 0
   const hiddenSidebarAccountIds = new Set(hiddenSidebarAccounts)
   const sidebarAccounts = accounts.filter((account) => !hiddenSidebarAccountIds.has(account.id))
   const hasBoards = boards.length > 0
@@ -128,7 +139,7 @@ export function AccountSwitcher() {
         setMoreMenu({ x: event.clientX, y: event.clientY })
       }}
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-4 overflow-y-auto">
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-4 overflow-y-auto pt-1.5">
         {/* Unified Inbox Home Button */}
         {showUnifiedInbox && (
           <div className="relative w-full flex justify-center group">
@@ -137,22 +148,25 @@ export function AccountSwitcher() {
                 isUnifiedActive ? 'h-7' : 'h-0 group-hover:h-3'
               }`}
             />
-            <button
-              className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 cursor-pointer ${
-                isUnifiedActive
-                  ? 'bg-accent text-white shadow-lg shadow-accent/25'
-                  : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white hover:scale-105'
-              }`}
-              onClick={() => selectAccount('unified')}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                setUnifiedMenu({ x: event.clientX, y: event.clientY })
-              }}
-              title={t('settings.sidebar.showUnifiedInbox')}
-            >
-              <Mail size={19} />
-            </button>
+            <div className="relative">
+              <button
+                className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 cursor-pointer ${
+                  isUnifiedActive
+                    ? 'bg-accent text-white shadow-lg shadow-accent/25'
+                    : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white hover:scale-105'
+                }`}
+                onClick={() => selectAccount('unified')}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setUnifiedMenu({ x: event.clientX, y: event.clientY })
+                }}
+                title={t('settings.sidebar.showUnifiedInbox')}
+              >
+                <Mail size={19} />
+              </button>
+              <UnreadCountBadge count={unifiedUnread} />
+            </div>
           </div>
         )}
 

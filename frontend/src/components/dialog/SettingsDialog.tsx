@@ -308,6 +308,7 @@ function BoardGroup({
 function GeneralSection() {
   const { t } = useTranslation()
   const showRealAvatars = useValue(settings$.showRealAvatars)
+  const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const sendShortcut = useValue(settings$.sendShortcut)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSidebar)
   const showStarred = useValue(settings$.showStarredInSidebar)
@@ -324,6 +325,13 @@ function GeneralSection() {
           hint={t('settings.appearance.showSenderImagesHint')}
           checked={showRealAvatars}
           onChange={() => settings$.showRealAvatars.set(!showRealAvatars)}
+        />
+        <ToggleRow
+          icon={<Inbox size={15} />}
+          title={t('settings.appearance.showUnreadAccountBadge')}
+          hint={t('settings.appearance.showUnreadAccountBadgeHint')}
+          checked={showUnreadAccountBadge}
+          onChange={() => settings$.showUnreadAccountBadge.set(!showUnreadAccountBadge)}
         />
       </SettingsGroup>
 

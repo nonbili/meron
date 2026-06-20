@@ -1,9 +1,13 @@
 import { Columns3, Pause, BellOff, KeyRound } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useValue } from '@legendapp/state/react'
 import type { DragEvent } from 'react'
 import type { Account } from '../../types'
+import { settings$ } from '../../states/settings'
+import { mail$, inboxUnread } from '../../states/mail'
 import { Avatar } from '../avatar/Avatar'
+import { UnreadCountBadge } from './UnreadCountBadge'
 
 function accountLabel(account: { display_name: string; email: string }) {
   return account.display_name || account.email
@@ -101,6 +105,9 @@ export function SortableAccount({
   const needsReconnect = account.needs_reconnect === true
   const isPaused = account.paused ?? false
   const isMuted = account.muted ?? false
+  const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
+  const accountFolders = useValue(mail$.foldersByAccount[account.id])
+  const unreadCount = showUnreadBadge && !isRSS ? inboxUnread(accountFolders) : 0
   const baseTooltip = isRSS
     ? account.display_name || 'RSS Feeds'
     : account.display_name
@@ -122,23 +129,28 @@ export function SortableAccount({
       title={baseTooltip + stateSuffix}
     >
       {activeIndicator(active)}
-      <div
-        className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
-          active
-            ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidebar scale-105'
-            : isPaused || needsReconnect
-              ? 'opacity-100 hover:scale-105'
-              : 'opacity-75 hover:opacity-100 hover:scale-105'
-        }`}
-      >
-        <Avatar
-          name={accountLabel(account)}
-          src={account.avatar_url}
-          size={44}
-          className={`!rounded-2xl pointer-events-none transition-all ${
-            isPaused || needsReconnect ? 'grayscale opacity-40' : ''
+      {/* Badges live on this wrapper, not the dimmed avatar div, so the unread
+          count stays full-opacity for inactive accounts (matching the rail's
+          other badges). */}
+      <div className="relative">
+        <div
+          className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
+            active
+              ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidebar scale-105'
+              : isPaused || needsReconnect
+                ? 'opacity-100 hover:scale-105'
+                : 'opacity-75 hover:opacity-100 hover:scale-105'
           }`}
-        />
+        >
+          <Avatar
+            name={accountLabel(account)}
+            src={account.avatar_url}
+            size={44}
+            className={`!rounded-2xl pointer-events-none transition-all ${
+              isPaused || needsReconnect ? 'grayscale opacity-40' : ''
+            }`}
+          />
+        </div>
         {(needsReconnect || isPaused || isMuted) && (
           <span
             className={`absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white/90 ring-2 ring-sidebar ${
@@ -149,6 +161,7 @@ export function SortableAccount({
             {needsReconnect ? <KeyRound size={10} /> : isPaused ? <Pause size={9} className="fill-current" /> : <BellOff size={9} />}
           </span>
         )}
+        <UnreadCountBadge count={unreadCount} />
       </div>
     </div>
   )

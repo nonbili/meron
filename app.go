@@ -2471,6 +2471,9 @@ func sidecarEnv() []string {
 	if secret := googleClientSecret(); secret != "" {
 		env = append(env, "MERON_GOOGLE_CLIENT_SECRET="+secret)
 	}
+	if id := outlookClientID(); id != "" {
+		env = append(env, "MERON_OUTLOOK_CLIENT_ID="+id)
+	}
 	return env
 }
 

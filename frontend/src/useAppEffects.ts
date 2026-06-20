@@ -31,6 +31,7 @@ export function useAppEffects() {
   const filterMode = useValue(ui$.filterMode)
   const startupSyncDone = useRef(false)
   const language = useValue(settings$.language)
+  const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
 
   useEffect(() => {
     const systemLanguage = resolveI18nLanguageFromWebLocale(navigator.language) || 'en'
@@ -61,6 +62,19 @@ export function useAppEffects() {
       unsubGlobalFilter()
     }
   }, [])
+
+  useEffect(() => {
+    // When the avatar unread-badge setting is on, seed every account's folder
+    // cache so badges show for all accounts — not just the selected one (which
+    // loadFolders covers). Cache-only (refresh:false), so no IMAP round-trip;
+    // mail.synced keeps these fresh afterwards. Covers paused accounts too.
+    if (!showUnreadBadge) return
+    for (const account of accounts) {
+      const isRSS = account.provider === 'rss' || account.auth_type === 'rss'
+      if (isRSS) continue
+      void refreshAccountFoldersCache(account.id, false)
+    }
+  }, [showUnreadBadge, accounts])
 
   useEffect(() => {
     if (startupSyncDone.current || accounts.length === 0) return

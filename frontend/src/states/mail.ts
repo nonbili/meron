@@ -281,6 +281,13 @@ export async function refreshAccountFoldersCache(accountId: string, refresh = fa
   }
 }
 
+/** Unread count of the INBOX folder in a folder list, or 0 if absent. */
+export function inboxUnread(folders: Folder[] | undefined): number {
+  if (!folders) return 0
+  const inbox = folders.find((f) => f.role === 'inbox' || f.id.toLowerCase() === 'inbox')
+  return inbox?.unread ?? 0
+}
+
 function hasOnlyBootstrapInbox(folders: Folder[]) {
   if (folders.length !== 1) return false
   const folder = folders[0]

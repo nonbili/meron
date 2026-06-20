@@ -40,6 +40,8 @@ export type Settings = {
   /** User-created themes (see lib/themes.ts). */
   customThemes: CustomTheme[]
   showRealAvatars: boolean
+  /** Whether to overlay an inbox unread-count badge on sidebar account avatars. */
+  showUnreadAccountBadge: boolean
   sendShortcut: SendShortcut
   /** Ordered user-created kanban boards. */
   kanbanBoards: KanbanBoard[]
@@ -68,6 +70,7 @@ const DB_KEY = {
   themeId: 'theme_id',
   customThemes: 'custom_themes',
   showRealAvatars: 'show_real_avatars',
+  showUnreadAccountBadge: 'show_unread_account_badge',
   sendShortcut: 'send_shortcut',
   kanbanBoards: 'kanban_boards',
   threadListWidth: 'thread_list_width',
@@ -161,6 +164,7 @@ export const settings$ = observable<Settings>({
   themeId: themeBootstrap.themeId,
   customThemes: themeBootstrap.customThemes,
   showRealAvatars: false,
+  showUnreadAccountBadge: false,
   sendShortcut: 'mod_enter',
   kanbanBoards: [],
   threadListWidth: 350,
@@ -348,6 +352,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.showRealAvatars] === 'boolean') {
       settings$.showRealAvatars.set(prefs[DB_KEY.showRealAvatars] as boolean)
+    }
+
+    if (typeof prefs[DB_KEY.showUnreadAccountBadge] === 'boolean') {
+      settings$.showUnreadAccountBadge.set(prefs[DB_KEY.showUnreadAccountBadge] as boolean)
     }
 
     const sendShortcut = prefs[DB_KEY.sendShortcut]

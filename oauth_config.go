@@ -37,9 +37,9 @@ var (
 	googleClientSecretObf = "CioxPD51QlcQNz0fIkvUSwoRQC4vaQM2QC4ydTtzw1Y0DQA="
 
 	// Outlook is a public client (PKCE), so there is no client secret — only the
-	// Application (client) ID. Generate the obfuscated value the same way as
-	// Google (`go run ./cmd/obfuscate`) and paste it here for release builds.
-	outlookClientIDObf = ""
+	// Application (client) ID. Generate the obfuscated value with the same
+	// obfuscation helper used for Google and paste it here for release builds.
+	outlookClientIDObf = "egQUWl8cWVZYQg1JFxyuWntTX1dbHFtMEEFZG0VUrgx7XBcN"
 )
 
 // googleClientID returns the OAuth client id. A non-empty MERON_GOOGLE_CLIENT_ID

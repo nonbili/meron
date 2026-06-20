@@ -48,7 +48,7 @@
     "noColumnsText": "Add a folder or label column to this board.",
     "kanbanSetupText": "Add an account to use kanban view.",
     "noConversationSelected": "No Conversation Selected",
-    "noConversationSelectedText": "Select a message thread from the sidebar list to view its contents, reply, or manage attachments."
+    "noConversationSelectedText": "Select a message thread from the thread list to view its contents, reply, or manage attachments."
   },
   "app": {
     "logoAlt": "Meron Logo"
@@ -393,9 +393,9 @@
     "label": "Settings",
     "sections": {
       "general": "General",
-      "mailAccounts": "Mail Accounts",
-      "feedAccounts": "Feed Accounts",
-      "kanbanBoards": "Kanban Boards",
+      "mailAccounts": "Mail accounts",
+      "feedAccounts": "Feed accounts",
+      "kanbanBoards": "Kanban boards",
       "noMailAccounts": "No mail accounts yet.",
       "noFeedAccounts": "No feed accounts yet.",
       "noBoards": "No boards yet.",
@@ -414,18 +414,20 @@
       "system": "System"
     },
     "appearance": {
-      "showSenderImages": "Show Sender Images",
-      "showSenderImagesHint": "Fetches sender images from Gravatar, with domain favicons as fallback."
+      "showSenderImages": "Show sender images",
+      "showSenderImagesHint": "Fetches sender images from Gravatar, with domain favicons as fallback.",
+      "showUnreadAccountBadge": "Show unread badge in sidebar",
+      "showUnreadAccountBadgeHint": "Overlays a count of unread inbox messages on each account in the sidebar."
     },
     "sidebar": {
-      "showUnifiedInbox": "Show Unified Inbox",
-      "showStarred": "Show Starred"
+      "showUnifiedInbox": "Show unified inbox",
+      "showStarred": "Show starred"
     },
     "kanban": {
-      "columnWidth": "Column Width"
+      "columnWidth": "Column width"
     },
     "composer": {
-      "sendMessageWith": "Send Message With",
+      "sendMessageWith": "Send message with",
       "sendShortcutEnterHint": "Enter sends, Shift+Enter adds a new line.",
       "sendShortcutModHint": "{{shortcut}} sends, Enter adds a new line."
     },
@@ -435,31 +437,31 @@
       "chooseAvatarFailed": "Failed to choose avatar",
       "removeAccount": "Remove account",
       "profile": "Profile",
-      "displayName": "Display Name",
+      "displayName": "Display name",
       "displayNameHint": "Only shown inside Meron.",
       "displayNamePlaceholder": "Shown inside Meron",
-      "senderName": "Sender Name",
+      "senderName": "Sender name",
       "senderNameHint": "The From name on outgoing mail.",
       "senderNamePlaceholder": "Outgoing mail From name",
       "visibility": "Visibility",
-      "showInUnifiedInbox": "Show in Unified Inbox",
+      "showInUnifiedInbox": "Show in unified inbox",
       "showInUnifiedInboxHint": "You can still open the account directly.",
-      "showInLeftSidebar": "Show in Left Sidebar",
+      "showInLeftSidebar": "Show in left sidebar",
       "showInLeftSidebarHint": "Hidden accounts stay available here in Settings.",
-      "notificationsSync": "Notifications & Sync",
-      "muteNotifications": "Mute Notifications",
+      "notificationsSync": "Notifications & sync",
+      "muteNotifications": "Mute notifications",
       "unmuteNotifications": "Unmute notifications",
       "muteNotificationsHint": "Messages still arrive and sync; no desktop notification.",
-      "pauseAccount": "Pause Account",
+      "pauseAccount": "Pause account",
       "resumeChecking": "Resume checking",
       "pauseAccountHint": "Stops checking for new messages; existing ones stay readable.",
-      "syncInterval": "Sync Interval",
+      "syncInterval": "Sync interval",
       "content": "Content",
-      "loadRemoteImages": "Load Remote Images",
+      "loadRemoteImages": "Load remote images",
       "loadRemoteImagesHint": "Off by default for email to avoid tracking pixels.",
-      "conversationView": "Conversation View",
+      "conversationView": "Conversation view",
       "conversationPlain": "Plain",
-      "chatBackground": "Chat Background",
+      "chatBackground": "Chat background",
       "sending": "Sending",
       "aliases": "Aliases",
       "aliasesHint": "Extra addresses you can send from. Replies to mail received on an alias default to that address.",
@@ -473,7 +475,7 @@
       "reconnectButton": "Reconnect"
     },
     "feeds": {
-      "opmlFile": "OPML File",
+      "opmlFile": "OPML file",
       "opmlHint": "Import or export this account's feed subscriptions."
     },
     "storage": {
