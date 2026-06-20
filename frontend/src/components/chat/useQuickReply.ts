@@ -13,6 +13,12 @@ import {
   type NativeClipboardImage,
 } from './quickReplyClipboard'
 
+const QUICK_REPLY_MAX_VISIBLE_LINES = 12
+const QUICK_REPLY_LINE_HEIGHT_PX = 20
+const QUICK_REPLY_VERTICAL_PADDING_PX = 14
+const QUICK_REPLY_MAX_HEIGHT_PX =
+  QUICK_REPLY_MAX_VISIBLE_LINES * QUICK_REPLY_LINE_HEIGHT_PX + QUICK_REPLY_VERTICAL_PADDING_PX
+
 // State and behaviour for the quick-reply box: per-thread draft hydration and
 // autosave, attachment handling (file picker + sync/async/native paste), the
 // auto-growing textarea, the reply-focus shortcut and send. The component renders
@@ -44,7 +50,7 @@ export function useQuickReply() {
     const textarea = textareaRef.current
     if (!textarea) return
     textarea.style.height = 'auto'
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 128)}px`
+    textarea.style.height = `${Math.min(textarea.scrollHeight, QUICK_REPLY_MAX_HEIGHT_PX)}px`
   }, [composer])
 
   // Focus the box when the "r" shortcut fires (ignore the initial 0 value).
