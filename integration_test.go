@@ -6,21 +6,24 @@ package main
 // IMAP fetch → SQLite store. See maddy_harness_test.go for the setup.
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-// pollInbox refreshes an account's INBOX until predicate matches a message row
+// pollFolder refreshes an account folder until predicate matches a message row
 // (messages.recent triggers a background IMAP sync and serves the store cache).
-func pollInbox(t *testing.T, sidecar *Sidecar, account string, predicate func(map[string]any) bool) map[string]any {
+func pollFolder(t *testing.T, sidecar *Sidecar, account, folder string, predicate func(map[string]any) bool) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		result := callMap(t, sidecar, "messages.recent", map[string]any{
 			"account": account,
-			"folder":  "INBOX",
+			"folder":  folder,
 			"refresh": true,
 			"limit":   50,
 		})
@@ -33,12 +36,62 @@ func pollInbox(t *testing.T, sidecar *Sidecar, account string, predicate func(ma
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	t.Fatalf("message did not arrive in %s INBOX within deadline", account)
+	t.Fatalf("message did not arrive in %s %s within deadline", account, folder)
 	return nil
+}
+
+func pollInbox(t *testing.T, sidecar *Sidecar, account string, predicate func(map[string]any) bool) map[string]any {
+	t.Helper()
+	return pollFolder(t, sidecar, account, "INBOX", predicate)
+}
+
+func assertNoMessageInFolder(t *testing.T, sidecar *Sidecar, account, folder string, predicate func(map[string]any) bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		result := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": account,
+			"folder":  folder,
+			"refresh": true,
+			"limit":   50,
+		})
+		rows, _ := result["messages"].([]any)
+		found := false
+		for _, row := range rows {
+			message, ok := row.(map[string]any)
+			if ok && predicate(message) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("message still present in %s %s after deadline", account, folder)
 }
 
 func str(message map[string]any, key string) string {
 	value, _ := message[key].(string)
+	return value
+}
+
+func num(message map[string]any, key string) uint32 {
+	switch value := message[key].(type) {
+	case float64:
+		return uint32(value)
+	case int:
+		return uint32(value)
+	case uint32:
+		return value
+	default:
+		return 0
+	}
+}
+
+func boolValue(message map[string]any, key string) bool {
+	value, _ := message[key].(bool)
 	return value
 }
 
@@ -68,6 +121,10 @@ func TestIntegrationMailFlow(t *testing.T) {
 		result := callMap(t, sidecar, "folders.create", map[string]any{"account": "alice", "name": "ITestFolder"})
 		if !foldersContain(result, "ITestFolder") {
 			t.Fatalf("folders.create did not return ITestFolder: %v", result)
+		}
+		result = callMap(t, sidecar, "folders.create", map[string]any{"account": "bob", "name": "ITestFolder"})
+		if !foldersContain(result, "ITestFolder") {
+			t.Fatalf("folders.create for bob did not return ITestFolder: %v", result)
 		}
 	})
 
@@ -133,6 +190,203 @@ func TestIntegrationMailFlow(t *testing.T) {
 			t.Errorf("messages.thread returned %d messages, want >= 2: %v", n, result)
 		}
 	})
+
+	t.Run("move and flags", func(t *testing.T) {
+		moveSubject := "Meron integration move " + nonce
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    moveSubject,
+			"body":       "move me to the integration folder",
+			"message_id": fmt.Sprintf("itest-move-%s@maddy.test", nonce),
+		}); err != nil {
+			t.Fatalf("send move fixture: %v", err)
+		}
+
+		message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == moveSubject
+		})
+		uid := num(message, "uid")
+		if uid == 0 {
+			t.Fatalf("delivered move fixture has no uid: %v", message)
+		}
+
+		callMap(t, sidecar, "messages.markRead", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+			"seen":    true,
+		})
+		callMap(t, sidecar, "messages.markStarred", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+			"starred": true,
+		})
+
+		updated := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == moveSubject && boolValue(m, "seen") && boolValue(m, "starred")
+		})
+		if num(updated, "uid") != uid {
+			t.Fatalf("flagged message uid = %d, want %d", num(updated, "uid"), uid)
+		}
+
+		result := callMap(t, sidecar, "messages.move", map[string]any{
+			"account":       "bob",
+			"folder":        "INBOX",
+			"target_folder": "ITestFolder",
+			"uid":           uid,
+		})
+		if moved := num(result, "moved"); moved != 1 {
+			t.Fatalf("messages.move moved = %d, want 1: %v", moved, result)
+		}
+
+		assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
+			return str(m, "subject") == moveSubject
+		})
+		moved := pollFolder(t, sidecar, "bob", "ITestFolder", func(m map[string]any) bool {
+			return str(m, "subject") == moveSubject
+		})
+		if !boolValue(moved, "seen") || !boolValue(moved, "starred") {
+			t.Fatalf("moved message lost flags: %v", moved)
+		}
+	})
+
+	t.Run("search and starred items", func(t *testing.T) {
+		searchSubject := "Meron integration search " + nonce
+		searchBody := "unique-search-token-" + nonce
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    searchSubject,
+			"body":       searchBody,
+			"message_id": fmt.Sprintf("itest-search-%s@maddy.test", nonce),
+		}); err != nil {
+			t.Fatalf("send search fixture: %v", err)
+		}
+
+		message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == searchSubject
+		})
+		uid := num(message, "uid")
+		if uid == 0 {
+			t.Fatalf("delivered search fixture has no uid: %v", message)
+		}
+
+		search := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"query":   searchBody,
+			"refresh": true,
+			"limit":   50,
+		})
+		if !messagesContainSubject(search, searchSubject) {
+			t.Fatalf("messages.recent query did not return %q: %v", searchSubject, search)
+		}
+
+		callMap(t, sidecar, "messages.markStarred", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+			"starred": true,
+		})
+		starred := callMap(t, sidecar, "starred.items", map[string]any{"limit": 50})
+		if !starredMailContainsSubject(starred, searchSubject) {
+			t.Fatalf("starred.items did not include %q: %v", searchSubject, starred)
+		}
+	})
+
+	t.Run("draft lifecycle", func(t *testing.T) {
+		draftID := fmt.Sprintf("itest-draft-%s@maddy.test", nonce)
+		draftSubject := "Meron integration draft " + nonce
+		if _, err := sidecar.Call("save_draft", map[string]any{
+			"account":  "alice",
+			"to":       "bob@maddy.test",
+			"subject":  draftSubject,
+			"body":     "draft body",
+			"draft_id": draftID,
+		}); err != nil {
+			t.Fatalf("save_draft: %v", err)
+		}
+
+		draft := pollFolder(t, sidecar, "alice", "Drafts", func(m map[string]any) bool {
+			return str(m, "subject") == draftSubject
+		})
+		if str(draft, "thread_key") == "" {
+			t.Fatalf("draft has empty thread_key: %v", draft)
+		}
+
+		if _, err := sidecar.Call("discard_draft", map[string]any{
+			"account":  "alice",
+			"draft_id": draftID,
+		}); err != nil {
+			t.Fatalf("discard_draft: %v", err)
+		}
+		assertNoMessageInFolder(t, sidecar, "alice", "Drafts", func(m map[string]any) bool {
+			return str(m, "subject") == draftSubject
+		})
+	})
+
+	t.Run("attachments", func(t *testing.T) {
+		attachmentSubject := "Meron integration attachment " + nonce
+		attachmentBody := "attachment body " + nonce
+		attachmentBytes := []byte("hello attachment " + nonce)
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    attachmentSubject,
+			"body":       attachmentBody,
+			"message_id": fmt.Sprintf("itest-attachment-%s@maddy.test", nonce),
+			"attachments": []map[string]any{{
+				"filename":  "itest-note.txt",
+				"mime":      "text/plain",
+				"data":      base64.StdEncoding.EncodeToString(attachmentBytes),
+				"inline_id": "",
+			}},
+		}); err != nil {
+			t.Fatalf("send attachment fixture: %v", err)
+		}
+
+		header := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == attachmentSubject
+		})
+		threadKey := str(header, "thread_key")
+		if threadKey == "" {
+			t.Fatalf("attachment fixture has empty thread_key: %v", header)
+		}
+
+		thread := callMap(t, sidecar, "messages.thread", map[string]any{
+			"account":    "bob",
+			"folder":     "INBOX",
+			"thread_key": threadKey,
+		})
+		message := firstThreadMessage(t, thread)
+		attachments := attachmentRows(t, message)
+		if len(attachments) != 1 {
+			t.Fatalf("attachments len = %d, want 1: %v", len(attachments), message)
+		}
+		attachment := attachments[0]
+		if str(attachment, "filename") != "itest-note.txt" {
+			t.Fatalf("attachment filename = %q", str(attachment, "filename"))
+		}
+		if str(attachment, "mime") != "text/plain" {
+			t.Fatalf("attachment mime = %q", str(attachment, "mime"))
+		}
+		if size := num(attachment, "size"); size != uint32(len(attachmentBytes)) {
+			t.Fatalf("attachment size = %d, want %d", size, len(attachmentBytes))
+		}
+		key := str(attachment, "key")
+		if key == "" {
+			t.Fatalf("attachment key is empty: %v", attachment)
+		}
+		got, err := os.ReadFile(filepath.Join(mediaDir(), key))
+		if err != nil {
+			t.Fatalf("read cached attachment %q: %v", key, err)
+		}
+		if string(got) != string(attachmentBytes) {
+			t.Fatalf("cached attachment bytes = %q, want %q", got, attachmentBytes)
+		}
+	})
 }
 
 func foldersContain(result map[string]any, name string) bool {
@@ -152,4 +406,57 @@ func foldersContain(result map[string]any, name string) bool {
 func threadLength(result map[string]any) int {
 	messages, _ := result["messages"].([]any)
 	return len(messages)
+}
+
+func messagesContainSubject(result map[string]any, subject string) bool {
+	rows, _ := result["messages"].([]any)
+	for _, row := range rows {
+		message, ok := row.(map[string]any)
+		if ok && str(message, "subject") == subject {
+			return true
+		}
+	}
+	return false
+}
+
+func starredMailContainsSubject(result map[string]any, subject string) bool {
+	rows, _ := result["mail"].([]any)
+	for _, row := range rows {
+		message, ok := row.(map[string]any)
+		if ok && str(message, "subject") == subject {
+			return true
+		}
+	}
+	return false
+}
+
+func firstThreadMessage(t *testing.T, result map[string]any) map[string]any {
+	t.Helper()
+	rows, _ := result["messages"].([]any)
+	if len(rows) == 0 {
+		t.Fatalf("thread has no messages: %v", result)
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatalf("thread row has type %T", rows[0])
+	}
+	message, ok := row["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("thread row message has type %T: %v", row["message"], row)
+	}
+	return message
+}
+
+func attachmentRows(t *testing.T, message map[string]any) []map[string]any {
+	t.Helper()
+	raw, _ := message["attachments"].([]any)
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		attachment, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("attachment has type %T", item)
+		}
+		out = append(out, attachment)
+	}
+	return out
 }
