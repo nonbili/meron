@@ -188,6 +188,11 @@ func resolveMediaPath(key string) (string, error) {
 	if key == "" {
 		return "", errors.New("missing attachment key")
 	}
+	for _, part := range strings.Split(filepath.ToSlash(key), "/") {
+		if part == ".." {
+			return "", errors.New("invalid attachment key")
+		}
+	}
 	root := mediaDir()
 	src := filepath.Join(root, filepath.Clean("/"+key))
 	if rel, err := filepath.Rel(root, src); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {

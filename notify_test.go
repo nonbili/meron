@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -96,5 +101,71 @@ func TestNotificationThreadIDRSS(t *testing.T) {
 	want := "rss-feed1#rss#item-key"
 	if got != want {
 		t.Fatalf("notificationThreadID() = %q, want %q", got, want)
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	if got := firstNonEmpty("", "", "fallback", "later"); got != "fallback" {
+		t.Fatalf("firstNonEmpty returned %q", got)
+	}
+	if got := firstNonEmpty("", ""); got != "" {
+		t.Fatalf("firstNonEmpty empty values returned %q", got)
+	}
+}
+
+func TestCheckProtocolVersionLogsMissingAndMismatch(t *testing.T) {
+	var buf bytes.Buffer
+	app := &App{logger: log.New(&buf, "", 0)}
+
+	app.checkProtocolVersion(nil)
+	if got := buf.String(); !strings.Contains(got, "missing protocol version") {
+		t.Fatalf("missing protocol log = %q", got)
+	}
+
+	buf.Reset()
+	app.checkProtocolVersion(map[string]any{"protocol": float64(expectedProtocolVersion + 1)})
+	if got := buf.String(); !strings.Contains(got, "protocol mismatch") {
+		t.Fatalf("mismatch protocol log = %q", got)
+	}
+
+	buf.Reset()
+	app.checkProtocolVersion(map[string]any{"protocol": float64(expectedProtocolVersion)})
+	if got := buf.String(); got != "" {
+		t.Fatalf("matching protocol logged %q, want empty", got)
+	}
+}
+
+func TestNotifyIconWritesEmbeddedIconOnce(t *testing.T) {
+	oldOnce := notifyIconOnce
+	oldPath := notifyIconPath
+	notifyIconOnce = sync.Once{}
+	notifyIconPath = ""
+	t.Cleanup(func() {
+		notifyIconOnce = oldOnce
+		notifyIconPath = oldPath
+	})
+
+	path := notifyIcon()
+	if len(appIconPNG) == 0 {
+		if path != "" {
+			t.Fatalf("notifyIcon path = %q with empty appIconPNG", path)
+		}
+		return
+	}
+	if path == "" {
+		t.Fatal("notifyIcon returned empty path")
+	}
+	if filepath.Base(path) != "meron-notify.png" {
+		t.Fatalf("notifyIcon path = %q", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read notify icon: %v", err)
+	}
+	if !bytes.Equal(data, appIconPNG) {
+		t.Fatalf("notify icon data length = %d, want %d matching bytes", len(data), len(appIconPNG))
+	}
+	if got := notifyIcon(); got != path {
+		t.Fatalf("second notifyIcon() = %q, want %q", got, path)
 	}
 }
