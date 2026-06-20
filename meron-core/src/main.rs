@@ -63,6 +63,10 @@ struct Engine {
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pause_signal: Notify,
+    /// Pulsed on OS resume (`system.resumed`) so IDLE watchers abandon sockets
+    /// that died during suspend and reconnect, instead of blocking up to the
+    /// IDLE timeout / TCP keepalive while no new mail is pushed.
+    resume_signal: Notify,
     /// Warm, authenticated IMAP sessions reused by the request path so each
     /// thread open / search / sync doesn't pay a fresh TLS + LOGIN/XOAUTH2
     /// handshake. Keyed by account; per-account `Vec` is a LIFO free-list
@@ -181,6 +185,7 @@ impl Engine {
             syncing: std::sync::Mutex::new(HashSet::new()),
             gap_attempts: std::sync::Mutex::new(HashMap::new()),
             pause_signal: Notify::new(),
+            resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
         })
     }
@@ -291,6 +296,14 @@ impl Engine {
     /// session built from stale creds.
     fn clear_pool(&self, account: &str) {
         self.pool.lock().unwrap().remove(account);
+    }
+
+    /// Drop every warm pooled session. Used on OS resume: a session's freshness
+    /// is judged by elapsed `Instant`, but the monotonic clock is frozen across
+    /// suspend, so a connection dead for hours still looks recently used and
+    /// dodges the `MAX_IDLE` eviction. Clearing forces the next op to reconnect.
+    fn clear_all_pools(&self) {
+        self.pool.lock().unwrap().clear();
     }
 
     /// Run `f` against a warm pooled session when one is available, otherwise a
@@ -1166,12 +1179,14 @@ async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
                 json!({ "message": format!("idle {account}/{folder}: {e:#}") }),
             )
             .await;
-        }
-        // Back off before reconnecting, but wake immediately on a pause toggle so
-        // a just-paused account stops promptly (next iteration sees is_paused).
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(15)) => {}
-            _ = engine.pause_signal.notified() => {}
+            // Back off before reconnecting on error, but wake immediately on a
+            // pause toggle so a just-paused account stops promptly (next
+            // iteration sees is_paused). A clean return (pause or OS resume)
+            // skips the backoff: pause exits at the top, resume reconnects now.
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(15)) => {}
+                _ = engine.pause_signal.notified() => {}
+            }
         }
     }
 }
@@ -1194,19 +1209,39 @@ async fn idle_once(
     loop {
         let mut handle = session.idle();
         handle.init().await.context("IDLE init")?;
-        let response = {
+        enum Wake<R> {
+            /// The IDLE wait completed: new data, a timeout, or an error.
+            Data(R),
+            /// The account was paused: return so idle_watch sees is_paused.
+            Pause,
+            /// The system resumed from suspend: the socket is probably dead.
+            Resume,
+        }
+        let wake = {
             let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
-            // Cancel the wait early if the account is paused so we return to
-            // idle_watch, which then sees is_paused and shuts the watcher down.
+            // Cancel the wait early on a pause (so idle_watch shuts the watcher
+            // down) or an OS resume (so we drop a likely-dead socket and
+            // reconnect) instead of blocking up to the IDLE timeout.
             tokio::select! {
-                r = idle_fut => Some(r),
-                _ = engine.pause_signal.notified() => None,
+                r = idle_fut => Wake::Data(r),
+                _ = engine.pause_signal.notified() => Wake::Pause,
+                _ = engine.resume_signal.notified() => Wake::Resume,
             }
         };
+
+        // On resume the connection likely died during suspend, and a graceful
+        // DONE could block on it until TCP keepalive times out. Drop the handle
+        // (closing the socket) without DONE; idle_watch reconnects immediately.
+        if let Wake::Resume = wake {
+            drop(handle);
+            return Ok(());
+        }
+
         session = handle.done().await.context("IDLE done")?;
-        let response = match response {
-            Some(r) => r,
-            None => return Ok(()),
+        let response = match wake {
+            Wake::Data(r) => r,
+            Wake::Pause => return Ok(()),
+            Wake::Resume => unreachable!("handled above"),
         };
 
         if let async_imap::extensions::idle::IdleResponse::NewData(_) = response.context("IDLE")? {
@@ -2675,6 +2710,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     spawn_body_prefetch(engine.clone(), id.clone(), "INBOX".to_string());
                 }
             }
+            Ok(json!({ "ok": true }))
+        }
+
+        // The host OS resumed from suspend. Connections held across sleep are
+        // likely dead but look fresh (monotonic clock froze), so drop pooled
+        // sessions and wake every IDLE watcher to reconnect, rather than waiting
+        // out TCP keepalive / the IDLE timeout with no mail being pushed.
+        "system.resumed" => {
+            engine.clear_all_pools();
+            engine.resume_signal.notify_waiters();
             Ok(json!({ "ok": true }))
         }
 

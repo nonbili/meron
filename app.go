@@ -148,6 +148,20 @@ func (a *App) Startup(ctx context.Context) {
 		a.logf("core started")
 	}
 	a.setupNotificationListener()
+	a.setupResumeListener()
+}
+
+// onSystemResumed tells the sidecar the host woke from suspend so its IDLE
+// watchers drop sockets that died during sleep and reconnect immediately,
+// instead of waiting out TCP keepalive / the IDLE timeout. Called from the
+// per-platform resume listeners.
+func (a *App) onSystemResumed() {
+	a.logf("resume: system woke, kicking IDLE watchers")
+	if a.sidecar != nil && a.sidecar.Started() {
+		if _, err := a.sidecar.Call("system.resumed", nil); err != nil {
+			a.logf("resume: system.resumed failed: %v", err)
+		}
+	}
 }
 
 func (a *App) HandleSecondInstanceLaunch(args []string) {
@@ -163,6 +177,7 @@ func (a *App) Shutdown(ctx context.Context) {
 		a.sidecar.Close()
 	}
 	a.closeNotificationListener()
+	a.closeResumeListener()
 	if a.logFile != nil {
 		_ = a.logFile.Close()
 	}
