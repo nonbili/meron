@@ -2507,4 +2507,372 @@ mod tests {
         );
         assert_eq!(items[0]["unread"], true);
     }
+
+    // ---- test helpers for the additions below -------------------------------
+
+    fn rss_conn_with_feed(account: &str, sub: &str) -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO accounts(id, engine, provider, display_name, config)
+             VALUES(?1, 'rss', 'rss', 'RSS', '{}')",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO subscriptions(id, account, url, title, feed_title, enabled)
+             VALUES(?1, ?2, 'https://example.com/feed', 'Example Feed', 'Example Feed', 1)",
+            params![sub, account],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert_item(conn: &Connection, account: &str, sub: &str, key: &str, published_at: i64) {
+        store::upsert_rss_item(
+            conn,
+            account,
+            sub,
+            key,
+            key,
+            true,
+            None,
+            &RssItemExtra {
+                author: String::new(),
+                link: "https://example.com/post".to_string(),
+                summary: "Caption".to_string(),
+                content: String::new(),
+                images: Vec::new(),
+                videos: Vec::new(),
+                published_at,
+                updated_at: 0,
+                fetched_at: published_at + 100,
+            },
+        )
+        .unwrap();
+    }
+
+    // ---- read_thread_page pagination ----------------------------------------
+
+    #[test]
+    fn read_thread_page_walks_backwards_with_cursor() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        insert_item(&conn, "rss-acct", "feed-1", "item-1", 100);
+        insert_item(&conn, "rss-acct", "feed-1", "item-2", 200);
+        insert_item(&conn, "rss-acct", "feed-1", "item-3", 300);
+
+        // First page (limit 2): the two newest items, ascending within the page,
+        // plus a cursor pointing at the oldest item on the page.
+        let (page1, cursor1) =
+            read_thread_page(&conn, "rss-acct#rss#feed-1", None, Some(2)).unwrap();
+        assert_eq!(
+            page1
+                .iter()
+                .map(|m| m["subject"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["item-2", "item-3"],
+        );
+        let cursor1 = cursor1.expect("more items remain, cursor must be present");
+        assert_eq!(cursor1, "ts:200:item-2");
+
+        // Second page from that cursor: the remaining older item, no further cursor.
+        let (page2, cursor2) =
+            read_thread_page(&conn, "rss-acct#rss#feed-1", Some((200, "item-2".into())), Some(2))
+                .unwrap();
+        assert_eq!(
+            page2
+                .iter()
+                .map(|m| m["subject"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["item-1"],
+        );
+        assert!(cursor2.is_none(), "last page must not yield a cursor");
+    }
+
+    #[test]
+    fn read_thread_page_unpaginated_returns_all_ascending() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        insert_item(&conn, "rss-acct", "feed-1", "item-1", 100);
+        insert_item(&conn, "rss-acct", "feed-1", "item-2", 300);
+        insert_item(&conn, "rss-acct", "feed-1", "item-3", 200);
+
+        let (items, cursor) =
+            read_thread_page(&conn, "rss-acct#rss#feed-1", None, None).unwrap();
+        assert!(cursor.is_none());
+        assert_eq!(
+            items
+                .iter()
+                .map(|m| m["subject"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["item-1", "item-3", "item-2"], // ts 100, 200, 300 ascending
+        );
+    }
+
+    // ---- mark read / starred lifecycle --------------------------------------
+
+    fn seen_starred(conn: &Connection, sub: &str, key: &str) -> (i64, i64) {
+        conn.query_row(
+            "SELECT seen, starred FROM messages WHERE folder = ?1 AND msg_id = ?2",
+            params![sub, key],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn mark_items_then_thread_read() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        insert_item(&conn, "rss-acct", "feed-1", "item-1", 100);
+        insert_item(&conn, "rss-acct", "feed-1", "item-2", 200);
+
+        // Marking one item read leaves the other untouched.
+        mark_items_read(&conn, "rss-acct#rss#feed-1", &["item-1".into()], true).unwrap();
+        assert_eq!(seen_starred(&conn, "feed-1", "item-1").0, 1);
+        assert_eq!(seen_starred(&conn, "feed-1", "item-2").0, 0);
+
+        // Marking the thread read flips the whole feed.
+        mark_thread_read(&conn, "rss-acct#rss#feed-1", true).unwrap();
+        assert_eq!(seen_starred(&conn, "feed-1", "item-1").0, 1);
+        assert_eq!(seen_starred(&conn, "feed-1", "item-2").0, 1);
+    }
+
+    #[test]
+    fn mark_items_then_thread_starred() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        insert_item(&conn, "rss-acct", "feed-1", "item-1", 100);
+        insert_item(&conn, "rss-acct", "feed-1", "item-2", 200);
+
+        mark_items_starred(&conn, "rss-acct#rss#feed-1", &["item-2".into()], true).unwrap();
+        assert_eq!(seen_starred(&conn, "feed-1", "item-1").1, 0);
+        assert_eq!(seen_starred(&conn, "feed-1", "item-2").1, 1);
+
+        mark_thread_starred(&conn, "rss-acct#rss#feed-1", true).unwrap();
+        assert_eq!(seen_starred(&conn, "feed-1", "item-1").1, 1);
+        assert_eq!(seen_starred(&conn, "feed-1", "item-2").1, 1);
+    }
+
+    #[test]
+    fn mark_rejects_invalid_thread_id() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        assert!(mark_thread_read(&conn, "not-an-rss-id", true).is_err());
+        assert!(mark_items_read(&conn, "bad", &["x".into()], true).is_err());
+    }
+
+    // ---- remove_feed --------------------------------------------------------
+
+    #[test]
+    fn remove_feed_deletes_subscription_and_items() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        insert_item(&conn, "rss-acct", "feed-1", "item-1", 100);
+        insert_item(&conn, "rss-acct", "feed-1", "item-2", 200);
+
+        remove_feed(&conn, "rss-acct#rss#feed-1").unwrap();
+
+        let subs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM subscriptions WHERE id = 'feed-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let msgs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE folder = 'feed-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(subs, 0, "subscription row must be deleted");
+        assert_eq!(msgs, 0, "the feed's cached items must be deleted");
+    }
+
+    #[test]
+    fn remove_feed_rejects_invalid_thread_id() {
+        let conn = rss_conn_with_feed("rss-acct", "feed-1");
+        assert!(remove_feed(&conn, "garbage").is_err());
+    }
+
+    // ---- OPML export round-trips with import --------------------------------
+
+    #[test]
+    fn export_opml_round_trips_through_import() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO accounts(id, engine, provider, display_name, config)
+             VALUES('rss-src', 'rss', 'rss', 'My Feeds', '{}')",
+            [],
+        )
+        .unwrap();
+        // Two feeds with an XML-special character in a title to exercise escaping.
+        conn.execute(
+            "INSERT INTO subscriptions(id, account, url, title, feed_title, site_url, enabled)
+             VALUES('feed-1', 'rss-src', 'https://a.example/feed.xml', 'News & Co', 'News', 'https://a.example', 1),
+                   ('feed-2', 'rss-src', 'https://b.example/feed.xml', 'Tech', 'Tech', '', 1)",
+            [],
+        )
+        .unwrap();
+
+        let opml = export_opml(&conn, "rss-src").unwrap();
+        assert!(opml.contains("News &amp; Co"), "title must be XML-escaped: {opml}");
+        assert!(opml.contains("xmlUrl=\"https://a.example/feed.xml\""));
+
+        // Import into a *separate* database — the `url` column is globally UNIQUE,
+        // so re-importing the same feeds into the same DB is (correctly) a no-op.
+        // The real round-trip is export-here, import-on-another-machine.
+        let dst = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&dst).unwrap();
+        dst.execute(
+            "INSERT INTO accounts(id, engine, provider, display_name, config)
+             VALUES('rss-dst', 'rss', 'rss', 'Dest', '{}')",
+            [],
+        )
+        .unwrap();
+        let db = Mutex::new(dst);
+        let imported = import_opml(&db, &opml, "rss-dst").unwrap();
+        assert_eq!(imported, 2, "both feeds must round-trip into the new account");
+
+        let urls: Vec<String> = {
+            let conn = db.lock().unwrap();
+            let mut stmt = conn
+                .prepare("SELECT url FROM subscriptions WHERE account = 'rss-dst' ORDER BY url")
+                .unwrap();
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(
+            urls,
+            vec![
+                "https://a.example/feed.xml".to_string(),
+                "https://b.example/feed.xml".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn export_opml_rejects_unknown_account() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&conn).unwrap();
+        assert!(export_opml(&conn, "nope").is_err());
+    }
+
+    // ---- small pure helpers -------------------------------------------------
+
+    #[test]
+    fn first_line_collapses_whitespace_and_truncates() {
+        assert_eq!(first_line("  hello   world \n again "), "hello world again");
+        let long = "x".repeat(300);
+        let preview = first_line(&long);
+        assert_eq!(preview.chars().count(), 223); // 220 chars + "..."
+        assert!(preview.ends_with("..."));
+    }
+
+    #[test]
+    fn mime_guesses_from_extension() {
+        assert_eq!(image_mime("https://x/a.PNG?v=2"), "image/png");
+        assert_eq!(image_mime("https://x/a.webp"), "image/webp");
+        assert_eq!(image_mime("https://x/a.bin"), "image/jpeg"); // default
+        assert_eq!(video_mime("https://x/a.webm"), "video/webm");
+        assert_eq!(video_mime("https://x/a"), "video/mp4"); // default
+    }
+
+    // ---- end-to-end feed fetch over a real HTTP server ----------------------
+
+    /// Spawn a throwaway HTTP/1.1 server that replies to every request with the
+    /// same body. Returns the feed URL. The thread is detached (dies with the
+    /// test process). Exercises the real `ureq` fetch path without any network.
+    fn serve_feed(body: &'static str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = [0u8; 2048];
+                let _ = stream.read(&mut buf); // drain the request line/headers
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://{addr}/feed.xml")
+    }
+
+    const SAMPLE_RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>First post</title>
+      <link>https://example.com/1</link>
+      <guid>guid-1</guid>
+      <description>Hello from the first post.</description>
+    </item>
+    <item>
+      <title>Second post</title>
+      <link>https://example.com/2</link>
+      <guid>guid-2</guid>
+      <description>And the second.</description>
+    </item>
+  </channel>
+</rss>"#;
+
+    #[test]
+    fn add_fetches_parses_and_syncs_over_http() {
+        // Keep prune_feed_media (called by sync_account) confined to a temp dir
+        // instead of the real media cache.
+        let media = std::env::temp_dir().join(format!("meron-rss-test-{}", std::process::id()));
+        unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+        let url = serve_feed(SAMPLE_RSS);
+        let conn = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&conn).unwrap();
+        let db = Mutex::new(conn);
+
+        // add() fetches the feed, creates the account, and stores both items.
+        let account = add(&db, &url, "Sample Feed").unwrap();
+        let account_id = account["id"].as_str().unwrap().to_string();
+        assert!(account_id.starts_with("rss-"));
+
+        let (subs, msgs): (i64, i64) = {
+            let conn = db.lock().unwrap();
+            let subs = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM subscriptions WHERE account = ?1",
+                    params![account_id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            let msgs = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM messages WHERE account = ?1",
+                    params![account_id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            (subs, msgs)
+        };
+        assert_eq!(subs, 1, "one subscription created");
+        assert_eq!(msgs, 2, "both feed items stored");
+
+        // The parsed items surface as a thread with the feed's titles.
+        let threads = {
+            let conn = db.lock().unwrap();
+            recent(&conn, &account_id, "", 10).unwrap()
+        };
+        assert_eq!(threads.len(), 1);
+        assert_eq!(threads[0]["from_name"], "Sample Feed");
+
+        // A re-sync of the unchanged feed finds no new items (guids dedupe).
+        let new_items = sync_account(&db, &account_id).unwrap();
+        assert_eq!(new_items, 0, "unchanged feed yields no new items on re-sync");
+    }
 }
