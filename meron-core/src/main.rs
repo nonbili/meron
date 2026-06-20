@@ -1191,6 +1191,74 @@ async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
     }
 }
 
+/// Sync `folder` and surface the result to the UI: a "new mail" toast when
+/// INBOX's UIDNEXT advanced (genuine arrivals), otherwise a silent refresh.
+/// Shared by the IDLE wake path and the post-connect catch-up so both behave
+/// identically.
+async fn sync_and_notify(
+    engine: &Arc<Engine>,
+    out: &Writer,
+    account: &str,
+    folder: &str,
+) -> anyhow::Result<()> {
+    // An IDLE wake can mean new mail *or* just a flag change (e.g. a message
+    // read on another device). UIDNEXT only advances for new arrivals, so
+    // compare it across the refresh to tell them apart.
+    let is_inbox = folder.eq_ignore_ascii_case("INBOX");
+    let uid_next_before = if is_inbox {
+        inbox_uid_next(engine, account)
+    } else {
+        0
+    };
+    // Refresh on a separate connection (the IDLE one stays dedicated to IDLE).
+    let synced = sync_messages(engine, account, folder, IDLE_LIMIT).await?;
+    let uid_next_after = if is_inbox {
+        inbox_uid_next(engine, account)
+    } else {
+        0
+    };
+
+    let new_inbox = if is_inbox {
+        new_unread_inbox_summary(engine, account, uid_next_before, uid_next_after)
+    } else {
+        None
+    };
+
+    if let Some((count, latest)) = new_inbox {
+        // New arrivals: warm their bodies so the first open is instant.
+        spawn_body_prefetch(engine.clone(), account.to_string(), "INBOX".to_string());
+        let (from, subject, thread_key) =
+            (display_from(&latest), latest.subject, latest.thread_key);
+        emit(
+            out,
+            "mail.newMessages",
+            json!({
+                "account": account,
+                "accountName": account_label(engine, account),
+                "folder": "inbox",
+                "count": count,
+                "muted": engine.is_muted(account),
+                "from": from,
+                "subject": subject,
+                "threadKey": thread_key,
+            }),
+        )
+        .await;
+    } else {
+        if !is_inbox {
+            spawn_body_prefetch(engine.clone(), account.to_string(), folder.to_string());
+        }
+        // Flag-only change: refresh the UI silently, no "new mail" toast.
+        emit(
+            out,
+            "mail.synced",
+            json!({ "account": account, "folder": folder, "synced": synced }),
+        )
+        .await;
+    }
+    Ok(())
+}
+
 /// One IDLE connection lifecycle: hold a dedicated session on one mailbox, and
 /// on each server notification refresh that folder in the store.
 async fn idle_once(
@@ -1205,6 +1273,13 @@ async fn idle_once(
         .select(folder)
         .await
         .with_context(|| format!("SELECT {folder}"))?;
+
+    // Catch up before parking in IDLE: the server only pushes notifications for
+    // mail that arrives *after* IDLE begins, so anything delivered while we were
+    // disconnected (startup, error reconnect, or resume from suspend) would
+    // otherwise stay invisible until the next push. Cheap because idle_once is
+    // only (re)entered on a fresh connection, not on each 15-min IDLE timeout.
+    sync_and_notify(engine, out, account, folder).await?;
 
     loop {
         let mut handle = session.idle();
@@ -1245,61 +1320,7 @@ async fn idle_once(
         };
 
         if let async_imap::extensions::idle::IdleResponse::NewData(_) = response.context("IDLE")? {
-            // An IDLE wake can mean new mail *or* just a flag change (e.g. a
-            // message read on another device). UIDNEXT only advances for new
-            // arrivals, so compare it across the refresh to tell them apart.
-            let is_inbox = folder.eq_ignore_ascii_case("INBOX");
-            let uid_next_before = if is_inbox {
-                inbox_uid_next(engine, account)
-            } else {
-                0
-            };
-            // Refresh on a separate connection (this one stays dedicated to IDLE).
-            let synced = sync_messages(engine, account, folder, IDLE_LIMIT).await?;
-            let uid_next_after = if is_inbox {
-                inbox_uid_next(engine, account)
-            } else {
-                0
-            };
-
-            let new_inbox = if is_inbox {
-                new_unread_inbox_summary(engine, account, uid_next_before, uid_next_after)
-            } else {
-                None
-            };
-
-            if let Some((count, latest)) = new_inbox {
-                // New arrivals: warm their bodies so the first open is instant.
-                spawn_body_prefetch(engine.clone(), account.to_string(), "INBOX".to_string());
-                let (from, subject, thread_key) =
-                    (display_from(&latest), latest.subject, latest.thread_key);
-                emit(
-                    out,
-                    "mail.newMessages",
-                    json!({
-                        "account": account,
-                        "accountName": account_label(engine, account),
-                        "folder": "inbox",
-                        "count": count,
-                        "muted": engine.is_muted(account),
-                        "from": from,
-                        "subject": subject,
-                        "threadKey": thread_key,
-                    }),
-                )
-                .await;
-            } else {
-                if !is_inbox {
-                    spawn_body_prefetch(engine.clone(), account.to_string(), folder.to_string());
-                }
-                // Flag-only change: refresh the UI silently, no "new mail" toast.
-                emit(
-                    out,
-                    "mail.synced",
-                    json!({ "account": account, "folder": folder, "synced": synced }),
-                )
-                .await;
-            }
+            sync_and_notify(engine, out, account, folder).await?;
         }
     }
 }
