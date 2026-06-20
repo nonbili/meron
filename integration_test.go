@@ -387,6 +387,155 @@ func TestIntegrationMailFlow(t *testing.T) {
 			t.Fatalf("cached attachment bytes = %q, want %q", got, attachmentBytes)
 		}
 	})
+
+	t.Run("delete moves to trash", func(t *testing.T) {
+		// Delete is destructive and folder-aware: a non-draft inbox message must
+		// land in Trash (not expunge), so a stray UID never silently vanishes.
+		deleteSubject := "Meron integration delete " + nonce
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    deleteSubject,
+			"body":       "delete me",
+			"message_id": fmt.Sprintf("itest-delete-%s@maddy.test", nonce),
+		}); err != nil {
+			t.Fatalf("send delete fixture: %v", err)
+		}
+		message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == deleteSubject
+		})
+		uid := num(message, "uid")
+		if uid == 0 {
+			t.Fatalf("delete fixture has no uid: %v", message)
+		}
+
+		result := callMap(t, sidecar, "messages.delete", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+		})
+		if trash, _ := result["trash"].(string); trash == "" {
+			t.Fatalf("messages.delete did not report a trash folder: %v", result)
+		}
+
+		assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
+			return str(m, "subject") == deleteSubject
+		})
+		pollFolder(t, sidecar, "bob", "Trash", func(m map[string]any) bool {
+			return str(m, "subject") == deleteSubject
+		})
+	})
+
+	t.Run("copy keeps original", func(t *testing.T) {
+		// Copy must duplicate, not move: the source UID stays put while a copy
+		// appears in the target folder.
+		copySubject := "Meron integration copy " + nonce
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    copySubject,
+			"body":       "copy me",
+			"message_id": fmt.Sprintf("itest-copy-%s@maddy.test", nonce),
+		}); err != nil {
+			t.Fatalf("send copy fixture: %v", err)
+		}
+		message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == copySubject
+		})
+		uid := num(message, "uid")
+		if uid == 0 {
+			t.Fatalf("copy fixture has no uid: %v", message)
+		}
+
+		result := callMap(t, sidecar, "messages.copy", map[string]any{
+			"account":        "bob",
+			"folder":         "INBOX",
+			"target_account": "bob",
+			"target_folder":  "ITestFolder",
+			"uid":            uid,
+		})
+		if copied := num(result, "copied"); copied != 1 {
+			t.Fatalf("messages.copy copied = %d, want 1: %v", copied, result)
+		}
+
+		pollFolder(t, sidecar, "bob", "ITestFolder", func(m map[string]any) bool {
+			return str(m, "subject") == copySubject
+		})
+		// The original must still be in INBOX.
+		original := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"refresh": true,
+			"limit":   50,
+		})
+		if !messagesContainSubject(original, copySubject) {
+			t.Fatalf("copy removed the original from INBOX: %v", original)
+		}
+	})
+
+	t.Run("mark all read", func(t *testing.T) {
+		readSubjectA := "Meron integration markall A " + nonce
+		readSubjectB := "Meron integration markall B " + nonce
+		for i, subj := range []string{readSubjectA, readSubjectB} {
+			if _, err := sidecar.Call("send", map[string]any{
+				"account":    "alice",
+				"to":         "bob@maddy.test",
+				"subject":    subj,
+				"body":       "unread fixture",
+				"message_id": fmt.Sprintf("itest-markall-%d-%s@maddy.test", i, nonce),
+			}); err != nil {
+				t.Fatalf("send markall fixture %d: %v", i, err)
+			}
+		}
+		// Wait for both to land while still unseen.
+		for _, subj := range []string{readSubjectA, readSubjectB} {
+			pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+				return str(m, "subject") == subj && !boolValue(m, "seen")
+			})
+		}
+
+		callMap(t, sidecar, "messages.markAllRead", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+		})
+
+		for _, subj := range []string{readSubjectA, readSubjectB} {
+			pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+				return str(m, "subject") == subj && boolValue(m, "seen")
+			})
+		}
+	})
+
+	t.Run("contacts suggest from history", func(t *testing.T) {
+		// bob's mailbox holds messages from alice, so a prefix query against
+		// bob's history must surface alice's address.
+		result := callMap(t, sidecar, "contacts.suggest", map[string]any{
+			"account": "bob",
+			"query":   "alice",
+			"limit":   8,
+		})
+		contacts, _ := result["contacts"].([]any)
+		found := false
+		for _, item := range contacts {
+			contact, ok := item.(map[string]any)
+			if ok && strings.Contains(str(contact, "addr"), "alice@maddy.test") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("contacts.suggest(%q) did not surface alice: %v", "alice", result)
+		}
+	})
+
+	t.Run("archive folder resolves", func(t *testing.T) {
+		// folders.archive resolves the account's special-use Archive folder; the
+		// move-to-archive action depends on this lookup succeeding.
+		result := callMap(t, sidecar, "folders.archive", map[string]any{"account": "bob"})
+		if folder := str(result, "folder"); folder == "" {
+			t.Fatalf("folders.archive returned no folder: %v", result)
+		}
+	})
 }
 
 func foldersContain(result map[string]any, name string) bool {
