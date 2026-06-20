@@ -2,6 +2,7 @@ import { invoke } from './bridge'
 import { unifiedAccounts } from '../states/accounts'
 import { getAllKanbanColumns, kanbanColumnKey, kanban$, type KanbanColumn } from '../states/kanban'
 import { mail$ } from '../states/mail'
+import { showToast } from '../states/ui'
 import { mergeStarredItems } from './starredItems'
 import type { FilterMode } from '../states/ui'
 import type { Account, Folder, Message } from '../types'
@@ -219,6 +220,33 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
     if (columnLoadVersions.get(key) === version) {
       kanban$.loading[key].set(false)
     }
+  }
+}
+
+// Manually pull a single column's folder from the server, then reload it. Unlike
+// the chat-view sync (which always targets the selected account's inbox), this is
+// column-scoped: it syncs the exact account + folder the column shows. Unified
+// columns sync each member account's inbox; the unified starred column has no
+// remote folder to pull, so it just reloads.
+export async function syncKanbanColumn(column: KanbanColumn) {
+  mail$.readThreads.set({})
+  try {
+    if (isUnifiedStarredColumn(column)) {
+      // Aggregated view — nothing to fetch, just refresh from local state.
+    } else if (column.accountId === 'unified') {
+      await Promise.all(
+        unifiedAccounts().map((account) =>
+          invoke('mail.sync', { account_id: account.id, folder: 'inbox' }).catch((err) =>
+            console.error(`Sync failed for ${account.email}:`, err),
+          ),
+        ),
+      )
+    } else {
+      await invoke('mail.sync', { account_id: column.accountId, folder: column.folderId })
+    }
+    await loadKanbanColumn(column, true)
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Sync failed', 'error')
   }
 }
 

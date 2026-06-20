@@ -1427,8 +1427,12 @@ func exchangeGmailOAuthCodeWithVerifier(code, verifier, redirectURI string) (*To
 
 func (a *App) mailSync(payload map[string]any) (any, error) {
 	accountID, _ := payload["account_id"].(string)
+	folder, _ := payload["folder"].(string)
+	if folder == "" {
+		folder = "inbox"
+	}
 	engine := "meron_mail"
-	params := map[string]any{"account": accountID, "folder": "inbox", "limit": 50}
+	params := map[string]any{"account": accountID, "folder": folder, "limit": 50}
 	if isRSSAccountID(accountID) {
 		engine = "rss"
 		delete(params, "folder")

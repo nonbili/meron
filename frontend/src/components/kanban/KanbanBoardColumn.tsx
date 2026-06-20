@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSortable } from '@dnd-kit/sortable'
@@ -27,6 +27,7 @@ import {
   folderLabel,
   loadKanbanColumn,
   loadMoreKanbanColumn,
+  syncKanbanColumn,
   mergeLabelFolders,
   refreshKanbanContextAction,
   isUnifiedStarredColumn,
@@ -109,6 +110,7 @@ function KanbanColumnContent({
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
   const isRss = isRssAccount(columnAccount, column.accountId)
   const emptyText = columnEmptyText(filterMode, searchActive, rawThreads.length > 0, isRss)
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     void loadKanbanColumn(column, true)
@@ -175,6 +177,17 @@ function KanbanColumnContent({
             }}
             hasUnread={hasUnread}
             onMarkAllRead={() => void markColumnAllRead(column)}
+            onSync={async () => {
+              setSyncing(true)
+              try {
+                await syncKanbanColumn(column)
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            syncing={syncing}
+            syncLabel={isRss ? t('feeds.actions.syncFeeds') : undefined}
+            syncingLabel={isRss ? t('feeds.actions.syncingFeeds') : undefined}
             onRemove={() => removeKanbanColumn(boardId, column)}
             size={14}
             triggerClassName="h-7 w-7"
