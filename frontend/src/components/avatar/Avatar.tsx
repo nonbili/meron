@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { settings$ } from '../../states/settings'
 
@@ -80,9 +80,12 @@ interface AvatarProps {
   /** Diameter in pixels. */
   size?: number
   className?: string
+  /** Rendered in place of the letter initials when no image resolves (e.g. an
+   *  RSS glyph for feed accounts). The gradient background and ring are kept. */
+  fallback?: ReactNode
 }
 
-export function Avatar({ name, email, src, size = 40, className = '' }: AvatarProps) {
+export function Avatar({ name, email, src, size = 40, className = '', fallback }: AvatarProps) {
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(src)
   const [sourceKind, setSourceKind] = useState<SourceKind>(src ? 'manual' : 'none')
@@ -197,7 +200,7 @@ export function Avatar({ name, email, src, size = 40, className = '' }: AvatarPr
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-tr font-semibold text-white shadow-sm ring-1 ring-white/10 saturate-[0.8] ${avatarColor(name)} ${className}`}
     >
-      {initials(name)}
+      {fallback ?? initials(name)}
     </div>
   )
 }

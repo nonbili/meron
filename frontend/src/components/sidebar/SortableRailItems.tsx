@@ -1,4 +1,4 @@
-import { Columns3, Pause, BellOff, KeyRound } from 'lucide-react'
+import { Columns3, Pause, BellOff, KeyRound, Rss } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
@@ -107,7 +107,7 @@ export function SortableAccount({
   const isMuted = account.muted ?? false
   const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
   const accountFolders = useValue(mail$.foldersByAccount[account.id])
-  const unreadCount = showUnreadBadge && !isRSS ? inboxUnread(accountFolders) : 0
+  const unreadCount = showUnreadBadge ? inboxUnread(accountFolders) : 0
   const baseTooltip = isRSS
     ? account.display_name || 'RSS Feeds'
     : account.display_name
@@ -146,6 +146,7 @@ export function SortableAccount({
             name={accountLabel(account)}
             src={account.avatar_url}
             size={44}
+            fallback={isRSS ? <Rss size={20} /> : undefined}
             className={`!rounded-2xl pointer-events-none transition-all ${
               isPaused || needsReconnect ? 'grayscale opacity-40' : ''
             }`}

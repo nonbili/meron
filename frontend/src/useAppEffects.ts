@@ -70,8 +70,6 @@ export function useAppEffects() {
     // mail.synced keeps these fresh afterwards. Covers paused accounts too.
     if (!showUnreadBadge) return
     for (const account of accounts) {
-      const isRSS = account.provider === 'rss' || account.auth_type === 'rss'
-      if (isRSS) continue
       void refreshAccountFoldersCache(account.id, false)
     }
   }, [showUnreadBadge, accounts])
