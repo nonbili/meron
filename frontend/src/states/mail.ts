@@ -134,6 +134,22 @@ function findLocalThread(threadId: string): Message | undefined {
   return mail$.messages.get().find((item) => item.thread_id === threadId)
 }
 
+// After a read/unread toggle, refresh the cached folder unread counts that feed
+// the sidebar badges. Refreshing the selected view (`loadFolders`) keeps the
+// folder sidebar and the unified/account badge for that view fresh — but it
+// only reloads `selectedAccount`'s folders. In the Starred view or an open
+// Kanban board, `selectedAccount` is 'starred' (or some unrelated account), so
+// the *thread's own* account never gets reloaded and its sidebar unread badge —
+// plus the unified total it sums into — drifts out of sync. Refresh that
+// account too. Both calls are cache-only (refresh:false), so no IMAP traffic.
+function refreshFoldersAfterFlagChange(accountId: string | undefined) {
+  const selectedAcc = ui$.selectedAccount.get()
+  if (selectedAcc) void loadFolders(selectedAcc, false)
+  if (accountId && accountId !== selectedAcc) {
+    void refreshAccountFoldersCache(accountId, false)
+  }
+}
+
 // Save a local attachment to disk via the native save dialog. The bytes already
 // live in the media cache (keyed); the bridge copies them to the chosen path.
 export async function downloadAttachment(att: { key: string | null; filename: string }) {
@@ -616,10 +632,7 @@ export async function markThreadRead(threadId: string) {
     kanban$.threads.set(previousKanbanThreads)
     throw error
   } finally {
-    const selectedAcc = ui$.selectedAccount.get()
-    if (selectedAcc) {
-      void loadFolders(selectedAcc, false)
-    }
+    refreshFoldersAfterFlagChange(findLocalThread(threadId)?.account_id)
   }
 }
 
@@ -655,10 +668,7 @@ export async function markThreadUnread(threadId: string) {
 
   await invoke('mail.markRead', { thread_id: threadId, seen: false })
 
-  const selectedAcc = ui$.selectedAccount.get()
-  if (selectedAcc) {
-    void loadFolders(selectedAcc, false)
-  }
+  refreshFoldersAfterFlagChange(findLocalThread(threadId)?.account_id)
 }
 
 export async function starThread(threadId: string, starred: boolean) {
@@ -1020,8 +1030,9 @@ export async function deleteMessage(message: Message) {
     }
     await loadThreads(false)
     const selectedAcc = ui$.selectedAccount.get()
-    if (selectedAcc) {
-      void loadFolders(selectedAcc, false)
+    if (selectedAcc) void loadFolders(selectedAcc, false)
+    if (message.account_id && message.account_id !== selectedAcc) {
+      void loadFolders(message.account_id, false)
     }
   } catch (error) {
     mail$.messages.set(previousMessages)
@@ -1046,8 +1057,12 @@ export async function markAllRead() {
 
   await markThreadsReadRemote(unread, accounts, folder)
 
-  if (selectedAcc) {
-    void loadFolders(selectedAcc, false)
+  if (selectedAcc) void loadFolders(selectedAcc, false)
+  // The visible list can span multiple accounts (unified inbox, Starred, a
+  // Kanban board), so refresh each affected account's folder cache — not just
+  // the selected view — to keep every sidebar badge in sync.
+  for (const accountId of new Set(unread.map((thread) => thread.account_id))) {
+    if (accountId && accountId !== selectedAcc) void refreshAccountFoldersCache(accountId, false)
   }
 }
 
@@ -1074,11 +1089,9 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
     }),
   )
 
-  const selectedAcc = ui$.selectedAccount.get()
-  if (selectedAcc) {
-    void loadFolders(selectedAcc, false)
-  }
+  const accountId = findLocalThread(threadId)?.account_id
   await invoke('mail.markRead', { thread_id: threadId, message_ids: Array.from(unreadIds) })
+  refreshFoldersAfterFlagChange(accountId)
 }
 
 export async function markMessageReadState(message: Message, seen: boolean) {
@@ -1111,10 +1124,7 @@ export async function markMessageReadState(message: Message, seen: boolean) {
     kanban$.threads.set(previousKanbanThreads)
     throw error
   } finally {
-    const selectedAcc = ui$.selectedAccount.get()
-    if (selectedAcc) {
-      void loadFolders(selectedAcc, false)
-    }
+    refreshFoldersAfterFlagChange(message.account_id)
   }
 }
 
