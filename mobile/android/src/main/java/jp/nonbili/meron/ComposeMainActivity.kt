@@ -1,6 +1,7 @@
 package jp.nonbili.meron
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -15,20 +16,26 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,18 +45,23 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
@@ -58,6 +70,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -111,6 +126,7 @@ import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.ComposeDraft
 import jp.nonbili.meron.shared.DraftAttachment
 import jp.nonbili.meron.shared.ExchangeOAuthCodeParams
+import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderListParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MessageBody
@@ -118,6 +134,8 @@ import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MoveRssFeedParams
+import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
@@ -146,6 +164,8 @@ import jp.nonbili.meron.shared.toSendMailParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -193,15 +213,38 @@ class ComposeMainActivity : ComponentActivity() {
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
 }
 
-private enum class Screen { Mail, Thread, Compose, AddAccount }
+private enum class Screen { Mail, Kanban, Thread, Compose, AddAccount }
+private enum class FilterMode { All, Unread, Starred }
 
 private const val UNIFIED_ACCOUNT_ID = "unified"
 private const val INBOX_FOLDER = "inbox"
+private const val KANBAN_PREFS = "kanban"
+private const val KANBAN_BOARDS_PREF = "kanban_boards_v1"
+private const val ACTIVE_KANBAN_BOARD_PREF = "active_kanban_board_id_v1"
+private const val KANBAN_FILTER_PREF = "kanban_filter_v1"
+private const val KANBAN_SEARCH_PREF = "kanban_search_v1"
 
 private data class MailboxLoadResult(
     val folders: List<FolderSummary>,
     val folder: String,
     val threads: List<ThreadSummary>,
+)
+
+private data class KanbanColumnSpec(
+    val accountId: String,
+    val folderId: String,
+)
+
+private data class KanbanBoardSpec(
+    val id: String,
+    val name: String,
+    val columns: List<KanbanColumnSpec>,
+)
+
+private data class KanbanColumnState(
+    val threads: List<ThreadSummary> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -241,9 +284,22 @@ private fun MeronMobileScreen(
     var coreAccounts by remember { mutableStateOf(emptyList<AccountSummary>()) }
     var selectedCoreAccountId by remember { mutableStateOf(UNIFIED_ACCOUNT_ID) }
     var coreFolders by remember { mutableStateOf(emptyList<FolderSummary>()) }
+    var foldersByAccount by remember { mutableStateOf(emptyMap<String, List<FolderSummary>>()) }
     var selectedCoreFolder by remember { mutableStateOf(INBOX_FOLDER) }
     var coreThreads by remember { mutableStateOf(emptyList<ThreadSummary>()) }
     var selectedCoreThread by remember { mutableStateOf<ThreadSummary?>(null) }
+    var previousTopScreen by remember { mutableStateOf(Screen.Mail) }
+    var kanbanBoards by remember { mutableStateOf(loadKanbanBoards(context, emptyList())) }
+    var activeKanbanBoardId by remember { mutableStateOf(loadActiveKanbanBoardId(context)) }
+    var kanbanColumns by remember { mutableStateOf(emptyMap<String, KanbanColumnState>()) }
+    var kanbanFilter by remember { mutableStateOf(loadKanbanFilter(context)) }
+    var kanbanSearch by remember { mutableStateOf(loadKanbanSearch(context)) }
+    var kanbanActionThread by remember { mutableStateOf<ThreadSummary?>(null) }
+    var showKanbanBoardDialog by remember { mutableStateOf(false) }
+    var showKanbanColumnDialog by remember { mutableStateOf(false) }
+    var showKanbanCreateFolderDialog by remember { mutableStateOf<AccountSummary?>(null) }
+    var kanbanBoardNameInput by remember { mutableStateOf("") }
+    var kanbanFolderNameInput by remember { mutableStateOf("") }
     var to by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
@@ -335,6 +391,11 @@ private fun MeronMobileScreen(
         selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
             ?: selectedCoreAccountId.takeIf { sel -> sel == UNIFIED_ACCOUNT_ID || parsed.any { it.id == sel } }
             ?: UNIFIED_ACCOUNT_ID
+        kanbanBoards = ensureKanbanDefaults(context, kanbanBoards, parsed)
+        if (activeKanbanBoardId.isBlank() || kanbanBoards.none { it.id == activeKanbanBoardId }) {
+            activeKanbanBoardId = kanbanBoards.firstOrNull()?.id.orEmpty()
+            saveActiveKanbanBoardId(context, activeKanbanBoardId)
+        }
     }
 
     fun listAccounts() {
@@ -553,6 +614,107 @@ private fun MeronMobileScreen(
         )
     }
 
+    suspend fun loadAccountFolders(client: MobileMailCommandClient, account: AccountSummary): List<FolderSummary> {
+        val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
+        return parseFolderListResponse(foldersJson)
+    }
+
+    fun persistKanbanBoards(next: List<KanbanBoardSpec>) {
+        kanbanBoards = next
+        saveKanbanBoards(context, next)
+        if (activeKanbanBoardId.isBlank() || next.none { it.id == activeKanbanBoardId }) {
+            activeKanbanBoardId = next.firstOrNull()?.id.orEmpty()
+            saveActiveKanbanBoardId(context, activeKanbanBoardId)
+        }
+    }
+
+    fun persistKanbanFilter(next: FilterMode) {
+        kanbanFilter = next
+        saveKanbanFilter(context, next)
+    }
+
+    fun persistKanbanSearch(next: String) {
+        kanbanSearch = next
+        saveKanbanSearch(context, next)
+    }
+
+    fun updateKanbanColumn(key: String, update: (KanbanColumnState) -> KanbanColumnState) {
+        kanbanColumns = kanbanColumns + (key to update(kanbanColumns[key] ?: KanbanColumnState()))
+    }
+
+    fun updateThreadEverywhere(thread: ThreadSummary, update: (ThreadSummary) -> ThreadSummary) {
+        val next = update(thread)
+        coreThreads = coreThreads.map { if (it.id == thread.id) next else it }
+        selectedCoreThread = selectedCoreThread?.let { if (it.id == thread.id) next else it }
+        kanbanColumns = kanbanColumns.mapValues { (_, state) ->
+            state.copy(threads = state.threads.map { if (it.id == thread.id) next else it })
+        }
+    }
+
+    fun removeThreadEverywhere(threadId: String) {
+        coreThreads = coreThreads.filterNot { it.id == threadId }
+        kanbanColumns = kanbanColumns.mapValues { (_, state) ->
+            state.copy(threads = state.threads.filterNot { it.id == threadId })
+        }
+        if (selectedCoreThread?.id == threadId) {
+            selectedCoreThread = null
+            messages = emptyList()
+        }
+    }
+
+    suspend fun fetchKanbanColumn(
+        client: MobileMailCommandClient,
+        column: KanbanColumnSpec,
+        refresh: Boolean,
+    ): Pair<List<FolderSummary>, List<ThreadSummary>> {
+        return if (column.accountId == UNIFIED_ACCOUNT_ID) {
+            val results = coreAccounts.map { account ->
+                loadAccountInbox(client, account, INBOX_FOLDER)
+            }
+            results.flatMap { it.folders } to results.flatMap { it.threads }.sortedByDescending { it.dateEpochSeconds }
+        } else {
+            val account = coreAccounts.firstOrNull { it.id == column.accountId } ?: return emptyList<FolderSummary>() to emptyList()
+            if (refresh) {
+                if (accountSummaryIsRss(account)) client.syncRss(SyncRssParams(accountId = account.id))
+                else client.sync(SyncMailParams(accountId = account.id, folderId = column.folderId, limit = 50, folders = true))
+            }
+            val folders = loadAccountFolders(client, account)
+            val folder = folders.firstOrNull { it.name.equals(column.folderId, ignoreCase = true) }?.name ?: column.folderId
+            val threadsJson = client.listThreads(ThreadListParams(accountId = account.id, folderId = folder))
+            folders to parseThreadListResponse(threadsJson)
+        }
+    }
+
+    fun loadKanbanColumn(column: KanbanColumnSpec, refresh: Boolean = false) {
+        if (!MeronCoreNative.isLoaded()) {
+            status = "Rust core not packaged."
+            return
+        }
+        val key = kanbanColumnKey(column)
+        updateKanbanColumn(key) { it.copy(loading = true, error = null) }
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val client = MobileMailCommandClient(JniMeronCore())
+                    fetchKanbanColumn(client, column, refresh)
+                }
+            }.onSuccess { (folders, threads) ->
+                if (folders.isNotEmpty()) {
+                    foldersByAccount = foldersByAccount + folders.groupBy { it.accountId }
+                }
+                updateKanbanColumn(key) { it.copy(threads = threads, loading = false, error = null) }
+            }.onFailure {
+                updateKanbanColumn(key) { state -> state.copy(loading = false, error = it.message ?: "Load failed") }
+                status = "Kanban load failed: ${it.message}"
+            }
+        }
+    }
+
+    fun loadKanbanBoard(refresh: Boolean = false) {
+        val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+        board.columns.forEach { column -> loadKanbanColumn(column, refresh) }
+    }
+
     fun syncCoreThreads(accountOverride: String? = null, folderOverride: String? = null) {
         if (!MeronCoreNative.isLoaded()) {
             status = "Rust core not packaged."
@@ -589,6 +751,9 @@ private fun MeronMobileScreen(
                 }
             }.onSuccess { result ->
                 coreFolders = result.folders
+                if (result.folders.isNotEmpty()) {
+                    foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
+                }
                 val folder = result.folder
                 selectedCoreFolder = folder
                 val parsedThreads = result.threads
@@ -619,6 +784,7 @@ private fun MeronMobileScreen(
         }
         selectedCoreThread = thread
         messages = emptyList()
+        previousTopScreen = if (screen == Screen.Kanban) Screen.Kanban else Screen.Mail
         screen = Screen.Thread
         if (thread.unread) {
             coreThreads = coreThreads.map { if (it.id == thread.id) it.copy(unread = false) else it }
@@ -635,6 +801,7 @@ private fun MeronMobileScreen(
                 }
             }.onSuccess {
                 messages = parseThreadReadResponse(it)
+                updateThreadEverywhere(thread) { current -> current.copy(unread = false) }
             }.onFailure {
                 status = "Could not open message: ${it.message}"
             }
@@ -656,6 +823,7 @@ private fun MeronMobileScreen(
                 withContext(Dispatchers.IO) { MobileMailCommandClient(JniMeronCore()).action() }
             }.onSuccess {
                 coreThreads = update(coreThreads)
+                kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
                 status = "$label complete"
             }.onFailure {
                 status = "$label failed: ${it.message}"
@@ -716,6 +884,59 @@ private fun MeronMobileScreen(
         )
     }
 
+    fun moveThreadToColumn(thread: ThreadSummary, target: KanbanColumnSpec) {
+        if (target.accountId == UNIFIED_ACCOUNT_ID) {
+            status = "Move to an account folder column."
+            return
+        }
+        val targetAccount = coreAccounts.firstOrNull { it.id == target.accountId }
+        if (targetAccount == null) {
+            status = "Target account not found."
+            return
+        }
+        if (threadIdIsRss(thread.id)) {
+            if (!accountSummaryIsRss(targetAccount)) {
+                status = "RSS feeds can only move to RSS accounts."
+                return
+            }
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        MobileMailCommandClient(JniMeronCore()).moveRssFeed(
+                            MoveRssFeedParams(threadId = thread.id, targetAccountId = target.accountId),
+                        )
+                    }
+                }.onSuccess {
+                    removeThreadEverywhere(thread.id)
+                    loadKanbanColumn(target, refresh = false)
+                    status = "Move complete"
+                }.onFailure {
+                    status = "Move failed: ${it.message}"
+                }
+            }
+            return
+        }
+        if (accountSummaryIsRss(targetAccount)) {
+            status = "Mail threads can't move into RSS feeds."
+            return
+        }
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    MobileMailCommandClient(JniMeronCore()).move(
+                        MoveThreadParams(threadId = thread.id, targetFolderId = target.folderId),
+                    )
+                }
+            }.onSuccess {
+                removeThreadEverywhere(thread.id)
+                loadKanbanColumn(target, refresh = false)
+                status = "Move complete"
+            }.onFailure {
+                status = "Move failed: ${it.message}"
+            }
+        }
+    }
+
     fun defaultSendAccountId(): String {
         return selectedCoreAccountId.takeIf { selected ->
             selected != UNIFIED_ACCOUNT_ID && coreAccounts.any { it.id == selected && !accountSummaryIsRss(it) }
@@ -743,7 +964,7 @@ private fun MeronMobileScreen(
             }.onSuccess {
                 attachments = emptyList()
                 to = ""; cc = ""; bcc = ""; subject = ""; body = ""
-                screen = Screen.Mail
+                screen = previousTopScreen
                 errorBanner = null
                 status = "Message sent"
                 syncCoreThreads()
@@ -788,6 +1009,7 @@ private fun MeronMobileScreen(
 
     fun openCompose() {
         to = ""; cc = ""; bcc = ""; subject = ""; body = ""; attachments = emptyList()
+        previousTopScreen = if (screen == Screen.Kanban) Screen.Kanban else Screen.Mail
         screen = Screen.Compose
     }
 
@@ -817,7 +1039,90 @@ private fun MeronMobileScreen(
             }
         }
         errorBanner = null
+        previousTopScreen = if (screen == Screen.Kanban) Screen.Kanban else Screen.Mail
         screen = Screen.AddAccount
+    }
+
+    fun createKanbanBoard() {
+        val board = defaultKanbanBoard(coreAccounts).copy(name = "Kanban board ${kanbanBoards.size + 1}")
+        persistKanbanBoards(kanbanBoards + board)
+        activeKanbanBoardId = board.id
+        saveActiveKanbanBoardId(context, board.id)
+        loadKanbanBoard(refresh = false)
+    }
+
+    fun renameActiveKanbanBoard(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        persistKanbanBoards(kanbanBoards.map { if (it.id == activeKanbanBoardId) it.copy(name = trimmed) else it })
+    }
+
+    fun deleteActiveKanbanBoard() {
+        val next = kanbanBoards.filterNot { it.id == activeKanbanBoardId }
+        persistKanbanBoards(if (next.isEmpty()) listOf(defaultKanbanBoard(coreAccounts)) else next)
+        kanbanColumns = emptyMap()
+        loadKanbanBoard(refresh = false)
+    }
+
+    fun addKanbanColumn(column: KanbanColumnSpec) {
+        val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+        if (board.columns.any { kanbanColumnKey(it) == kanbanColumnKey(column) }) return
+        persistKanbanBoards(kanbanBoards.map {
+            if (it.id == board.id) it.copy(columns = it.columns + column) else it
+        })
+        loadKanbanColumn(column, refresh = true)
+    }
+
+    fun removeKanbanColumn(column: KanbanColumnSpec) {
+        val key = kanbanColumnKey(column)
+        persistKanbanBoards(kanbanBoards.map {
+            if (it.id == activeKanbanBoardId) it.copy(columns = it.columns.filterNot { existing -> kanbanColumnKey(existing) == key }) else it
+        })
+        kanbanColumns = kanbanColumns - key
+    }
+
+    fun moveKanbanColumn(column: KanbanColumnSpec, delta: Int) {
+        persistKanbanBoards(kanbanBoards.map { board ->
+            if (board.id != activeKanbanBoardId) return@map board
+            val columns = board.columns.toMutableList()
+            val index = columns.indexOfFirst { kanbanColumnKey(it) == kanbanColumnKey(column) }
+            val target = (index + delta).coerceIn(0, columns.lastIndex)
+            if (index < 0 || index == target) board else {
+                val item = columns.removeAt(index)
+                columns.add(target, item)
+                board.copy(columns = columns)
+            }
+        })
+    }
+
+    fun createFolderForKanban(account: AccountSummary, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            status = "Folder name is required."
+            return
+        }
+        if (!MeronCoreNative.isLoaded()) {
+            status = "Rust core not packaged."
+            return
+        }
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val client = MobileMailCommandClient(JniMeronCore())
+                    client.createFolder(FolderCreateParams(accountId = account.id, name = trimmed))
+                    loadAccountFolders(client, account)
+                }
+            }.onSuccess { folders ->
+                foldersByAccount = foldersByAccount + (account.id to folders)
+                val created = folders.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }?.name ?: trimmed
+                addKanbanColumn(KanbanColumnSpec(account.id, created))
+                showKanbanCreateFolderDialog = null
+                kanbanFolderNameInput = ""
+                status = "Folder created"
+            }.onFailure {
+                status = "Create folder failed: ${it.message}"
+            }
+        }
     }
 
     // Load persisted accounts once on startup so they survive app restarts.
@@ -827,8 +1132,15 @@ private fun MeronMobileScreen(
         }
     }
 
+    LaunchedEffect(coreAccounts, activeKanbanBoardId) {
+        if (coreAccounts.isNotEmpty() && screen == Screen.Kanban) {
+            loadKanbanBoard(refresh = false)
+        }
+    }
+
     val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
     val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
+    val activeKanbanBoard = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: kanbanBoards.firstOrNull()
     val appBarTitle = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) "Unified inbox" else "Inbox"
     val appBarSubtitle = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
         "All accounts"
@@ -838,7 +1150,7 @@ private fun MeronMobileScreen(
 
     // Hardware back from a sub-screen returns to the inbox instead of exiting.
     BackHandler(enabled = screen != Screen.Mail) {
-        screen = Screen.Mail
+        screen = if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount) previousTopScreen else Screen.Mail
     }
 
     when (screen) {
@@ -846,9 +1158,9 @@ private fun MeronMobileScreen(
             thread = selectedCoreThread,
             messages = messages,
             accountEmail = selectedThreadAccount?.email.orEmpty(),
-            onBack = { screen = Screen.Mail },
-            onArchive = { selectedCoreThread?.let { archiveOrRemove(it); screen = Screen.Mail } },
-            onDelete = { selectedCoreThread?.let { deleteThread(it); screen = Screen.Mail } },
+            onBack = { screen = previousTopScreen },
+            onArchive = { selectedCoreThread?.let { archiveOrRemove(it); screen = previousTopScreen } },
+            onDelete = { selectedCoreThread?.let { deleteThread(it); screen = previousTopScreen } },
             onToggleStar = { selectedCoreThread?.let { t -> toggleStar(t); selectedCoreThread = t.copy(starred = !t.starred) } },
             quickReplyBody = quickReplyBody,
             onQuickReplyChange = { quickReplyBody = it },
@@ -865,11 +1177,11 @@ private fun MeronMobileScreen(
             onAttach = { attachmentPicker.launch(arrayOf("*/*")) },
             onClearAttachments = { attachments = emptyList() },
             onSend = ::sendMail,
-            onBack = { screen = Screen.Mail },
+            onBack = { screen = previousTopScreen },
         )
 
         Screen.AddAccount -> AddAccountScreen(
-            onBack = { screen = Screen.Mail },
+            onBack = { screen = previousTopScreen },
             initialSection = addSection,
             displayName = displayName, onDisplayNameChange = { displayName = it },
             senderName = senderName, onSenderNameChange = { senderName = it },
@@ -898,6 +1210,135 @@ private fun MeronMobileScreen(
             diagnostics = coreStatus(coreInitJson),
         )
 
+        Screen.Kanban -> ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                MailDrawer(
+                    accounts = coreAccounts,
+                    selectedAccountId = selectedCoreAccountId,
+                    folders = coreFolders,
+                    currentScreen = screen,
+                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
+                    onSelectUnified = {
+                        screen = Screen.Mail
+                        if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
+                            selectedCoreAccountId = UNIFIED_ACCOUNT_ID
+                            selectedCoreFolder = INBOX_FOLDER
+                            coreThreads = emptyList()
+                            selectedCoreThread = null
+                            messages = emptyList()
+                            syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
+                        }
+                        scope.launch { drawerState.close() }
+                    },
+                    onSelectAccount = { account ->
+                        screen = Screen.Mail
+                        if (selectedCoreAccountId != account.id) {
+                            selectedCoreAccountId = account.id
+                            selectedCoreFolder = INBOX_FOLDER
+                            coreFolders = emptyList()
+                            coreThreads = emptyList()
+                            selectedCoreThread = null
+                            messages = emptyList()
+                            syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
+                        }
+                        scope.launch { drawerState.close() }
+                    },
+                    onSelectKanban = { scope.launch { drawerState.close() } },
+                    onAddAccount = {
+                        addSection = 0
+                        previousTopScreen = Screen.Kanban
+                        screen = Screen.AddAccount
+                        scope.launch { drawerState.close() }
+                    },
+                    onRefreshBackground = {
+                        AndroidBackgroundSyncScheduler.runOnce(context)
+                        status = "Queued background refresh"
+                        scope.launch { drawerState.close() }
+                    },
+                    onEnableNotifications = {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        scope.launch { drawerState.close() }
+                    },
+                )
+            },
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(activeKanbanBoard?.name ?: "Kanban board", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${activeKanbanBoard?.columns?.size ?: 0} columns",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showKanbanBoardDialog = true; kanbanBoardNameInput = activeKanbanBoard?.name.orEmpty() }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Board menu")
+                            }
+                            IconButton(onClick = {
+                                coreAccounts.forEach { account ->
+                                    scope.launch {
+                                        runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                val client = MobileMailCommandClient(JniMeronCore())
+                                                loadAccountFolders(client, account)
+                                            }
+                                        }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
+                                    }
+                                }
+                                showKanbanColumnDialog = true
+                            }) {
+                                Icon(Icons.Filled.Add, contentDescription = "Add column")
+                            }
+                            IconButton(onClick = { loadKanbanBoard(refresh = true) }) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh board")
+                            }
+                        },
+                    )
+                },
+                floatingActionButton = {
+                    if (coreAccounts.any { !accountSummaryIsRss(it) }) {
+                        ExtendedFloatingActionButton(
+                            onClick = ::openCompose,
+                            icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                            text = { Text("Compose") },
+                        )
+                    }
+                },
+                snackbarHost = { SnackbarHost(snackbarHost) },
+            ) { innerPadding ->
+                KanbanScreen(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    accounts = coreAccounts,
+                    board = activeKanbanBoard,
+                    columns = kanbanColumns,
+                    foldersByAccount = foldersByAccount,
+                    filter = kanbanFilter,
+                    search = kanbanSearch,
+                    onFilter = ::persistKanbanFilter,
+                    onSearch = ::persistKanbanSearch,
+                    onOpen = ::readCoreThread,
+                    onLongPress = { kanbanActionThread = it },
+                    onToggleStar = ::toggleStar,
+                    onArchive = ::archiveOrRemove,
+                    onRefreshColumn = { loadKanbanColumn(it, refresh = true) },
+                    onRemoveColumn = ::removeKanbanColumn,
+                    onMoveColumn = ::moveKanbanColumn,
+                    onAddColumn = { showKanbanColumnDialog = true },
+                )
+            }
+        }
+
         Screen.Mail -> ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -905,6 +1346,7 @@ private fun MeronMobileScreen(
                     accounts = coreAccounts,
                     selectedAccountId = selectedCoreAccountId,
                     folders = coreFolders,
+                    currentScreen = screen,
                     notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
                     onSelectUnified = {
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
@@ -915,6 +1357,7 @@ private fun MeronMobileScreen(
                             messages = emptyList()
                             syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
                         }
+                        screen = Screen.Mail
                         scope.launch { drawerState.close() }
                     },
                     onSelectAccount = { account ->
@@ -927,10 +1370,18 @@ private fun MeronMobileScreen(
                             messages = emptyList()
                             syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
                         }
+                        screen = Screen.Mail
+                        scope.launch { drawerState.close() }
+                    },
+                    onSelectKanban = {
+                        screen = Screen.Kanban
+                        previousTopScreen = Screen.Kanban
+                        loadKanbanBoard(refresh = false)
                         scope.launch { drawerState.close() }
                     },
                     onAddAccount = {
                         addSection = 0
+                        previousTopScreen = screen
                         screen = Screen.AddAccount
                         scope.launch { drawerState.close() }
                     },
@@ -1040,6 +1491,576 @@ private fun MeronMobileScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    if (showKanbanBoardDialog && screen == Screen.Kanban) {
+        KanbanBoardDialog(
+            boards = kanbanBoards,
+            activeBoardId = activeKanbanBoardId,
+            name = kanbanBoardNameInput,
+            onNameChange = { kanbanBoardNameInput = it },
+            onSelect = {
+                activeKanbanBoardId = it
+                saveActiveKanbanBoardId(context, it)
+                showKanbanBoardDialog = false
+                loadKanbanBoard(refresh = false)
+            },
+            onRename = { renameActiveKanbanBoard(kanbanBoardNameInput) },
+            onCreate = { createKanbanBoard() },
+            onDelete = { deleteActiveKanbanBoard(); showKanbanBoardDialog = false },
+            onDismiss = { showKanbanBoardDialog = false },
+        )
+    }
+
+    if (showKanbanColumnDialog && screen == Screen.Kanban) {
+        KanbanColumnDialog(
+            accounts = coreAccounts,
+            board = activeKanbanBoard,
+            foldersByAccount = foldersByAccount,
+            onAddColumn = {
+                addKanbanColumn(it)
+                showKanbanColumnDialog = false
+            },
+            onCreateFolder = {
+                showKanbanCreateFolderDialog = it
+                kanbanFolderNameInput = ""
+            },
+            onDismiss = { showKanbanColumnDialog = false },
+        )
+    }
+
+    showKanbanCreateFolderDialog?.let { account ->
+        AlertDialog(
+            onDismissRequest = { showKanbanCreateFolderDialog = null },
+            title = { Text("Create folder") },
+            text = {
+                OutlinedTextField(
+                    value = kanbanFolderNameInput,
+                    onValueChange = { kanbanFolderNameInput = it },
+                    label = { Text("Folder name") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { createFolderForKanban(account, kanbanFolderNameInput) }) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showKanbanCreateFolderDialog = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    kanbanActionThread?.let { thread ->
+        KanbanThreadActionDialog(
+            thread = thread,
+            board = activeKanbanBoard,
+            accounts = coreAccounts,
+            onDismiss = { kanbanActionThread = null },
+            onOpen = { kanbanActionThread = null; readCoreThread(thread) },
+            onToggleStar = { kanbanActionThread = null; toggleStar(thread) },
+            onToggleRead = { kanbanActionThread = null; toggleRead(thread) },
+            onArchive = { kanbanActionThread = null; archiveOrRemove(thread) },
+            onDelete = { kanbanActionThread = null; deleteThread(thread) },
+            onMove = { target -> kanbanActionThread = null; moveThreadToColumn(thread, target) },
+        )
+    }
+}
+
+@Composable
+private fun KanbanScreen(
+    modifier: Modifier,
+    accounts: List<AccountSummary>,
+    board: KanbanBoardSpec?,
+    columns: Map<String, KanbanColumnState>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    filter: FilterMode,
+    search: String,
+    onFilter: (FilterMode) -> Unit,
+    onSearch: (String) -> Unit,
+    onOpen: (ThreadSummary) -> Unit,
+    onLongPress: (ThreadSummary) -> Unit,
+    onToggleStar: (ThreadSummary) -> Unit,
+    onArchive: (ThreadSummary) -> Unit,
+    onRefreshColumn: (KanbanColumnSpec) -> Unit,
+    onRemoveColumn: (KanbanColumnSpec) -> Unit,
+    onMoveColumn: (KanbanColumnSpec, Int) -> Unit,
+    onAddColumn: () -> Unit,
+) {
+    if (accounts.isEmpty()) {
+        EmptyState(
+            icon = Icons.Filled.PersonAdd,
+            title = "Welcome to Meron",
+            text = "Add an account to use Kanban.",
+            actionLabel = "Add account",
+            onAction = {},
+        )
+        return
+    }
+    val boardColumns = board?.columns.orEmpty()
+    Column(modifier.background(MaterialTheme.colorScheme.background)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = search,
+                onValueChange = onSearch,
+                placeholder = { Text("Search board") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            FilterModeButton(filter, onFilter)
+        }
+        if (boardColumns.isEmpty()) {
+            EmptyState(
+                icon = Icons.Filled.ViewKanban,
+                title = "No columns",
+                text = "Add a column to start using this board.",
+                actionLabel = "Add column",
+                onAction = onAddColumn,
+            )
+        } else {
+            LazyRow(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 88.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(boardColumns, key = { kanbanColumnKey(it) }) { column ->
+                    KanbanColumn(
+                        column = column,
+                        state = columns[kanbanColumnKey(column)] ?: KanbanColumnState(),
+                        accounts = accounts,
+                        foldersByAccount = foldersByAccount,
+                        filter = filter,
+                        search = search,
+                        onOpen = onOpen,
+                        onLongPress = onLongPress,
+                        onToggleStar = onToggleStar,
+                        onArchive = onArchive,
+                        onRefresh = { onRefreshColumn(column) },
+                        onRemove = { onRemoveColumn(column) },
+                        onMoveLeft = { onMoveColumn(column, -1) },
+                        onMoveRight = { onMoveColumn(column, 1) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterModeButton(value: FilterMode, onChange: (FilterMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.Filled.FilterList, contentDescription = "Filter")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            FilterMode.values().forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label()) },
+                    onClick = {
+                        expanded = false
+                        onChange(mode)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KanbanColumn(
+    column: KanbanColumnSpec,
+    state: KanbanColumnState,
+    accounts: List<AccountSummary>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    filter: FilterMode,
+    search: String,
+    onOpen: (ThreadSummary) -> Unit,
+    onLongPress: (ThreadSummary) -> Unit,
+    onToggleStar: (ThreadSummary) -> Unit,
+    onArchive: (ThreadSummary) -> Unit,
+    onRefresh: () -> Unit,
+    onRemove: () -> Unit,
+    onMoveLeft: () -> Unit,
+    onMoveRight: () -> Unit,
+) {
+    val visibleThreads = state.threads.filteredKanbanThreads(filter, search)
+    Card(
+        modifier = Modifier.width(320.dp).fillMaxSize(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            KanbanColumnHeader(
+                column = column,
+                accounts = accounts,
+                foldersByAccount = foldersByAccount,
+                count = visibleThreads.size,
+                unread = visibleThreads.count { it.unread },
+                onRefresh = onRefresh,
+                onRemove = onRemove,
+                onMoveLeft = onMoveLeft,
+                onMoveRight = onMoveRight,
+            )
+            if (state.loading) {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                }
+            }
+            if (state.error != null) {
+                Text(
+                    state.error,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!state.loading && visibleThreads.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(18.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (search.isBlank()) "No ${filter.emptyNoun()} here" else "No matches",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(visibleThreads, key = { it.id }) { thread ->
+                        KanbanThreadCard(
+                            thread = thread,
+                            onOpen = { onOpen(thread) },
+                            onLongPress = { onLongPress(thread) },
+                            onToggleStar = { onToggleStar(thread) },
+                            onArchive = { onArchive(thread) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KanbanColumnHeader(
+    column: KanbanColumnSpec,
+    accounts: List<AccountSummary>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    count: Int,
+    unread: Int,
+    onRefresh: () -> Unit,
+    onRemove: () -> Unit,
+    onMoveLeft: () -> Unit,
+    onMoveRight: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(folderIcon(column.folderId), contentDescription = null, modifier = Modifier.size(19.dp), tint = MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f)) {
+            Text(columnTitle(column, accounts, foldersByAccount), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("$count cards${if (unread > 0) " · $unread unread" else ""}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "Column actions")
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; onRefresh() })
+                DropdownMenuItem(text = { Text("Move left") }, onClick = { menuOpen = false; onMoveLeft() })
+                DropdownMenuItem(text = { Text("Move right") }, onClick = { menuOpen = false; onMoveRight() })
+                DropdownMenuItem(text = { Text("Remove column") }, onClick = { menuOpen = false; onRemove() })
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun KanbanThreadCard(
+    thread: ThreadSummary,
+    onOpen: () -> Unit,
+    onLongPress: () -> Unit,
+    onToggleStar: () -> Unit,
+    onArchive: () -> Unit,
+) {
+    val chat = LocalChatColors.current
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onArchive()
+                true
+            } else {
+                false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(if (threadIdIsRss(thread.id)) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null)
+            }
+        },
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (thread.unread) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+            ),
+        ) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        thread.sender.ifBlank { thread.accountId }.substringBefore('@'),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(formatRelativeTime(thread.dateEpochSeconds), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    thread.subject.ifBlank { "(no subject)" },
+                    fontSize = 12.sp,
+                    fontWeight = if (thread.unread) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (thread.preview.isNotBlank()) {
+                    Text(thread.preview, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (thread.unread) {
+                        Box(Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                    }
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onToggleStar, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = if (thread.starred) "Unstar" else "Star",
+                            tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KanbanBoardDialog(
+    boards: List<KanbanBoardSpec>,
+    activeBoardId: String,
+    name: String,
+    onNameChange: (String) -> Unit,
+    onSelect: (String) -> Unit,
+    onRename: () -> Unit,
+    onCreate: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kanban boards") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = onNameChange,
+                        label = { Text("Board name") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                items(boards, key = { it.id }) { board ->
+                    SidebarLikeDialogRow(
+                        selected = board.id == activeBoardId,
+                        title = board.name,
+                        subtitle = "${board.columns.size} columns",
+                        onClick = { onSelect(board.id) },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onRename) { Text("Rename") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onCreate) { Text("New") }
+                TextButton(onClick = onDelete) { Text("Delete") }
+                TextButton(onClick = onDismiss) { Text("Done") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun KanbanColumnDialog(
+    accounts: List<AccountSummary>,
+    board: KanbanBoardSpec?,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    onAddColumn: (KanbanColumnSpec) -> Unit,
+    onCreateFolder: (AccountSummary) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val selected = board?.columns.orEmpty().map(::kanbanColumnKey).toSet()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add column") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item {
+                    val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
+                    SidebarLikeDialogRow(
+                        selected = selected.contains(kanbanColumnKey(unified)),
+                        title = "Unified inbox",
+                        subtitle = "All accounts",
+                        onClick = { onAddColumn(unified) },
+                    )
+                }
+                accounts.forEach { account ->
+                    item {
+                        Text(
+                            account.displayName.ifBlank { account.email.ifBlank { account.id } },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    val folders = foldersByAccount[account.id].orEmpty()
+                    if (!accountSummaryIsRss(account)) {
+                        item {
+                            TextButton(onClick = { onCreateFolder(account) }) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Create folder")
+                            }
+                        }
+                    }
+                    val visibleFolders = if (folders.isEmpty()) {
+                        listOf(FolderSummary(account.id, INBOX_FOLDER, 0))
+                    } else {
+                        folders
+                    }
+                    items(visibleFolders, key = { "${account.id}\n${it.name}" }) { folder ->
+                        val column = KanbanColumnSpec(account.id, folder.name)
+                        SidebarLikeDialogRow(
+                            selected = selected.contains(kanbanColumnKey(column)),
+                            title = folder.name.replaceFirstChar { it.uppercase() },
+                            subtitle = if (accountSummaryIsRss(account)) "Feed" else account.email,
+                            onClick = { onAddColumn(column) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
+
+@Composable
+private fun KanbanThreadActionDialog(
+    thread: ThreadSummary,
+    board: KanbanBoardSpec?,
+    accounts: List<AccountSummary>,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onToggleStar: () -> Unit,
+    onToggleRead: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    onMove: (KanbanColumnSpec) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(thread.subject.ifBlank { "(no subject)" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                item { DialogAction("Open", onOpen) }
+                item { DialogAction(if (thread.starred) "Unstar" else "Star", onToggleStar) }
+                item { DialogAction(if (thread.unread) "Mark read" else "Mark unread", onToggleRead) }
+                item { DialogAction(if (threadIdIsRss(thread.id)) "Remove feed" else "Archive", onArchive) }
+                if (!threadIdIsRss(thread.id)) {
+                    item { DialogAction("Delete", onDelete) }
+                }
+                val moveTargets = board?.columns.orEmpty()
+                    .filter { it.accountId != UNIFIED_ACCOUNT_ID }
+                    .filter { target ->
+                        val targetAccount = accounts.firstOrNull { it.id == target.accountId }
+                        targetAccount != null && (threadIdIsRss(thread.id) == accountSummaryIsRss(targetAccount))
+                    }
+                    .filterNot { it.accountId == thread.accountId && it.folderId.equals(thread.folder, ignoreCase = true) }
+                if (moveTargets.isNotEmpty()) {
+                    item {
+                        Text("Move to", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+                    }
+                    items(moveTargets, key = { kanbanColumnKey(it) }) { target ->
+                        val account = accounts.firstOrNull { it.id == target.accountId }
+                        DialogAction("${account?.displayName?.ifBlank { account.email } ?: target.accountId} / ${target.folderId}") {
+                            onMove(target)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun DialogAction(label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(label, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SidebarLikeDialogRow(selected: Boolean, title: String, subtitle: String?, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) {
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -1567,9 +2588,11 @@ private fun MailDrawer(
     accounts: List<AccountSummary>,
     selectedAccountId: String,
     folders: List<FolderSummary>,
+    currentScreen: Screen,
     notificationsNeedPermission: Boolean,
     onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
+    onSelectKanban: () -> Unit,
     onAddAccount: () -> Unit,
     onRefreshBackground: () -> Unit,
     onEnableNotifications: () -> Unit,
@@ -1618,6 +2641,20 @@ private fun MailDrawer(
                         title = label,
                         subtitle = account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox",
                         trailing = if (account.needsReconnect) "!" else unread.takeIf { it > 0 }?.toString(),
+                    )
+                }
+            }
+            if (accounts.isNotEmpty()) {
+                item { DrawerLabel("Views", chat) }
+                item {
+                    SidebarRow(
+                        selected = currentScreen == Screen.Kanban,
+                        chat = chat,
+                        onClick = onSelectKanban,
+                        leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Kanban",
+                        subtitle = "Boards and columns",
+                        trailing = null,
                     )
                 }
             }
@@ -1827,6 +2864,169 @@ private fun folderIcon(name: String): androidx.compose.ui.graphics.vector.ImageV
     "trash", "deleted" -> Icons.Filled.Delete
     "starred" -> Icons.Filled.Star
     else -> Icons.Outlined.FolderOpen
+}
+
+private fun kanbanColumnKey(column: KanbanColumnSpec): String = "${column.accountId}\n${column.folderId}"
+
+private fun FilterMode.label(): String = when (this) {
+    FilterMode.All -> "All"
+    FilterMode.Unread -> "Unread"
+    FilterMode.Starred -> "Starred"
+}
+
+private fun FilterMode.emptyNoun(): String = when (this) {
+    FilterMode.All -> "cards"
+    FilterMode.Unread -> "unread cards"
+    FilterMode.Starred -> "starred cards"
+}
+
+private fun List<ThreadSummary>.filteredKanbanThreads(filter: FilterMode, search: String): List<ThreadSummary> {
+    val query = search.trim().lowercase()
+    return filter { thread ->
+        val filterOk = when (filter) {
+            FilterMode.All -> true
+            FilterMode.Unread -> thread.unread
+            FilterMode.Starred -> thread.starred
+        }
+        val queryOk = query.isBlank() ||
+            thread.subject.lowercase().contains(query) ||
+            thread.sender.lowercase().contains(query) ||
+            thread.preview.lowercase().contains(query) ||
+            thread.accountId.lowercase().contains(query)
+        filterOk && queryOk
+    }.sortedByDescending { it.dateEpochSeconds }
+}
+
+private fun columnTitle(
+    column: KanbanColumnSpec,
+    accounts: List<AccountSummary>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+): String {
+    if (column.accountId == UNIFIED_ACCOUNT_ID) return "Unified inbox"
+    val account = accounts.firstOrNull { it.id == column.accountId }
+    val folder = foldersByAccount[column.accountId]
+        ?.firstOrNull { it.name.equals(column.folderId, ignoreCase = true) }
+        ?.name
+        ?: column.folderId
+    val folderLabel = if (folder.equals(INBOX_FOLDER, ignoreCase = true)) {
+        if (account?.let(::accountSummaryIsRss) == true) "Feed" else "Inbox"
+    } else {
+        folder
+    }
+    val accountLabel = account?.displayName?.ifBlank { account.email } ?: column.accountId
+    return "$accountLabel / $folderLabel"
+}
+
+private fun defaultKanbanBoard(accounts: List<AccountSummary>): KanbanBoardSpec {
+    val columns = mutableListOf(KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER))
+    accounts.forEach { account -> columns += KanbanColumnSpec(account.id, INBOX_FOLDER) }
+    return KanbanBoardSpec(
+        id = "kb-${UUID.randomUUID()}",
+        name = "Kanban board",
+        columns = columns.distinctBy(::kanbanColumnKey),
+    )
+}
+
+private fun ensureKanbanDefaults(
+    context: Context,
+    boards: List<KanbanBoardSpec>,
+    accounts: List<AccountSummary>,
+): List<KanbanBoardSpec> {
+    val next = if (boards.isEmpty()) {
+        listOf(defaultKanbanBoard(accounts))
+    } else {
+        boards.mapIndexed { index, board ->
+            if (index != 0) board else {
+                val existing = board.columns.map(::kanbanColumnKey).toMutableSet()
+                val columns = board.columns.toMutableList()
+                val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
+                if (existing.add(kanbanColumnKey(unified))) columns.add(0, unified)
+                accounts.forEach { account ->
+                    val column = KanbanColumnSpec(account.id, INBOX_FOLDER)
+                    if (existing.add(kanbanColumnKey(column))) columns.add(column)
+                }
+                board.copy(columns = columns)
+            }
+        }
+    }
+    if (next != boards) saveKanbanBoards(context, next)
+    return next
+}
+
+private fun loadKanbanBoards(context: Context, accounts: List<AccountSummary>): List<KanbanBoardSpec> {
+    val raw = context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).getString(KANBAN_BOARDS_PREF, null)
+    val parsed = runCatching {
+        if (raw.isNullOrBlank()) emptyList() else {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val id = obj.optString("id").ifBlank { "kb-${UUID.randomUUID()}" }
+                    val name = obj.optString("name").ifBlank { "Kanban board" }
+                    val colArray = obj.optJSONArray("columns") ?: JSONArray()
+                    val columns = buildList {
+                        for (j in 0 until colArray.length()) {
+                            val col = colArray.optJSONObject(j) ?: continue
+                            val accountId = col.optString("accountId")
+                            val folderId = col.optString("folderId")
+                            if (accountId.isNotBlank() && folderId.isNotBlank()) add(KanbanColumnSpec(accountId, folderId))
+                        }
+                    }.distinctBy(::kanbanColumnKey)
+                    add(KanbanBoardSpec(id, name, columns))
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
+    return ensureKanbanDefaults(context, parsed, accounts)
+}
+
+private fun saveKanbanBoards(context: Context, boards: List<KanbanBoardSpec>) {
+    val array = JSONArray()
+    boards.forEach { board ->
+        val columns = JSONArray()
+        board.columns.forEach { column ->
+            columns.put(JSONObject().put("accountId", column.accountId).put("folderId", column.folderId))
+        }
+        array.put(JSONObject().put("id", board.id).put("name", board.name).put("columns", columns))
+    }
+    context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KANBAN_BOARDS_PREF, array.toString())
+        .apply()
+}
+
+private fun loadActiveKanbanBoardId(context: Context): String {
+    return context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).getString(ACTIVE_KANBAN_BOARD_PREF, "").orEmpty()
+}
+
+private fun saveActiveKanbanBoardId(context: Context, boardId: String) {
+    context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).edit().putString(ACTIVE_KANBAN_BOARD_PREF, boardId).apply()
+}
+
+private fun loadKanbanFilter(context: Context): FilterMode {
+    val raw = context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).getString(KANBAN_FILTER_PREF, "all")
+    return when (raw) {
+        "unread" -> FilterMode.Unread
+        "starred" -> FilterMode.Starred
+        else -> FilterMode.All
+    }
+}
+
+private fun saveKanbanFilter(context: Context, filter: FilterMode) {
+    val value = when (filter) {
+        FilterMode.All -> "all"
+        FilterMode.Unread -> "unread"
+        FilterMode.Starred -> "starred"
+    }
+    context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).edit().putString(KANBAN_FILTER_PREF, value).apply()
+}
+
+private fun loadKanbanSearch(context: Context): String {
+    return context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).getString(KANBAN_SEARCH_PREF, "").orEmpty()
+}
+
+private fun saveKanbanSearch(context: Context, search: String) {
+    context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).edit().putString(KANBAN_SEARCH_PREF, search).apply()
 }
 
 private fun formatRelativeTime(epochSeconds: Long): String {

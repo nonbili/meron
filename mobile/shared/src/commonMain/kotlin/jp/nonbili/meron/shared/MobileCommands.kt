@@ -10,6 +10,7 @@ object MobileCommand {
     const val FeedRemove = "feed.remove"
     const val FeedMove = "feed.move"
     const val FolderList = "mail.folderList"
+    const val FolderCreate = "mail.folderCreate"
     const val ThreadList = "mail.threadList"
     const val StarredItems = "mail.starredItems"
     const val ThreadRead = "mail.threadRead"
@@ -17,6 +18,7 @@ object MobileCommand {
     const val Send = "mail.send"
     const val Archive = "mail.archive"
     const val Delete = "mail.delete"
+    const val Move = "mail.move"
     const val MarkRead = "mail.markRead"
     const val MarkStarred = "mail.markStarred"
     const val RssSync = "rss.sync"
@@ -159,6 +161,18 @@ data class FolderListParams(
     val accountId: String,
 ) {
     fun toJson(): String = jsonObject("account_id" to accountId.jsonString())
+}
+
+data class FolderCreateParams(
+    val accountId: String,
+    val name: String,
+) {
+    fun toJson(): String {
+        return jsonObject(
+            "account_id" to accountId.jsonString(),
+            "name" to name.jsonString(),
+        )
+    }
 }
 
 data class ThreadListParams(
@@ -334,6 +348,18 @@ data class ThreadActionParams(
     }
 }
 
+data class MoveThreadParams(
+    val threadId: String,
+    val targetFolderId: String,
+) {
+    fun toJson(): String {
+        return jsonObject(
+            "thread_id" to threadId.jsonString(),
+            "target_folder_id" to targetFolderId.jsonString(),
+        )
+    }
+}
+
 data class MarkReadParams(
     val threadId: String,
     val seen: Boolean = true,
@@ -429,6 +455,8 @@ class MobileMailCommandClient(
 
     suspend fun listFolders(params: FolderListParams): String = core.invoke(MobileCommand.FolderList, params.toJson())
 
+    suspend fun createFolder(params: FolderCreateParams): String = core.invoke(MobileCommand.FolderCreate, params.toJson())
+
     suspend fun listThreads(params: ThreadListParams): String = core.invoke(MobileCommand.ThreadList, params.toJson())
 
     suspend fun listStarredItems(): String = core.invoke(MobileCommand.StarredItems)
@@ -450,6 +478,8 @@ class MobileMailCommandClient(
     suspend fun archive(params: ThreadActionParams): String = core.invoke(MobileCommand.Archive, params.archiveJson())
 
     suspend fun delete(params: ThreadActionParams): String = core.invoke(MobileCommand.Delete, params.deleteJson())
+
+    suspend fun move(params: MoveThreadParams): String = core.invoke(MobileCommand.Move, params.toJson())
 
     suspend fun markRead(params: MarkReadParams): String = core.invoke(MobileCommand.MarkRead, params.toJson())
 
@@ -490,6 +520,10 @@ fun folderListRequest(id: Long = 1, params: FolderListParams): CoreRequest {
     return CoreRequest(id, MobileCommand.FolderList, params.toJson())
 }
 
+fun folderCreateRequest(id: Long = 1, params: FolderCreateParams): CoreRequest {
+    return CoreRequest(id, MobileCommand.FolderCreate, params.toJson())
+}
+
 fun threadListRequest(id: Long = 1, params: ThreadListParams): CoreRequest {
     return CoreRequest(id, MobileCommand.ThreadList, params.toJson())
 }
@@ -516,6 +550,10 @@ fun sendMailRequest(id: Long = 1, params: SendMailParams): CoreRequest {
 
 fun archiveThreadRequest(id: Long = 1, params: ThreadActionParams): CoreRequest {
     return CoreRequest(id, MobileCommand.Archive, params.archiveJson())
+}
+
+fun moveThreadRequest(id: Long = 1, params: MoveThreadParams): CoreRequest {
+    return CoreRequest(id, MobileCommand.Move, params.toJson())
 }
 
 fun deleteThreadRequest(id: Long = 1, params: ThreadActionParams): CoreRequest {

@@ -52,12 +52,14 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "feed.remove" => Ok(json!({ "ok": true })),
         "feed.move" => Ok(json!({ "ok": true, "moved": 0 })),
         "mail.folderList" => Ok(json!({ "folders": [] })),
+        "mail.folderCreate" => Ok(json!({ "folders": [] })),
         "mail.threadList" => Ok(json!({ "threads": [] })),
         "mail.threadRead" => Ok(json!({ "messages": [] })),
         "mail.starredItems" => Ok(json!({ "items": [] })),
         "mail.send" => Ok(json!({ "ok": true })),
         "mail.archive" => Ok(json!({ "ok": true, "moved": 0 })),
         "mail.delete" => Ok(json!({ "ok": true, "deleted": 0 })),
+        "mail.move" => Ok(json!({ "ok": true, "moved": 0 })),
         "mail.markRead" => Ok(json!({ "ok": true })),
         "mail.markStarred" => Ok(json!({ "ok": true })),
         "rss.thread" => Ok(json!({ "messages": [] })),
@@ -78,6 +80,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "feed.remove" => remove_mobile_rss_feed(data_dir, &req.params),
         "feed.move" => move_mobile_rss_feed(data_dir, &req.params),
         "mail.folderList" => list_mobile_folders(data_dir, &req.params),
+        "mail.folderCreate" => create_mobile_folder(data_dir, &req.params),
         "mail.threadList" => list_mobile_threads(data_dir, &req.params),
         "mail.threadRead" => read_mobile_thread(data_dir, &req.params),
         "mail.starredItems" => list_mobile_starred_items(data_dir, &req.params),
@@ -85,6 +88,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "mail.send" => send_mobile_message(data_dir, &req.params),
         "mail.archive" => archive_mobile_thread(data_dir, &req.params),
         "mail.delete" => delete_mobile_thread(data_dir, &req.params),
+        "mail.move" => move_mobile_thread(data_dir, &req.params),
         "mail.markRead" => mark_mobile_thread_read(data_dir, &req.params),
         "mail.markStarred" => mark_mobile_thread_starred(data_dir, &req.params),
         "rss.sync" => sync_mobile_rss(data_dir, &req.params),
@@ -639,6 +643,32 @@ fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Value, String> 
     })
 }
 
+fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_id = req_str(params, "account_id")?;
+    let name = req_str(params, "name")?.trim().to_string();
+    if name.is_empty() {
+        return Err("Folder name is required".to_string());
+    }
+    with_mobile_db(data_dir, |conn| {
+        if is_rss_account(&conn, &account_id)? {
+            return Err("RSS accounts do not support folders".to_string());
+        }
+        let creds = load_mobile_account_creds(&conn, &account_id)?;
+        if account_needs_reconnect(&creds) {
+            return Err(format!("account needs reconnect: {account_id}"));
+        }
+        let folders = run_mobile_async(async {
+            let mut session = imap::connect(&creds).await?;
+            imap::create_folder(&mut session, &name).await?;
+            let folders = imap::list_folders(&mut session).await?;
+            let _ = session.logout().await;
+            anyhow::Ok(folders)
+        })?;
+        store::upsert_folders(&conn, &account_id, &folders).map_err(|err| err.to_string())?;
+        list_mobile_folders(data_dir, params)
+    })
+}
+
 fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
     let folder_id = params
@@ -924,6 +954,69 @@ fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String
                 "folder": target_folder,
                 "thread_id": thread_id,
             }));
+        }
+        let creds = load_mobile_account_creds(&conn, &parsed.account)?;
+        if account_needs_reconnect(&creds) {
+            return Err(format!("account needs reconnect: {}", parsed.account));
+        }
+        let target_batch = run_mobile_async(async {
+            let mut session = imap::connect(&creds).await?;
+            imap::move_to_folder(&mut session, &parsed.folder, &target_folder, &uids).await?;
+            let batch =
+                imap::fetch_recent(&mut session, &target_folder, 50.max(uids.len() as u32)).await?;
+            let _ = session.logout().await;
+            anyhow::Ok(batch)
+        })?;
+        store::ensure_folder(&conn, &parsed.account, &target_folder)
+            .map_err(|err| err.to_string())?;
+        store::upsert_messages(
+            &conn,
+            &parsed.account,
+            &target_folder,
+            &target_batch.messages,
+        )
+        .map_err(|err| err.to_string())?;
+        store::set_folder_state(
+            &conn,
+            &parsed.account,
+            &target_folder,
+            target_batch.uidvalidity,
+            target_batch.uid_next,
+        )
+        .map_err(|err| err.to_string())?;
+        let moved = store::move_messages_by_uid(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &target_folder,
+            &uids,
+        )
+        .map_err(|err| err.to_string())?;
+        let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
+        Ok(json!({
+            "ok": true,
+            "moved": moved,
+            "folder": target_folder,
+            "thread_id": moved_thread_id,
+        }))
+    })
+}
+
+fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let thread_id = req_str(params, "thread_id")?;
+    let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
+    let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    if parsed.folder == target_folder {
+        return Ok(
+            json!({ "ok": true, "moved": 0, "folder": target_folder, "thread_id": thread_id }),
+        );
+    }
+    with_mobile_db(data_dir, |conn| {
+        let uids = cached_thread_uids(&conn, &parsed)?;
+        if uids.is_empty() {
+            return Ok(
+                json!({ "ok": true, "moved": 0, "folder": target_folder, "thread_id": thread_id }),
+            );
         }
         let creds = load_mobile_account_creds(&conn, &parsed.account)?;
         if account_needs_reconnect(&creds) {
@@ -1853,6 +1946,63 @@ mod tests {
         assert_eq!(value["result"]["folders"][1]["id"], "INBOX");
         assert_eq!(value["result"]["folders"][1]["role"], "inbox");
         assert_eq!(value["result"]["folders"][1]["unread"], 1);
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_folder_create_requires_usable_account_secret() {
+        let data_dir = unique_data_dir("folder-create-needs-secret");
+        seed_mobile_account(&data_dir, "me@example.com");
+
+        let value = invoke_mobile_protocol_json(
+            r#"{"id":66,"method":"mail.folderCreate","params":{"account_id":"me@example.com","name":"Work"}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+
+        assert_eq!(value["id"], 66);
+        assert!(
+            value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("account needs reconnect")
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_move_requires_usable_account_secret() {
+        let data_dir = unique_data_dir("move-needs-secret");
+        seed_mobile_account(&data_dir, "me@example.com");
+        let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[MessageHeader {
+                uid: 7,
+                subject: "Move me".to_string(),
+                thread_key: "topic".to_string(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        drop(conn);
+
+        let value = invoke_mobile_protocol_json(
+            r#"{"id":67,"method":"mail.move","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","target_folder_id":"Work"}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+
+        assert_eq!(value["id"], 67);
+        assert!(
+            value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("account needs reconnect")
+        );
 
         let _ = std::fs::remove_dir_all(data_dir);
     }

@@ -286,6 +286,10 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.FolderList, core.lastCommand)
         assertEquals("""{"account_id":"acc1"}""", core.lastPayloadJson)
 
+        runSuspend { client.createFolder(FolderCreateParams(accountId = "acc1", name = "Work")) }
+        assertEquals(MobileCommand.FolderCreate, core.lastCommand)
+        assertEquals("""{"account_id":"acc1","name":"Work"}""", core.lastPayloadJson)
+
         runSuspend { client.listThreads(ThreadListParams(accountId = "acc1")) }
         assertEquals(MobileCommand.ThreadList, core.lastCommand)
         assertEquals("""{"account_id":"acc1","folder_id":"inbox","query":"","filter":"all","refresh":false}""", core.lastPayloadJson)
@@ -322,6 +326,10 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.Delete, core.lastCommand)
         assertEquals("""{"thread_id":"thread1"}""", core.lastPayloadJson)
 
+        runSuspend { client.move(MoveThreadParams(threadId = "thread1", targetFolderId = "Work")) }
+        assertEquals(MobileCommand.Move, core.lastCommand)
+        assertEquals("""{"thread_id":"thread1","target_folder_id":"Work"}""", core.lastPayloadJson)
+
         runSuspend { client.markRead(MarkReadParams(threadId = "thread1", seen = false)) }
         assertEquals(MobileCommand.MarkRead, core.lastCommand)
         assertEquals("""{"thread_id":"thread1","seen":false}""", core.lastPayloadJson)
@@ -348,6 +356,25 @@ class MobileCommandsTest {
         assertEquals(
             """{"id":4,"method":"mail.threadList","params":{"account_id":"acc1","folder_id":"inbox","query":"design","filter":"unread","before_cursor":"1700000000:44","refresh":true}}""",
             request.toJson(),
+        )
+    }
+
+    @Test
+    fun folderCreatePreservesFrontendWireFieldNames() {
+        assertEquals(
+            """{"id":6,"method":"mail.folderCreate","params":{"account_id":"acc1","name":"Work"}}""",
+            folderCreateRequest(id = 6, params = FolderCreateParams(accountId = "acc1", name = "Work")).toJson(),
+        )
+    }
+
+    @Test
+    fun moveThreadPreservesFrontendWireFieldNames() {
+        assertEquals(
+            """{"id":7,"method":"mail.move","params":{"thread_id":"acc#imap#inbox#thread","target_folder_id":"Work"}}""",
+            moveThreadRequest(
+                id = 7,
+                params = MoveThreadParams(threadId = "acc#imap#inbox#thread", targetFolderId = "Work"),
+            ).toJson(),
         )
     }
 
