@@ -119,6 +119,10 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   updated_at    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS subscriptions_account_idx ON subscriptions(account);
+CREATE TABLE IF NOT EXISTS account_secrets (
+  account_id TEXT PRIMARY KEY,
+  blob       TEXT NOT NULL
+);
 ";
 
 const BODY_CACHE_VERSION: &str = "1";
@@ -182,6 +186,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 2 {
         migrate_v2(conn)?;
     }
+    if version < 3 {
+        migrate_v3(conn)?;
+    }
 
     Ok(())
 }
@@ -203,6 +210,22 @@ fn migrate_v2(conn: &Connection) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     tx.execute_batch("ALTER TABLE subscriptions ADD COLUMN json TEXT NOT NULL DEFAULT '{}';")?;
     tx.execute_batch("PRAGMA user_version = 2;")?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Per-account secret blob (IMAP password / OAuth tokens) for platforms without
+/// an OS keychain (Android, iOS sandbox). Desktop continues to use the keychain
+/// via the `secrets` module; only the mobile FFI path reads/writes this table.
+fn migrate_v3(conn: &Connection) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS account_secrets (
+           account_id TEXT PRIMARY KEY,
+           blob       TEXT NOT NULL
+         );",
+    )?;
+    tx.execute_batch("PRAGMA user_version = 3;")?;
     tx.commit()?;
     Ok(())
 }

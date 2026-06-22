@@ -8,28 +8,79 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,11 +88,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddOAuthAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
@@ -84,7 +147,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
+import kotlin.math.abs
 
 class ComposeMainActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
@@ -92,6 +159,7 @@ class ComposeMainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         incomingMailtoDraft = intent.toMailtoDraft()
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
         AndroidNotificationService.ensureChannels(this)
@@ -102,8 +170,8 @@ class ComposeMainActivity : ComponentActivity() {
             ""
         }
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            MeronTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MeronMobileScreen(
                         coreInitJson = coreInitJson,
                         incomingMailtoDraft = incomingMailtoDraft,
@@ -125,6 +193,9 @@ class ComposeMainActivity : ComponentActivity() {
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
 }
 
+private enum class Screen { Mail, Thread, Compose, AddAccount }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MeronMobileScreen(
     coreInitJson: String,
@@ -133,6 +204,9 @@ private fun MeronMobileScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val snackbarHost = remember { SnackbarHostState() }
+
     var host by remember { mutableStateOf("10.0.2.2") }
     var email by remember { mutableStateOf("user1@mail.localhost") }
     var password by remember { mutableStateOf("user1password") }
@@ -155,23 +229,27 @@ private fun MeronMobileScreen(
     var rssFeedUrl by remember { mutableStateOf("https://example.com/feed.xml") }
     var rssDisplayName by remember { mutableStateOf("Example Feed") }
     var accountJson by remember { mutableStateOf("") }
-    var coreAccounts by remember { mutableStateOf(emptyList<jp.nonbili.meron.shared.AccountSummary>()) }
+    var coreAccounts by remember { mutableStateOf(emptyList<AccountSummary>()) }
     var selectedCoreAccountId by remember { mutableStateOf("") }
     var coreFolders by remember { mutableStateOf(emptyList<FolderSummary>()) }
     var selectedCoreFolder by remember { mutableStateOf("inbox") }
     var coreThreads by remember { mutableStateOf(emptyList<ThreadSummary>()) }
     var selectedCoreThread by remember { mutableStateOf<ThreadSummary?>(null) }
-    var to by remember { mutableStateOf("user1@mail.localhost") }
-    var subject by remember { mutableStateOf("Hello from Compose Rust core Android") }
-    var body by remember { mutableStateOf("This message was sent from the Compose Android shell through shared KMP state and meron-core.") }
+    var to by remember { mutableStateOf("") }
+    var subject by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
     var quickReplyBody by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Starting...") }
+    var status by remember { mutableStateOf("") }
+    var syncing by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(emptyList<MessageBody>()) }
-    var selected by remember { mutableStateOf<MessageBody?>(null) }
     var attachments by remember { mutableStateOf(emptyList<DraftAttachment>()) }
     var cc by remember { mutableStateOf("") }
     var bcc by remember { mutableStateOf("") }
+    var screen by remember { mutableStateOf(Screen.Mail) }
+    var errorBanner by remember { mutableStateOf<String?>(null) }
+    var addSection by remember { mutableStateOf(0) }
     var notificationPermissionGranted by remember { mutableStateOf(AndroidNotificationService.canNotify(context)) }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationPermissionGranted = granted
         status = if (granted) "Notifications enabled" else "Notifications are disabled"
@@ -202,6 +280,12 @@ private fun MeronMobileScreen(
         }
     }
 
+    LaunchedEffect(status) {
+        if (status.isNotBlank()) {
+            snackbarHost.showSnackbar(status)
+        }
+    }
+
     LaunchedEffect(incomingMailtoDraft) {
         incomingMailtoDraft?.let { draft ->
             to = draft.to
@@ -209,6 +293,7 @@ private fun MeronMobileScreen(
             bcc = draft.bcc
             subject = draft.subject
             body = draft.body
+            screen = Screen.Compose
             status = "Loaded compose draft from mailto link"
         }
     }
@@ -224,7 +309,9 @@ private fun MeronMobileScreen(
             }.onSuccess { result ->
                 if (result != null) {
                     oauthAuthorizationCode = result.code
-                    status = "OAuth authorization code received; use Exchange code and add account."
+                    addSection = 1
+                    screen = Screen.AddAccount
+                    status = "OAuth authorization code received; exchange it to add the account."
                 }
             }.onFailure {
                 status = "OAuth callback failed: ${it.message}"
@@ -232,23 +319,25 @@ private fun MeronMobileScreen(
         }
     }
 
+    fun applyAccounts(json: String, preferEmail: String? = null) {
+        accountJson = json
+        val parsed = parseAccountListResponse(json)
+        coreAccounts = parsed
+        selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
+            ?: selectedCoreAccountId.takeIf { sel -> parsed.any { it.id == sel } }
+            ?: parsed.firstOrNull()?.id.orEmpty()
+    }
+
     fun listAccounts() {
         if (!MeronCoreNative.isLoaded()) {
-            accountJson = "Rust core not packaged."
+            status = "Rust core not packaged."
             return
         }
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) {
-                    MobileMailCommandClient(JniMeronCore()).listAccounts()
-                }
+                withContext(Dispatchers.IO) { MobileMailCommandClient(JniMeronCore()).listAccounts() }
             }.onSuccess {
-                accountJson = it
-                val parsedAccounts = parseAccountListResponse(it)
-                coreAccounts = parsedAccounts
-                selectedCoreAccountId = selectedCoreAccountId.takeIf { selected ->
-                    parsedAccounts.any { account -> account.id == selected }
-                } ?: parsedAccounts.firstOrNull()?.id.orEmpty()
+                applyAccounts(it)
                 status = "Loaded accounts"
             }.onFailure {
                 status = "Account list failed: ${it.message}"
@@ -261,16 +350,14 @@ private fun MeronMobileScreen(
             status = "Rust core not packaged."
             return
         }
-        val parsedImapPort = imapPort.trim().toIntOrNull() ?: 993
-        val parsedSmtpPort = smtpPort.trim().toIntOrNull() ?: 465
         val params = AddPasswordAccountParams(
             email = email.trim(),
             displayName = displayName.trim(),
             senderName = senderName.trim(),
             imapHost = host.trim(),
-            imapPort = parsedImapPort,
+            imapPort = imapPort.trim().toIntOrNull() ?: 993,
             smtpHost = smtpHost.trim(),
-            smtpPort = parsedSmtpPort,
+            smtpPort = smtpPort.trim().toIntOrNull() ?: 465,
             username = email.trim(),
             password = password,
             tls = true,
@@ -284,14 +371,12 @@ private fun MeronMobileScreen(
                     client.listAccounts()
                 }
             }.onSuccess {
-                accountJson = it
-                val parsedAccounts = parseAccountListResponse(it)
-                coreAccounts = parsedAccounts
-                selectedCoreAccountId = selectedCoreAccountId.takeIf { selected ->
-                    parsedAccounts.any { account -> account.id == selected }
-                } ?: parsedAccounts.firstOrNull()?.id.orEmpty()
-                status = "Added password account"
+                applyAccounts(it, preferEmail = params.email)
+                screen = Screen.Mail
+                errorBanner = null
+                status = "Added ${params.email}"
             }.onFailure {
+                errorBanner = it.message ?: "Add account failed"
                 status = "Add account failed: ${it.message}"
             }
         }
@@ -307,22 +392,13 @@ private fun MeronMobileScreen(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val client = MobileMailCommandClient(JniMeronCore())
-                    client.addRssAccount(
-                        AddRssAccountParams(
-                            feedUrl = rssFeedUrl.trim(),
-                            displayName = rssDisplayName.trim(),
-                        ),
-                    )
+                    client.addRssAccount(AddRssAccountParams(feedUrl = rssFeedUrl.trim(), displayName = rssDisplayName.trim()))
                     client.listAccounts()
                 }
             }.onSuccess {
-                accountJson = it
-                val parsedAccounts = parseAccountListResponse(it)
-                coreAccounts = parsedAccounts
-                selectedCoreAccountId = selectedCoreAccountId.takeIf { selected ->
-                    parsedAccounts.any { account -> account.id == selected }
-                } ?: parsedAccounts.firstOrNull()?.id.orEmpty()
-                status = "Added RSS account"
+                applyAccounts(it)
+                screen = Screen.Mail
+                status = "Added RSS feed"
             }.onFailure {
                 status = "Add RSS failed: ${it.message}"
             }
@@ -348,7 +424,7 @@ private fun MeronMobileScreen(
             refreshToken = refreshToken,
             tokenExpiresAt = oauthExpiresAt.trim().toLongOrNull() ?: 0,
         )
-        status = "Adding ${oauthProvider.replaceFirstChar { it.uppercase() }} OAuth account..."
+        status = "Adding ${oauthProvider.replaceFirstChar { it.uppercase() }} account..."
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -357,16 +433,12 @@ private fun MeronMobileScreen(
                     client.listAccounts()
                 }
             }.onSuccess {
-                accountJson = it
-                val parsedAccounts = parseAccountListResponse(it)
-                coreAccounts = parsedAccounts
-                selectedCoreAccountId = parsedAccounts.firstOrNull { account -> account.email == params.email }?.id
-                    ?: selectedCoreAccountId.takeIf { selected ->
-                        parsedAccounts.any { account -> account.id == selected }
-                    }
-                    ?: parsedAccounts.firstOrNull()?.id.orEmpty()
-                status = "Added ${oauthProvider.replaceFirstChar { it.uppercase() }} OAuth account"
+                applyAccounts(it, preferEmail = params.email)
+                screen = Screen.Mail
+                errorBanner = null
+                status = "Added ${params.email}"
             }.onFailure {
+                errorBanner = it.message ?: "Add OAuth failed"
                 status = "Add OAuth failed: ${it.message}"
             }
         }
@@ -407,16 +479,12 @@ private fun MeronMobileScreen(
                     client.listAccounts()
                 }
             }.onSuccess {
-                accountJson = it
-                val parsedAccounts = parseAccountListResponse(it)
-                coreAccounts = parsedAccounts
-                selectedCoreAccountId = parsedAccounts.firstOrNull { account -> account.email == params.email }?.id
-                    ?: selectedCoreAccountId.takeIf { selected ->
-                        parsedAccounts.any { account -> account.id == selected }
-                    }
-                    ?: parsedAccounts.firstOrNull()?.id.orEmpty()
-                status = "OAuth account added"
+                applyAccounts(it, preferEmail = params.email)
+                screen = Screen.Mail
+                errorBanner = null
+                status = "Connected ${params.email}"
             }.onFailure {
+                errorBanner = it.message ?: "OAuth exchange failed"
                 status = "OAuth exchange failed: ${it.message}"
             }
         }
@@ -443,7 +511,7 @@ private fun MeronMobileScreen(
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onSuccess {
-            status = "Opened ${oauthProvider.replaceFirstChar { it.uppercase() }} OAuth in browser"
+            status = "Opened ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in"
         }.onFailure {
             status = "OAuth browser launch failed: ${it.message}"
         }
@@ -461,7 +529,7 @@ private fun MeronMobileScreen(
             status = "No account selected."
             return
         }
-        status = "Syncing $accountId / $requestedFolder..."
+        syncing = true
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -473,26 +541,32 @@ private fun MeronMobileScreen(
                     }
                     val foldersJson = client.listFolders(FolderListParams(accountId = accountId))
                     val folders = parseFolderListResponse(foldersJson)
-                    val folder = requestedFolder.takeIf { selected -> folders.any { it.name == selected } }
+                    // Server folder names are case-sensitive ("INBOX"), but the
+                    // default request uses "inbox"; match case-insensitively and
+                    // fall back to a real inbox before the first folder.
+                    val folder = folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
+                        ?: folders.firstOrNull { it.name.equals("inbox", ignoreCase = true) }?.name
                         ?: folders.firstOrNull()?.name
                         ?: requestedFolder
                     val threadsJson = client.listThreads(ThreadListParams(accountId = accountId, folderId = folder))
                     Triple(foldersJson, folder, threadsJson)
                 }
             }.onSuccess { (foldersJson, folder, threadsJson) ->
-                val parsedFolders = parseFolderListResponse(foldersJson)
-                val parsedThreads = parseThreadListResponse(threadsJson)
-                coreFolders = parsedFolders
+                coreFolders = parseFolderListResponse(foldersJson)
                 selectedCoreFolder = folder
+                val parsedThreads = parseThreadListResponse(threadsJson)
                 coreThreads = parsedThreads
-                if (selectedCoreThread?.id !in parsedThreads.map { thread -> thread.id }) {
+                if (selectedCoreThread?.id !in parsedThreads.map { it.id }) {
                     selectedCoreThread = null
                     messages = emptyList()
-                    selected = null
                 }
-                status = "Loaded ${parsedThreads.size} core thread(s) from $folder"
+                syncing = false
+                errorBanner = null
+                status = "${parsedThreads.size} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
             }.onFailure {
-                status = "Core sync failed: ${it.message}"
+                syncing = false
+                errorBanner = it.message ?: "Sync failed"
+                status = "Sync failed: ${it.message}"
             }
         }
     }
@@ -503,7 +577,11 @@ private fun MeronMobileScreen(
             return
         }
         selectedCoreThread = thread
-        status = "Opening ${thread.subject.ifBlank { thread.id }}..."
+        messages = emptyList()
+        screen = Screen.Thread
+        if (thread.unread) {
+            coreThreads = coreThreads.map { if (it.id == thread.id) it.copy(unread = false) else it }
+        }
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -515,12 +593,9 @@ private fun MeronMobileScreen(
                     }
                 }
             }.onSuccess {
-                val parsedMessages = parseThreadReadResponse(it)
-                messages = parsedMessages
-                selected = parsedMessages.firstOrNull()
-                status = "Loaded ${parsedMessages.size} message(s)"
+                messages = parseThreadReadResponse(it)
             }.onFailure {
-                status = "Thread read failed: ${it.message}"
+                status = "Could not open message: ${it.message}"
             }
         }
     }
@@ -535,19 +610,69 @@ private fun MeronMobileScreen(
             status = "Rust core not packaged."
             return
         }
-        status = "$label..."
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) {
-                    MobileMailCommandClient(JniMeronCore()).action()
-                }
+                withContext(Dispatchers.IO) { MobileMailCommandClient(JniMeronCore()).action() }
             }.onSuccess {
                 coreThreads = update(coreThreads)
                 status = "$label complete"
             }.onFailure {
-                status = "$label failed for ${thread.subject.ifBlank { thread.id }}: ${it.message}"
+                status = "$label failed: ${it.message}"
             }
         }
+    }
+
+    fun toggleStar(thread: ThreadSummary) {
+        val isRssThread = threadIdIsRss(thread.id)
+        runCoreThreadAction(
+            thread = thread,
+            label = if (thread.starred) "Unstar" else "Star",
+            action = {
+                if (isRssThread) markRssStarred(RssMarkStarredParams(threadId = thread.id, starred = !thread.starred))
+                else markStarred(MarkStarredParams(threadId = thread.id, starred = !thread.starred))
+            },
+            update = { threads -> threads.map { if (it.id == thread.id) it.copy(starred = !thread.starred) else it } },
+        )
+    }
+
+    fun toggleRead(thread: ThreadSummary) {
+        val isRssThread = threadIdIsRss(thread.id)
+        runCoreThreadAction(
+            thread = thread,
+            label = if (thread.unread) "Mark read" else "Mark unread",
+            action = {
+                if (isRssThread) markRssRead(RssMarkReadParams(threadId = thread.id, seen = thread.unread))
+                else markRead(MarkReadParams(threadId = thread.id, seen = thread.unread))
+            },
+            update = { threads -> threads.map { if (it.id == thread.id) it.copy(unread = !thread.unread) else it } },
+        )
+    }
+
+    fun archiveOrRemove(thread: ThreadSummary) {
+        if (threadIdIsRss(thread.id)) {
+            runCoreThreadAction(
+                thread = thread,
+                label = "Remove feed",
+                action = { removeRssFeed(RemoveRssFeedParams(threadId = thread.id)) },
+                update = { threads -> threads.filterNot { it.id == thread.id } },
+            )
+        } else {
+            runCoreThreadAction(
+                thread = thread,
+                label = "Archive",
+                action = { archive(ThreadActionParams(threadId = thread.id)) },
+                update = { threads -> threads.filterNot { it.id == thread.id } },
+            )
+        }
+    }
+
+    fun deleteThread(thread: ThreadSummary) {
+        runCoreThreadAction(
+            thread = thread,
+            label = "Delete",
+            action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
+            update = { threads -> threads.filterNot { it.id == thread.id } },
+        )
     }
 
     fun sendMail() {
@@ -556,19 +681,12 @@ private fun MeronMobileScreen(
             status = "Select or add an account before sending."
             return
         }
-        val draft = ComposeDraft(
-            to = to.trim(),
-            cc = cc.trim(),
-            bcc = bcc.trim(),
-            subject = subject.trim(),
-            body = body.trim(),
-            attachments = attachments,
-        )
+        val draft = ComposeDraft(to.trim(), cc.trim(), bcc.trim(), subject.trim(), body.trim(), attachments)
         if (!draft.canSend) {
             status = "Complete To, Subject, and Body before sending."
             return
         }
-        status = "Sending through core..."
+        status = "Sending..."
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -577,12 +695,15 @@ private fun MeronMobileScreen(
                     client.listThreads(ThreadListParams(accountId = accountId, folderId = selectedCoreFolder.ifBlank { "inbox" }))
                 }
             }.onSuccess {
-                val parsedThreads = parseThreadListResponse(it)
-                coreThreads = parsedThreads
+                coreThreads = parseThreadListResponse(it)
                 attachments = emptyList()
-                status = "Sent through core; loaded ${parsedThreads.size} thread(s)"
+                to = ""; cc = ""; bcc = ""; subject = ""; body = ""
+                screen = Screen.Mail
+                errorBanner = null
+                status = "Message sent"
             }.onFailure {
-                status = "Core send failed: ${it.message}"
+                errorBanner = it.message ?: "Send failed"
+                status = "Send failed: ${it.message}"
             }
         }
     }
@@ -597,14 +718,14 @@ private fun MeronMobileScreen(
             return
         }
         if (threadIdIsRss(thread.id)) {
-            status = "RSS threads do not support replies."
+            status = "RSS items do not support replies."
             return
         }
         if (replyBody.isBlank()) {
             status = "Write a reply before sending."
             return
         }
-        status = "Sending quick reply..."
+        status = "Sending reply..."
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -612,341 +733,1064 @@ private fun MeronMobileScreen(
                 }
             }.onSuccess {
                 quickReplyBody = ""
-                status = "Quick reply sent"
+                status = "Reply sent"
             }.onFailure {
-                status = "Quick reply failed: ${it.message}"
+                status = "Reply failed: ${it.message}"
             }
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Text("Meron", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            Text("Compose Android shell backed by shared KMP state and Rust core IMAP/SMTP.")
-            Spacer(Modifier.height(8.dp))
-            Text(coreStatus(coreInitJson), style = MaterialTheme.typography.bodySmall)
-        }
-        item {
-            Text("Background refresh", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    AndroidBackgroundSyncScheduler.runOnce(context)
-                    status = "Queued background refresh"
-                }) {
-                    Text("Refresh in background")
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted) {
-                    Button(onClick = {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }) {
-                        Text("Enable notifications")
-                    }
-                }
+    fun openCompose() {
+        to = ""; cc = ""; bcc = ""; subject = ""; body = ""; attachments = emptyList()
+        screen = Screen.Compose
+    }
+
+    // Re-open account setup pre-filled so the user can fix credentials. OAuth
+    // accounts re-run the browser sign-in; password accounts re-enter the
+    // password (the IMAP/SMTP host fields keep their last values).
+    fun reconnectAccount(account: AccountSummary) {
+        val isOAuth = account.authType == "oauth" || account.provider == "gmail" || account.provider == "outlook"
+        when {
+            accountSummaryIsRss(account) -> {
+                addSection = 2
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted) {
-                Text("Notifications need permission before refresh results can be shown.")
+            isOAuth -> {
+                oauthEmail = account.email
+                if (account.provider == "gmail" || account.provider == "outlook") oauthProvider = account.provider
+                oauthAuthorizationCode = ""
+                addSection = 1
+            }
+            else -> {
+                email = account.email
+                password = ""
+                if (account.imapHost.isNotBlank()) host = account.imapHost
+                if (account.imapPort > 0) imapPort = account.imapPort.toString()
+                if (account.smtpHost.isNotBlank()) smtpHost = account.smtpHost
+                if (account.smtpPort > 0) smtpPort = account.smtpPort.toString()
+                addSection = 0
             }
         }
-        item {
-            Text("Accounts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(senderName, { senderName = it }, label = { Text("Sender name") }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(host, { host = it }, label = { Text("IMAP host") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(imapPort, { imapPort = it }, label = { Text("IMAP port") }, modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(smtpHost, { smtpHost = it }, label = { Text("SMTP host") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(smtpPort, { smtpPort = it }, label = { Text("SMTP port") }, modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = ::addPasswordAccount) {
-                    Text("Add password account")
-                }
-                Button(onClick = ::listAccounts) {
-                    Text("List accounts")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text("OAuth", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { oauthProvider = "gmail" }) {
-                    Text(if (oauthProvider == "gmail") "Gmail selected" else "Gmail")
-                }
-                Button(onClick = { oauthProvider = "outlook" }) {
-                    Text(if (oauthProvider == "outlook") "Outlook selected" else "Outlook")
-                }
-            }
-            OutlinedTextField(oauthEmail, { oauthEmail = it }, label = { Text("OAuth email") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(oauthClientId, { oauthClientId = it }, label = { Text("OAuth client ID") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(oauthClientSecret, { oauthClientSecret = it }, label = { Text("OAuth client secret (optional)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(oauthRedirectUri, { oauthRedirectUri = it }, label = { Text("Redirect URI") }, modifier = Modifier.fillMaxWidth())
-            Button(onClick = ::launchOAuthFlow, modifier = Modifier.fillMaxWidth()) {
-                Text("Open OAuth in browser")
-            }
-            if (oauthAuthorizationCode.isNotBlank()) {
-                Text("Authorization code: $oauthAuthorizationCode", style = MaterialTheme.typography.bodySmall)
-            }
-            Button(onClick = ::exchangeOAuthCode, modifier = Modifier.fillMaxWidth()) {
-                Text("Exchange code and add account")
-            }
-            OutlinedTextField(oauthAccessToken, { oauthAccessToken = it }, label = { Text("Access token") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(oauthRefreshToken, { oauthRefreshToken = it }, label = { Text("Refresh token") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(oauthExpiresAt, { oauthExpiresAt = it }, label = { Text("Token expires at") }, modifier = Modifier.fillMaxWidth())
-            Button(onClick = ::addOAuthAccount, modifier = Modifier.fillMaxWidth()) {
-                Text("Add OAuth account")
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(rssFeedUrl, { rssFeedUrl = it }, label = { Text("RSS feed URL") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(rssDisplayName, { rssDisplayName = it }, label = { Text("RSS name") }, modifier = Modifier.fillMaxWidth())
-            Button(onClick = ::addRssAccount) {
-                Text("Add RSS account")
-            }
-            if (coreAccounts.isNotEmpty()) {
-                Text("Selected account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                coreAccounts.forEach { account ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            if (selectedCoreAccountId != account.id) {
-                                selectedCoreAccountId = account.id
-                                selectedCoreFolder = "inbox"
-                                coreFolders = emptyList()
-                                coreThreads = emptyList()
-                                selectedCoreThread = null
-                                messages = emptyList()
-                                selected = null
-                            }
-                        }) {
-                            Text(if (selectedCoreAccountId == account.id) "Selected" else "Select")
+        errorBanner = null
+        screen = Screen.AddAccount
+    }
+
+    // Load persisted accounts once on startup so they survive app restarts.
+    LaunchedEffect(Unit) {
+        if (MeronCoreNative.isLoaded() && coreAccounts.isEmpty()) {
+            listAccounts()
+        }
+    }
+
+    val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
+
+    // Hardware back from a sub-screen returns to the inbox instead of exiting.
+    BackHandler(enabled = screen != Screen.Mail) {
+        screen = Screen.Mail
+    }
+
+    when (screen) {
+        Screen.Thread -> ThreadScreen(
+            thread = selectedCoreThread,
+            messages = messages,
+            accountEmail = selectedAccount?.email.orEmpty(),
+            onBack = { screen = Screen.Mail },
+            onArchive = { selectedCoreThread?.let { archiveOrRemove(it); screen = Screen.Mail } },
+            onDelete = { selectedCoreThread?.let { deleteThread(it); screen = Screen.Mail } },
+            onToggleStar = { selectedCoreThread?.let { t -> toggleStar(t); selectedCoreThread = t.copy(starred = !t.starred) } },
+            quickReplyBody = quickReplyBody,
+            onQuickReplyChange = { quickReplyBody = it },
+            onSendReply = ::sendQuickReply,
+        )
+
+        Screen.Compose -> ComposeScreen(
+            to = to, onToChange = { to = it },
+            cc = cc, onCcChange = { cc = it },
+            bcc = bcc, onBccChange = { bcc = it },
+            subject = subject, onSubjectChange = { subject = it },
+            body = body, onBodyChange = { body = it },
+            attachments = attachments,
+            onAttach = { attachmentPicker.launch(arrayOf("*/*")) },
+            onClearAttachments = { attachments = emptyList() },
+            onSend = ::sendMail,
+            onBack = { screen = Screen.Mail },
+        )
+
+        Screen.AddAccount -> AddAccountScreen(
+            onBack = { screen = Screen.Mail },
+            initialSection = addSection,
+            displayName = displayName, onDisplayNameChange = { displayName = it },
+            senderName = senderName, onSenderNameChange = { senderName = it },
+            email = email, onEmailChange = { email = it },
+            password = password, onPasswordChange = { password = it },
+            host = host, onHostChange = { host = it },
+            imapPort = imapPort, onImapPortChange = { imapPort = it },
+            smtpHost = smtpHost, onSmtpHostChange = { smtpHost = it },
+            smtpPort = smtpPort, onSmtpPortChange = { smtpPort = it },
+            onAddPassword = ::addPasswordAccount,
+            oauthProvider = oauthProvider, onOauthProviderChange = { oauthProvider = it },
+            oauthEmail = oauthEmail, onOauthEmailChange = { oauthEmail = it },
+            oauthClientId = oauthClientId, onOauthClientIdChange = { oauthClientId = it },
+            oauthClientSecret = oauthClientSecret, onOauthClientSecretChange = { oauthClientSecret = it },
+            oauthRedirectUri = oauthRedirectUri, onOauthRedirectUriChange = { oauthRedirectUri = it },
+            oauthAuthorizationCode = oauthAuthorizationCode,
+            oauthAccessToken = oauthAccessToken, onOauthAccessTokenChange = { oauthAccessToken = it },
+            oauthRefreshToken = oauthRefreshToken, onOauthRefreshTokenChange = { oauthRefreshToken = it },
+            oauthExpiresAt = oauthExpiresAt, onOauthExpiresAtChange = { oauthExpiresAt = it },
+            onLaunchOAuth = ::launchOAuthFlow,
+            onExchangeOAuth = ::exchangeOAuthCode,
+            onAddOAuth = ::addOAuthAccount,
+            rssFeedUrl = rssFeedUrl, onRssFeedUrlChange = { rssFeedUrl = it },
+            rssDisplayName = rssDisplayName, onRssDisplayNameChange = { rssDisplayName = it },
+            onAddRss = ::addRssAccount,
+            diagnostics = coreStatus(coreInitJson),
+        )
+
+        Screen.Mail -> ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                MailDrawer(
+                    accounts = coreAccounts,
+                    selectedAccountId = selectedCoreAccountId,
+                    folders = coreFolders,
+                    selectedFolder = selectedCoreFolder,
+                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
+                    onSelectAccount = { account ->
+                        if (selectedCoreAccountId != account.id) {
+                            selectedCoreAccountId = account.id
+                            selectedCoreFolder = "inbox"
+                            coreFolders = emptyList()
+                            coreThreads = emptyList()
+                            selectedCoreThread = null
+                            messages = emptyList()
+                            syncCoreThreads()
                         }
-                        Text(
-                            account.displayName.ifBlank { account.email.ifBlank { account.id } },
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        scope.launch { drawerState.close() }
+                    },
+                    onSelectFolder = { folder ->
+                        selectedCoreFolder = folder.name
+                        selectedCoreThread = null
+                        messages = emptyList()
+                        syncCoreThreads()
+                        scope.launch { drawerState.close() }
+                    },
+                    onAddAccount = {
+                        addSection = 0
+                        screen = Screen.AddAccount
+                        scope.launch { drawerState.close() }
+                    },
+                    onRefreshBackground = {
+                        AndroidBackgroundSyncScheduler.runOnce(context)
+                        status = "Queued background refresh"
+                        scope.launch { drawerState.close() }
+                    },
+                    onEnableNotifications = {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        scope.launch { drawerState.close() }
+                    },
+                )
+            },
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(selectedCoreFolder.replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
+                                selectedAccount?.let {
+                                    Text(
+                                        it.email.ifBlank { it.displayName },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = ::syncCoreThreads) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Sync")
+                            }
+                        },
+                    )
+                },
+                floatingActionButton = {
+                    if (coreAccounts.isNotEmpty()) {
+                        ExtendedFloatingActionButton(
+                            onClick = ::openCompose,
+                            icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                            text = { Text("Compose") },
                         )
                     }
-                }
-                if (coreFolders.isNotEmpty()) {
-                    Text("Selected folder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    coreFolders.forEach { folder ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                selectedCoreFolder = folder.name
-                                selectedCoreThread = null
-                                messages = emptyList()
-                                selected = null
-                            }) {
-                                Text(if (selectedCoreFolder == folder.name) "Selected" else "Select")
-                            }
-                            Text(
-                                if (folder.unread > 0) "${folder.name} (${folder.unread})" else folder.name,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                },
+                snackbarHost = { SnackbarHost(snackbarHost) },
+            ) { innerPadding ->
+                Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                    val reconnectAccount2 = selectedAccount?.takeIf { it.needsReconnect }
+                    when {
+                        reconnectAccount2 != null -> StatusBanner(
+                            message = "Can't sign in to ${reconnectAccount2.email.ifBlank { reconnectAccount2.displayName }}. Update the credentials to reconnect.",
+                            isError = true,
+                            actionLabel = "Reconnect",
+                            onAction = { reconnectAccount(reconnectAccount2) },
+                            onDismiss = null,
+                        )
+                        errorBanner != null -> {
+                            val authLike = isAuthError(errorBanner!!)
+                            StatusBanner(
+                                message = errorBanner!!,
+                                isError = true,
+                                actionLabel = if (authLike && selectedAccount != null) "Reconnect" else "Retry",
+                                onAction = {
+                                    if (authLike && selectedAccount != null) reconnectAccount(selectedAccount)
+                                    else syncCoreThreads()
+                                },
+                                onDismiss = { errorBanner = null },
+                            )
+                        }
+                    }
+                    Box(Modifier.fillMaxSize()) {
+                        if (syncing) {
+                            CircularProgressIndicator(
+                                Modifier.padding(top = 4.dp).align(Alignment.TopCenter).size(28.dp),
+                            )
+                        }
+                        when {
+                            coreAccounts.isEmpty() -> EmptyState(
+                                icon = Icons.Filled.PersonAdd,
+                                title = "Welcome to Meron",
+                                text = "Add a mail or RSS account to start reading your inbox.",
+                                actionLabel = "Add account",
+                                onAction = { addSection = 0; screen = Screen.AddAccount },
+                            )
+                            coreThreads.isEmpty() -> EmptyState(
+                                icon = Icons.Outlined.Drafts,
+                                title = "Nothing here yet",
+                                text = "Pull in your latest messages from the server.",
+                                actionLabel = "Sync now",
+                                onAction = ::syncCoreThreads,
+                            )
+                            else -> MailList(
+                                threads = coreThreads,
+                                onOpen = ::readCoreThread,
+                                onToggleStar = ::toggleStar,
+                                onArchive = ::archiveOrRemove,
                             )
                         }
                     }
                 }
-                Button(onClick = ::syncCoreThreads, modifier = Modifier.fillMaxWidth()) {
-                    Text("Sync selected account/folder")
-                }
-            }
-            if (accountJson.isNotBlank()) {
-                Text(accountJson, style = MaterialTheme.typography.bodySmall)
             }
         }
-        item {
-            Text("Core Threads", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            if (coreThreads.isEmpty()) {
-                Text("Sync a selected account to load cached core threads.")
-            }
-        }
-        items(coreThreads, key = { it.id }) { thread ->
-            val isRssThread = threadIdIsRss(thread.id)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { readCoreThread(thread) },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(thread.sender.ifBlank { thread.accountId }, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (thread.unread) Text("Unread")
-                        if (thread.starred) Text("Starred")
-                    }
-                    Text(thread.subject.ifBlank { "(no subject)" }, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    if (thread.preview.isNotBlank()) {
-                        Text(thread.preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(thread.folder, style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            runCoreThreadAction(
-                                thread = thread,
-                                label = if (thread.unread) "Mark read" else "Mark unread",
-                                action = {
-                                    if (isRssThread) {
-                                        markRssRead(RssMarkReadParams(threadId = thread.id, seen = thread.unread))
-                                    } else {
-                                        markRead(MarkReadParams(threadId = thread.id, seen = thread.unread))
-                                    }
-                                },
-                                update = { threads ->
-                                    threads.map { if (it.id == thread.id) it.copy(unread = !thread.unread) else it }
-                                },
-                            )
-                        }) {
-                            Text(if (thread.unread) "Read" else "Unread")
-                        }
-                        Button(onClick = {
-                            runCoreThreadAction(
-                                thread = thread,
-                                label = if (thread.starred) "Unstar" else "Star",
-                                action = {
-                                    if (isRssThread) {
-                                        markRssStarred(RssMarkStarredParams(threadId = thread.id, starred = !thread.starred))
-                                    } else {
-                                        markStarred(MarkStarredParams(threadId = thread.id, starred = !thread.starred))
-                                    }
-                                },
-                                update = { threads ->
-                                    threads.map { if (it.id == thread.id) it.copy(starred = !thread.starred) else it }
-                                },
-                            )
-                        }) {
-                            Text(if (thread.starred) "Unstar" else "Star")
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (isRssThread) {
-                            Button(onClick = {
-                                runCoreThreadAction(
-                                    thread = thread,
-                                    label = "Remove feed",
-                                    action = { removeRssFeed(RemoveRssFeedParams(threadId = thread.id)) },
-                                    update = { threads -> threads.filterNot { it.id == thread.id } },
-                                )
-                            }) {
-                                Text("Remove Feed")
-                            }
-                        } else {
-                            Button(onClick = {
-                                runCoreThreadAction(
-                                    thread = thread,
-                                    label = "Archive",
-                                    action = { archive(ThreadActionParams(threadId = thread.id)) },
-                                    update = { threads -> threads.filterNot { it.id == thread.id } },
-                                )
-                            }) {
-                                Text("Archive")
-                            }
-                            Button(onClick = {
-                                runCoreThreadAction(
-                                    thread = thread,
-                                    label = "Delete",
-                                    action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
-                                    update = { threads -> threads.filterNot { it.id == thread.id } },
-                                )
-                            }) {
-                                Text("Delete")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            Text(status, style = MaterialTheme.typography.bodyMedium)
-        }
-        item {
-            Text("Messages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            selectedCoreThread?.let { thread ->
-                Text(thread.subject.ifBlank { thread.id }, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        items(messages, key = { it.id }) { message ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { selected = message },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(message.subject, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text(message.from, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        item {
-            Text("Message", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    val message = selected
-                    if (message == null) {
-                        Text("Select a message.")
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MailList(
+    threads: List<ThreadSummary>,
+    onOpen: (ThreadSummary) -> Unit,
+    onToggleStar: (ThreadSummary) -> Unit,
+    onArchive: (ThreadSummary) -> Unit,
+) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
+        items(threads, key = { it.id }) { thread ->
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    if (value == SwipeToDismissBoxValue.EndToStart) {
+                        onArchive(thread)
+                        true
                     } else {
-                        Text("From: ${message.from}")
-                        Text("To: ${message.to}")
-                        Text("Date: ${message.dateEpochSeconds}")
-                        Spacer(Modifier.height(8.dp))
-                        Text(message.subject, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
-                        Text(message.body)
+                        false
                     }
-                }
+                },
+            )
+            SwipeToDismissBox(
+                state = dismissState,
+                enableDismissFromStartToEnd = false,
+                backgroundContent = {
+                    val isRss = threadIdIsRss(thread.id)
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 24.dp),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Icon(
+                            if (isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                            contentDescription = if (isRss) "Remove" else "Archive",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                },
+            ) {
+                MailRow(thread = thread, onOpen = { onOpen(thread) }, onToggleStar = { onToggleStar(thread) })
             }
-            val replyThread = selectedCoreThread
-            if (replyThread != null && !threadIdIsRss(replyThread.id) && messages.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    quickReplyBody,
-                    { quickReplyBody = it },
-                    label = { Text("Quick reply") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+    }
+}
+
+@Composable
+private fun MailRow(thread: ThreadSummary, onOpen: () -> Unit, onToggleStar: () -> Unit) {
+    val unread = thread.unread
+    val chat = LocalChatColors.current
+    val senderLabel = thread.sender.ifBlank { thread.accountId }
+    val rowBackground = when {
+        unread -> MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(rowBackground)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Avatar(senderLabel)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    senderLabel.substringBefore('@'),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Button(onClick = ::sendQuickReply, modifier = Modifier.fillMaxWidth()) {
-                    Text("Send quick reply")
+                Text(
+                    formatRelativeTime(thread.dateEpochSeconds),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                if (thread.starred) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = chat.star, modifier = Modifier.size(11.dp))
+                }
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface, fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal)) {
+                            append(thread.subject.ifBlank { "(no subject)" })
+                        }
+                        if (thread.preview.isNotBlank()) {
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                append(" — ${thread.preview}")
+                            }
+                        }
+                    },
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (unread) {
+                    Box(
+                        Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    )
                 }
             }
         }
-        item {
-            Text("Compose", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(to, { to = it }, label = { Text("To") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(cc, { cc = it }, label = { Text("Cc") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(bcc, { bcc = it }, label = { Text("Bcc") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(subject, { subject = it }, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(body, { body = it }, label = { Text("Body") }, minLines = 4, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) {
-                    Text("Attach file")
+        IconButton(onClick = onToggleStar, modifier = Modifier.size(24.dp)) {
+            Icon(
+                if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                contentDescription = if (thread.starred) "Unstar" else "Star",
+                tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Avatar(name: String, size: Dp = 42.dp) {
+    Box(
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(avatarBrush(name)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            avatarInitials(name),
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = (size.value * 0.34f).sp,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThreadScreen(
+    thread: ThreadSummary?,
+    messages: List<MessageBody>,
+    accountEmail: String,
+    onBack: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    onToggleStar: () -> Unit,
+    quickReplyBody: String,
+    onQuickReplyChange: (String) -> Unit,
+    onSendReply: () -> Unit,
+) {
+    val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
+    val chat = LocalChatColors.current
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onToggleStar) {
+                        Icon(
+                            if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = "Star",
+                            tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = onArchive) {
+                        Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = "Archive")
+                    }
+                    if (!isRss) {
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                        }
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(innerPadding),
+        ) {
+            if (messages.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                if (attachments.isNotEmpty()) {
-                    Button(onClick = { attachments = emptyList() }) {
-                        Text("Clear")
+            } else {
+                LazyColumn(
+                    Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(messages, key = { it.id }) { message ->
+                        val outgoing = isOutgoing(message, accountEmail)
+                        MessageBubble(message = message, outgoing = outgoing, chat = chat)
                     }
                 }
             }
-            attachments.forEach { attachment ->
+            if (thread != null && !isRss && messages.isNotEmpty()) {
+                ReplyBar(quickReplyBody, onQuickReplyChange, onSendReply)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageBubble(message: MessageBody, outgoing: Boolean, chat: ChatColors) {
+    val bubbleShape = if (outgoing) {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
+    } else {
+        RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
+    }
+    val bubbleColor = if (outgoing) chat.bubbleOut else chat.bubbleIn
+    val textColor = if (outgoing) chat.bubbleOutText else chat.bubbleInText
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
+    ) {
+        Column(
+            Modifier
+                .widthIn(max = 320.dp)
+                .clip(bubbleShape)
+                .background(bubbleColor)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (!outgoing) {
                 Text(
-                    "${attachment.displayName} (${attachment.sizeBytes} bytes)",
-                    style = MaterialTheme.typography.bodySmall,
+                    message.from.ifBlank { message.fromAddr },
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Button(onClick = ::sendMail, modifier = Modifier.fillMaxWidth()) {
-                Text("Send through core")
+            // Subject is the conversation title (top bar); the bubble shows the
+            // message body, matching the desktop chat reader.
+            Text(
+                message.body.ifBlank { "(no content)" },
+                color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
+            )
+            Text(
+                formatRelativeTime(message.dateEpochSeconds),
+                fontSize = 10.5.sp,
+                color = textColor.copy(alpha = 0.6f),
+                modifier = Modifier.align(Alignment.End),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReplyBar(value: String, onChange: (String) -> Unit, onSend: () -> Unit) {
+    Surface(tonalElevation = 3.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                value = value,
+                onValueChange = onChange,
+                placeholder = { Text("Reply") },
+                modifier = Modifier.weight(1f),
+                maxLines = 4,
+            )
+            IconButton(onClick = onSend, enabled = value.isNotBlank()) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComposeScreen(
+    to: String, onToChange: (String) -> Unit,
+    cc: String, onCcChange: (String) -> Unit,
+    bcc: String, onBccChange: (String) -> Unit,
+    subject: String, onSubjectChange: (String) -> Unit,
+    body: String, onBodyChange: (String) -> Unit,
+    attachments: List<DraftAttachment>,
+    onAttach: () -> Unit,
+    onClearAttachments: () -> Unit,
+    onSend: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("New message") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.Close, contentDescription = "Discard")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onAttach) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach")
+                    }
+                    IconButton(onClick = onSend) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ComposeField(to, onToChange, "To")
+            ComposeField(cc, onCcChange, "Cc")
+            ComposeField(bcc, onBccChange, "Bcc")
+            ComposeField(subject, onSubjectChange, "Subject")
+            OutlinedTextField(
+                value = body,
+                onValueChange = onBodyChange,
+                label = { Text("Message") },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+            attachments.forEach { attachment ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(
+                        "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            if (attachments.isNotEmpty()) {
+                TextButton(onClick = onClearAttachments) { Text("Clear attachments") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposeField(value: String, onChange: (String) -> Unit, label: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddAccountScreen(
+    onBack: () -> Unit,
+    initialSection: Int,
+    displayName: String, onDisplayNameChange: (String) -> Unit,
+    senderName: String, onSenderNameChange: (String) -> Unit,
+    email: String, onEmailChange: (String) -> Unit,
+    password: String, onPasswordChange: (String) -> Unit,
+    host: String, onHostChange: (String) -> Unit,
+    imapPort: String, onImapPortChange: (String) -> Unit,
+    smtpHost: String, onSmtpHostChange: (String) -> Unit,
+    smtpPort: String, onSmtpPortChange: (String) -> Unit,
+    onAddPassword: () -> Unit,
+    oauthProvider: String, onOauthProviderChange: (String) -> Unit,
+    oauthEmail: String, onOauthEmailChange: (String) -> Unit,
+    oauthClientId: String, onOauthClientIdChange: (String) -> Unit,
+    oauthClientSecret: String, onOauthClientSecretChange: (String) -> Unit,
+    oauthRedirectUri: String, onOauthRedirectUriChange: (String) -> Unit,
+    oauthAuthorizationCode: String,
+    oauthAccessToken: String, onOauthAccessTokenChange: (String) -> Unit,
+    oauthRefreshToken: String, onOauthRefreshTokenChange: (String) -> Unit,
+    oauthExpiresAt: String, onOauthExpiresAtChange: (String) -> Unit,
+    onLaunchOAuth: () -> Unit,
+    onExchangeOAuth: () -> Unit,
+    onAddOAuth: () -> Unit,
+    rssFeedUrl: String, onRssFeedUrlChange: (String) -> Unit,
+    rssDisplayName: String, onRssDisplayNameChange: (String) -> Unit,
+    onAddRss: () -> Unit,
+    diagnostics: String,
+) {
+    var section by remember(initialSection) { mutableStateOf(initialSection) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Add account") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Password", "OAuth", "RSS").forEachIndexed { index, label ->
+                        FilterChip(
+                            selected = section == index,
+                            onClick = { section = index },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            when (section) {
+                0 -> item {
+                    SetupCard(title = "IMAP / SMTP account") {
+                        SetupField(displayName, onDisplayNameChange, "Display name")
+                        SetupField(senderName, onSenderNameChange, "Sender name")
+                        SetupField(email, onEmailChange, "Email")
+                        SetupField(password, onPasswordChange, "Password", isPassword = true)
+                        SetupField(host, onHostChange, "IMAP host")
+                        SetupField(imapPort, onImapPortChange, "IMAP port")
+                        SetupField(smtpHost, onSmtpHostChange, "SMTP host")
+                        SetupField(smtpPort, onSmtpPortChange, "SMTP port")
+                        Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text("Add account") }
+                    }
+                }
+                1 -> item {
+                    SetupCard(title = "Gmail / Outlook") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(oauthProvider == "gmail", { onOauthProviderChange("gmail") }, { Text("Gmail") })
+                            FilterChip(oauthProvider == "outlook", { onOauthProviderChange("outlook") }, { Text("Outlook") })
+                        }
+                        SetupField(oauthEmail, onOauthEmailChange, "Email")
+                        SetupField(oauthClientId, onOauthClientIdChange, "Client ID")
+                        SetupField(oauthClientSecret, onOauthClientSecretChange, "Client secret (optional)")
+                        SetupField(oauthRedirectUri, onOauthRedirectUriChange, "Redirect URI")
+                        Button(onClick = onLaunchOAuth, modifier = Modifier.fillMaxWidth()) { Text("Sign in with browser") }
+                        if (oauthAuthorizationCode.isNotBlank()) {
+                            Text("Authorization code received.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            Button(onClick = onExchangeOAuth, modifier = Modifier.fillMaxWidth()) { Text("Finish sign-in") }
+                        }
+                        HorizontalDivider()
+                        Text("Or paste tokens manually", style = MaterialTheme.typography.labelLarge)
+                        SetupField(oauthAccessToken, onOauthAccessTokenChange, "Access token")
+                        SetupField(oauthRefreshToken, onOauthRefreshTokenChange, "Refresh token")
+                        SetupField(oauthExpiresAt, onOauthExpiresAtChange, "Token expires at")
+                        Button(onClick = onAddOAuth, modifier = Modifier.fillMaxWidth()) { Text("Add with tokens") }
+                    }
+                }
+                else -> item {
+                    SetupCard(title = "RSS feed") {
+                        SetupField(rssFeedUrl, onRssFeedUrlChange, "Feed URL")
+                        SetupField(rssDisplayName, onRssDisplayNameChange, "Feed name")
+                        Button(onClick = onAddRss, modifier = Modifier.fillMaxWidth()) { Text("Add feed") }
+                    }
+                }
+            }
+            item {
+                Text(
+                    diagnostics,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SetupField(value: String, onChange: (String) -> Unit, label: String, isPassword: Boolean = false) {
+    var revealed by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value,
+        onChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        visualTransformation = if (isPassword && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
+        trailingIcon = if (isPassword) {
+            {
+                IconButton(onClick = { revealed = !revealed }) {
+                    Icon(
+                        if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (revealed) "Hide password" else "Show password",
+                    )
+                }
+            }
+        } else null,
+    )
+}
+
+@Composable
+private fun MailDrawer(
+    accounts: List<AccountSummary>,
+    selectedAccountId: String,
+    folders: List<FolderSummary>,
+    selectedFolder: String,
+    notificationsNeedPermission: Boolean,
+    onSelectAccount: (AccountSummary) -> Unit,
+    onSelectFolder: (FolderSummary) -> Unit,
+    onAddAccount: () -> Unit,
+    onRefreshBackground: () -> Unit,
+    onEnableNotifications: () -> Unit,
+) {
+    val chat = LocalChatColors.current
+    ModalDrawerSheet(
+        drawerContainerColor = chat.sidebar,
+        drawerContentColor = chat.onSidebar,
+    ) {
+        LazyColumn(contentPadding = PaddingValues(vertical = 16.dp)) {
+            item {
+                Text(
+                    "Meron",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = chat.onSidebar,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+            }
+            if (accounts.isNotEmpty()) {
+                item { DrawerLabel("Accounts", chat) }
+                items(accounts, key = { it.id }) { account ->
+                    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+                    SidebarRow(
+                        selected = account.id == selectedAccountId,
+                        chat = chat,
+                        onClick = { onSelectAccount(account) },
+                        leading = {
+                            Avatar(label, size = 32.dp)
+                        },
+                        title = label,
+                        subtitle = account.email.takeIf { it.isNotBlank() && it != label },
+                        trailing = if (account.needsReconnect) "!" else null,
+                    )
+                }
+            }
+            if (folders.isNotEmpty()) {
+                item { DrawerLabel("Folders", chat) }
+                items(folders, key = { it.name }) { folder ->
+                    SidebarRow(
+                        selected = folder.name == selectedFolder,
+                        chat = chat,
+                        onClick = { onSelectFolder(folder) },
+                        leading = { Icon(folderIcon(folder.name), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = folder.name.replaceFirstChar { it.uppercase() },
+                        subtitle = null,
+                        trailing = folder.unread.takeIf { it > 0 }?.toString(),
+                    )
+                }
+            }
+            item {
+                HorizontalDivider(
+                    Modifier.padding(vertical = 10.dp, horizontal = 20.dp),
+                    color = chat.onSidebarMuted.copy(alpha = 0.25f),
+                )
+            }
+            item {
+                SidebarRow(
+                    selected = false, chat = chat, onClick = onAddAccount,
+                    leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Add account", subtitle = null, trailing = null,
+                )
+            }
+            item {
+                SidebarRow(
+                    selected = false, chat = chat, onClick = onRefreshBackground,
+                    leading = { Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Refresh in background", subtitle = null, trailing = null,
+                )
+            }
+            if (notificationsNeedPermission) {
+                item {
+                    SidebarRow(
+                        selected = false, chat = chat, onClick = onEnableNotifications,
+                        leading = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Enable notifications", subtitle = null, trailing = null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SidebarRow(
+    selected: Boolean,
+    chat: ChatColors,
+    onClick: () -> Unit,
+    leading: @Composable () -> Unit,
+    title: String,
+    subtitle: String?,
+    trailing: String?,
+) {
+    val tint = if (selected) MaterialTheme.colorScheme.primary else chat.onSidebarMuted
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalContentColor provides tint,
+            ) { leading() }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                color = if (selected) chat.onSidebar else chat.onSidebar.copy(alpha = 0.9f),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    color = chat.onSidebarMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (trailing != null) {
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(trailing, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerLabel(text: String, chat: ChatColors) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = chat.onSidebarMuted,
+        modifier = Modifier.padding(start = 24.dp, top = 14.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun StatusBanner(
+    message: String,
+    isError: Boolean,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+    onDismiss: (() -> Unit)?,
+) {
+    val container = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+    val content = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    Surface(color = container, contentColor = content) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(message, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction) {
+                    Text(actionLabel, color = content, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    text: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onAction) { Text(actionLabel) }
+    }
+}
+
+// Gradient pairs mirror the desktop avatar palette in
+// frontend/src/components/avatar/Avatar.tsx (Tailwind 400 -> 500 shades).
+private val avatarGradients = listOf(
+    Color(0xFF818CF8) to Color(0xFF6366F1), // indigo
+    Color(0xFFA78BFA) to Color(0xFF8B5CF6), // violet
+    Color(0xFF2DD4BF) to Color(0xFF14B8A6), // teal
+    Color(0xFF34D399) to Color(0xFF10B981), // emerald
+    Color(0xFFFB7185) to Color(0xFFF43F5E), // rose
+    Color(0xFFFBBF24) to Color(0xFFF59E0B), // amber
+    Color(0xFF38BDF8) to Color(0xFF0EA5E9), // sky
+    Color(0xFFE879F9) to Color(0xFFD946EF), // fuchsia
+)
+
+private fun avatarBrush(name: String): Brush {
+    val key = name.ifBlank { "?" }
+    var hash = 0
+    for (ch in key) hash = ch.code + ((hash shl 5) - hash)
+    val (start, end) = avatarGradients[abs(hash) % avatarGradients.size]
+    return Brush.linearGradient(listOf(start, end))
+}
+
+private fun avatarInitials(value: String): String {
+    val parts = value.split(' ', '\t', '\n', '@').filter { it.isNotBlank() }
+    if (parts.isEmpty()) return "?"
+    return parts.take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
+}
+
+private fun isAuthError(message: String): Boolean {
+    val m = message.lowercase()
+    return listOf("auth", "login", "credential", "password", "unauthor", "permission", "token", "401", "535")
+        .any { m.contains(it) }
+}
+
+private fun isOutgoing(message: MessageBody, accountEmail: String): Boolean {
+    if (accountEmail.isBlank()) return false
+    val acct = accountEmail.trim().lowercase()
+    val from = message.fromAddr.ifBlank { message.from }.trim().lowercase()
+    return from.contains(acct)
+}
+
+private fun folderIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name.lowercase()) {
+    "inbox" -> Icons.Filled.Inbox
+    "sent" -> Icons.AutoMirrored.Filled.Send
+    "drafts" -> Icons.Outlined.Drafts
+    "archive" -> Icons.Filled.Archive
+    "trash", "deleted" -> Icons.Filled.Delete
+    "starred" -> Icons.Filled.Star
+    else -> Icons.Outlined.FolderOpen
+}
+
+private fun formatRelativeTime(epochSeconds: Long): String {
+    if (epochSeconds <= 0) return ""
+    val nowMillis = System.currentTimeMillis()
+    val thenMillis = epochSeconds * 1000
+    val diff = nowMillis - thenMillis
+    return when {
+        diff < 60_000 -> "now"
+        diff < 3_600_000 -> "${diff / 60_000}m"
+        diff < 86_400_000 -> "${diff / 3_600_000}h"
+        diff < 7 * 86_400_000L -> SimpleDateFormat("EEE", Locale.getDefault()).format(Date(thenMillis))
+        else -> SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(thenMillis))
+    }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_000_000 -> "${bytes / 1_000_000} MB"
+    bytes >= 1_000 -> "${bytes / 1_000} KB"
+    else -> "$bytes B"
 }
 
 private fun android.content.Context.displayNameFor(uri: Uri): String {
@@ -975,7 +1819,7 @@ private fun Intent.toOAuthCallbackUrl(): String? {
 
 private fun coreStatus(coreInitJson: String): String {
     return if (MeronCoreNative.isLoaded()) {
-        "Rust core loaded: protocol ${MeronCoreNative.protocolVersion()}\nShared protocol: ${SharedMobileContract.protocolVersion}\nInit: $coreInitJson\nPing: ${MeronCoreNative.pingJson()}"
+        "Core protocol ${MeronCoreNative.protocolVersion()} · shared ${SharedMobileContract.protocolVersion}"
     } else {
         "Rust core not packaged yet; using Java fallback."
     }

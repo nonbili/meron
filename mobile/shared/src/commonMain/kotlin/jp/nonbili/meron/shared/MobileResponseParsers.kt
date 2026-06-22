@@ -13,6 +13,10 @@ fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
             engine = item.findJsonStringProperty("engine").orEmpty(),
             provider = item.findJsonStringProperty("provider").orEmpty(),
             authType = item.findJsonStringProperty("auth_type").orEmpty(),
+            imapHost = item.findJsonStringProperty("imap_host").orEmpty(),
+            imapPort = item.findJsonLongProperty("imap_port")?.toInt() ?: 0,
+            smtpHost = item.findJsonStringProperty("smtp_host").orEmpty(),
+            smtpPort = item.findJsonLongProperty("smtp_port")?.toInt() ?: 0,
         )
     }
 }

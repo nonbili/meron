@@ -8,6 +8,10 @@ data class AccountSummary(
     val engine: String = "",
     val provider: String = "",
     val authType: String = "",
+    val imapHost: String = "",
+    val imapPort: Int = 0,
+    val smtpHost: String = "",
+    val smtpPort: Int = 0,
 )
 
 data class FolderSummary(

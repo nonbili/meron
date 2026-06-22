@@ -44,7 +44,7 @@ pub extern "C" fn meron_core_protocol_version() -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn Java_im_meron_mobile_MeronCoreNative_meronCoreProtocolVersion(
+pub extern "C" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreProtocolVersion(
     _env: *mut c_void,
     _class: *mut c_void,
 ) -> c_int {
@@ -52,7 +52,7 @@ pub extern "C" fn Java_im_meron_mobile_MeronCoreNative_meronCoreProtocolVersion(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreInvokeJson(
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInvokeJson(
     mut env: JNIEnv,
     _class: JClass,
     request: JString,
@@ -71,7 +71,7 @@ pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreInvokeJson(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreInitJson(
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJson(
     mut env: JNIEnv,
     _class: JClass,
     data_dir: JString,
@@ -90,7 +90,7 @@ pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreInitJson(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreRegisterEventCallback(
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreRegisterEventCallback(
     env: JNIEnv,
     _class: JClass,
 ) {
@@ -102,7 +102,7 @@ pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreRegisterEve
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreUnregisterEventCallback(
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreUnregisterEventCallback(
     _env: JNIEnv,
     _class: JClass,
 ) {
@@ -110,7 +110,7 @@ pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreUnregisterE
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_im_meron_mobile_MeronCoreNative_meronCoreEmitReadyEvent(
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreEmitReadyEvent(
     _env: JNIEnv,
     _class: JClass,
 ) -> jboolean {

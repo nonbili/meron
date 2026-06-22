@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::imap::{self, Creds, MessageHeader};
 use crate::parse::Message;
 use crate::rss;
-use crate::secrets::{self, Secrets};
+use crate::secrets::Secrets;
 use crate::smtp::{self, AttachmentInput};
 use crate::store::{self, AccountMeta};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -141,9 +141,7 @@ fn list_mobile_accounts(data_dir: &str) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .and_then(|id| {
                     let mut creds = creds_by_id.get(id)?.clone();
-                    if let Ok(stored) = secrets::load(id) {
-                        stored.apply_to(&mut creds);
-                    }
+                    load_mobile_secret(&conn, id).apply_to(&mut creds);
                     Some(account_needs_reconnect(&creds))
                 })
                 .unwrap_or(true);
@@ -204,7 +202,7 @@ fn add_mobile_password_account(data_dir: &str, params: &Value) -> Result<Value, 
 
     with_mobile_db(data_dir, |conn| {
         store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
-        secrets::store(&id, &Secrets::from_creds(&creds)).map_err(|err| format!("{err:#}"))?;
+        store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
             .map_err(|err| err.to_string())?
             .into_iter()
@@ -296,7 +294,7 @@ fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result<Value, Str
 
     with_mobile_db(data_dir, |conn| {
         store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
-        secrets::store(&id, &Secrets::from_creds(&creds)).map_err(|err| format!("{err:#}"))?;
+        store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
             .map_err(|err| err.to_string())?
             .into_iter()
@@ -740,6 +738,65 @@ fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
                 .map_err(|err| err.to_string())?
         };
 
+        // Mobile sync stores headers only, so the first time a thread is opened
+        // its message bodies aren't cached yet. Fetch them on demand from IMAP
+        // (grouped by folder), cache them, then render. Best-effort: a fetch
+        // failure still renders whatever is cached.
+        let mut missing: std::collections::BTreeMap<String, Vec<u32>> =
+            std::collections::BTreeMap::new();
+        for header in &headers {
+            if header.uid == 0 {
+                continue;
+            }
+            let folder = if header.folder.is_empty() {
+                parsed.folder.clone()
+            } else {
+                header.folder.clone()
+            };
+            let cached =
+                store::has_cached_body(&conn, &parsed.account, &folder, header.uid).unwrap_or(false);
+            if !cached {
+                missing.entry(folder).or_default().push(header.uid);
+            }
+        }
+        if !missing.is_empty() {
+            if let Ok(creds) = load_mobile_account_creds(&conn, &parsed.account) {
+                if !account_needs_reconnect(&creds) {
+                    let media_root = std::path::PathBuf::from(data_dir).join("attachments");
+                    let fetched = run_mobile_async(async {
+                        let mut session = imap::connect(&creds).await?;
+                        let mut all = Vec::new();
+                        for (folder, uids) in &missing {
+                            let bodies = imap::fetch_bodies(
+                                &mut session,
+                                folder,
+                                uids,
+                                media_root.clone(),
+                                &parsed.account,
+                            )
+                            .await?;
+                            for (uid, message) in bodies {
+                                all.push((folder.clone(), uid, message));
+                            }
+                        }
+                        let _ = session.logout().await;
+                        anyhow::Ok(all)
+                    });
+                    if let Ok(fetched) = fetched {
+                        for (folder, uid, message) in fetched {
+                            let _ = store::save_cached_message(
+                                &conn,
+                                &parsed.account,
+                                &folder,
+                                uid,
+                                &message,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         let messages = headers
             .into_iter()
             .filter_map(|header| {
@@ -1075,6 +1132,27 @@ fn account_needs_reconnect(creds: &Creds) -> bool {
     }
 }
 
+/// Mobile secret persistence. Unlike desktop (OS keychain via `secrets`),
+/// mobile has no keychain, so the per-account secret blob lives in the
+/// app-private SQLite DB. Keep these the only secret read/write on the mobile
+/// path so password/token persistence stays consistent.
+fn store_mobile_secret(
+    conn: &rusqlite::Connection,
+    account_id: &str,
+    creds: &Creds,
+) -> Result<(), String> {
+    let blob = serde_json::to_string(&Secrets::from_creds(creds)).map_err(|err| err.to_string())?;
+    store::upsert_secret(conn, account_id, &blob).map_err(|err| err.to_string())
+}
+
+fn load_mobile_secret(conn: &rusqlite::Connection, account_id: &str) -> Secrets {
+    store::load_secret(conn, account_id)
+        .ok()
+        .flatten()
+        .and_then(|blob| serde_json::from_str::<Secrets>(&blob).ok())
+        .unwrap_or_default()
+}
+
 fn load_mobile_account_creds(
     conn: &rusqlite::Connection,
     account_id: &str,
@@ -1085,9 +1163,7 @@ fn load_mobile_account_creds(
         .find(|(id, _)| id == account_id)
         .map(|(_, creds)| creds)
         .ok_or_else(|| format!("account not found: {account_id}"))?;
-    secrets::load(account_id)
-        .map_err(|err| format!("{err:#}"))?
-        .apply_to(&mut creds);
+    load_mobile_secret(conn, account_id).apply_to(&mut creds);
     Ok(creds)
 }
 
@@ -1528,7 +1604,6 @@ mod tests {
         assert_eq!(listed["result"]["accounts"][0]["id"], email.as_str());
         assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false);
 
-        let _ = secrets::delete(&email);
         let _ = std::fs::remove_dir_all(data_dir);
     }
 
@@ -1562,7 +1637,6 @@ mod tests {
         assert_eq!(listed["result"]["accounts"][0]["id"], email.as_str());
         assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false);
 
-        let _ = secrets::delete(&email);
         let _ = std::fs::remove_dir_all(data_dir);
     }
 
@@ -1590,7 +1664,6 @@ mod tests {
         assert_eq!(listed["result"]["accounts"][0]["id"], email.as_str(), "{listed}");
         assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false, "{listed}");
 
-        let _ = secrets::delete(&email);
         let _ = std::fs::remove_dir_all(data_dir);
     }
 

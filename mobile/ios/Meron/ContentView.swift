@@ -67,355 +67,379 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Shared Core Contract") {
-                    LabeledContent("Expected protocol", value: "\(protocolVersion)")
-                    LabeledContent("Rust protocol", value: "\(rustProtocolVersion)")
-                    LabeledContent("Command", value: MobileCommand.shared.ThreadList)
-                }
+        TabView {
+            NavigationStack {
+                mailView
+                    .navigationTitle(selectedCoreFolder.isEmpty ? "Inbox" : selectedCoreFolder.capitalized)
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("Mail", systemImage: "tray") }
 
-                Section("Rust Init") {
-                    Text(rustInitJson)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
-                }
+            NavigationStack {
+                composeView
+                    .navigationTitle("Compose")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("Compose", systemImage: "square.and.pencil") }
 
-                Section("Rust Ping") {
-                    Text(rustPingJson)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
+            NavigationStack {
+                accountsView
+                    .navigationTitle("Accounts")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
+        }
+        .onOpenURL { url in
+            if OAuthFlowKt.isOAuthCallbackUrl(rawUrl: url.absoluteString, redirectUri: oauthRedirectUri) {
+                handleOAuthCallback(url)
+            } else {
+                mailtoDraft = MailtoKt.parseMailtoUrl(rawUrl: url.absoluteString)
+                if let draft = mailtoDraft {
+                    applyMailtoDraftToCompose(
+                        draft,
+                        to: &composeTo,
+                        cc: &composeCc,
+                        bcc: &composeBcc,
+                        subject: &composeSubject,
+                        body: &composeBody
+                    )
                 }
+            }
+        }
+        .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.item]) { result in
+            switch result {
+            case .success(let url):
+                addAttachment(from: url)
+            case .failure(let error):
+                attachmentError = error.localizedDescription
+            }
+        }
+    }
 
-                Section("Rust Events") {
-                    ForEach(rustReadyEvents, id: \.self) { event in
-                        Text(event)
-                            .font(.system(.footnote, design: .monospaced))
-                            .textSelection(.enabled)
-                    }
+    private var mailView: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(coreAccounts.isEmpty ? "Connect your mail" : accountStatus)
+                        .font(.headline)
+                    Text(coreAccounts.isEmpty ? "Add an account from the Accounts tab to load your inbox." : "Read, triage, and reply from the selected mailbox.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
+            }
 
-                Section("Generated Request") {
-                    Text(threadListJson)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
+            if coreAccounts.isEmpty {
+                Section {
+                    Label("No accounts configured", systemImage: "tray")
+                        .foregroundStyle(.secondary)
                 }
-
-                Section("Background Refresh") {
-                    Button {
-                        IosBackgroundRefresh.runOnce { summary in
-                            backgroundRefreshStatus = summary
+            } else {
+                Section("Mailbox") {
+                    Picker("Account", selection: $selectedCoreAccountId) {
+                        ForEach(coreAccounts, id: \.id) { account in
+                            Text(account.displayName.isEmpty ? (account.email.isEmpty ? account.id : account.email) : account.displayName)
+                                .tag(account.id)
                         }
-                    } label: {
-                        Label("Run Background Refresh", systemImage: "arrow.clockwise")
                     }
-                    Button {
-                        IosNotificationService.requestAuthorization { granted in
-                            notificationStatus = granted ? "Notifications enabled." : "Notifications disabled."
-                        }
-                    } label: {
-                        Label("Enable Notifications", systemImage: "bell")
+                    .onChange(of: selectedCoreAccountId) { _, _ in
+                        selectedCoreFolder = "inbox"
+                        coreFolders = []
+                        coreThreads = []
+                        selectedCoreThread = nil
+                        coreMessages = []
                     }
-                    LabeledContent("Refresh", value: backgroundRefreshStatus)
-                    LabeledContent("Notifications", value: notificationStatus)
-                }
 
-                Section("Accounts") {
-                    TextField("Email", text: $accountEmail)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("Password", text: $accountPassword)
-                    TextField("Display name", text: $accountDisplayName)
-                    TextField("Sender name", text: $accountSenderName)
-                    TextField("IMAP host", text: $imapHost)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("IMAP port", text: $imapPort)
-                        .keyboardType(.numberPad)
-                    TextField("SMTP host", text: $smtpHost)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("SMTP port", text: $smtpPort)
-                        .keyboardType(.numberPad)
-                    Button {
-                        addPasswordAccount()
-                    } label: {
-                        Label("Add Password Account", systemImage: "person.badge.plus")
-                    }
-                    Picker("OAuth Provider", selection: $oauthProvider) {
-                        Text("Gmail").tag("gmail")
-                        Text("Outlook").tag("outlook")
-                    }
-                    .pickerStyle(.segmented)
-                    TextField("OAuth email", text: $oauthEmail)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("OAuth client ID", text: $oauthClientId)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("OAuth client secret (optional)", text: $oauthClientSecret)
-                    TextField("Redirect URI", text: $oauthRedirectUri)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Button {
-                        launchOAuthFlow()
-                    } label: {
-                        Label("Open OAuth in Browser", systemImage: "safari")
-                    }
-                    if !oauthAuthorizationCode.isEmpty {
-                        LabeledContent("Authorization Code", value: oauthAuthorizationCode)
-                    }
-                    Button {
-                        exchangeOAuthCode()
-                    } label: {
-                        Label("Exchange Code And Add Account", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    TextField("Access token", text: $oauthAccessToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("Refresh token", text: $oauthRefreshToken)
-                    TextField("Token expires at", text: $oauthExpiresAt)
-                        .keyboardType(.numberPad)
-                    Button {
-                        addOAuthAccount()
-                    } label: {
-                        Label("Add OAuth Account", systemImage: "person.crop.circle.badge.checkmark")
-                    }
-                    TextField("RSS feed URL", text: $rssFeedUrl)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("RSS name", text: $rssDisplayName)
-                    Button {
-                        addRssAccount()
-                    } label: {
-                        Label("Add RSS Account", systemImage: "dot.radiowaves.left.and.right")
-                    }
-                    Button {
-                        listAccounts()
-                    } label: {
-                        Label("List Accounts", systemImage: "list.bullet")
-                    }
-                    if !coreAccounts.isEmpty {
-                        Picker("Selected Account", selection: $selectedCoreAccountId) {
-                            ForEach(coreAccounts, id: \.id) { account in
-                                Text(account.displayName.isEmpty ? (account.email.isEmpty ? account.id : account.email) : account.displayName)
-                                    .tag(account.id)
+                    if !coreFolders.isEmpty {
+                        Picker("Folder", selection: $selectedCoreFolder) {
+                            ForEach(coreFolders, id: \.name) { folder in
+                                Text(folder.unread > 0 ? "\(folder.name) (\(folder.unread))" : folder.name)
+                                    .tag(folder.name)
                             }
                         }
-                        .onChange(of: selectedCoreAccountId) { _, _ in
-                            selectedCoreFolder = "inbox"
-                            coreFolders = []
-                            coreThreads = []
+                        .onChange(of: selectedCoreFolder) { _, _ in
                             selectedCoreThread = nil
                             coreMessages = []
                         }
-                        if !coreFolders.isEmpty {
-                            Picker("Selected Folder", selection: $selectedCoreFolder) {
-                                ForEach(coreFolders, id: \.name) { folder in
-                                    Text(folder.unread > 0 ? "\(folder.name) (\(folder.unread))" : folder.name)
-                                        .tag(folder.name)
+                    }
+
+                    Button {
+                        syncSelectedAccount()
+                    } label: {
+                        Label("Sync Mailbox", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+
+            Section("Inbox") {
+                if coreThreads.isEmpty {
+                    Text("Sync the selected mailbox to load cached threads.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(coreThreads, id: \.id) { thread in
+                        ThreadRow(thread: thread) {
+                            readThread(thread)
+                        } actions: {
+                            Button(thread.unread ? "Mark Read" : "Mark Unread") {
+                                markThreadRead(thread, seen: thread.unread)
+                            }
+                            Button(thread.starred ? "Unstar" : "Star") {
+                                markThreadStarred(thread, starred: !thread.starred)
+                            }
+                            if isRssThread(thread) {
+                                Button("Remove Feed", role: .destructive) {
+                                    removeRssFeed(thread)
+                                }
+                            } else {
+                                Button("Archive") {
+                                    archiveThread(thread)
+                                }
+                                Button("Delete", role: .destructive) {
+                                    deleteThread(thread)
                                 }
                             }
-                            .onChange(of: selectedCoreFolder) { _, _ in
-                                selectedCoreThread = nil
-                                coreMessages = []
-                            }
-                        }
-                        Button {
-                            syncSelectedAccount()
-                        } label: {
-                            Label("Sync Selected Account/Folder", systemImage: "tray.and.arrow.down")
                         }
                     }
-                    LabeledContent("Status", value: accountStatus)
-                    if !accountJson.isEmpty {
+                }
+            }
+
+            Section("Conversation") {
+                if let selectedCoreThread {
+                    Text(selectedCoreThread.subject.isEmpty ? selectedCoreThread.id : selectedCoreThread.subject)
+                        .font(.headline)
+                }
+
+                if coreMessages.isEmpty {
+                    Text("Open a thread to read cached messages.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(coreMessages, id: \.id) { message in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(message.subject.isEmpty ? "(no subject)" : message.subject)
+                                .font(.headline)
+                            Text(message.from)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(message.body)
+                                .font(.body)
+                                .textSelection(.enabled)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    if let selectedCoreThread, !isRssThread(selectedCoreThread) {
+                        TextEditor(text: $quickReplyBody)
+                            .frame(minHeight: 90)
+                        Button {
+                            sendQuickReply()
+                        } label: {
+                            Label("Send Reply", systemImage: "arrowshape.turn.up.left")
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private var composeView: some View {
+        List {
+            Section {
+                TextField("To", text: $composeTo)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("Cc", text: $composeCc)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("Bcc", text: $composeBcc)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("Subject", text: $composeSubject)
+                TextEditor(text: $composeBody)
+                    .frame(minHeight: 220)
+            }
+
+            Section("Attachments") {
+                Button {
+                    isFileImporterPresented = true
+                } label: {
+                    Label("Attach File", systemImage: "paperclip")
+                }
+                if let attachmentError {
+                    Text(attachmentError)
+                        .foregroundStyle(.red)
+                }
+                if attachments.isEmpty {
+                    Text("No attachments selected.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(attachments, id: \.id) { attachment in
+                        VStack(alignment: .leading) {
+                            Text(attachment.displayName)
+                            Text("\(attachment.sizeBytes) bytes")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("Clear Attachments", role: .destructive) {
+                        attachments = []
+                    }
+                }
+            }
+
+            Section {
+                if let draft = mailtoDraft {
+                    Text("Loaded mailto draft for \(draft.to)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    sendCoreMail()
+                } label: {
+                    Label("Send Message", systemImage: "paperplane.fill")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private var accountsView: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(accountStatus)
+                        .font(.headline)
+                    Text("Manage providers, background refresh, and core diagnostics.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Background Refresh") {
+                Button {
+                    IosBackgroundRefresh.runOnce { summary in
+                        backgroundRefreshStatus = summary
+                    }
+                } label: {
+                    Label("Run Background Refresh", systemImage: "arrow.clockwise")
+                }
+                Button {
+                    IosNotificationService.requestAuthorization { granted in
+                        notificationStatus = granted ? "Notifications enabled." : "Notifications disabled."
+                    }
+                } label: {
+                    Label("Enable Notifications", systemImage: "bell")
+                }
+                LabeledContent("Refresh", value: backgroundRefreshStatus)
+                LabeledContent("Notifications", value: notificationStatus)
+            }
+
+            Section("Password Account") {
+                TextField("Email", text: $accountEmail)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("Password", text: $accountPassword)
+                TextField("Display name", text: $accountDisplayName)
+                TextField("Sender name", text: $accountSenderName)
+                TextField("IMAP host", text: $imapHost)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("IMAP port", text: $imapPort)
+                    .keyboardType(.numberPad)
+                TextField("SMTP host", text: $smtpHost)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("SMTP port", text: $smtpPort)
+                    .keyboardType(.numberPad)
+                Button {
+                    addPasswordAccount()
+                } label: {
+                    Label("Add Password Account", systemImage: "person.badge.plus")
+                }
+                Button {
+                    listAccounts()
+                } label: {
+                    Label("Reload Accounts", systemImage: "list.bullet")
+                }
+            }
+
+            Section("OAuth") {
+                Picker("Provider", selection: $oauthProvider) {
+                    Text("Gmail").tag("gmail")
+                    Text("Outlook").tag("outlook")
+                }
+                .pickerStyle(.segmented)
+                TextField("OAuth email", text: $oauthEmail)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("OAuth client ID", text: $oauthClientId)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("OAuth client secret (optional)", text: $oauthClientSecret)
+                TextField("Redirect URI", text: $oauthRedirectUri)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button {
+                    launchOAuthFlow()
+                } label: {
+                    Label("Open OAuth in Browser", systemImage: "safari")
+                }
+                if !oauthAuthorizationCode.isEmpty {
+                    LabeledContent("Authorization Code", value: oauthAuthorizationCode)
+                }
+                Button {
+                    exchangeOAuthCode()
+                } label: {
+                    Label("Exchange Code And Add Account", systemImage: "arrow.triangle.2.circlepath")
+                }
+                TextField("Access token", text: $oauthAccessToken)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("Refresh token", text: $oauthRefreshToken)
+                TextField("Token expires at", text: $oauthExpiresAt)
+                    .keyboardType(.numberPad)
+                Button {
+                    addOAuthAccount()
+                } label: {
+                    Label("Add OAuth Account", systemImage: "person.crop.circle.badge.checkmark")
+                }
+            }
+
+            Section("RSS") {
+                TextField("RSS feed URL", text: $rssFeedUrl)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("RSS name", text: $rssDisplayName)
+                Button {
+                    addRssAccount()
+                } label: {
+                    Label("Add RSS Account", systemImage: "dot.radiowaves.left.and.right")
+                }
+            }
+
+            Section("Diagnostics") {
+                DisclosureGroup("Core contract") {
+                    LabeledContent("Expected protocol", value: "\(protocolVersion)")
+                    LabeledContent("Rust protocol", value: "\(rustProtocolVersion)")
+                    LabeledContent("Command", value: MobileCommand.shared.ThreadList)
+                    DiagnosticText(title: "Init", value: rustInitJson)
+                    DiagnosticText(title: "Ping", value: rustPingJson)
+                    DiagnosticText(title: "Generated request", value: threadListJson)
+                    ForEach(rustReadyEvents, id: \.self) { event in
+                        DiagnosticText(title: "Event", value: event)
+                    }
+                }
+                if !accountJson.isEmpty {
+                    DisclosureGroup("Last core response") {
                         Text(accountJson)
                             .font(.system(.footnote, design: .monospaced))
                             .textSelection(.enabled)
                     }
                 }
-
-                Section("Core Threads") {
-                    if coreThreads.isEmpty {
-                        Text("Sync a selected account to load cached core threads.")
-                    } else {
-                        ForEach(coreThreads, id: \.id) { thread in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(thread.sender.isEmpty ? thread.accountId : thread.sender)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    if thread.unread {
-                                        Text("Unread")
-                                            .font(.caption)
-                                    }
-                                    if thread.starred {
-                                        Text("Starred")
-                                            .font(.caption)
-                                    }
-                                }
-                                Text(thread.subject.isEmpty ? "(no subject)" : thread.subject)
-                                    .font(.headline)
-                                if !thread.preview.isEmpty {
-                                    Text(thread.preview)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
-                                Text(thread.folder)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                HStack {
-                                    Button("Open") {
-                                        readThread(thread)
-                                    }
-                                    Button(thread.unread ? "Read" : "Unread") {
-                                        markThreadRead(thread, seen: thread.unread)
-                                    }
-                                    Button(thread.starred ? "Unstar" : "Star") {
-                                        markThreadStarred(thread, starred: !thread.starred)
-                                    }
-                                    if isRssThread(thread) {
-                                        Button("Remove Feed", role: .destructive) {
-                                            removeRssFeed(thread)
-                                        }
-                                    } else {
-                                        Button("Archive") {
-                                            archiveThread(thread)
-                                        }
-                                        Button("Delete", role: .destructive) {
-                                            deleteThread(thread)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                    }
-                }
-
-                Section("Messages") {
-                    if let selectedCoreThread {
-                        LabeledContent("Thread", value: selectedCoreThread.subject.isEmpty ? selectedCoreThread.id : selectedCoreThread.subject)
-                    }
-                    if coreMessages.isEmpty {
-                        Text("Open a core thread to read cached messages.")
-                    } else {
-                        ForEach(coreMessages, id: \.id) { message in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(message.subject.isEmpty ? "(no subject)" : message.subject)
-                                    .font(.headline)
-                                Text("From: \(message.from)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("To: \(message.to)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(message.body)
-                                    .font(.body)
-                                    .textSelection(.enabled)
-                            }
-                        }
-                        if let selectedCoreThread, !isRssThread(selectedCoreThread) {
-                            TextEditor(text: $quickReplyBody)
-                                .frame(minHeight: 90)
-                            Button {
-                                sendQuickReply()
-                            } label: {
-                                Label("Send Quick Reply", systemImage: "arrowshape.turn.up.left")
-                            }
-                        }
-                    }
-                }
-
-                Section("Compose") {
-                    TextField("To", text: $composeTo)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Cc", text: $composeCc)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Bcc", text: $composeBcc)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Subject", text: $composeSubject)
-                    TextEditor(text: $composeBody)
-                        .frame(minHeight: 120)
-                    if let draft = mailtoDraft {
-                        Text("Loaded mailto draft for \(draft.to)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Open a mailto: link to prefill compose.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button {
-                        sendCoreMail()
-                    } label: {
-                        Label("Send Through Core", systemImage: "paperplane")
-                    }
-                }
-
-                Section("Attachments") {
-                    Button {
-                        isFileImporterPresented = true
-                    } label: {
-                        Label("Attach File", systemImage: "paperclip")
-                    }
-                    if let attachmentError {
-                        Text(attachmentError)
-                            .foregroundStyle(.red)
-                    }
-                    if attachments.isEmpty {
-                        Text("No attachments selected.")
-                    } else {
-                        ForEach(attachments, id: \.id) { attachment in
-                            VStack(alignment: .leading) {
-                                Text(attachment.displayName)
-                                Text("\(attachment.sizeBytes) bytes")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Button("Clear Attachments", role: .destructive) {
-                            attachments = []
-                        }
-                    }
-                }
-
-                Section("Provider Registration") {
-                    Label("Use registered Gmail/Outlook mobile client IDs and exact redirect URIs.", systemImage: "safari")
-                }
-            }
-            .navigationTitle("Meron")
-            .onOpenURL { url in
-                if OAuthFlowKt.isOAuthCallbackUrl(rawUrl: url.absoluteString, redirectUri: oauthRedirectUri) {
-                    handleOAuthCallback(url)
-                } else {
-                    mailtoDraft = MailtoKt.parseMailtoUrl(rawUrl: url.absoluteString)
-                    if let draft = mailtoDraft {
-                        applyMailtoDraftToCompose(
-                            draft,
-                            to: &composeTo,
-                            cc: &composeCc,
-                            bcc: &composeBcc,
-                            subject: &composeSubject,
-                            body: &composeBody
-                        )
-                    }
-                }
-            }
-            .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.item]) { result in
-                switch result {
-                case .success(let url):
-                    addAttachment(from: url)
-                case .failure(let error):
-                    attachmentError = error.localizedDescription
-                }
+                Label("Use registered Gmail/Outlook mobile client IDs and exact redirect URIs.", systemImage: "safari")
             }
         }
+        .listStyle(.insetGrouped)
     }
 
     private func listAccounts() {
@@ -799,6 +823,70 @@ struct ContentView: View {
             attachmentError = nil
         } catch {
             attachmentError = error.localizedDescription
+        }
+    }
+}
+
+private struct ThreadRow<Actions: View>: View {
+    let thread: ThreadSummary
+    let onOpen: () -> Void
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(thread.sender.isEmpty ? thread.accountId : thread.sender)
+                        .font(.subheadline.weight(thread.unread ? .semibold : .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    if thread.unread {
+                        Text("Unread")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.tint)
+                    }
+                    if thread.starred {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                    }
+                }
+                Text(thread.subject.isEmpty ? "(no subject)" : thread.subject)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                if !thread.preview.isEmpty {
+                    Text(thread.preview)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Text(thread.folder)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            actions()
+        }
+    }
+}
+
+private struct DiagnosticText: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.footnote, design: .monospaced))
+                .textSelection(.enabled)
         }
     }
 }

@@ -1187,6 +1187,33 @@ pub async fn fetch_full_message(
     Ok(raw.map(|bytes| parse::parse_message(&bytes, Some(media))))
 }
 
+/// Select `folder` and fetch full bodies for `uids`, parsing each into a
+/// `Message`. Used by the mobile thread reader, which (unlike desktop) does not
+/// warm bodies during sync, so opening a thread fetches its bodies on demand.
+/// `peek` so reading doesn't flip server-side `\Seen`.
+pub async fn fetch_bodies(
+    session: &mut Session,
+    folder: &str,
+    uids: &[u32],
+    media_root: std::path::PathBuf,
+    account: &str,
+) -> Result<Vec<(u32, parse::Message)>> {
+    session.select(folder).await.context("SELECT")?;
+    let mut out = Vec::new();
+    for &uid in uids {
+        let media = parse::MediaCtx {
+            root: media_root.clone(),
+            account: account.to_string(),
+            folder: folder.to_string(),
+            uid,
+        };
+        if let Some(message) = fetch_full_message(session, uid, &media, true).await? {
+            out.push((uid, message));
+        }
+    }
+    Ok(out)
+}
+
 /// UIDs worth prefetching full bodies for in `folder`: messages that are both
 /// unread *and* received within the last `days` days. The two criteria are ANDed
 /// (IMAP SEARCH semantics). Uses server-side SEARCH so the set isn't limited to

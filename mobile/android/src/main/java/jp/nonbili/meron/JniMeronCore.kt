@@ -14,7 +14,14 @@ class JniMeronCore : MeronCore {
 
     override suspend fun invoke(command: String, payloadJson: String): String {
         ensureLoaded()
-        return MeronCoreNative.invokeJson(CoreRequest(1, command, payloadJson).toJson())
+        // Log command names and errors only — never payloads/responses, which
+        // carry passwords and OAuth tokens.
+        android.util.Log.i("MeronCore", "-> $command")
+        val response = MeronCoreNative.invokeJson(CoreRequest(1, command, payloadJson).toJson())
+        if (response.contains("\"error\"")) {
+            android.util.Log.w("MeronCore", "<- $command error: ${response.take(300)}")
+        }
+        return response
     }
 
     override fun events(): CoreEventStream = eventStream

@@ -452,6 +452,39 @@ pub fn scrub_account_secrets(_conn: &Connection, _id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Mobile secret storage (no OS keychain). Persists a per-account JSON secret
+/// blob in the app-private DB. Desktop uses the `secrets` keychain module
+/// instead; these are only called from the mobile FFI path in `protocol.rs`.
+#[allow(dead_code)]
+pub fn upsert_secret(conn: &Connection, account_id: &str, blob: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO account_secrets(account_id, blob) VALUES(?1, ?2)
+         ON CONFLICT(account_id) DO UPDATE SET blob = excluded.blob",
+        params![account_id, blob],
+    )?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn load_secret(conn: &Connection, account_id: &str) -> Result<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT blob FROM account_secrets WHERE account_id = ?1",
+            params![account_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?)
+}
+
+#[allow(dead_code)]
+pub fn delete_secret(conn: &Connection, account_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM account_secrets WHERE account_id = ?1",
+        params![account_id],
+    )?;
+    Ok(())
+}
+
 /// Remove an account and all of its cached state (mail folders/messages and rss
 /// subscriptions/items) from the DB.
 pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
@@ -461,6 +494,7 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
     tx.execute("DELETE FROM messages WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM folder_state WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM subscriptions WHERE account = ?1", params![id])?;
+    tx.execute("DELETE FROM account_secrets WHERE account_id = ?1", params![id])?;
     tx.commit()?;
     Ok(())
 }
