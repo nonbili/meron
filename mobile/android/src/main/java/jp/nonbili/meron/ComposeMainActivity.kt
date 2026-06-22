@@ -591,11 +591,17 @@ private fun MeronMobileScreen(
         client: MobileMailCommandClient,
         account: AccountSummary,
         requestedFolder: String,
+        syncFirst: Boolean = true,
     ): MailboxLoadResult {
-        if (accountSummaryIsRss(account)) {
-            client.syncRss(SyncRssParams(accountId = account.id))
-        } else {
-            client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 50, folders = true))
+        // When syncFirst is false we read whatever the local (encrypted) store
+        // already has — used on startup so the inbox shows instantly without a
+        // server round-trip. Pull-to-sync / "Sync now" still fetch from server.
+        if (syncFirst) {
+            if (accountSummaryIsRss(account)) {
+                client.syncRss(SyncRssParams(accountId = account.id))
+            } else {
+                client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 50, folders = true))
+            }
         }
         val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
         val folders = parseFolderListResponse(foldersJson)
@@ -715,7 +721,7 @@ private fun MeronMobileScreen(
         board.columns.forEach { column -> loadKanbanColumn(column, refresh) }
     }
 
-    fun syncCoreThreads(accountOverride: String? = null, folderOverride: String? = null) {
+    fun syncCoreThreads(accountOverride: String? = null, folderOverride: String? = null, syncFirst: Boolean = true) {
         if (!MeronCoreNative.isLoaded()) {
             status = "Rust core not packaged."
             return
@@ -738,7 +744,7 @@ private fun MeronMobileScreen(
                     val client = MobileMailCommandClient(JniMeronCore())
                     if (accountId == UNIFIED_ACCOUNT_ID) {
                         val results = selectedAccounts.map { account ->
-                            loadAccountInbox(client, account, INBOX_FOLDER)
+                            loadAccountInbox(client, account, INBOX_FOLDER, syncFirst = syncFirst)
                         }
                         MailboxLoadResult(
                             folders = results.flatMap { it.folders },
@@ -746,7 +752,7 @@ private fun MeronMobileScreen(
                             threads = results.flatMap { it.threads }.sortedByDescending { it.dateEpochSeconds },
                         )
                     } else {
-                        loadAccountInbox(client, selectedAccounts.first(), requestedFolder)
+                        loadAccountInbox(client, selectedAccounts.first(), requestedFolder, syncFirst = syncFirst)
                     }
                 }
             }.onSuccess { result ->
@@ -1129,6 +1135,15 @@ private fun MeronMobileScreen(
     LaunchedEffect(Unit) {
         if (MeronCoreNative.isLoaded() && coreAccounts.isEmpty()) {
             listAccounts()
+        }
+    }
+
+    // Once accounts are known, surface whatever the local store already holds so
+    // a cold start shows the cached inbox instead of an empty "Nothing here yet".
+    // A server sync still happens on pull-to-refresh / "Sync now".
+    LaunchedEffect(coreAccounts) {
+        if (coreAccounts.isNotEmpty() && coreThreads.isEmpty()) {
+            syncCoreThreads(syncFirst = false)
         }
     }
 
