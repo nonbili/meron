@@ -1327,8 +1327,28 @@ where
         return Err("mobile core is not initialized".to_string());
     }
     let db_path = Path::new(data_dir).join("meron.db");
-    let conn = store::open_at(&db_path).map_err(|err| err.to_string())?;
+    let conn = match mobile_db_key() {
+        Some(key) => store::open_at_keyed(&db_path, &key),
+        // No key set (tests/unkeyed init): plaintext, matching prior behavior.
+        None => store::open_at(&db_path),
+    }
+    .map_err(|err| err.to_string())?;
     f(conn)
+}
+
+/// SQLCipher key for the mobile store. The platform host (Android Keystore /
+/// iOS Keychain) owns the key and passes it through the keyed `init` FFI; we
+/// keep it process-global so every `with_mobile_db` opens the encrypted store
+/// without threading the key through every command handler.
+static MOBILE_DB_KEY: Mutex<Option<String>> = Mutex::new(None);
+
+/// Set (or clear, with an empty/`None` key) the mobile store's SQLCipher key.
+pub fn set_mobile_db_key(key: Option<String>) {
+    *MOBILE_DB_KEY.lock().unwrap() = key.filter(|k| !k.is_empty());
+}
+
+fn mobile_db_key() -> Option<String> {
+    MOBILE_DB_KEY.lock().unwrap().clone()
 }
 
 fn with_mobile_db_mutex<F>(data_dir: &str, f: F) -> Result<Value, String>

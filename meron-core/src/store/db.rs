@@ -129,15 +129,32 @@ const BODY_CACHE_VERSION: &str = "1";
 
 pub fn open() -> Result<Connection> {
     let path = db_path();
-    open_at(path)
+    match crate::secrets::db_key()? {
+        Some(key) => open_at_keyed(path, &key),
+        // Keyring disabled (tests/headless): keep the store plaintext as before.
+        None => open_at(path),
+    }
 }
 
+/// Open an unencrypted store. SQLCipher leaves a database untouched until a key
+/// is set, so this stays byte-compatible with pre-encryption databases and is
+/// what tests and the headless/`MERON_KEYRING=off` path use.
 pub fn open_at(path: impl AsRef<Path>) -> Result<Connection> {
-    let path = path.as_ref();
+    open_inner(path.as_ref(), None)
+}
+
+/// Open an encrypted store, keying the connection with `key` (64 hex chars = a
+/// raw 32-byte SQLCipher key). A legacy plaintext database at `path` is migrated
+/// in place to an encrypted one on first keyed open.
+pub fn open_at_keyed(path: impl AsRef<Path>, key: &str) -> Result<Connection> {
+    open_inner(path.as_ref(), Some(key))
+}
+
+fn open_inner(path: &Path, key: Option<&str>) -> Result<Connection> {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let conn = Connection::open(&path).with_context(|| format!("open db {}", path.display()))?;
+    let conn = open_keyed_connection(path, key)?;
     // WAL + synchronous=NORMAL is the durable-but-fast desktop combo; busy_timeout
     // avoids spurious SQLITE_BUSY now that a reader can overlap a writer under WAL.
     conn.execute_batch(
@@ -153,6 +170,97 @@ pub fn open_at(path: impl AsRef<Path>) -> Result<Connection> {
     run_migrations(&conn).context("run migrations")?;
     invalidate_body_cache_if_needed(&conn)?;
     Ok(conn)
+}
+
+/// Opens `path` and applies the SQLCipher `key` (if any). When the key is set
+/// but the file turns out to be an unencrypted legacy database, it is migrated
+/// in place to an encrypted database before returning.
+fn open_keyed_connection(path: &Path, key: Option<&str>) -> Result<Connection> {
+    let conn = Connection::open(path).with_context(|| format!("open db {}", path.display()))?;
+    let Some(key) = key else {
+        return Ok(conn);
+    };
+    apply_key(&conn, key)?;
+    if database_readable(&conn) {
+        return Ok(conn);
+    }
+    // The key didn't unlock the file: it predates encryption and is plaintext
+    // (a wrong/empty file would also land here, but the key is persistent so in
+    // practice this is the one-time legacy-plaintext upgrade). Migrate in place.
+    drop(conn);
+    encrypt_plaintext_db(path, key)
+        .with_context(|| format!("encrypt legacy plaintext db {}", path.display()))?;
+    let conn = Connection::open(path).with_context(|| format!("reopen db {}", path.display()))?;
+    apply_key(&conn, key)?;
+    if !database_readable(&conn) {
+        anyhow::bail!(
+            "database still unreadable after encryption migration: {}",
+            path.display()
+        );
+    }
+    Ok(conn)
+}
+
+/// Apply the raw 32-byte key (as 64 hex chars). Using the raw-key form makes
+/// SQLCipher skip PBKDF2 derivation, so opening is cheap and deterministic.
+fn apply_key(conn: &Connection, key: &str) -> Result<()> {
+    conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\";"))
+        .context("apply sqlcipher key")
+}
+
+/// A cheap probe that succeeds only when the page cipher matches the file: a
+/// plaintext file opened with a key (or a wrong key) fails to decrypt here.
+fn database_readable(conn: &Connection) -> bool {
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .is_ok()
+}
+
+/// One-time upgrade of a plaintext database to an encrypted one. Exports the
+/// plaintext contents into a fresh encrypted sibling via `sqlcipher_export`,
+/// then atomically replaces the original and drops its now-stale WAL/SHM files.
+fn encrypt_plaintext_db(path: &Path, key: &str) -> Result<()> {
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("meron.db");
+    let tmp = path.with_file_name(format!("{file_name}.sqlcipher-migrating"));
+    let _ = std::fs::remove_file(&tmp);
+    {
+        let plain =
+            Connection::open(path).with_context(|| format!("open plaintext {}", path.display()))?;
+        // Fold any WAL frames into the main file so the export sees committed data.
+        let _ = plain.pragma_update(None, "journal_mode", "DELETE");
+        // `sqlcipher_export` copies the schema and rows but not `user_version`,
+        // so carry it across explicitly — otherwise migrations re-run on the
+        // encrypted copy and trip over the already-migrated schema.
+        let user_version: i64 = plain.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        plain
+            .execute_batch(&format!(
+                "ATTACH DATABASE '{}' AS encrypted KEY \"x'{key}'\";
+                 SELECT sqlcipher_export('encrypted');
+                 PRAGMA encrypted.user_version = {user_version};
+                 DETACH DATABASE encrypted;",
+                sql_single_quote(&tmp)
+            ))
+            .context("sqlcipher_export to encrypted db")?;
+    }
+    std::fs::rename(&tmp, path).context("replace plaintext db with encrypted db")?;
+    for suffix in ["-wal", "-shm"] {
+        let _ = std::fs::remove_file(sibling_with_suffix(path, suffix));
+    }
+    Ok(())
+}
+
+fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+fn sql_single_quote(path: &Path) -> String {
+    path.to_string_lossy().replace('\'', "''")
 }
 
 fn db_path() -> PathBuf {
@@ -293,4 +401,63 @@ pub(super) fn invalidate_body_cache_if_needed(conn: &Connection) -> Result<()> {
     meta_set(&tx, "body_cache_version", BODY_CACHE_VERSION)?;
     tx.commit()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    fn tmp_db_path() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("meron-db-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("meron.db")
+    }
+
+    #[test]
+    fn keyed_open_round_trips() {
+        let path = tmp_db_path();
+        {
+            let conn = open_at_keyed(&path, TEST_KEY).unwrap();
+            conn.execute("INSERT INTO settings(key, value) VALUES('k', 'v')", [])
+                .unwrap();
+        }
+        // Reopening with the key sees the data.
+        let conn = open_at_keyed(&path, TEST_KEY).unwrap();
+        let value: String = conn
+            .query_row("SELECT value FROM settings WHERE key='k'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(value, "v");
+        // The on-disk file is encrypted: a plaintext open can't read the schema.
+        assert!(!database_readable(&Connection::open(&path).unwrap()));
+    }
+
+    #[test]
+    fn legacy_plaintext_is_migrated_to_encrypted() {
+        let path = tmp_db_path();
+        // Simulate a pre-encryption store: create it plaintext with some data.
+        {
+            let conn = open_at(&path).unwrap();
+            conn.execute("INSERT INTO settings(key, value) VALUES('k', 'legacy')", [])
+                .unwrap();
+        }
+        assert!(database_readable(&Connection::open(&path).unwrap()));
+
+        // First keyed open migrates the plaintext file in place, preserving data.
+        let conn = open_at_keyed(&path, TEST_KEY).unwrap();
+        let value: String = conn
+            .query_row("SELECT value FROM settings WHERE key='k'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(value, "legacy");
+        drop(conn);
+
+        // The file is now encrypted and still readable with the key on reopen.
+        assert!(!database_readable(&Connection::open(&path).unwrap()));
+        let conn = open_at_keyed(&path, TEST_KEY).unwrap();
+        let value: String = conn
+            .query_row("SELECT value FROM settings WHERE key='k'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(value, "legacy");
+    }
 }

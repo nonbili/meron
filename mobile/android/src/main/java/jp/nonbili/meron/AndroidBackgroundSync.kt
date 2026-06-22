@@ -22,7 +22,7 @@ class AndroidBackgroundSyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         if (!MeronCoreNative.isLoaded()) return Result.success()
-        MeronCoreNative.initJson(applicationContext.filesDir.absolutePath)
+        MeronCoreNative.initJson(applicationContext.filesDir.absolutePath, MeronDbKey.get(applicationContext))
 
         val listResponse = JSONObject(MeronCoreNative.invokeJson(requestJson(1, "account.list")))
         val accounts = listResponse.optJSONObject("result")?.optJSONArray("accounts")

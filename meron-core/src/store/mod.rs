@@ -23,6 +23,11 @@ pub fn open_at(path: impl AsRef<std::path::Path>) -> Result<Connection> {
     db::open_at(path)
 }
 
+#[allow(dead_code)]
+pub fn open_at_keyed(path: impl AsRef<std::path::Path>, key: &str) -> Result<Connection> {
+    db::open_at_keyed(path, key)
+}
+
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) fn run_migrations(conn: &Connection) -> Result<()> {

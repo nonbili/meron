@@ -55,6 +55,11 @@ final class MeronCoreNative {
         return meronCoreInitJson(dataDir);
     }
 
+    static String initJson(String dataDir, String dbKey) {
+        if (!LOADED) return "";
+        return meronCoreInitJsonKeyed(dataDir, dbKey);
+    }
+
     static void addCoreEventListener(CoreEventListener listener) {
         if (!LOADED) return;
         ensureEventCallbackRegistered();
@@ -91,6 +96,7 @@ final class MeronCoreNative {
 
     private static native int meronCoreProtocolVersion();
     private static native String meronCoreInitJson(String dataDir);
+    private static native String meronCoreInitJsonKeyed(String dataDir, String dbKey);
     private static native String meronCoreInvokeJson(String requestJson);
     private static native void meronCoreRegisterEventCallback();
     private static native void meronCoreUnregisterEventCallback();

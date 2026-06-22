@@ -54,7 +54,7 @@ struct ContentView: View {
     @State private var quickReplyBody = ""
 
     init() {
-        rustInitJson = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory())
+        rustInitJson = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory(), dbKey: IosDbKey.get())
         let params = ThreadListParams(
             accountId: "mobile-demo",
             folderId: "inbox",

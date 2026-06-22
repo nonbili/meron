@@ -32,6 +32,8 @@ static ANDROID_EVENT_DISPATCHER: OnceLock<AndroidEventDispatcher> = OnceLock::ne
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MobileConfig {
     data_dir: String,
+    /// SQLCipher key (64 hex chars), or empty for an unencrypted store.
+    db_key: String,
 }
 
 struct AndroidEventDispatcher {
@@ -86,7 +88,37 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJson(
             );
         }
     };
-    java_string(&env, init_mobile_core(&data_dir).to_string())
+    java_string(&env, init_mobile_core(&data_dir, None).to_string())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJsonKeyed(
+    mut env: JNIEnv,
+    _class: JClass,
+    data_dir: JString,
+    db_key: JString,
+) -> jstring {
+    let data_dir = match env.get_string(&data_dir) {
+        Ok(value) => value.to_string_lossy().into_owned(),
+        Err(err) => {
+            return java_string(
+                &env,
+                serde_json::json!({ "error": { "message": format!("bad JNI string: {err}") } })
+                    .to_string(),
+            );
+        }
+    };
+    let db_key = match env.get_string(&db_key) {
+        Ok(value) => value.to_string_lossy().into_owned(),
+        Err(err) => {
+            return java_string(
+                &env,
+                serde_json::json!({ "error": { "message": format!("bad JNI string: {err}") } })
+                    .to_string(),
+            );
+        }
+    };
+    java_string(&env, init_mobile_core(&data_dir, Some(&db_key)).to_string())
 }
 
 #[unsafe(no_mangle)]
@@ -146,7 +178,22 @@ pub unsafe extern "C" fn meron_core_init_json(data_dir: *const c_char) -> *mut c
         }));
     }
     let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
-    json_to_c_string(init_mobile_core(&data_dir))
+    json_to_c_string(init_mobile_core(&data_dir, None))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn meron_core_init_json_keyed(
+    data_dir: *const c_char,
+    db_key: *const c_char,
+) -> *mut c_char {
+    if data_dir.is_null() || db_key.is_null() {
+        return json_to_c_string(serde_json::json!({
+            "error": { "message": "data_dir and db_key pointers are required" }
+        }));
+    }
+    let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
+    let db_key = unsafe { CStr::from_ptr(db_key) }.to_string_lossy();
+    json_to_c_string(init_mobile_core(&data_dir, Some(&db_key)))
 }
 
 /// Registers the mobile host event callback.
@@ -200,14 +247,23 @@ fn json_to_c_string(value: serde_json::Value) -> *mut c_char {
     }
 }
 
-fn init_mobile_core(data_dir: &str) -> serde_json::Value {
+fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
     let data_dir = data_dir.trim();
     if data_dir.is_empty() {
         return serde_json::json!({ "error": { "message": "data_dir is required" } });
     }
+    let db_key = db_key.map(str::trim).unwrap_or_default();
     let mut config = MOBILE_CONFIG.lock().unwrap();
     *config = Some(MobileConfig {
         data_dir: data_dir.to_string(),
+        db_key: db_key.to_string(),
+    });
+    // Publish the key so `with_mobile_db` opens the encrypted store. An empty
+    // key (unkeyed init) leaves the store plaintext.
+    crate::protocol::set_mobile_db_key(if db_key.is_empty() {
+        None
+    } else {
+        Some(db_key.to_string())
     });
     serde_json::json!({
         "ok": true,
@@ -348,6 +404,7 @@ mod tests {
             *MOBILE_CONFIG.lock().unwrap(),
             Some(MobileConfig {
                 data_dir: "/tmp/meron-mobile-test".to_string(),
+                db_key: String::new(),
             })
         );
     }

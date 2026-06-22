@@ -14,6 +14,10 @@ use crate::imap::Creds;
 // OS keychain service name, matching the app name.
 const SERVICE: &str = "meron";
 
+// Reserved keychain "account" holding the SQLCipher key for the local store.
+// The leading underscores keep it out of the real per-account id namespace.
+const DB_KEY_ACCOUNT: &str = "__meron_db_key__";
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Secrets {
     #[serde(default)]
@@ -81,6 +85,46 @@ pub fn load(account: &str) -> Result<Secrets> {
         Err(keyring::Error::NoEntry) => Ok(Secrets::default()),
         Err(e) => Err(e).with_context(|| format!("read keychain entry for {account}")),
     }
+}
+
+/// The SQLCipher key for the local store (64 hex chars = a raw 32-byte key),
+/// created and persisted in the OS keychain on first use.
+///
+/// Returns `Ok(None)` when the keychain is disabled (`MERON_KEYRING=off`,
+/// tests/headless), so the store falls back to plaintext exactly as before.
+pub fn db_key() -> Result<Option<String>> {
+    if keyring_disabled() {
+        return Ok(None);
+    }
+    let entry = entry(DB_KEY_ACCOUNT)?;
+    match entry.get_password() {
+        Ok(key) if is_hex_key(&key) => Ok(Some(key)),
+        // Missing (first run) or a malformed entry: mint and persist a fresh key.
+        Ok(_) | Err(keyring::Error::NoEntry) => {
+            let key = generate_db_key();
+            entry
+                .set_password(&key)
+                .context("store db key in keychain")?;
+            Ok(Some(key))
+        }
+        Err(e) => Err(e).context("read db key from keychain"),
+    }
+}
+
+/// 32 random bytes (two v4 UUIDs' worth) rendered as 64 lowercase hex chars.
+fn generate_db_key() -> String {
+    use std::fmt::Write;
+    let mut hex = String::with_capacity(64);
+    for _ in 0..2 {
+        for byte in uuid::Uuid::new_v4().as_bytes() {
+            let _ = write!(hex, "{byte:02x}");
+        }
+    }
+    hex
+}
+
+fn is_hex_key(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// Remove an account's secrets from the keychain. A missing entry is not an error.

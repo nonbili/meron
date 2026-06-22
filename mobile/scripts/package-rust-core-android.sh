@@ -52,8 +52,22 @@ if [[ ! -x "$AR" ]]; then
   exit 1
 fi
 
+RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+
+# The vendored OpenSSL build (openssl-src) drives OpenSSL's own Makefile, which
+# otherwise picks up the host macOS `ar` and emits BSD-format archives. rustc,
+# bundling these Android (ELF) static libs, expects GNU-format archives and
+# misreads a BSD long-name table as a member name ("invalid utf-8 sequence").
+# The NDK's llvm-ar already writes GNU-format archives, so force AR/RANLIB (in
+# both the unscoped and per-target forms the cc/openssl-src crates consult) to
+# the NDK tools. CC is set the same way so OpenSSL cross-compiles for Android.
 export "CC_${TARGET//-/_}=$CLANG"
 export "AR_${TARGET//-/_}=$AR"
+export "RANLIB_${TARGET//-/_}=$RANLIB"
+# Unscoped AR/RANLIB are what OpenSSL's own Makefile (driven by openssl-src)
+# reads; without these it falls back to the host macOS `ar` (BSD format).
+export AR="$AR"
+export RANLIB="$RANLIB"
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR"
 

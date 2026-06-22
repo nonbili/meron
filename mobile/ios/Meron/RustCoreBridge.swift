@@ -13,9 +13,16 @@ enum RustCoreBridge {
         ownedString(meron_core_ping_json())
     }
 
-    static func initJson(dataDirectory: String) -> String {
-        dataDirectory.withCString { pointer in
-            ownedString(meron_core_init_json(pointer))
+    static func initJson(dataDirectory: String, dbKey: String = "") -> String {
+        if dbKey.isEmpty {
+            return dataDirectory.withCString { pointer in
+                ownedString(meron_core_init_json(pointer))
+            }
+        }
+        return dataDirectory.withCString { dirPointer in
+            dbKey.withCString { keyPointer in
+                ownedString(meron_core_init_json_keyed(dirPointer, keyPointer))
+            }
         }
     }
 

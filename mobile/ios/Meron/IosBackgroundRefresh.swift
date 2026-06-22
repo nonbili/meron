@@ -88,7 +88,7 @@ enum IosBackgroundRefresh {
     }
 
     private static func refreshNow() -> RefreshResult {
-        _ = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory())
+        _ = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory(), dbKey: IosDbKey.get())
         let accountList = invoke(id: 1, method: "account.list", params: [:])
         guard let accounts = accountList["result"] as? [String: Any],
               let accountRows = accounts["accounts"] as? [[String: Any]] else {

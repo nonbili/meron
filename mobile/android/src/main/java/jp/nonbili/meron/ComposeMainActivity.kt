@@ -185,7 +185,7 @@ class ComposeMainActivity : ComponentActivity() {
         AndroidNotificationService.ensureChannels(this)
         AndroidBackgroundSyncScheduler.schedule(this)
         val coreInitJson = if (MeronCoreNative.isLoaded()) {
-            MeronCoreNative.initJson(filesDir.absolutePath)
+            MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
         } else {
             ""
         }
