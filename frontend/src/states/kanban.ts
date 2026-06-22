@@ -1,7 +1,7 @@
 import { observable } from '@legendapp/state'
 import type { ChatWallpaper, Message } from '../types'
 import { isFilterMode, ui$, type FilterMode } from './ui'
-import { mail$ } from './mail'
+import { mail$, refreshAccountFoldersCache } from './mail'
 import { accounts$ } from './accounts'
 import { filterThreads, markThreadsReadRemote } from '../lib/threadActions'
 import { persistedField } from '../lib/sessionPref'
@@ -280,6 +280,11 @@ export async function markColumnAllRead(column: KanbanColumn) {
   }
 
   await markThreadsReadRemote(unread, accounts$.get(), column.folderId)
+  await Promise.all(
+    Array.from(new Set(unread.map((thread) => thread.account_id)))
+      .filter(Boolean)
+      .map((accountId) => refreshAccountFoldersCache(accountId, false)),
+  )
 }
 
 // Move the open kanban conversation through the visible cards in its current
