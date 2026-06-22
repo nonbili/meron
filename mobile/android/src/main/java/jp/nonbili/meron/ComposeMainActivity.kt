@@ -195,6 +195,15 @@ class ComposeMainActivity : ComponentActivity() {
 
 private enum class Screen { Mail, Thread, Compose, AddAccount }
 
+private const val UNIFIED_ACCOUNT_ID = "unified"
+private const val INBOX_FOLDER = "inbox"
+
+private data class MailboxLoadResult(
+    val folders: List<FolderSummary>,
+    val folder: String,
+    val threads: List<ThreadSummary>,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MeronMobileScreen(
@@ -230,9 +239,9 @@ private fun MeronMobileScreen(
     var rssDisplayName by remember { mutableStateOf("Example Feed") }
     var accountJson by remember { mutableStateOf("") }
     var coreAccounts by remember { mutableStateOf(emptyList<AccountSummary>()) }
-    var selectedCoreAccountId by remember { mutableStateOf("") }
+    var selectedCoreAccountId by remember { mutableStateOf(UNIFIED_ACCOUNT_ID) }
     var coreFolders by remember { mutableStateOf(emptyList<FolderSummary>()) }
-    var selectedCoreFolder by remember { mutableStateOf("inbox") }
+    var selectedCoreFolder by remember { mutableStateOf(INBOX_FOLDER) }
     var coreThreads by remember { mutableStateOf(emptyList<ThreadSummary>()) }
     var selectedCoreThread by remember { mutableStateOf<ThreadSummary?>(null) }
     var to by remember { mutableStateOf("") }
@@ -324,8 +333,8 @@ private fun MeronMobileScreen(
         val parsed = parseAccountListResponse(json)
         coreAccounts = parsed
         selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
-            ?: selectedCoreAccountId.takeIf { sel -> parsed.any { it.id == sel } }
-            ?: parsed.firstOrNull()?.id.orEmpty()
+            ?: selectedCoreAccountId.takeIf { sel -> sel == UNIFIED_ACCOUNT_ID || parsed.any { it.id == sel } }
+            ?: UNIFIED_ACCOUNT_ID
     }
 
     fun listAccounts() {
@@ -517,15 +526,46 @@ private fun MeronMobileScreen(
         }
     }
 
-    fun syncCoreThreads() {
+    suspend fun loadAccountInbox(
+        client: MobileMailCommandClient,
+        account: AccountSummary,
+        requestedFolder: String,
+    ): MailboxLoadResult {
+        if (accountSummaryIsRss(account)) {
+            client.syncRss(SyncRssParams(accountId = account.id))
+        } else {
+            client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 50, folders = true))
+        }
+        val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
+        val folders = parseFolderListResponse(foldersJson)
+        // Server folder names are case-sensitive ("INBOX"), but the default
+        // request uses "inbox"; match case-insensitively and fall back to a real
+        // inbox before the first folder.
+        val folder = folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
+            ?: folders.firstOrNull { it.name.equals(INBOX_FOLDER, ignoreCase = true) }?.name
+            ?: folders.firstOrNull()?.name
+            ?: requestedFolder
+        val threadsJson = client.listThreads(ThreadListParams(accountId = account.id, folderId = folder))
+        return MailboxLoadResult(
+            folders = folders.filter { it.name.equals(folder, ignoreCase = true) },
+            folder = folder,
+            threads = parseThreadListResponse(threadsJson),
+        )
+    }
+
+    fun syncCoreThreads(accountOverride: String? = null, folderOverride: String? = null) {
         if (!MeronCoreNative.isLoaded()) {
             status = "Rust core not packaged."
             return
         }
-        val accountId = selectedCoreAccountId.ifBlank { coreAccounts.firstOrNull()?.id.orEmpty() }
-        val isRssAccount = coreAccounts.firstOrNull { it.id == accountId }?.let(::accountSummaryIsRss) ?: false
-        val requestedFolder = selectedCoreFolder.ifBlank { "inbox" }
-        if (accountId.isBlank()) {
+        val accountId = accountOverride ?: selectedCoreAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
+        val requestedFolder = folderOverride ?: selectedCoreFolder.ifBlank { INBOX_FOLDER }
+        val selectedAccounts = if (accountId == UNIFIED_ACCOUNT_ID) {
+            coreAccounts
+        } else {
+            coreAccounts.filter { it.id == accountId }
+        }
+        if (selectedAccounts.isEmpty()) {
             status = "No account selected."
             return
         }
@@ -534,27 +574,24 @@ private fun MeronMobileScreen(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val client = MobileMailCommandClient(JniMeronCore())
-                    if (isRssAccount) {
-                        client.syncRss(SyncRssParams(accountId = accountId))
+                    if (accountId == UNIFIED_ACCOUNT_ID) {
+                        val results = selectedAccounts.map { account ->
+                            loadAccountInbox(client, account, INBOX_FOLDER)
+                        }
+                        MailboxLoadResult(
+                            folders = results.flatMap { it.folders },
+                            folder = INBOX_FOLDER,
+                            threads = results.flatMap { it.threads }.sortedByDescending { it.dateEpochSeconds },
+                        )
                     } else {
-                        client.sync(SyncMailParams(accountId = accountId, folderId = requestedFolder, limit = 50, folders = true))
+                        loadAccountInbox(client, selectedAccounts.first(), requestedFolder)
                     }
-                    val foldersJson = client.listFolders(FolderListParams(accountId = accountId))
-                    val folders = parseFolderListResponse(foldersJson)
-                    // Server folder names are case-sensitive ("INBOX"), but the
-                    // default request uses "inbox"; match case-insensitively and
-                    // fall back to a real inbox before the first folder.
-                    val folder = folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
-                        ?: folders.firstOrNull { it.name.equals("inbox", ignoreCase = true) }?.name
-                        ?: folders.firstOrNull()?.name
-                        ?: requestedFolder
-                    val threadsJson = client.listThreads(ThreadListParams(accountId = accountId, folderId = folder))
-                    Triple(foldersJson, folder, threadsJson)
                 }
-            }.onSuccess { (foldersJson, folder, threadsJson) ->
-                coreFolders = parseFolderListResponse(foldersJson)
+            }.onSuccess { result ->
+                coreFolders = result.folders
+                val folder = result.folder
                 selectedCoreFolder = folder
-                val parsedThreads = parseThreadListResponse(threadsJson)
+                val parsedThreads = result.threads
                 coreThreads = parsedThreads
                 if (selectedCoreThread?.id !in parsedThreads.map { it.id }) {
                     selectedCoreThread = null
@@ -562,7 +599,11 @@ private fun MeronMobileScreen(
                 }
                 syncing = false
                 errorBanner = null
-                status = "${parsedThreads.size} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
+                status = if (accountId == UNIFIED_ACCOUNT_ID) {
+                    "${parsedThreads.size} message(s) in Unified inbox"
+                } else {
+                    "${parsedThreads.size} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
+                }
             }.onFailure {
                 syncing = false
                 errorBanner = it.message ?: "Sync failed"
@@ -675,8 +716,14 @@ private fun MeronMobileScreen(
         )
     }
 
+    fun defaultSendAccountId(): String {
+        return selectedCoreAccountId.takeIf { selected ->
+            selected != UNIFIED_ACCOUNT_ID && coreAccounts.any { it.id == selected && !accountSummaryIsRss(it) }
+        } ?: coreAccounts.firstOrNull { !accountSummaryIsRss(it) }?.id.orEmpty()
+    }
+
     fun sendMail() {
-        val accountId = selectedCoreAccountId.ifBlank { coreAccounts.firstOrNull()?.id.orEmpty() }
+        val accountId = defaultSendAccountId()
         if (accountId.isBlank()) {
             status = "Select or add an account before sending."
             return
@@ -692,15 +739,14 @@ private fun MeronMobileScreen(
                 withContext(Dispatchers.IO) {
                     val client = MobileMailCommandClient(JniMeronCore())
                     client.send(draft.toSendMailParams(accountId = accountId))
-                    client.listThreads(ThreadListParams(accountId = accountId, folderId = selectedCoreFolder.ifBlank { "inbox" }))
                 }
             }.onSuccess {
-                coreThreads = parseThreadListResponse(it)
                 attachments = emptyList()
                 to = ""; cc = ""; bcc = ""; subject = ""; body = ""
                 screen = Screen.Mail
                 errorBanner = null
                 status = "Message sent"
+                syncCoreThreads()
             }.onFailure {
                 errorBanner = it.message ?: "Send failed"
                 status = "Send failed: ${it.message}"
@@ -709,8 +755,8 @@ private fun MeronMobileScreen(
     }
 
     fun sendQuickReply() {
-        val accountId = selectedCoreAccountId.ifBlank { coreAccounts.firstOrNull()?.id.orEmpty() }
         val thread = selectedCoreThread
+        val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
         val parent = messages.lastOrNull()
         val replyBody = quickReplyBody.trim()
         if (accountId.isBlank() || thread == null || parent == null) {
@@ -782,6 +828,13 @@ private fun MeronMobileScreen(
     }
 
     val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
+    val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
+    val appBarTitle = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) "Unified inbox" else "Inbox"
+    val appBarSubtitle = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+        "All accounts"
+    } else {
+        selectedAccount?.email?.ifBlank { selectedAccount.displayName }.orEmpty()
+    }
 
     // Hardware back from a sub-screen returns to the inbox instead of exiting.
     BackHandler(enabled = screen != Screen.Mail) {
@@ -792,7 +845,7 @@ private fun MeronMobileScreen(
         Screen.Thread -> ThreadScreen(
             thread = selectedCoreThread,
             messages = messages,
-            accountEmail = selectedAccount?.email.orEmpty(),
+            accountEmail = selectedThreadAccount?.email.orEmpty(),
             onBack = { screen = Screen.Mail },
             onArchive = { selectedCoreThread?.let { archiveOrRemove(it); screen = Screen.Mail } },
             onDelete = { selectedCoreThread?.let { deleteThread(it); screen = Screen.Mail } },
@@ -852,25 +905,28 @@ private fun MeronMobileScreen(
                     accounts = coreAccounts,
                     selectedAccountId = selectedCoreAccountId,
                     folders = coreFolders,
-                    selectedFolder = selectedCoreFolder,
                     notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
+                    onSelectUnified = {
+                        if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
+                            selectedCoreAccountId = UNIFIED_ACCOUNT_ID
+                            selectedCoreFolder = INBOX_FOLDER
+                            coreThreads = emptyList()
+                            selectedCoreThread = null
+                            messages = emptyList()
+                            syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
+                        }
+                        scope.launch { drawerState.close() }
+                    },
                     onSelectAccount = { account ->
                         if (selectedCoreAccountId != account.id) {
                             selectedCoreAccountId = account.id
-                            selectedCoreFolder = "inbox"
+                            selectedCoreFolder = INBOX_FOLDER
                             coreFolders = emptyList()
                             coreThreads = emptyList()
                             selectedCoreThread = null
                             messages = emptyList()
-                            syncCoreThreads()
+                            syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
                         }
-                        scope.launch { drawerState.close() }
-                    },
-                    onSelectFolder = { folder ->
-                        selectedCoreFolder = folder.name
-                        selectedCoreThread = null
-                        messages = emptyList()
-                        syncCoreThreads()
                         scope.launch { drawerState.close() }
                     },
                     onAddAccount = {
@@ -895,10 +951,10 @@ private fun MeronMobileScreen(
                     TopAppBar(
                         title = {
                             Column {
-                                Text(selectedCoreFolder.replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
-                                selectedAccount?.let {
+                                Text(appBarTitle, fontWeight = FontWeight.SemiBold)
+                                if (appBarSubtitle.isNotBlank()) {
                                     Text(
-                                        it.email.ifBlank { it.displayName },
+                                        appBarSubtitle,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -1511,10 +1567,9 @@ private fun MailDrawer(
     accounts: List<AccountSummary>,
     selectedAccountId: String,
     folders: List<FolderSummary>,
-    selectedFolder: String,
     notificationsNeedPermission: Boolean,
+    onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
-    onSelectFolder: (FolderSummary) -> Unit,
     onAddAccount: () -> Unit,
     onRefreshBackground: () -> Unit,
     onEnableNotifications: () -> Unit,
@@ -1535,33 +1590,34 @@ private fun MailDrawer(
                 )
             }
             if (accounts.isNotEmpty()) {
-                item { DrawerLabel("Accounts", chat) }
+                item { DrawerLabel("Inboxes", chat) }
+                item {
+                    val unread = folders.sumOf { it.unread }
+                    SidebarRow(
+                        selected = selectedAccountId == UNIFIED_ACCOUNT_ID,
+                        chat = chat,
+                        onClick = onSelectUnified,
+                        leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Unified inbox",
+                        subtitle = "All accounts",
+                        trailing = unread.takeIf { it > 0 }?.toString(),
+                    )
+                }
                 items(accounts, key = { it.id }) { account ->
                     val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+                    val unread = folders
+                        .filter { it.accountId == account.id && it.name.equals(INBOX_FOLDER, ignoreCase = true) }
+                        .sumOf { it.unread }
                     SidebarRow(
                         selected = account.id == selectedAccountId,
                         chat = chat,
                         onClick = { onSelectAccount(account) },
                         leading = {
-                            Avatar(label, size = 32.dp)
+                            Icon(if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp))
                         },
                         title = label,
-                        subtitle = account.email.takeIf { it.isNotBlank() && it != label },
-                        trailing = if (account.needsReconnect) "!" else null,
-                    )
-                }
-            }
-            if (folders.isNotEmpty()) {
-                item { DrawerLabel("Folders", chat) }
-                items(folders, key = { it.name }) { folder ->
-                    SidebarRow(
-                        selected = folder.name == selectedFolder,
-                        chat = chat,
-                        onClick = { onSelectFolder(folder) },
-                        leading = { Icon(folderIcon(folder.name), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        title = folder.name.replaceFirstChar { it.uppercase() },
-                        subtitle = null,
-                        trailing = folder.unread.takeIf { it > 0 }?.toString(),
+                        subtitle = account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox",
+                        trailing = if (account.needsReconnect) "!" else unread.takeIf { it > 0 }?.toString(),
                     )
                 }
             }
