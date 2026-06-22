@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { formatShortcut, isBareShortcut, matchShortcut, SHORTCUTS } from './shortcuts'
+import { formatShortcut, isBareShortcut, isMac, matchShortcut, SHORTCUTS } from './shortcuts'
 
-// Bun reports a non-mac userAgent, so the module resolves the command modifier
-// to Ctrl; these tests assume that.
 const keydown = (key: string, mods: Partial<KeyboardEvent> = {}): KeyboardEvent =>
   ({
     key,
@@ -13,13 +11,18 @@ const keydown = (key: string, mods: Partial<KeyboardEvent> = {}): KeyboardEvent 
     ...mods,
   }) as KeyboardEvent
 
+const modKey = isMac ? { metaKey: true } : { ctrlKey: true }
+const otherModKey = isMac ? { ctrlKey: true } : { metaKey: true }
+const modLabel = isMac ? '⌘' : 'Ctrl'
+const shiftLabel = isMac ? '⇧' : 'Shift'
+
 describe('matchShortcut', () => {
   it('matches a mod chord', () => {
-    expect(matchShortcut(keydown('k', { ctrlKey: true }))).toBe('palette.open')
+    expect(matchShortcut(keydown('k', modKey))).toBe('palette.open')
   })
 
   it('matches a mod+shift chord', () => {
-    expect(matchShortcut(keydown('R', { ctrlKey: true, shiftKey: true }))).toBe('mail.sync')
+    expect(matchShortcut(keydown('R', { ...modKey, shiftKey: true }))).toBe('mail.sync')
   })
 
   it('matches bare single-key shortcuts', () => {
@@ -28,13 +31,12 @@ describe('matchShortcut', () => {
   })
 
   it('does not fire when the other command key is held', () => {
-    // On non-mac, metaKey is the "other" modifier and must veto the match.
-    expect(matchShortcut(keydown('k', { ctrlKey: true, metaKey: true }))).toBeNull()
+    expect(matchShortcut(keydown('k', { ...modKey, ...otherModKey }))).toBeNull()
   })
 
   it('returns null when nothing matches', () => {
     expect(matchShortcut(keydown('q'))).toBeNull()
-    expect(matchShortcut(keydown('j', { ctrlKey: true }))).toBeNull()
+    expect(matchShortcut(keydown('j', modKey))).toBeNull()
   })
 })
 
@@ -47,13 +49,13 @@ describe('isBareShortcut', () => {
 })
 
 describe('formatShortcut', () => {
-  it('renders mod chords with Ctrl on non-mac', () => {
-    expect(formatShortcut('palette.open')).toEqual(['Ctrl', 'K'])
-    expect(formatShortcut('mail.sync')).toEqual(['Ctrl', 'Shift', 'R'])
+  it('renders mod chords with the platform command modifier', () => {
+    expect(formatShortcut('palette.open')).toEqual([modLabel, 'K'])
+    expect(formatShortcut('mail.sync')).toEqual([modLabel, shiftLabel, 'R'])
   })
 
   it('does not double Shift for keys that imply it', () => {
-    expect(formatShortcut('shortcuts.help')).toEqual(['Ctrl', '?'])
+    expect(formatShortcut('shortcuts.help')).toEqual([modLabel, '?'])
     expect(formatShortcut('thread.delete')).toEqual(['#'])
   })
 

@@ -21,7 +21,6 @@ mod smtp;
 mod store;
 
 use anyhow::Context as _;
-use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -29,11 +28,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
 use tokio::sync::{Mutex, Notify};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Version of the line-delimited JSON protocol spoken over stdio. Bump on any
-/// breaking change to request/response/event shapes; the Go bridge checks it on
-/// the `ready` handshake and warns on mismatch.
-const PROTOCOL_VERSION: u32 = 1;
+use meron_core::protocol::{Request, ping_response, ready_event};
 
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -736,7 +731,8 @@ async fn prefetch_bodies(
                     uids.into_iter()
                         .filter(|uid| {
                             store::has_message(&db, &account, &folder, *uid).unwrap_or(false)
-                                && !store::has_cached_body(&db, &account, &folder, *uid).unwrap_or(false)
+                                && !store::has_cached_body(&db, &account, &folder, *uid)
+                                    .unwrap_or(false)
                         })
                         .collect()
                 };
@@ -1325,14 +1321,6 @@ async fn idle_once(
     }
 }
 
-#[derive(Deserialize)]
-struct Request {
-    id: u64,
-    method: String,
-    #[serde(default)]
-    params: Value,
-}
-
 #[tokio::main]
 async fn main() {
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
@@ -1362,7 +1350,7 @@ async fn main() {
         start_idle_watch(engine.clone(), out.clone(), account, "INBOX".to_string());
     }
 
-    emit(&out, "ready", json!({ "version": VERSION, "protocol": PROTOCOL_VERSION })).await;
+    emit(&out, "ready", ready_event()).await;
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     loop {
@@ -1410,7 +1398,7 @@ async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
 async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
     let p = &req.params;
     match req.method.as_str() {
-        "ping" => Ok(json!({ "pong": true, "version": VERSION, "protocol": PROTOCOL_VERSION })),
+        "ping" => Ok(ping_response()),
 
         "app.prefsGet" => {
             let keys = p
@@ -1458,10 +1446,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     let needs_reconnect = live_accounts
                         .get(&id)
                         .is_none_or(|creds| !creds_have_required_secret(creds));
-                    obj.insert(
-                        "needs_reconnect".to_string(),
-                        json!(needs_reconnect),
-                    );
+                    obj.insert("needs_reconnect".to_string(), json!(needs_reconnect));
                 }
             }
             Ok(json!({ "accounts": accounts }))

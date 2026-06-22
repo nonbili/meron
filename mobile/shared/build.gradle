@@ -1,0 +1,39 @@
+plugins {
+    id "org.jetbrains.kotlin.multiplatform"
+    id "com.android.kotlin.multiplatform.library"
+}
+
+kotlin {
+    android {
+        namespace = "jp.nonbili.meron.shared"
+        compileSdk = 36
+        minSdk = 23
+        withHostTest {}
+    }
+
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget).configureEach {
+        binaries.framework {
+            baseName = "MeronShared"
+            isStatic = true
+        }
+    }
+
+    jvmToolchain(17)
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation kotlin("stdlib")
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin("test")
+            }
+        }
+    }
+}

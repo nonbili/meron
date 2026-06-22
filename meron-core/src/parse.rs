@@ -354,7 +354,10 @@ fn sanitize_email_html(source: &str) -> String {
                 // (e.g. an `href`) so it can't become a navigable script document.
                 let ok = element == "img"
                     && attribute == "src"
-                    && value.trim_start().to_ascii_lowercase().starts_with("data:image/");
+                    && value
+                        .trim_start()
+                        .to_ascii_lowercase()
+                        .starts_with("data:image/");
                 return if ok { Some(Cow::Borrowed(value)) } else { None };
             }
             Some(Cow::Borrowed(value))
@@ -374,7 +377,10 @@ pub fn prepare_html(source: &str, load_remote_images: bool) -> String {
     // CSP allows `style-src 'unsafe-inline'`); only script vectors are removed.
     let source = &sanitize_email_html(source);
     let (img, media) = if load_remote_images {
-        ("'self' data: http: https:", "'self' data: blob: http: https:")
+        (
+            "'self' data: http: https:",
+            "'self' data: blob: http: https:",
+        )
     } else {
         ("'self' data:", "'self' data: blob:")
     };

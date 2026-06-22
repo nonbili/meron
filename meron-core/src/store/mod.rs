@@ -18,7 +18,13 @@ mod db;
 
 pub use db::open;
 
+#[allow(dead_code)]
+pub fn open_at(path: impl AsRef<std::path::Path>) -> Result<Connection> {
+    db::open_at(path)
+}
+
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn run_migrations(conn: &Connection) -> Result<()> {
     db::run_migrations(conn)
 }
@@ -1345,6 +1351,43 @@ pub fn delete_messages_by_uid(
         )?;
     }
     Ok(deleted)
+}
+
+#[allow(dead_code)]
+pub fn move_messages_by_uid(
+    conn: &Connection,
+    account: &str,
+    source_folder: &str,
+    target_folder: &str,
+    uids: &[u32],
+) -> Result<usize> {
+    if source_folder == target_folder || uids.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut moved = 0usize;
+    for uid in uids {
+        let msg_id = tx
+            .query_row(
+                "SELECT msg_id FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                params![account, source_folder, *uid],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let Some(msg_id) = msg_id else {
+            continue;
+        };
+        tx.execute(
+            "DELETE FROM messages WHERE account = ?1 AND folder = ?2 AND msg_id = ?3",
+            params![account, target_folder, msg_id],
+        )?;
+        moved += tx.execute(
+            "UPDATE messages SET folder = ?4 WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+            params![account, source_folder, *uid, target_folder],
+        )?;
+    }
+    tx.commit()?;
+    Ok(moved)
 }
 
 /// UIDs of every unseen message in a folder. Used by "mark all as read" to set

@@ -1,0 +1,50 @@
+import Foundation
+
+enum RustCoreBridge {
+    private final class EventBox {
+        var events: [String] = []
+    }
+
+    static func protocolVersion() -> Int {
+        Int(meron_core_protocol_version())
+    }
+
+    static func pingJson() -> String {
+        ownedString(meron_core_ping_json())
+    }
+
+    static func initJson(dataDirectory: String) -> String {
+        dataDirectory.withCString { pointer in
+            ownedString(meron_core_init_json(pointer))
+        }
+    }
+
+    static func invokeJson(_ request: String) -> String {
+        request.withCString { pointer in
+            ownedString(meron_core_invoke_json(pointer))
+        }
+    }
+
+    static func readyEvents() -> [String] {
+        let box = EventBox()
+        let opaque = Unmanaged.passUnretained(box).toOpaque()
+        meron_core_register_event_callback({ eventJson, userData in
+            guard let eventJson, let userData else {
+                return
+            }
+            let box = Unmanaged<EventBox>.fromOpaque(userData).takeUnretainedValue()
+            box.events.append(String(cString: eventJson))
+        }, opaque)
+        _ = meron_core_emit_ready_event()
+        meron_core_register_event_callback(nil, nil)
+        return box.events
+    }
+
+    private static func ownedString(_ pointer: UnsafeMutablePointer<CChar>?) -> String {
+        guard let pointer else {
+            return #"{"error":{"message":"meron-core returned null"}}"#
+        }
+        defer { meron_core_string_free(pointer) }
+        return String(cString: pointer)
+    }
+}

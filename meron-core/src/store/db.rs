@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(super) const ACCOUNTS_DDL: &str = "
 CREATE TABLE IF NOT EXISTS accounts (
@@ -125,6 +125,11 @@ const BODY_CACHE_VERSION: &str = "1";
 
 pub fn open() -> Result<Connection> {
     let path = db_path();
+    open_at(path)
+}
+
+pub fn open_at(path: impl AsRef<Path>) -> Result<Connection> {
+    let path = path.as_ref();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

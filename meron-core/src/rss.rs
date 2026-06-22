@@ -2576,9 +2576,13 @@ mod tests {
         assert_eq!(cursor1, "ts:200:item-2");
 
         // Second page from that cursor: the remaining older item, no further cursor.
-        let (page2, cursor2) =
-            read_thread_page(&conn, "rss-acct#rss#feed-1", Some((200, "item-2".into())), Some(2))
-                .unwrap();
+        let (page2, cursor2) = read_thread_page(
+            &conn,
+            "rss-acct#rss#feed-1",
+            Some((200, "item-2".into())),
+            Some(2),
+        )
+        .unwrap();
         assert_eq!(
             page2
                 .iter()
@@ -2596,8 +2600,7 @@ mod tests {
         insert_item(&conn, "rss-acct", "feed-1", "item-2", 300);
         insert_item(&conn, "rss-acct", "feed-1", "item-3", 200);
 
-        let (items, cursor) =
-            read_thread_page(&conn, "rss-acct#rss#feed-1", None, None).unwrap();
+        let (items, cursor) = read_thread_page(&conn, "rss-acct#rss#feed-1", None, None).unwrap();
         assert!(cursor.is_none());
         assert_eq!(
             items
@@ -2714,7 +2717,10 @@ mod tests {
         .unwrap();
 
         let opml = export_opml(&conn, "rss-src").unwrap();
-        assert!(opml.contains("News &amp; Co"), "title must be XML-escaped: {opml}");
+        assert!(
+            opml.contains("News &amp; Co"),
+            "title must be XML-escaped: {opml}"
+        );
         assert!(opml.contains("xmlUrl=\"https://a.example/feed.xml\""));
 
         // Import into a *separate* database — the `url` column is globally UNIQUE,
@@ -2730,7 +2736,10 @@ mod tests {
         .unwrap();
         let db = Mutex::new(dst);
         let imported = import_opml(&db, &opml, "rss-dst").unwrap();
-        assert_eq!(imported, 2, "both feeds must round-trip into the new account");
+        assert_eq!(
+            imported, 2,
+            "both feeds must round-trip into the new account"
+        );
 
         let urls: Vec<String> = {
             let conn = db.lock().unwrap();
@@ -2873,6 +2882,9 @@ mod tests {
 
         // A re-sync of the unchanged feed finds no new items (guids dedupe).
         let new_items = sync_account(&db, &account_id).unwrap();
-        assert_eq!(new_items, 0, "unchanged feed yields no new items on re-sync");
+        assert_eq!(
+            new_items, 0,
+            "unchanged feed yields no new items on re-sync"
+        );
     }
 }

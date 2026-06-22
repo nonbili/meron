@@ -1,0 +1,6 @@
+/.gradle/
+/.kotlin/
+/build/
+/**/build/
+/android/src/main/jniLibs/
+/ios/RustCore/libmeron_core.a
