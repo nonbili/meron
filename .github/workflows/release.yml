@@ -69,7 +69,12 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libdbus-1-dev \
             pkg-config \
-            libfuse2
+            libfuse2 \
+            perl
+          # `perl` (full, not perl-base) is required by openssl-src, which builds
+          # the vendored OpenSSL pulled in via rusqlite's
+          # bundled-sqlcipher-vendored-openssl feature. Its Configure script needs
+          # core modules like FindBin, IPC::Cmd and Time::Piece.
 
       - name: install wails
         shell: bash

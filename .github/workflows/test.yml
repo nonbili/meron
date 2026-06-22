@@ -25,7 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+        # `perl` is required by openssl-src (vendored OpenSSL via rusqlite's
+        # bundled-sqlcipher-vendored-openssl feature) — its Configure script
+        # needs core modules like FindBin, IPC::Cmd and Time::Piece.
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config perl
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -55,7 +58,10 @@ jobs:
         with:
           workspaces: meron-core
       - name: Install GTK/WebKitGTK headers
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+        # `perl` is required by openssl-src (vendored OpenSSL via rusqlite's
+        # bundled-sqlcipher-vendored-openssl feature) — its Configure script
+        # needs core modules like FindBin, IPC::Cmd and Time::Piece.
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev perl
       - name: Create frontend/dist placeholder
         run: mkdir -p frontend/dist && touch frontend/dist/placeholder
       - run: docker pull foxcpp/maddy:0.8
