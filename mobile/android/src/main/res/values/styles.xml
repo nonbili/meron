@@ -5,4 +5,10 @@
         <item name="android:statusBarColor">#F8FAFC</item>
         <item name="android:navigationBarColor">#F8FAFC</item>
     </style>
+
+    <style name="Theme.Meron.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FFFFFF</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
 </resources>

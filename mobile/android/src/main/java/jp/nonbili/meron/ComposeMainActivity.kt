@@ -19,6 +19,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -98,8 +101,11 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
@@ -112,6 +118,7 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -258,6 +265,7 @@ class ComposeMainActivity : ComponentActivity() {
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         incomingMailtoDraft = intent.toMailtoDraft()
@@ -390,17 +398,20 @@ private fun MeronMobileScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val snackbarHost = remember { SnackbarHostState() }
 
-    var host by remember { mutableStateOf("10.0.2.2") }
-    var email by remember { mutableStateOf("user1@mail.localhost") }
+    // Lab/test defaults only seed the form in debug builds; release builds start
+    // empty so users see placeholder hints instead of fake credentials.
+    val labDefaults = BuildConfig.DEBUG
+    var host by remember { mutableStateOf(if (labDefaults) "10.0.2.2" else "") }
+    var email by remember { mutableStateOf(if (labDefaults) "user1@mail.localhost" else "") }
     var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("user1password") }
-    var displayName by remember { mutableStateOf("Local Test") }
-    var senderName by remember { mutableStateOf("Local Test") }
+    var password by remember { mutableStateOf(if (labDefaults) "user1password" else "") }
+    var displayName by remember { mutableStateOf(if (labDefaults) "Local Test" else "") }
+    var senderName by remember { mutableStateOf(if (labDefaults) "Local Test" else "") }
     var imapPort by remember { mutableStateOf("993") }
-    var smtpHost by remember { mutableStateOf("10.0.2.2") }
+    var smtpHost by remember { mutableStateOf(if (labDefaults) "10.0.2.2" else "") }
     var smtpPort by remember { mutableStateOf("465") }
     var oauthProvider by remember { mutableStateOf("gmail") }
-    var oauthEmail by remember { mutableStateOf("me@gmail.com") }
+    var oauthEmail by remember { mutableStateOf(if (labDefaults) "me@gmail.com" else "") }
     var oauthAccessToken by remember { mutableStateOf("") }
     var oauthRefreshToken by remember { mutableStateOf("") }
     var oauthExpiresAt by remember { mutableStateOf("0") }
@@ -410,8 +421,8 @@ private fun MeronMobileScreen(
     var oauthState by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var oauthVerifier by remember { mutableStateOf(UUID.randomUUID().toString() + UUID.randomUUID().toString()) }
     var oauthAuthorizationCode by remember { mutableStateOf("") }
-    var rssFeedUrl by remember { mutableStateOf("https://example.com/feed.xml") }
-    var rssDisplayName by remember { mutableStateOf("Example Feed") }
+    var rssFeedUrl by remember { mutableStateOf(if (labDefaults) "https://example.com/feed.xml" else "") }
+    var rssDisplayName by remember { mutableStateOf(if (labDefaults) "Example Feed" else "") }
     var accountJson by remember { mutableStateOf("") }
     var coreAccounts by remember { mutableStateOf(emptyList<AccountSummary>()) }
     var selectedCoreAccountId by remember { mutableStateOf(UNIFIED_ACCOUNT_ID) }
@@ -1809,6 +1820,8 @@ private fun MeronMobileScreen(
         label: String,
         action: suspend MobileMailCommandClient.() -> String,
         update: (List<ThreadSummary>) -> List<ThreadSummary>,
+        undoMessage: String? = null,
+        onUndo: (() -> Unit)? = null,
     ) {
         if (!MeronCoreNative.isLoaded()) {
             status = "Rust core not packaged."
@@ -1820,9 +1833,43 @@ private fun MeronMobileScreen(
             }.onSuccess {
                 coreThreads = update(coreThreads)
                 kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
-                status = "$label complete"
+                if (undoMessage != null && onUndo != null) {
+                    val result = snackbarHost.showSnackbar(
+                        message = undoMessage,
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) onUndo()
+                } else {
+                    status = "$label complete"
+                }
             }.onFailure {
                 status = "$label failed: ${it.message}"
+            }
+        }
+    }
+
+    // Moves a thread back to the folder it was in before an archive/delete and
+    // restores the pre-action list snapshots, backing the "Undo" snackbar action.
+    fun restoreThread(
+        thread: ThreadSummary,
+        threadsSnapshot: List<ThreadSummary>,
+        kanbanSnapshot: Map<String, KanbanColumnState>,
+    ) {
+        if (!MeronCoreNative.isLoaded()) return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    MobileMailCommandClient(JniMeronCore()).move(
+                        MoveThreadParams(threadId = thread.id, targetFolderId = thread.folder),
+                    )
+                }
+            }.onSuccess {
+                coreThreads = threadsSnapshot
+                kanbanColumns = kanbanSnapshot
+                status = "Restored"
+            }.onFailure {
+                status = "Undo failed: ${it.message}"
             }
         }
     }
@@ -2029,21 +2076,29 @@ private fun MeronMobileScreen(
                 update = { threads -> threads.filterNot { it.id == thread.id } },
             )
         } else {
+            val threadsSnapshot = coreThreads
+            val kanbanSnapshot = kanbanColumns
             runCoreThreadAction(
                 thread = thread,
                 label = "Archive",
                 action = { archive(ThreadActionParams(threadId = thread.id)) },
                 update = { threads -> threads.filterNot { it.id == thread.id } },
+                undoMessage = "Archived",
+                onUndo = { restoreThread(thread, threadsSnapshot, kanbanSnapshot) },
             )
         }
     }
 
     fun deleteThread(thread: ThreadSummary) {
+        val threadsSnapshot = coreThreads
+        val kanbanSnapshot = kanbanColumns
         runCoreThreadAction(
             thread = thread,
             label = threadDeleteActionLabel(thread.folder),
             action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
             update = { threads -> threads.filterNot { it.id == thread.id } },
+            undoMessage = "Deleted",
+            onUndo = { restoreThread(thread, threadsSnapshot, kanbanSnapshot) },
         )
     }
 
@@ -3511,12 +3566,11 @@ private fun MeronMobileScreen(
                             syncCoreThreads(syncFirst = false)
                         },
                     )
-                    Box(Modifier.fillMaxSize()) {
-                        if (syncing) {
-                            CircularProgressIndicator(
-                                Modifier.padding(top = 4.dp).align(Alignment.TopCenter).size(28.dp),
-                            )
-                        }
+                    PullToRefreshBox(
+                        isRefreshing = syncing,
+                        onRefresh = { syncCoreThreads() },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
                         when {
                             coreAccounts.isEmpty() -> EmptyState(
                                 icon = Icons.Filled.PersonAdd,
@@ -3988,8 +4042,19 @@ private fun KanbanColumn(
                     )
                 }
             } else {
+                val columnListState = rememberLazyListState()
+                val nearBottom by remember {
+                    derivedStateOf {
+                        val lastVisible = columnListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        lastVisible >= visibleThreads.size - 3
+                    }
+                }
+                LaunchedEffect(nearBottom, canLoadMore, state.loadingMore) {
+                    if (nearBottom && canLoadMore && !state.loadingMore) onLoadMore()
+                }
                 LazyColumn(
                     Modifier.fillMaxSize(),
+                    state = columnListState,
                     contentPadding = PaddingValues(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -4194,6 +4259,23 @@ private fun AccountSettingsDialog(
         })
     }
     val interval = intervalText.toIntOrNull()?.coerceIn(5, 1440) ?: account.rssSyncIntervalMinutes.coerceIn(5, 1440)
+    var confirmRemove by remember(account.id) { mutableStateOf(false) }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove account?") },
+            text = { Text("Remove ${account.email.ifBlank { account.id }}? Cached mail for this account will be deleted from this device.") },
+            confirmButton = {
+                TextButton(onClick = { confirmRemove = false; onRemove() }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -4311,7 +4393,7 @@ private fun AccountSettingsDialog(
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onRemove) {
+                TextButton(onClick = { confirmRemove = true }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
                 TextButton(onClick = onDismiss) {
@@ -4692,7 +4774,17 @@ private fun MailList(
     onLoadMore: () -> Unit,
     showSenderImages: Boolean,
 ) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
+    val listState = rememberLazyListState()
+    val nearBottom by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= threads.size - 3
+        }
+    }
+    LaunchedEffect(nearBottom, canLoadMore, loadingMore) {
+        if (nearBottom && canLoadMore && !loadingMore) onLoadMore()
+    }
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         items(threads, key = { it.id }) { thread ->
             val dismissState = rememberSwipeToDismissBoxState(
                 confirmValueChange = { value ->
@@ -4819,7 +4911,11 @@ private fun MailRow(
                 )
                 if (unread) {
                     Box(
-                        Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .semantics { contentDescription = "Unread" },
                     )
                 }
             }
@@ -4862,7 +4958,7 @@ private fun SenderAvatar(label: String, enabled: Boolean, size: Dp) {
     if (enabled && bitmap != null) {
         Image(
             bitmap = bitmap!!.asImageBitmap(),
-            contentDescription = null,
+            contentDescription = "Avatar for $label",
             modifier = Modifier.size(size).clip(CircleShape),
         )
     } else {
@@ -5968,6 +6064,26 @@ private fun ComposeScreen(
     onSend: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val hasContent = to.isNotBlank() || cc.isNotBlank() || bcc.isNotBlank() ||
+        subject.isNotBlank() || body.isNotBlank() || attachments.isNotEmpty()
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard draft?") },
+            text = { Text("This message will be deleted and won't be saved.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDiscard = false; onDiscardDraft() }) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -5984,7 +6100,7 @@ private fun ComposeScreen(
                     IconButton(onClick = onSaveDraft) {
                         Icon(Icons.Outlined.Drafts, contentDescription = "Save draft")
                     }
-                    IconButton(onClick = onDiscardDraft) {
+                    IconButton(onClick = { if (hasContent) confirmDiscard = true else onDiscardDraft() }) {
                         Icon(Icons.Filled.Delete, contentDescription = "Discard draft", tint = MaterialTheme.colorScheme.error)
                     }
                     IconButton(onClick = onSend) {
@@ -6216,18 +6332,18 @@ private fun AddAccountScreen(
             when (section) {
                 0 -> item {
                     SetupCard(title = "IMAP / SMTP account") {
-                        SetupField(displayName, onDisplayNameChange, "Display name")
-                        SetupField(senderName, onSenderNameChange, "Sender name")
-                        SetupField(email, onEmailChange, "Email")
-                        SetupField(username, onUsernameChange, "Username")
+                        SetupField(displayName, onDisplayNameChange, "Display name", placeholder = "Work")
+                        SetupField(senderName, onSenderNameChange, "Sender name", placeholder = "Jane Doe")
+                        SetupField(email, onEmailChange, "Email", placeholder = "you@example.com")
+                        SetupField(username, onUsernameChange, "Username", placeholder = "you@example.com")
                         SetupField(password, onPasswordChange, "Password", isPassword = true)
                         OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
                             Text("Find mail settings")
                         }
-                        SetupField(host, onHostChange, "IMAP host")
-                        SetupField(imapPort, onImapPortChange, "IMAP port")
-                        SetupField(smtpHost, onSmtpHostChange, "SMTP host")
-                        SetupField(smtpPort, onSmtpPortChange, "SMTP port")
+                        SetupField(host, onHostChange, "IMAP host", placeholder = "imap.example.com")
+                        SetupField(imapPort, onImapPortChange, "IMAP port", placeholder = "993")
+                        SetupField(smtpHost, onSmtpHostChange, "SMTP host", placeholder = "smtp.example.com")
+                        SetupField(smtpPort, onSmtpPortChange, "SMTP port", placeholder = "465")
                         Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text("Add account") }
                     }
                 }
@@ -6237,7 +6353,7 @@ private fun AddAccountScreen(
                             FilterChip(oauthProvider == "gmail", { onOauthProviderChange("gmail") }, { Text("Gmail") })
                             FilterChip(oauthProvider == "outlook", { onOauthProviderChange("outlook") }, { Text("Outlook") })
                         }
-                        SetupField(oauthEmail, onOauthEmailChange, "Email")
+                        SetupField(oauthEmail, onOauthEmailChange, "Email", placeholder = "you@gmail.com")
                         SetupField(oauthClientId, onOauthClientIdChange, "Client ID")
                         SetupField(oauthClientSecret, onOauthClientSecretChange, "Client secret (optional)")
                         SetupField(oauthRedirectUri, onOauthRedirectUriChange, "Redirect URI")
@@ -6256,8 +6372,8 @@ private fun AddAccountScreen(
                 }
                 else -> item {
                     SetupCard(title = "RSS feed") {
-                        SetupField(rssFeedUrl, onRssFeedUrlChange, "Feed URL")
-                        SetupField(rssDisplayName, onRssDisplayNameChange, "Feed name")
+                        SetupField(rssFeedUrl, onRssFeedUrlChange, "Feed URL", placeholder = "https://example.com/feed.xml")
+                        SetupField(rssDisplayName, onRssDisplayNameChange, "Feed name", placeholder = "Example Feed")
                         Button(onClick = onAddRss, modifier = Modifier.fillMaxWidth()) { Text("Add feed") }
                     }
                 }
@@ -6284,12 +6400,13 @@ private fun SetupCard(title: String, content: @Composable ColumnScope.() -> Unit
 }
 
 @Composable
-private fun SetupField(value: String, onChange: (String) -> Unit, label: String, isPassword: Boolean = false) {
+private fun SetupField(value: String, onChange: (String) -> Unit, label: String, isPassword: Boolean = false, placeholder: String? = null) {
     var revealed by remember { mutableStateOf(false) }
     OutlinedTextField(
         value,
         onChange,
         label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
         visualTransformation = if (isPassword && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
