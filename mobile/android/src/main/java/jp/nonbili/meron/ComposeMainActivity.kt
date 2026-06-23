@@ -74,6 +74,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
@@ -97,8 +98,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -131,6 +134,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
@@ -307,7 +311,7 @@ class ComposeMainActivity : ComponentActivity() {
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
 }
 
-private enum class Screen { Mail, Starred, Kanban, Thread, Compose, AddAccount }
+private enum class Screen { Mail, Starred, Kanban, Thread, Compose, AddAccount, Settings }
 
 private data class AccountMediaUploadTarget(
     val account: AccountSummary,
@@ -2860,7 +2864,7 @@ private fun MeronMobileScreen(
 
     // Hardware back from a sub-screen returns to the inbox instead of exiting.
     BackHandler(enabled = screen != Screen.Mail) {
-        screen = if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount) previousTopScreen else Screen.Mail
+        screen = if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount || screen == Screen.Settings) previousTopScreen else Screen.Mail
     }
 
     when (screen) {
@@ -3008,6 +3012,60 @@ private fun MeronMobileScreen(
             diagnostics = coreStatus(coreInitJson),
         )
 
+        Screen.Settings -> {
+            LaunchedEffect(Unit) { loadStorageUsage() }
+            SettingsScreen(
+                onBack = { screen = previousTopScreen },
+                appearanceMode = appearanceMode,
+                onAppearanceModeChange = onAppearanceModeChange,
+                showSenderImages = showSenderImages,
+                onToggleSenderImages = {
+                    showSenderImages = !showSenderImages
+                    saveAppBoolean(context, SHOW_SENDER_IMAGES_PREF, showSenderImages)
+                },
+                showUnreadBadges = showUnreadBadges,
+                onToggleUnreadBadges = {
+                    showUnreadBadges = !showUnreadBadges
+                    saveAppBoolean(context, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
+                },
+                showUnifiedInboxNav = showUnifiedInboxNav,
+                onToggleUnifiedInboxNav = {
+                    showUnifiedInboxNav = !showUnifiedInboxNav
+                    saveAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
+                },
+                showStarredNav = showStarredNav,
+                onToggleStarredNav = {
+                    showStarredNav = !showStarredNav
+                    saveAppBoolean(context, SHOW_STARRED_NAV_PREF, showStarredNav)
+                },
+                sendShortcutMode = sendShortcutMode,
+                onToggleSendShortcut = {
+                    val next = sendShortcutMode.next()
+                    sendShortcutMode = next
+                    saveSendShortcutMode(context, next)
+                },
+                kanbanColumnWidth = kanbanColumnWidth,
+                onCycleKanbanColumnWidth = {
+                    val next = nextKanbanColumnWidth(kanbanColumnWidth)
+                    kanbanColumnWidth = next
+                    saveAppInt(context, KANBAN_COLUMN_WIDTH_PREF, next)
+                },
+                notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
+                onEnableNotifications = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                onRefreshBackground = {
+                    AndroidBackgroundSyncScheduler.runOnce(context)
+                    status = "Queued background refresh"
+                },
+                storageUsage = storageUsage,
+                storageBusy = storageBusy,
+                storageClearConfirming = storageClearConfirming,
+                onRefreshStorage = { loadStorageUsage(showStatus = true) },
+                onClearStorageCache = ::clearStorageCache,
+                appVersion = appVersion,
+                onShowAbout = { showAboutDialog = true },
+            )
+        }
+
         Screen.Starred -> ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -3016,18 +3074,9 @@ private fun MeronMobileScreen(
                     selectedAccountId = selectedCoreAccountId,
                     folders = coreFolders,
                     currentScreen = screen,
-                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
-                    appearanceMode = appearanceMode,
-                    storageUsage = storageUsage,
-                    storageBusy = storageBusy,
-                    storageClearConfirming = storageClearConfirming,
                     showUnreadBadges = showUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     showStarredNav = showStarredNav,
-                    appVersion = appVersion,
-                    showSenderImages = showSenderImages,
-                    sendShortcutMode = sendShortcutMode,
-                    kanbanColumnWidth = kanbanColumnWidth,
                     onSelectUnified = {
                         screen = Screen.Mail
                         syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
@@ -3053,46 +3102,9 @@ private fun MeronMobileScreen(
                         screen = Screen.AddAccount
                         scope.launch { drawerState.close() }
                     },
-                    onRefreshBackground = {
-                        AndroidBackgroundSyncScheduler.runOnce(context)
-                        status = "Queued background refresh"
-                        scope.launch { drawerState.close() }
-                    },
-                    onEnableNotifications = {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        scope.launch { drawerState.close() }
-                    },
-                    onAppearanceModeChange = onAppearanceModeChange,
-                    onToggleUnreadBadges = {
-                        showUnreadBadges = !showUnreadBadges
-                        saveAppBoolean(context, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
-                    },
-                    onToggleUnifiedInboxNav = {
-                        showUnifiedInboxNav = !showUnifiedInboxNav
-                        saveAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
-                    },
-                    onToggleStarredNav = {
-                        showStarredNav = !showStarredNav
-                        saveAppBoolean(context, SHOW_STARRED_NAV_PREF, showStarredNav)
-                    },
-                    onToggleSenderImages = {
-                        showSenderImages = !showSenderImages
-                        saveAppBoolean(context, SHOW_SENDER_IMAGES_PREF, showSenderImages)
-                    },
-                    onToggleSendShortcut = {
-                        val next = sendShortcutMode.next()
-                        sendShortcutMode = next
-                        saveSendShortcutMode(context, next)
-                    },
-                    onCycleKanbanColumnWidth = {
-                        val next = nextKanbanColumnWidth(kanbanColumnWidth)
-                        kanbanColumnWidth = next
-                        saveAppInt(context, KANBAN_COLUMN_WIDTH_PREF, next)
-                    },
-                    onRefreshStorage = { loadStorageUsage(showStatus = true) },
-                    onClearStorageCache = ::clearStorageCache,
-                    onShowAbout = {
-                        showAboutDialog = true
+                    onOpenSettings = {
+                        previousTopScreen = screen
+                        screen = Screen.Settings
                         scope.launch { drawerState.close() }
                     },
                 )
@@ -3155,18 +3167,9 @@ private fun MeronMobileScreen(
                     selectedAccountId = selectedCoreAccountId,
                     folders = coreFolders,
                     currentScreen = screen,
-                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
-                    appearanceMode = appearanceMode,
-                    storageUsage = storageUsage,
-                    storageBusy = storageBusy,
-                    storageClearConfirming = storageClearConfirming,
                     showUnreadBadges = showUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     showStarredNav = showStarredNav,
-                    appVersion = appVersion,
-                    showSenderImages = showSenderImages,
-                    sendShortcutMode = sendShortcutMode,
-                    kanbanColumnWidth = kanbanColumnWidth,
                     onSelectUnified = {
                         screen = Screen.Mail
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
@@ -3205,46 +3208,9 @@ private fun MeronMobileScreen(
                         screen = Screen.AddAccount
                         scope.launch { drawerState.close() }
                     },
-                    onRefreshBackground = {
-                        AndroidBackgroundSyncScheduler.runOnce(context)
-                        status = "Queued background refresh"
-                        scope.launch { drawerState.close() }
-                    },
-                    onEnableNotifications = {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        scope.launch { drawerState.close() }
-                    },
-                    onAppearanceModeChange = onAppearanceModeChange,
-                    onToggleUnreadBadges = {
-                        showUnreadBadges = !showUnreadBadges
-                        saveAppBoolean(context, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
-                    },
-                    onToggleUnifiedInboxNav = {
-                        showUnifiedInboxNav = !showUnifiedInboxNav
-                        saveAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
-                    },
-                    onToggleStarredNav = {
-                        showStarredNav = !showStarredNav
-                        saveAppBoolean(context, SHOW_STARRED_NAV_PREF, showStarredNav)
-                    },
-                    onToggleSenderImages = {
-                        showSenderImages = !showSenderImages
-                        saveAppBoolean(context, SHOW_SENDER_IMAGES_PREF, showSenderImages)
-                    },
-                    onToggleSendShortcut = {
-                        val next = sendShortcutMode.next()
-                        sendShortcutMode = next
-                        saveSendShortcutMode(context, next)
-                    },
-                    onCycleKanbanColumnWidth = {
-                        val next = nextKanbanColumnWidth(kanbanColumnWidth)
-                        kanbanColumnWidth = next
-                        saveAppInt(context, KANBAN_COLUMN_WIDTH_PREF, next)
-                    },
-                    onRefreshStorage = { loadStorageUsage(showStatus = true) },
-                    onClearStorageCache = ::clearStorageCache,
-                    onShowAbout = {
-                        showAboutDialog = true
+                    onOpenSettings = {
+                        previousTopScreen = screen
+                        screen = Screen.Settings
                         scope.launch { drawerState.close() }
                     },
                 )
@@ -3347,18 +3313,9 @@ private fun MeronMobileScreen(
                     selectedAccountId = selectedCoreAccountId,
                     folders = coreFolders,
                     currentScreen = screen,
-                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
-                    appearanceMode = appearanceMode,
-                    storageUsage = storageUsage,
-                    storageBusy = storageBusy,
-                    storageClearConfirming = storageClearConfirming,
                     showUnreadBadges = showUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     showStarredNav = showStarredNav,
-                    appVersion = appVersion,
-                    showSenderImages = showSenderImages,
-                    sendShortcutMode = sendShortcutMode,
-                    kanbanColumnWidth = kanbanColumnWidth,
                     onSelectUnified = {
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                             selectedCoreAccountId = UNIFIED_ACCOUNT_ID
@@ -3402,46 +3359,9 @@ private fun MeronMobileScreen(
                         screen = Screen.AddAccount
                         scope.launch { drawerState.close() }
                     },
-                    onRefreshBackground = {
-                        AndroidBackgroundSyncScheduler.runOnce(context)
-                        status = "Queued background refresh"
-                        scope.launch { drawerState.close() }
-                    },
-                    onEnableNotifications = {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        scope.launch { drawerState.close() }
-                    },
-                    onAppearanceModeChange = onAppearanceModeChange,
-                    onToggleUnreadBadges = {
-                        showUnreadBadges = !showUnreadBadges
-                        saveAppBoolean(context, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
-                    },
-                    onToggleUnifiedInboxNav = {
-                        showUnifiedInboxNav = !showUnifiedInboxNav
-                        saveAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
-                    },
-                    onToggleStarredNav = {
-                        showStarredNav = !showStarredNav
-                        saveAppBoolean(context, SHOW_STARRED_NAV_PREF, showStarredNav)
-                    },
-                    onToggleSenderImages = {
-                        showSenderImages = !showSenderImages
-                        saveAppBoolean(context, SHOW_SENDER_IMAGES_PREF, showSenderImages)
-                    },
-                    onToggleSendShortcut = {
-                        val next = sendShortcutMode.next()
-                        sendShortcutMode = next
-                        saveSendShortcutMode(context, next)
-                    },
-                    onCycleKanbanColumnWidth = {
-                        val next = nextKanbanColumnWidth(kanbanColumnWidth)
-                        kanbanColumnWidth = next
-                        saveAppInt(context, KANBAN_COLUMN_WIDTH_PREF, next)
-                    },
-                    onRefreshStorage = { loadStorageUsage(showStatus = true) },
-                    onClearStorageCache = ::clearStorageCache,
-                    onShowAbout = {
-                        showAboutDialog = true
+                    onOpenSettings = {
+                        previousTopScreen = screen
+                        screen = Screen.Settings
                         scope.launch { drawerState.close() }
                     },
                 )
@@ -6423,41 +6343,240 @@ private fun SetupField(value: String, onChange: (String) -> Unit, label: String,
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(
+    onBack: () -> Unit,
+    appearanceMode: AppAppearanceMode,
+    onAppearanceModeChange: (AppAppearanceMode) -> Unit,
+    showSenderImages: Boolean,
+    onToggleSenderImages: () -> Unit,
+    showUnreadBadges: Boolean,
+    onToggleUnreadBadges: () -> Unit,
+    showUnifiedInboxNav: Boolean,
+    onToggleUnifiedInboxNav: () -> Unit,
+    showStarredNav: Boolean,
+    onToggleStarredNav: () -> Unit,
+    sendShortcutMode: SendShortcutMode,
+    onToggleSendShortcut: () -> Unit,
+    kanbanColumnWidth: Int,
+    onCycleKanbanColumnWidth: () -> Unit,
+    notificationsNeedPermission: Boolean,
+    onEnableNotifications: () -> Unit,
+    onRefreshBackground: () -> Unit,
+    storageUsage: StorageUsage?,
+    storageBusy: Boolean,
+    storageClearConfirming: Boolean,
+    onRefreshStorage: () -> Unit,
+    onClearStorageCache: () -> Unit,
+    appVersion: String,
+    onShowAbout: () -> Unit,
+) {
+    var showThemePicker by remember { mutableStateOf(false) }
+    if (showThemePicker) {
+        ThemePickerDialog(
+            current = appearanceMode,
+            onSelect = onAppearanceModeChange,
+            onDismiss = { showThemePicker = false },
+        )
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
+            item { SettingsSectionLabel("Appearance") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Visibility,
+                    title = "Theme",
+                    subtitle = "Color presets shared with desktop",
+                    onClick = { showThemePicker = true },
+                    trailing = { Text(appearanceMode.label, color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item {
+                SettingsToggleRow(
+                    icon = Icons.Filled.Visibility,
+                    title = "Sender images",
+                    subtitle = "Use Gravatar and site icons",
+                    checked = showSenderImages,
+                    onToggle = onToggleSenderImages,
+                )
+            }
+            item { SettingsSectionLabel("Navigation") }
+            item { SettingsToggleRow(Icons.Filled.Visibility, "Unread badges", "Show counts in the drawer", showUnreadBadges, onToggleUnreadBadges) }
+            item { SettingsToggleRow(Icons.Filled.Inbox, "Unified inbox", "Show in the navigation drawer", showUnifiedInboxNav, onToggleUnifiedInboxNav) }
+            item { SettingsToggleRow(Icons.Filled.Star, "Starred", "Show in the navigation drawer", showStarredNav, onToggleStarredNav) }
+            item { SettingsSectionLabel("Composer") }
+            item {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    title = "Send shortcut",
+                    subtitle = "Hardware keyboard behavior",
+                    onClick = onToggleSendShortcut,
+                    trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item { SettingsSectionLabel("Kanban") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.ViewKanban,
+                    title = "Column width",
+                    subtitle = "Adjust board density",
+                    onClick = onCycleKanbanColumnWidth,
+                    trailing = { Text("${kanbanColumnWidth}dp", color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item { SettingsSectionLabel("Sync & notifications") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Refresh,
+                    title = "Refresh in background",
+                    subtitle = "Queue a sync for all accounts",
+                    onClick = onRefreshBackground,
+                )
+            }
+            if (notificationsNeedPermission) {
+                item {
+                    SettingsRow(
+                        icon = Icons.Filled.MarkEmailUnread,
+                        title = "Enable notifications",
+                        subtitle = "Allow new mail alerts",
+                        onClick = onEnableNotifications,
+                    )
+                }
+            }
+            item { SettingsSectionLabel("Storage") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Info,
+                    title = "Storage usage",
+                    subtitle = storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
+                        ?: if (storageBusy) "Loading..." else "Tap to refresh",
+                    onClick = onRefreshStorage,
+                )
+            }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Delete,
+                    title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
+                    subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
+                    onClick = onClearStorageCache,
+                    trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
+                )
+            }
+            item { SettingsSectionLabel("About") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Info,
+                    title = "About Meron",
+                    subtitle = "Version and support",
+                    onClick = onShowAbout,
+                    trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun SettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = trailing,
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+@Composable
+private fun SettingsToggleRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = { onToggle() }) },
+        modifier = Modifier.clickable(onClick = onToggle),
+    )
+}
+
+@Composable
+private fun ThemePickerDialog(
+    current: AppAppearanceMode,
+    onSelect: (AppAppearanceMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Theme") },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
+                items(AppAppearanceMode.entries) { mode ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode); onDismiss() }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = mode == current, onClick = { onSelect(mode); onDismiss() })
+                        Text(mode.label, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
+}
+
 @Composable
 private fun MailDrawer(
     accounts: List<AccountSummary>,
     selectedAccountId: String,
     folders: List<FolderSummary>,
     currentScreen: Screen,
-    notificationsNeedPermission: Boolean,
-    appearanceMode: AppAppearanceMode,
-    storageUsage: StorageUsage?,
-    storageBusy: Boolean,
-    storageClearConfirming: Boolean,
     showUnreadBadges: Boolean,
     showUnifiedInboxNav: Boolean,
     showStarredNav: Boolean,
-    appVersion: String,
-    showSenderImages: Boolean,
-    sendShortcutMode: SendShortcutMode,
-    kanbanColumnWidth: Int,
     onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
     onSelectStarred: () -> Unit,
     onSelectKanban: () -> Unit,
     onAddAccount: () -> Unit,
-    onRefreshBackground: () -> Unit,
-    onEnableNotifications: () -> Unit,
-    onAppearanceModeChange: (AppAppearanceMode) -> Unit,
-    onToggleUnreadBadges: () -> Unit,
-    onToggleUnifiedInboxNav: () -> Unit,
-    onToggleStarredNav: () -> Unit,
-    onToggleSenderImages: () -> Unit,
-    onToggleSendShortcut: () -> Unit,
-    onCycleKanbanColumnWidth: () -> Unit,
-    onRefreshStorage: () -> Unit,
-    onClearStorageCache: () -> Unit,
-    onShowAbout: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val chat = LocalChatColors.current
     ModalDrawerSheet(
@@ -6538,40 +6657,6 @@ private fun MailDrawer(
                     color = chat.onSidebarMuted.copy(alpha = 0.25f),
                 )
             }
-            item { DrawerLabel("Navigation", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onToggleUnreadBadges,
-                    leading = { Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Unread badges",
-                    subtitle = "Show counts in the drawer",
-                    trailing = onOffLabel(showUnreadBadges),
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onToggleUnifiedInboxNav,
-                    leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Unified inbox",
-                    subtitle = "Show in navigation",
-                    trailing = onOffLabel(showUnifiedInboxNav),
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onToggleStarredNav,
-                    leading = { Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Starred",
-                    subtitle = "Show in navigation",
-                    trailing = onOffLabel(showStarredNav),
-                )
-            }
             item {
                 SidebarRow(
                     selected = false, chat = chat, onClick = onAddAccount,
@@ -6581,101 +6666,9 @@ private fun MailDrawer(
             }
             item {
                 SidebarRow(
-                    selected = false, chat = chat, onClick = onRefreshBackground,
-                    leading = { Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Refresh in background", subtitle = null, trailing = null,
-                )
-            }
-            if (notificationsNeedPermission) {
-                item {
-                    SidebarRow(
-                        selected = false, chat = chat, onClick = onEnableNotifications,
-                        leading = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        title = "Enable notifications", subtitle = null, trailing = null,
-                    )
-                }
-            }
-            item { DrawerLabel("Appearance", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = { onAppearanceModeChange(appearanceMode.next()) },
-                    leading = { Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Theme",
-                    subtitle = "System and desktop presets",
-                    trailing = appearanceMode.label,
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onToggleSenderImages,
-                    leading = { Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Sender images",
-                    subtitle = "Use Gravatar and site icons",
-                    trailing = onOffLabel(showSenderImages),
-                )
-            }
-            item { DrawerLabel("Composer", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onToggleSendShortcut,
-                    leading = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Send shortcut",
-                    subtitle = "Hardware keyboard behavior",
-                    trailing = sendShortcutMode.label(),
-                )
-            }
-            item { DrawerLabel("Kanban", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onCycleKanbanColumnWidth,
-                    leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Column width",
-                    subtitle = "Adjust board density",
-                    trailing = "${kanbanColumnWidth}dp",
-                )
-            }
-            item { DrawerLabel("Storage", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onRefreshStorage,
-                    leading = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Storage usage",
-                    subtitle = storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
-                        ?: if (storageBusy) "Loading..." else "Tap to refresh",
-                    trailing = null,
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onClearStorageCache,
-                    leading = { Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
-                    subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
-                    trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let(::formatBytes),
-                )
-            }
-            item { DrawerLabel("About", chat) }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onShowAbout,
-                    leading = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "About Meron",
-                    subtitle = "Version and support",
-                    trailing = appVersion,
+                    selected = false, chat = chat, onClick = onOpenSettings,
+                    leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Settings", subtitle = "Appearance, navigation, storage", trailing = null,
                 )
             }
         }
