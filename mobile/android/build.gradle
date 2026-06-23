@@ -3,6 +3,26 @@ plugins {
     id "org.jetbrains.kotlin.plugin.compose"
 }
 
+def releaseProp = { String name, String envName = null, String fallback = "" ->
+    if (project.hasProperty(name)) {
+        return project.property(name).toString()
+    }
+    if (envName != null) {
+        return System.getenv(envName) ?: fallback
+    }
+    return fallback
+}
+
+def releaseVersionCode = releaseProp("meronVersionCode", "MERON_VERSION_CODE", "1").toInteger()
+def releaseVersionName = releaseProp("meronVersionName", "MERON_VERSION_NAME", "0.1.0")
+def oauthAppLinkHost = releaseProp("oauthAppLinkHost", "MERON_OAUTH_APP_LINK_HOST", "oauth.example.invalid")
+def oauthAppLinkPathPrefix = releaseProp("oauthAppLinkPathPrefix", "MERON_OAUTH_APP_LINK_PATH_PREFIX", "/meron/oauth")
+def releaseKeystore = releaseProp("meronReleaseStoreFile", "MERON_ANDROID_RELEASE_STORE_FILE")
+def releaseStorePassword = releaseProp("meronReleaseStorePassword", "MERON_ANDROID_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseStorePassword)
+def hasReleaseSigning = releaseKeystore && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace "jp.nonbili.meron"
     compileSdk 36
@@ -11,13 +31,30 @@ android {
         applicationId "jp.nonbili.meron"
         minSdk 23
         targetSdk 36
-        versionCode 1
-        versionName "0.1.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [
-            oauthAppLinkHost: "oauth.example.invalid",
-            oauthAppLinkPathPrefix: "/meron/oauth",
+            oauthAppLinkHost: oauthAppLinkHost,
+            oauthAppLinkPathPrefix: oauthAppLinkPathPrefix,
         ]
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseKeystore)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig hasReleaseSigning ? signingConfigs.release : null
+        }
     }
 
     compileOptions {

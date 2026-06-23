@@ -499,7 +499,10 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
     tx.execute("DELETE FROM messages WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM folder_state WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM subscriptions WHERE account = ?1", params![id])?;
-    tx.execute("DELETE FROM account_secrets WHERE account_id = ?1", params![id])?;
+    tx.execute(
+        "DELETE FROM account_secrets WHERE account_id = ?1",
+        params![id],
+    )?;
     tx.commit()?;
     Ok(())
 }
@@ -2238,7 +2241,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         for table in [
             "accounts",
@@ -2267,7 +2270,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]

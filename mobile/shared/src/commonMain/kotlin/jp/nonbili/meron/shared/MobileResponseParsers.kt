@@ -5,10 +5,13 @@ fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
     return accountsJson.jsonArrayElements().mapNotNull { item ->
         val id = item.findJsonStringProperty("id").orEmpty()
         if (id.isBlank()) return@mapNotNull null
+        val wallpaperJson = item.findJsonPropertyValue("chat_wallpaper").orEmpty()
         AccountSummary(
             id = id,
             email = item.findJsonStringProperty("email").orEmpty(),
             displayName = item.findJsonStringProperty("display_name").orEmpty(),
+            senderName = item.findJsonStringProperty("sender_name").orEmpty(),
+            avatarUrl = item.findJsonStringProperty("avatar_url").orEmpty(),
             needsReconnect = item.findJsonBooleanProperty("needs_reconnect") ?: false,
             engine = item.findJsonStringProperty("engine").orEmpty(),
             provider = item.findJsonStringProperty("provider").orEmpty(),
@@ -17,6 +20,22 @@ fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
             imapPort = item.findJsonLongProperty("imap_port")?.toInt() ?: 0,
             smtpHost = item.findJsonStringProperty("smtp_host").orEmpty(),
             smtpPort = item.findJsonLongProperty("smtp_port")?.toInt() ?: 0,
+            loadRemoteImages = item.findJsonBooleanProperty("load_remote_images") ?: false,
+            includedInUnified = item.findJsonBooleanProperty("included_in_unified") ?: true,
+            muted = item.findJsonBooleanProperty("muted") ?: false,
+            paused = item.findJsonBooleanProperty("paused") ?: false,
+            conversationHtml = item.findJsonBooleanProperty("conversation_html") ?: true,
+            rssSyncIntervalMinutes = item.findJsonLongProperty("rss_sync_interval_minutes")?.toInt() ?: 60,
+            aliases = item.findJsonArrayProperty("aliases")?.jsonArrayElements()?.mapNotNull { aliasJson ->
+                val email = aliasJson.findJsonStringProperty("email").orEmpty()
+                if (email.isBlank()) null else AccountAlias(
+                    email = email,
+                    name = aliasJson.findJsonStringProperty("name").orEmpty(),
+                )
+            }.orEmpty(),
+            chatWallpaperKind = wallpaperJson.findJsonStringProperty("kind").orEmpty(),
+            chatWallpaperPresetId = wallpaperJson.findJsonStringProperty("presetId").orEmpty(),
+            chatWallpaperUrl = wallpaperJson.findJsonStringProperty("url").orEmpty(),
         )
     }
 }
@@ -34,9 +53,54 @@ fun parseFolderListResponse(responseJson: String): List<FolderSummary> {
     }
 }
 
-fun parseThreadListResponse(responseJson: String): List<ThreadSummary> {
-    val threadsJson = responseJson.findJsonArrayProperty("threads") ?: return emptyList()
-    return threadsJson.jsonArrayElements().mapNotNull { item ->
+fun parseContactSuggestResponse(responseJson: String): List<ContactSuggestion> {
+    val contactsJson = responseJson.findJsonArrayProperty("contacts") ?: return emptyList()
+    return contactsJson.jsonArrayElements().mapNotNull { item ->
+        val addr = item.findJsonStringProperty("addr").orEmpty()
+        if (addr.isBlank()) return@mapNotNull null
+        ContactSuggestion(
+            name = item.findJsonStringProperty("name").orEmpty(),
+            addr = addr,
+        )
+    }
+}
+
+data class DiscoveredAccountSettings(
+    val imapHost: String,
+    val imapPort: Int,
+    val smtpHost: String,
+    val smtpPort: Int,
+    val username: String,
+    val providerName: String,
+    val source: String,
+    val appPasswordProvider: String,
+    val appPasswordUrl: String,
+)
+
+fun parseAutodiscoverResponse(responseJson: String): DiscoveredAccountSettings {
+    val hintJson = responseJson.findJsonPropertyValue("app_password_hint").orEmpty()
+    return DiscoveredAccountSettings(
+        imapHost = responseJson.findJsonStringProperty("imap_host").orEmpty(),
+        imapPort = responseJson.findJsonLongProperty("imap_port")?.toInt() ?: 993,
+        smtpHost = responseJson.findJsonStringProperty("smtp_host").orEmpty(),
+        smtpPort = responseJson.findJsonLongProperty("smtp_port")?.toInt() ?: 465,
+        username = responseJson.findJsonStringProperty("username").orEmpty(),
+        providerName = responseJson.findJsonStringProperty("provider_name").orEmpty(),
+        source = responseJson.findJsonStringProperty("source").orEmpty(),
+        appPasswordProvider = hintJson.findJsonStringProperty("provider").orEmpty(),
+        appPasswordUrl = hintJson.findJsonStringProperty("url").orEmpty(),
+    )
+}
+
+data class ThreadListPage(
+    val threads: List<ThreadSummary>,
+    val nextCursor: String,
+)
+
+fun parseThreadListPage(responseJson: String): ThreadListPage {
+    val threadsJson = responseJson.findJsonArrayProperty("threads")
+        ?: return ThreadListPage(threads = emptyList(), nextCursor = "")
+    val threads = threadsJson.jsonArrayElements().mapNotNull { item ->
         val id = item.findJsonStringProperty("id").orEmpty()
         if (id.isBlank()) return@mapNotNull null
         ThreadSummary(
@@ -49,13 +113,48 @@ fun parseThreadListResponse(responseJson: String): List<ThreadSummary> {
             unread = item.findJsonBooleanProperty("unread") ?: false,
             starred = item.findJsonBooleanProperty("starred") ?: false,
             dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
+            feedUrl = item.findJsonStringProperty("feed_url").orEmpty(),
+        )
+    }
+    return ThreadListPage(
+        threads = threads,
+        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
+    )
+}
+
+fun parseThreadListResponse(responseJson: String): List<ThreadSummary> {
+    return parseThreadListPage(responseJson).threads
+}
+
+data class ThreadReadPage(
+    val messages: List<MessageBody>,
+    val nextCursor: String,
+)
+
+fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
+    val itemsJson = responseJson.findJsonArrayProperty("items") ?: return emptyList()
+    return itemsJson.jsonArrayElements().mapNotNull { item ->
+        val id = item.findJsonStringProperty("id").orEmpty()
+        val threadId = item.findJsonStringProperty("thread_id").orEmpty()
+        if (id.isBlank() || threadId.isBlank()) return@mapNotNull null
+        StarredItemSummary(
+            id = id,
+            threadId = threadId,
+            accountId = item.findJsonStringProperty("account_id").orEmpty(),
+            folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
+            subject = item.findJsonStringProperty("subject").orEmpty(),
+            sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
+            preview = item.findJsonStringProperty("preview").orEmpty(),
+            unread = item.findJsonBooleanProperty("unread") ?: false,
+            dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
         )
     }
 }
 
-fun parseThreadReadResponse(responseJson: String): List<MessageBody> {
-    val messagesJson = responseJson.findJsonArrayProperty("messages") ?: return emptyList()
-    return messagesJson.jsonArrayElements().mapNotNull { item ->
+fun parseThreadReadPage(responseJson: String): ThreadReadPage {
+    val messagesJson = responseJson.findJsonArrayProperty("messages")
+        ?: return ThreadReadPage(messages = emptyList(), nextCursor = "")
+    val messages = messagesJson.jsonArrayElements().mapNotNull { item ->
         val id = item.findJsonStringProperty("id").orEmpty()
         if (id.isBlank()) return@mapNotNull null
         val fromName = item.findJsonStringProperty("from_name").orEmpty()
@@ -64,15 +163,63 @@ fun parseThreadReadResponse(responseJson: String): List<MessageBody> {
             id = id,
             from = fromName.ifBlank { fromAddr },
             to = item.findJsonStringProperty("to").orEmpty(),
+            cc = item.findJsonStringProperty("cc").orEmpty(),
+            bcc = item.findJsonStringProperty("bcc").orEmpty(),
             subject = item.findJsonStringProperty("subject").orEmpty(),
             body = item.findJsonStringProperty("body").orEmpty(),
+            bodyHtml = item.findJsonStringProperty("body_html").orEmpty(),
             dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
             fromAddr = fromAddr,
             replyTo = item.findJsonStringProperty("reply_to").orEmpty(),
             messageId = item.findJsonStringProperty("message_id").orEmpty(),
             references = item.findJsonStringProperty("references").orEmpty(),
+            unread = item.findJsonBooleanProperty("unread") ?: false,
+            starred = item.findJsonBooleanProperty("starred") ?: false,
+            hasAttachments = item.findJsonBooleanProperty("has_attachments") ?: false,
+            attachments = item.findJsonArrayProperty("attachments")?.jsonArrayElements()?.mapNotNull { attachmentJson ->
+                val filename = attachmentJson.findJsonStringProperty("filename").orEmpty()
+                if (filename.isBlank()) return@mapNotNull null
+                MessageAttachment(
+                    filename = filename,
+                    mimeType = attachmentJson.findJsonStringProperty("mime").orEmpty(),
+                    sizeBytes = attachmentJson.findJsonLongProperty("size") ?: 0,
+                    key = attachmentJson.findJsonStringProperty("key").orEmpty(),
+                    url = attachmentJson.findJsonStringProperty("url").orEmpty(),
+                )
+            }.orEmpty(),
         )
     }
+    return ThreadReadPage(
+        messages = messages,
+        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
+    )
+}
+
+fun parseThreadReadResponse(responseJson: String): List<MessageBody> {
+    return parseThreadReadPage(responseJson).messages
+}
+
+fun parseOpmlExportResponse(responseJson: String): String {
+    return responseJson.findJsonStringProperty("opml").orEmpty()
+}
+
+fun parseOpmlImportCountResponse(responseJson: String): Int {
+    return responseJson.findJsonLongProperty("imported")?.toInt() ?: 0
+}
+
+fun parseMediaFileUrlResponse(responseJson: String): String {
+    return responseJson.findJsonStringProperty("url").orEmpty()
+}
+
+fun parseAttachmentDataResponse(responseJson: String): String {
+    return responseJson.findJsonStringProperty("data").orEmpty()
+}
+
+fun parseStorageUsageResponse(responseJson: String): StorageUsage {
+    return StorageUsage(
+        cacheBytes = responseJson.findJsonLongProperty("cacheBytes") ?: 0,
+        dbBytes = responseJson.findJsonLongProperty("dbBytes") ?: 0,
+    )
 }
 
 private fun String.findJsonArrayProperty(name: String): String? {

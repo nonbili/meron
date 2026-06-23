@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::path::Path;
+use std::path::{Component, Path};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -10,7 +10,10 @@ use crate::rss;
 use crate::secrets::Secrets;
 use crate::smtp::{self, AttachmentInput};
 use crate::store::{self, AccountMeta};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -22,8 +25,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PROTOCOL_VERSION: u32 = 1;
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const OUTLOOK_SCOPES: &str =
-    "offline_access openid email https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
+const OUTLOOK_SCOPES: &str = "offline_access openid email https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Request {
@@ -45,22 +47,48 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
     match req.method.as_str() {
         "ping" => Ok(ping_response()),
         "account.list" => Ok(json!({ "accounts": [] })),
+        "account.autodiscover" => autodiscover_mobile_account(&req.params),
         "account.addOAuth" => Ok(json!({ "account": Value::Null })),
         "account.exchangeOAuthCode" => Ok(json!({ "account": Value::Null })),
-        "account.addRss" => Ok(json!({ "account": Value::Null })),
-        "feed.add" => Ok(json!({ "ok": true })),
-        "feed.remove" => Ok(json!({ "ok": true })),
-        "feed.move" => Ok(json!({ "ok": true, "moved": 0 })),
+        "account.addRss" | "account.addRSS" => Ok(json!({ "account": Value::Null })),
+        "account.remove" => Ok(json!({ "ok": true })),
+        "account.setName" => Ok(json!({ "ok": true })),
+        "account.setSenderName" => Ok(json!({ "ok": true })),
+        "account.setAvatar" => Ok(json!({ "ok": true })),
+        "account.writeAvatarFile" => Ok(json!({ "url": "" })),
+        "account.setChatWallpaper" => Ok(json!({ "ok": true })),
+        "account.writeChatWallpaperFile" => Ok(json!({ "url": "" })),
+        "account.setImages" => Ok(json!({ "ok": true })),
+        "account.setConversationHtml" => Ok(json!({ "ok": true })),
+        "account.setUnified" => Ok(json!({ "ok": true })),
+        "account.setMuted" => Ok(json!({ "ok": true })),
+        "account.setPaused" => Ok(json!({ "ok": true })),
+        "account.setRSSSyncInterval" => Ok(json!({ "ok": true })),
+        "account.setAliases" => Ok(json!({ "ok": true })),
+        "account.reorder" => Ok(json!({ "ok": true })),
+        "contacts.suggest" | "mail.suggestContacts" => Ok(json!({ "contacts": [] })),
+        "feed.add" | "rss.addFeed" => Ok(json!({ "ok": true })),
+        "feed.remove" | "rss.removeFeed" => Ok(json!({ "ok": true })),
+        "feed.move" | "rss.moveFeed" => Ok(json!({ "ok": true, "moved": 0 })),
+        "rss.exportOpml" => Ok(json!({ "opml": "" })),
+        "rss.importOpml" => Ok(json!({ "imported": 0 })),
         "mail.folderList" => Ok(json!({ "folders": [] })),
         "mail.folderCreate" => Ok(json!({ "folders": [] })),
         "mail.threadList" => Ok(json!({ "threads": [] })),
         "mail.threadRead" => Ok(json!({ "messages": [] })),
+        "mail.attachmentRead" | "mail.readAttachment" => Ok(json!({ "data": "" })),
+        "storage.usage" => Ok(json!({ "cacheBytes": 0, "dbBytes": 0 })),
+        "storage.clearCache" => Ok(json!({ "cacheBytes": 0, "dbBytes": 0 })),
         "mail.starredItems" => Ok(json!({ "items": [] })),
         "mail.send" => Ok(json!({ "ok": true })),
+        "mail.saveDraft" => Ok(json!({ "ok": true })),
+        "mail.discardDraft" => Ok(json!({ "ok": true, "deleted": 0, "permanent": true })),
         "mail.archive" => Ok(json!({ "ok": true, "moved": 0 })),
         "mail.delete" => Ok(json!({ "ok": true, "deleted": 0 })),
         "mail.move" => Ok(json!({ "ok": true, "moved": 0 })),
+        "mail.copy" => Ok(json!({ "ok": true, "copied": 0 })),
         "mail.markRead" => Ok(json!({ "ok": true })),
+        "mail.markAllRead" => Ok(json!({ "ok": true })),
         "mail.markStarred" => Ok(json!({ "ok": true })),
         "rss.thread" => Ok(json!({ "messages": [] })),
         "rss.markRead" => Ok(json!({ "ok": true })),
@@ -73,23 +101,61 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
     match req.method.as_str() {
         "account.list" => list_mobile_accounts(data_dir),
         "account.addPassword" => add_mobile_password_account(data_dir, &req.params),
+        "account.autodiscover" => autodiscover_mobile_account(&req.params),
         "account.addOAuth" => add_mobile_oauth_account(data_dir, &req.params),
         "account.exchangeOAuthCode" => exchange_mobile_oauth_code(data_dir, &req.params),
-        "account.addRss" => add_mobile_rss_account(data_dir, &req.params),
-        "feed.add" => add_mobile_rss_feed(data_dir, &req.params),
-        "feed.remove" => remove_mobile_rss_feed(data_dir, &req.params),
-        "feed.move" => move_mobile_rss_feed(data_dir, &req.params),
+        "account.addRss" | "account.addRSS" => add_mobile_rss_account(data_dir, &req.params),
+        "account.remove" => remove_mobile_account(data_dir, &req.params),
+        "account.setName" => set_mobile_account_name(data_dir, &req.params),
+        "account.setSenderName" => set_mobile_account_sender_name(data_dir, &req.params),
+        "account.setAvatar" => set_mobile_account_avatar(data_dir, &req.params),
+        "account.writeAvatarFile" => {
+            write_mobile_account_media_file(data_dir, &req.params, "avatars")
+        }
+        "account.setChatWallpaper" => set_mobile_account_chat_wallpaper(data_dir, &req.params),
+        "account.writeChatWallpaperFile" => {
+            write_mobile_account_media_file(data_dir, &req.params, "wallpapers")
+        }
+        "account.setImages" => set_mobile_account_images(data_dir, &req.params),
+        "account.setConversationHtml" => {
+            set_mobile_account_bool_pref(data_dir, &req.params, "conversation_html")
+        }
+        "account.setUnified" => {
+            set_mobile_account_bool_pref(data_dir, &req.params, "included_in_unified")
+        }
+        "account.setMuted" => set_mobile_account_bool_pref(data_dir, &req.params, "muted"),
+        "account.setPaused" => set_mobile_account_bool_pref(data_dir, &req.params, "paused"),
+        "account.setRSSSyncInterval" => set_mobile_account_rss_sync_interval(data_dir, &req.params),
+        "account.setAliases" => set_mobile_account_aliases(data_dir, &req.params),
+        "account.reorder" => reorder_mobile_accounts(data_dir, &req.params),
+        "contacts.suggest" | "mail.suggestContacts" => {
+            suggest_mobile_contacts(data_dir, &req.params)
+        }
+        "feed.add" | "rss.addFeed" => add_mobile_rss_feed(data_dir, &req.params),
+        "feed.remove" | "rss.removeFeed" => remove_mobile_rss_feed(data_dir, &req.params),
+        "feed.move" | "rss.moveFeed" => move_mobile_rss_feed(data_dir, &req.params),
+        "rss.exportOpml" => export_mobile_opml(data_dir, &req.params),
+        "rss.importOpml" => import_mobile_opml(data_dir, &req.params),
         "mail.folderList" => list_mobile_folders(data_dir, &req.params),
         "mail.folderCreate" => create_mobile_folder(data_dir, &req.params),
         "mail.threadList" => list_mobile_threads(data_dir, &req.params),
         "mail.threadRead" => read_mobile_thread(data_dir, &req.params),
+        "mail.attachmentRead" | "mail.readAttachment" => {
+            read_mobile_attachment_file(data_dir, &req.params)
+        }
+        "storage.usage" => mobile_storage_usage(data_dir),
+        "storage.clearCache" => clear_mobile_storage_cache(data_dir),
         "mail.starredItems" => list_mobile_starred_items(data_dir, &req.params),
         "mail.sync" | "messages.sync" => sync_mobile_mail(data_dir, &req.params),
         "mail.send" => send_mobile_message(data_dir, &req.params),
+        "mail.saveDraft" => save_mobile_draft(data_dir, &req.params),
+        "mail.discardDraft" => discard_mobile_draft(data_dir, &req.params),
         "mail.archive" => archive_mobile_thread(data_dir, &req.params),
         "mail.delete" => delete_mobile_thread(data_dir, &req.params),
         "mail.move" => move_mobile_thread(data_dir, &req.params),
+        "mail.copy" => copy_mobile_thread(data_dir, &req.params),
         "mail.markRead" => mark_mobile_thread_read(data_dir, &req.params),
+        "mail.markAllRead" => mark_mobile_folder_all_read(data_dir, &req.params),
         "mail.markStarred" => mark_mobile_thread_starred(data_dir, &req.params),
         "rss.sync" => sync_mobile_rss(data_dir, &req.params),
         "rss.thread" => read_mobile_rss_thread(data_dir, &req.params),
@@ -154,6 +220,431 @@ fn list_mobile_accounts(data_dir: &str) -> Result<Value, String> {
             }
         }
         Ok(json!({ "accounts": accounts }))
+    })
+}
+
+fn req_account_pref_id(params: &Value) -> Result<String, String> {
+    req_str(params, "account")
+        .or_else(|_| req_str(params, "account_id"))
+        .or_else(|_| req_str(params, "id"))
+}
+
+fn remove_mobile_account(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    with_mobile_db(data_dir, |conn| {
+        store::delete_account(&conn, &id).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn autodiscover_mobile_account(params: &Value) -> Result<Value, String> {
+    let email = req_str(params, "email")?.trim().to_string();
+    let Some((_, domain)) = email.rsplit_once('@') else {
+        return Err("invalid email".to_string());
+    };
+    let domain = domain.trim().to_ascii_lowercase();
+    if domain.is_empty() {
+        return Err("invalid email".to_string());
+    }
+    let (provider, imap_host, imap_port, smtp_host, smtp_port, source) =
+        mobile_provider_mail_settings(&domain).unwrap_or_else(|| {
+            (
+                String::new(),
+                format!("imap.{domain}"),
+                993,
+                format!("smtp.{domain}"),
+                465,
+                "guess".to_string(),
+            )
+        });
+    let mut result = json!({
+        "imap_host": imap_host,
+        "imap_port": imap_port,
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "username": email,
+        "source": source,
+    });
+    if !provider.is_empty() {
+        result["provider_name"] = json!(provider);
+    }
+    if let Some((provider, url)) =
+        mobile_app_password_hint(&domain, result["imap_host"].as_str().unwrap_or_default())
+    {
+        result["app_password_hint"] = json!({ "provider": provider, "url": url });
+    }
+    Ok(result)
+}
+
+fn mobile_provider_mail_settings(
+    domain: &str,
+) -> Option<(String, String, u16, String, u16, String)> {
+    let settings = match domain {
+        "gmail.com" | "googlemail.com" => ("Gmail", "imap.gmail.com", 993, "smtp.gmail.com", 465),
+        "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => (
+            "Outlook",
+            "outlook.office365.com",
+            993,
+            "smtp.office365.com",
+            587,
+        ),
+        "icloud.com" | "me.com" | "mac.com" => {
+            ("iCloud", "imap.mail.me.com", 993, "smtp.mail.me.com", 587)
+        }
+        "yahoo.com" | "ymail.com" | "rocketmail.com" => (
+            "Yahoo",
+            "imap.mail.yahoo.com",
+            993,
+            "smtp.mail.yahoo.com",
+            465,
+        ),
+        "aol.com" => ("AOL", "imap.aol.com", 993, "smtp.aol.com", 465),
+        "fastmail.com" | "fastmail.fm" => (
+            "Fastmail",
+            "imap.fastmail.com",
+            993,
+            "smtp.fastmail.com",
+            465,
+        ),
+        "proton.me" | "protonmail.com" => {
+            ("Proton Mail Bridge", "127.0.0.1", 1143, "127.0.0.1", 1025)
+        }
+        _ => return None,
+    };
+    Some((
+        settings.0.to_string(),
+        settings.1.to_string(),
+        settings.2,
+        settings.3.to_string(),
+        settings.4,
+        "known".to_string(),
+    ))
+}
+
+fn mobile_app_password_hint(domain: &str, imap_host: &str) -> Option<(&'static str, &'static str)> {
+    let host = imap_host.to_ascii_lowercase();
+    let contains = |needle: &str| host.contains(needle) || domain.contains(needle);
+    if contains("mail.me.com")
+        || contains("icloud.com")
+        || contains("me.com")
+        || contains("mac.com")
+    {
+        Some(("iCloud", "https://account.apple.com/account/manage"))
+    } else if contains("fastmail") {
+        Some((
+            "Fastmail",
+            "https://app.fastmail.com/settings/security/apppassword",
+        ))
+    } else if contains("yahoo") || contains("ymail") || contains("rocketmail") {
+        Some((
+            "Yahoo",
+            "https://login.yahoo.com/account/security/app-passwords",
+        ))
+    } else if contains("aol.com") {
+        Some((
+            "AOL",
+            "https://login.aol.com/account/security/app-passwords",
+        ))
+    } else {
+        None
+    }
+}
+
+fn reorder_mobile_accounts(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let ids = req_str_array(params, "accounts")?;
+    with_mobile_db(data_dir, |conn| {
+        store::reorder_accounts(&conn, &ids).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn suggest_mobile_contacts(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let mut account = opt_str(params, "account");
+    if account.is_empty() {
+        account = opt_str(params, "account_id");
+    }
+    if account.is_empty() {
+        account = opt_str(params, "id");
+    }
+    let query = opt_str(params, "query");
+    let limit = opt_u32(params, "limit").unwrap_or(8);
+    with_mobile_db(data_dir, |conn| {
+        let contacts = store::suggest_contacts(&conn, &account, &query, limit)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "contacts": contacts }))
+    })
+}
+
+fn set_mobile_account_name(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let name = opt_str(params, "name");
+    with_mobile_db(data_dir, |conn| {
+        conn.execute(
+            "UPDATE accounts SET display_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
+            rusqlite::params![name, id],
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn set_mobile_account_sender_name(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let name = opt_str(params, "name");
+    with_mobile_db(data_dir, |conn| {
+        conn.execute(
+            "UPDATE accounts SET sender_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
+            rusqlite::params![name, id],
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn set_mobile_account_avatar(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let avatar_url = opt_str(params, "avatar_url");
+    with_mobile_db(data_dir, |conn| {
+        conn.execute(
+            "UPDATE accounts SET avatar_url = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
+            rusqlite::params![avatar_url, id],
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn write_mobile_account_media_file(
+    data_dir: &str,
+    params: &Value,
+    media_kind: &str,
+) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let filename = req_str(params, "filename")?;
+    let mime = opt_str(params, "mime").to_lowercase();
+    let data = req_str(params, "data")?;
+    let bytes = STANDARD
+        .decode(data.as_bytes())
+        .map_err(|err| format!("invalid media data: {err}"))?;
+    if bytes.is_empty() {
+        return Err("media file is empty".to_string());
+    }
+    let ext = media_extension(&filename, &mime)?;
+    let account_dir = safe_media_segment(&id);
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let stored_name = format!("{stamp}.{ext}");
+    let relative_url = format!("/media/{media_kind}/{account_dir}/{stored_name}");
+    let dir = Path::new(data_dir)
+        .join("media")
+        .join(media_kind)
+        .join(&account_dir);
+    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    std::fs::write(dir.join(stored_name), bytes).map_err(|err| err.to_string())?;
+    Ok(json!({ "url": relative_url }))
+}
+
+fn read_mobile_attachment_file(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let key = req_str(params, "key")?;
+    let relative = Path::new(&key);
+    if key.trim().is_empty()
+        || relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
+            )
+        })
+    {
+        return Err("invalid attachment key".to_string());
+    }
+    let root = Path::new(data_dir).join("attachments");
+    let path = root.join(relative);
+    let root = root.canonicalize().map_err(|err| err.to_string())?;
+    let path = path.canonicalize().map_err(|err| err.to_string())?;
+    if !path.starts_with(&root) {
+        return Err("invalid attachment key".to_string());
+    }
+    let data = std::fs::read(path).map_err(|err| err.to_string())?;
+    Ok(json!({ "data": STANDARD.encode(data) }))
+}
+
+fn mobile_storage_usage(data_dir: &str) -> Result<Value, String> {
+    let root = Path::new(data_dir);
+    if data_dir.trim().is_empty() {
+        return Err("mobile core is not initialized".to_string());
+    }
+    Ok(json!({
+        "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|err| err.to_string())?,
+        "dbBytes": path_size_bytes(&root.join("meron.db")).map_err(|err| err.to_string())?,
+    }))
+}
+
+fn clear_mobile_storage_cache(data_dir: &str) -> Result<Value, String> {
+    let cache_dir = Path::new(data_dir).join("attachments");
+    if cache_dir.exists() {
+        std::fs::remove_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    }
+    std::fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    mobile_storage_usage(data_dir)
+}
+
+fn path_size_bytes(path: &Path) -> std::io::Result<u64> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => return Err(err),
+    };
+    if metadata.is_file() {
+        return Ok(metadata.len());
+    }
+    if !metadata.is_dir() {
+        return Ok(0);
+    }
+    let mut total = 0;
+    for entry in std::fs::read_dir(path)? {
+        total += path_size_bytes(&entry?.path())?;
+    }
+    Ok(total)
+}
+
+fn media_extension(filename: &str, mime: &str) -> Result<&'static str, String> {
+    let name_ext = filename
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.trim().to_lowercase())
+        .unwrap_or_default();
+    match name_ext.as_str() {
+        "png" => Ok("png"),
+        "jpg" | "jpeg" => Ok("jpg"),
+        "webp" => Ok("webp"),
+        "gif" => Ok("gif"),
+        _ => match mime {
+            "image/png" => Ok("png"),
+            "image/jpeg" | "image/jpg" => Ok("jpg"),
+            "image/webp" => Ok("webp"),
+            "image/gif" => Ok("gif"),
+            _ => Err("media file must be png, jpeg, webp, or gif".to_string()),
+        },
+    }
+}
+
+fn safe_media_segment(value: &str) -> String {
+    let segment: String = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let cleaned = segment.trim_matches('_').to_string();
+    if cleaned.is_empty() {
+        "account".to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn set_mobile_account_chat_wallpaper(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let wallpaper = match params.get("wallpaper") {
+        Some(Value::Null) | None => None,
+        Some(value) => {
+            let obj = value
+                .as_object()
+                .ok_or_else(|| "wallpaper must be an object".to_string())?;
+            match obj.get("kind").and_then(Value::as_str).unwrap_or_default() {
+                "preset" => {
+                    let preset_id = obj
+                        .get("presetId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .trim();
+                    if preset_id.is_empty() {
+                        return Err("preset wallpaper requires presetId".to_string());
+                    }
+                    Some(json!({ "kind": "preset", "presetId": preset_id }))
+                }
+                "custom" => {
+                    let url = obj
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .trim();
+                    if !url.starts_with("/media/wallpapers/") {
+                        return Err("custom wallpaper URL must be a Meron wallpaper".to_string());
+                    }
+                    Some(json!({ "kind": "custom", "url": url }))
+                }
+                _ => return Err("unknown wallpaper kind".to_string()),
+            }
+        }
+    };
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_pref_json(&conn, &id, "chat_wallpaper", wallpaper)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn set_mobile_account_images(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let enabled = req_bool(params, "enabled")?;
+    with_mobile_db(data_dir, |conn| {
+        store::set_load_remote_images(&conn, &id, enabled).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn set_mobile_account_bool_pref(
+    data_dir: &str,
+    params: &Value,
+    key: &str,
+) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let enabled = req_bool(params, "enabled")?;
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_pref(&conn, &id, key, enabled).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+fn set_mobile_account_rss_sync_interval(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let minutes = params
+        .get("minutes")
+        .and_then(Value::as_u64)
+        .unwrap_or(60)
+        .clamp(5, 1440);
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_pref_u64(&conn, &id, "rss_sync_interval_minutes", minutes)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true, "minutes": minutes }))
+    })
+}
+
+fn set_mobile_account_aliases(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let mut aliases: Vec<store::Alias> = params
+        .get("aliases")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| "aliases must be an array".to_string())?
+        .unwrap_or_default();
+    let mut seen = std::collections::HashSet::new();
+    aliases.retain_mut(|alias| {
+        alias.email = alias.email.trim().to_string();
+        alias.name = alias.name.trim().to_string();
+        !alias.email.is_empty() && seen.insert(alias.email.to_lowercase())
+    });
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_aliases(&conn, &id, &aliases).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true, "aliases": aliases.len() }))
     })
 }
 
@@ -372,7 +863,10 @@ fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Result<Value, S
         .ok_or_else(|| "params must be an object".to_string())?;
     obj.insert("email".to_string(), Value::String(email));
     obj.insert("provider".to_string(), Value::String(provider));
-    obj.insert("access_token".to_string(), Value::String(token.access_token));
+    obj.insert(
+        "access_token".to_string(),
+        Value::String(token.access_token),
+    );
     obj.insert("refresh_token".to_string(), Value::String(refresh_token));
     obj.insert("token_expires_at".to_string(), json!(token_expires_at));
     add_mobile_oauth_account(data_dir, &add_params)
@@ -444,9 +938,27 @@ fn remove_mobile_rss_feed(data_dir: &str, params: &Value) -> Result<Value, Strin
 
 fn move_mobile_rss_feed(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
-    let target_account = req_str(params, "target_account")?;
+    let target_account =
+        req_str(params, "target_account").or_else(|_| req_str(params, "target_account_id"))?;
     with_mobile_db(data_dir, |conn| {
         rss::move_feed(&conn, &thread_id, &target_account).map_err(|err| format!("{err:#}"))
+    })
+}
+
+fn export_mobile_opml(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account = req_account_id(params)?;
+    with_mobile_db(data_dir, |conn| {
+        let opml = rss::export_opml(&conn, &account).map_err(|err| format!("{err:#}"))?;
+        Ok(json!({ "opml": opml }))
+    })
+}
+
+fn import_mobile_opml(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account = req_account_id(params)?;
+    let opml = req_str(params, "opml")?;
+    with_mobile_db_mutex(data_dir, |db| {
+        let imported = rss::import_opml(&db, &opml, &account).map_err(|err| format!("{err:#}"))?;
+        Ok(json!({ "imported": imported }))
     })
 }
 
@@ -488,7 +1000,97 @@ fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Value, String> 
             &reply_to,
             &message_id,
         ))?;
-        Ok(json!({ "ok": true, "sent_bytes": raw.len() }))
+        let sent_bytes = raw.len();
+        if let Err(err) = run_mobile_async(async move {
+            let mut session = imap::connect(&creds).await?;
+            let sent = imap::find_sent_folder(&mut session)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("no Sent folder found"))?;
+            imap::append_to_sent(&mut session, &sent, &raw).await?;
+            let _ = session.logout().await;
+            anyhow::Ok(())
+        }) {
+            eprintln!("meron-core: mobile APPEND to Sent failed for {account_id}: {err}");
+        }
+        Ok(json!({ "ok": true, "sent_bytes": sent_bytes }))
+    })
+}
+
+fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_id = req_account_id(params)?;
+    let to = opt_str(params, "to");
+    let cc = opt_str(params, "cc");
+    let bcc = opt_str(params, "bcc");
+    let subject = opt_str(params, "subject");
+    let body = opt_str(params, "body");
+    let html = opt_str(params, "html");
+    let in_reply_to = opt_str(params, "in_reply_to");
+    let references = opt_str(params, "references");
+    let reply_to = opt_str(params, "reply_to");
+    let draft_id = req_str(params, "draft_id")?;
+    let requested_from = opt_str(params, "from");
+    let attachments = parse_mobile_attachments(params)?;
+
+    with_mobile_db(data_dir, |conn| {
+        let creds = load_mobile_account_creds(&conn, &account_id)?;
+        if account_needs_reconnect(&creds) {
+            return Err(format!("account needs reconnect: {account_id}"));
+        }
+        let (from_addr, sender_name) =
+            resolve_mobile_send_from(&conn, &account_id, &creds, &requested_from);
+        let raw = smtp::build_message(
+            &sender_name,
+            &from_addr,
+            &to,
+            &cc,
+            &bcc,
+            true,
+            &subject,
+            &body,
+            &html,
+            &attachments,
+            &in_reply_to,
+            &references,
+            &reply_to,
+            &draft_id,
+        )
+        .map_err(|err| format!("{err:#}"))?;
+        let saved_id = draft_id.clone();
+        let saved_bytes = raw.len();
+        run_mobile_async(async move {
+            let mut session = imap::connect(&creds).await?;
+            let drafts = imap::find_drafts_folder(&mut session)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+            imap::replace_draft(&mut session, &drafts, &raw, &saved_id).await?;
+            let _ = session.logout().await;
+            anyhow::Ok(())
+        })?;
+        Ok(json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes }))
+    })
+}
+
+fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_id = req_account_id(params)?;
+    let draft_id = opt_str(params, "draft_id");
+    if draft_id.trim().is_empty() {
+        return Ok(json!({ "ok": true, "deleted": 0, "permanent": true }));
+    }
+    with_mobile_db(data_dir, |conn| {
+        let creds = load_mobile_account_creds(&conn, &account_id)?;
+        if account_needs_reconnect(&creds) {
+            return Err(format!("account needs reconnect: {account_id}"));
+        }
+        let deleted = run_mobile_async(async move {
+            let mut session = imap::connect(&creds).await?;
+            let drafts = imap::find_drafts_folder(&mut session)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+            let deleted = imap::discard_draft(&mut session, &drafts, &draft_id).await?;
+            let _ = session.logout().await;
+            anyhow::Ok(deleted)
+        })?;
+        Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
     })
 }
 
@@ -783,8 +1385,8 @@ fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
             } else {
                 header.folder.clone()
             };
-            let cached =
-                store::has_cached_body(&conn, &parsed.account, &folder, header.uid).unwrap_or(false);
+            let cached = store::has_cached_body(&conn, &parsed.account, &folder, header.uid)
+                .unwrap_or(false);
             if !cached {
                 missing.entry(folder).or_default().push(header.uid);
             }
@@ -893,9 +1495,10 @@ fn list_mobile_starred_items(data_dir: &str, params: &Value) -> Result<Value, St
 
 fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
-    let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let parsed = parse_thread_id_with_request_folder(&thread_id, params)
+        .ok_or_else(|| "invalid thread_id".to_string())?;
     with_mobile_db(data_dir, |conn| {
-        let uids = cached_thread_uids(&conn, &parsed)?;
+        let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if uids.is_empty() {
             return Ok(json!({ "ok": true, "deleted": 0 }));
         }
@@ -1065,6 +1668,71 @@ fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
     })
 }
 
+fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let thread_id = req_str(params, "thread_id")?;
+    let target_account = req_str(params, "target_account_id")?;
+    let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
+    let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    with_mobile_db(data_dir, |conn| {
+        let uids = cached_thread_uids(&conn, &parsed)?;
+        if uids.is_empty() {
+            return Ok(json!({
+                "ok": true,
+                "copied": 0,
+                "source_folder": parsed.folder,
+                "target_account": target_account,
+                "target_folder": target_folder,
+            }));
+        }
+        let source_creds = load_mobile_account_creds(&conn, &parsed.account)?;
+        if account_needs_reconnect(&source_creds) {
+            return Err(format!("account needs reconnect: {}", parsed.account));
+        }
+        let target_creds = load_mobile_account_creds(&conn, &target_account)?;
+        if account_needs_reconnect(&target_creds) {
+            return Err(format!("account needs reconnect: {target_account}"));
+        }
+        let target_batch = run_mobile_async(async {
+            let raw_messages = {
+                let mut session = imap::connect(&source_creds).await?;
+                let messages =
+                    imap::fetch_raw_messages_for_copy(&mut session, &parsed.folder, &uids).await?;
+                let _ = session.logout().await;
+                messages
+            };
+            let copied = raw_messages.len();
+            let mut session = imap::connect(&target_creds).await?;
+            for message in &raw_messages {
+                imap::append_copied_message(&mut session, &target_folder, message).await?;
+            }
+            let batch =
+                imap::fetch_recent(&mut session, &target_folder, 50.max(copied as u32)).await?;
+            let _ = session.logout().await;
+            anyhow::Ok((copied, batch))
+        })?;
+        let (copied, batch) = target_batch;
+        store::ensure_folder(&conn, &target_account, &target_folder)
+            .map_err(|err| err.to_string())?;
+        store::upsert_messages(&conn, &target_account, &target_folder, &batch.messages)
+            .map_err(|err| err.to_string())?;
+        store::set_folder_state(
+            &conn,
+            &target_account,
+            &target_folder,
+            batch.uidvalidity,
+            batch.uid_next,
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(json!({
+            "ok": true,
+            "copied": copied,
+            "source_folder": parsed.folder,
+            "target_account": target_account,
+            "target_folder": target_folder,
+        }))
+    })
+}
+
 fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let seen = req_bool(params, "seen")?;
@@ -1073,7 +1741,7 @@ fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<Value, Stri
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     with_mobile_db(data_dir, |conn| {
-        let uids = cached_thread_uids(&conn, &parsed)?;
+        let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if !uids.is_empty() {
             let creds = load_mobile_account_creds(&conn, &parsed.account)?;
             if account_needs_reconnect(&creds) {
@@ -1086,7 +1754,12 @@ fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<Value, Stri
                 anyhow::Ok(())
             })?;
         }
-        if let Some(uid) = parsed.uid {
+        if has_requested_mobile_message_ids(params) {
+            for uid in uids {
+                store::update_message_seen(&conn, &parsed.account, &parsed.folder, uid, seen)
+                    .map_err(|err| err.to_string())?;
+            }
+        } else if let Some(uid) = parsed.uid {
             store::update_message_seen(&conn, &parsed.account, &parsed.folder, uid, seen)
                 .map_err(|err| err.to_string())?;
         } else {
@@ -1103,6 +1776,40 @@ fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<Value, Stri
     })
 }
 
+fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_id = req_account_id(params)?;
+    let folder = params
+        .get("folder_id")
+        .or_else(|| params.get("folder"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(canon_folder)
+        .unwrap_or_else(|| "INBOX".to_string());
+
+    with_mobile_db(data_dir, |conn| {
+        if is_rss_account(&conn, &account_id)? {
+            return Ok(json!({ "ok": true, "updated": 0, "rss": true }));
+        }
+        let uids =
+            store::get_unseen_uids(&conn, &account_id, &folder).map_err(|err| err.to_string())?;
+        if !uids.is_empty() {
+            let creds = load_mobile_account_creds(&conn, &account_id)?;
+            if account_needs_reconnect(&creds) {
+                return Err(format!("account needs reconnect: {account_id}"));
+            }
+            run_mobile_async(async {
+                let mut session = imap::connect(&creds).await?;
+                imap::set_seen(&mut session, &folder, &uids, true).await?;
+                let _ = session.logout().await;
+                anyhow::Ok(())
+            })?;
+        }
+        store::mark_folder_seen(&conn, &account_id, &folder, true)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true, "updated": uids.len(), "folder": folder }))
+    })
+}
+
 fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let starred = req_bool(params, "starred")?;
@@ -1111,7 +1818,7 @@ fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Result<Value, S
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     with_mobile_db(data_dir, |conn| {
-        let uids = cached_thread_uids(&conn, &parsed)?;
+        let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if !uids.is_empty() {
             let creds = load_mobile_account_creds(&conn, &parsed.account)?;
             if account_needs_reconnect(&creds) {
@@ -1124,7 +1831,12 @@ fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Result<Value, S
                 anyhow::Ok(())
             })?;
         }
-        if let Some(uid) = parsed.uid {
+        if has_requested_mobile_message_ids(params) {
+            for uid in uids {
+                store::update_message_starred(&conn, &parsed.account, &parsed.folder, uid, starred)
+                    .map_err(|err| err.to_string())?;
+            }
+        } else if let Some(uid) = parsed.uid {
             store::update_message_starred(&conn, &parsed.account, &parsed.folder, uid, starred)
                 .map_err(|err| err.to_string())?;
         } else {
@@ -1189,6 +1901,47 @@ fn cached_thread_uids(
             .map(|header| header.uid)
             .collect(),
     )
+}
+
+fn has_requested_mobile_message_ids(params: &Value) -> bool {
+    params
+        .get("message_ids")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.as_str().is_some_and(|value| !value.trim().is_empty()))
+        })
+}
+
+fn requested_mobile_uids(
+    conn: &rusqlite::Connection,
+    parsed: &ParsedThreadId,
+    params: &Value,
+) -> Result<Vec<u32>, String> {
+    let uids = params
+        .get("message_ids")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter_map(mobile_message_id_uid)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if has_requested_mobile_message_ids(params) {
+        return Ok(uids);
+    }
+    cached_thread_uids(conn, parsed)
+}
+
+fn mobile_message_id_uid(value: &str) -> Option<u32> {
+    value
+        .trim()
+        .rsplit('#')
+        .next()
+        .and_then(|uid| uid.parse::<u32>().ok())
 }
 
 fn find_cached_archive_folder(
@@ -1390,6 +2143,20 @@ fn req_str(params: &Value, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{key} required"))
 }
 
+fn req_str_array(params: &Value, key: &str) -> Result<Vec<String>, String> {
+    let values = params
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{key} required"))?;
+    Ok(values
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
 fn opt_str(params: &Value, key: &str) -> String {
     params
         .get(key)
@@ -1569,6 +2336,19 @@ fn parse_thread_id(thread_id: &str) -> Option<ParsedThreadId> {
     })
 }
 
+fn parse_thread_id_with_request_folder(thread_id: &str, params: &Value) -> Option<ParsedThreadId> {
+    let mut parsed = parse_thread_id(thread_id)?;
+    if let Some(folder) = params
+        .get("folder")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        parsed.folder = folder.to_string();
+    }
+    Some(parsed)
+}
+
 fn message_json(
     account_id: &str,
     thread_id: &str,
@@ -1721,6 +2501,377 @@ mod tests {
     }
 
     #[test]
+    fn mobile_protocol_updates_account_settings_and_aliases() {
+        let data_dir = unique_data_dir("account-settings");
+        let unique = unique_test_suffix();
+        let email = format!("settings+{unique}@example.com");
+        let data_dir_str = data_dir.to_str().unwrap();
+        let add_request = format!(
+            r#"{{"id":70,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Old","sender_name":"Old Sender","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
+        );
+        assert!(
+            invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+                .get("error")
+                .is_none()
+        );
+
+        let commands = [
+            format!(
+                r#"{{"id":71,"method":"account.setName","params":{{"id":"{email}","name":"Personal"}}}}"#
+            ),
+            format!(
+                r#"{{"id":72,"method":"account.setSenderName","params":{{"id":"{email}","name":"Sender"}}}}"#
+            ),
+            format!(
+                r#"{{"id":73,"method":"account.setAvatar","params":{{"id":"{email}","avatar_url":"https://example.com/avatar.png"}}}}"#
+            ),
+            format!(
+                r#"{{"id":74,"method":"account.setChatWallpaper","params":{{"id":"{email}","wallpaper":{{"kind":"preset","presetId":"grid"}}}}}}"#
+            ),
+            format!(
+                r#"{{"id":75,"method":"account.setImages","params":{{"id":"{email}","enabled":true}}}}"#
+            ),
+            format!(
+                r#"{{"id":76,"method":"account.setConversationHtml","params":{{"id":"{email}","enabled":false}}}}"#
+            ),
+            format!(
+                r#"{{"id":77,"method":"account.setUnified","params":{{"id":"{email}","enabled":false}}}}"#
+            ),
+            format!(
+                r#"{{"id":78,"method":"account.setMuted","params":{{"id":"{email}","enabled":true}}}}"#
+            ),
+            format!(
+                r#"{{"id":79,"method":"account.setPaused","params":{{"id":"{email}","enabled":true}}}}"#
+            ),
+            format!(
+                r#"{{"id":80,"method":"account.setRSSSyncInterval","params":{{"id":"{email}","minutes":30}}}}"#
+            ),
+            format!(
+                r#"{{"id":81,"method":"account.setAliases","params":{{"id":"{email}","aliases":[{{"email":"alias@example.com","name":"Alias"}},{{"email":"alias@example.com","name":"Duplicate"}},{{"email":"   ","name":"Blank"}}]}}}}"#
+            ),
+        ];
+        for command in commands {
+            let value = invoke_mobile_protocol_json(&command, Some(data_dir_str));
+            assert!(value.get("error").is_none(), "{value}");
+        }
+
+        let listed = invoke_mobile_protocol_json(
+            r#"{"id":82,"method":"account.list","params":{}}"#,
+            Some(data_dir_str),
+        );
+        let account = &listed["result"]["accounts"][0];
+        assert_eq!(account["display_name"], "Personal", "{listed}");
+        assert_eq!(account["sender_name"], "Sender", "{listed}");
+        assert_eq!(
+            account["avatar_url"], "https://example.com/avatar.png",
+            "{listed}"
+        );
+        assert_eq!(account["chat_wallpaper"]["kind"], "preset", "{listed}");
+        assert_eq!(account["chat_wallpaper"]["presetId"], "grid", "{listed}");
+        assert_eq!(account["load_remote_images"], true, "{listed}");
+        assert_eq!(account["conversation_html"], false, "{listed}");
+        assert_eq!(account["included_in_unified"], false, "{listed}");
+        assert_eq!(account["muted"], true, "{listed}");
+        assert_eq!(account["paused"], true, "{listed}");
+        assert_eq!(account["aliases"].as_array().unwrap().len(), 1, "{listed}");
+        assert_eq!(
+            account["aliases"][0]["email"], "alias@example.com",
+            "{listed}"
+        );
+        assert_eq!(account["aliases"][0]["name"], "Alias", "{listed}");
+
+        let remove =
+            format!(r#"{{"id":83,"method":"account.remove","params":{{"id":"{email}"}}}}"#);
+        assert!(
+            invoke_mobile_protocol_json(&remove, Some(data_dir_str))
+                .get("error")
+                .is_none()
+        );
+        let empty = invoke_mobile_protocol_json(
+            r#"{"id":84,"method":"account.list","params":{}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(empty["result"]["accounts"].as_array().unwrap().len(), 0);
+
+        seed_rss_account(&data_dir, "rss-settings", "Feeds");
+        let interval = invoke_mobile_protocol_json(
+            r#"{"id":85,"method":"account.setRSSSyncInterval","params":{"id":"rss-settings","minutes":30}}"#,
+            Some(data_dir_str),
+        );
+        assert!(interval.get("error").is_none(), "{interval}");
+        let rss_listed = invoke_mobile_protocol_json(
+            r#"{"id":84,"method":"account.list","params":{}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(
+            rss_listed["result"]["accounts"][0]["rss_sync_interval_minutes"], 30,
+            "{rss_listed}"
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_writes_account_media_files() {
+        let data_dir = unique_data_dir("account-media");
+        let unique = unique_test_suffix();
+        let email = format!("media+{unique}@example.com");
+        let data_dir_str = data_dir.to_str().unwrap();
+        let add_request = format!(
+            r#"{{"id":85,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Media","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
+        );
+        assert!(
+            invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+                .get("error")
+                .is_none()
+        );
+
+        let avatar_request = format!(
+            r#"{{"id":86,"method":"account.writeAvatarFile","params":{{"id":"{email}","filename":"avatar.png","mime":"image/png","data":"aGVsbG8="}}}}"#
+        );
+        let avatar = invoke_mobile_protocol_json(&avatar_request, Some(data_dir_str));
+        let avatar_url = avatar["result"]["url"].as_str().unwrap();
+        assert!(avatar_url.starts_with("/media/avatars/"), "{avatar}");
+        assert!(
+            data_dir.join(avatar_url.trim_start_matches('/')).exists(),
+            "{avatar_url}"
+        );
+
+        let wallpaper_request = format!(
+            r#"{{"id":87,"method":"account.writeChatWallpaperFile","params":{{"id":"{email}","filename":"wallpaper.webp","mime":"image/webp","data":"d2FsbA=="}}}}"#
+        );
+        let wallpaper = invoke_mobile_protocol_json(&wallpaper_request, Some(data_dir_str));
+        let wallpaper_url = wallpaper["result"]["url"].as_str().unwrap();
+        assert!(
+            wallpaper_url.starts_with("/media/wallpapers/"),
+            "{wallpaper}"
+        );
+        assert!(
+            data_dir
+                .join(wallpaper_url.trim_start_matches('/'))
+                .exists(),
+            "{wallpaper_url}"
+        );
+
+        let set_wallpaper = format!(
+            r#"{{"id":88,"method":"account.setChatWallpaper","params":{{"id":"{email}","wallpaper":{{"kind":"custom","url":"{wallpaper_url}"}}}}}}"#
+        );
+        assert!(
+            invoke_mobile_protocol_json(&set_wallpaper, Some(data_dir_str))
+                .get("error")
+                .is_none()
+        );
+
+        let listed = invoke_mobile_protocol_json(
+            r#"{"id":89,"method":"account.list","params":{}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(
+            listed["result"]["accounts"][0]["chat_wallpaper"]["url"],
+            wallpaper_url
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_reads_cached_attachment_file() {
+        let data_dir = unique_data_dir("attachment-read");
+        let data_dir_str = data_dir.to_str().unwrap();
+        let attachment_dir = data_dir
+            .join("attachments")
+            .join("acc")
+            .join("INBOX")
+            .join("1");
+        std::fs::create_dir_all(&attachment_dir).unwrap();
+        std::fs::write(attachment_dir.join("note.txt"), b"Hi").unwrap();
+
+        let read = invoke_mobile_protocol_json(
+            r#"{"id":90,"method":"mail.attachmentRead","params":{"key":"acc/INBOX/1/note.txt"}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(read["id"], 90);
+        assert_eq!(read["result"]["data"], STANDARD.encode(b"Hi"));
+
+        let desktop_alias_read = invoke_mobile_protocol_json(
+            r#"{"id":92,"method":"mail.readAttachment","params":{"key":"acc/INBOX/1/note.txt"}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(desktop_alias_read["id"], 92);
+        assert_eq!(desktop_alias_read["result"]["data"], STANDARD.encode(b"Hi"));
+
+        let rejected = invoke_mobile_protocol_json(
+            r#"{"id":91,"method":"mail.attachmentRead","params":{"key":"../meron.db"}}"#,
+            Some(data_dir_str),
+        );
+        assert!(
+            rejected["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("invalid attachment key")
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_reports_and_clears_storage_cache() {
+        let data_dir = unique_data_dir("storage-cache");
+        let data_dir_str = data_dir.to_str().unwrap();
+        seed_mobile_account(&data_dir, "me@example.com");
+        let attachment_dir = data_dir
+            .join("attachments")
+            .join("acc")
+            .join("INBOX")
+            .join("1");
+        std::fs::create_dir_all(&attachment_dir).unwrap();
+        std::fs::write(attachment_dir.join("one.txt"), b"Hi").unwrap();
+        std::fs::write(attachment_dir.join("two.txt"), b"There").unwrap();
+
+        let usage = invoke_mobile_protocol_json(
+            r#"{"id":92,"method":"storage.usage"}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(usage["id"], 92);
+        assert_eq!(usage["result"]["cacheBytes"], 7);
+        assert!(usage["result"]["dbBytes"].as_u64().unwrap() > 0, "{usage}");
+
+        let cleared = invoke_mobile_protocol_json(
+            r#"{"id":93,"method":"storage.clearCache"}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(cleared["id"], 93);
+        assert_eq!(cleared["result"]["cacheBytes"], 0);
+        assert!(
+            cleared["result"]["dbBytes"].as_u64().unwrap() > 0,
+            "{cleared}"
+        );
+        assert!(data_dir.join("attachments").exists());
+        assert!(data_dir.join("meron.db").exists());
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_reorders_accounts() {
+        let data_dir = unique_data_dir("account-reorder");
+        let data_dir_str = data_dir.to_str().unwrap();
+        for email in [
+            "first@example.com",
+            "second@example.com",
+            "third@example.com",
+        ] {
+            let add_request = format!(
+                r#"{{"id":90,"method":"account.addPassword","params":{{"email":"{email}","display_name":"{email}","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
+            );
+            assert!(
+                invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+                    .get("error")
+                    .is_none()
+            );
+        }
+
+        let reorder = invoke_mobile_protocol_json(
+            r#"{"id":91,"method":"account.reorder","params":{"accounts":["third@example.com","first@example.com","second@example.com"]}}"#,
+            Some(data_dir_str),
+        );
+        assert_eq!(reorder["result"]["ok"], true, "{reorder}");
+
+        let listed = invoke_mobile_protocol_json(
+            r#"{"id":92,"method":"account.list","params":{}}"#,
+            Some(data_dir_str),
+        );
+        let accounts = listed["result"]["accounts"].as_array().unwrap();
+        let ids: Vec<_> = accounts
+            .iter()
+            .map(|account| account["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            ids,
+            vec![
+                "third@example.com",
+                "first@example.com",
+                "second@example.com"
+            ]
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_suggests_contacts_from_cached_messages() {
+        let data_dir = unique_data_dir("contact-suggest");
+        seed_mobile_account(&data_dir, "me@example.com");
+        let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[
+                MessageHeader {
+                    uid: 1,
+                    subject: "Hello".to_string(),
+                    from_name: "Aki".to_string(),
+                    from_addr: "aki@example.com".to_string(),
+                    date: 100,
+                    thread_key: "one".to_string(),
+                    ..Default::default()
+                },
+                MessageHeader {
+                    uid: 2,
+                    subject: "Again".to_string(),
+                    from_name: "Aki".to_string(),
+                    from_addr: "aki@example.com".to_string(),
+                    date: 200,
+                    thread_key: "two".to_string(),
+                    ..Default::default()
+                },
+                MessageHeader {
+                    uid: 3,
+                    subject: "Plan".to_string(),
+                    from_name: "Bea".to_string(),
+                    from_addr: "bea@example.com".to_string(),
+                    date: 300,
+                    thread_key: "three".to_string(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let suggestions = invoke_mobile_protocol_json(
+            r#"{"id":93,"method":"mail.suggestContacts","params":{"account":"me@example.com","query":"","limit":2}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+        assert_eq!(
+            suggestions["result"]["contacts"][0]["addr"], "aki@example.com",
+            "{suggestions}"
+        );
+        assert_eq!(
+            suggestions["result"]["contacts"][0]["name"], "Aki",
+            "{suggestions}"
+        );
+        assert_eq!(
+            suggestions["result"]["contacts"][1]["addr"], "bea@example.com",
+            "{suggestions}"
+        );
+
+        let filtered = invoke_mobile_protocol_json(
+            r#"{"id":94,"method":"contacts.suggest","params":{"account_id":"me@example.com","query":"bea","limit":8}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+        assert_eq!(filtered["result"]["contacts"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            filtered["result"]["contacts"][0]["addr"], "bea@example.com",
+            "{filtered}"
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
     fn mobile_protocol_persists_oauth_account_metadata() {
         let data_dir = unique_data_dir("oauth-account");
         let unique = unique_test_suffix();
@@ -1765,17 +2916,37 @@ mod tests {
 
         let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
         assert_eq!(exchanged["id"], 66, "{exchanged}");
-        assert_eq!(exchanged["result"]["account"]["id"], email.as_str(), "{exchanged}");
-        assert_eq!(exchanged["result"]["account"]["provider"], "gmail", "{exchanged}");
-        assert_eq!(exchanged["result"]["account"]["auth_type"], "gmail_oauth", "{exchanged}");
-        assert_eq!(exchanged["result"]["account"]["needs_reconnect"], false, "{exchanged}");
+        assert_eq!(
+            exchanged["result"]["account"]["id"],
+            email.as_str(),
+            "{exchanged}"
+        );
+        assert_eq!(
+            exchanged["result"]["account"]["provider"], "gmail",
+            "{exchanged}"
+        );
+        assert_eq!(
+            exchanged["result"]["account"]["auth_type"], "gmail_oauth",
+            "{exchanged}"
+        );
+        assert_eq!(
+            exchanged["result"]["account"]["needs_reconnect"], false,
+            "{exchanged}"
+        );
 
         let listed = invoke_mobile_protocol_json(
             r#"{"id":67,"method":"account.list","params":{}}"#,
             Some(data_dir.to_str().unwrap()),
         );
-        assert_eq!(listed["result"]["accounts"][0]["id"], email.as_str(), "{listed}");
-        assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false, "{listed}");
+        assert_eq!(
+            listed["result"]["accounts"][0]["id"],
+            email.as_str(),
+            "{listed}"
+        );
+        assert_eq!(
+            listed["result"]["accounts"][0]["needs_reconnect"], false,
+            "{listed}"
+        );
 
         let _ = std::fs::remove_dir_all(data_dir);
     }
@@ -1814,7 +2985,8 @@ mod tests {
                         break;
                     }
                     request.extend_from_slice(&buf[..read]);
-                    let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+                    let Some(header_end) =
+                        request.windows(4).position(|window| window == b"\r\n\r\n")
                     else {
                         continue;
                     };
@@ -2017,6 +3189,44 @@ mod tests {
         );
 
         assert_eq!(value["id"], 67);
+        assert!(
+            value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("account needs reconnect")
+        );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_copy_requires_usable_account_secret() {
+        let data_dir = unique_data_dir("copy-needs-secret");
+        seed_mobile_account(&data_dir, "me@example.com");
+        seed_mobile_account(&data_dir, "target@example.com");
+        let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::ensure_folder(&conn, "target@example.com", "Archive").unwrap();
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[MessageHeader {
+                uid: 7,
+                subject: "Copy me".to_string(),
+                thread_key: "topic".to_string(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        drop(conn);
+
+        let value = invoke_mobile_protocol_json(
+            r#"{"id":68,"method":"mail.copy","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","target_account_id":"target@example.com","target_folder_id":"Archive"}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+
+        assert_eq!(value["id"], 68);
         assert!(
             value["error"]["message"]
                 .as_str()
@@ -2244,6 +3454,18 @@ mod tests {
         assert_eq!(starred["id"], 69);
         assert!(
             starred["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("account needs reconnect")
+        );
+
+        let mark_all = invoke_mobile_protocol_json(
+            r#"{"id":72,"method":"mail.markAllRead","params":{"account_id":"me@example.com","folder_id":"INBOX"}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+        assert_eq!(mark_all["id"], 72);
+        assert!(
+            mark_all["error"]["message"]
                 .as_str()
                 .unwrap()
                 .contains("account needs reconnect")
@@ -2483,6 +3705,40 @@ mod tests {
             starred["result"]["items"][0]["id"],
             "rss-account#rss#feed-a#item-new"
         );
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn mobile_protocol_exports_and_imports_opml() {
+        let data_dir = unique_data_dir("rss-opml-mobile");
+        seed_rss_account(&data_dir, "rss-source", "Source feeds");
+        seed_rss_account(&data_dir, "rss-target", "Target feeds");
+        let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+        seed_rss_feed(&conn, "rss-source", "feed-a", "Feed A");
+        drop(conn);
+
+        let exported = invoke_mobile_protocol_json(
+            r#"{"id":91,"method":"rss.exportOpml","params":{"account":"rss-source"}}"#,
+            Some(data_dir.to_str().unwrap()),
+        );
+        assert_eq!(exported["id"], 91);
+        let opml = exported["result"]["opml"].as_str().unwrap();
+        assert!(opml.contains("<opml version=\"2.0\">"));
+        assert!(opml.contains("Feed A"));
+
+        let request = serde_json::json!({
+            "id": 92,
+            "method": "rss.importOpml",
+            "params": {
+                "account": "rss-target",
+                "opml": r#"<?xml version="1.0"?><opml version="2.0"><body><outline text="Imported"><outline type="rss" text="Imported Feed" xmlUrl="https://import.example/feed.xml"/></outline></body></opml>"#,
+            },
+        })
+        .to_string();
+        let imported = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+        assert_eq!(imported["id"], 92);
+        assert_eq!(imported["result"]["imported"], 1);
 
         let _ = std::fs::remove_dir_all(data_dir);
     }
@@ -2747,6 +4003,10 @@ mod tests {
                 r#"{"id":47,"method":"mail.starredItems","params":{}}"#,
                 json!({ "items": [] }),
             ),
+            (
+                r#"{"id":48,"method":"rss.exportOpml","params":{"account":"rss"}}"#,
+                json!({ "opml": "" }),
+            ),
         ];
 
         for (request, expected_result) in cases {
@@ -2764,6 +4024,102 @@ mod tests {
                 json!({ "ok": true }),
             ),
             (
+                r#"{"id":71,"method":"mail.saveDraft","params":{"account_id":"acc","draft_id":"draft@example.com"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":72,"method":"mail.discardDraft","params":{"account_id":"acc","draft_id":"draft@example.com"}}"#,
+                json!({ "ok": true, "deleted": 0, "permanent": true }),
+            ),
+            (
+                r#"{"id":54,"method":"rss.importOpml","params":{"account":"rss","opml":"<opml/>"}}"#,
+                json!({ "imported": 0 }),
+            ),
+            (
+                r#"{"id":73,"method":"account.addRSS","params":{"feed_url":"https://example.com/feed.xml","display_name":"News"}}"#,
+                json!({ "account": Value::Null }),
+            ),
+            (
+                r#"{"id":74,"method":"rss.addFeed","params":{"account_id":"rss","feed_url":"https://example.com/feed.xml"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":75,"method":"rss.removeFeed","params":{"thread_id":"rss#rss#feed"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":76,"method":"rss.moveFeed","params":{"thread_id":"rss#rss#feed","target_account_id":"rss2"}}"#,
+                json!({ "ok": true, "moved": 0 }),
+            ),
+            (
+                r#"{"id":77,"method":"mail.readAttachment","params":{"key":"acc/INBOX/1/note.txt"}}"#,
+                json!({ "data": "" }),
+            ),
+            (
+                r#"{"id":55,"method":"account.remove","params":{"id":"acc"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":56,"method":"account.setName","params":{"id":"acc","name":"Personal"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":57,"method":"account.setSenderName","params":{"id":"acc","name":"Sender"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":58,"method":"account.setAvatar","params":{"id":"acc","avatar_url":"https://example.com/avatar.png"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":59,"method":"account.setChatWallpaper","params":{"id":"acc","wallpaper":{"kind":"preset","presetId":"grid"}}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":60,"method":"account.writeAvatarFile","params":{"id":"acc","filename":"avatar.png","mime":"image/png","data":"aGVsbG8="}}"#,
+                json!({ "url": "" }),
+            ),
+            (
+                r#"{"id":61,"method":"account.writeChatWallpaperFile","params":{"id":"acc","filename":"wallpaper.png","mime":"image/png","data":"aGVsbG8="}}"#,
+                json!({ "url": "" }),
+            ),
+            (
+                r#"{"id":62,"method":"account.setImages","params":{"id":"acc","enabled":true}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":63,"method":"account.setConversationHtml","params":{"id":"acc","enabled":false}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":64,"method":"account.setUnified","params":{"id":"acc","enabled":false}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":65,"method":"account.setMuted","params":{"id":"acc","enabled":true}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":66,"method":"account.setPaused","params":{"id":"acc","enabled":true}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":67,"method":"account.setRSSSyncInterval","params":{"id":"acc","minutes":30}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":68,"method":"account.setAliases","params":{"id":"acc","aliases":[]}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":69,"method":"account.reorder","params":{"accounts":["b","a"]}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":70,"method":"mail.suggestContacts","params":{"account":"acc","query":"a","limit":8}}"#,
+                json!({ "contacts": [] }),
+            ),
+            (
                 r#"{"id":49,"method":"mail.archive","params":{"thread_id":"thread"}}"#,
                 json!({ "ok": true, "moved": 0 }),
             ),
@@ -2776,7 +4132,11 @@ mod tests {
                 json!({ "ok": true }),
             ),
             (
-                r#"{"id":52,"method":"mail.markStarred","params":{"thread_id":"thread","starred":true}}"#,
+                r#"{"id":52,"method":"mail.markAllRead","params":{"account_id":"acc","folder_id":"INBOX"}}"#,
+                json!({ "ok": true }),
+            ),
+            (
+                r#"{"id":53,"method":"mail.markStarred","params":{"thread_id":"thread","starred":true}}"#,
                 json!({ "ok": true }),
             ),
         ];
@@ -2897,5 +4257,90 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn requested_mobile_uids_uses_message_ids_without_thread_fallback() {
+        let data_dir = unique_data_dir("targeted-uids");
+        seed_mobile_account(&data_dir, "me@example.com");
+        let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[
+                MessageHeader {
+                    uid: 7,
+                    subject: "One".to_string(),
+                    thread_key: "topic".to_string(),
+                    ..Default::default()
+                },
+                MessageHeader {
+                    uid: 8,
+                    subject: "Two".to_string(),
+                    thread_key: "topic".to_string(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        let parsed = ParsedThreadId {
+            account: "me@example.com".to_string(),
+            folder: "INBOX".to_string(),
+            thread_key: "topic".to_string(),
+            uid: None,
+        };
+
+        let targeted = requested_mobile_uids(
+            &conn,
+            &parsed,
+            &json!({ "message_ids": ["me@example.com#INBOX#t.dG9waWM#8"] }),
+        )
+        .unwrap();
+        assert_eq!(targeted, vec![8]);
+
+        let malformed =
+            requested_mobile_uids(&conn, &parsed, &json!({ "message_ids": ["bad"] })).unwrap();
+        assert!(malformed.is_empty());
+
+        let fallback = requested_mobile_uids(&conn, &parsed, &json!({})).unwrap();
+        assert_eq!(fallback, vec![7, 8]);
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn parse_thread_id_with_request_folder_overrides_encoded_folder() {
+        let parsed = parse_thread_id_with_request_folder(
+            "me@example.com#INBOX#t.dG9waWM",
+            &json!({ "folder": "Trash" }),
+        )
+        .unwrap();
+
+        assert_eq!(parsed.account, "me@example.com");
+        assert_eq!(parsed.folder, "Trash");
+        assert_eq!(parsed.thread_key, "topic");
+    }
+
+    #[test]
+    fn mobile_autodiscover_returns_known_provider_or_guess() {
+        let gmail = invoke_mobile_protocol_json(
+            r#"{"id":96,"method":"account.autodiscover","params":{"email":"me@gmail.com"}}"#,
+            None,
+        );
+        assert_eq!(gmail["id"], 96);
+        assert_eq!(gmail["result"]["imap_host"], "imap.gmail.com");
+        assert_eq!(gmail["result"]["smtp_host"], "smtp.gmail.com");
+        assert_eq!(gmail["result"]["username"], "me@gmail.com");
+        assert_eq!(gmail["result"]["source"], "known");
+
+        let guessed = invoke_mobile_protocol_json(
+            r#"{"id":97,"method":"account.autodiscover","params":{"email":"me@example.org"}}"#,
+            None,
+        );
+        assert_eq!(guessed["result"]["imap_host"], "imap.example.org");
+        assert_eq!(guessed["result"]["smtp_host"], "smtp.example.org");
+        assert_eq!(guessed["result"]["source"], "guess");
     }
 }

@@ -7,9 +7,16 @@ import kotlin.test.assertTrue
 
 class MailViewModelTest {
     @Test
-    fun draftRequiresRecipientSubjectAndBodyBeforeSend() {
+    fun draftRequiresRecipientSubjectAndBodyOrAttachmentBeforeSend() {
         assertFalse(ComposeDraft(to = "a@example.com", subject = "Hi").canSend)
         assertTrue(ComposeDraft(to = "a@example.com", subject = "Hi", body = "Body").canSend)
+        assertTrue(
+            ComposeDraft(
+                to = "a@example.com",
+                subject = "Hi",
+                attachments = listOf(DraftAttachment(id = "att1", displayName = "file.txt")),
+            ).canSend,
+        )
     }
 
     @Test
