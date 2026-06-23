@@ -264,49 +264,79 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-class ComposeMainActivity : ComponentActivity() {
-    private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
-    private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
+internal enum class Screen { Mail, Starred, Kanban, Thread, Compose, AddAccount, Settings }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
-        AndroidNotificationService.ensureChannels(this)
-        AndroidBackgroundSyncScheduler.schedule(this)
-        val coreInitJson = if (MeronCoreNative.isLoaded()) {
-            MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
-        } else {
-            ""
-        }
-        setContent {
-            var appearanceMode by remember { mutableStateOf(loadAppearanceMode(this)) }
-            MeronTheme(appearanceMode = appearanceMode) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MeronMobileScreen(
-                        coreInitJson = coreInitJson,
-                        incomingMailtoDraft = incomingMailtoDraft,
-                        incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-                        appearanceMode = appearanceMode,
-                        onAppearanceModeChange = { mode ->
-                            appearanceMode = mode
-                            saveAppearanceMode(this, mode)
-                        },
-                    )
-                }
-            }
-        }
-    }
+internal data class AccountMediaUploadTarget(
+    val account: AccountSummary,
+    val wallpaper: Boolean,
+)
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
-    }
+internal data class AndroidImagePreview(
+    val title: String,
+    val bitmap: Bitmap,
+    val file: File,
+    val mimeType: String,
+)
 
-    fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
-    fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
-}
+internal enum class FilterMode { All, Unread, Starred }
+internal enum class SendShortcutMode { Enter, ModEnter }
+
+internal const val UNIFIED_ACCOUNT_ID = "unified"
+internal const val INBOX_FOLDER = "inbox"
+internal const val KANBAN_PREFS = "kanban"
+internal const val KANBAN_BOARDS_PREF = "kanban_boards_v1"
+internal const val ACTIVE_KANBAN_BOARD_PREF = "active_kanban_board_id_v1"
+internal const val KANBAN_FILTER_PREF = "kanban_filter_v1"
+internal const val KANBAN_SEARCH_PREF = "kanban_search_v1"
+internal const val APP_PREFS = "meron_app_prefs"
+internal const val APPEARANCE_MODE_PREF = "appearance_mode_v1"
+internal const val SHOW_UNREAD_BADGES_PREF = "show_unread_badges_v1"
+internal const val SHOW_UNIFIED_INBOX_PREF = "show_unified_inbox_v1"
+internal const val SHOW_STARRED_NAV_PREF = "show_starred_nav_v1"
+internal const val SHOW_SENDER_IMAGES_PREF = "show_sender_images_v1"
+internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
+internal const val HIDDEN_NAV_ACCOUNTS_PREF = "hidden_navigation_accounts_v1"
+internal const val KANBAN_COLUMN_WIDTH_PREF = "kanban_column_width_v1"
+internal const val KANBAN_COLUMN_MIN_WIDTH = 240
+internal const val KANBAN_COLUMN_DEFAULT_WIDTH = 320
+internal const val KANBAN_COLUMN_MAX_WIDTH = 520
+internal const val KANBAN_COLUMN_WIDTH_STEP = 20
+
+internal data class MailboxLoadResult(
+    val folders: List<FolderSummary>,
+    val folder: String,
+    val threads: List<ThreadSummary>,
+    val nextCursor: String = "",
+    val accountCursors: Map<String, String> = emptyMap(),
+)
+
+internal data class KanbanColumnSpec(
+    val accountId: String,
+    val folderId: String,
+)
+
+internal data class KanbanBoardSpec(
+    val id: String,
+    val name: String,
+    val columns: List<KanbanColumnSpec>,
+    val avatarUrl: String = "",
+    val wallpaperPresetId: String = "",
+    val wallpaperUrl: String = "",
+)
+
+internal data class KanbanColumnState(
+    val threads: List<ThreadSummary> = emptyList(),
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: String? = null,
+    val nextCursor: String = "",
+    val accountCursors: Map<String, String> = emptyMap(),
+)
+
+internal data class ConversationParticipant(
+    val name: String,
+    val email: String,
+    val count: Int,
+    val isSelf: Boolean,
+)
+

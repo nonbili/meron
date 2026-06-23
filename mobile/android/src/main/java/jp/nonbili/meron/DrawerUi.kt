@@ -264,49 +264,286 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-class ComposeMainActivity : ComponentActivity() {
-    private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
-    private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
-        AndroidNotificationService.ensureChannels(this)
-        AndroidBackgroundSyncScheduler.schedule(this)
-        val coreInitJson = if (MeronCoreNative.isLoaded()) {
-            MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
-        } else {
-            ""
-        }
-        setContent {
-            var appearanceMode by remember { mutableStateOf(loadAppearanceMode(this)) }
-            MeronTheme(appearanceMode = appearanceMode) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MeronMobileScreen(
-                        coreInitJson = coreInitJson,
-                        incomingMailtoDraft = incomingMailtoDraft,
-                        incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-                        appearanceMode = appearanceMode,
-                        onAppearanceModeChange = { mode ->
-                            appearanceMode = mode
-                            saveAppearanceMode(this, mode)
-                        },
+@Composable
+internal fun MailDrawer(
+    accounts: List<AccountSummary>,
+    selectedAccountId: String,
+    folders: List<FolderSummary>,
+    currentScreen: Screen,
+    showUnreadBadges: Boolean,
+    showUnifiedInboxNav: Boolean,
+    showStarredNav: Boolean,
+    onSelectUnified: () -> Unit,
+    onSelectAccount: (AccountSummary) -> Unit,
+    onSelectStarred: () -> Unit,
+    onSelectKanban: () -> Unit,
+    onAddAccount: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val chat = LocalChatColors.current
+    ModalDrawerSheet(
+        drawerContainerColor = chat.sidebar,
+        drawerContentColor = chat.onSidebar,
+    ) {
+        LazyColumn(contentPadding = PaddingValues(vertical = 16.dp)) {
+            item {
+                Text(
+                    "Meron",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = chat.onSidebar,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+            }
+            if (accounts.isNotEmpty()) {
+                item { DrawerLabel("Inboxes", chat) }
+                if (showUnifiedInboxNav) item {
+                    val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
+                    val unread = folders.filter { it.accountId in includedAccountIds }.sumOf { it.unread }
+                    SidebarRow(
+                        selected = selectedAccountId == UNIFIED_ACCOUNT_ID,
+                        chat = chat,
+                        onClick = onSelectUnified,
+                        leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Unified inbox",
+                        subtitle = "All accounts",
+                        trailing = if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
                     )
+                }
+                items(accounts, key = { it.id }) { account ->
+                    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+                    val unread = folders
+                        .filter { it.accountId == account.id && it.name.equals(INBOX_FOLDER, ignoreCase = true) }
+                        .sumOf { it.unread }
+                    SidebarRow(
+                        selected = account.id == selectedAccountId,
+                        chat = chat,
+                        onClick = { onSelectAccount(account) },
+                        leading = {
+                            Icon(if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp))
+                        },
+                        title = label,
+                        subtitle = account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox",
+                        trailing = if (account.needsReconnect) "!" else if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
+                    )
+                }
+            }
+            if (accounts.isNotEmpty()) {
+                item { DrawerLabel("Views", chat) }
+                if (showStarredNav) item {
+                    SidebarRow(
+                        selected = currentScreen == Screen.Starred,
+                        chat = chat,
+                        onClick = onSelectStarred,
+                        leading = { Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Starred",
+                        subtitle = "All starred items",
+                        trailing = null,
+                    )
+                }
+                item {
+                    SidebarRow(
+                        selected = currentScreen == Screen.Kanban,
+                        chat = chat,
+                        onClick = onSelectKanban,
+                        leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = "Kanban",
+                        subtitle = "Boards and columns",
+                        trailing = null,
+                    )
+                }
+            }
+            item {
+                HorizontalDivider(
+                    Modifier.padding(vertical = 10.dp, horizontal = 20.dp),
+                    color = chat.onSidebarMuted.copy(alpha = 0.25f),
+                )
+            }
+            item {
+                SidebarRow(
+                    selected = false, chat = chat, onClick = onAddAccount,
+                    leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Add account", subtitle = null, trailing = null,
+                )
+            }
+            item {
+                SidebarRow(
+                    selected = false, chat = chat, onClick = onOpenSettings,
+                    leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Settings", subtitle = "Appearance, navigation, storage", trailing = null,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AboutDialog(
+    appVersion: String,
+    packageName: String,
+    coreProtocolVersion: Int,
+    sharedProtocolVersion: Int,
+    onOpenUrl: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("About Meron") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Meron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Version $appVersion · Package $packageName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Core protocol $coreProtocolVersion · Shared protocol $sharedProtocolVersion",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onOpenUrl("https://github.com/sponsors/nonbili") }) {
+                        Text("GitHub Sponsors")
+                    }
+                    OutlinedButton(onClick = { onOpenUrl("https://liberapay.com/nonbili") }) {
+                        Text("Liberapay")
+                    }
+                    OutlinedButton(onClick = { onOpenUrl("https://www.paypal.com/paypalme/nonbili") }) {
+                        Text("PayPal")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
+}
+
+@Composable
+internal fun SidebarRow(
+    selected: Boolean,
+    chat: ChatColors,
+    onClick: () -> Unit,
+    leading: @Composable () -> Unit,
+    title: String,
+    subtitle: String?,
+    trailing: String?,
+) {
+    val tint = if (selected) MaterialTheme.colorScheme.primary else chat.onSidebarMuted
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalContentColor provides tint,
+            ) { leading() }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                color = if (selected) chat.onSidebar else chat.onSidebar.copy(alpha = 0.9f),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    color = chat.onSidebarMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (trailing != null) {
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(trailing, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DrawerLabel(text: String, chat: ChatColors) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = chat.onSidebarMuted,
+        modifier = Modifier.padding(start = 24.dp, top = 14.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+internal fun StatusBanner(
+    message: String,
+    isError: Boolean,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+    onDismiss: (() -> Unit)?,
+) {
+    val container = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+    val content = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    Surface(color = container, contentColor = content) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(message, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction) {
+                    Text(actionLabel, color = content, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
                 }
             }
         }
     }
+}
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
+@Composable
+internal fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    text: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onAction) { Text(actionLabel) }
     }
-
-    fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
-    fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
 }

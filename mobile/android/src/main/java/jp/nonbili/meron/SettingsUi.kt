@@ -264,49 +264,221 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-class ComposeMainActivity : ComponentActivity() {
-    private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
-    private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
-        AndroidNotificationService.ensureChannels(this)
-        AndroidBackgroundSyncScheduler.schedule(this)
-        val coreInitJson = if (MeronCoreNative.isLoaded()) {
-            MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
-        } else {
-            ""
-        }
-        setContent {
-            var appearanceMode by remember { mutableStateOf(loadAppearanceMode(this)) }
-            MeronTheme(appearanceMode = appearanceMode) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MeronMobileScreen(
-                        coreInitJson = coreInitJson,
-                        incomingMailtoDraft = incomingMailtoDraft,
-                        incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-                        appearanceMode = appearanceMode,
-                        onAppearanceModeChange = { mode ->
-                            appearanceMode = mode
-                            saveAppearanceMode(this, mode)
-                        },
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SettingsScreen(
+    onBack: () -> Unit,
+    appearanceMode: AppAppearanceMode,
+    onAppearanceModeChange: (AppAppearanceMode) -> Unit,
+    showSenderImages: Boolean,
+    onToggleSenderImages: () -> Unit,
+    showUnreadBadges: Boolean,
+    onToggleUnreadBadges: () -> Unit,
+    showUnifiedInboxNav: Boolean,
+    onToggleUnifiedInboxNav: () -> Unit,
+    showStarredNav: Boolean,
+    onToggleStarredNav: () -> Unit,
+    sendShortcutMode: SendShortcutMode,
+    onToggleSendShortcut: () -> Unit,
+    kanbanColumnWidth: Int,
+    onCycleKanbanColumnWidth: () -> Unit,
+    notificationsNeedPermission: Boolean,
+    onEnableNotifications: () -> Unit,
+    onRefreshBackground: () -> Unit,
+    storageUsage: StorageUsage?,
+    storageBusy: Boolean,
+    storageClearConfirming: Boolean,
+    onRefreshStorage: () -> Unit,
+    onClearStorageCache: () -> Unit,
+    appVersion: String,
+    onShowAbout: () -> Unit,
+) {
+    var showThemePicker by remember { mutableStateOf(false) }
+    if (showThemePicker) {
+        ThemePickerDialog(
+            current = appearanceMode,
+            onSelect = onAppearanceModeChange,
+            onDismiss = { showThemePicker = false },
+        )
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
+            item { SettingsSectionLabel("Appearance") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Visibility,
+                    title = "Theme",
+                    subtitle = "Color presets shared with desktop",
+                    onClick = { showThemePicker = true },
+                    trailing = { Text(appearanceMode.label, color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item {
+                SettingsToggleRow(
+                    icon = Icons.Filled.Visibility,
+                    title = "Sender images",
+                    subtitle = "Use Gravatar and site icons",
+                    checked = showSenderImages,
+                    onToggle = onToggleSenderImages,
+                )
+            }
+            item { SettingsSectionLabel("Navigation") }
+            item { SettingsToggleRow(Icons.Filled.Visibility, "Unread badges", "Show counts in the drawer", showUnreadBadges, onToggleUnreadBadges) }
+            item { SettingsToggleRow(Icons.Filled.Inbox, "Unified inbox", "Show in the navigation drawer", showUnifiedInboxNav, onToggleUnifiedInboxNav) }
+            item { SettingsToggleRow(Icons.Filled.Star, "Starred", "Show in the navigation drawer", showStarredNav, onToggleStarredNav) }
+            item { SettingsSectionLabel("Composer") }
+            item {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    title = "Send shortcut",
+                    subtitle = "Hardware keyboard behavior",
+                    onClick = onToggleSendShortcut,
+                    trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item { SettingsSectionLabel("Kanban") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.ViewKanban,
+                    title = "Column width",
+                    subtitle = "Adjust board density",
+                    onClick = onCycleKanbanColumnWidth,
+                    trailing = { Text("${kanbanColumnWidth}dp", color = MaterialTheme.colorScheme.primary) },
+                )
+            }
+            item { SettingsSectionLabel("Sync & notifications") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Refresh,
+                    title = "Refresh in background",
+                    subtitle = "Queue a sync for all accounts",
+                    onClick = onRefreshBackground,
+                )
+            }
+            if (notificationsNeedPermission) {
+                item {
+                    SettingsRow(
+                        icon = Icons.Filled.MarkEmailUnread,
+                        title = "Enable notifications",
+                        subtitle = "Allow new mail alerts",
+                        onClick = onEnableNotifications,
                     )
                 }
             }
+            item { SettingsSectionLabel("Storage") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Info,
+                    title = "Storage usage",
+                    subtitle = storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
+                        ?: if (storageBusy) "Loading..." else "Tap to refresh",
+                    onClick = onRefreshStorage,
+                )
+            }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Delete,
+                    title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
+                    subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
+                    onClick = onClearStorageCache,
+                    trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
+                )
+            }
+            item { SettingsSectionLabel("About") }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Info,
+                    title = "About Meron",
+                    subtitle = "Version and support",
+                    onClick = onShowAbout,
+                    trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
+            }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
+}
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        incomingMailtoDraft = intent.toMailtoDraft()
-        incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
-    }
+@Composable
+internal fun SettingsSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 2.dp),
+    )
+}
 
-    fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
-    fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
+@Composable
+internal fun SettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = trailing,
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+@Composable
+internal fun SettingsToggleRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = { onToggle() }) },
+        modifier = Modifier.clickable(onClick = onToggle),
+    )
+}
+
+@Composable
+internal fun ThemePickerDialog(
+    current: AppAppearanceMode,
+    onSelect: (AppAppearanceMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Theme") },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
+                items(AppAppearanceMode.entries) { mode ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode); onDismiss() }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = mode == current, onClick = { onSelect(mode); onDismiss() })
+                        Text(mode.label, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }
