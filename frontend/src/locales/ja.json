@@ -280,10 +280,10 @@
       "copyImage": "画像をコピー"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "表示とテーマ",
-      "hideFromSidebar": "サイドバーから非表示"
+      "hideFromSideNav": "サイドバーから非表示"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "すべての背後にあるウィンドウの背景",
       "surface": "サーフェス",
       "surfaceHint": "スレッドリスト、ヘッダー、および作成画面のパネル",
-      "sidebar": "サイドバー",
-      "sidebarHint": "左側のアカウントレール",
+      "sideNav": "サイドバー",
+      "sideNavHint": "左側のアカウントレール",
       "accent": "アクセント",
       "accentHint": "ボタン、リンク、および送信メッセージのバブル",
       "text": "テキスト",
@@ -394,7 +394,7 @@
       "noMailAccounts": "メールアカウントはまだありません。",
       "noFeedAccounts": "フィードアカウントはまだありません。",
       "noBoards": "ボードはまだありません。",
-      "sidebar": "サイドバー",
+      "sideNav": "サイドバー",
       "kanban": "カンバン",
       "composer": "作成画面",
       "subscriptions": "購読一覧",
@@ -412,7 +412,7 @@
       "showSenderImages": "送信者の画像を表示",
       "showSenderImagesHint": "Gravatarから送信者の画像を取得します（フォールバックとしてドメインのファビコンを使用）。"
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "統合受信トレイを表示",
       "showStarred": "スター付きを表示"
     },
@@ -439,8 +439,8 @@
       "visibility": "表示設定",
       "showInUnifiedInbox": "統合受信トレイに表示",
       "showInUnifiedInboxHint": "アカウントは引き続き直接開くことができます。",
-      "showInLeftSidebar": "左サイドバーに表示",
-      "showInLeftSidebarHint": "非表示のアカウントも、ここの設定から引き続き利用できます。",
+      "showInSideNav": "左サイドバーに表示",
+      "showInSideNavHint": "非表示のアカウントも、ここの設定から引き続き利用できます。",
       "notificationsSync": "通知と同期",
       "muteNotifications": "通知をミュート",
       "unmuteNotifications": "通知のミュートを解除",

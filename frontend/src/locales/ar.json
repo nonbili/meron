@@ -280,10 +280,10 @@
       "copyImage": "نسخ الصورة"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "العرض والسمة",
-      "hideFromSidebar": "إخفاء من الشريط الجانبي"
+      "hideFromSideNav": "إخفاء من الشريط الجانبي"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "خلفية النافذة خلف كل شيء",
       "surface": "السطح",
       "surfaceHint": "قائمة سلاسل الرسائل والترویسة ولوحات المنشئ",
-      "sidebar": "الشريط الجانبي",
-      "sidebarHint": "مسار الحسابات على اليسار",
+      "sideNav": "الشريط الجانبي",
+      "sideNavHint": "مسار الحسابات على اليسار",
       "accent": "اللون المميز",
       "accentHint": "الأزرار والروابط وفقاعات الرسائل الصادرة",
       "text": "النص",
@@ -394,7 +394,7 @@
       "noMailAccounts": "لا توجد حسابات بريد بعد.",
       "noFeedAccounts": "لا توجد حسابات خلاصات بعد.",
       "noBoards": "لا توجد لوحات بعد.",
-      "sidebar": "الشريط الجانبي",
+      "sideNav": "الشريط الجانبي",
       "kanban": "كانبان",
       "composer": "منشئ الرسائل",
       "subscriptions": "الاشتراكات",
@@ -412,7 +412,7 @@
       "showSenderImages": "إظهار صور المرسلين",
       "showSenderImagesHint": "يجلب صور المرسل من Gravatar، مع استخدام أيقونات المواقع كبديل."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "إظهار صندوق الوارد الموحد",
       "showStarred": "إظهار المميزة بنجمة"
     },
@@ -439,8 +439,8 @@
       "visibility": "الظهور",
       "showInUnifiedInbox": "إظهار في صندوق الوارد الموحد",
       "showInUnifiedInboxHint": "لا يزال بإمكانك فتح الحساب مباشرة.",
-      "showInLeftSidebar": "إظهار في الشريط الجانبي الأيسر",
-      "showInLeftSidebarHint": "تظل الحسابات المخفية متاحة هنا في الإعدادات.",
+      "showInSideNav": "إظهار في الشريط الجانبي الأيسر",
+      "showInSideNavHint": "تظل الحسابات المخفية متاحة هنا في الإعدادات.",
       "notificationsSync": "الإشعارات والمزامنة",
       "muteNotifications": "كتم الإشعارات",
       "unmuteNotifications": "إلغاء كتم الإشعارات",

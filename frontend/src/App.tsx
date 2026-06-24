@@ -9,7 +9,7 @@ import { kanban$ } from './states/kanban'
 import { settings$ } from './states/settings'
 import { startKanbanResize, startThreadListResize } from './lib/paneResize'
 import { useAppEffects } from './useAppEffects'
-import { AccountSwitcher } from './components/sidebar/AccountSwitcher'
+import { SideNav } from './components/sidenav/SideNav'
 import { ThreadList } from './components/threads/ThreadList'
 import { KanbanView } from './components/kanban/KanbanView'
 import { MessagePane } from './components/chat/MessagePane'
@@ -77,8 +77,8 @@ export default function App() {
       <MacTitleBar />
       <ConnectivityBanner />
       <main ref={mainRef} className="flex min-h-0 w-full flex-1 overflow-hidden">
-        <ErrorBoundary label="sidebar">
-          <AccountSwitcher />
+        <ErrorBoundary label="side navigation">
+          <SideNav />
         </ErrorBoundary>
         <ErrorBoundary label="thread list">
           {activeBoardId ? (

@@ -280,10 +280,10 @@
       "copyImage": "Kopeeri pilt"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Vaade ja kujundus",
-      "hideFromSidebar": "Peida külgribalt"
+      "hideFromSideNav": "Peida külgribalt"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Akna taust kõige taga",
       "surface": "Pind",
       "surfaceHint": "Lõimeloend, päis ja koostaja paneelid",
-      "sidebar": "Külgriba",
-      "sidebarHint": "Vasakpoolne kontoriba",
+      "sideNav": "Külgriba",
+      "sideNavHint": "Vasakpoolne kontoriba",
       "accent": "Aktsent",
       "accentHint": "Nupud, lingid ja väljuvad jutumullid",
       "text": "Tekst",
@@ -394,7 +394,7 @@
       "noMailAccounts": "E-posti kontosid veel pole.",
       "noFeedAccounts": "Voogude kontosid veel pole.",
       "noBoards": "Stende veel pole.",
-      "sidebar": "Külgriba",
+      "sideNav": "Külgriba",
       "kanban": "Kanban",
       "composer": "Koostaja",
       "subscriptions": "Tellimused",
@@ -412,7 +412,7 @@
       "showSenderImages": "Näita saatja pilte",
       "showSenderImagesHint": "Laadib saatja pildid Gravatarist, kasutades varulahendusena domeeni ikoone (favicon)."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Näita ühendatud postkasti",
       "showStarred": "Näita tärniga märgitud üksusi"
     },
@@ -439,8 +439,8 @@
       "visibility": "Nähtavus",
       "showInUnifiedInbox": "Näita ühendatud postkastis",
       "showInUnifiedInboxHint": "Saad kontot ikkagi otse avada.",
-      "showInLeftSidebar": "Näita vasakul külgribal",
-      "showInLeftSidebarHint": "Peidetud kontod jäävad siin seadetes kättesaadavaks.",
+      "showInSideNav": "Näita vasakul külgribal",
+      "showInSideNavHint": "Peidetud kontod jäävad siin seadetes kättesaadavaks.",
       "notificationsSync": "Teavitused ja sünkroonimine",
       "muteNotifications": "Vaigista teavitused",
       "unmuteNotifications": "Lülita teavitused sisse",

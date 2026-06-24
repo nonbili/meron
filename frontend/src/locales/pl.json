@@ -280,10 +280,10 @@
       "copyImage": "Kopiuj obraz"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Widok i motyw",
-      "hideFromSidebar": "Ukryj z paska bocznego"
+      "hideFromSideNav": "Ukryj z paska bocznego"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Tło okna pod całą zawartością",
       "surface": "Powierzchnia",
       "surfaceHint": "Lista wątków, nagłówek i panele edytora",
-      "sidebar": "Pasek boczny",
-      "sidebarHint": "Pasek kont po lewej stronie",
+      "sideNav": "Pasek boczny",
+      "sideNavHint": "Pasek kont po lewej stronie",
       "accent": "Akcent",
       "accentHint": "Przyciski, linki i dymki wiadomości wychodzących",
       "text": "Tekst",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Brak kont pocztowych.",
       "noFeedAccounts": "Brak kont kanałów.",
       "noBoards": "Brak tablic.",
-      "sidebar": "Pasek boczny",
+      "sideNav": "Pasek boczny",
       "kanban": "Kanban",
       "composer": "Tworzenie wiadomości",
       "subscriptions": "Subskrypcje",
@@ -412,7 +412,7 @@
       "showSenderImages": "Pokaż zdjęcia nadawców",
       "showSenderImagesHint": "Pobiera zdjęcia nadawców z Gravatara, a jako zapasowe używa ikon domen (favicon)."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Pokaż wspólną skrzynkę odbiorczą",
       "showStarred": "Pokaż oznaczone gwiazdką"
     },
@@ -439,8 +439,8 @@
       "visibility": "Widoczność",
       "showInUnifiedInbox": "Pokaż we wspólnej skrzynce odbiorczej",
       "showInUnifiedInboxHint": "Nadal możesz otworzyć konto bezpośrednio.",
-      "showInLeftSidebar": "Pokaż na lewym pasku bocznym",
-      "showInLeftSidebarHint": "Ukryte konta pozostają dostępne tutaj, w Ustawieniach.",
+      "showInSideNav": "Pokaż na lewym pasku bocznym",
+      "showInSideNavHint": "Ukryte konta pozostają dostępne tutaj, w Ustawieniach.",
       "notificationsSync": "Powiadomienia i synchronizacja",
       "muteNotifications": "Wycisz powiadomienia",
       "unmuteNotifications": "Wyłącz wyciszenie powiadomień",

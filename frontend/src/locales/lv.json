@@ -280,10 +280,10 @@
       "copyImage": "Kopēt attēlu"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Skats un motīvs",
-      "hideFromSidebar": "Paslēpt no sānjoslas"
+      "hideFromSideNav": "Paslēpt no sānjoslas"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Loga fons aiz visa",
       "surface": "Virsma",
       "surfaceHint": "Pavedienu saraksta, galvenes un rakstītāja paneļi",
-      "sidebar": "Sānjosla",
-      "sidebarHint": "Konta sliede kreisajā pusē",
+      "sideNav": "Sānjosla",
+      "sideNavHint": "Konta sliede kreisajā pusē",
       "accent": "Akcents",
       "accentHint": "Pogas, saites un izejošie burbuļi",
       "text": "Teksts",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Vēl nav pasta kontu.",
       "noFeedAccounts": "Vēl nav plūsmu kontu.",
       "noBoards": "Vēl nav tāfeļu.",
-      "sidebar": "Sānjosla",
+      "sideNav": "Sānjosla",
       "kanban": "Kanban",
       "composer": "Rakstītājs",
       "subscriptions": "Abonementi",
@@ -412,7 +412,7 @@
       "showSenderImages": "Rādīt sūtītāja attēlus",
       "showSenderImagesHint": "Iegūst sūtītāja attēlus no Gravatar, kā rezerves variantu izmantojot domēna favikonu."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Rādīt apvienoto iesūtni",
       "showStarred": "Rādīt atzīmētos ar zvaigznīti"
     },
@@ -439,8 +439,8 @@
       "visibility": "Redzamība",
       "showInUnifiedInbox": "Rādīt apvienotajā iesūtnē",
       "showInUnifiedInboxHint": "Jūs joprojām varat atvērt kontu tieši.",
-      "showInLeftSidebar": "Rādīt kreisajā sānjoslā",
-      "showInLeftSidebarHint": "Slēptie konti joprojām ir pieejami šeit, Iestatījumos.",
+      "showInSideNav": "Rādīt kreisajā sānjoslā",
+      "showInSideNavHint": "Slēptie konti joprojām ir pieejami šeit, Iestatījumos.",
       "notificationsSync": "Paziņojumi un sinhronizācija",
       "muteNotifications": "Izslēgt paziņojumu skaņu",
       "unmuteNotifications": "Ieslēgt paziņojumu skaņu",

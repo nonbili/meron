@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 
-// Sidebar rail menu rows are just the shared MenuItem; re-exported under the
+// Side navigation rail menu rows are just the shared MenuItem; re-exported under the
 // rail's local name so existing call sites keep importing from here.
 export { MenuItem as RailMenuItem } from '../menu/MenuItem'
 
-// Shared popover shell for the sidebar rail's right-click menus: a full-screen
+// Shared popover shell for the side navigation rail's right-click menus: a full-screen
 // click-catcher plus a card positioned at the cursor.
 export function RailContextMenu({
   x,

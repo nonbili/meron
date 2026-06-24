@@ -280,10 +280,10 @@
       "copyImage": "이미지 복사"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "보기 및 테마",
-      "hideFromSidebar": "사이드바에서 숨기기"
+      "hideFromSideNav": "사이드바에서 숨기기"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "모든 것 뒤의 창 배경",
       "surface": "표면",
       "surfaceHint": "스레드 목록, 헤더 및 작성기 패널",
-      "sidebar": "사이드바",
-      "sidebarHint": "왼쪽 계정 레일",
+      "sideNav": "사이드바",
+      "sideNavHint": "왼쪽 계정 레일",
       "accent": "강조",
       "accentHint": "버튼, 링크 및 발신 메시지 풍선",
       "text": "텍스트",
@@ -394,7 +394,7 @@
       "noMailAccounts": "아직 등록된 메일 계정이 없습니다.",
       "noFeedAccounts": "아직 등록된 피드 계정이 없습니다.",
       "noBoards": "아직 생성된 보드가 없습니다.",
-      "sidebar": "사이드바",
+      "sideNav": "사이드바",
       "kanban": "칸반",
       "composer": "메시지 작성",
       "subscriptions": "구독",
@@ -412,7 +412,7 @@
       "showSenderImages": "보내는 사람 이미지 표시",
       "showSenderImagesHint": "Gravatar에서 보내는 사람 이미지를 가져오며, 실패 시 도메인 파비콘을 폴백으로 사용합니다."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "통합 받은 편지함 표시",
       "showStarred": "별표 표시됨 표시"
     },
@@ -439,8 +439,8 @@
       "visibility": "표시 여부",
       "showInUnifiedInbox": "통합 받은 편지함에 표시",
       "showInUnifiedInboxHint": "계정을 여전히 직접 열 수 있습니다.",
-      "showInLeftSidebar": "왼쪽 사이드바에 표시",
-      "showInLeftSidebarHint": "숨겨진 계정은 여기 설정에서 계속 사용할 수 있습니다.",
+      "showInSideNav": "왼쪽 사이드바에 표시",
+      "showInSideNavHint": "숨겨진 계정은 여기 설정에서 계속 사용할 수 있습니다.",
       "notificationsSync": "알림 및 동기화",
       "muteNotifications": "알림 무음 처리",
       "unmuteNotifications": "알림 무음 해제",

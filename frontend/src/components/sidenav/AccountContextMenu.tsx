@@ -1,7 +1,7 @@
 import { Bell, BellOff, EyeOff, Pause, Play, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { setAccountMuted, setAccountPaused } from '../../states/accounts'
-import { setAccountSidebarHidden } from '../../states/settings'
+import { setAccountSideNavHidden } from '../../states/settings'
 import { ui$ } from '../../states/ui'
 import type { Account } from '../../types'
 import { RailContextMenu, RailMenuItem } from './RailContextMenu'
@@ -50,9 +50,9 @@ export function AccountContextMenu({
       />
       <RailMenuItem
         icon={<EyeOff size={13} className={secondary} />}
-        label={t('sidebar.actions.hideFromSidebar')}
+        label={t('sidenav.actions.hideFromSideNav')}
         onClick={() => {
-          setAccountSidebarHidden(account.id, true)
+          setAccountSideNavHidden(account.id, true)
           onClose()
         }}
       />

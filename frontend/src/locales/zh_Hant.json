@@ -280,10 +280,10 @@
       "copyImage": "複製圖片"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "檢視與主題",
-      "hideFromSidebar": "在側邊欄隱藏"
+      "hideFromSideNav": "在側邊欄隱藏"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "所有內容背後的視窗背景",
       "surface": "表面",
       "surfaceHint": "對話串清單、標題與編輯器面板",
-      "sidebar": "側邊欄",
-      "sidebarHint": "左側的帳戶導覽列",
+      "sideNav": "側邊欄",
+      "sideNavHint": "左側的帳戶導覽列",
       "accent": "強調色",
       "accentHint": "按鈕、連結與外寄訊息泡泡",
       "text": "文字",
@@ -394,7 +394,7 @@
       "noMailAccounts": "尚無郵件帳戶。",
       "noFeedAccounts": "尚無訂閱源帳戶。",
       "noBoards": "尚無看板。",
-      "sidebar": "側邊欄",
+      "sideNav": "側邊欄",
       "kanban": "看板",
       "composer": "編輯器",
       "subscriptions": "訂閱",
@@ -412,7 +412,7 @@
       "showSenderImages": "顯示寄件者圖片",
       "showSenderImagesHint": "自 Gravatar 取得寄件者圖片，並以網域的 Favicon 作為備用方案。"
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "顯示統一收件匣",
       "showStarred": "顯示已加星號"
     },
@@ -439,8 +439,8 @@
       "visibility": "可見度",
       "showInUnifiedInbox": "顯示於統一收件匣",
       "showInUnifiedInboxHint": "您仍可直接開啟此帳戶。",
-      "showInLeftSidebar": "顯示於左側側邊欄",
-      "showInLeftSidebarHint": "隱藏的帳戶在此處的「設定」中仍保持可用。",
+      "showInSideNav": "顯示於左側側邊欄",
+      "showInSideNavHint": "隱藏的帳戶在此處的「設定」中仍保持可用。",
       "notificationsSync": "通知與同步",
       "muteNotifications": "靜音通知",
       "unmuteNotifications": "取消靜音通知",

@@ -6,7 +6,7 @@ import { ui$ } from '../../states/ui'
 import { MenuItem } from '../menu/MenuItem'
 
 /**
- * Popover with common app actions. Shared by the desktop sidebar 3-dot menu and
+ * Popover with common app actions. Shared by the desktop side navigation 3-dot menu and
  * the narrow-window thread-list header. `placement` flips the panel above
  * ("up") or below ("down") the anchor.
  */

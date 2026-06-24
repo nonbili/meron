@@ -280,10 +280,10 @@
       "copyImage": "复制图片"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "视图与主题",
-      "hideFromSidebar": "从侧边栏隐藏"
+      "hideFromSideNav": "从侧边栏隐藏"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "所有元素背后的窗口背景色",
       "surface": "板面色",
       "surfaceHint": "会话列表、页眉和撰写面板的颜色",
-      "sidebar": "侧边栏",
-      "sidebarHint": "左侧的账户栏",
+      "sideNav": "侧边栏",
+      "sideNavHint": "左侧的账户栏",
       "accent": "强调色",
       "accentHint": "按钮、链接和发送的消息气泡的颜色",
       "text": "文本",
@@ -394,7 +394,7 @@
       "noMailAccounts": "尚无邮件账户。",
       "noFeedAccounts": "尚无订阅源账户。",
       "noBoards": "尚无看板。",
-      "sidebar": "侧边栏",
+      "sideNav": "侧边栏",
       "kanban": "看板",
       "composer": "编辑器",
       "subscriptions": "订阅管理",
@@ -412,7 +412,7 @@
       "showSenderImages": "显示发件人头像",
       "showSenderImagesHint": "从 Gravatar 获取发件人头像，并以域名 favicon 作为备选。"
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "显示统一收件箱",
       "showStarred": "显示星标"
     },
@@ -439,8 +439,8 @@
       "visibility": "可见性",
       "showInUnifiedInbox": "在统一收件箱中显示",
       "showInUnifiedInboxHint": "您仍然可以直接打开该账户。",
-      "showInLeftSidebar": "在左侧边栏中显示",
-      "showInLeftSidebarHint": "隐藏的账户仍可在“设置”中访问。",
+      "showInSideNav": "在左侧边栏中显示",
+      "showInSideNavHint": "隐藏的账户仍可在“设置”中访问。",
       "notificationsSync": "通知与同步",
       "muteNotifications": "静音通知",
       "unmuteNotifications": "取消静音通知",

@@ -33,7 +33,7 @@ export function ThemeSettingsSection() {
             className="h-7 w-11 rounded-lg border border-border/80 overflow-hidden relative shadow-inner shrink-0 flex"
             style={{ background: t.bgApp }}
           >
-            <span className="w-1 shrink-0" style={{ background: t.bgSidebar }} />
+            <span className="w-1 shrink-0" style={{ background: t.bgSideNav }} />
             <span className="w-3 shrink-0 border-r" style={{ background: t.bgChats, borderColor: t.border }} />
             <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-1">
               <span

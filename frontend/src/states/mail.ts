@@ -135,11 +135,11 @@ function findLocalThread(threadId: string): Message | undefined {
 }
 
 // After a read/unread toggle, refresh the cached folder unread counts that feed
-// the sidebar badges. Refreshing the selected view (`loadFolders`) keeps the
-// folder sidebar and the unified/account badge for that view fresh — but it
+// the side navigation badges. Refreshing the selected view (`loadFolders`) keeps the
+// folder list and the unified/account badge for that view fresh — but it
 // only reloads `selectedAccount`'s folders. In the Starred view or an open
 // Kanban board, `selectedAccount` is 'starred' (or some unrelated account), so
-// the *thread's own* account never gets reloaded and its sidebar unread badge —
+// the *thread's own* account never gets reloaded and its side navigation unread badge —
 // plus the unified total it sums into — drifts out of sync. Refresh that
 // account too. Both calls are cache-only (refresh:false), so no IMAP traffic.
 function refreshFoldersAfterFlagChange(accountId: string | undefined) {
@@ -1060,7 +1060,7 @@ export async function markAllRead() {
   if (selectedAcc) void loadFolders(selectedAcc, false)
   // The visible list can span multiple accounts (unified inbox, Starred, a
   // Kanban board), so refresh each affected account's folder cache — not just
-  // the selected view — to keep every sidebar badge in sync.
+  // the selected view — to keep every side navigation badge in sync.
   for (const accountId of new Set(unread.map((thread) => thread.account_id))) {
     if (accountId && accountId !== selectedAcc) void refreshAccountFoldersCache(accountId, false)
   }

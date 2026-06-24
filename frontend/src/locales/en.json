@@ -285,10 +285,10 @@
       "copyImage": "Copy image"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "View & theme",
-      "hideFromSidebar": "Hide from sidebar"
+      "hideFromSideNav": "Hide from side navigation"
     }
   },
   "about": {
@@ -381,8 +381,8 @@
       "backgroundHint": "Window background behind everything",
       "surface": "Surface",
       "surfaceHint": "Thread list, header and composer panels",
-      "sidebar": "Sidebar",
-      "sidebarHint": "The account rail on the left",
+      "sideNav": "Side navigation",
+      "sideNavHint": "The account navigation on the left",
       "accent": "Accent",
       "accentHint": "Buttons, links and outgoing bubbles",
       "text": "Text",
@@ -399,7 +399,7 @@
       "noMailAccounts": "No mail accounts yet.",
       "noFeedAccounts": "No feed accounts yet.",
       "noBoards": "No boards yet.",
-      "sidebar": "Sidebar",
+      "sideNav": "Side navigation",
       "kanban": "Kanban",
       "composer": "Composer",
       "subscriptions": "Subscriptions",
@@ -416,10 +416,10 @@
     "appearance": {
       "showSenderImages": "Show sender images",
       "showSenderImagesHint": "Fetches sender images from Gravatar, with domain favicons as fallback.",
-      "showUnreadAccountBadge": "Show unread badge in sidebar",
-      "showUnreadAccountBadgeHint": "Overlays a count of unread inbox messages on each account in the sidebar."
+      "showUnreadAccountBadge": "Show unread badge in side navigation",
+      "showUnreadAccountBadgeHint": "Overlays a count of unread inbox messages on each account in the side navigation."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Show unified inbox",
       "showStarred": "Show starred"
     },
@@ -446,8 +446,8 @@
       "visibility": "Visibility",
       "showInUnifiedInbox": "Show in unified inbox",
       "showInUnifiedInboxHint": "You can still open the account directly.",
-      "showInLeftSidebar": "Show in left sidebar",
-      "showInLeftSidebarHint": "Hidden accounts stay available here in Settings.",
+      "showInSideNav": "Show in side navigation",
+      "showInSideNavHint": "Hidden accounts stay available here in Settings.",
       "notificationsSync": "Notifications & sync",
       "muteNotifications": "Mute notifications",
       "unmuteNotifications": "Unmute notifications",

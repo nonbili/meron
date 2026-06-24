@@ -18,7 +18,7 @@ const SAMPLE_INPUT: CustomThemeInput = {
   appearance: 'light',
   bgApp: '#f1f5f9',
   surface: '#ffffff',
-  sidebar: '#0f172a',
+  sideNav: '#0f172a',
   accent: '#4f46e5',
   text: '#0f172a',
 }
@@ -68,7 +68,7 @@ describe('deriveThemeTokens', () => {
       appearance: 'dark',
       bgApp: '#090d16',
       surface: '#0f172a',
-      sidebar: '#05070c',
+      sideNav: '#05070c',
       accent: '#6366f1',
       text: '#f8fafc',
     })
@@ -79,7 +79,7 @@ describe('deriveThemeTokens', () => {
     const tokens = deriveThemeTokens(SAMPLE_INPUT)
     expect(tokens.bgApp).toBe(SAMPLE_INPUT.bgApp)
     expect(tokens.bgChats).toBe(SAMPLE_INPUT.surface)
-    expect(tokens.bgSidebar).toBe(SAMPLE_INPUT.sidebar)
+    expect(tokens.bgSideNav).toBe(SAMPLE_INPUT.sideNav)
     expect(tokens.accent).toBe(SAMPLE_INPUT.accent)
     expect(tokens.textPrimary).toBe(SAMPLE_INPUT.text)
   })

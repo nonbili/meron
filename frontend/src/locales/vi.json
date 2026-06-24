@@ -280,10 +280,10 @@
       "copyImage": "Sao chép ảnh"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Xem & Giao diện",
-      "hideFromSidebar": "Ẩn khỏi thanh bên"
+      "hideFromSideNav": "Ẩn khỏi thanh bên"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Nền cửa sổ phía sau mọi thứ",
       "surface": "Bề mặt",
       "surfaceHint": "Danh sách luồng, tiêu đề và khung soạn thảo",
-      "sidebar": "Thanh bên",
-      "sidebarHint": "Thanh tài khoản ở phía bên trái",
+      "sideNav": "Thanh bên",
+      "sideNavHint": "Thanh tài khoản ở phía bên trái",
       "accent": "Màu nhấn",
       "accentHint": "Nút bấm, liên kết và bong bóng tin nhắn gửi đi",
       "text": "Màu văn bản",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Chưa có tài khoản thư nào.",
       "noFeedAccounts": "Chưa có tài khoản nguồn tin nào.",
       "noBoards": "Chưa có bảng nào.",
-      "sidebar": "Thanh bên",
+      "sideNav": "Thanh bên",
       "kanban": "Kanban",
       "composer": "Soạn thư",
       "subscriptions": "Đăng ký",
@@ -412,7 +412,7 @@
       "showSenderImages": "Hiển thị ảnh người gửi",
       "showSenderImagesHint": "Tải ảnh người gửi từ Gravatar, sử dụng favicon của tên miền để dự phòng."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Hiển thị Hộp thư đến chung",
       "showStarred": "Hiển thị thư đã gắn sao"
     },
@@ -439,8 +439,8 @@
       "visibility": "Hiển thị",
       "showInUnifiedInbox": "Hiển thị trong Hộp thư đến chung",
       "showInUnifiedInboxHint": "Bạn vẫn có thể mở tài khoản một cách trực tiếp.",
-      "showInLeftSidebar": "Hiển thị ở thanh bên trái",
-      "showInLeftSidebarHint": "Các tài khoản bị ẩn vẫn khả dụng ở đây trong Cài đặt.",
+      "showInSideNav": "Hiển thị ở thanh bên trái",
+      "showInSideNavHint": "Các tài khoản bị ẩn vẫn khả dụng ở đây trong Cài đặt.",
       "notificationsSync": "Thông báo & Đồng bộ",
       "muteNotifications": "Tắt tiếng thông báo",
       "unmuteNotifications": "Bật tiếng thông báo",

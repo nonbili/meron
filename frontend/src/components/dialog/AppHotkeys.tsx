@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { ui$, openCommandPalette, closeCommandPalette, focusGlobalSearch, focusQuickReply } from '../../states/ui'
-import { settings$, visibleSidebarAccounts } from '../../states/settings'
+import { settings$, visibleSideNavAccounts } from '../../states/settings'
 import { accounts$ } from '../../states/accounts'
 import {
   kanban$,
@@ -126,7 +126,7 @@ function handleRailShortcut(action: ShortcutId): boolean {
   if (slot === -1 || modalOpen()) return false
 
   let target = slot
-  if (settings$.showUnifiedInboxInSidebar.peek()) {
+  if (settings$.showUnifiedInboxInSideNav.peek()) {
     if (target === 0) {
       closeKanbanBoard()
       ui$.selectedAccount.set('unified')
@@ -144,7 +144,7 @@ function handleRailShortcut(action: ShortcutId): boolean {
   }
   target -= boards.length
 
-  const account = visibleSidebarAccounts(accounts$.peek())[target]
+  const account = visibleSideNavAccounts(accounts$.peek())[target]
   if (!account) return false
   closeKanbanBoard()
   ui$.selectedAccount.set(account.id)

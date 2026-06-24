@@ -61,7 +61,7 @@ export function SortableBoard({ board, active, onSelect, onContextMenu }: Sortab
         <div
           className={`flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
             active
-              ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidebar scale-105'
+              ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidenav scale-105'
               : 'opacity-75 hover:opacity-100 hover:scale-105'
           }`}
         >
@@ -136,7 +136,7 @@ export function SortableAccount({
         <div
           className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
             active
-              ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidebar scale-105'
+              ? 'ring-2 ring-accent ring-offset-2 ring-offset-sidenav scale-105'
               : isPaused || needsReconnect
                 ? 'opacity-100 hover:scale-105'
                 : 'opacity-75 hover:opacity-100 hover:scale-105'
@@ -154,7 +154,7 @@ export function SortableAccount({
         </div>
         {(needsReconnect || isPaused || isMuted) && (
           <span
-            className={`absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white/90 ring-2 ring-sidebar ${
+            className={`absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white/90 ring-2 ring-sidenav ${
               needsReconnect ? 'bg-amber-600' : 'bg-black/60 text-white/80'
             }`}
             title={needsReconnect ? 'Needs reconnect' : isPaused ? 'Paused' : 'Muted'}

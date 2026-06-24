@@ -10,5 +10,5 @@ const DRAG: CSSProperties = { '--wails-draggable': 'drag' } as CSSProperties
 
 export function MacTitleBar() {
   if (!isMac) return null
-  return <div className="flex h-7 shrink-0 items-center bg-sidebar" style={DRAG} aria-hidden />
+  return <div className="flex h-7 shrink-0 items-center bg-sidenav" style={DRAG} aria-hidden />
 }

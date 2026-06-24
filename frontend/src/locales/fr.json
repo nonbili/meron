@@ -280,10 +280,10 @@
       "copyImage": "Copier l'image"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Affichage & thème",
-      "hideFromSidebar": "Masquer de la barre latérale"
+      "hideFromSideNav": "Masquer de la barre latérale"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Arrière-plan de la fenêtre derrière le reste",
       "surface": "Surface",
       "surfaceHint": "Panneaux de liste des fils, d'en-tête et de l'éditeur de message",
-      "sidebar": "Barre latérale",
-      "sidebarHint": "La barre de compte sur la gauche",
+      "sideNav": "Barre latérale",
+      "sideNavHint": "La barre de compte sur la gauche",
       "accent": "Accentuation",
       "accentHint": "Boutons, liens et bulles de message sortant",
       "text": "Texte",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Aucun compte de messagerie pour le moment.",
       "noFeedAccounts": "Aucun compte de flux pour le moment.",
       "noBoards": "Aucun tableau pour le moment.",
-      "sidebar": "Barre latérale",
+      "sideNav": "Barre latérale",
       "kanban": "Kanban",
       "composer": "Éditeur de message",
       "subscriptions": "Abonnements",
@@ -412,7 +412,7 @@
       "showSenderImages": "Afficher les photos des expéditeurs",
       "showSenderImagesHint": "Récupère les photos d'expéditeurs depuis Gravatar, avec les favicons des domaines en secours."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Afficher la boîte de réception unifiée",
       "showStarred": "Afficher les éléments suivis"
     },
@@ -439,8 +439,8 @@
       "visibility": "Visibilité",
       "showInUnifiedInbox": "Afficher dans la boîte unifiée",
       "showInUnifiedInboxHint": "Vous pouvez toujours ouvrir le compte directement.",
-      "showInLeftSidebar": "Afficher dans la barre latérale gauche",
-      "showInLeftSidebarHint": "Les comptes masqués restent disponibles ici dans les paramètres.",
+      "showInSideNav": "Afficher dans la barre latérale gauche",
+      "showInSideNavHint": "Les comptes masqués restent disponibles ici dans les paramètres.",
       "notificationsSync": "Notifications & synchronisation",
       "muteNotifications": "Désactiver les notifications",
       "unmuteNotifications": "Activer les notifications",

@@ -280,10 +280,10 @@
       "copyImage": "Copia immagine"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Visualizzazione e tema",
-      "hideFromSidebar": "Nascondi dalla barra laterale"
+      "hideFromSideNav": "Nascondi dalla barra laterale"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Sfondo della finestra dietro a tutto",
       "surface": "Superficie",
       "surfaceHint": "Elenco thread, intestazione e pannelli del composer",
-      "sidebar": "Barra laterale",
-      "sidebarHint": "La guida dell'account sulla sinistra",
+      "sideNav": "Barra laterale",
+      "sideNavHint": "La guida dell'account sulla sinistra",
       "accent": "Accento",
       "accentHint": "Pulsanti, collegamenti e fumetti in uscita",
       "text": "Testo",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Nessun account e-mail impostato.",
       "noFeedAccounts": "Nessun account dei feed impostato.",
       "noBoards": "Nessuna bacheca impostata.",
-      "sidebar": "Barra laterale",
+      "sideNav": "Barra laterale",
       "kanban": "Kanban",
       "composer": "Composer",
       "subscriptions": "Iscrizioni",
@@ -412,7 +412,7 @@
       "showSenderImages": "Mostra immagini dei mittenti",
       "showSenderImagesHint": "Recupera le immagini dei mittenti da Gravatar, utilizzando le favicon del dominio come ripiego."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Mostra posta in arrivo unificata",
       "showStarred": "Mostra speciali"
     },
@@ -439,8 +439,8 @@
       "visibility": "Visibilità",
       "showInUnifiedInbox": "Mostra in Posta in arrivo unificata",
       "showInUnifiedInboxHint": "È comunque possibile aprire l'account direttamente.",
-      "showInLeftSidebar": "Mostra nella barra laterale sinistra",
-      "showInLeftSidebarHint": "Gli account nascosti rimangono disponibili qui nelle Impostazioni.",
+      "showInSideNav": "Mostra nella barra laterale sinistra",
+      "showInSideNavHint": "Gli account nascosti rimangono disponibili qui nelle Impostazioni.",
       "notificationsSync": "Notifiche e sincronizzazione",
       "muteNotifications": "Disattiva notifiche",
       "unmuteNotifications": "Attiva notifiche",

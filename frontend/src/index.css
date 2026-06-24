@@ -10,7 +10,7 @@
   --color-app: var(--me-bg-app);
   --color-chat: var(--me-bg-chat);
   --color-chat-overlay: var(--me-bg-chat-overlay);
-  --color-sidebar: var(--me-bg-sidebar);
+  --color-sidenav: var(--me-bg-sidenav);
   --color-chats: var(--me-bg-chats);
   --color-header: var(--me-bg-header);
   --color-hover: var(--me-bg-hover);
@@ -64,7 +64,7 @@
   --me-bg-app: #f1f5f9;
   --me-bg-chat: #f8fafc;
   --me-bg-chat-overlay: rgba(248, 250, 252, 0.94);
-  --me-bg-sidebar: #0f172a;
+  --me-bg-sidenav: #0f172a;
   --me-bg-chats: #ffffff;
   --me-bg-header: #ffffff;
   --me-bg-hover: #f1f5f9;
@@ -94,7 +94,7 @@
   --me-bg-app: #090d16;
   --me-bg-chat: #090d16;
   --me-bg-chat-overlay: rgba(9, 13, 22, 0.95);
-  --me-bg-sidebar: #05070c;
+  --me-bg-sidenav: #05070c;
   --me-bg-chats: #0f172a;
   --me-bg-header: #0f172a;
   --me-bg-hover: rgba(30, 41, 59, 0.6);

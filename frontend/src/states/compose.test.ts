@@ -65,7 +65,7 @@ describe('openThreadTabById', () => {
     }
   })
 
-  it('opens a fetched thread tab without changing navbar selection state', async () => {
+  it('opens a fetched thread tab without changing side navigation selection state', async () => {
     await openThreadTabById('t-notification')
 
     expect(compose$.activeTab.get()).toBe('thread-t-notification')

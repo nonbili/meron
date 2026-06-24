@@ -12,7 +12,7 @@ import { mail$, getFilteredThreads, syncMail, markAllRead, loadMoreThreads, isDr
 import { isRssAccount } from '../../lib/threadActions'
 import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
-import { QuickSettingsMenu } from '../sidebar/QuickSettingsMenu'
+import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
 import { type MessageContextMenuState } from '../chat/MessageContextMenu'
 import { StarredItemMenu } from './StarredItemMenu'
 import { ThreadActionsMenu } from './ThreadActionsMenu'
@@ -45,8 +45,8 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   // the per-message menu instead of the thread one.
   const isStarredView = selectedAccount === 'starred'
   const [starredMenu, setStarredMenu] = useState<MessageContextMenuState | null>(null)
-  // Quick-settings (view + theme) anchor for the narrow-window header button —
-  // the sidebar that normally hosts these controls is hidden at this width.
+  // Quick-settings (view + theme) anchor for the narrow-window header button.
+  // The side navigation that normally hosts these controls is hidden at this width.
   const [quickMenu, setQuickMenu] = useState<{ x: number; y: number } | null>(null)
   // Focus the search box when ⌘/Ctrl+Shift+F (or the palette) bumps the signal.
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -136,7 +136,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
             )}
           </div>
 
-          {/* Add account — only reachable here when the sidebar is hidden (narrow). */}
+          {/* Add account: only reachable here when the side navigation is hidden (narrow). */}
           <IconButton
             icon={Plus}
             iconSize={18}
@@ -182,11 +182,11 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
               onClick={() => openAddFeed(selectedAccount)}
             />
           )}
-          {/* View + theme — only reachable here when the sidebar is hidden (narrow). */}
+          {/* View + theme: only reachable here when the side navigation is hidden (narrow). */}
           <IconButton
             icon={MoreHorizontal}
             iconSize={18}
-            label={t('sidebar.actions.viewAndTheme')}
+            label={t('sidenav.actions.viewAndTheme')}
             size="md"
             radius="lg"
             className="min-[769px]:hidden"

@@ -280,10 +280,10 @@
       "copyImage": "Copiar imagem"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Visualização e tema",
-      "hideFromSidebar": "Ocultar da barra lateral"
+      "hideFromSideNav": "Ocultar da barra lateral"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Plano de fundo da janela por trás de tudo",
       "surface": "Superfície",
       "surfaceHint": "Lista de conversas, cabeçalho e painéis do compositor",
-      "sidebar": "Barra lateral",
-      "sidebarHint": "A barra de contas à esquerda",
+      "sideNav": "Barra lateral",
+      "sideNavHint": "A barra de contas à esquerda",
       "accent": "Destaque",
       "accentHint": "Botões, links e balões de envio",
       "text": "Texto",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Nenhuma conta de e-mail ainda.",
       "noFeedAccounts": "Nenhuma conta de feed ainda.",
       "noBoards": "Nenhum quadro ainda.",
-      "sidebar": "Barra lateral",
+      "sideNav": "Barra lateral",
       "kanban": "Kanban",
       "composer": "Compositor",
       "subscriptions": "Inscrições",
@@ -412,7 +412,7 @@
       "showSenderImages": "Exibir imagens dos remetentes",
       "showSenderImagesHint": "Busca imagens dos remetentes no Gravatar, usando favicons de domínio como alternativa."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Exibir caixa de entrada unificada",
       "showStarred": "Exibir itens com estrela"
     },
@@ -439,8 +439,8 @@
       "visibility": "Visibilidade",
       "showInUnifiedInbox": "Exibir na caixa de entrada unificada",
       "showInUnifiedInboxHint": "Você ainda poderá abrir a conta diretamente.",
-      "showInLeftSidebar": "Exibir na barra lateral esquerda",
-      "showInLeftSidebarHint": "Contas ocultas permanecem disponíveis aqui nas Configurações.",
+      "showInSideNav": "Exibir na barra lateral esquerda",
+      "showInSideNavHint": "Contas ocultas permanecem disponíveis aqui nas Configurações.",
       "notificationsSync": "Notificações e Sincronização",
       "muteNotifications": "Silenciar notificações",
       "unmuteNotifications": "Desativar silenciamento de notificações",

@@ -280,10 +280,10 @@
       "copyImage": "Kopiera bild"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Vy & tema",
-      "hideFromSidebar": "Dölj från sidofältet"
+      "hideFromSideNav": "Dölj från sidofältet"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Fönsterbakgrund bakom allt",
       "surface": "Yta",
       "surfaceHint": "Trådlista, rubrik och paneler för skrivfönstret",
-      "sidebar": "Sidofält",
-      "sidebarHint": "Kontofältet till vänster",
+      "sideNav": "Sidofält",
+      "sideNavHint": "Kontofältet till vänster",
       "accent": "Accentfärg",
       "accentHint": "Knappar, länkar och utgående bubblor",
       "text": "Text",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Inga e-postkonton än.",
       "noFeedAccounts": "Inga flödeskonton än.",
       "noBoards": "Inga tavlor än.",
-      "sidebar": "Sidofält",
+      "sideNav": "Sidofält",
       "kanban": "Kanban",
       "composer": "Skrivfönster",
       "subscriptions": "Prenumerationer",
@@ -412,7 +412,7 @@
       "showSenderImages": "Visa avsändarbilder",
       "showSenderImagesHint": "Hämtar avsändarbilder från Gravatar, med domän-faviconer som reserv."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Visa samlad inkorg",
       "showStarred": "Visa stjärnmärkta"
     },
@@ -439,8 +439,8 @@
       "visibility": "Synlighet",
       "showInUnifiedInbox": "Visa i samlad inkorg",
       "showInUnifiedInboxHint": "Du kan fortfarande öppna kontot direkt.",
-      "showInLeftSidebar": "Visa i vänster sidofält",
-      "showInLeftSidebarHint": "Dolda konton förblir tillgängliga här i inställningarna.",
+      "showInSideNav": "Visa i vänster sidofält",
+      "showInSideNavHint": "Dolda konton förblir tillgängliga här i inställningarna.",
       "notificationsSync": "Aviseringar & synkronisering",
       "muteNotifications": "Stäng av aviseringar",
       "unmuteNotifications": "Slå på aviseringar",

@@ -280,10 +280,10 @@
       "copyImage": "Resmi kopyala"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Görünüm ve tema",
-      "hideFromSidebar": "Kenar çubuğundan gizle"
+      "hideFromSideNav": "Kenar çubuğundan gizle"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Her şeyin arkasındaki pencere arka planı",
       "surface": "Yüzey",
       "surfaceHint": "İleti dizisi listesi, başlık ve yazıcı panelleri",
-      "sidebar": "Kenar Çubuğu",
-      "sidebarHint": "Soldaki hesap rayı",
+      "sideNav": "Kenar Çubuğu",
+      "sideNavHint": "Soldaki hesap rayı",
       "accent": "Vurgu",
       "accentHint": "Butonlar, bağlantılar ve giden baloncukları",
       "text": "Metin",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Henüz e-posta hesabı yok.",
       "noFeedAccounts": "Henüz besleme hesabı yok.",
       "noBoards": "Henüz pano yok.",
-      "sidebar": "Kenar Çubuğu",
+      "sideNav": "Kenar Çubuğu",
       "kanban": "Kanban",
       "composer": "E-posta Yazıcısı",
       "subscriptions": "Abonelikler",
@@ -412,7 +412,7 @@
       "showSenderImages": "Gönderen Resimlerini Göster",
       "showSenderImagesHint": "Gönderen resimlerini Gravatar'dan çeker, domain favicon'larını yedek olarak kullanır."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Birleşik Gelen Kutusu'nu Göster",
       "showStarred": "Yıldızlıları Göster"
     },
@@ -439,8 +439,8 @@
       "visibility": "Görünürlük",
       "showInUnifiedInbox": "Birleşik Gelen Kutusu'nda Göster",
       "showInUnifiedInboxHint": "Hesabı yine de doğrudan açabilirsiniz.",
-      "showInLeftSidebar": "Sol Kenar Çubuğunda Göster",
-      "showInLeftSidebarHint": "Gizli hesaplar burada, Ayarlar'da kullanılabilir kalır.",
+      "showInSideNav": "Sol Kenar Çubuğunda Göster",
+      "showInSideNavHint": "Gizli hesaplar burada, Ayarlar'da kullanılabilir kalır.",
       "notificationsSync": "Bildirimler ve Senkronizasyon",
       "muteNotifications": "Bildirimleri Sessize Al",
       "unmuteNotifications": "Bildirimlerin sesini aç",

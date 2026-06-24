@@ -10,7 +10,7 @@ import {
   setAccountPaused,
   setRSSSyncInterval,
 } from '../../states/accounts'
-import { settings$, setAccountSidebarHidden } from '../../states/settings'
+import { settings$, setAccountSideNavHidden } from '../../states/settings'
 import type { Account } from '../../types'
 import { NumberRow, SegmentedRow, SettingsGroup, ToggleRow } from './AccountSettingsRows'
 
@@ -18,7 +18,7 @@ import { NumberRow, SegmentedRow, SettingsGroup, ToggleRow } from './AccountSett
 // notifications/sync (incl. the RSS interval), and content rendering.
 export function AccountTogglesSection({ account, isRSS }: { account: Account; isRSS: boolean }) {
   const { t } = useTranslation()
-  const hiddenSidebarAccounts = useValue(settings$.hiddenSidebarAccounts)
+  const hiddenSideNavAccounts = useValue(settings$.hiddenSideNavAccounts)
   const [rssIntervalVal, setRssIntervalVal] = useState('60')
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function AccountTogglesSection({ account, isRSS }: { account: Account; is
   }, [account.id, account.rss_sync_interval_minutes])
 
   const inUnified = account.included_in_unified !== false
-  const inSidebar = !hiddenSidebarAccounts.includes(account.id)
+  const inSideNav = !hiddenSideNavAccounts.includes(account.id)
   const muted = account.muted ?? false
   const paused = account.paused ?? false
   const loadImages = account.load_remote_images ?? isRSS
@@ -52,10 +52,10 @@ export function AccountTogglesSection({ account, isRSS }: { account: Account; is
         />
         <ToggleRow
           icon={<Eye size={15} />}
-          title={t('settings.account.showInLeftSidebar')}
-          hint={t('settings.account.showInLeftSidebarHint')}
-          checked={inSidebar}
-          onChange={() => setAccountSidebarHidden(account.id, inSidebar)}
+          title={t('settings.account.showInSideNav')}
+          hint={t('settings.account.showInSideNavHint')}
+          checked={inSideNav}
+          onChange={() => setAccountSideNavHidden(account.id, inSideNav)}
         />
       </SettingsGroup>
 

@@ -280,10 +280,10 @@
       "copyImage": "Bild kopieren"
     }
   },
-  "sidebar": {
+  "sidenav": {
     "actions": {
       "viewAndTheme": "Ansicht & Design",
-      "hideFromSidebar": "Aus Seitenleiste ausblenden"
+      "hideFromSideNav": "Aus Seitenleiste ausblenden"
     }
   },
   "about": {
@@ -376,8 +376,8 @@
       "backgroundHint": "Fensterhintergrund ganz hinten",
       "surface": "Oberfläche",
       "surfaceHint": "Thread-Liste, Header und Editor-Bereiche",
-      "sidebar": "Seitenleiste",
-      "sidebarHint": "Die Kontoleiste auf der linken Seite",
+      "sideNav": "Seitenleiste",
+      "sideNavHint": "Die Kontoleiste auf der linken Seite",
       "accent": "Akzent",
       "accentHint": "Schaltflächen, Links und Blasen für ausgehende Nachrichten",
       "text": "Text",
@@ -394,7 +394,7 @@
       "noMailAccounts": "Noch keine E-Mail-Konten.",
       "noFeedAccounts": "Noch keine Feed-Konten.",
       "noBoards": "Noch keine Boards.",
-      "sidebar": "Seitenleiste",
+      "sideNav": "Seitenleiste",
       "kanban": "Kanban",
       "composer": "Composer",
       "subscriptions": "Abonnements",
@@ -412,7 +412,7 @@
       "showSenderImages": "Absenderbilder anzeigen",
       "showSenderImagesHint": "Ruft Absenderbilder von Gravatar ab, mit Domain-Favicons als Ausweichlösung."
     },
-    "sidebar": {
+    "sideNav": {
       "showUnifiedInbox": "Gemeinsamen Posteingang anzeigen",
       "showStarred": "Markierte anzeigen"
     },
@@ -439,8 +439,8 @@
       "visibility": "Sichtbarkeit",
       "showInUnifiedInbox": "Im gemeinsamen Posteingang anzeigen",
       "showInUnifiedInboxHint": "Sie können das Konto weiterhin direkt öffnen.",
-      "showInLeftSidebar": "In der linken Seitenleiste anzeigen",
-      "showInLeftSidebarHint": "Ausgeblendete Konten bleiben hier in den Einstellungen verfügbar.",
+      "showInSideNav": "In der linken Seitenleiste anzeigen",
+      "showInSideNavHint": "Ausgeblendete Konten bleiben hier in den Einstellungen verfügbar.",
       "notificationsSync": "Benachrichtigungen & Synchronisierung",
       "muteNotifications": "Benachrichtigungen stummschalten",
       "unmuteNotifications": "Stummschaltung aufheben",

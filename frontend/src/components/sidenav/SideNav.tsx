@@ -11,7 +11,7 @@ import { accounts$, reorderAccountIds } from '../../states/accounts'
 import { moveFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
 import { closeKanbanBoard, kanban$, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
 import { mail$, inboxUnread } from '../../states/mail'
-import { settings$, setUnifiedInboxSidebarVisible, setStarredSidebarVisible } from '../../states/settings'
+import { settings$, setUnifiedInboxSideNavVisible, setStarredSideNavVisible } from '../../states/settings'
 import { ui$ } from '../../states/ui'
 import { QuickSettingsMenu } from './QuickSettingsMenu'
 import { SortableBoard, SortableAccount } from './SortableRailItems'
@@ -22,13 +22,13 @@ import { BoardContextMenu } from './BoardContextMenu'
 import { BoardDialog, type BoardDialogState } from './BoardDialog'
 import type { Account } from '../../types'
 
-export function AccountSwitcher() {
+export function SideNav() {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
   const boards = useValue(settings$.kanbanBoards)
-  const hiddenSidebarAccounts = useValue(settings$.hiddenSidebarAccounts)
-  const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSidebar)
-  const showStarred = useValue(settings$.showStarredInSidebar)
+  const hiddenSideNavAccounts = useValue(settings$.hiddenSideNavAccounts)
+  const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
+  const showStarred = useValue(settings$.showStarredInSideNav)
   const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   const activeBoardId = useValue(kanban$.activeBoardId)
@@ -53,10 +53,10 @@ export function AccountSwitcher() {
         0,
       )
     : 0
-  const hiddenSidebarAccountIds = new Set(hiddenSidebarAccounts)
-  const sidebarAccounts = accounts.filter((account) => !hiddenSidebarAccountIds.has(account.id))
+  const hiddenSideNavAccountIds = new Set(hiddenSideNavAccounts)
+  const sideNavAccounts = accounts.filter((account) => !hiddenSideNavAccountIds.has(account.id))
   const hasBoards = boards.length > 0
-  const hasAccounts = sidebarAccounts.length > 0
+  const hasAccounts = sideNavAccounts.length > 0
 
   const isRssAccount = (account: { provider: string; auth_type: string }) =>
     account.provider === 'rss' || account.auth_type === 'rss'
@@ -98,7 +98,7 @@ export function AccountSwitcher() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (over && active.id !== over.id) {
-      const visible = [...sidebarAccounts]
+      const visible = [...sideNavAccounts]
       const oldIndex = visible.findIndex((account) => account.id === active.id)
       const newIndex = visible.findIndex((account) => account.id === over.id)
       if (oldIndex === -1 || newIndex === -1) return
@@ -106,7 +106,7 @@ export function AccountSwitcher() {
       visible.splice(newIndex, 0, removed)
       const next = [...accounts]
       const visiblePositions = accounts.flatMap((account, index) =>
-        hiddenSidebarAccountIds.has(account.id) ? [] : [index],
+        hiddenSideNavAccountIds.has(account.id) ? [] : [index],
       )
       visiblePositions.forEach((position, index) => {
         next[position] = visible[index]
@@ -132,7 +132,7 @@ export function AccountSwitcher() {
 
   return (
     <aside
-      className="flex w-[60px] shrink-0 flex-col items-center gap-4 border-r border-border bg-sidebar px-0 py-4 max-[768px]:hidden select-none"
+      className="flex w-[60px] shrink-0 flex-col items-center gap-4 border-r border-border bg-sidenav px-0 py-4 max-[768px]:hidden select-none"
       onContextMenu={(event) => {
         if (event.defaultPrevented) return
         event.preventDefault()
@@ -161,7 +161,7 @@ export function AccountSwitcher() {
                   event.stopPropagation()
                   setUnifiedMenu({ x: event.clientX, y: event.clientY })
                 }}
-                title={t('settings.sidebar.showUnifiedInbox')}
+                title={t('settings.sideNav.showUnifiedInbox')}
               >
                 <Mail size={19} />
               </button>
@@ -190,7 +190,7 @@ export function AccountSwitcher() {
                 event.stopPropagation()
                 setStarredMenu({ x: event.clientX, y: event.clientY })
               }}
-              title={t('settings.sidebar.showStarred')}
+              title={t('settings.sideNav.showStarred')}
             >
               <Star size={19} />
             </button>
@@ -240,8 +240,8 @@ export function AccountSwitcher() {
               onDragEnd={handleDragEnd}
               modifiers={[restrictToVerticalAxis]}
             >
-              <SortableContext items={sidebarAccounts.map((acc) => acc.id)} strategy={verticalListSortingStrategy}>
-                {sidebarAccounts.map((account) => (
+              <SortableContext items={sideNavAccounts.map((acc) => acc.id)} strategy={verticalListSortingStrategy}>
+                {sideNavAccounts.map((account) => (
                   <SortableAccount
                     key={account.id}
                     account={account}
@@ -295,9 +295,9 @@ export function AccountSwitcher() {
         <RailContextMenu x={unifiedMenu.x} y={unifiedMenu.y} onClose={() => setUnifiedMenu(null)}>
           <RailMenuItem
             icon={<EyeOff size={13} className="text-secondary" />}
-            label={t('sidebar.actions.hideFromSidebar')}
+            label={t('sidenav.actions.hideFromSideNav')}
             onClick={() => {
-              setUnifiedInboxSidebarVisible(false)
+              setUnifiedInboxSideNavVisible(false)
               setUnifiedMenu(null)
             }}
           />
@@ -308,9 +308,9 @@ export function AccountSwitcher() {
         <RailContextMenu x={starredMenu.x} y={starredMenu.y} onClose={() => setStarredMenu(null)}>
           <RailMenuItem
             icon={<EyeOff size={13} className="text-secondary" />}
-            label={t('sidebar.actions.hideFromSidebar')}
+            label={t('sidenav.actions.hideFromSideNav')}
             onClick={() => {
-              setStarredSidebarVisible(false)
+              setStarredSideNavVisible(false)
               setStarredMenu(null)
             }}
           />

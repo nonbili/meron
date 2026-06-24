@@ -16,7 +16,7 @@ export type ThemeTokens = {
   bgApp: string
   bgChat: string
   bgChatOverlay: string
-  bgSidebar: string
+  bgSideNav: string
   bgChats: string
   bgHeader: string
   bgHover: string
@@ -41,7 +41,7 @@ export const TOKEN_CSS_VAR: Record<keyof ThemeTokens, string> = {
   bgApp: '--me-bg-app',
   bgChat: '--me-bg-chat',
   bgChatOverlay: '--me-bg-chat-overlay',
-  bgSidebar: '--me-bg-sidebar',
+  bgSideNav: '--me-bg-sidenav',
   bgChats: '--me-bg-chats',
   bgHeader: '--me-bg-header',
   bgHover: '--me-bg-hover',
@@ -79,8 +79,8 @@ export type CustomThemeInput = {
   bgApp: string
   /** Panels: thread list, header, composer, incoming bubbles. */
   surface: string
-  /** The account rail / left sidebar. */
-  sidebar: string
+  /** The account rail / side navigation. */
+  sideNav: string
   accent: string
   /** Primary text color. */
   text: string
@@ -93,7 +93,7 @@ export type CustomTheme = ThemeDef & { source: CustomThemeInput }
  * Meron Light/Dark inputs reproduce (closely) the hand-picked index.css values.
  */
 export function deriveThemeTokens(input: CustomThemeInput): ThemeTokens {
-  const { appearance, bgApp, surface, sidebar, accent, text } = input
+  const { appearance, bgApp, surface, sideNav, accent, text } = input
   const light = appearance === 'light'
 
   const bgChat = light ? lighten(bgApp, 0.5) : bgApp
@@ -102,7 +102,7 @@ export function deriveThemeTokens(input: CustomThemeInput): ThemeTokens {
     bgApp,
     bgChat,
     bgChatOverlay: withAlpha(bgChat, light ? 0.94 : 0.95),
-    bgSidebar: sidebar,
+    bgSideNav: sideNav,
     bgChats: surface,
     bgHeader: surface,
     bgHover: light ? mix(surface, text, 0.06) : withAlpha(lighten(surface, 0.08), 0.6),
@@ -134,7 +134,7 @@ const MERON_LIGHT: ThemeTokens = {
   bgApp: '#f0f2f1',
   bgChat: '#f8faf9',
   bgChatOverlay: 'rgba(248, 250, 249, 0.94)',
-  bgSidebar: '#121a16',
+  bgSideNav: '#121a16',
   bgChats: '#ffffff',
   bgHeader: '#ffffff',
   bgHover: '#eef1f0',
@@ -159,7 +159,7 @@ const MERON_DARK: ThemeTokens = {
   bgApp: '#0c100e',
   bgChat: '#0c100e',
   bgChatOverlay: 'rgba(12, 16, 14, 0.95)',
-  bgSidebar: '#070a09',
+  bgSideNav: '#070a09',
   bgChats: '#151b18',
   bgHeader: '#151b18',
   bgHover: 'rgba(38, 47, 42, 0.6)',
@@ -187,7 +187,7 @@ const INDIGO_LIGHT: ThemeTokens = {
   bgApp: '#f1f5f9',
   bgChat: '#f8fafc',
   bgChatOverlay: 'rgba(248, 250, 252, 0.94)',
-  bgSidebar: '#0f172a',
+  bgSideNav: '#0f172a',
   bgChats: '#ffffff',
   bgHeader: '#ffffff',
   bgHover: '#f1f5f9',
@@ -212,7 +212,7 @@ const INDIGO_DARK: ThemeTokens = {
   bgApp: '#090d16',
   bgChat: '#090d16',
   bgChatOverlay: 'rgba(9, 13, 22, 0.95)',
-  bgSidebar: '#05070c',
+  bgSideNav: '#05070c',
   bgChats: '#0f172a',
   bgHeader: '#0f172a',
   bgHover: 'rgba(30, 41, 59, 0.6)',
@@ -240,7 +240,7 @@ const MIST: ThemeTokens = {
     appearance: 'light',
     bgApp: '#edf4f7',
     surface: '#ffffff',
-    sidebar: '#123947',
+    sideNav: '#123947',
     accent: '#0ea5b7',
     text: '#14323c',
   }),
@@ -265,7 +265,7 @@ const PAPER: ThemeTokens = {
     appearance: 'light',
     bgApp: '#f4f1ea',
     surface: '#fffdf8',
-    sidebar: '#263238',
+    sideNav: '#263238',
     accent: '#64748b',
     text: '#2f3a3d',
   }),
@@ -290,7 +290,7 @@ const DAWN: ThemeTokens = {
     appearance: 'light',
     bgApp: '#f7ede8',
     surface: '#fffaf7',
-    sidebar: '#35263b',
+    sideNav: '#35263b',
     accent: '#c06c84',
     text: '#4a3f4d',
   }),
@@ -315,7 +315,7 @@ const GRAPHITE: ThemeTokens = {
     appearance: 'dark',
     bgApp: '#181a1f',
     surface: '#23262d',
-    sidebar: '#111318',
+    sideNav: '#111318',
     accent: '#8b9bb4',
     text: '#eef0f3',
   }),
@@ -338,7 +338,7 @@ const MIDNIGHT: ThemeTokens = {
     appearance: 'dark',
     bgApp: '#0b1120',
     surface: '#111827',
-    sidebar: '#050814',
+    sideNav: '#050814',
     accent: '#38bdf8',
     text: '#f8fafc',
   }),
@@ -361,7 +361,7 @@ const FOREST: ThemeTokens = {
     appearance: 'dark',
     bgApp: '#101813',
     surface: '#17231c',
-    sidebar: '#0b120e',
+    sideNav: '#0b120e',
     accent: '#7ccf9b',
     text: '#f0f6ef',
   }),
@@ -384,7 +384,7 @@ const HONEY: ThemeTokens = {
     appearance: 'light',
     bgApp: '#f7f1e6',
     surface: '#fffdf7',
-    sidebar: '#33270f',
+    sideNav: '#33270f',
     accent: '#b07c10',
     text: '#3a3122',
   }),
@@ -409,7 +409,7 @@ const LILAC: ThemeTokens = {
     appearance: 'light',
     bgApp: '#f2f0f8',
     surface: '#fdfcff',
-    sidebar: '#2b2440',
+    sideNav: '#2b2440',
     accent: '#7a5bc4',
     text: '#34304a',
   }),
@@ -434,7 +434,7 @@ const PLUM: ThemeTokens = {
     appearance: 'dark',
     bgApp: '#151019',
     surface: '#1f1826',
-    sidebar: '#0d0a11',
+    sideNav: '#0d0a11',
     accent: '#b48ae0',
     text: '#f2eef6',
   }),
@@ -457,7 +457,7 @@ const EMBER: ThemeTokens = {
     appearance: 'dark',
     bgApp: '#181210',
     surface: '#231a15',
-    sidebar: '#0f0b09',
+    sideNav: '#0f0b09',
     accent: '#e1854c',
     text: '#f6efe9',
   }),
@@ -506,8 +506,8 @@ export function defaultThemeId(appearance: Appearance): string {
 /** Editor seed for a new custom theme: the default theme's source palette. */
 export function defaultCustomInput(appearance: Appearance): CustomThemeInput {
   return appearance === 'light'
-    ? { appearance, bgApp: '#f1f5f9', surface: '#ffffff', sidebar: '#0f172a', accent: '#4f46e5', text: '#0f172a' }
-    : { appearance, bgApp: '#090d16', surface: '#0f172a', sidebar: '#05070c', accent: '#6366f1', text: '#f8fafc' }
+    ? { appearance, bgApp: '#f1f5f9', surface: '#ffffff', sideNav: '#0f172a', accent: '#4f46e5', text: '#0f172a' }
+    : { appearance, bgApp: '#090d16', surface: '#0f172a', sideNav: '#05070c', accent: '#6366f1', text: '#f8fafc' }
 }
 
 export function newCustomThemeId(): string {
@@ -548,8 +548,8 @@ function sanitizeSource(raw: unknown): CustomThemeInput | null {
   const obj = raw as Record<string, unknown>
   const appearance = obj.appearance
   if (appearance !== 'light' && appearance !== 'dark') return null
-  const colors = {} as Record<'bgApp' | 'surface' | 'sidebar' | 'accent' | 'text', string>
-  for (const key of ['bgApp', 'surface', 'sidebar', 'accent', 'text'] as const) {
+  const colors = {} as Record<'bgApp' | 'surface' | 'sideNav' | 'accent' | 'text', string>
+  for (const key of ['bgApp', 'surface', 'sideNav', 'accent', 'text'] as const) {
     const value = obj[key]
     if (typeof value !== 'string' || !isValidColor(value)) return null
     colors[key] = value

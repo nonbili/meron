@@ -26,7 +26,7 @@ type ColorField = keyof Omit<CustomThemeInput, 'appearance'>
 const COLOR_FIELDS: { key: ColorField; labelKey: string; hintKey: string }[] = [
   { key: 'bgApp', labelKey: 'theme.fields.background', hintKey: 'theme.fields.backgroundHint' },
   { key: 'surface', labelKey: 'theme.fields.surface', hintKey: 'theme.fields.surfaceHint' },
-  { key: 'sidebar', labelKey: 'theme.fields.sidebar', hintKey: 'theme.fields.sidebarHint' },
+  { key: 'sideNav', labelKey: 'theme.fields.sideNav', hintKey: 'theme.fields.sideNavHint' },
   { key: 'accent', labelKey: 'theme.fields.accent', hintKey: 'theme.fields.accentHint' },
   { key: 'text', labelKey: 'theme.fields.text', hintKey: 'theme.fields.textHint' },
 ]
@@ -201,7 +201,7 @@ function ThemePreview({ tokens }: { tokens: ReturnType<typeof deriveThemeTokens>
       style={{ ...cssVarStyle(tokens), borderColor: tokens.border }}
     >
       <div className="flex h-40 bg-app">
-        <div className="w-9 shrink-0 bg-sidebar p-1.5">
+        <div className="w-9 shrink-0 bg-sidenav p-1.5">
           <div className="mx-auto h-6 w-6 rounded-lg" style={{ background: tokens.accent }} />
         </div>
         <div className="w-28 shrink-0 border-r border-border bg-chats p-1.5 flex flex-col gap-1">

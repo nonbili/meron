@@ -27,8 +27,8 @@ import {
   KANBAN_COLUMN_MAX_WIDTH,
   KANBAN_COLUMN_MIN_WIDTH,
   sendShortcutLabel,
-  setUnifiedInboxSidebarVisible,
-  setStarredSidebarVisible,
+  setUnifiedInboxSideNavVisible,
+  setStarredSideNavVisible,
   type KanbanBoard,
   type SendShortcut,
 } from '../../states/settings'
@@ -310,8 +310,8 @@ function GeneralSection() {
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const sendShortcut = useValue(settings$.sendShortcut)
-  const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSidebar)
-  const showStarred = useValue(settings$.showStarredInSidebar)
+  const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
+  const showStarred = useValue(settings$.showStarredInSideNav)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
   const language = useValue(settings$.language)
 
@@ -354,18 +354,18 @@ function GeneralSection() {
         />
       </SettingsGroup>
 
-      <SettingsGroup title={t('settings.sections.sidebar')}>
+      <SettingsGroup title={t('settings.sections.sideNav')}>
         <ToggleRow
           icon={<Inbox size={15} />}
-          title={t('settings.sidebar.showUnifiedInbox')}
+          title={t('settings.sideNav.showUnifiedInbox')}
           checked={showUnifiedInbox}
-          onChange={() => setUnifiedInboxSidebarVisible(!showUnifiedInbox)}
+          onChange={() => setUnifiedInboxSideNavVisible(!showUnifiedInbox)}
         />
         <ToggleRow
           icon={<Star size={15} />}
-          title={t('settings.sidebar.showStarred')}
+          title={t('settings.sideNav.showStarred')}
           checked={showStarred}
-          onChange={() => setStarredSidebarVisible(!showStarred)}
+          onChange={() => setStarredSideNavVisible(!showStarred)}
         />
       </SettingsGroup>
 

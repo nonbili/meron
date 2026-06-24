@@ -168,7 +168,7 @@ export type MessageTab = {
   threadId: string
   /** Present on thread tabs so they can render outside the currently selected mailbox. */
   accountId?: string
-  /** Present on thread tabs so message loading does not depend on sidebar navigation. */
+  /** Present on thread tabs so message loading does not depend on side navigation. */
   folderId?: string
   subject: string
   from: string

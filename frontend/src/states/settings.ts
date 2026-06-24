@@ -40,7 +40,7 @@ export type Settings = {
   /** User-created themes (see lib/themes.ts). */
   customThemes: CustomTheme[]
   showRealAvatars: boolean
-  /** Whether to overlay an inbox unread-count badge on sidebar account avatars. */
+  /** Whether to overlay an inbox unread-count badge on side navigation account avatars. */
   showUnreadAccountBadge: boolean
   sendShortcut: SendShortcut
   /** Ordered user-created kanban boards. */
@@ -51,12 +51,12 @@ export type Settings = {
   kanbanColumnWidth: number
   /** kanbanColumnKey -> whether the column is collapsed to a vertical bar. */
   kanbanMinimizedColumns: Record<string, boolean>
-  /** Account ids hidden from the desktop left sidebar. */
-  hiddenSidebarAccounts: string[]
-  /** Whether the synthetic unified inbox appears in the desktop left sidebar. */
-  showUnifiedInboxInSidebar: boolean
-  /** Whether the Starred view button appears in the desktop left sidebar. */
-  showStarredInSidebar: boolean
+  /** Account ids hidden from the desktop side navigation. */
+  hiddenSideNavAccounts: string[]
+  /** Whether the synthetic unified inbox appears in the desktop side navigation. */
+  showUnifiedInboxInSideNav: boolean
+  /** Whether the Starred view button appears in the desktop side navigation. */
+  showStarredInSideNav: boolean
   language: SupportedI18nLanguage | null
 }
 
@@ -77,9 +77,9 @@ const DB_KEY = {
   kanbanPaneWidth: 'kanban_pane_width',
   kanbanColumnWidth: 'kanban_column_width',
   kanbanMinimizedColumns: 'kanban_minimized_columns',
-  hiddenSidebarAccounts: 'hidden_sidebar_accounts',
-  showUnifiedInboxInSidebar: 'show_unified_inbox_in_sidebar',
-  showStarredInSidebar: 'show_starred_in_sidebar',
+  hiddenSideNavAccounts: 'hidden_sidenav_accounts',
+  showUnifiedInboxInSideNav: 'show_unified_inbox_in_sidenav',
+  showStarredInSideNav: 'show_starred_in_sidenav',
   language: 'language',
 } satisfies Record<keyof Settings, string>
 
@@ -171,9 +171,9 @@ export const settings$ = observable<Settings>({
   kanbanPaneWidth: 33,
   kanbanColumnWidth: KANBAN_COLUMN_DEFAULT_WIDTH,
   kanbanMinimizedColumns: {},
-  hiddenSidebarAccounts: [],
-  showUnifiedInboxInSidebar: true,
-  showStarredInSidebar: false,
+  hiddenSideNavAccounts: [],
+  showUnifiedInboxInSideNav: true,
+  showStarredInSideNav: false,
   language: null,
 })
 
@@ -314,28 +314,28 @@ function sanitizeStringArray(raw: unknown): string[] | null {
   return out
 }
 
-export function isAccountHiddenFromSidebar(accountId: string): boolean {
-  return settings$.hiddenSidebarAccounts.peek().includes(accountId)
+export function isAccountHiddenFromSideNav(accountId: string): boolean {
+  return settings$.hiddenSideNavAccounts.peek().includes(accountId)
 }
 
-export function setAccountSidebarHidden(accountId: string, hidden: boolean) {
-  const current = settings$.hiddenSidebarAccounts.peek()
+export function setAccountSideNavHidden(accountId: string, hidden: boolean) {
+  const current = settings$.hiddenSideNavAccounts.peek()
   const has = current.includes(accountId)
   if (hidden === has) return
-  settings$.hiddenSidebarAccounts.set(hidden ? [...current, accountId] : current.filter((id) => id !== accountId))
+  settings$.hiddenSideNavAccounts.set(hidden ? [...current, accountId] : current.filter((id) => id !== accountId))
 }
 
-export function visibleSidebarAccounts(accounts: Account[]): Account[] {
-  const hidden = new Set(settings$.hiddenSidebarAccounts.peek())
+export function visibleSideNavAccounts(accounts: Account[]): Account[] {
+  const hidden = new Set(settings$.hiddenSideNavAccounts.peek())
   return accounts.filter((account) => !hidden.has(account.id))
 }
 
-export function setUnifiedInboxSidebarVisible(visible: boolean) {
-  settings$.showUnifiedInboxInSidebar.set(visible)
+export function setUnifiedInboxSideNavVisible(visible: boolean) {
+  settings$.showUnifiedInboxInSideNav.set(visible)
 }
 
-export function setStarredSidebarVisible(visible: boolean) {
-  settings$.showStarredInSidebar.set(visible)
+export function setStarredSideNavVisible(visible: boolean) {
+  settings$.showStarredInSideNav.set(visible)
 }
 
 /** Apply persisted settings loaded from the DB (via `app.prefsGet`). */
@@ -384,15 +384,15 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const minimizedColumns = sanitizeBooleanMap(prefs[DB_KEY.kanbanMinimizedColumns])
     if (minimizedColumns) settings$.kanbanMinimizedColumns.set(minimizedColumns)
 
-    const hiddenSidebarAccounts = sanitizeStringArray(prefs[DB_KEY.hiddenSidebarAccounts])
-    if (hiddenSidebarAccounts) settings$.hiddenSidebarAccounts.set(hiddenSidebarAccounts)
+    const hiddenSideNavAccounts = sanitizeStringArray(prefs[DB_KEY.hiddenSideNavAccounts])
+    if (hiddenSideNavAccounts) settings$.hiddenSideNavAccounts.set(hiddenSideNavAccounts)
 
-    if (typeof prefs[DB_KEY.showUnifiedInboxInSidebar] === 'boolean') {
-      settings$.showUnifiedInboxInSidebar.set(prefs[DB_KEY.showUnifiedInboxInSidebar] as boolean)
+    if (typeof prefs[DB_KEY.showUnifiedInboxInSideNav] === 'boolean') {
+      settings$.showUnifiedInboxInSideNav.set(prefs[DB_KEY.showUnifiedInboxInSideNav] as boolean)
     }
 
-    if (typeof prefs[DB_KEY.showStarredInSidebar] === 'boolean') {
-      settings$.showStarredInSidebar.set(prefs[DB_KEY.showStarredInSidebar] as boolean)
+    if (typeof prefs[DB_KEY.showStarredInSideNav] === 'boolean') {
+      settings$.showStarredInSideNav.set(prefs[DB_KEY.showStarredInSideNav] as boolean)
     }
 
     const language = normalizeI18nLanguage(prefs[DB_KEY.language] as string | null | undefined)

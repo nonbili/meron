@@ -3,7 +3,7 @@ import { Check, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ThemeDef } from '../../lib/themes'
 
-// One selectable theme tile: a mini app mock (sidebar / panel / bubbles) drawn
+// One selectable theme tile: a mini app mock (side navigation / panel / bubbles) drawn
 // with the theme's OWN token values via inline styles — never the live CSS
 // vars, so every swatch previews its theme regardless of the active one.
 
@@ -58,7 +58,7 @@ export function ThemeSwatch({
       }`}
     >
       <div className={large ? 'flex h-20' : 'flex h-12'} style={{ background: t.bgApp }}>
-        <div className={`shrink-0 ${large ? 'w-4' : 'w-2.5'}`} style={{ background: t.bgSidebar }} />
+        <div className={`shrink-0 ${large ? 'w-4' : 'w-2.5'}`} style={{ background: t.bgSideNav }} />
         <div
           className={`shrink-0 border-r ${large ? 'w-12' : 'w-7'}`}
           style={{ background: t.bgChats, borderColor: t.border }}
