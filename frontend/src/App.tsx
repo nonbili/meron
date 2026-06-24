@@ -1,6 +1,6 @@
-import { lazy, Suspense, useRef } from 'react'
+import { useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from './lib/i18n'
 import { ui$ } from './states/ui'
 import { mail$ } from './states/mail'
 import { compose$ } from './states/compose'
@@ -22,22 +22,11 @@ import { AppToast } from './components/toast/AppToast'
 import { AppConfirm } from './components/dialog/AppConfirm'
 import { MacTitleBar } from './components/titlebar/MacTitleBar'
 import { ConnectivityBanner } from './components/banner/ConnectivityBanner'
-
-// State-gated screens, code-split so they stay out of the initial bundle and only
-// load when first opened. Each is a named export, so unwrap it to a default for lazy().
-const SetupScreen = lazy(() => import('./components/setup/SetupScreen').then((m) => ({ default: m.SetupScreen })))
-const AccountDialog = lazy(() =>
-  import('./components/dialog/AccountDialog').then((m) => ({ default: m.AccountDialog })),
-)
-const SettingsDialog = lazy(() =>
-  import('./components/dialog/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
-)
-const AddFeedDialog = lazy(() =>
-  import('./components/dialog/AddFeedDialog').then((m) => ({ default: m.AddFeedDialog })),
-)
-const FeedEditDialog = lazy(() =>
-  import('./components/dialog/FeedEditDialog').then((m) => ({ default: m.FeedEditDialog })),
-)
+import { SetupScreen } from './components/setup/SetupScreen'
+import { AccountDialog } from './components/dialog/AccountDialog'
+import { SettingsDialog } from './components/dialog/SettingsDialog'
+import { AddFeedDialog } from './components/dialog/AddFeedDialog'
+import { FeedEditDialog } from './components/dialog/FeedEditDialog'
 
 export default function App() {
   const { t } = useTranslation()
@@ -64,9 +53,7 @@ export default function App() {
       <div className="flex h-full w-full flex-col bg-app text-primary">
         <MacTitleBar />
         <div className="min-h-0 flex-1">
-          <Suspense fallback={null}>
-            <SetupScreen />
-          </Suspense>
+          <SetupScreen />
         </div>
       </div>
     )
@@ -115,14 +102,11 @@ export default function App() {
         <AboutDialog />
 
         {/* Settings first so the add-account dialog (setupOpen), opened from within
-          Settings, layers on top and returns here when closed. Lazy-loaded, so a
-          single Suspense boundary covers them while their chunk fetches. */}
-        <Suspense fallback={null}>
-          {settingsOpen && <SettingsDialog />}
-          {setupOpen && <AccountDialog />}
-          {addFeedAccount && <AddFeedDialog />}
-          {editFeed && <FeedEditDialog />}
-        </Suspense>
+          Settings, layers on top and returns here when closed. */}
+        {settingsOpen && <SettingsDialog />}
+        {setupOpen && <AccountDialog />}
+        {addFeedAccount && <AddFeedDialog />}
+        {editFeed && <FeedEditDialog />}
 
         <AppToast />
         <AppConfirm />

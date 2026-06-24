@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Camera, Columns3, Image as ImageIcon, Trash2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { KanbanBoard } from '../../states/settings'
 import {
   removeKanbanBoard,

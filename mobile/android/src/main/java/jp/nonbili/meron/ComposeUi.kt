@@ -143,6 +143,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -303,18 +304,18 @@ internal fun ComposeScreen(
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
-            title = { Text("Discard draft?") },
-            text = { Text("This message will be deleted and won't be saved.") },
+            title = { Text(stringResource(R.string.mobile_compose_discard_draft_title)) },
+            text = { Text(stringResource(R.string.mobile_compose_discard_draft_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDiscard = false
                     onDiscardDraft()
                 }) {
-                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.buttons_discard), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") }
+                TextButton(onClick = { confirmDiscard = false }) { Text(stringResource(R.string.mobile_compose_keep_editing)) }
             },
         )
     }
@@ -322,26 +323,26 @@ internal fun ComposeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New message") },
+                title = { Text(stringResource(R.string.composer_actions_new_message)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.Close, contentDescription = "Discard")
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.buttons_discard))
                     }
                 },
                 actions = {
                     IconButton(onClick = onAttach) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Attach")
+                        Icon(Icons.Filled.AttachFile, contentDescription = stringResource(R.string.composer_actions_attach_files))
                     }
                     IconButton(onClick = onSend, enabled = to.isNotBlank()) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.buttons_send), tint = MaterialTheme.colorScheme.primary)
                     }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more))
                         }
                         DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text("Save draft") },
+                                text = { Text(stringResource(R.string.composer_actions_save_draft)) },
                                 leadingIcon = { Icon(Icons.Outlined.Drafts, contentDescription = null) },
                                 onClick = {
                                     overflowOpen = false
@@ -349,7 +350,7 @@ internal fun ComposeScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Discard draft", color = MaterialTheme.colorScheme.error) },
+                                text = { Text(stringResource(R.string.chat_actions_discard_draft), color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     overflowOpen = false
@@ -377,7 +378,7 @@ internal fun ComposeScreen(
                 ComposeField(
                     value = to,
                     onChange = onToChange,
-                    label = "To",
+                    label = stringResource(R.string.composer_fields_to),
                     field = "to",
                     suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
                     onFocus = onRecipientFocus,
@@ -385,14 +386,14 @@ internal fun ComposeScreen(
                     modifier = Modifier.weight(1f),
                 )
                 if (!showCcBcc) {
-                    TextButton(onClick = { showCcBcc = true }) { Text("Cc/Bcc") }
+                    TextButton(onClick = { showCcBcc = true }) { Text(stringResource(R.string.composer_actions_cc_bcc)) }
                 }
             }
             if (showCcBcc) {
                 ComposeField(
                     value = cc,
                     onChange = onCcChange,
-                    label = "Cc",
+                    label = stringResource(R.string.composer_fields_cc),
                     field = "cc",
                     suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
                     onFocus = onRecipientFocus,
@@ -401,18 +402,18 @@ internal fun ComposeScreen(
                 ComposeField(
                     value = bcc,
                     onChange = onBccChange,
-                    label = "Bcc",
+                    label = stringResource(R.string.composer_fields_bcc),
                     field = "bcc",
                     suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
                     onFocus = onRecipientFocus,
                     onAcceptSuggestion = onAcceptRecipientSuggestion,
                 )
             }
-            ComposeField(subject, onSubjectChange, "Subject")
+            ComposeField(subject, onSubjectChange, stringResource(R.string.composer_fields_subject))
             OutlinedTextField(
                 value = body,
                 onValueChange = onBodyChange,
-                placeholder = { Text("Write your message…") },
+                placeholder = { Text(stringResource(R.string.composer_placeholders_message)) },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -439,7 +440,7 @@ internal fun ComposeScreen(
                 }
             }
             if (attachments.isNotEmpty()) {
-                TextButton(onClick = onClearAttachments) { Text("Clear attachments") }
+                TextButton(onClick = onClearAttachments) { Text(stringResource(R.string.mobile_compose_clear_attachments)) }
             }
         }
     }
@@ -456,9 +457,9 @@ internal fun FromIdentitySelector(
     Box {
         TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth()) {
-                Text("From", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.composer_fields_from), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    selected?.let { formatSendIdentity(it) } ?: "Select sender",
+                    selected?.let { formatSendIdentity(it) } ?: stringResource(R.string.mobile_compose_select_sender),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,

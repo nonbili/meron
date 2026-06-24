@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { thread$ } from '../../states/thread'
 
 // The narrow-viewport in-thread search bar (the desktop equivalent lives inside

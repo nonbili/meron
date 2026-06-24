@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import { Image as TiptapImage } from '@tiptap/extension-image'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 
 function ImageNodeView({ node, updateAttributes, selected }: any) {
   const { t } = useTranslation()

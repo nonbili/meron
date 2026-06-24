@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, Rss, Trash2, Copy, Check } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { removeFeed } from '../../states/feeds'
 import { ui$ } from '../../states/ui'
 import { Button } from '../button/Button'

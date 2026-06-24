@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Check, Upload, Image as ImageIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { ChatWallpaper } from '../../types'
 import { WALLPAPER_PRESETS, sanitizeChatWallpaper, wallpaperCss } from '../../lib/wallpapers'
 import { pickImageFile } from '../../lib/nativeFilePicker'

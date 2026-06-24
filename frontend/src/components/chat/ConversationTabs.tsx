@@ -1,6 +1,6 @@
 import { MessageSquare, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { compose$, closeMessageTab } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 

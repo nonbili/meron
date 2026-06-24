@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { compose$, openComposeTab } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 import { mail$, getActiveThread } from '../../states/mail'

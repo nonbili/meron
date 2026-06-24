@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { setAccountName, setAccountSenderName } from '../../states/accounts'
 import type { Account } from '../../types'
 import { SettingsGroup, TextRow } from './AccountSettingsRows'

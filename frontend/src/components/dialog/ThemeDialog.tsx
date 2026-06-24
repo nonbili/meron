@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Palette, Plus, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { BUILTIN_THEMES, DEFAULT_LIGHT_ID, type Appearance, type CustomTheme, type ThemeDef } from '../../lib/themes'
 import { confirmAction } from '../../states/ui'
 import { deleteCustomTheme, selectTheme, settings$ } from '../../states/settings'

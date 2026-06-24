@@ -12,88 +12,88 @@ extension ContentView {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(accountStatus)
                         .font(.headline)
-                    Text("Manage providers, background refresh, and core diagnostics.")
+                    Text(String(localized: "mobile.accounts.manageSubtitle"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Background Refresh") {
+            Section(String(localized: "mobile.accounts.backgroundRefresh")) {
                 Button {
                     IosBackgroundRefresh.runOnce { summary in
                         backgroundRefreshStatus = summary
                     }
                 } label: {
-                    Label("Run Background Refresh", systemImage: "arrow.clockwise")
+                    Label(String(localized: "mobile.accounts.runBackgroundRefresh"), systemImage: "arrow.clockwise")
                 }
                 Button {
                     IosNotificationService.requestAuthorization { granted in
-                        notificationStatus = granted ? "Notifications enabled." : "Notifications disabled."
+                        notificationStatus = granted ? String(localized: "mobile.accounts.notificationsEnabled") : String(localized: "mobile.accounts.notificationsDisabled")
                     }
                 } label: {
-                    Label("Enable Notifications", systemImage: "bell")
+                    Label(String(localized: "mobile.accounts.enableNotifications"), systemImage: "bell")
                 }
-                LabeledContent("Refresh", value: backgroundRefreshStatus)
-                LabeledContent("Notifications", value: notificationStatus)
+                LabeledContent(String(localized: "mobile.accounts.refresh"), value: backgroundRefreshStatus)
+                LabeledContent(String(localized: "mobile.accounts.notifications"), value: notificationStatus)
             }
 
-            Section("Appearance") {
-                Picker("Theme", selection: $appearanceMode) {
+            Section(String(localized: "settings.pages.appearance")) {
+                Picker(String(localized: "common.theme"), selection: $appearanceMode) {
                     ForEach(iosThemeOptions) { option in
                         Text(option.name).tag(option.id)
                     }
                 }
-                Toggle("Show sender images", isOn: $showSenderImages)
+                Toggle(String(localized: "settings.appearance.showSenderImages"), isOn: $showSenderImages)
             }
 
-            Section("Navigation") {
-                Toggle("Show Unified inbox", isOn: $showUnifiedInbox)
-                Toggle("Show Starred tab", isOn: $showStarredTab)
-                Toggle("Show unread badges", isOn: $showUnreadBadges)
+            Section(String(localized: "mobile.accounts.navigation")) {
+                Toggle(String(localized: "settings.sideNav.showUnifiedInbox"), isOn: $showUnifiedInbox)
+                Toggle(String(localized: "mobile.accounts.showStarredTab"), isOn: $showStarredTab)
+                Toggle(String(localized: "mobile.accounts.showUnreadBadges"), isOn: $showUnreadBadges)
             }
 
-            Section("Composer") {
-                Picker("Send shortcut", selection: $sendShortcutMode) {
+            Section(String(localized: "settings.sections.composer")) {
+                Picker(String(localized: "settings.composer.sendMessageWith"), selection: $sendShortcutMode) {
                     Text("Cmd/Ctrl+Enter").tag("mod_enter")
                     Text("Enter").tag("enter")
                 }
-                Text("\(sendShortcutLabel(sendShortcutMode)) sends from hardware keyboards.")
+                Text(String(localized: "mobile.accounts.sendShortcutHardware").replacingOccurrences(of: "{shortcut}", with: sendShortcutLabel(sendShortcutMode)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Kanban") {
+            Section(String(localized: "settings.sections.kanban")) {
                 Stepper(
                     value: $kanbanColumnWidth,
                     in: iosKanbanColumnMinWidth ... iosKanbanColumnMaxWidth,
                     step: 20
                 ) {
-                    LabeledContent("Column width", value: "\(Int(kanbanColumnWidth)) pt")
+                    LabeledContent(String(localized: "settings.kanban.columnWidth"), value: "\(Int(kanbanColumnWidth)) pt")
                 }
             }
 
-            Section("Storage") {
-                LabeledContent("Cache", value: formattedStorageBytes(storageCacheBytes))
-                LabeledContent("Database", value: formattedStorageBytes(storageDbBytes))
+            Section(String(localized: "settings.sections.storage")) {
+                LabeledContent(String(localized: "settings.storage.cacheLabel"), value: formattedStorageBytes(storageCacheBytes))
+                LabeledContent(String(localized: "settings.storage.databaseLabel"), value: formattedStorageBytes(storageDbBytes))
                 Button {
                     loadStorageUsage(showStatus: true)
                 } label: {
-                    Label(storageBusy ? "Refreshing" : "Refresh Usage", systemImage: "arrow.clockwise")
+                    Label(storageBusy ? String(localized: "common.loading") : String(localized: "mobile.accounts.refreshUsage"), systemImage: "arrow.clockwise")
                 }
                 .disabled(storageBusy)
 
                 Button(role: storageClearConfirming ? .destructive : nil) {
                     clearStorageCache()
                 } label: {
-                    Label(storageClearConfirming ? "Confirm Clear Cache" : "Clear Cache", systemImage: "trash")
+                    Label(storageClearConfirming ? String(localized: "mobile.accounts.confirmClearCache") : String(localized: "settings.storage.clearTitle"), systemImage: "trash")
                 }
                 .disabled(storageBusy || (storageCacheBytes ?? 0) == 0)
             }
 
-            Section("About") {
-                LabeledContent("Version", value: "\(appVersion) (\(appBuild))")
-                LabeledContent("Core protocol", value: "\(rustProtocolVersion)")
-                LabeledContent("Shared protocol", value: "\(protocolVersion)")
+            Section(String(localized: "about.title")) {
+                LabeledContent(String(localized: "mobile.accounts.version"), value: "\(appVersion) (\(appBuild))")
+                LabeledContent(String(localized: "mobile.accounts.coreProtocol"), value: "\(rustProtocolVersion)")
+                LabeledContent(String(localized: "mobile.accounts.sharedProtocol"), value: "\(protocolVersion)")
                 if let sponsorsUrl = URL(string: "https://github.com/sponsors/nonbili") {
                     Link(destination: sponsorsUrl) {
                         Label("GitHub Sponsors", systemImage: "heart")
@@ -112,21 +112,21 @@ extension ContentView {
             }
 
             if !coreAccounts.isEmpty {
-                Section("Configured Accounts") {
+                Section(String(localized: "mobile.accounts.configuredAccounts")) {
                     ForEach(Array(coreAccounts.enumerated()), id: \.element.id) { index, account in
                         DisclosureGroup {
                             HStack {
                                 Button {
                                     moveAccount(account, delta: -1)
                                 } label: {
-                                    Label("Move Up", systemImage: "arrow.up")
+                                    Label(String(localized: "mobile.accounts.moveUp"), systemImage: "arrow.up")
                                 }
                                 .disabled(index == 0)
 
                                 Button {
                                     moveAccount(account, delta: 1)
                                 } label: {
-                                    Label("Move Down", systemImage: "arrow.down")
+                                    Label(String(localized: "mobile.accounts.moveDown"), systemImage: "arrow.down")
                                 }
                                 .disabled(index == coreAccounts.count - 1)
 
@@ -134,7 +134,7 @@ extension ContentView {
                                     Button {
                                         reconnectAccount(account)
                                     } label: {
-                                        Label("Reconnect", systemImage: "key")
+                                        Label(String(localized: "settings.account.reconnectButton"), systemImage: "key")
                                     }
                                 }
                             }
@@ -176,117 +176,117 @@ extension ContentView {
                 }
             }
 
-            Section("Password Account") {
-                TextField("Email", text: $accountEmail)
+            Section(String(localized: "mobile.accounts.passwordAccount")) {
+                TextField(String(localized: "accounts.fields.emailAddress"), text: $accountEmail)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("Username", text: $accountUsername)
+                TextField(String(localized: "accounts.fields.username"), text: $accountUsername)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                SecureField("Password", text: $accountPassword)
-                TextField("Display name", text: $accountDisplayName)
-                TextField("Sender name", text: $accountSenderName)
+                SecureField(String(localized: "accounts.fields.password"), text: $accountPassword)
+                TextField(String(localized: "settings.account.displayName"), text: $accountDisplayName)
+                TextField(String(localized: "settings.account.senderName"), text: $accountSenderName)
                 Button {
                     autodiscoverPasswordAccount()
                 } label: {
-                    Label("Find Mail Settings", systemImage: "magnifyingglass")
+                    Label(String(localized: "mobile.accounts.findMailSettings"), systemImage: "magnifyingglass")
                 }
-                TextField("IMAP host", text: $imapHost)
+                TextField(String(localized: "accounts.fields.imapHost"), text: $imapHost)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("IMAP port", text: $imapPort)
+                TextField(String(localized: "accounts.fields.port"), text: $imapPort)
                     .keyboardType(.numberPad)
-                TextField("SMTP host", text: $smtpHost)
+                TextField(String(localized: "accounts.fields.smtpHost"), text: $smtpHost)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("SMTP port", text: $smtpPort)
+                TextField(String(localized: "accounts.fields.port"), text: $smtpPort)
                     .keyboardType(.numberPad)
                 Button {
                     addPasswordAccount()
                 } label: {
-                    Label(reconnectingAccountId.isEmpty ? "Add Password Account" : "Reconnect Password Account", systemImage: "person.badge.plus")
+                    Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.addPasswordAccount") : String(localized: "mobile.accounts.reconnectPasswordAccount"), systemImage: "person.badge.plus")
                 }
                 Button {
                     listAccounts()
                 } label: {
-                    Label("Reload Accounts", systemImage: "list.bullet")
+                    Label(String(localized: "mobile.accounts.reloadAccounts"), systemImage: "list.bullet")
                 }
             }
 
             Section("OAuth") {
-                Picker("Provider", selection: $oauthProvider) {
+                Picker(String(localized: "mobile.accounts.provider"), selection: $oauthProvider) {
                     Text("Gmail").tag("gmail")
                     Text("Outlook").tag("outlook")
                 }
                 .pickerStyle(.segmented)
-                TextField("OAuth email", text: $oauthEmail)
+                TextField(String(localized: "mobile.accounts.oauthEmail"), text: $oauthEmail)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("OAuth client ID", text: $oauthClientId)
+                TextField(String(localized: "mobile.accounts.oauthClientId"), text: $oauthClientId)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                SecureField("OAuth client secret (optional)", text: $oauthClientSecret)
-                TextField("Redirect URI", text: $oauthRedirectUri)
+                SecureField(String(localized: "mobile.accounts.oauthClientSecretOptional"), text: $oauthClientSecret)
+                TextField(String(localized: "mobile.accounts.redirectUri"), text: $oauthRedirectUri)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 Button {
                     launchOAuthFlow()
                 } label: {
-                    Label("Open OAuth in Browser", systemImage: "safari")
+                    Label(String(localized: "mobile.accounts.openOAuthInBrowser"), systemImage: "safari")
                 }
                 if !oauthAuthorizationCode.isEmpty {
-                    LabeledContent("Authorization Code", value: oauthAuthorizationCode)
+                    LabeledContent(String(localized: "mobile.accounts.authorizationCode"), value: oauthAuthorizationCode)
                 }
                 Button {
                     exchangeOAuthCode()
                 } label: {
-                    Label(reconnectingAccountId.isEmpty ? "Exchange Code And Add Account" : "Exchange Code And Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                    Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.exchangeCodeAndAddAccount") : String(localized: "mobile.accounts.exchangeCodeAndReconnect"), systemImage: "arrow.triangle.2.circlepath")
                 }
-                TextField("Access token", text: $oauthAccessToken)
+                TextField(String(localized: "mobile.accounts.accessToken"), text: $oauthAccessToken)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                SecureField("Refresh token", text: $oauthRefreshToken)
-                TextField("Token expires at", text: $oauthExpiresAt)
+                SecureField(String(localized: "mobile.accounts.refreshToken"), text: $oauthRefreshToken)
+                TextField(String(localized: "mobile.accounts.tokenExpiresAt"), text: $oauthExpiresAt)
                     .keyboardType(.numberPad)
                 Button {
                     addOAuthAccount()
                 } label: {
-                    Label(reconnectingAccountId.isEmpty ? "Add OAuth Account" : "Reconnect OAuth Account", systemImage: "person.crop.circle.badge.checkmark")
+                    Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.addOAuthAccount") : String(localized: "mobile.accounts.reconnectOAuthAccount"), systemImage: "person.crop.circle.badge.checkmark")
                 }
             }
 
             Section("RSS") {
-                TextField("RSS feed URL", text: $rssFeedUrl)
+                TextField(String(localized: "mobile.accounts.rssFeedUrl"), text: $rssFeedUrl)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("RSS name", text: $rssDisplayName)
+                TextField(String(localized: "mobile.accounts.rssName"), text: $rssDisplayName)
                 Button {
                     addRssAccount()
                 } label: {
-                    Label("Add RSS Account", systemImage: "dot.radiowaves.left.and.right")
+                    Label(String(localized: "mobile.accounts.addRssAccount"), systemImage: "dot.radiowaves.left.and.right")
                 }
             }
 
-            Section("Diagnostics") {
-                DisclosureGroup("Core contract") {
-                    LabeledContent("Expected protocol", value: "\(protocolVersion)")
-                    LabeledContent("Rust protocol", value: "\(rustProtocolVersion)")
-                    LabeledContent("Command", value: MobileCommand.shared.ThreadList)
+            Section(String(localized: "mobile.accounts.diagnostics")) {
+                DisclosureGroup(String(localized: "mobile.accounts.coreContract")) {
+                    LabeledContent(String(localized: "mobile.accounts.expectedProtocol"), value: "\(protocolVersion)")
+                    LabeledContent(String(localized: "mobile.accounts.rustProtocol"), value: "\(rustProtocolVersion)")
+                    LabeledContent(String(localized: "mobile.accounts.command"), value: MobileCommand.shared.ThreadList)
                     DiagnosticText(title: "Init", value: rustInitJson)
                     DiagnosticText(title: "Ping", value: rustPingJson)
-                    DiagnosticText(title: "Generated request", value: threadListJson)
+                    DiagnosticText(title: String(localized: "mobile.accounts.generatedRequest"), value: threadListJson)
                     ForEach(rustReadyEvents, id: \.self) { event in
                         DiagnosticText(title: "Event", value: event)
                     }
                 }
                 if !accountJson.isEmpty {
-                    DisclosureGroup("Last core response") {
+                    DisclosureGroup(String(localized: "mobile.accounts.lastCoreResponse")) {
                         Text(accountJson)
                             .font(.system(.footnote, design: .monospaced))
                             .textSelection(.enabled)
                     }
                 }
-                Label("Use registered Gmail/Outlook mobile client IDs and exact redirect URIs.", systemImage: "safari")
+                Label(String(localized: "mobile.accounts.oauthClientHint"), systemImage: "safari")
             }
         }
         .listStyle(.insetGrouped)

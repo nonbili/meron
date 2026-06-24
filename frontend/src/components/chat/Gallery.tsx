@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Copy, Download, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { copyAttachmentImage, downloadAttachment } from '../../states/mail'
 import { MenuItem } from '../menu/MenuItem'
 

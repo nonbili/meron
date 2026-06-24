@@ -1,6 +1,6 @@
 import { Columns3, Info, Plus, RefreshCw, Settings } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { syncMail } from '../../states/mail'
 import { ui$ } from '../../states/ui'
 import { MenuItem } from '../menu/MenuItem'

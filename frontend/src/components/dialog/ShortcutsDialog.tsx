@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
 import { formatShortcut, isMac, SHORTCUT_GROUPS, SHORTCUT_LABELS } from '../../lib/shortcuts'
 import { IconButton } from '../button/IconButton'

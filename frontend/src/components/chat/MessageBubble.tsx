@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import {
   AlertCircle,
   Check,

@@ -1,95 +1,55 @@
-import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
-import arText from '../locales/ar.json'
-import deText from '../locales/de.json'
-import elText from '../locales/el.json'
-import enText from '../locales/en.json'
-import esText from '../locales/es.json'
-import etText from '../locales/et.json'
-import frText from '../locales/fr.json'
-import itText from '../locales/it.json'
-import koText from '../locales/ko.json'
-import lvText from '../locales/lv.json'
-import plText from '../locales/pl.json'
-import ptText from '../locales/pt.json'
-import ptBRText from '../locales/pt_BR.json'
-import svText from '../locales/sv.json'
-import trText from '../locales/tr.json'
-import viText from '../locales/vi.json'
-import zhHansText from '../locales/zh_Hans.json'
-import zhHantText from '../locales/zh_Hant.json'
-import jaText from '../locales/ja.json'
+import {
+  Fragment,
+  cloneElement,
+  createElement,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
+import IntlMessageFormat from 'intl-messageformat'
+import {
+  languageNativeNames,
+  messages,
+  supportedI18nLanguages,
+  type SupportedI18nLanguage,
+} from '../generated/locales'
 
-export const supportedI18nLanguages = [
-  'ar',
-  'de',
-  'el',
-  'en',
-  'es',
-  'et',
-  'fr',
-  'it',
-  'ko',
-  'lv',
-  'pl',
-  'pt',
-  'pt_BR',
-  'sv',
-  'tr',
-  'vi',
-  'zh_Hans',
-  'zh_Hant',
-  'ja',
-] as const
+export { languageNativeNames, supportedI18nLanguages, type SupportedI18nLanguage }
 
-export type SupportedI18nLanguage = (typeof supportedI18nLanguages)[number]
+type TranslationValues = Record<string, unknown> & { defaultValue?: string }
+type Listener = () => void
 
-export const languageNativeNames: Record<SupportedI18nLanguage, string> = {
-  ar: 'العربية',
-  de: 'Deutsch',
-  el: 'Ελληνικά',
-  en: 'English',
-  es: 'Español',
-  et: 'Eesti',
-  fr: 'Français',
-  it: 'Italiano',
-  ko: '한국어',
-  lv: 'Latviešu',
-  pl: 'Polski',
-  pt: 'Português',
-  pt_BR: 'Português (Brasil)',
-  sv: 'Svenska',
-  tr: 'Türkçe',
-  vi: 'Tiếng Việt',
-  zh_Hans: '简体中文',
-  zh_Hant: '繁體中文',
-  ja: '日本語',
-}
+const listeners = new Set<Listener>()
+const formatterCache = new Map<string, IntlMessageFormat>()
 
-const resources: Record<SupportedI18nLanguage, { translation: any }> = {
-  ar: { translation: arText },
-  de: { translation: deText },
-  el: { translation: elText },
-  en: { translation: enText },
-  es: { translation: esText },
-  et: { translation: etText },
-  fr: { translation: frText },
-  it: { translation: itText },
-  ko: { translation: koText },
-  lv: { translation: lvText },
-  pl: { translation: plText },
-  pt: { translation: ptText },
-  pt_BR: { translation: ptBRText },
-  sv: { translation: svText },
-  tr: { translation: trText },
-  vi: { translation: viText },
-  zh_Hans: { translation: zhHansText },
-  zh_Hant: { translation: zhHantText },
-  ja: { translation: jaText },
-}
+const localeForIntl = (language: SupportedI18nLanguage) => language.replace('_', '-')
 
 const isSupportedLanguage = (value?: string | null): value is SupportedI18nLanguage =>
   Boolean(value && supportedI18nLanguages.includes(value as any))
+
+let currentLanguage: SupportedI18nLanguage = 'en'
+
+function notify() {
+  for (const listener of listeners) listener()
+}
+
+function messageFor(language: SupportedI18nLanguage, key: string, defaultValue?: string) {
+  return messages[language]?.[key] ?? messages.en[key] ?? defaultValue ?? key
+}
+
+function formatMessage(language: SupportedI18nLanguage, key: string, values: TranslationValues = {}) {
+  const source = messageFor(language, key, values.defaultValue)
+  const cacheKey = `${language}\0${key}\0${source}`
+  let formatter = formatterCache.get(cacheKey)
+  if (!formatter) {
+    formatter = new IntlMessageFormat(source, localeForIntl(language), undefined, { ignoreTag: false })
+    formatterCache.set(cacheKey, formatter)
+  }
+  return formatter.format(values)
+}
 
 export const resolveI18nLanguageFromWebLocale = (localeStr?: string): SupportedI18nLanguage | undefined => {
   if (!localeStr) {
@@ -117,13 +77,74 @@ export const resolveI18nLanguageFromWebLocale = (localeStr?: string): SupportedI
 export const normalizeI18nLanguage = (value?: string | null): SupportedI18nLanguage | null =>
   value == null ? null : isSupportedLanguage(value) ? value : null
 
-i18n.use(initReactI18next).init({
-  fallbackLng: 'en',
-  supportedLngs: Object.keys(resources),
-  resources,
-  interpolation: {
-    escapeValue: false, // react already escapes values to prevent XSS
+export function t(key: string, values: TranslationValues = {}): string {
+  const formatted = formatMessage(currentLanguage, key, values)
+  return Array.isArray(formatted) ? formatted.join('') : String(formatted)
+}
+
+export function useTranslation() {
+  const [language, setLanguage] = useState(currentLanguage)
+
+  useEffect(() => {
+    const listener = () => setLanguage(currentLanguage)
+    listeners.add(listener)
+    return () => void listeners.delete(listener)
+  }, [])
+
+  return useMemo(
+    () => ({
+      t: (key: string, values: TranslationValues = {}) => {
+        const formatted = formatMessage(language, key, values)
+        return Array.isArray(formatted) ? formatted.join('') : String(formatted)
+      },
+      i18n,
+    }),
+    [language],
+  )
+}
+
+export function Trans({
+  i18nKey,
+  values = {},
+  components = {},
+}: {
+  i18nKey: string
+  values?: TranslationValues
+  components?: Record<string, ReactElement>
+}) {
+  const [language, setLanguage] = useState(currentLanguage)
+
+  useEffect(() => {
+    const listener = () => setLanguage(currentLanguage)
+    listeners.add(listener)
+    return () => void listeners.delete(listener)
+  }, [])
+
+  const richValues = useMemo(() => {
+    const out: Record<string, unknown> = { ...values }
+    for (const [name, component] of Object.entries(components)) {
+      out[name] = (chunks: ReactNode[]) =>
+        isValidElement(component) ? cloneElement(component, { key: name }, chunks) : chunks
+    }
+    return out
+  }, [components, values])
+
+  const formatted = formatMessage(language, i18nKey, richValues)
+  return createElement(Fragment, null, formatted as ReactNode)
+}
+
+const i18n = {
+  get language() {
+    return currentLanguage
   },
-})
+  async changeLanguage(language: string) {
+    const next = normalizeI18nLanguage(language) ?? 'en'
+    if (next !== currentLanguage) {
+      currentLanguage = next
+      notify()
+    }
+    return next
+  },
+}
 
 export default i18n

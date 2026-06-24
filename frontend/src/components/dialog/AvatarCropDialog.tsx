@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image as ImageIcon, Minus, Plus, RotateCcw, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { showToast } from '../../states/ui'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'

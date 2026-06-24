@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Inbox, Mail, MoreVertical, Plus, Star } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { FilterMode } from '../../states/ui'
 import { IconButton } from '../button/IconButton'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'

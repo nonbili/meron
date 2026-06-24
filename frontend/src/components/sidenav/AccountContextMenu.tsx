@@ -1,5 +1,5 @@
 import { Bell, BellOff, EyeOff, Pause, Play, SlidersHorizontal } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { setAccountMuted, setAccountPaused } from '../../states/accounts'
 import { setAccountSideNavHidden } from '../../states/settings'
 import { ui$ } from '../../states/ui'

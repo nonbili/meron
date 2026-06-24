@@ -1,5 +1,5 @@
 import { Settings, Trash2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { removeKanbanBoard } from '../../states/kanban'
 import { confirmAction, ui$ } from '../../states/ui'
 import { RailContextMenu, RailMenuItem } from './RailContextMenu'

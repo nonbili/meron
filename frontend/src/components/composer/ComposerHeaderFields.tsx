@@ -1,5 +1,5 @@
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { accounts$, isSendableAccount, accountIdentities } from '../../states/accounts'
 import type { ComposeDraft } from '../../types'
 import { RecipientInput } from './RecipientInput'

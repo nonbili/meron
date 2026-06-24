@@ -3,7 +3,7 @@ import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSe
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { Columns3, Search, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { invoke } from '../../lib/bridge'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { ui$ } from '../../states/ui'

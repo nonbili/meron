@@ -1,5 +1,5 @@
 import { Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 

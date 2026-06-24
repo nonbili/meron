@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { compose$ } from '../../states/compose'
 import type { ComposerAttachment } from '../../types'
 import { fileIconFor, formatFileSize } from './messageHelpers'

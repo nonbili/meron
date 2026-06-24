@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { MoreVertical, Inbox, Mail, Star, CheckCheck, EyeOff, RefreshCw, Search } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { FilterMode } from '../../states/ui'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MenuItem } from '../menu/MenuItem'

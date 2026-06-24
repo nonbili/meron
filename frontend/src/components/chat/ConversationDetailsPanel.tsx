@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ChevronLeft, Copy, Download, File, Image, Loader2, Play, SquarePen, Users, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import { downloadAttachment } from '../../states/mail'
 import { Avatar } from '../avatar/Avatar'

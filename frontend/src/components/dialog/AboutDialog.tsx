@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { ExternalLink, Heart, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
 import { openExternal } from '../../lib/native'
 import { Button } from '../button/Button'

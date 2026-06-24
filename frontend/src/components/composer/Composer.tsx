@@ -1,5 +1,5 @@
 import { EditorContent } from '@tiptap/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { closeMessageTab } from '../../states/compose'
 import { useComposer } from './useComposer'
 import { ComposerHeaderFields } from './ComposerHeaderFields'

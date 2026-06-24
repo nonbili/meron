@@ -1,5 +1,5 @@
 import { Code, FileText, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { closeMessageTab, setTabViewMode } from '../../states/compose'
 import type { MessageTab } from '../../types'
 import { Composer } from '../composer/Composer'

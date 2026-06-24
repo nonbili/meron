@@ -1,5 +1,5 @@
 import { Copy } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import type { Message } from '../../types'
 import {

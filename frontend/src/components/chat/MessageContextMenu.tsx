@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, Forward, Link2, Mail, MailOpen, SquarePen, Star, Trash2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { openMessageTab, editAsNewMessage, forwardMessage, openDraftCompose } from '../../states/compose'
 import { deleteMessage, isDraftFolder, markMessageReadState, starMessage } from '../../states/mail'
 import { openExternal } from '../../lib/native'

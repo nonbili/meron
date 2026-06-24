@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Columns3 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { accounts$ } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { kanbanColumnKey, type KanbanColumn } from '../../states/kanban'

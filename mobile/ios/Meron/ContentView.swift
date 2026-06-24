@@ -147,43 +147,43 @@ struct ContentView: View {
                     .navigationTitle(selectedCoreFolder.isEmpty ? "Inbox" : selectedCoreFolder.capitalized)
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem { Label("Mail", systemImage: "tray") }
+            .tabItem { Label(String(localized: "mobile.tabs.mail"), systemImage: "tray") }
             .badge(showUnreadBadges ? coreThreads.filter(\.unread).count : 0)
             .tag(IosAppTab.mail)
 
             NavigationStack {
                 composeView
-                    .navigationTitle("Compose")
+                    .navigationTitle(String(localized: "mobile.tabs.compose"))
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem { Label("Compose", systemImage: "square.and.pencil") }
+            .tabItem { Label(String(localized: "mobile.tabs.compose"), systemImage: "square.and.pencil") }
             .tag(IosAppTab.compose)
 
             if showStarredTab {
                 NavigationStack {
                     starredView
-                        .navigationTitle("Starred")
+                        .navigationTitle(String(localized: "mobile.tabs.starred"))
                         .navigationBarTitleDisplayMode(.inline)
                 }
-                .tabItem { Label("Starred", systemImage: "star") }
+                .tabItem { Label(String(localized: "mobile.tabs.starred"), systemImage: "star") }
                 .badge(showUnreadBadges ? starredItems.filter(\.unread).count : 0)
                 .tag(IosAppTab.starred)
             }
 
             NavigationStack {
                 kanbanView
-                    .navigationTitle("Kanban")
+                    .navigationTitle(String(localized: "mobile.tabs.kanban"))
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem { Label("Kanban", systemImage: "rectangle.3.group") }
+            .tabItem { Label(String(localized: "mobile.tabs.kanban"), systemImage: "rectangle.3.group") }
             .tag(IosAppTab.kanban)
 
             NavigationStack {
                 accountsView
-                    .navigationTitle("Accounts")
+                    .navigationTitle(String(localized: "mobile.tabs.accounts"))
                     .navigationBarTitleDisplayMode(.inline)
             }
-            .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
+            .tabItem { Label(String(localized: "mobile.tabs.accounts"), systemImage: "person.crop.circle") }
             .tag(IosAppTab.accounts)
         }
         .onChange(of: showStarredTab) { _, visible in
@@ -286,7 +286,7 @@ struct ContentView: View {
                     moveThread(thread, toFolder: folder.name)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(String(localized: "buttons.cancel"), role: .cancel) {}
         } message: { thread in
             Text(thread.subject.isEmpty ? "(no subject)" : thread.subject)
         }
@@ -295,7 +295,7 @@ struct ContentView: View {
             Button("Create & Move") {
                 createFolderAndMoveThread(thread, name: moveThreadNewFolderName)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(String(localized: "buttons.cancel"), role: .cancel) {}
         } message: { thread in
             Text(thread.subject.isEmpty ? "(no subject)" : thread.subject)
         }
@@ -305,18 +305,18 @@ struct ContentView: View {
                     copyThread(thread, toFolder: folder)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(String(localized: "buttons.cancel"), role: .cancel) {}
         } message: { thread in
             Text(thread.subject.isEmpty ? "(no subject)" : thread.subject)
         }
-        .alert("Add Feed", isPresented: $isAddFeedPresented) {
-            TextField("Feed URL", text: $addFeedUrl)
-            Button("Add") {
+        .alert(String(localized: "feeds.actions.addFeed"), isPresented: $isAddFeedPresented) {
+            TextField(String(localized: "feeds.url"), text: $addFeedUrl)
+            Button(String(localized: "feeds.actions.addFeed")) {
                 addFeedToSelectedRssAccount()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(String(localized: "buttons.cancel"), role: .cancel) {}
         } message: {
-            Text("Add a feed to the selected RSS account.")
+            Text(String(localized: "empty.addFeedToStart"))
         }
         .onAppear {
             ensureKanbanDefaults()

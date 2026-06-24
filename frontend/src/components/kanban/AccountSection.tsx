@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { ChevronRight, Loader2, Plus, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { Folder } from '../../types'
 import { kanbanColumnKey } from '../../states/kanban'
 import { Avatar } from '../avatar/Avatar'

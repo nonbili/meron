@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
 import { connectivity$ } from '../../states/connectivity'
 

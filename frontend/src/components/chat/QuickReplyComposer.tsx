@@ -1,5 +1,5 @@
 import { Loader2, Maximize2, Paperclip, Send } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { compose$, openReplyInFullEditor } from '../../states/compose'
 import { sendShortcutLabel } from '../../states/settings'
 import { useQuickReply } from './useQuickReply'

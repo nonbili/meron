@@ -1,5 +1,5 @@
 import { ChevronRight, RefreshCw } from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import { Field } from '../field/Field'
 import type { AccountDialogController } from './useAccountDialog'

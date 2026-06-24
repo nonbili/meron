@@ -18,6 +18,8 @@
 		A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* IosNotificationContractTests.swift */; };
 		A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
 		A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
+		A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
+		A10000000000000000000117 /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000118 /* LocalizationContractTests.swift */; };
 			A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
 			A10000000000000000000093 /* ContentViewComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000104 /* ContentViewComponents.swift */; };
 			A10000000000000000000094 /* ContentView+MailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000105 /* ContentView+MailViews.swift */; };
@@ -29,6 +31,7 @@
 			A10000000000000000000100 /* ContentView+Threads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000111 /* ContentView+Threads.swift */; };
 			A10000000000000000000101 /* ContentView+Compose.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000112 /* ContentView+Compose.swift */; };
 			A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000113 /* ContentView+ThreadActions.swift */; };
+			A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +61,7 @@
 		A1000000000000000000001B /* IosNotificationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosNotificationContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 			A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IosMailModels.swift"; sourceTree = "<group>"; };
 			A10000000000000000000104 /* ContentViewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentViewComponents.swift"; sourceTree = "<group>"; };
 			A10000000000000000000105 /* ContentView+MailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+MailViews.swift"; sourceTree = "<group>"; };
@@ -69,6 +73,8 @@
 			A10000000000000000000111 /* ContentView+Threads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Threads.swift"; sourceTree = "<group>"; };
 			A10000000000000000000112 /* ContentView+Compose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Compose.swift"; sourceTree = "<group>"; };
 			A10000000000000000000113 /* ContentView+ThreadActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ThreadActions.swift"; sourceTree = "<group>"; };
+			A10000000000000000000115 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = "Localizable.xcstrings"; sourceTree = "<group>"; };
+			A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalizedCatalog.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +120,7 @@
 				A10000000000000000000111 /* ContentView+Threads.swift */,
 				A10000000000000000000112 /* ContentView+Compose.swift */,
 				A10000000000000000000113 /* ContentView+ThreadActions.swift */,
+				A1000000000000000000011A /* LocalizedCatalog.swift */,
 				A10000000000000000000014 /* RustCoreBridge.swift */,
 				A10000000000000000000016 /* IosBackgroundRefresh.swift */,
 				A10000000000000000000017 /* IosAppPaths.swift */,
@@ -121,6 +128,7 @@
 				A1000000000000000000001E /* Meron.entitlements */,
 				A10000000000000000000015 /* Meron-Bridging-Header.h */,
 				A10000000000000000000013 /* Info.plist */,
+				A10000000000000000000115 /* Localizable.xcstrings */,
 			);
 			path = Meron;
 			sourceTree = "<group>";
@@ -133,6 +141,7 @@
 				A1000000000000000000001B /* IosNotificationContractTests.swift */,
 				A1000000000000000000001C /* OAuthCallbackContractTests.swift */,
 				A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */,
+				A10000000000000000000118 /* LocalizationContractTests.swift */,
 			);
 			path = MeronTests;
 			sourceTree = "<group>";
@@ -157,6 +166,7 @@
 				A10000000000000000000061 /* Build meron-core */,
 				A10000000000000000000050 /* Sources */,
 				A10000000000000000000020 /* Frameworks */,
+				A10000000000000000000116 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -210,6 +220,24 @@
 			knownRegions = (
 				en,
 				Base,
+				ar,
+				de,
+				el,
+				es,
+				et,
+				fr,
+				it,
+				ja,
+				ko,
+				lv,
+				pl,
+				pt,
+				"pt-BR",
+				sv,
+				tr,
+				vi,
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = A10000000000000000000030;
 			productRefGroup = A10000000000000000000032 /* Products */;
@@ -221,6 +249,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000116 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000114 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		A10000000000000000000060 /* Build MeronShared */ = {
@@ -283,6 +322,7 @@
 				A10000000000000000000100 /* ContentView+Threads.swift in Sources */,
 				A10000000000000000000101 /* ContentView+Compose.swift in Sources */,
 				A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */,
+				A10000000000000000000119 /* LocalizedCatalog.swift in Sources */,
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
 				A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */,
 				A10000000000000000000005 /* IosAppPaths.swift in Sources */,
@@ -299,6 +339,7 @@
 				A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */,
 				A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */,
 				A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */,
+				A10000000000000000000117 /* LocalizationContractTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

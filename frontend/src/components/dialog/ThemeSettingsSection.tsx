@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Palette } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
 import { BUILTIN_THEMES, DEFAULT_LIGHT_ID } from '../../lib/themes'
 import { settings$ } from '../../states/settings'

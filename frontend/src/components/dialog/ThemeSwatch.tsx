@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { Check, Pencil, Trash2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { ThemeDef } from '../../lib/themes'
 
 // One selectable theme tile: a mini app mock (side navigation / panel / bubbles) drawn

@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
 import { archiveThread, deleteThread, starThread } from '../../states/mail'
 import { thread$, type ConversationMode } from '../../states/thread'

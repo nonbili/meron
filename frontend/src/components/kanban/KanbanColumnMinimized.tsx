@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
 import { accounts$ } from '../../states/accounts'
 import { mail$ } from '../../states/mail'

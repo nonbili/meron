@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { X, RefreshCw } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
 import { Field } from '../field/Field'
 import { Button } from '../button/Button'

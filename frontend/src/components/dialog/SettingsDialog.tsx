@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { LucideIcon } from 'lucide-react'
 import {
   X,

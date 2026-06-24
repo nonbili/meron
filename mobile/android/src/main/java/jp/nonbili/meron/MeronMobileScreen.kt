@@ -143,6 +143,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -976,9 +977,9 @@ internal fun MeronMobileScreen(
                             TopAppBar(
                                 title = {
                                     Column {
-                                        Text("Starred", fontWeight = FontWeight.SemiBold)
+                                        Text(stringResource(R.string.mobile_tabs_starred), fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "All starred messages and feed items",
+                                            stringResource(R.string.mobile_mail_starred_subtitle),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -986,12 +987,12 @@ internal fun MeronMobileScreen(
                                 },
                                 navigationIcon = {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                        Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.mobile_actions_open_navigation))
                                     }
                                 },
                                 actions = {
                                     IconButton(onClick = ::loadStarredItems) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh starred")
+                                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.mobile_actions_refresh_starred))
                                     }
                                 },
                             )
@@ -1005,9 +1006,9 @@ internal fun MeronMobileScreen(
                             if (starredItems.isEmpty()) {
                                 EmptyState(
                                     icon = Icons.Filled.StarBorder,
-                                    title = "No starred items",
-                                    text = "Star messages or feed items to collect them here.",
-                                    actionLabel = "Refresh",
+                                    title = stringResource(R.string.empty_no_starred_items),
+                                    text = stringResource(R.string.empty_no_starred_items_text),
+                                    actionLabel = stringResource(R.string.mobile_actions_refresh),
                                     onAction = ::loadStarredItems,
                                 )
                             } else {
@@ -1093,7 +1094,7 @@ internal fun MeronMobileScreen(
                                     ) {
                                         KanbanBoardTile(activeKanbanBoard, 36.dp)
                                         Column {
-                                            Text(activeKanbanBoard?.name ?: "Kanban board", fontWeight = FontWeight.SemiBold)
+                                            Text(activeKanbanBoard?.name ?: stringResource(R.string.kanban_board_default_name), fontWeight = FontWeight.SemiBold)
                                             Text(
                                                 "${activeKanbanBoard?.columns?.size ?: 0} columns${if (activeKanbanBoard?.hasBoardStyle() == true) " · styled" else ""}",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -1104,7 +1105,7 @@ internal fun MeronMobileScreen(
                                 },
                                 navigationIcon = {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                        Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.mobile_actions_open_navigation))
                                     }
                                 },
                                 actions = {
@@ -1115,7 +1116,7 @@ internal fun MeronMobileScreen(
                                             screen = Screen.Settings
                                         }
                                     }) {
-                                        Icon(Icons.Filled.MoreVert, contentDescription = "Board menu")
+                                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_board_options))
                                     }
                                     IconButton(onClick = {
                                         coreAccounts.forEach { account ->
@@ -1130,10 +1131,10 @@ internal fun MeronMobileScreen(
                                         }
                                         showKanbanColumnDialog = true
                                     }) {
-                                        Icon(Icons.Filled.Add, contentDescription = "Add column")
+                                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.kanban_actions_add_column))
                                     }
                                     IconButton(onClick = { loadKanbanBoard(refresh = true) }) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh board")
+                                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.mobile_actions_refresh_board))
                                     }
                                 },
                             )
@@ -1143,7 +1144,7 @@ internal fun MeronMobileScreen(
                                 ExtendedFloatingActionButton(
                                     onClick = ::openCompose,
                                     icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                    text = { Text("Compose") },
+                                    text = { Text(stringResource(R.string.mobile_tabs_compose)) },
                                 )
                             }
                         },
@@ -1262,11 +1263,11 @@ internal fun MeronMobileScreen(
                                             selectedMailThreadIds = emptySet()
                                             mailSelectionMenuOpen = false
                                         }) {
-                                            Icon(Icons.Filled.Close, contentDescription = "Clear selection")
+                                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.mobile_actions_clear_selection))
                                         }
                                     } else {
                                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                            Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                            Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.mobile_actions_open_navigation))
                                         }
                                     }
                                 },
@@ -1276,17 +1277,17 @@ internal fun MeronMobileScreen(
                                             selectedMailThreads.forEach(::archiveOrRemove)
                                             selectedMailThreadIds = emptySet()
                                         }) {
-                                            Icon(Icons.Filled.Archive, contentDescription = "Archive selected")
+                                            Icon(Icons.Filled.Archive, contentDescription = stringResource(R.string.threads_actions_archive_thread))
                                         }
                                         IconButton(onClick = {
                                             selectedMailThreads.forEach(::deleteThread)
                                             selectedMailThreadIds = emptySet()
                                         }) {
-                                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+                                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.buttons_delete))
                                         }
                                         Box {
                                             IconButton(onClick = { mailSelectionMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = "Selection actions")
+                                                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.chat_more_actions))
                                             }
                                             DropdownMenu(
                                                 expanded = mailSelectionMenuOpen,
@@ -1294,7 +1295,7 @@ internal fun MeronMobileScreen(
                                             ) {
                                                 val markRead = selectedMailThreads.any { it.unread }
                                                 DropdownMenuItem(
-                                                    text = { Text(if (markRead) "Mark read" else "Mark unread") },
+                                                    text = { Text(if (markRead) stringResource(R.string.threads_actions_mark_as_read) else stringResource(R.string.threads_actions_mark_as_unread)) },
                                                     leadingIcon = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null) },
                                                     onClick = {
                                                         mailSelectionMenuOpen = false
@@ -1306,7 +1307,7 @@ internal fun MeronMobileScreen(
                                                 )
                                                 val star = selectedMailThreads.any { !it.starred }
                                                 DropdownMenuItem(
-                                                    text = { Text(if (star) "Star" else "Unstar") },
+                                                    text = { Text(if (star) stringResource(R.string.chat_star) else stringResource(R.string.chat_unstar)) },
                                                     leadingIcon = {
                                                         Icon(
                                                             if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
@@ -1327,7 +1328,7 @@ internal fun MeronMobileScreen(
                                                         ?.takeUnless { threadIdIsRss(it.id) }
                                                 if (singleSelectedMailThread != null) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Move") },
+                                                        text = { Text(stringResource(R.string.threads_actions_move_to)) },
                                                         leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
                                                         onClick = {
                                                             mailSelectionMenuOpen = false
@@ -1340,7 +1341,7 @@ internal fun MeronMobileScreen(
                                                         },
                                                     )
                                                     DropdownMenuItem(
-                                                        text = { Text("Copy") },
+                                                        text = { Text(stringResource(R.string.threads_actions_copy_to)) },
                                                         leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                                                         onClick = {
                                                             mailSelectionMenuOpen = false
@@ -1358,7 +1359,7 @@ internal fun MeronMobileScreen(
                                     } else {
                                         Box {
                                             IconButton(onClick = { mailboxMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = "Mailbox actions")
+                                                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.threads_actions_title))
                                             }
                                             DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
                                                 FilterMode.values().forEach { mode ->
@@ -1379,7 +1380,7 @@ internal fun MeronMobileScreen(
                                                 }
                                                 if (coreThreads.any { it.unread }) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Mark all read") },
+                                                        text = { Text(stringResource(R.string.threads_actions_mark_all_as_read)) },
                                                         leadingIcon = {
                                                             Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
                                                         },
@@ -1391,7 +1392,7 @@ internal fun MeronMobileScreen(
                                                 }
                                                 if (selectedAccount != null) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Account settings") },
+                                                        text = { Text(stringResource(R.string.settings_account_account_settings)) },
                                                         onClick = {
                                                             mailboxMenuOpen = false
                                                             accountSettingsTargetId = selectedAccount.id
@@ -1401,7 +1402,7 @@ internal fun MeronMobileScreen(
                                                     )
                                                     if (selectedAccount.let(::accountSummaryIsRss)) {
                                                         DropdownMenuItem(
-                                                            text = { Text("Add feed") },
+                                                            text = { Text(stringResource(R.string.feeds_actions_add_feed)) },
                                                             onClick = {
                                                                 mailboxMenuOpen = false
                                                                 addFeedUrl = ""
@@ -1409,14 +1410,14 @@ internal fun MeronMobileScreen(
                                                             },
                                                         )
                                                         DropdownMenuItem(
-                                                            text = { Text("Import OPML") },
+                                                            text = { Text(stringResource(R.string.common_import)) },
                                                             onClick = {
                                                                 mailboxMenuOpen = false
                                                                 opmlImportPicker.launch(arrayOf("text/xml", "application/xml", "text/*", "*/*"))
                                                             },
                                                         )
                                                         DropdownMenuItem(
-                                                            text = { Text("Export OPML") },
+                                                            text = { Text(stringResource(R.string.common_export)) },
                                                             onClick = {
                                                                 mailboxMenuOpen = false
                                                                 exportOpmlForSelectedAccount()
@@ -1435,7 +1436,7 @@ internal fun MeronMobileScreen(
                                 ExtendedFloatingActionButton(
                                     onClick = ::openCompose,
                                     icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                    text = { Text("Compose") },
+                                    text = { Text(stringResource(R.string.mobile_tabs_compose)) },
                                 )
                             }
                         },

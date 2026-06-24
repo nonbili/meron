@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import { createKanbanBoard } from '../../states/kanban'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'

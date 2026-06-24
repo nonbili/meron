@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 import type { Account } from '../../types'
 import { WALLPAPER_PRESETS, sanitizeChatWallpaper, wallpaperCss } from '../../lib/wallpapers'
 import { readFileData } from '../../lib/readFileData'

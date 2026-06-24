@@ -10,9 +10,9 @@ extension ContentView {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(coreAccounts.isEmpty ? "Connect your mail" : accountStatus)
+                    Text(coreAccounts.isEmpty ? String(localized: "mobile.mail.connectYourMail") : accountStatus)
                         .font(.headline)
-                    Text(coreAccounts.isEmpty ? "Add an account from the Accounts tab to load your inbox." : "Read, triage, and reply from the selected mailbox.")
+                    Text(coreAccounts.isEmpty ? String(localized: "mobile.mail.addAccountToLoadInbox") : String(localized: "mobile.mail.readTriageReply"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -20,7 +20,7 @@ extension ContentView {
 
             if coreAccounts.isEmpty {
                 Section {
-                    Label("No accounts configured", systemImage: "tray")
+                    Label(String(localized: "mobile.mail.noAccountsConfigured"), systemImage: "tray")
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -30,13 +30,13 @@ extension ContentView {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("\(accountLabel(account)) needs credentials", systemImage: "key")
                                     .font(.headline)
-                                Text("Update the password or OAuth sign-in before syncing this account.")
+                                Text(String(localized: "mobile.mail.reconnectHint"))
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                 Button {
                                     reconnectAccount(account)
                                 } label: {
-                                    Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                                    Label(String(localized: "settings.account.reconnectButton"), systemImage: "arrow.triangle.2.circlepath")
                                 }
                             }
                         }
@@ -46,7 +46,7 @@ extension ContentView {
                 Section("Mailbox") {
                     Picker("Account", selection: $selectedCoreAccountId) {
                         if showUnifiedInbox {
-                            Text("Unified inbox")
+                            Text(String(localized: "kanban.columns.unifiedInbox"))
                                 .tag(iosUnifiedAccountId)
                         }
                         ForEach(visibleNavigationAccounts, id: \.id) { account in
@@ -77,7 +77,7 @@ extension ContentView {
                         }
                     }
 
-                    TextField("Search mail", text: $mailSearch)
+                    TextField(String(localized: "threads.searchMessages"), text: $mailSearch)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.search)
@@ -85,7 +85,7 @@ extension ContentView {
                             searchSelectedMailbox()
                         }
 
-                    Picker("Filter", selection: $mailFilter) {
+                    Picker(String(localized: "filters.label"), selection: $mailFilter) {
                         ForEach(IosFilterMode.allCases) { mode in
                             Text(mode.label).tag(mode)
                         }
@@ -98,36 +98,36 @@ extension ContentView {
                     Button {
                         syncSelectedAccount()
                     } label: {
-                        Label("Sync Mailbox", systemImage: "arrow.clockwise")
+                        Label(String(localized: "mobile.mail.syncMailbox"), systemImage: "arrow.clockwise")
                     }
                     Button {
                         searchSelectedMailbox()
                     } label: {
-                        Label("Search Cached Mail", systemImage: "magnifyingglass")
+                        Label(String(localized: "mobile.mail.searchCachedMail"), systemImage: "magnifyingglass")
                     }
                     if selectedAccountIsRss(selectedCoreAccountId) {
                         Button {
                             addFeedUrl = ""
                             isAddFeedPresented = true
                         } label: {
-                            Label("Add Feed", systemImage: "plus")
+                            Label(String(localized: "feeds.actions.addFeed"), systemImage: "plus")
                         }
                         Button {
                             isOpmlImporterPresented = true
                         } label: {
-                            Label("Import OPML", systemImage: "square.and.arrow.down")
+                            Label(String(localized: "common.import"), systemImage: "square.and.arrow.down")
                         }
                         Button {
                             exportSelectedAccountOpml()
                         } label: {
-                            Label("Export OPML", systemImage: "square.and.arrow.up")
+                            Label(String(localized: "common.export"), systemImage: "square.and.arrow.up")
                         }
                     }
                     if coreThreads.contains(where: \.unread) {
                         Button {
                             markSelectedMailboxAllRead()
                         } label: {
-                            Label("Mark All Read", systemImage: "envelope.open")
+                            Label(String(localized: "threads.actions.markAllAsRead"), systemImage: "envelope.open")
                         }
                     }
                 }
@@ -135,17 +135,17 @@ extension ContentView {
 
             Section("Inbox") {
                 if coreThreads.isEmpty {
-                    Text(mailSearch.isEmpty && mailFilter == .all ? "Sync the selected mailbox to load cached threads." : "No messages match the current search and filter.")
+                    Text(mailSearch.isEmpty && mailFilter == .all ? String(localized: "mobile.mail.syncSelectedMailbox") : String(localized: "mobile.mail.noSearchMatches"))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(coreThreads, id: \.id) { thread in
                         ThreadRow(thread: thread, showSenderImages: showSenderImages) {
                             readThread(thread)
                         } actions: {
-                            Button(thread.unread ? "Mark Read" : "Mark Unread") {
+                            Button(thread.unread ? String(localized: "threads.actions.markAsRead") : String(localized: "threads.actions.markAsUnread")) {
                                 markThreadRead(thread, seen: thread.unread)
                             }
-                            Button(thread.starred ? "Unstar" : "Star") {
+                            Button(thread.starred ? String(localized: "chat.unstar") : String(localized: "chat.star")) {
                                 markThreadStarred(thread, starred: !thread.starred)
                             }
                             if isRssThread(thread) {
@@ -155,17 +155,17 @@ extension ContentView {
                                         accountStatus = "Copied feed URL."
                                     }
                                 }
-                                Button("Remove Feed", role: .destructive) {
+                                Button(String(localized: "feeds.actions.deleteFeed"), role: .destructive) {
                                     removeRssFeed(thread)
                                 }
                             } else {
-                                Button("Archive") {
+                                Button(String(localized: "threads.actions.archiveThread")) {
                                     archiveThread(thread)
                                 }
-                                Button("Move To") {
+                                Button(String(localized: "threads.actions.moveTo")) {
                                     presentMoveThreadDialog(thread)
                                 }
-                                Button("Copy To") {
+                                Button(String(localized: "threads.actions.copyTo")) {
                                     presentCopyThreadDialog(thread)
                                 }
                                 Button(threadDeleteActionLabel(thread), role: .destructive) {
@@ -179,9 +179,9 @@ extension ContentView {
                             loadMoreCoreThreads()
                         } label: {
                             if isLoadingMoreThreads {
-                                Label("Loading Older", systemImage: "hourglass")
+                                Label(String(localized: "common.loading"), systemImage: "hourglass")
                             } else {
-                                Label("Load Older", systemImage: "chevron.down")
+                                Label(String(localized: "threads.actions.loadMore"), systemImage: "chevron.down")
                             }
                         }
                         .disabled(isLoadingMoreThreads)
@@ -225,26 +225,26 @@ extension ContentView {
                         Button {
                             presentMoveThreadDialog(selectedCoreThread)
                         } label: {
-                            Label("Move to Folder", systemImage: "folder")
+                            Label(String(localized: "threads.actions.moveTo"), systemImage: "folder")
                         }
                         Button {
                             presentCopyThreadDialog(selectedCoreThread)
                         } label: {
-                            Label("Copy to Folder", systemImage: "doc.on.doc")
+                            Label(String(localized: "threads.actions.copyTo"), systemImage: "doc.on.doc")
                         }
                     }
                 }
 
                 if coreMessages.isEmpty {
-                    Text("Open a thread to read cached messages.")
+                    Text(String(localized: "mobile.mail.openThreadHint"))
                         .foregroundStyle(.secondary)
                 } else {
                     Picker("View", selection: Binding(
                         get: { currentConversationPrefersHtml() },
                         set: { setCurrentConversationPrefersHtml($0) }
                     )) {
-                        Text("HTML").tag(true)
-                        Text("Plain Text").tag(false)
+                        Text(String(localized: "chat.htmlView")).tag(true)
+                        Text(String(localized: "chat.plainView")).tag(false)
                     }
                     .pickerStyle(.segmented)
                     if currentConversationPrefersHtml() && !normalizedThreadSearch.isEmpty {
@@ -280,9 +280,9 @@ extension ContentView {
                             loadMoreThreadMessages()
                         } label: {
                             if isLoadingMoreMessages {
-                                Label("Loading Older Messages", systemImage: "hourglass")
+                                Label(String(localized: "common.loading"), systemImage: "hourglass")
                             } else {
-                                Label("Load Older Messages", systemImage: "chevron.up")
+                                Label(String(localized: "threads.actions.loadMore"), systemImage: "chevron.up")
                             }
                         }
                         .disabled(isLoadingMoreMessages)
@@ -324,7 +324,7 @@ extension ContentView {
 
     var threadSearchControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Search conversation", text: $threadSearch)
+            TextField(String(localized: "chat.searchThread"), text: $threadSearch)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .onChange(of: threadSearch) { _, _ in
@@ -335,11 +335,11 @@ extension ContentView {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Previous") {
+                Button(String(localized: "chat.previousMatch")) {
                     goToThreadSearchMatch(-1)
                 }
                 .disabled(threadSearchMatches.isEmpty)
-                Button("Next") {
+                Button(String(localized: "chat.nextMatch")) {
                     goToThreadSearchMatch(1)
                 }
                 .disabled(threadSearchMatches.isEmpty)
@@ -394,7 +394,7 @@ extension ContentView {
                         .font(.caption)
                         .foregroundStyle(.red)
                     Spacer()
-                    Button("Retry") {
+                    Button(String(localized: "chat.retry")) {
                         sendQuickReply()
                     }
                     .disabled(quickReplyBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && quickReplyAttachments.isEmpty)
@@ -403,17 +403,17 @@ extension ContentView {
             Button {
                 isQuickReplyFileImporterPresented = true
             } label: {
-                Label("Attach File", systemImage: "paperclip")
+                Label(String(localized: "composer.actions.attachFiles"), systemImage: "paperclip")
             }
             Button {
                 openQuickReplyInFullEditor()
             } label: {
-                Label("Open Full Editor", systemImage: "arrow.up.left.and.arrow.down.right")
+                Label(String(localized: "composer.actions.openFullEditor"), systemImage: "arrow.up.left.and.arrow.down.right")
             }
             Button {
                 sendQuickReply()
             } label: {
-                Label("Send Reply", systemImage: "arrowshape.turn.up.left")
+                Label(String(localized: "buttons.send"), systemImage: "arrowshape.turn.up.left")
             }
             .disabled(quickReplyBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && quickReplyAttachments.isEmpty)
         }

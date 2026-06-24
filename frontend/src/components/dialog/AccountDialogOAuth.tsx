@@ -1,6 +1,6 @@
 import type { AccountDialogController } from './useAccountDialog'
 import { GoogleIcon, MicrosoftIcon } from './providerIcons'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/i18n'
 
 // The Gmail/Outlook OAuth sign-in section: a provider sign-in button (with the
 // provider glyph) plus the "configure client id" notice when OAuth isn't set up.
