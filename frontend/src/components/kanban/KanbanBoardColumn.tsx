@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -33,10 +33,11 @@ import {
   isUnifiedStarredColumn,
 } from '../../lib/kanbanData'
 import { openThreadTab } from '../../states/compose'
-import { ThreadActionsMenu } from '../threads/ThreadActionsMenu'
+import { ThreadActionsMenu, ThreadActionsMenuItems } from '../threads/ThreadActionsMenu'
 import { ThreadContextMenu, type ThreadContextMenuController } from '../threads/ThreadContextMenu'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
+import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { KanbanThreadCard } from './KanbanThreadCard'
 import { KanbanColumnMinimized } from './KanbanColumnMinimized'
 
@@ -56,12 +57,14 @@ function KanbanColumnContent({
   column,
   wrapper,
   onMoveThread,
+  onSearchColumn,
   threadMenu,
 }: {
   boardId: string
   column: KanbanColumn
   wrapper: ColumnWrapper
   onMoveThread: (threadId: string, source: KanbanColumn, target: KanbanColumn) => void
+  onSearchColumn: (column: KanbanColumn) => void
   threadMenu: ThreadContextMenuController
 }) {
   const { t } = useTranslation()
@@ -111,10 +114,17 @@ function KanbanColumnContent({
   const isRss = isRssAccount(columnAccount, column.accountId)
   const emptyText = columnEmptyText(filterMode, searchActive, rawThreads.length > 0, isRss)
   const [syncing, setSyncing] = useState(false)
+  const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     void loadKanbanColumn(column, true)
   }, [column.accountId, column.folderId, filterMode])
+
+  const openHeaderMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setHeaderMenu({ x: event.clientX, y: event.clientY })
+  }
 
   if (minimized) {
     return <KanbanColumnMinimized boardId={boardId} column={column} wrapper={wrapper} />
@@ -136,6 +146,7 @@ function KanbanColumnContent({
         }`}
         title={wrapper.dragHandle ? t('kanban.actions.dragToReorderColumn') : undefined}
         onClick={wrapper.scrollIntoView}
+        onContextMenu={openHeaderMenu}
         {...wrapper.dragHandle}
       >
         <Avatar
@@ -160,6 +171,7 @@ function KanbanColumnContent({
           title=""
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.stopPropagation()}
         >
           <IconButton
             icon={Minus}
@@ -189,11 +201,52 @@ function KanbanColumnContent({
             syncLabel={isRss ? t('feeds.actions.syncFeeds') : undefined}
             syncingLabel={isRss ? t('feeds.actions.syncingFeeds') : undefined}
             onRemove={() => removeKanbanColumn(boardId, column)}
+            onSearch={() => onSearchColumn(column)}
+            searchLabel={t('kanban.actions.search', { defaultValue: 'Search' })}
             size={14}
             triggerClassName="h-7 w-7"
           />
         </div>
       </div>
+      {headerMenu && (
+        <FloatingContextMenu
+          x={headerMenu.x}
+          y={headerMenu.y}
+          offset={4}
+          onClose={() => setHeaderMenu(null)}
+          overlay
+          className="fixed z-50 min-w-[176px] rounded-xl border border-border bg-chats p-1 shadow-2xl animate-fade-in text-primary"
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        >
+          <ThreadActionsMenuItems
+            filterMode={filterMode}
+            onFilterChange={(mode) => {
+              mail$.readThreads.set({})
+              kanban$.filters[key].set(mode)
+            }}
+            hasUnread={hasUnread}
+            onMarkAllRead={() => void markColumnAllRead(column)}
+            onSync={async () => {
+              setSyncing(true)
+              try {
+                await syncKanbanColumn(column)
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            syncing={syncing}
+            syncLabel={isRss ? t('feeds.actions.syncFeeds') : undefined}
+            syncingLabel={isRss ? t('feeds.actions.syncingFeeds') : undefined}
+            onRemove={() => removeKanbanColumn(boardId, column)}
+            onSearch={() => onSearchColumn(column)}
+            searchLabel={t('kanban.actions.search', { defaultValue: 'Search' })}
+            closeMenu={() => setHeaderMenu(null)}
+          />
+        </FloatingContextMenu>
+      )}
       <div
         data-thread-list
         className="flex-1 space-y-2 overflow-y-auto p-2"
@@ -263,11 +316,13 @@ export function SortableColumn({
   boardId,
   column,
   onMoveThread,
+  onSearchColumn,
   threadMenu,
 }: {
   boardId: string
   column: KanbanColumn
   onMoveThread: (threadId: string, source: KanbanColumn, target: KanbanColumn) => void
+  onSearchColumn: (column: KanbanColumn) => void
   threadMenu: ThreadContextMenuController
 }) {
   const key = kanbanBoardColumnKey(boardId, column)
@@ -304,6 +359,7 @@ export function SortableColumn({
         dragHandle: { ...attributes, ...listeners },
       }}
       onMoveThread={onMoveThread}
+      onSearchColumn={onSearchColumn}
       threadMenu={threadMenu}
     />
   )

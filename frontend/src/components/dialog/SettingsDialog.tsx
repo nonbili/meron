@@ -151,6 +151,7 @@ export function SettingsDialog() {
               </NavItem>
             ))}
 
+            <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
             <AccountGroup
               label={t('settings.sections.mailAccounts')}
               accounts={mailAccounts}
@@ -167,7 +168,6 @@ export function SettingsDialog() {
               onAdd={() => onAddAccount('rss')}
               emptyLabel={t('settings.sections.noFeedAccounts')}
             />
-            <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
           </nav>
 
           {/* Content */}

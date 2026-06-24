@@ -496,7 +496,7 @@ internal fun SettingsScreen(
 
             SettingsPage.Root -> {
                 // Mirrors the desktop Settings sidebar: a single "General" entry,
-                // then Mail accounts, Feed accounts, and Kanban boards sections.
+                // then Kanban boards, Mail accounts, and Feed accounts sections.
                 val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
                 val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
                 LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
@@ -506,6 +506,23 @@ internal fun SettingsScreen(
                             title = "General",
                             subtitle = "Appearance, sidebar, kanban, composer, storage",
                             onClick = { page = SettingsPage.General },
+                        )
+                    }
+                    item { SettingsSectionLabel("Kanban boards") }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Add,
+                            title = "New Kanban board",
+                            subtitle = "Create a board from current accounts",
+                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
+                        )
+                    }
+                    items(kanbanBoards, key = { it.id }) { board ->
+                        SettingsRow(
+                            icon = Icons.Filled.ViewKanban,
+                            title = board.name,
+                            subtitle = "${board.columns.size} columns${if (board.id == activeKanbanBoardId) " · Active" else ""}",
+                            onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
                         )
                     }
                     item { SettingsSectionLabel("Mail accounts") }
@@ -531,23 +548,6 @@ internal fun SettingsScreen(
                                 onClick = { page = SettingsPage.AccountDetail(account.id) },
                             )
                         }
-                    }
-                    item { SettingsSectionLabel("Kanban boards") }
-                    item {
-                        SettingsRow(
-                            icon = Icons.Filled.Add,
-                            title = "New Kanban board",
-                            subtitle = "Create a board from current accounts",
-                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
-                        )
-                    }
-                    items(kanbanBoards, key = { it.id }) { board ->
-                        SettingsRow(
-                            icon = Icons.Filled.ViewKanban,
-                            title = board.name,
-                            subtitle = "${board.columns.size} columns${if (board.id == activeKanbanBoardId) " · Active" else ""}",
-                            onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
-                        )
                     }
                     item { Spacer(Modifier.height(24.dp)) }
                 }

@@ -18,6 +18,7 @@ import {
   kanban$,
   removeKanbanColumn,
   setGlobalKanbanFilter,
+  type KanbanColumn,
 } from '../../states/kanban'
 import { settings$ } from '../../states/settings'
 import { EmptyState } from '../empty-state/EmptyState'
@@ -122,6 +123,15 @@ export function KanbanView({ boardId }: { boardId: string }) {
     )
     setDialogGroups(groups)
     setDialogOpen(true)
+  }
+
+  function searchColumn(column: KanbanColumn) {
+    kanban$.searchScope.set(kanbanColumnKey(column))
+    setSearchOpen(true)
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    })
   }
 
   function applyColumns(nextKeys: string[]) {
@@ -299,6 +309,7 @@ export function KanbanView({ boardId }: { boardId: string }) {
                     boardId={boardId}
                     column={column}
                     onMoveThread={moveThread}
+                    onSearchColumn={searchColumn}
                     threadMenu={threadMenu}
                   />
                 ))}
