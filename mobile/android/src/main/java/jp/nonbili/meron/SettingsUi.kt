@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -56,17 +57,22 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MarkEmailUnread
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
@@ -149,6 +155,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -268,6 +275,44 @@ import kotlin.math.abs
 @Composable
 internal fun SettingsScreen(
     onBack: () -> Unit,
+    initialAccountId: String?,
+    onConsumeInitialAccount: () -> Unit,
+    initialKanbanBoardId: String?,
+    onConsumeInitialKanbanBoard: () -> Unit,
+    accounts: List<AccountSummary>,
+    hiddenNavigationAccountIds: Set<String>,
+    kanbanBoards: List<KanbanBoardSpec>,
+    activeKanbanBoardId: String,
+    onSaveKanbanBoard: (
+        board: KanbanBoardSpec,
+        name: String,
+        avatarUrl: String,
+        wallpaperPresetId: String,
+        wallpaperUrl: String,
+    ) -> Unit,
+    onDeleteKanbanBoard: (KanbanBoardSpec) -> Unit,
+    onSetActiveKanbanBoard: (KanbanBoardSpec) -> Unit,
+    onCreateKanbanBoard: () -> String,
+    onSaveAccountSettings: (
+        account: AccountSummary,
+        displayName: String,
+        senderName: String,
+        avatarUrl: String,
+        wallpaperPresetId: String,
+        loadRemoteImages: Boolean,
+        conversationHtml: Boolean,
+        includedInUnified: Boolean,
+        showInNavigation: Boolean,
+        muted: Boolean,
+        paused: Boolean,
+        rssSyncIntervalMinutes: Int,
+        aliasesText: String,
+    ) -> Unit,
+    onPickAccountAvatar: (AccountSummary) -> Unit,
+    onPickAccountWallpaper: (AccountSummary) -> Unit,
+    onMoveAccountUp: (AccountSummary) -> Unit,
+    onMoveAccountDown: (AccountSummary) -> Unit,
+    onRemoveAccount: (AccountSummary) -> Unit,
     appearanceMode: AppAppearanceMode,
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
     showSenderImages: Boolean,
@@ -294,6 +339,19 @@ internal fun SettingsScreen(
     onShowAbout: () -> Unit,
 ) {
     var showThemePicker by remember { mutableStateOf(false) }
+    var page by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
+    LaunchedEffect(initialAccountId) {
+        if (!initialAccountId.isNullOrBlank()) {
+            page = SettingsPage.AccountDetail(initialAccountId)
+            onConsumeInitialAccount()
+        }
+    }
+    LaunchedEffect(initialKanbanBoardId) {
+        if (!initialKanbanBoardId.isNullOrBlank()) {
+            page = SettingsPage.KanbanBoardDetail(initialKanbanBoardId)
+            onConsumeInitialKanbanBoard()
+        }
+    }
     if (showThemePicker) {
         ThemePickerDialog(
             current = appearanceMode,
@@ -304,126 +362,911 @@ internal fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = {
+                    Text(
+                        when (page) {
+                            SettingsPage.Root -> "Settings"
+                            SettingsPage.General -> "General"
+                            is SettingsPage.AccountDetail -> "Account"
+                            is SettingsPage.KanbanBoardDetail -> "Kanban board"
+                        },
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (page == SettingsPage.Root) {
+                            onBack()
+                        } else {
+                            page = SettingsPage.Root
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
         },
     ) { innerPadding ->
-        LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
-            item { SettingsSectionLabel("Appearance") }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.Visibility,
-                    title = "Theme",
-                    subtitle = "Color presets shared with desktop",
-                    onClick = { showThemePicker = true },
-                    trailing = { Text(appearanceMode.label, color = MaterialTheme.colorScheme.primary) },
+        when (page) {
+            SettingsPage.General -> {
+                SettingsGeneralPage(
+                    appearanceMode = appearanceMode,
+                    onOpenTheme = { showThemePicker = true },
+                    showSenderImages = showSenderImages,
+                    onToggleSenderImages = onToggleSenderImages,
+                    showUnreadBadges = showUnreadBadges,
+                    onToggleUnreadBadges = onToggleUnreadBadges,
+                    showUnifiedInboxNav = showUnifiedInboxNav,
+                    onToggleUnifiedInboxNav = onToggleUnifiedInboxNav,
+                    showStarredNav = showStarredNav,
+                    onToggleStarredNav = onToggleStarredNav,
+                    kanbanColumnWidth = kanbanColumnWidth,
+                    onCycleKanbanColumnWidth = onCycleKanbanColumnWidth,
+                    sendShortcutMode = sendShortcutMode,
+                    onToggleSendShortcut = onToggleSendShortcut,
+                    notificationsNeedPermission = notificationsNeedPermission,
+                    onEnableNotifications = onEnableNotifications,
+                    onRefreshBackground = onRefreshBackground,
+                    storageUsage = storageUsage,
+                    storageBusy = storageBusy,
+                    storageClearConfirming = storageClearConfirming,
+                    onRefreshStorage = onRefreshStorage,
+                    onClearStorageCache = onClearStorageCache,
+                    appVersion = appVersion,
+                    onShowAbout = onShowAbout,
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
                 )
             }
-            item {
-                SettingsToggleRow(
-                    icon = Icons.Filled.Visibility,
-                    title = "Sender images",
-                    subtitle = "Use Gravatar and site icons",
-                    checked = showSenderImages,
-                    onToggle = onToggleSenderImages,
-                )
-            }
-            item { SettingsSectionLabel("Navigation") }
-            item {
-                SettingsToggleRow(
-                    Icons.Filled.Visibility,
-                    "Unread badges",
-                    "Show counts in the drawer",
-                    showUnreadBadges,
-                    onToggleUnreadBadges,
-                )
-            }
-            item {
-                SettingsToggleRow(
-                    Icons.Filled.Inbox,
-                    "Unified inbox",
-                    "Show in the navigation drawer",
-                    showUnifiedInboxNav,
-                    onToggleUnifiedInboxNav,
-                )
-            }
-            item { SettingsToggleRow(Icons.Filled.Star, "Starred", "Show in the navigation drawer", showStarredNav, onToggleStarredNav) }
-            item { SettingsSectionLabel("Composer") }
-            item {
-                SettingsRow(
-                    icon = Icons.AutoMirrored.Filled.Send,
-                    title = "Send shortcut",
-                    subtitle = "Hardware keyboard behavior",
-                    onClick = onToggleSendShortcut,
-                    trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
-                )
-            }
-            item { SettingsSectionLabel("Kanban") }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.ViewKanban,
-                    title = "Column width",
-                    subtitle = "Adjust board density",
-                    onClick = onCycleKanbanColumnWidth,
-                    trailing = { Text("${kanbanColumnWidth}dp", color = MaterialTheme.colorScheme.primary) },
-                )
-            }
-            item { SettingsSectionLabel("Sync & notifications") }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.Refresh,
-                    title = "Refresh in background",
-                    subtitle = "Queue a sync for all accounts",
-                    onClick = onRefreshBackground,
-                )
-            }
-            if (notificationsNeedPermission) {
-                item {
-                    SettingsRow(
-                        icon = Icons.Filled.MarkEmailUnread,
-                        title = "Enable notifications",
-                        subtitle = "Allow new mail alerts",
-                        onClick = onEnableNotifications,
+
+            is SettingsPage.AccountDetail -> {
+                val account = accounts.firstOrNull { it.id == (page as SettingsPage.AccountDetail).accountId }
+                if (account == null) {
+                    page = SettingsPage.Root
+                } else {
+                    val accountIndex = accounts.indexOfFirst { it.id == account.id }
+                    SettingsAccountDetailPage(
+                        account = account,
+                        canMoveUp = accountIndex > 0,
+                        canMoveDown = accountIndex >= 0 && accountIndex < accounts.lastIndex,
+                        showInNavigation = account.id !in hiddenNavigationAccountIds,
+                        onSave = {
+                            displayName,
+                            senderName,
+                            avatarUrl,
+                            wallpaperPresetId,
+                            loadRemoteImages,
+                            conversationHtml,
+                            includedInUnified,
+                            showInNavigation,
+                            muted,
+                            paused,
+                            interval,
+                            aliases,
+                            ->
+                            onSaveAccountSettings(
+                                account,
+                                displayName,
+                                senderName,
+                                avatarUrl,
+                                wallpaperPresetId,
+                                loadRemoteImages,
+                                conversationHtml,
+                                includedInUnified,
+                                showInNavigation,
+                                muted,
+                                paused,
+                                interval,
+                                aliases,
+                            )
+                        },
+                        onPickAvatar = { onPickAccountAvatar(account) },
+                        onPickWallpaper = { onPickAccountWallpaper(account) },
+                        onMoveUp = { onMoveAccountUp(account) },
+                        onMoveDown = { onMoveAccountDown(account) },
+                        onRemove = { onRemoveAccount(account) },
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
                     )
                 }
             }
-            item { SettingsSectionLabel("Storage") }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.Info,
-                    title = "Storage usage",
-                    subtitle =
-                        storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
-                            ?: if (storageBusy) "Loading..." else "Tap to refresh",
-                    onClick = onRefreshStorage,
-                )
+
+            is SettingsPage.KanbanBoardDetail -> {
+                val board = kanbanBoards.firstOrNull { it.id == (page as SettingsPage.KanbanBoardDetail).boardId }
+                if (board == null) {
+                    page = SettingsPage.Root
+                } else {
+                    SettingsKanbanBoardDetailPage(
+                        board = board,
+                        active = board.id == activeKanbanBoardId,
+                        onSave = { name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
+                            onSaveKanbanBoard(board, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
+                        },
+                        onSetActive = { onSetActiveKanbanBoard(board) },
+                        onDelete = {
+                            onDeleteKanbanBoard(board)
+                            page = SettingsPage.Root
+                        },
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    )
+                }
             }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.Delete,
-                    title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
-                    subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
-                    onClick = onClearStorageCache,
-                    trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
-                )
+
+            SettingsPage.Root -> {
+                // Mirrors the desktop Settings sidebar: a single "General" entry,
+                // then Mail accounts, Feed accounts, and Kanban boards sections.
+                val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
+                val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
+                LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Settings,
+                            title = "General",
+                            subtitle = "Appearance, sidebar, kanban, composer, storage",
+                            onClick = { page = SettingsPage.General },
+                        )
+                    }
+                    item { SettingsSectionLabel("Mail accounts") }
+                    if (mailAccounts.isEmpty()) {
+                        item { SettingsEmptyLabel("No mail accounts") }
+                    } else {
+                        items(mailAccounts, key = { it.id }) { account ->
+                            SettingsAccountRow(
+                                account = account,
+                                hidden = account.id in hiddenNavigationAccountIds,
+                                onClick = { page = SettingsPage.AccountDetail(account.id) },
+                            )
+                        }
+                    }
+                    item { SettingsSectionLabel("Feed accounts") }
+                    if (feedAccounts.isEmpty()) {
+                        item { SettingsEmptyLabel("No feed accounts") }
+                    } else {
+                        items(feedAccounts, key = { it.id }) { account ->
+                            SettingsAccountRow(
+                                account = account,
+                                hidden = account.id in hiddenNavigationAccountIds,
+                                onClick = { page = SettingsPage.AccountDetail(account.id) },
+                            )
+                        }
+                    }
+                    item { SettingsSectionLabel("Kanban boards") }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Add,
+                            title = "New Kanban board",
+                            subtitle = "Create a board from current accounts",
+                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
+                        )
+                    }
+                    items(kanbanBoards, key = { it.id }) { board ->
+                        SettingsRow(
+                            icon = Icons.Filled.ViewKanban,
+                            title = board.name,
+                            subtitle = "${board.columns.size} columns${if (board.id == activeKanbanBoardId) " · Active" else ""}",
+                            onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
+                        )
+                    }
+                    item { Spacer(Modifier.height(24.dp)) }
+                }
             }
-            item { SettingsSectionLabel("About") }
-            item {
-                SettingsRow(
-                    icon = Icons.Filled.Info,
-                    title = "About Meron",
-                    subtitle = "Version and support",
-                    onClick = onShowAbout,
-                    trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                )
-            }
-            item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+}
+
+private sealed class SettingsPage {
+    data object Root : SettingsPage()
+
+    data object General : SettingsPage()
+
+    data class AccountDetail(
+        val accountId: String,
+    ) : SettingsPage()
+
+    data class KanbanBoardDetail(
+        val boardId: String,
+    ) : SettingsPage()
+}
+
+// Combines the desktop "General" section: Appearance, Sidebar, Kanban,
+// Composer, Sync & notifications, Storage, and About in one scrollable page.
+@Composable
+internal fun SettingsGeneralPage(
+    appearanceMode: AppAppearanceMode,
+    onOpenTheme: () -> Unit,
+    showSenderImages: Boolean,
+    onToggleSenderImages: () -> Unit,
+    showUnreadBadges: Boolean,
+    onToggleUnreadBadges: () -> Unit,
+    showUnifiedInboxNav: Boolean,
+    onToggleUnifiedInboxNav: () -> Unit,
+    showStarredNav: Boolean,
+    onToggleStarredNav: () -> Unit,
+    kanbanColumnWidth: Int,
+    onCycleKanbanColumnWidth: () -> Unit,
+    sendShortcutMode: SendShortcutMode,
+    onToggleSendShortcut: () -> Unit,
+    notificationsNeedPermission: Boolean,
+    onEnableNotifications: () -> Unit,
+    onRefreshBackground: () -> Unit,
+    storageUsage: StorageUsage?,
+    storageBusy: Boolean,
+    storageClearConfirming: Boolean,
+    onRefreshStorage: () -> Unit,
+    onClearStorageCache: () -> Unit,
+    appVersion: String,
+    onShowAbout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier) {
+        item { SettingsSectionLabel("Appearance") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Visibility,
+                title = "Theme",
+                subtitle = "Color presets shared with desktop",
+                onClick = onOpenTheme,
+                trailing = { Text(appearanceMode.label, color = MaterialTheme.colorScheme.primary) },
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Visibility,
+                title = "Sender images",
+                subtitle = "Use Gravatar and site icons",
+                checked = showSenderImages,
+                onToggle = onToggleSenderImages,
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Inbox,
+                title = "Unread badges",
+                subtitle = "Show counts in the drawer",
+                checked = showUnreadBadges,
+                onToggle = onToggleUnreadBadges,
+            )
+        }
+
+        item { SettingsSectionLabel("Sidebar") }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Inbox,
+                title = "Unified inbox",
+                subtitle = "Show in the navigation drawer",
+                checked = showUnifiedInboxNav,
+                onToggle = onToggleUnifiedInboxNav,
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Star,
+                title = "Starred",
+                subtitle = "Show in the navigation drawer",
+                checked = showStarredNav,
+                onToggle = onToggleStarredNav,
+            )
+        }
+
+        item { SettingsSectionLabel("Kanban") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.ViewKanban,
+                title = "Column width",
+                subtitle = "Adjust board density",
+                onClick = onCycleKanbanColumnWidth,
+                trailing = { Text("${kanbanColumnWidth}dp", color = MaterialTheme.colorScheme.primary) },
+            )
+        }
+
+        item { SettingsSectionLabel("Composer") }
+        item {
+            SettingsRow(
+                icon = Icons.AutoMirrored.Filled.Send,
+                title = "Send shortcut",
+                subtitle = "Hardware keyboard behavior",
+                onClick = onToggleSendShortcut,
+                trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
+            )
+        }
+
+        item { SettingsSectionLabel("Sync & notifications") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Refresh,
+                title = "Refresh in background",
+                subtitle = "Queue a sync for all accounts",
+                onClick = onRefreshBackground,
+            )
+        }
+        if (notificationsNeedPermission) {
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.MarkEmailUnread,
+                    title = "Enable notifications",
+                    subtitle = "Allow new mail alerts",
+                    onClick = onEnableNotifications,
+                )
+            }
+        }
+
+        item { SettingsSectionLabel("Storage") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Info,
+                title = "Storage usage",
+                subtitle =
+                    storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
+                        ?: if (storageBusy) "Loading..." else "Tap to refresh",
+                onClick = onRefreshStorage,
+            )
+        }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Delete,
+                title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
+                subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
+                onClick = onClearStorageCache,
+                trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
+            )
+        }
+
+        item { SettingsSectionLabel("About") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Info,
+                title = "About Meron",
+                subtitle = "Version and support",
+                onClick = onShowAbout,
+                trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+internal fun SettingsAccountDetailPage(
+    account: AccountSummary,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    showInNavigation: Boolean,
+    onSave: (
+        displayName: String,
+        senderName: String,
+        avatarUrl: String,
+        wallpaperPresetId: String,
+        loadRemoteImages: Boolean,
+        conversationHtml: Boolean,
+        includedInUnified: Boolean,
+        showInNavigation: Boolean,
+        muted: Boolean,
+        paused: Boolean,
+        rssSyncIntervalMinutes: Int,
+        aliasesText: String,
+    ) -> Unit,
+    onPickAvatar: () -> Unit,
+    onPickWallpaper: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isRss = accountSummaryIsRss(account)
+    var displayName by remember(account.id) { mutableStateOf(account.displayName) }
+    var senderName by remember(account.id) { mutableStateOf(account.senderName) }
+    var avatarUrl by remember(account.id) { mutableStateOf(account.avatarUrl) }
+    var wallpaperPresetId by remember(account.id) { mutableStateOf(account.chatWallpaperPresetId) }
+    var loadRemoteImages by remember(account.id) { mutableStateOf(account.loadRemoteImages || isRss) }
+    var conversationHtml by remember(account.id) { mutableStateOf(account.conversationHtml) }
+    var includedInUnified by remember(account.id) { mutableStateOf(account.includedInUnified) }
+    var visibleInNavigation by remember(account.id, showInNavigation) { mutableStateOf(showInNavigation) }
+    var muted by remember(account.id) { mutableStateOf(account.muted) }
+    var paused by remember(account.id) { mutableStateOf(account.paused) }
+    var intervalText by remember(account.id) { mutableStateOf(account.rssSyncIntervalMinutes.toString()) }
+    var aliasesText by remember(account.id) {
+        mutableStateOf(
+            account.aliases.joinToString("\n") { alias ->
+                if (alias.name.isBlank()) alias.email else "${alias.email}, ${alias.name}"
+            },
+        )
+    }
+    var confirmRemove by remember(account.id) { mutableStateOf(false) }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove account?") },
+            text = { Text("Remove ${account.email.ifBlank { account.id }}? Cached mail for this account will be deleted from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    onRemove()
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Autosave: every control persists immediately, matching the desktop panel.
+    // The lambda reads the live state values at call time, so flipping a toggle
+    // then calling persist() writes the just-updated value.
+    val persist = {
+        onSave(
+            displayName,
+            senderName,
+            avatarUrl,
+            wallpaperPresetId,
+            loadRemoteImages,
+            conversationHtml,
+            includedInUnified,
+            visibleInNavigation,
+            muted,
+            paused,
+            intervalText.toIntOrNull()?.coerceIn(5, 1440) ?: account.rssSyncIntervalMinutes.coerceIn(5, 1440),
+            aliasesText,
+        )
+    }
+
+    LazyColumn(modifier) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AccountAvatarEditor(
+                    name = displayName.ifBlank { account.email.ifBlank { account.id } },
+                    url = avatarUrl,
+                    onPick = onPickAvatar,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        displayName.ifBlank { account.email.ifBlank { account.id } },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        account.email.ifBlank { account.id },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
+        item { SettingsSectionLabel("Profile") }
+        item {
+            SettingsTextRow(
+                value = displayName,
+                label = if (isRss) "Feed group name" else "Account name",
+                onValueChange = {
+                    displayName = it
+                    persist()
+                },
+            )
+        }
+        if (!isRss) {
+            item {
+                SettingsTextRow(
+                    value = senderName,
+                    label = "Sender name",
+                    onValueChange = {
+                        senderName = it
+                        persist()
+                    },
+                )
+            }
+        }
+        item {
+            SettingsTextRow(
+                value = avatarUrl,
+                label = "Avatar URL",
+                supporting = "Or tap the avatar above to pick an image",
+                onValueChange = {
+                    avatarUrl = it
+                    persist()
+                },
+            )
+        }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Image,
+                title = "Choose avatar image",
+                subtitle = "Pick a photo from this device",
+                onClick = onPickAvatar,
+            )
+        }
+
+        item { SettingsSectionLabel("Chat background") }
+        item {
+            WallpaperPresetChips(
+                selected = wallpaperPresetId,
+                onSelect = {
+                    wallpaperPresetId = it
+                    persist()
+                },
+            )
+        }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Image,
+                title = "Choose wallpaper image",
+                subtitle = "Use a custom chat background",
+                onClick = onPickWallpaper,
+            )
+        }
+
+        item { SettingsSectionLabel("Visibility") }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Inbox,
+                title = "Show in unified inbox",
+                subtitle = null,
+                checked = includedInUnified,
+            ) {
+                includedInUnified = !includedInUnified
+                persist()
+            }
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Visibility,
+                title = "Show in navigation",
+                subtitle = null,
+                checked = visibleInNavigation,
+            ) {
+                visibleInNavigation = !visibleInNavigation
+                persist()
+            }
+        }
+
+        item { SettingsSectionLabel("Notifications & sync") }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.NotificationsOff,
+                title = "Mute notifications",
+                subtitle = null,
+                checked = muted,
+            ) {
+                muted = !muted
+                persist()
+            }
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.PauseCircle,
+                title = "Pause automatic sync",
+                subtitle = null,
+                checked = paused,
+            ) {
+                paused = !paused
+                persist()
+            }
+        }
+        if (isRss) {
+            item {
+                SettingsTextRow(
+                    value = intervalText,
+                    label = "Sync interval (minutes)",
+                    supporting = "Between 5 and 1440",
+                    keyboardDigits = true,
+                    onValueChange = {
+                        intervalText = it.filter(Char::isDigit).take(4)
+                        persist()
+                    },
+                )
+            }
+        }
+
+        item { SettingsSectionLabel("Content") }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Image,
+                title = "Load remote images",
+                subtitle = null,
+                checked = loadRemoteImages,
+            ) {
+                loadRemoteImages = !loadRemoteImages
+                persist()
+            }
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Code,
+                title = "Render HTML messages",
+                subtitle = null,
+                checked = conversationHtml,
+            ) {
+                conversationHtml = !conversationHtml
+                persist()
+            }
+        }
+
+        if (!isRss) {
+            item { SettingsSectionLabel("Send-as aliases") }
+            item {
+                SettingsTextRow(
+                    value = aliasesText,
+                    label = "Aliases",
+                    supporting = "One per line: email, optional name",
+                    singleLine = false,
+                    minLines = 2,
+                    onValueChange = {
+                        aliasesText = it
+                        persist()
+                    },
+                )
+            }
+        }
+
+        if (canMoveUp || canMoveDown) {
+            item { SettingsSectionLabel("Order") }
+            if (canMoveUp) {
+                item {
+                    SettingsRow(
+                        icon = Icons.Filled.KeyboardArrowUp,
+                        title = "Move up",
+                        subtitle = null,
+                        onClick = onMoveUp,
+                    )
+                }
+            }
+            if (canMoveDown) {
+                item {
+                    SettingsRow(
+                        icon = Icons.Filled.KeyboardArrowDown,
+                        title = "Move down",
+                        subtitle = null,
+                        onClick = onMoveDown,
+                    )
+                }
+            }
+        }
+
+        item { SettingsSectionLabel("Danger zone") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Delete,
+                title = "Remove account",
+                subtitle = "Delete cached mail from this device",
+                onClick = { confirmRemove = true },
+                destructive = true,
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+private val wallpaperPresets =
+    listOf(
+        "" to "Default",
+        "grid" to "Grid",
+        "dots" to "Dots",
+        "forest" to "Forest",
+        "ocean" to "Ocean",
+        "sunset" to "Sunset",
+    )
+
+@Composable
+internal fun WallpaperPresetChips(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        items(wallpaperPresets, key = { it.first }) { (id, label) ->
+            FilterChip(
+                selected = selected == id,
+                onClick = { onSelect(id) },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AccountAvatarEditor(
+    name: String,
+    url: String,
+    onPick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(url) {
+        bitmap = null
+        if (url.isNotBlank()) {
+            bitmap = withContext(Dispatchers.IO) { loadFirstBitmap(listOf(url)) }
+        }
+    }
+    Box(
+        modifier =
+            modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .then(if (onPick != null) Modifier.clickable(onClick = onPick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        val bmp = bitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Avatar",
+                modifier = Modifier.size(64.dp).clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Avatar(name, 64.dp)
+        }
+        if (onPick != null) {
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = "Change avatar",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SettingsKanbanBoardDetailPage(
+    board: KanbanBoardSpec,
+    active: Boolean,
+    onSave: (
+        name: String,
+        avatarUrl: String,
+        wallpaperPresetId: String,
+        wallpaperUrl: String,
+    ) -> Unit,
+    onSetActive: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var name by remember(board.id) { mutableStateOf(board.name) }
+    var avatarUrl by remember(board.id) { mutableStateOf(board.avatarUrl) }
+    var wallpaperPresetId by remember(board.id) { mutableStateOf(board.wallpaperPresetId) }
+    var wallpaperUrl by remember(board.id) { mutableStateOf(board.wallpaperUrl) }
+    var confirmDelete by remember(board.id) { mutableStateOf(false) }
+
+    // Autosave on every change, like the desktop board panel.
+    val persist = { onSave(name, avatarUrl, wallpaperPresetId, wallpaperUrl) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete board?") },
+            text = { Text("Delete ${board.name}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    LazyColumn(modifier) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AccountAvatarEditor(
+                    name = name.ifBlank { board.name },
+                    url = avatarUrl,
+                    onPick = null,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        name.ifBlank { board.name },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "${board.columns.size} columns${if (active) " · Active" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        item { SettingsSectionLabel("Profile") }
+        item {
+            SettingsTextRow(
+                value = name,
+                label = "Board name",
+                onValueChange = {
+                    name = it
+                    persist()
+                },
+            )
+        }
+        item {
+            SettingsTextRow(
+                value = avatarUrl,
+                label = "Board image URL",
+                onValueChange = {
+                    avatarUrl = it
+                    persist()
+                },
+            )
+        }
+
+        item { SettingsSectionLabel("Chat background") }
+        item {
+            WallpaperPresetChips(
+                selected = wallpaperPresetId,
+                onSelect = {
+                    wallpaperPresetId = it
+                    persist()
+                },
+            )
+        }
+        item {
+            SettingsTextRow(
+                value = wallpaperUrl,
+                label = "Wallpaper image URL",
+                onValueChange = {
+                    wallpaperUrl = it
+                    persist()
+                },
+            )
+        }
+
+        item { SettingsSectionLabel("Board") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Star,
+                title = if (active) "Active board" else "Set as active board",
+                subtitle = if (active) "Shown when Kanban opens" else "Show this board when Kanban opens",
+                onClick = { if (!active) onSetActive() },
+                trailing =
+                    if (active) {
+                        { Text("Active", color = MaterialTheme.colorScheme.primary) }
+                    } else {
+                        null
+                    },
+            )
+        }
+
+        item { SettingsSectionLabel("Danger zone") }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Delete,
+                title = "Delete board",
+                subtitle = "Remove this Kanban board",
+                onClick = { confirmDelete = true },
+                destructive = true,
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -438,19 +1281,78 @@ internal fun SettingsSectionLabel(text: String) {
 }
 
 @Composable
+internal fun SettingsEmptyLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+internal fun SettingsAccountRow(
+    account: AccountSummary,
+    hidden: Boolean,
+    onClick: () -> Unit,
+) {
+    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+    SettingsRow(
+        icon = if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox,
+        title = label,
+        subtitle =
+            listOfNotNull(
+                account.email.takeIf { it.isNotBlank() && it != label },
+                if (hidden) "Hidden from navigation" else null,
+            ).joinToString(" · ").ifBlank { "Account settings" },
+        onClick = onClick,
+    )
+}
+
+@Composable
 internal fun SettingsRow(
     icon: ImageVector,
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
+    destructive: Boolean = false,
 ) {
+    val accent = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     ListItem(
-        headlineContent = { Text(title) },
+        headlineContent = { Text(title, color = accent) },
         supportingContent = subtitle?.let { { Text(it) } },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        leadingContent = { Icon(icon, contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = trailing,
         modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+// Full-width text input styled to align with the list rows in the detail forms.
+@Composable
+internal fun SettingsTextRow(
+    value: String,
+    label: String,
+    onValueChange: (String) -> Unit,
+    supporting: String? = null,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    keyboardDigits: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        supportingText = supporting?.let { { Text(it) } },
+        singleLine = singleLine,
+        minLines = minLines,
+        keyboardOptions =
+            if (keyboardDigits) {
+                KeyboardOptions(keyboardType = KeyboardType.Number)
+            } else {
+                KeyboardOptions.Default
+            },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
     )
 }
 

@@ -384,6 +384,7 @@ internal fun MailList(
     onOpen: (ThreadSummary) -> Unit,
     onToggleStar: (ThreadSummary) -> Unit,
     onArchive: (ThreadSummary) -> Unit,
+    onDelete: (ThreadSummary) -> Unit,
     onCopyFeedUrl: (ThreadSummary) -> Unit,
     onLoadMore: () -> Unit,
     showSenderImages: Boolean,
@@ -403,33 +404,63 @@ internal fun MailList(
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         items(threads, key = { it.id }) { thread ->
-            val dismissState =
-                rememberSwipeToDismissBoxState(
-                    confirmValueChange = { value ->
-                        if (value == SwipeToDismissBoxValue.EndToStart) {
-                            onArchive(thread)
-                            true
-                        } else {
-                            false
-                        }
-                    },
-                )
+            val dismissState = rememberSwipeToDismissBoxState()
+            var dismissHandled by remember(thread.id) { mutableStateOf(false) }
+            LaunchedEffect(dismissState.currentValue) {
+                if (dismissHandled) return@LaunchedEffect
+                when (dismissState.currentValue) {
+                    SwipeToDismissBoxValue.StartToEnd -> {
+                        dismissHandled = true
+                        onArchive(thread)
+                    }
+
+                    SwipeToDismissBoxValue.EndToStart -> {
+                        dismissHandled = true
+                        onDelete(thread)
+                    }
+
+                    SwipeToDismissBoxValue.Settled -> {
+                        Unit
+                    }
+                }
+            }
             SwipeToDismissBox(
                 state = dismissState,
-                enableDismissFromStartToEnd = false,
                 backgroundContent = {
                     val isRss = threadIdIsRss(thread.id)
+                    val direction = dismissState.dismissDirection
+                    val deleting = direction == SwipeToDismissBoxValue.EndToStart
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 24.dp),
-                        contentAlignment = Alignment.CenterEnd,
+                            .background(
+                                if (deleting) {
+                                    MaterialTheme.colorScheme.errorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                            ).padding(horizontal = 24.dp),
+                        contentAlignment =
+                            if (deleting) {
+                                Alignment.CenterEnd
+                            } else {
+                                Alignment.CenterStart
+                            },
                     ) {
                         Icon(
-                            if (isRss) Icons.Filled.Delete else Icons.Filled.Archive,
-                            contentDescription = if (isRss) "Remove" else "Archive",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            if (deleting || isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                            contentDescription =
+                                when {
+                                    deleting -> "Delete"
+                                    isRss -> "Remove"
+                                    else -> "Archive"
+                                },
+                            tint =
+                                if (deleting) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                },
                         )
                     }
                 },
@@ -463,6 +494,48 @@ internal fun MailList(
             }
         }
     }
+}
+
+@Composable
+internal fun MailHeaderSearchField(
+    search: String,
+    onSearchChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+) {
+    OutlinedTextField(
+        value = search,
+        onValueChange = onSearchChange,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .onPreviewKeyEvent { event ->
+                    if (
+                        event.type == KeyEventType.KeyUp &&
+                        event.key == Key.Enter
+                    ) {
+                        onSearchSubmit()
+                        true
+                    } else {
+                        false
+                    }
+                },
+        placeholder = { Text("Search mail") },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = {
+            if (search.isNotBlank()) {
+                IconButton(
+                    onClick = {
+                        onSearchChange("")
+                        onSearchSubmit()
+                    },
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                }
+            }
+        },
+        singleLine = true,
+    )
 }
 
 @Composable

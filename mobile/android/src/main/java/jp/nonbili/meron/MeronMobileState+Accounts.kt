@@ -523,7 +523,7 @@ internal fun MeronMobileState.saveAccountSettings(
             }
         }.onSuccess {
             applyAccounts(it)
-            showAccountSettings = false
+            accountSettingsTargetId = null
             status = "Saved account settings"
         }.onFailure {
             status = "Account settings failed: ${it.message}"
@@ -574,7 +574,6 @@ internal fun MeronMobileState.removeAccount(account: AccountSummary) {
             messages = emptyList()
             coreThreads = emptyList()
             applyAccounts(it)
-            showAccountSettings = false
             status = "Removed account"
         }.onFailure {
             status = "Remove account failed: ${it.message}"

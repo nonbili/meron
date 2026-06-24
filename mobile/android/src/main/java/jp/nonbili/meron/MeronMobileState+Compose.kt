@@ -744,45 +744,47 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
     screen = Screen.AddAccount
 }
 
-internal fun MeronMobileState.createKanbanBoard() {
+internal fun MeronMobileState.createKanbanBoard(): String {
     val board = defaultKanbanBoard(coreAccounts).copy(name = "Kanban board ${kanbanBoards.size + 1}")
     persistKanbanBoards(kanbanBoards + board)
     activeKanbanBoardId = board.id
     saveActiveKanbanBoardId(context, board.id)
     loadKanbanBoard(refresh = false)
+    return board.id
 }
 
-internal fun MeronMobileState.renameActiveKanbanBoard(name: String) {
-    val trimmed = name.trim()
-    if (trimmed.isBlank()) return
-    persistKanbanBoards(kanbanBoards.map { if (it.id == activeKanbanBoardId) it.copy(name = trimmed) else it })
-}
-
-internal fun MeronMobileState.updateActiveKanbanBoardAppearance(
+internal fun MeronMobileState.updateKanbanBoard(
+    boardId: String,
+    name: String,
     avatarUrl: String,
     wallpaperPresetId: String,
     wallpaperUrl: String,
 ) {
+    val trimmedName = name.trim()
+    if (trimmedName.isBlank()) return
     persistKanbanBoards(
-        kanbanBoards.map {
-            if (it.id == activeKanbanBoardId) {
-                it.copy(
+        kanbanBoards.map { board ->
+            if (board.id == boardId) {
+                board.copy(
+                    name = trimmedName,
                     avatarUrl = avatarUrl.trim(),
                     wallpaperPresetId = wallpaperPresetId.trim(),
                     wallpaperUrl = wallpaperUrl.trim(),
                 )
             } else {
-                it
+                board
             }
         },
     )
 }
 
-internal fun MeronMobileState.deleteActiveKanbanBoard() {
-    val next = kanbanBoards.filterNot { it.id == activeKanbanBoardId }
+internal fun MeronMobileState.deleteKanbanBoard(boardId: String) {
+    val next = kanbanBoards.filterNot { it.id == boardId }
     persistKanbanBoards(if (next.isEmpty()) listOf(defaultKanbanBoard(coreAccounts)) else next)
-    kanbanColumns = emptyMap()
-    loadKanbanBoard(refresh = false)
+    if (boardId == activeKanbanBoardId) {
+        kanbanColumns = emptyMap()
+        loadKanbanBoard(refresh = false)
+    }
 }
 
 internal fun MeronMobileState.addKanbanColumn(column: KanbanColumnSpec) {

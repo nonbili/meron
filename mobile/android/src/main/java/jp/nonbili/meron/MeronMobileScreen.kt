@@ -790,6 +790,70 @@ internal fun MeronMobileScreen(
                 LaunchedEffect(Unit) { loadStorageUsage() }
                 SettingsScreen(
                     onBack = { screen = previousTopScreen },
+                    initialAccountId = accountSettingsTargetId,
+                    onConsumeInitialAccount = { accountSettingsTargetId = null },
+                    initialKanbanBoardId = kanbanSettingsTargetId,
+                    onConsumeInitialKanbanBoard = { kanbanSettingsTargetId = null },
+                    accounts = coreAccounts,
+                    hiddenNavigationAccountIds = hiddenNavigationAccountIds,
+                    kanbanBoards = kanbanBoards,
+                    activeKanbanBoardId = activeKanbanBoardId,
+                    onSaveKanbanBoard = { board, name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
+                        updateKanbanBoard(board.id, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
+                    },
+                    onDeleteKanbanBoard = { board ->
+                        deleteKanbanBoard(board.id)
+                    },
+                    onSetActiveKanbanBoard = { board ->
+                        activeKanbanBoardId = board.id
+                        saveActiveKanbanBoardId(context, board.id)
+                        if (screen == Screen.Kanban || previousTopScreen == Screen.Kanban) {
+                            loadKanbanBoard(refresh = false)
+                        }
+                    },
+                    onCreateKanbanBoard = ::createKanbanBoard,
+                    onSaveAccountSettings = {
+                        account,
+                        displayName,
+                        senderName,
+                        avatarUrl,
+                        wallpaperPresetId,
+                        loadRemoteImages,
+                        conversationHtml,
+                        includedInUnified,
+                        showInNavigation,
+                        muted,
+                        paused,
+                        interval,
+                        aliases,
+                        ->
+                        setAccountNavigationVisible(account, showInNavigation)
+                        saveAccountSettings(
+                            account,
+                            displayName,
+                            senderName,
+                            avatarUrl,
+                            wallpaperPresetId,
+                            loadRemoteImages,
+                            conversationHtml,
+                            includedInUnified,
+                            muted,
+                            paused,
+                            interval,
+                            aliases,
+                        )
+                    },
+                    onPickAccountAvatar = { account ->
+                        accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
+                        accountMediaPicker.launch(arrayOf("image/*"))
+                    },
+                    onPickAccountWallpaper = { account ->
+                        accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
+                        accountMediaPicker.launch(arrayOf("image/*"))
+                    },
+                    onMoveAccountUp = { account -> moveAccount(account, -1) },
+                    onMoveAccountDown = { account -> moveAccount(account, 1) },
+                    onRemoveAccount = ::removeAccount,
                     appearanceMode = appearanceMode,
                     onAppearanceModeChange = onAppearanceModeChange,
                     showSenderImages = showSenderImages,
@@ -1023,11 +1087,11 @@ internal fun MeronMobileScreen(
                                 },
                                 actions = {
                                     IconButton(onClick = {
-                                        showKanbanBoardDialog = true
-                                        kanbanBoardNameInput = activeKanbanBoard?.name.orEmpty()
-                                        kanbanBoardAvatarInput = activeKanbanBoard?.avatarUrl.orEmpty()
-                                        kanbanBoardWallpaperPresetInput = activeKanbanBoard?.wallpaperPresetId.orEmpty()
-                                        kanbanBoardWallpaperUrlInput = activeKanbanBoard?.wallpaperUrl.orEmpty()
+                                        activeKanbanBoard?.let { board ->
+                                            kanbanSettingsTargetId = board.id
+                                            previousTopScreen = Screen.Kanban
+                                            screen = Screen.Settings
+                                        }
                                     }) {
                                         Icon(Icons.Filled.MoreVert, contentDescription = "Board menu")
                                     }
@@ -1095,7 +1159,7 @@ internal fun MeronMobileScreen(
                     drawerState = drawerState,
                     drawerContent = {
                         MailDrawer(
-                            accounts = coreAccounts,
+                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
                             selectedAccountId = selectedCoreAccountId,
                             folders = coreFolders,
                             currentScreen = screen,
@@ -1157,18 +1221,11 @@ internal fun MeronMobileScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    Column {
-                                        Text(appBarTitle, fontWeight = FontWeight.SemiBold)
-                                        if (appBarSubtitle.isNotBlank()) {
-                                            Text(
-                                                appBarSubtitle,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                    }
+                                    MailHeaderSearchField(
+                                        search = mailSearch,
+                                        onSearchChange = { mailSearch = it },
+                                        onSearchSubmit = { syncCoreThreads(syncFirst = false) },
+                                    )
                                 },
                                 navigationIcon = {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -1176,22 +1233,47 @@ internal fun MeronMobileScreen(
                                     }
                                 },
                                 actions = {
-                                    if (coreThreads.any { it.unread }) {
-                                        IconButton(onClick = ::markVisibleMailboxAllRead) {
-                                            Icon(Icons.Filled.MarkEmailUnread, contentDescription = "Mark all read")
+                                    Box {
+                                        IconButton(onClick = { mailboxMenuOpen = true }) {
+                                            Icon(Icons.Filled.MoreVert, contentDescription = "Mailbox actions")
                                         }
-                                    }
-                                    if (selectedAccount != null) {
-                                        Box {
-                                            IconButton(onClick = { mailboxMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = "Mailbox actions")
+                                        DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
+                                            FilterMode.values().forEach { mode ->
+                                                DropdownMenuItem(
+                                                    text = { Text(mode.label()) },
+                                                    leadingIcon = {
+                                                        RadioButton(
+                                                            selected = mailFilter == mode,
+                                                            onClick = null,
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        mailboxMenuOpen = false
+                                                        mailFilter = mode
+                                                        syncCoreThreads(syncFirst = false)
+                                                    },
+                                                )
                                             }
-                                            DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
+                                            if (coreThreads.any { it.unread }) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Mark all read") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
+                                                    },
+                                                    onClick = {
+                                                        mailboxMenuOpen = false
+                                                        markVisibleMailboxAllRead()
+                                                    },
+                                                )
+                                            }
+                                            if (selectedAccount != null) {
                                                 DropdownMenuItem(
                                                     text = { Text("Account settings") },
                                                     onClick = {
                                                         mailboxMenuOpen = false
-                                                        showAccountSettings = true
+                                                        accountSettingsTargetId = selectedAccount.id
+                                                        previousTopScreen = Screen.Mail
+                                                        screen = Screen.Settings
                                                     },
                                                 )
                                                 if (selectedAccount.let(::accountSummaryIsRss)) {
@@ -1220,9 +1302,6 @@ internal fun MeronMobileScreen(
                                                 }
                                             }
                                         }
-                                    }
-                                    IconButton(onClick = ::syncCoreThreads) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = "Sync")
                                     }
                                 },
                             )
@@ -1270,16 +1349,6 @@ internal fun MeronMobileScreen(
                                     )
                                 }
                             }
-                            MailSearchFilterBar(
-                                search = mailSearch,
-                                filter = mailFilter,
-                                onSearchChange = { mailSearch = it },
-                                onSearchSubmit = { syncCoreThreads(syncFirst = false) },
-                                onFilterChange = {
-                                    mailFilter = it
-                                    syncCoreThreads(syncFirst = false)
-                                },
-                            )
                             PullToRefreshBox(
                                 isRefreshing = syncing,
                                 onRefresh = { syncCoreThreads() },
@@ -1334,6 +1403,7 @@ internal fun MeronMobileScreen(
                                             onOpen = ::readCoreThread,
                                             onToggleStar = ::toggleStar,
                                             onArchive = ::archiveOrRemove,
+                                            onDelete = ::deleteThread,
                                             onCopyFeedUrl = { thread ->
                                                 copyToClipboard(context, "Feed URL", thread.feedUrl)
                                                 status = "Copied feed URL"
@@ -1347,102 +1417,6 @@ internal fun MeronMobileScreen(
                         }
                     }
                 }
-            }
-        }
-
-        if (showKanbanBoardDialog && screen == Screen.Kanban) {
-            KanbanBoardDialog(
-                boards = kanbanBoards,
-                activeBoardId = activeKanbanBoardId,
-                name = kanbanBoardNameInput,
-                avatarUrl = kanbanBoardAvatarInput,
-                wallpaperPresetId = kanbanBoardWallpaperPresetInput,
-                wallpaperUrl = kanbanBoardWallpaperUrlInput,
-                onNameChange = { kanbanBoardNameInput = it },
-                onAvatarUrlChange = { kanbanBoardAvatarInput = it },
-                onWallpaperPresetChange = { kanbanBoardWallpaperPresetInput = it },
-                onWallpaperUrlChange = { kanbanBoardWallpaperUrlInput = it },
-                onSelect = {
-                    activeKanbanBoardId = it
-                    saveActiveKanbanBoardId(context, it)
-                    val board = kanbanBoards.firstOrNull { board -> board.id == it }
-                    kanbanBoardNameInput = board?.name.orEmpty()
-                    kanbanBoardAvatarInput = board?.avatarUrl.orEmpty()
-                    kanbanBoardWallpaperPresetInput = board?.wallpaperPresetId.orEmpty()
-                    kanbanBoardWallpaperUrlInput = board?.wallpaperUrl.orEmpty()
-                    showKanbanBoardDialog = false
-                    loadKanbanBoard(refresh = false)
-                },
-                onRename = { renameActiveKanbanBoard(kanbanBoardNameInput) },
-                onSaveAppearance = {
-                    updateActiveKanbanBoardAppearance(
-                        kanbanBoardAvatarInput,
-                        kanbanBoardWallpaperPresetInput,
-                        kanbanBoardWallpaperUrlInput,
-                    )
-                },
-                onCreate = { createKanbanBoard() },
-                onDelete = {
-                    deleteActiveKanbanBoard()
-                    showKanbanBoardDialog = false
-                },
-                onDismiss = { showKanbanBoardDialog = false },
-            )
-        }
-
-        if (showAccountSettings) {
-            selectedAccount?.let { account ->
-                val accountIndex = coreAccounts.indexOfFirst { it.id == account.id }
-                AccountSettingsDialog(
-                    account = account,
-                    canMoveUp = accountIndex > 0,
-                    canMoveDown = accountIndex >= 0 && accountIndex < coreAccounts.lastIndex,
-                    showInNavigation = account.id !in hiddenNavigationAccountIds,
-                    onSave = {
-                        displayName,
-                        senderName,
-                        avatarUrl,
-                        wallpaperPresetId,
-                        loadRemoteImages,
-                        conversationHtml,
-                        includedInUnified,
-                        showInNavigation,
-                        muted,
-                        paused,
-                        interval,
-                        aliases,
-                        ->
-                        setAccountNavigationVisible(account, showInNavigation)
-                        saveAccountSettings(
-                            account,
-                            displayName,
-                            senderName,
-                            avatarUrl,
-                            wallpaperPresetId,
-                            loadRemoteImages,
-                            conversationHtml,
-                            includedInUnified,
-                            muted,
-                            paused,
-                            interval,
-                            aliases,
-                        )
-                    },
-                    onPickAvatar = {
-                        accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
-                        accountMediaPicker.launch(arrayOf("image/*"))
-                    },
-                    onPickWallpaper = {
-                        accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
-                        accountMediaPicker.launch(arrayOf("image/*"))
-                    },
-                    onMoveUp = { moveAccount(account, -1) },
-                    onMoveDown = { moveAccount(account, 1) },
-                    onRemove = { removeAccount(account) },
-                    onDismiss = { showAccountSettings = false },
-                )
-            } ?: run {
-                showAccountSettings = false
             }
         }
 
