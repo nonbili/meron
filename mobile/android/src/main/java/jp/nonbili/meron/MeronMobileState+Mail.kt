@@ -285,6 +285,7 @@ internal fun MeronMobileState.syncCoreThreads(
         }
     if (selectedAccounts.isEmpty()) {
         status = if (accountId == UNIFIED_ACCOUNT_ID) "No accounts are included in Unified inbox." else "No account selected."
+        initialThreadsLoaded = true
         return
     }
     syncing = true
@@ -979,6 +980,62 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
         undoMessage = "Deleted",
         onUndo = { restoreThread(thread, threadsSnapshot, kanbanSnapshot) },
     )
+}
+
+private fun List<FolderSummary>.hasOnlyBootstrapInbox(): Boolean = size == 1 && first().name.equals(INBOX_FOLDER, ignoreCase = true)
+
+internal fun MeronMobileState.ensureThreadActionFolders(
+    thread: ThreadSummary,
+    includeAllMailAccounts: Boolean,
+    onReady: () -> Unit,
+) {
+    if (threadIdIsRss(thread.id)) {
+        status = "RSS feeds move between RSS accounts from Kanban."
+        return
+    }
+    if (!MeronCoreNative.isLoaded()) {
+        status = "Rust core not packaged."
+        return
+    }
+    val accounts =
+        if (includeAllMailAccounts) {
+            coreAccounts.filterNot { accountSummaryIsRss(it) }
+        } else {
+            coreAccounts.filter { it.id == thread.accountId && !accountSummaryIsRss(it) }
+        }
+    if (accounts.isEmpty()) {
+        status = "No mail folders available."
+        return
+    }
+    status = "Loading folders..."
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val client = MobileMailCommandClient(JniMeronCore())
+                accounts.associate { account ->
+                    var folders = loadAccountFolders(client, account)
+                    if (folders.hasOnlyBootstrapInbox()) {
+                        client.sync(
+                            SyncMailParams(
+                                accountId = account.id,
+                                folderId = INBOX_FOLDER,
+                                limit = 1,
+                                folders = true,
+                            ),
+                        )
+                        folders = loadAccountFolders(client, account)
+                    }
+                    account.id to folders
+                }
+            }
+        }.onSuccess { loadedFolders ->
+            foldersByAccount = foldersByAccount + loadedFolders
+            status = "Loaded folders"
+            onReady()
+        }.onFailure {
+            status = "Load folders failed: ${it.message}"
+        }
+    }
 }
 
 internal fun MeronMobileState.moveThreadToFolder(

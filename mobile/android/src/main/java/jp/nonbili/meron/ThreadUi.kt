@@ -793,9 +793,26 @@ internal fun MoveThreadDialog(
 internal fun CopyThreadDialog(
     thread: ThreadSummary,
     folders: List<FolderSummary>,
+    accounts: List<AccountSummary> = emptyList(),
     onCopy: (FolderSummary) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val foldersByAccount = folders.groupBy { it.accountId.ifBlank { thread.accountId } }
+    val accountGroups =
+        if (accounts.isNotEmpty()) {
+            accounts.map { account -> account.id to account.displayName.ifBlank { account.email.ifBlank { account.id } } }
+        } else {
+            foldersByAccount.keys.map { accountId -> accountId to accountId }
+        }
+    val copyTargetCount =
+        accountGroups.sumOf { (accountId, _) ->
+            foldersByAccount[accountId]
+                .orEmpty()
+                .count { folder ->
+                    accountId != thread.accountId ||
+                        !folder.name.equals(thread.folder, ignoreCase = true)
+                }
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Copy conversation") },
@@ -810,7 +827,7 @@ internal fun CopyThreadDialog(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (folders.isEmpty()) {
+                if (copyTargetCount == 0) {
                     item {
                         Text(
                             "No copy targets available.",
@@ -820,15 +837,38 @@ internal fun CopyThreadDialog(
                         )
                     }
                 } else {
-                    items(folders, key = { "${it.accountId}\n${it.name}" }) { folder ->
-                        val label =
-                            if (folder.accountId.isBlank() || folder.accountId == thread.accountId) {
-                                folder.name.replaceFirstChar { it.uppercase() }
-                            } else {
-                                "${folder.accountId} / ${folder.name.replaceFirstChar { it.uppercase() }}"
+                    accountGroups.forEach { (accountId, accountLabel) ->
+                        val accountFolders =
+                            foldersByAccount[accountId]
+                                .orEmpty()
+                                .filterNot { folder ->
+                                    accountId == thread.accountId &&
+                                        folder.name.equals(thread.folder, ignoreCase = true)
+                                }
+                        item(key = "account:$accountId") {
+                            Text(
+                                accountLabel,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 2.dp),
+                            )
+                        }
+                        if (accountFolders.isEmpty()) {
+                            item(key = "empty:$accountId") {
+                                Text(
+                                    "No folders available.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
                             }
-                        DialogAction(label) {
-                            onCopy(folder)
+                        } else {
+                            items(accountFolders, key = { "$accountId\n${it.name}" }) { folder ->
+                                DialogAction(folder.name.replaceFirstChar { it.uppercase() }) {
+                                    onCopy(folder)
+                                }
+                            }
                         }
                     }
                 }

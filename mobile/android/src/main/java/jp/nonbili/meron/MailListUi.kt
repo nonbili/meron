@@ -55,6 +55,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -386,6 +387,10 @@ internal fun MailList(
     onArchive: (ThreadSummary) -> Unit,
     onDelete: (ThreadSummary) -> Unit,
     onCopyFeedUrl: (ThreadSummary) -> Unit,
+    selectedThreadIds: Set<String>,
+    selectionActive: Boolean,
+    onToggleSelected: (ThreadSummary) -> Unit,
+    onLongPress: (ThreadSummary) -> Unit,
     onLoadMore: () -> Unit,
     showSenderImages: Boolean,
 ) {
@@ -404,71 +409,14 @@ internal fun MailList(
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         items(threads, key = { it.id }) { thread ->
-            val dismissState = rememberSwipeToDismissBoxState()
-            var dismissHandled by remember(thread.id) { mutableStateOf(false) }
-            LaunchedEffect(dismissState.currentValue) {
-                if (dismissHandled) return@LaunchedEffect
-                when (dismissState.currentValue) {
-                    SwipeToDismissBoxValue.StartToEnd -> {
-                        dismissHandled = true
-                        onArchive(thread)
-                    }
-
-                    SwipeToDismissBoxValue.EndToStart -> {
-                        dismissHandled = true
-                        onDelete(thread)
-                    }
-
-                    SwipeToDismissBoxValue.Settled -> {
-                        Unit
-                    }
-                }
-            }
-            SwipeToDismissBox(
-                state = dismissState,
-                backgroundContent = {
-                    val isRss = threadIdIsRss(thread.id)
-                    val direction = dismissState.dismissDirection
-                    val deleting = direction == SwipeToDismissBoxValue.EndToStart
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (deleting) {
-                                    MaterialTheme.colorScheme.errorContainer
-                                } else {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                },
-                            ).padding(horizontal = 24.dp),
-                        contentAlignment =
-                            if (deleting) {
-                                Alignment.CenterEnd
-                            } else {
-                                Alignment.CenterStart
-                            },
-                    ) {
-                        Icon(
-                            if (deleting || isRss) Icons.Filled.Delete else Icons.Filled.Archive,
-                            contentDescription =
-                                when {
-                                    deleting -> "Delete"
-                                    isRss -> "Remove"
-                                    else -> "Archive"
-                                },
-                            tint =
-                                if (deleting) {
-                                    MaterialTheme.colorScheme.onErrorContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                },
-                        )
-                    }
-                },
-            ) {
+            if (selectionActive) {
                 MailRow(
                     thread = thread,
                     showSenderImages = showSenderImages,
-                    onOpen = { onOpen(thread) },
+                    selected = thread.id in selectedThreadIds,
+                    selectionActive = true,
+                    onOpen = { onToggleSelected(thread) },
+                    onLongPress = { onLongPress(thread) },
                     onToggleStar = { onToggleStar(thread) },
                     onCopyFeedUrl =
                         if (threadIdIsRss(thread.id) && thread.feedUrl.isNotBlank()) {
@@ -477,6 +425,84 @@ internal fun MailList(
                             null
                         },
                 )
+            } else {
+                val dismissState = rememberSwipeToDismissBoxState()
+                var dismissHandled by remember(thread.id) { mutableStateOf(false) }
+                LaunchedEffect(dismissState.currentValue) {
+                    if (dismissHandled) return@LaunchedEffect
+                    when (dismissState.currentValue) {
+                        SwipeToDismissBoxValue.StartToEnd -> {
+                            dismissHandled = true
+                            onArchive(thread)
+                        }
+
+                        SwipeToDismissBoxValue.EndToStart -> {
+                            dismissHandled = true
+                            onDelete(thread)
+                        }
+
+                        SwipeToDismissBoxValue.Settled -> {
+                            Unit
+                        }
+                    }
+                }
+                SwipeToDismissBox(
+                    state = dismissState,
+                    backgroundContent = {
+                        val isRss = threadIdIsRss(thread.id)
+                        val direction = dismissState.dismissDirection
+                        val deleting = direction == SwipeToDismissBoxValue.EndToStart
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (deleting) {
+                                        MaterialTheme.colorScheme.errorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    },
+                                ).padding(horizontal = 24.dp),
+                            contentAlignment =
+                                if (deleting) {
+                                    Alignment.CenterEnd
+                                } else {
+                                    Alignment.CenterStart
+                                },
+                        ) {
+                            Icon(
+                                if (deleting || isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                                contentDescription =
+                                    when {
+                                        deleting -> "Delete"
+                                        isRss -> "Remove"
+                                        else -> "Archive"
+                                    },
+                                tint =
+                                    if (deleting) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                            )
+                        }
+                    },
+                ) {
+                    MailRow(
+                        thread = thread,
+                        showSenderImages = showSenderImages,
+                        selected = false,
+                        selectionActive = false,
+                        onOpen = { onOpen(thread) },
+                        onLongPress = { onLongPress(thread) },
+                        onToggleStar = { onToggleStar(thread) },
+                        onCopyFeedUrl =
+                            if (threadIdIsRss(thread.id) && thread.feedUrl.isNotBlank()) {
+                                { onCopyFeedUrl(thread) }
+                            } else {
+                                null
+                            },
+                    )
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
@@ -538,11 +564,15 @@ internal fun MailHeaderSearchField(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun MailRow(
     thread: ThreadSummary,
     showSenderImages: Boolean,
+    selected: Boolean,
+    selectionActive: Boolean,
     onOpen: () -> Unit,
+    onLongPress: () -> Unit,
     onToggleStar: () -> Unit,
     onCopyFeedUrl: (() -> Unit)?,
 ) {
@@ -551,6 +581,7 @@ internal fun MailRow(
     val senderLabel = thread.sender.ifBlank { thread.accountId }
     val rowBackground =
         when {
+            selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
             unread -> MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
             else -> MaterialTheme.colorScheme.surface
         }
@@ -558,12 +589,23 @@ internal fun MailRow(
         Modifier
             .fillMaxWidth()
             .background(rowBackground)
-            .clickable(onClick = onOpen)
+            .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 42.dp)
+        if (selectionActive) {
+            Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = if (selected) "Selected" else "Not selected",
+                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        } else {
+            SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 42.dp)
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -618,22 +660,24 @@ internal fun MailRow(
                 }
             }
         }
-        IconButton(onClick = onToggleStar, modifier = Modifier.size(24.dp)) {
-            Icon(
-                if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                contentDescription = if (thread.starred) "Unstar" else "Star",
-                tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (onCopyFeedUrl != null) {
-            IconButton(onClick = onCopyFeedUrl, modifier = Modifier.size(24.dp)) {
+        if (!selectionActive) {
+            IconButton(onClick = onToggleStar, modifier = Modifier.size(24.dp)) {
                 Icon(
-                    Icons.Filled.MoreVert,
-                    contentDescription = "Copy feed URL",
-                    tint = MaterialTheme.colorScheme.outline,
+                    if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    contentDescription = if (thread.starred) "Unstar" else "Star",
+                    tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(18.dp),
                 )
+            }
+            if (onCopyFeedUrl != null) {
+                IconButton(onClick = onCopyFeedUrl, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Copy feed URL",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
     }

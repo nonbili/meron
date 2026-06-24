@@ -307,10 +307,14 @@ internal class MeronMobileState(
     var mailSearch by mutableStateOf("")
     var mailFilter by mutableStateOf(FilterMode.All)
     var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
+    var selectedMailThreadIds by mutableStateOf(emptySet<String>())
+    var selectedMailMoveThread by mutableStateOf<ThreadSummary?>(null)
+    var selectedMailCopyThread by mutableStateOf<ThreadSummary?>(null)
 
     // False until the first inbox load (cache or server) settles, so the list can
     // show a loading indicator instead of an empty state on cold start.
     var initialThreadsLoaded by mutableStateOf(false)
+    var initialAccountsLoaded by mutableStateOf(false)
     var mailboxCursor by mutableStateOf("")
     var mailboxAccountCursors by mutableStateOf(emptyMap<String, String>())
     var loadingMoreThreads by mutableStateOf(false)
@@ -364,7 +368,9 @@ internal class MeronMobileState(
     var errorBanner by mutableStateOf<String?>(null)
     var addSection by mutableStateOf(0)
     var notificationPermissionGranted by mutableStateOf(AndroidNotificationService.canNotify(context))
+    var accountsLoading by mutableStateOf(false)
     var mailboxMenuOpen by mutableStateOf(false)
+    var mailSelectionMenuOpen by mutableStateOf(false)
     var accountSettingsTargetId by mutableStateOf<String?>(null)
     var showAddFeedDialog by mutableStateOf(false)
     var addFeedUrl by mutableStateOf("")

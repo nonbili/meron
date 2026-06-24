@@ -539,6 +539,8 @@ internal fun MeronMobileScreen(
             if (MeronCoreNative.isLoaded() && coreAccounts.isEmpty()) {
                 listAccounts()
                 loadStorageUsage()
+            } else if (!MeronCoreNative.isLoaded()) {
+                initialAccountsLoaded = true
             }
         }
 
@@ -572,8 +574,22 @@ internal fun MeronMobileScreen(
             } else {
                 selectedAccount?.email?.ifBlank { selectedAccount.displayName }.orEmpty()
             }
+        val selectedMailThreads = coreThreads.filter { it.id in selectedMailThreadIds }
+        val mailSelectionActive = selectedMailThreadIds.isNotEmpty()
+
+        LaunchedEffect(coreThreads) {
+            val visibleThreadIds = coreThreads.map { it.id }.toSet()
+            val retainedThreadIds = selectedMailThreadIds.intersect(visibleThreadIds)
+            if (retainedThreadIds.size != selectedMailThreadIds.size) {
+                selectedMailThreadIds = retainedThreadIds
+            }
+        }
 
         // Hardware back from a sub-screen returns to the inbox instead of exiting.
+        BackHandler(enabled = screen == Screen.Mail && mailSelectionActive) {
+            selectedMailThreadIds = emptySet()
+            mailSelectionMenuOpen = false
+        }
         BackHandler(enabled = screen != Screen.Mail) {
             screen =
                 if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount ||
@@ -1227,84 +1243,186 @@ internal fun MeronMobileScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    MailHeaderSearchField(
-                                        search = mailSearch,
-                                        onSearchChange = { mailSearch = it },
-                                        onSearchSubmit = { syncCoreThreads(syncFirst = false) },
-                                    )
+                                    if (mailSelectionActive) {
+                                        Text(
+                                            "${selectedMailThreads.size} selected",
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    } else {
+                                        MailHeaderSearchField(
+                                            search = mailSearch,
+                                            onSearchChange = { mailSearch = it },
+                                            onSearchSubmit = { syncCoreThreads(syncFirst = false) },
+                                        )
+                                    }
                                 },
                                 navigationIcon = {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                    if (mailSelectionActive) {
+                                        IconButton(onClick = {
+                                            selectedMailThreadIds = emptySet()
+                                            mailSelectionMenuOpen = false
+                                        }) {
+                                            Icon(Icons.Filled.Close, contentDescription = "Clear selection")
+                                        }
+                                    } else {
+                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                            Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                        }
                                     }
                                 },
                                 actions = {
-                                    Box {
-                                        IconButton(onClick = { mailboxMenuOpen = true }) {
-                                            Icon(Icons.Filled.MoreVert, contentDescription = "Mailbox actions")
+                                    if (mailSelectionActive) {
+                                        IconButton(onClick = {
+                                            selectedMailThreads.forEach(::archiveOrRemove)
+                                            selectedMailThreadIds = emptySet()
+                                        }) {
+                                            Icon(Icons.Filled.Archive, contentDescription = "Archive selected")
                                         }
-                                        DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
-                                            FilterMode.values().forEach { mode ->
+                                        IconButton(onClick = {
+                                            selectedMailThreads.forEach(::deleteThread)
+                                            selectedMailThreadIds = emptySet()
+                                        }) {
+                                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+                                        }
+                                        Box {
+                                            IconButton(onClick = { mailSelectionMenuOpen = true }) {
+                                                Icon(Icons.Filled.MoreVert, contentDescription = "Selection actions")
+                                            }
+                                            DropdownMenu(
+                                                expanded = mailSelectionMenuOpen,
+                                                onDismissRequest = { mailSelectionMenuOpen = false },
+                                            ) {
+                                                val markRead = selectedMailThreads.any { it.unread }
                                                 DropdownMenuItem(
-                                                    text = { Text(mode.label()) },
+                                                    text = { Text(if (markRead) "Mark read" else "Mark unread") },
+                                                    leadingIcon = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null) },
+                                                    onClick = {
+                                                        mailSelectionMenuOpen = false
+                                                        selectedMailThreads
+                                                            .filter { it.unread == markRead }
+                                                            .forEach(::toggleRead)
+                                                        selectedMailThreadIds = emptySet()
+                                                    },
+                                                )
+                                                val star = selectedMailThreads.any { !it.starred }
+                                                DropdownMenuItem(
+                                                    text = { Text(if (star) "Star" else "Unstar") },
                                                     leadingIcon = {
-                                                        RadioButton(
-                                                            selected = mailFilter == mode,
-                                                            onClick = null,
+                                                        Icon(
+                                                            if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
+                                                            contentDescription = null,
                                                         )
                                                     },
                                                     onClick = {
-                                                        mailboxMenuOpen = false
-                                                        mailFilter = mode
-                                                        syncCoreThreads(syncFirst = false)
+                                                        mailSelectionMenuOpen = false
+                                                        selectedMailThreads
+                                                            .filter { it.starred != star }
+                                                            .forEach(::toggleStar)
+                                                        selectedMailThreadIds = emptySet()
                                                     },
                                                 )
+                                                val singleSelectedMailThread =
+                                                    selectedMailThreads
+                                                        .singleOrNull()
+                                                        ?.takeUnless { threadIdIsRss(it.id) }
+                                                if (singleSelectedMailThread != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Move") },
+                                                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                                                        onClick = {
+                                                            mailSelectionMenuOpen = false
+                                                            ensureThreadActionFolders(
+                                                                thread = singleSelectedMailThread,
+                                                                includeAllMailAccounts = false,
+                                                            ) {
+                                                                selectedMailMoveThread = singleSelectedMailThread
+                                                            }
+                                                        },
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Copy") },
+                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                                        onClick = {
+                                                            mailSelectionMenuOpen = false
+                                                            ensureThreadActionFolders(
+                                                                thread = singleSelectedMailThread,
+                                                                includeAllMailAccounts = true,
+                                                            ) {
+                                                                selectedMailCopyThread = singleSelectedMailThread
+                                                            }
+                                                        },
+                                                    )
+                                                }
                                             }
-                                            if (coreThreads.any { it.unread }) {
-                                                DropdownMenuItem(
-                                                    text = { Text("Mark all read") },
-                                                    leadingIcon = {
-                                                        Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
-                                                    },
-                                                    onClick = {
-                                                        mailboxMenuOpen = false
-                                                        markVisibleMailboxAllRead()
-                                                    },
-                                                )
+                                        }
+                                    } else {
+                                        Box {
+                                            IconButton(onClick = { mailboxMenuOpen = true }) {
+                                                Icon(Icons.Filled.MoreVert, contentDescription = "Mailbox actions")
                                             }
-                                            if (selectedAccount != null) {
-                                                DropdownMenuItem(
-                                                    text = { Text("Account settings") },
-                                                    onClick = {
-                                                        mailboxMenuOpen = false
-                                                        accountSettingsTargetId = selectedAccount.id
-                                                        previousTopScreen = Screen.Mail
-                                                        screen = Screen.Settings
-                                                    },
-                                                )
-                                                if (selectedAccount.let(::accountSummaryIsRss)) {
+                                            DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
+                                                FilterMode.values().forEach { mode ->
                                                     DropdownMenuItem(
-                                                        text = { Text("Add feed") },
+                                                        text = { Text(mode.label()) },
+                                                        leadingIcon = {
+                                                            RadioButton(
+                                                                selected = mailFilter == mode,
+                                                                onClick = null,
+                                                            )
+                                                        },
                                                         onClick = {
                                                             mailboxMenuOpen = false
-                                                            addFeedUrl = ""
-                                                            showAddFeedDialog = true
+                                                            mailFilter = mode
+                                                            syncCoreThreads(syncFirst = false)
                                                         },
                                                     )
+                                                }
+                                                if (coreThreads.any { it.unread }) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Import OPML") },
+                                                        text = { Text("Mark all read") },
+                                                        leadingIcon = {
+                                                            Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
+                                                        },
                                                         onClick = {
                                                             mailboxMenuOpen = false
-                                                            opmlImportPicker.launch(arrayOf("text/xml", "application/xml", "text/*", "*/*"))
+                                                            markVisibleMailboxAllRead()
                                                         },
                                                     )
+                                                }
+                                                if (selectedAccount != null) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Export OPML") },
+                                                        text = { Text("Account settings") },
                                                         onClick = {
                                                             mailboxMenuOpen = false
-                                                            exportOpmlForSelectedAccount()
+                                                            accountSettingsTargetId = selectedAccount.id
+                                                            previousTopScreen = Screen.Mail
+                                                            screen = Screen.Settings
                                                         },
                                                     )
+                                                    if (selectedAccount.let(::accountSummaryIsRss)) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("Add feed") },
+                                                            onClick = {
+                                                                mailboxMenuOpen = false
+                                                                addFeedUrl = ""
+                                                                showAddFeedDialog = true
+                                                            },
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("Import OPML") },
+                                                            onClick = {
+                                                                mailboxMenuOpen = false
+                                                                opmlImportPicker.launch(arrayOf("text/xml", "application/xml", "text/*", "*/*"))
+                                                            },
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("Export OPML") },
+                                                            onClick = {
+                                                                mailboxMenuOpen = false
+                                                                exportOpmlForSelectedAccount()
+                                                            },
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1361,6 +1479,10 @@ internal fun MeronMobileScreen(
                                 modifier = Modifier.fillMaxSize(),
                             ) {
                                 when {
+                                    !initialAccountsLoaded || accountsLoading -> {
+                                        LoadingState("Loading your inbox…")
+                                    }
+
                                     coreAccounts.isEmpty() -> {
                                         EmptyState(
                                             icon = Icons.Filled.PersonAdd,
@@ -1418,6 +1540,27 @@ internal fun MeronMobileScreen(
                                                 copyToClipboard(context, "Feed URL", thread.feedUrl)
                                                 status = "Copied feed URL"
                                             },
+                                            selectedThreadIds = selectedMailThreadIds,
+                                            selectionActive = mailSelectionActive,
+                                            onToggleSelected = { thread ->
+                                                selectedMailThreadIds =
+                                                    if (thread.id in selectedMailThreadIds) {
+                                                        selectedMailThreadIds - thread.id
+                                                    } else {
+                                                        selectedMailThreadIds + thread.id
+                                                    }
+                                                if (selectedMailThreadIds.isEmpty()) {
+                                                    mailSelectionMenuOpen = false
+                                                }
+                                            },
+                                            onLongPress = { thread ->
+                                                selectedMailThreadIds =
+                                                    if (thread.id in selectedMailThreadIds) {
+                                                        selectedMailThreadIds
+                                                    } else {
+                                                        selectedMailThreadIds + thread.id
+                                                    }
+                                            },
                                             onLoadMore = ::loadMoreCoreThreads,
                                             showSenderImages = showSenderImages,
                                         )
@@ -1453,6 +1596,46 @@ internal fun MeronMobileScreen(
                         Text("Cancel")
                     }
                 },
+            )
+        }
+
+        selectedMailMoveThread?.let { thread ->
+            MoveThreadDialog(
+                thread = thread,
+                folders =
+                    foldersByAccount[thread.accountId]
+                        .orEmpty()
+                        .filterNot { folder -> folder.name.equals(thread.folder, ignoreCase = true) },
+                onMove = { folder ->
+                    selectedMailMoveThread = null
+                    moveThreadToFolder(thread, folder.name) {
+                        selectedMailThreadIds = emptySet()
+                    }
+                },
+                onCreateAndMove = { name ->
+                    selectedMailMoveThread = null
+                    createFolderAndMoveThread(thread, name) {
+                        selectedMailThreadIds = emptySet()
+                    }
+                },
+                onDismiss = { selectedMailMoveThread = null },
+            )
+        }
+
+        selectedMailCopyThread?.let { thread ->
+            CopyThreadDialog(
+                thread = thread,
+                accounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
+                folders =
+                    coreAccounts
+                        .filterNot { accountSummaryIsRss(it) }
+                        .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                onCopy = { folder ->
+                    selectedMailCopyThread = null
+                    copyThreadToFolder(thread, folder)
+                    selectedMailThreadIds = emptySet()
+                },
+                onDismiss = { selectedMailCopyThread = null },
             )
         }
 

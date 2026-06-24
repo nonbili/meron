@@ -284,9 +284,11 @@ internal fun MeronMobileState.applyAccounts(
 internal fun MeronMobileState.listAccounts() {
     if (!MeronCoreNative.isLoaded()) {
         status = "Rust core not packaged."
+        initialAccountsLoaded = true
         return
     }
     scope.launch {
+        accountsLoading = true
         runCatching {
             withContext(Dispatchers.IO) { MobileMailCommandClient(JniMeronCore()).listAccounts() }
         }.onSuccess {
@@ -295,6 +297,8 @@ internal fun MeronMobileState.listAccounts() {
         }.onFailure {
             status = "Account list failed: ${it.message}"
         }
+        accountsLoading = false
+        initialAccountsLoaded = true
     }
 }
 
@@ -767,7 +771,7 @@ internal suspend fun MeronMobileState.loadAccountInbox(
         )
     val page = parseThreadListPage(threadsJson)
     return MailboxLoadResult(
-        folders = folders.filter { it.name.equals(folder, ignoreCase = true) },
+        folders = folders,
         folder = folder,
         threads = page.threads,
         nextCursor = page.nextCursor,
