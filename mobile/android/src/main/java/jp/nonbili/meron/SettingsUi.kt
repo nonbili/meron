@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -133,10 +134,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -149,6 +153,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -761,12 +766,8 @@ internal fun SettingsAccountDetailPage(
     var muted by remember(account.id) { mutableStateOf(account.muted) }
     var paused by remember(account.id) { mutableStateOf(account.paused) }
     var intervalText by remember(account.id) { mutableStateOf(account.rssSyncIntervalMinutes.toString()) }
-    var aliasesText by remember(account.id) {
-        mutableStateOf(
-            account.aliases.joinToString("\n") { alias ->
-                if (alias.name.isBlank()) alias.email else "${alias.email}, ${alias.name}"
-            },
-        )
+    var aliasEntries by remember(account.id) {
+        mutableStateOf(account.aliases.map { it.email to it.name })
     }
     var confirmRemove by remember(account.id) { mutableStateOf(false) }
 
@@ -805,7 +806,11 @@ internal fun SettingsAccountDetailPage(
             muted,
             paused,
             intervalText.toIntOrNull()?.coerceIn(5, 1440) ?: account.rssSyncIntervalMinutes.coerceIn(5, 1440),
-            aliasesText,
+            aliasEntries
+                .filter { it.first.isNotBlank() }
+                .joinToString("\n") { (email, name) ->
+                    if (name.isBlank()) email else "$email, $name"
+                },
         )
     }
 
@@ -863,27 +868,13 @@ internal fun SettingsAccountDetailPage(
                 )
             }
         }
-        item {
-            SettingsTextRow(
-                value = avatarUrl,
-                label = "Avatar URL",
-                supporting = "Or tap the avatar above to pick an image",
-                onValueChange = {
-                    avatarUrl = it
-                    persist()
-                },
-            )
-        }
-        item {
-            SettingsRow(
-                icon = Icons.Filled.Image,
-                title = "Choose avatar image",
-                subtitle = "Pick a photo from this device",
-                onClick = onPickAvatar,
-            )
-        }
-
         item { SettingsSectionLabel("Chat background") }
+        item {
+            ChatWallpaperPreview(
+                presetId = wallpaperPresetId,
+                customUrl = if (account.chatWallpaperKind == "custom") account.chatWallpaperUrl else "",
+            )
+        }
         item {
             WallpaperPresetChips(
                 selected = wallpaperPresetId,
@@ -990,17 +981,30 @@ internal fun SettingsAccountDetailPage(
 
         if (!isRss) {
             item { SettingsSectionLabel("Send-as aliases") }
-            item {
-                SettingsTextRow(
-                    value = aliasesText,
-                    label = "Aliases",
-                    supporting = "One per line: email, optional name",
-                    singleLine = false,
-                    minLines = 2,
-                    onValueChange = {
-                        aliasesText = it
+            itemsIndexed(aliasEntries) { index, (email, name) ->
+                AliasEditorRow(
+                    email = email,
+                    name = name,
+                    onEmailChange = { value ->
+                        aliasEntries = aliasEntries.toMutableList().also { it[index] = value to it[index].second }
                         persist()
                     },
+                    onNameChange = { value ->
+                        aliasEntries = aliasEntries.toMutableList().also { it[index] = it[index].first to value }
+                        persist()
+                    },
+                    onRemove = {
+                        aliasEntries = aliasEntries.toMutableList().also { it.removeAt(index) }
+                        persist()
+                    },
+                )
+            }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Add,
+                    title = "Add alias",
+                    subtitle = "Send mail from another address",
+                    onClick = { aliasEntries = aliasEntries + ("" to "") },
                 )
             }
         }
@@ -1043,15 +1047,62 @@ internal fun SettingsAccountDetailPage(
     }
 }
 
+// Mirrors frontend/src/lib/wallpapers.ts WALLPAPER_PRESETS, plus a leading
+// "Default" that clears the wallpaper. Photographic presets resolve to bundled
+// drawables (see wallpaperImageRes); the rest are drawn as approximations.
 private val wallpaperPresets =
     listOf(
         "" to "Default",
-        "grid" to "Grid",
-        "dots" to "Dots",
-        "forest" to "Forest",
-        "ocean" to "Ocean",
-        "sunset" to "Sunset",
+        "plain" to "Plain",
+        "doodle" to "Doodle",
+        "dots" to "Linear Dots",
+        "grid" to "Classic Grid",
+        "stripes" to "Diagonal Stripes",
+        "hexagon" to "Hexagon Grid",
+        "isometric" to "Isometric Cubes",
+        "waves" to "Flowing Waves",
+        "nordic" to "Nordic Pattern",
+        "topography" to "Topography",
+        "constellation" to "Constellation",
+        "aurora" to "Aurora",
+        "nebula" to "Nebula",
+        "sunset" to "Sunset Glow",
+        "forest" to "Forest Mist",
+        "desert" to "Desert Dunes",
+        "ocean" to "Tranquil Ocean",
+        "mountain" to "Mountain Range",
+        "breeze" to "Soft Breeze",
+        "galaxy" to "Spiral Galaxy",
+        "shapes" to "Abstract Shapes",
+        "sakura" to "Sakura Watercolor",
+        "vintage" to "Vintage Parchment",
+        "raindrops" to "Raindrops",
+        "marble" to "Sleek Marble",
+        "cyberpunk" to "Cyberpunk Grid",
+        "matrix" to "Digital Matrix",
+        "autumn" to "Autumn Leaves",
+        "nightsky" to "Celestial Night",
     )
+
+// Photographic presets ship as bundled drawables so the preview matches desktop.
+private fun wallpaperImageRes(presetId: String): Int? =
+    when (presetId) {
+        "aurora" -> R.drawable.wp_aurora
+        "nebula" -> R.drawable.wp_nebula
+        "sunset" -> R.drawable.wp_sunset
+        "forest" -> R.drawable.wp_forest
+        "desert" -> R.drawable.wp_desert
+        "ocean" -> R.drawable.wp_ocean
+        "mountain" -> R.drawable.wp_mountain
+        "breeze" -> R.drawable.wp_breeze
+        "galaxy" -> R.drawable.wp_galaxy
+        "shapes" -> R.drawable.wp_shapes
+        "sakura" -> R.drawable.wp_sakura
+        "vintage" -> R.drawable.wp_vintage
+        "raindrops" -> R.drawable.wp_raindrops
+        "marble" -> R.drawable.wp_marble
+        else -> null
+    }
 
 @Composable
 internal fun WallpaperPresetChips(
@@ -1068,6 +1119,262 @@ internal fun WallpaperPresetChips(
                 onClick = { onSelect(id) },
                 label = { Text(label) },
             )
+        }
+    }
+}
+
+// Paints a chat wallpaper as a fill layer: a bundled photographic drawable, a
+// loaded custom image, or a drawn pattern/gradient approximation. Place it as
+// the first child of a Box with the content drawn on top. Shared by the
+// settings preview and the conversation thread background.
+@Composable
+internal fun ChatWallpaperBackground(
+    presetId: String,
+    customUrl: String,
+    modifier: Modifier = Modifier,
+    fallback: Color = MaterialTheme.colorScheme.background,
+) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    var customBitmap by remember(customUrl) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(customUrl) {
+        customBitmap = null
+        if (customUrl.isNotBlank()) {
+            customBitmap = withContext(Dispatchers.IO) { loadFirstBitmap(listOf(customUrl)) }
+        }
+    }
+
+    val imageRes = if (customBitmap == null) wallpaperImageRes(presetId) else null
+    Box(
+        modifier =
+            modifier.then(
+                if (customBitmap == null && imageRes == null) {
+                    Modifier.chatWallpaper(presetId, dark, fallback)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        val bmp = customBitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else if (imageRes != null) {
+            Image(
+                painter = painterResource(imageRes),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+    }
+}
+
+// Telegram-style preview: paints the selected wallpaper with a couple of sample
+// chat bubbles on top, so the choice reads at a glance before opening a thread.
+@Composable
+internal fun ChatWallpaperPreview(
+    presetId: String,
+    customUrl: String,
+    modifier: Modifier = Modifier,
+) {
+    val chat = LocalChatColors.current
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .height(160.dp)
+                .clip(RoundedCornerShape(16.dp)),
+    ) {
+        ChatWallpaperBackground(
+            presetId = presetId,
+            customUrl = customUrl,
+            modifier = Modifier.matchParentSize(),
+            fallback = MaterialTheme.colorScheme.surface,
+        )
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PreviewBubble("Welcome to the conversation", chat.bubbleIn, chat.bubbleInText, false)
+            PreviewBubble("This is your chat background", chat.bubbleOut, chat.bubbleOutText, true)
+        }
+    }
+}
+
+@Composable
+private fun PreviewBubble(
+    text: String,
+    color: Color,
+    textColor: Color,
+    outgoing: Boolean,
+) {
+    val shape =
+        if (outgoing) {
+            RoundedCornerShape(topStart = 14.dp, topEnd = 4.dp, bottomEnd = 14.dp, bottomStart = 14.dp)
+        } else {
+            RoundedCornerShape(topStart = 4.dp, topEnd = 14.dp, bottomEnd = 14.dp, bottomStart = 14.dp)
+        }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
+    ) {
+        Text(
+            text,
+            color = textColor,
+            style = MaterialTheme.typography.bodySmall,
+            modifier =
+                Modifier
+                    .widthIn(max = 220.dp)
+                    .clip(shape)
+                    .background(color)
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+        )
+    }
+}
+
+// Approximates the desktop wallpaper presets: a base gradient plus an optional
+// grid/dot pattern overlay drawn on top.
+private fun Modifier.chatWallpaper(
+    presetId: String,
+    dark: Boolean,
+    fallback: Color,
+): Modifier {
+    val colors =
+        when (presetId) {
+            "doodle" -> if (dark) listOf(Color(0xFF11131F), Color(0xFF0C0A16)) else listOf(Color(0xFFEEF2FF), Color(0xFFF5F3FF), Color(0xFFFEF2F2))
+            "dots" -> if (dark) listOf(Color(0xFF121212), Color(0xFF171717)) else listOf(Color(0xFFFAFAF9), Color(0xFFF5F5F7))
+            "grid" -> if (dark) listOf(Color(0xFF090E1A), Color(0xFF020617)) else listOf(Color(0xFFF3F4F6), Color(0xFFE5E7EB))
+            "stripes" -> if (dark) listOf(Color(0xFF04120E), Color(0xFF020706)) else listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7))
+            "hexagon" -> if (dark) listOf(Color(0xFF021613), Color(0xFF010807)) else listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1))
+            "isometric" -> if (dark) listOf(Color(0xFF0B0F17), Color(0xFF05070C)) else listOf(Color(0xFFF1F5F9), Color(0xFFE2E8F0))
+            "waves" -> if (dark) listOf(Color(0xFF06101A), Color(0xFF030A12)) else listOf(Color(0xFFF0FDF4), Color(0xFFE0F2FE))
+            "nordic" -> if (dark) listOf(Color(0xFF0E0F12), Color(0xFF070809)) else listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
+            "topography" -> if (dark) listOf(Color(0xFF0A1018), Color(0xFF05090F)) else listOf(Color(0xFFF0F4F8), Color(0xFFE2E8F0))
+            "constellation" -> if (dark) listOf(Color(0xFF070B1A), Color(0xFF03050F)) else listOf(Color(0xFFE0F2FE), Color(0xFFE0E7FF))
+            "cyberpunk" -> listOf(Color(0xFF0F0A1C), Color(0xFF07040D))
+            "matrix" -> listOf(Color(0xFF02040A), Color(0xFF010204))
+            "nightsky" -> listOf(Color(0xFF0B0F19), Color(0xFF050510), Color(0xFF020617))
+            "autumn" -> if (dark) listOf(Color(0xFF1C1206), Color(0xFF0E0903)) else listOf(Color(0xFFFFFBEB), Color(0xFFFFEDD5), Color(0xFFFEF3C7))
+            else -> listOf(fallback, fallback)
+        }
+    val base = Brush.linearGradient(colors)
+    val accentPattern = if (dark) Color.White.copy(alpha = 0.05f) else Color(0xFF6366F1).copy(alpha = 0.10f)
+    return this
+        .background(base)
+        .drawBehind {
+            when (presetId) {
+                "grid", "isometric", "nordic" -> {
+                    val step = 24.dp.toPx()
+                    var x = step
+                    while (x < size.width) {
+                        drawLine(accentPattern, Offset(x, 0f), Offset(x, size.height), 1f)
+                        x += step
+                    }
+                    var y = step
+                    while (y < size.height) {
+                        drawLine(accentPattern, Offset(0f, y), Offset(size.width, y), 1f)
+                        y += step
+                    }
+                }
+
+                "dots", "doodle", "topography", "raindrops" -> {
+                    val step = 20.dp.toPx()
+                    val radius = 1.5.dp.toPx()
+                    var y = step / 2
+                    while (y < size.height) {
+                        var x = step / 2
+                        while (x < size.width) {
+                            drawCircle(accentPattern, radius, Offset(x, y))
+                            x += step
+                        }
+                        y += step
+                    }
+                }
+
+                "stripes", "waves", "cyberpunk", "matrix" -> {
+                    val patternColor =
+                        when (presetId) {
+                            "stripes", "waves" -> if (dark) Color(0xFF34D399).copy(alpha = 0.10f) else Color(0xFF10B981).copy(alpha = 0.12f)
+                            else -> Color(0xFF22D3EE).copy(alpha = 0.16f)
+                        }
+                    val step = 22.dp.toPx()
+                    var x = -size.height
+                    while (x < size.width) {
+                        drawLine(patternColor, Offset(x, size.height), Offset(x + size.height, 0f), 1.5f)
+                        x += step
+                    }
+                }
+
+                "constellation", "nightsky", "galaxy" -> {
+                    val star = Color.White.copy(alpha = if (dark) 0.5f else 0.35f)
+                    val seedPoints =
+                        listOf(
+                            0.12f to 0.22f,
+                            0.3f to 0.55f,
+                            0.48f to 0.18f,
+                            0.62f to 0.7f,
+                            0.78f to 0.32f,
+                            0.88f to 0.6f,
+                            0.2f to 0.82f,
+                            0.55f to 0.4f,
+                        )
+                    seedPoints.forEach { (fx, fy) ->
+                        drawCircle(star, 1.4.dp.toPx(), Offset(fx * size.width, fy * size.height))
+                    }
+                }
+            }
+        }
+}
+
+// A single send-as alias rendered as an editable row instead of a free-form
+// textarea: an email field, an optional display-name field, and a remove button.
+@Composable
+internal fun AliasEditorRow(
+    email: String,
+    name: String,
+    onEmailChange: (String) -> Unit,
+    onNameChange: (String) -> Unit,
+    onRemove: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = onEmailChange,
+                    label = { Text("Email") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = onNameChange,
+                    label = { Text("Display name (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove alias",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -1339,21 +1646,25 @@ internal fun SettingsTextRow(
     minLines: Int = 1,
     keyboardDigits: Boolean = false,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        supportingText = supporting?.let { { Text(it) } },
-        singleLine = singleLine,
-        minLines = minLines,
-        keyboardOptions =
-            if (keyboardDigits) {
-                KeyboardOptions(keyboardType = KeyboardType.Number)
-            } else {
-                KeyboardOptions.Default
-            },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-    )
+    // Sit the field on a full-width surface strip so the row reads as a white
+    // section, matching the ListItem-based rows above and below it.
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            supportingText = supporting?.let { { Text(it) } },
+            singleLine = singleLine,
+            minLines = minLines,
+            keyboardOptions =
+                if (keyboardDigits) {
+                    KeyboardOptions(keyboardType = KeyboardType.Number)
+                } else {
+                    KeyboardOptions.Default
+                },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
 
 @Composable

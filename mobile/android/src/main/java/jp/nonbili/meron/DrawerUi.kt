@@ -574,3 +574,18 @@ internal fun EmptyState(
         Button(onClick = onAction) { Text(actionLabel) }
     }
 }
+
+// Shown while the first load is still in flight, so a cold start reads as
+// "loading" rather than an empty inbox.
+@Composable
+internal fun LoadingState(text: String = "Loading…") {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Spacer(Modifier.height(16.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

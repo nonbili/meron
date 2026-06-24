@@ -294,6 +294,8 @@ internal fun ComposeScreen(
     onBack: () -> Unit,
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
+    var overflowOpen by remember { mutableStateOf(false) }
+    var showCcBcc by remember { mutableStateOf(cc.isNotBlank() || bcc.isNotBlank()) }
     val hasContent =
         to.isNotBlank() || cc.isNotBlank() || bcc.isNotBlank() ||
             subject.isNotBlank() || body.isNotBlank() || attachments.isNotEmpty()
@@ -330,14 +332,31 @@ internal fun ComposeScreen(
                     IconButton(onClick = onAttach) {
                         Icon(Icons.Filled.AttachFile, contentDescription = "Attach")
                     }
-                    IconButton(onClick = onSaveDraft) {
-                        Icon(Icons.Outlined.Drafts, contentDescription = "Save draft")
-                    }
-                    IconButton(onClick = { if (hasContent) confirmDiscard = true else onDiscardDraft() }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Discard draft", tint = MaterialTheme.colorScheme.error)
-                    }
-                    IconButton(onClick = onSend) {
+                    IconButton(onClick = onSend, enabled = to.isNotBlank()) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Save draft") },
+                                leadingIcon = { Icon(Icons.Outlined.Drafts, contentDescription = null) },
+                                onClick = {
+                                    overflowOpen = false
+                                    onSaveDraft()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Discard draft", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    overflowOpen = false
+                                    if (hasContent) confirmDiscard = true else onDiscardDraft()
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -354,39 +373,46 @@ internal fun ComposeScreen(
                     onSelect = onFromChange,
                 )
             }
-            ComposeField(
-                value = to,
-                onChange = onToChange,
-                label = "To",
-                field = "to",
-                suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
-                onFocus = onRecipientFocus,
-                onAcceptSuggestion = onAcceptRecipientSuggestion,
-            )
-            ComposeField(
-                value = cc,
-                onChange = onCcChange,
-                label = "Cc",
-                field = "cc",
-                suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
-                onFocus = onRecipientFocus,
-                onAcceptSuggestion = onAcceptRecipientSuggestion,
-            )
-            ComposeField(
-                value = bcc,
-                onChange = onBccChange,
-                label = "Bcc",
-                field = "bcc",
-                suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
-                onFocus = onRecipientFocus,
-                onAcceptSuggestion = onAcceptRecipientSuggestion,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ComposeField(
+                    value = to,
+                    onChange = onToChange,
+                    label = "To",
+                    field = "to",
+                    suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
+                    onFocus = onRecipientFocus,
+                    onAcceptSuggestion = onAcceptRecipientSuggestion,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!showCcBcc) {
+                    TextButton(onClick = { showCcBcc = true }) { Text("Cc/Bcc") }
+                }
+            }
+            if (showCcBcc) {
+                ComposeField(
+                    value = cc,
+                    onChange = onCcChange,
+                    label = "Cc",
+                    field = "cc",
+                    suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
+                    onFocus = onRecipientFocus,
+                    onAcceptSuggestion = onAcceptRecipientSuggestion,
+                )
+                ComposeField(
+                    value = bcc,
+                    onChange = onBccChange,
+                    label = "Bcc",
+                    field = "bcc",
+                    suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
+                    onFocus = onRecipientFocus,
+                    onAcceptSuggestion = onAcceptRecipientSuggestion,
+                )
+            }
             ComposeField(subject, onSubjectChange, "Subject")
             OutlinedTextField(
                 value = body,
                 onValueChange = onBodyChange,
-                label = { Text("Message") },
-                supportingText = { Text("${sendShortcutMode.label()} sends") },
+                placeholder = { Text("Write your message…") },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -468,8 +494,9 @@ internal fun ComposeField(
     suggestions: List<ContactSuggestion> = emptyList(),
     onFocus: (field: String, value: String) -> Unit = { _, _ -> },
     onAcceptSuggestion: (field: String, contact: ContactSuggestion) -> Unit = { _, _ -> },
+    modifier: Modifier = Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedTextField(
             value = value,
             onValueChange = onChange,

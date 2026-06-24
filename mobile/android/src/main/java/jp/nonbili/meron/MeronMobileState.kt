@@ -307,6 +307,10 @@ internal class MeronMobileState(
     var mailSearch by mutableStateOf("")
     var mailFilter by mutableStateOf(FilterMode.All)
     var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
+
+    // False until the first inbox load (cache or server) settles, so the list can
+    // show a loading indicator instead of an empty state on cold start.
+    var initialThreadsLoaded by mutableStateOf(false)
     var mailboxCursor by mutableStateOf("")
     var mailboxAccountCursors by mutableStateOf(emptyMap<String, String>())
     var loadingMoreThreads by mutableStateOf(false)

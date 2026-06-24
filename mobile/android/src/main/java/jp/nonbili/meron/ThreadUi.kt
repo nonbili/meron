@@ -50,12 +50,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -89,6 +89,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -112,6 +113,8 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
@@ -127,6 +130,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -270,6 +274,8 @@ internal fun ThreadScreen(
     thread: ThreadSummary?,
     messages: List<MessageBody>,
     accountEmail: String,
+    wallpaperPresetId: String,
+    wallpaperCustomUrl: String,
     preferHtml: Boolean,
     onPreferHtmlChange: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -313,6 +319,7 @@ internal fun ThreadScreen(
     var detailsOpen by remember(thread?.id) { mutableStateOf(false) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
+    var overflowOpen by remember(thread?.id) { mutableStateOf(false) }
     val normalizedSearch = threadSearch.trim().lowercase()
     val currentThreadAccountId = thread?.accountId.orEmpty()
     val currentThreadFolder = thread?.folder.orEmpty()
@@ -371,11 +378,25 @@ internal fun ThreadScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Column {
+                        Text(
+                            thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        val subtitle = threadHeaderSubtitle(messages, accountEmail, isRss)
+                        if (subtitle.isNotBlank()) {
+                            Text(
+                                subtitle,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -383,12 +404,6 @@ internal fun ThreadScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { detailsOpen = true }) {
-                        Icon(Icons.Filled.Info, contentDescription = "Conversation details")
-                    }
-                    IconButton(onClick = { searchOpen = !searchOpen }) {
-                        Icon(Icons.Filled.Search, contentDescription = "Search conversation")
-                    }
                     IconButton(onClick = onToggleStar) {
                         Icon(
                             if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
@@ -397,17 +412,66 @@ internal fun ThreadScreen(
                         )
                     }
                     IconButton(onClick = onArchive) {
-                        Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = "Archive")
+                        Icon(
+                            if (isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                            contentDescription = if (isRss) "Remove" else "Archive",
+                        )
                     }
-                    if (!isRss) {
-                        IconButton(onClick = { moveDialogOpen = true }) {
-                            Icon(Icons.Outlined.FolderOpen, contentDescription = "Move to folder")
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
                         }
-                        IconButton(onClick = { copyDialogOpen = true }) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = "Copy to folder")
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Filled.Delete, contentDescription = deleteLabel)
+                        DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Search conversation") },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                onClick = {
+                                    overflowOpen = false
+                                    searchOpen = !searchOpen
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Conversation details") },
+                                leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                                onClick = {
+                                    overflowOpen = false
+                                    detailsOpen = true
+                                },
+                            )
+                            if (!isRss) {
+                                DropdownMenuItem(
+                                    text = { Text(if (preferHtml) "View as plain text" else "View as HTML") },
+                                    leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onPreferHtmlChange(!preferHtml)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Move to folder") },
+                                    leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        moveDialogOpen = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Copy to folder") },
+                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        copyDialogOpen = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onDelete()
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -477,68 +541,56 @@ internal fun ThreadScreen(
                     },
                 )
             }
-            if (!isRss) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("View", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FilterChip(
-                        selected = preferHtml,
-                        onClick = { onPreferHtmlChange(true) },
-                        label = { Text("HTML") },
-                    )
-                    FilterChip(
-                        selected = !preferHtml,
-                        onClick = { onPreferHtmlChange(false) },
-                        label = { Text("Plain text") },
-                    )
-                }
-            }
-            if (messages.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                LazyColumn(
-                    Modifier.weight(1f),
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (canLoadOlder || loadingOlder) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
-                                if (loadingOlder) {
-                                    CircularProgressIndicator(Modifier.size(24.dp))
-                                } else {
-                                    OutlinedButton(onClick = onLoadOlder) {
-                                        Text("Load older")
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                ChatWallpaperBackground(
+                    presetId = wallpaperPresetId,
+                    customUrl = wallpaperCustomUrl,
+                    modifier = Modifier.matchParentSize(),
+                )
+                if (messages.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (canLoadOlder || loadingOlder) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
+                                    if (loadingOlder) {
+                                        CircularProgressIndicator(Modifier.size(24.dp))
+                                    } else {
+                                        OutlinedButton(onClick = onLoadOlder) {
+                                            Text("Load older")
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    items(messages, key = { it.id }) { message ->
-                        val outgoing = isOutgoing(message, accountEmail)
-                        MessageBubble(
-                            message = message,
-                            outgoing = outgoing,
-                            chat = chat,
-                            preferHtml = preferHtml,
-                            searchQuery = normalizedSearch,
-                            activeSearchMatch = message.id == activeSearchId,
-                            actionsEnabled = !isRss,
-                            onForward = onForward,
-                            onEditAsNew = onEditAsNew,
-                            onToggleRead = onToggleMessageRead,
-                            onToggleStarred = onToggleMessageStarred,
-                            onDelete = onDeleteMessage,
-                            onOpenAttachment = onOpenAttachment,
-                            onSaveAttachment = onSaveAttachment,
-                            onCopyMessageText = onCopyMessageText,
-                        )
+                        items(messages, key = { it.id }) { message ->
+                            val outgoing = isOutgoing(message, accountEmail)
+                            MessageBubble(
+                                message = message,
+                                outgoing = outgoing,
+                                chat = chat,
+                                preferHtml = preferHtml,
+                                searchQuery = normalizedSearch,
+                                activeSearchMatch = message.id == activeSearchId,
+                                actionsEnabled = !isRss,
+                                onForward = onForward,
+                                onEditAsNew = onEditAsNew,
+                                onToggleRead = onToggleMessageRead,
+                                onToggleStarred = onToggleMessageStarred,
+                                onDelete = onDeleteMessage,
+                                onOpenAttachment = onOpenAttachment,
+                                onSaveAttachment = onSaveAttachment,
+                                onCopyMessageText = onCopyMessageText,
+                            )
+                        }
                     }
                 }
             }
@@ -916,7 +968,8 @@ internal fun MessageBubble(
     ) {
         Column(
             Modifier
-                .widthIn(max = 320.dp)
+                .widthIn(max = 300.dp)
+                .shadow(3.dp, bubbleShape, clip = false)
                 .clip(bubbleShape)
                 .then(
                     if (activeSearchMatch) {
@@ -925,8 +978,8 @@ internal fun MessageBubble(
                         Modifier
                     },
                 ).background(bubbleColor)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             if (!outgoing) {
                 Text(
@@ -960,81 +1013,115 @@ internal fun MessageBubble(
                     }
                 }
             }
-            Text(
-                formatRelativeTime(message.dateEpochSeconds),
-                fontSize = 10.5.sp,
-                color = textColor.copy(alpha = 0.6f),
+            Row(
                 modifier = Modifier.align(Alignment.End),
-            )
-            Box(modifier = Modifier.align(Alignment.End)) {
-                TextButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Text("More")
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Copy message text") },
-                        onClick = {
-                            menuOpen = false
-                            onCopyMessageText("Message text", messagePlainText(message))
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Copy subject") },
-                        onClick = {
-                            menuOpen = false
-                            onCopyMessageText("Subject", message.subject.ifBlank { "(no subject)" })
-                        },
-                    )
-                    if (message.messageId.isNotBlank()) {
-                        DropdownMenuItem(
-                            text = { Text("Copy message ID") },
-                            onClick = {
-                                menuOpen = false
-                                onCopyMessageText("Message ID", message.messageId)
-                            },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    formatRelativeTime(message.dateEpochSeconds),
+                    fontSize = 10.5.sp,
+                    color = textColor.copy(alpha = 0.55f),
+                )
+                Box {
+                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Message actions",
+                            modifier = Modifier.size(16.dp),
+                            tint = textColor.copy(alpha = 0.55f),
                         )
                     }
-                    if (actionsEnabled) {
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text(if (message.unread) "Mark read" else "Mark unread") },
+                            text = { Text("Copy message text") },
                             onClick = {
                                 menuOpen = false
-                                onToggleRead(message)
+                                onCopyMessageText("Message text", messagePlainText(message))
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text(if (message.starred) "Unstar" else "Star") },
+                            text = { Text("Copy subject") },
                             onClick = {
                                 menuOpen = false
-                                onToggleStarred(message)
+                                onCopyMessageText("Subject", message.subject.ifBlank { "(no subject)" })
                             },
                         )
-                        DropdownMenuItem(
-                            text = { Text("Forward") },
-                            onClick = {
-                                menuOpen = false
-                                onForward(message)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Edit as new") },
-                            onClick = {
-                                menuOpen = false
-                                onEditAsNew(message)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete message", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuOpen = false
-                                onDelete(message)
-                            },
-                        )
+                        if (message.messageId.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("Copy message ID") },
+                                onClick = {
+                                    menuOpen = false
+                                    onCopyMessageText("Message ID", message.messageId)
+                                },
+                            )
+                        }
+                        if (actionsEnabled) {
+                            DropdownMenuItem(
+                                text = { Text(if (message.unread) "Mark read" else "Mark unread") },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleRead(message)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (message.starred) "Unstar" else "Star") },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleStarred(message)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Forward") },
+                                onClick = {
+                                    menuOpen = false
+                                    onForward(message)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit as new") },
+                                onClick = {
+                                    menuOpen = false
+                                    onEditAsNew(message)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete message", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete(message)
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+// One-line header subtitle: who's in the conversation plus message count, so the
+// header carries context the way a mail client's thread view does.
+internal fun threadHeaderSubtitle(
+    messages: List<MessageBody>,
+    ownEmail: String,
+    isRss: Boolean,
+): String {
+    if (messages.isEmpty()) return ""
+    val count = messages.size
+    val countLabel = if (count == 1) "1 message" else "$count messages"
+    if (isRss) return countLabel
+    val others =
+        messages
+            .filterNot { isOutgoing(it, ownEmail) }
+            .map { it.from.ifBlank { it.fromAddr } }
+            .filter { it.isNotBlank() }
+            .distinct()
+    val people = others.take(2).joinToString(", ")
+    return when {
+        people.isBlank() -> countLabel
+        count == 1 -> people
+        else -> "$people · $countLabel"
     }
 }
 
@@ -1294,36 +1381,52 @@ internal fun ReplyBar(
             }
             Row(
                 Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(
+                val canSend = value.isNotBlank() || attachments.isNotEmpty()
+                TextField(
                     value = value,
                     onValueChange = onChange,
-                    placeholder = { Text("Reply") },
-                    supportingText = { Text("${sendShortcutMode.label()} sends") },
+                    placeholder = { Text("Message") },
+                    shape = RoundedCornerShape(24.dp),
+                    colors =
+                        TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
+                    trailingIcon = {
+                        Row {
+                            IconButton(onClick = onAttach) {
+                                Icon(Icons.Filled.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = onOpenFullEditor) {
+                                Icon(Icons.Filled.OpenInFull, contentDescription = "Open full editor", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    },
                     modifier =
                         Modifier
                             .weight(1f)
                             .onPreviewKeyEvent { event ->
-                                if (shouldSendFromEditor(event, sendShortcutMode) && (value.isNotBlank() || attachments.isNotEmpty())) {
+                                if (shouldSendFromEditor(event, sendShortcutMode) && canSend) {
                                     onSend()
                                     true
                                 } else {
                                     false
                                 }
                             },
-                    maxLines = 4,
+                    maxLines = 5,
                 )
-                IconButton(onClick = onAttach) {
-                    Icon(Icons.Filled.AttachFile, contentDescription = "Attach")
-                }
-                IconButton(onClick = onOpenFullEditor) {
-                    Icon(Icons.Filled.OpenInFull, contentDescription = "Open full editor")
-                }
-                IconButton(onClick = onSend, enabled = value.isNotBlank() || attachments.isNotEmpty()) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply", tint = MaterialTheme.colorScheme.primary)
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = canSend,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply")
                 }
             }
         }

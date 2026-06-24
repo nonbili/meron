@@ -341,6 +341,7 @@ internal fun MeronMobileState.syncCoreThreads(
                 messages = emptyList()
             }
             syncing = false
+            initialThreadsLoaded = true
             errorBanner = null
             status =
                 if (accountId == UNIFIED_ACCOUNT_ID) {
@@ -350,6 +351,7 @@ internal fun MeronMobileState.syncCoreThreads(
                 }
         }.onFailure {
             syncing = false
+            initialThreadsLoaded = true
             errorBanner = it.message ?: "Sync failed"
             status = "Sync failed: ${it.message}"
         }

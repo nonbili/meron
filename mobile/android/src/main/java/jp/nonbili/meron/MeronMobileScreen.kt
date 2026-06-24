@@ -591,6 +591,12 @@ internal fun MeronMobileScreen(
                     thread = selectedCoreThread,
                     messages = messages,
                     accountEmail = selectedThreadAccount?.email.orEmpty(),
+                    wallpaperPresetId = selectedThreadAccount?.chatWallpaperPresetId.orEmpty(),
+                    wallpaperCustomUrl =
+                        selectedThreadAccount
+                            ?.takeIf { it.chatWallpaperKind == "custom" }
+                            ?.chatWallpaperUrl
+                            .orEmpty(),
                     preferHtml = selectedThreadPreferHtml,
                     onPreferHtmlChange = { preferHtml ->
                         if (selectedThreadAccountId.isNotBlank()) {
@@ -1366,6 +1372,10 @@ internal fun MeronMobileScreen(
                                                 screen = Screen.AddAccount
                                             },
                                         )
+                                    }
+
+                                    coreThreads.isEmpty() && (syncing || !initialThreadsLoaded) -> {
+                                        LoadingState("Loading your inbox…")
                                     }
 
                                     coreThreads.isEmpty() -> {
