@@ -8,9 +8,7 @@ data class CoreRequest(
     val paramsJson: String = "{}",
 )
 
-fun CoreRequest.toJson(): String {
-    return """{"id":$id,"method":${method.jsonString()},"params":$paramsJson}"""
-}
+fun CoreRequest.toJson(): String = """{"id":$id,"method":${method.jsonString()},"params":$paramsJson}"""
 
 fun pingRequest(id: Long = 1): CoreRequest = CoreRequest(id = id, method = "ping")
 
@@ -25,11 +23,26 @@ internal fun String.jsonString(): String {
     out.append('"')
     for (ch in this) {
         when (ch) {
-            '\\' -> out.append("\\\\")
-            '"' -> out.append("\\\"")
-            '\n' -> out.append("\\n")
-            '\r' -> out.append("\\r")
-            '\t' -> out.append("\\t")
+            '\\' -> {
+                out.append("\\\\")
+            }
+
+            '"' -> {
+                out.append("\\\"")
+            }
+
+            '\n' -> {
+                out.append("\\n")
+            }
+
+            '\r' -> {
+                out.append("\\r")
+            }
+
+            '\t' -> {
+                out.append("\\t")
+            }
+
             else -> {
                 if (ch.code < 0x20) {
                     out.append("\\u")

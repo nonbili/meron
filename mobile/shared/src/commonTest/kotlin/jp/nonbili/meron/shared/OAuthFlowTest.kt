@@ -10,16 +10,17 @@ import kotlin.test.assertTrue
 class OAuthFlowTest {
     @Test
     fun gmailAuthorizationUrlUsesPkceAndOfflineAccess() {
-        val url = buildOAuthAuthorizationUrl(
-            OAuthAuthorizationRequest(
-                provider = "gmail",
-                clientId = "client id",
-                redirectUri = defaultOAuthRedirectUri(),
-                state = "state",
-                codeChallenge = "challenge",
-                loginHint = "me@example.com",
-            ),
-        )
+        val url =
+            buildOAuthAuthorizationUrl(
+                OAuthAuthorizationRequest(
+                    provider = "gmail",
+                    clientId = "client id",
+                    redirectUri = defaultOAuthRedirectUri(),
+                    state = "state",
+                    codeChallenge = "challenge",
+                    loginHint = "me@example.com",
+                ),
+            )
 
         assertTrue(url.startsWith("https://accounts.google.com/o/oauth2/v2/auth?"))
         assertTrue(url.contains("client_id=client%20id"))
@@ -36,15 +37,16 @@ class OAuthFlowTest {
 
     @Test
     fun outlookAuthorizationUrlUsesMicrosoftEndpointAndScopes() {
-        val url = buildOAuthAuthorizationUrl(
-            OAuthAuthorizationRequest(
-                provider = "outlook",
-                clientId = "client",
-                redirectUri = defaultOAuthRedirectUri(),
-                state = "state",
-                codeChallenge = "challenge",
-            ),
-        )
+        val url =
+            buildOAuthAuthorizationUrl(
+                OAuthAuthorizationRequest(
+                    provider = "outlook",
+                    clientId = "client",
+                    redirectUri = defaultOAuthRedirectUri(),
+                    state = "state",
+                    codeChallenge = "challenge",
+                ),
+            )
 
         assertTrue(url.startsWith("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"))
         assertTrue(url.contains("offline_access"))
@@ -54,10 +56,11 @@ class OAuthFlowTest {
 
     @Test
     fun callbackParserRequiresSchemeCodeAndMatchingState() {
-        val parsed = parseOAuthCallbackUrl(
-            "${defaultOAuthRedirectUri()}?code=abc%20123&state=expected",
-            expectedState = "expected",
-        )
+        val parsed =
+            parseOAuthCallbackUrl(
+                "${defaultOAuthRedirectUri()}?code=abc%20123&state=expected",
+                expectedState = "expected",
+            )
 
         assertNotNull(parsed)
         assertEquals("abc 123", parsed.code)
@@ -82,11 +85,12 @@ class OAuthFlowTest {
     @Test
     fun callbackParserCanValidateConfiguredHttpsRedirectUri() {
         val redirectUri = "https://mail.example.com/oauth/android"
-        val parsed = parseOAuthCallbackUrlForRedirect(
-            "$redirectUri?code=app-link-code&state=expected",
-            expectedState = "expected",
-            redirectUri = redirectUri,
-        )
+        val parsed =
+            parseOAuthCallbackUrlForRedirect(
+                "$redirectUri?code=app-link-code&state=expected",
+                expectedState = "expected",
+                redirectUri = redirectUri,
+            )
 
         assertNotNull(parsed)
         assertEquals("app-link-code", parsed.code)

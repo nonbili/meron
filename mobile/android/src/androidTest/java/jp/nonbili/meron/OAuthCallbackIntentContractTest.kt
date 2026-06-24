@@ -18,8 +18,9 @@ class OAuthCallbackIntentContractTest {
     fun oauthCallbackIntentIsCapturedByActivity() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val callbackUrl = "jp.nonbili.meron.oauth://oauth?code=mobile-code&state=state-123"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
-            .setClass(context, ComposeMainActivity::class.java)
+        val intent =
+            Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
+                .setClass(context, ComposeMainActivity::class.java)
 
         ActivityScenario.launch<ComposeMainActivity>(intent).use {
             it.onActivity { activity ->
@@ -32,8 +33,9 @@ class OAuthCallbackIntentContractTest {
     fun appLinkStyleOAuthCallbackIntentIsCapturedByActivity() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val callbackUrl = "https://oauth.example.invalid/meron/oauth?code=mobile-code&state=state-123"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
-            .setClass(context, ComposeMainActivity::class.java)
+        val intent =
+            Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
+                .setClass(context, ComposeMainActivity::class.java)
 
         ActivityScenario.launch<ComposeMainActivity>(intent).use {
             it.onActivity { activity ->
@@ -46,9 +48,10 @@ class OAuthCallbackIntentContractTest {
     fun manifestRegistersPlaceholderHttpsAppLinkRedirect() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val redirectUri = Uri.parse("https://oauth.example.invalid/meron/oauth?code=abc&state=expected")
-        val intent = Intent(Intent.ACTION_VIEW, redirectUri)
-            .addCategory(Intent.CATEGORY_BROWSABLE)
-            .setPackage(context.packageName)
+        val intent =
+            Intent(Intent.ACTION_VIEW, redirectUri)
+                .addCategory(Intent.CATEGORY_BROWSABLE)
+                .setPackage(context.packageName)
 
         val matches = context.packageManager.queryIntentActivities(intent, 0)
 
@@ -61,9 +64,10 @@ class OAuthCallbackIntentContractTest {
     fun manifestRegistersSharedOAuthRedirectUri() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val redirectUri = Uri.parse(defaultOAuthRedirectUri())
-        val intent = Intent(Intent.ACTION_VIEW, redirectUri)
-            .addCategory(Intent.CATEGORY_BROWSABLE)
-            .setPackage(context.packageName)
+        val intent =
+            Intent(Intent.ACTION_VIEW, redirectUri)
+                .addCategory(Intent.CATEGORY_BROWSABLE)
+                .setPackage(context.packageName)
 
         val matches = context.packageManager.queryIntentActivities(intent, 0)
 

@@ -12,7 +12,10 @@ import jp.nonbili.meron.shared.toJson
 class JniMeronCore : MeronCore {
     private val eventStream = JniCoreEventStream(::ensureLoaded)
 
-    override suspend fun invoke(command: String, payloadJson: String): String {
+    override suspend fun invoke(
+        command: String,
+        payloadJson: String,
+    ): String {
         ensureLoaded()
         // Log command names and errors only — never payloads/responses, which
         // carry passwords and OAuth tokens.
@@ -48,9 +51,10 @@ private class JniCoreEventStream(
 ) : CoreEventStream {
     override fun subscribe(listener: (CoreEvent) -> Unit): CloseableHandle {
         ensureLoaded()
-        val nativeListener = MeronCoreNative.CoreEventListener { eventJson ->
-            listener(parseCoreEventEnvelope(eventJson))
-        }
+        val nativeListener =
+            MeronCoreNative.CoreEventListener { eventJson ->
+                listener(parseCoreEventEnvelope(eventJson))
+            }
         MeronCoreNative.addCoreEventListener(nativeListener)
         MeronCoreNative.emitReadyEvent()
         return CloseableHandle {

@@ -6,9 +6,10 @@ import kotlin.test.assertEquals
 class CoreEventStreamTest {
     @Test
     fun readyEventEnvelopeParsesToSharedCoreEvent() {
-        val event = parseCoreEventEnvelope(
-            """{"event":"ready","detail":{"version":"0.1.0","protocol":1}}""",
-        )
+        val event =
+            parseCoreEventEnvelope(
+                """{"event":"ready","detail":{"version":"0.1.0","protocol":1}}""",
+            )
 
         assertEquals("ready", event.name)
         assertEquals("""{"version":"0.1.0","protocol":1}""", event.detailJson)
@@ -16,9 +17,10 @@ class CoreEventStreamTest {
 
     @Test
     fun eventEnvelopePreservesNestedDetailJson() {
-        val event = parseCoreEventEnvelope(
-            """{"detail":{"account":"a1","changes":[{"folder":"INBOX","unread":2}]},"event":"mail.changed"}""",
-        )
+        val event =
+            parseCoreEventEnvelope(
+                """{"detail":{"account":"a1","changes":[{"folder":"INBOX","unread":2}]},"event":"mail.changed"}""",
+            )
 
         assertEquals("mail.changed", event.name)
         assertEquals("""{"account":"a1","changes":[{"folder":"INBOX","unread":2}]}""", event.detailJson)
@@ -26,9 +28,10 @@ class CoreEventStreamTest {
 
     @Test
     fun eventEnvelopeDecodesEscapedEventName() {
-        val event = parseCoreEventEnvelope(
-            """{"event":"mail.changed\nnext","detail":{}}""",
-        )
+        val event =
+            parseCoreEventEnvelope(
+                """{"event":"mail.changed\nnext","detail":{}}""",
+            )
 
         assertEquals("mail.changed\nnext", event.name)
         assertEquals("{}", event.detailJson)

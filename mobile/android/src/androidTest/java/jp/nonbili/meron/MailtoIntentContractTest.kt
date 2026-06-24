@@ -15,13 +15,14 @@ class MailtoIntentContractTest {
     @Test
     fun mailtoIntentPrefillsComposeFields() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse(
-                "mailto:to@example.com?cc=cc@example.com&bcc=bcc@example.com" +
-                    "&subject=Mobile%20Draft&body=Line%20one%0ALine%20two",
-            ),
-        ).setClass(context, ComposeMainActivity::class.java)
+        val intent =
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(
+                    "mailto:to@example.com?cc=cc@example.com&bcc=bcc@example.com" +
+                        "&subject=Mobile%20Draft&body=Line%20one%0ALine%20two",
+                ),
+            ).setClass(context, ComposeMainActivity::class.java)
 
         ActivityScenario.launch<ComposeMainActivity>(intent).use {
             it.onActivity { activity ->

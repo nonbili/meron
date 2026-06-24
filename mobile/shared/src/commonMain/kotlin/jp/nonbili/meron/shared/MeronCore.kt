@@ -1,8 +1,13 @@
 package jp.nonbili.meron.shared
 
 interface MeronCore {
-    suspend fun invoke(command: String, payloadJson: String = "{}"): String
+    suspend fun invoke(
+        command: String,
+        payloadJson: String = "{}",
+    ): String
+
     fun events(): CoreEventStream
+
     suspend fun protocolVersion(): Int
 }
 
@@ -40,11 +45,13 @@ fun parseCoreEventEnvelope(eventJson: String): CoreEvent {
                 name = value.value
                 index = value.nextIndex
             }
+
             "detail" -> {
                 val value = objectBody.readJsonValue(index)
                 detailJson = value.value
                 index = value.nextIndex
             }
+
             else -> {
                 index = objectBody.readJsonValue(index).nextIndex
             }
@@ -55,10 +62,15 @@ fun parseCoreEventEnvelope(eventJson: String): CoreEvent {
 }
 
 interface SecretStore
+
 interface FilePicker
+
 interface OAuthLauncher
+
 interface NotificationService
+
 interface BackgroundSyncScheduler
+
 interface MailtoHandler
 
 private data class JsonSlice(
@@ -94,27 +106,52 @@ private fun String.readJsonString(start: Int): JsonSlice {
     while (index < length) {
         val ch = this[index]
         when (ch) {
-            '"' -> return JsonSlice(out.toString(), index + 1)
+            '"' -> {
+                return JsonSlice(out.toString(), index + 1)
+            }
+
             '\\' -> {
                 require(index + 1 < length) { "Invalid core event envelope: dangling escape" }
                 val escaped = this[index + 1]
                 when (escaped) {
-                    '"', '\\', '/' -> out.append(escaped)
-                    'b' -> out.append('\b')
-                    'f' -> out.append('\u000c')
-                    'n' -> out.append('\n')
-                    'r' -> out.append('\r')
-                    't' -> out.append('\t')
+                    '"', '\\', '/' -> {
+                        out.append(escaped)
+                    }
+
+                    'b' -> {
+                        out.append('\b')
+                    }
+
+                    'f' -> {
+                        out.append('\u000c')
+                    }
+
+                    'n' -> {
+                        out.append('\n')
+                    }
+
+                    'r' -> {
+                        out.append('\r')
+                    }
+
+                    't' -> {
+                        out.append('\t')
+                    }
+
                     'u' -> {
                         require(index + 5 < length) { "Invalid core event envelope: short unicode escape" }
                         val hex = substring(index + 2, index + 6)
                         out.append(hex.toInt(16).toChar())
                         index += 4
                     }
-                    else -> error("Invalid core event envelope: bad escape \\$escaped")
+
+                    else -> {
+                        error("Invalid core event envelope: bad escape \\$escaped")
+                    }
                 }
                 index += 2
             }
+
             else -> {
                 out.append(ch)
                 index += 1
@@ -131,8 +168,15 @@ private fun String.readJsonValue(start: Int): JsonSlice {
             val end = findJsonStringEnd(start)
             JsonSlice(substring(start, end), end)
         }
-        '{' -> readBalancedJson(start, '{', '}')
-        '[' -> readBalancedJson(start, '[', ']')
+
+        '{' -> {
+            readBalancedJson(start, '{', '}')
+        }
+
+        '[' -> {
+            readBalancedJson(start, '[', ']')
+        }
+
         else -> {
             var index = start
             while (index < length && this[index] != ',') index += 1
@@ -153,7 +197,11 @@ private fun String.findJsonStringEnd(start: Int): Int {
     error("Invalid core event envelope: unterminated JSON string value")
 }
 
-private fun String.readBalancedJson(start: Int, open: Char, close: Char): JsonSlice {
+private fun String.readBalancedJson(
+    start: Int,
+    open: Char,
+    close: Char,
+): JsonSlice {
     var depth = 0
     var index = start
     var inString = false
@@ -166,8 +214,14 @@ private fun String.readBalancedJson(start: Int, open: Char, close: Char): JsonSl
             }
         } else {
             when (ch) {
-                '"' -> inString = true
-                open -> depth += 1
+                '"' -> {
+                    inString = true
+                }
+
+                open -> {
+                    depth += 1
+                }
+
                 close -> {
                     depth -= 1
                     if (depth == 0) return JsonSlice(substring(start, index + 1), index + 1)

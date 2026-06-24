@@ -11,17 +11,18 @@ import org.junit.runner.RunWith
 class AndroidBackgroundRefreshContractTest {
     @Test
     fun mailAccountBuildsMailSyncRequestForInboxRefresh() {
-        val request = androidRefreshSyncRequest(
-            JSONObject(
-                mapOf(
-                    "id" to "mail-account",
-                    "engine" to "mail",
-                    "provider" to "gmail",
-                    "auth_type" to "gmail_oauth",
+        val request =
+            androidRefreshSyncRequest(
+                JSONObject(
+                    mapOf(
+                        "id" to "mail-account",
+                        "engine" to "mail",
+                        "provider" to "gmail",
+                        "auth_type" to "gmail_oauth",
+                    ),
                 ),
-            ),
-            id = 7,
-        )
+                id = 7,
+            )
 
         val requestJson = JSONObject(request?.requestJson.orEmpty())
         val params = requestJson.getJSONObject("params")
@@ -37,17 +38,18 @@ class AndroidBackgroundRefreshContractTest {
 
     @Test
     fun rssAccountBuildsRssSyncRequest() {
-        val request = androidRefreshSyncRequest(
-            JSONObject(
-                mapOf(
-                    "id" to "rss-account",
-                    "engine" to "rss",
-                    "provider" to "custom",
-                    "auth_type" to "password",
+        val request =
+            androidRefreshSyncRequest(
+                JSONObject(
+                    mapOf(
+                        "id" to "rss-account",
+                        "engine" to "rss",
+                        "provider" to "custom",
+                        "auth_type" to "password",
+                    ),
                 ),
-            ),
-            id = 8,
-        )
+                id = 8,
+            )
 
         val requestJson = JSONObject(request?.requestJson.orEmpty())
         val params = requestJson.getJSONObject("params")

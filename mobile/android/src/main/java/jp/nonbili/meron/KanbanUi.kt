@@ -19,23 +19,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,17 +52,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -82,42 +79,42 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,8 +132,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -146,8 +141,12 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,6 +158,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -170,15 +170,15 @@ import jp.nonbili.meron.shared.AccountNameParams
 import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
-import jp.nonbili.meron.shared.AttachmentReadParams
-import jp.nonbili.meron.shared.AutodiscoverAccountParams
-import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddOAuthAccountParams
+import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
+import jp.nonbili.meron.shared.AttachmentReadParams
+import jp.nonbili.meron.shared.AutodiscoverAccountParams
 import jp.nonbili.meron.shared.ComposeDraft
-import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.ContactSuggestParams
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.CopyThreadParams
 import jp.nonbili.meron.shared.DiscardDraftParams
 import jp.nonbili.meron.shared.DraftAttachment
@@ -188,20 +188,20 @@ import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderListParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ImportOpmlParams
-import jp.nonbili.meron.shared.MessageAttachment
-import jp.nonbili.meron.shared.MessageBody
-import jp.nonbili.meron.shared.MobileMailCommandClient
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MessageAttachment
+import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
+import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
-import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.RssThreadParams
+import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -211,40 +211,40 @@ import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.accountSendIdentities
+import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
+import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.defaultOAuthRedirectUri
+import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
-import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
+import jp.nonbili.meron.shared.forwardableAttachments
+import jp.nonbili.meron.shared.isOAuthCallbackUrl
+import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
-import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
+import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
+import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
+import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
-import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
-import jp.nonbili.meron.shared.parseMailtoUrl
+import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
-import jp.nonbili.meron.shared.defaultOAuthRedirectUri
-import jp.nonbili.meron.shared.detectReplyFromIdentity
-import jp.nonbili.meron.shared.isOAuthCallbackUrl
-import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
-import jp.nonbili.meron.shared.ownAddressList
-import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -415,7 +415,10 @@ internal fun KanbanScreen(
 }
 
 @Composable
-internal fun FilterModeButton(value: FilterMode, onChange: (FilterMode) -> Unit) {
+internal fun FilterModeButton(
+    value: FilterMode,
+    onChange: (FilterMode) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
@@ -503,7 +506,10 @@ internal fun KanbanColumn(
                 val columnListState = rememberLazyListState()
                 val nearBottom by remember {
                     derivedStateOf {
-                        val lastVisible = columnListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        val lastVisible =
+                            columnListState.layoutInfo.visibleItemsInfo
+                                .lastOrNull()
+                                ?.index ?: 0
                         lastVisible >= visibleThreads.size - 3
                     }
                 }
@@ -564,21 +570,50 @@ internal fun KanbanColumnHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(folderIcon(column.folderId), contentDescription = null, modifier = Modifier.size(19.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(
+            folderIcon(column.folderId),
+            contentDescription = null,
+            modifier = Modifier.size(19.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
         Column(Modifier.weight(1f)) {
-            Text(columnTitle(column, accounts, foldersByAccount), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("$count cards${if (unread > 0) " · $unread unread" else ""}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                columnTitle(column, accounts, foldersByAccount),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "$count cards${if (unread > 0) " · $unread unread" else ""}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Box {
             IconButton(onClick = { menuOpen = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "Column actions")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; onRefresh() })
-                DropdownMenuItem(text = { Text("Mark all read") }, onClick = { menuOpen = false; onMarkAllRead() }, enabled = unread > 0)
-                DropdownMenuItem(text = { Text("Move left") }, onClick = { menuOpen = false; onMoveLeft() })
-                DropdownMenuItem(text = { Text("Move right") }, onClick = { menuOpen = false; onMoveRight() })
-                DropdownMenuItem(text = { Text("Remove column") }, onClick = { menuOpen = false; onRemove() })
+                DropdownMenuItem(text = { Text("Refresh") }, onClick = {
+                    menuOpen = false
+                    onRefresh()
+                })
+                DropdownMenuItem(text = { Text("Mark all read") }, onClick = {
+                    menuOpen = false
+                    onMarkAllRead()
+                }, enabled = unread > 0)
+                DropdownMenuItem(text = { Text("Move left") }, onClick = {
+                    menuOpen = false
+                    onMoveLeft()
+                })
+                DropdownMenuItem(text = { Text("Move right") }, onClick = {
+                    menuOpen = false
+                    onMoveRight()
+                })
+                DropdownMenuItem(text = { Text("Remove column") }, onClick = {
+                    menuOpen = false
+                    onRemove()
+                })
             }
         }
     }
@@ -595,22 +630,28 @@ internal fun KanbanThreadCard(
     onArchive: () -> Unit,
 ) {
     val chat = LocalChatColors.current
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onArchive()
-                true
-            } else {
-                false
-            }
-        },
-    )
+    val dismissState =
+        rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart) {
+                    onArchive()
+                    true
+                } else {
+                    false
+                }
+            },
+        )
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 16.dp),
+                Modifier
+                    .fillMaxSize()
+                    .clip(
+                        RoundedCornerShape(8.dp),
+                    ).background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Icon(if (threadIdIsRss(thread.id)) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null)
@@ -618,13 +659,22 @@ internal fun KanbanThreadCard(
         },
     ) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
             shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (thread.unread) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        if (thread.unread) {
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.08f,
+                            )
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                ),
         ) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -641,7 +691,11 @@ internal fun KanbanThreadCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(formatRelativeTime(thread.dateEpochSeconds), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        formatRelativeTime(thread.dateEpochSeconds),
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Text(
                     thread.subject.ifBlank { "(no subject)" },
@@ -651,7 +705,13 @@ internal fun KanbanThreadCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (thread.preview.isNotBlank()) {
-                    Text(thread.preview, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        thread.preview,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (thread.unread) {
@@ -712,9 +772,11 @@ internal fun AccountSettingsDialog(
     var paused by remember(account.id) { mutableStateOf(account.paused) }
     var intervalText by remember(account.id) { mutableStateOf(account.rssSyncIntervalMinutes.toString()) }
     var aliasesText by remember(account.id) {
-        mutableStateOf(account.aliases.joinToString("\n") { alias ->
-            if (alias.name.isBlank()) alias.email else "${alias.email}, ${alias.name}"
-        })
+        mutableStateOf(
+            account.aliases.joinToString("\n") { alias ->
+                if (alias.name.isBlank()) alias.email else "${alias.email}, ${alias.name}"
+            },
+        )
     }
     val interval = intervalText.toIntOrNull()?.coerceIn(5, 1440) ?: account.rssSyncIntervalMinutes.coerceIn(5, 1440)
     var confirmRemove by remember(account.id) { mutableStateOf(false) }
@@ -723,9 +785,16 @@ internal fun AccountSettingsDialog(
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text("Remove account?") },
-            text = { Text("Remove ${account.email.ifBlank { account.id }}? Cached mail for this account will be deleted from this device.") },
+            text = {
+                Text(
+                    "Remove ${account.email.ifBlank { account.id }}? Cached mail for this account will be deleted from this device.",
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { confirmRemove = false; onRemove() }) {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    onRemove()
+                }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -745,7 +814,11 @@ internal fun AccountSettingsDialog(
             ) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(account.email.ifBlank { account.id }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            account.email.ifBlank { account.id },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         OutlinedTextField(
                             value = displayName,
                             onValueChange = { displayName = it },
@@ -969,7 +1042,12 @@ internal fun KanbanColumnDialog(
     onCreateFolder: (AccountSummary) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val selected = board?.columns.orEmpty().map(::kanbanColumnKey).toSet()
+    val selected =
+        board
+            ?.columns
+            .orEmpty()
+            .map(::kanbanColumnKey)
+            .toSet()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add column") },
@@ -1004,11 +1082,12 @@ internal fun KanbanColumnDialog(
                             }
                         }
                     }
-                    val visibleFolders = if (folders.isEmpty()) {
-                        listOf(FolderSummary(account.id, INBOX_FOLDER, 0))
-                    } else {
-                        folders
-                    }
+                    val visibleFolders =
+                        if (folders.isEmpty()) {
+                            listOf(FolderSummary(account.id, INBOX_FOLDER, 0))
+                        } else {
+                            folders
+                        }
                     items(visibleFolders, key = { "${account.id}\n${it.name}" }) { folder ->
                         val column = KanbanColumnSpec(account.id, folder.name)
                         SidebarLikeDialogRow(
@@ -1057,16 +1136,24 @@ internal fun KanbanThreadActionDialog(
                 if (!threadIdIsRss(thread.id)) {
                     item { DialogAction(deleteLabel, onDelete) }
                 }
-                val moveTargets = board?.columns.orEmpty()
-                    .filter { it.accountId != UNIFIED_ACCOUNT_ID }
-                    .filter { target ->
-                        val targetAccount = accounts.firstOrNull { it.id == target.accountId }
-                        targetAccount != null && (threadIdIsRss(thread.id) == accountSummaryIsRss(targetAccount))
-                    }
-                    .filterNot { it.accountId == thread.accountId && it.folderId.equals(thread.folder, ignoreCase = true) }
+                val moveTargets =
+                    board
+                        ?.columns
+                        .orEmpty()
+                        .filter { it.accountId != UNIFIED_ACCOUNT_ID }
+                        .filter { target ->
+                            val targetAccount = accounts.firstOrNull { it.id == target.accountId }
+                            targetAccount != null && (threadIdIsRss(thread.id) == accountSummaryIsRss(targetAccount))
+                        }.filterNot { it.accountId == thread.accountId && it.folderId.equals(thread.folder, ignoreCase = true) }
                 if (moveTargets.isNotEmpty()) {
                     item {
-                        Text("Move to", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+                        Text(
+                            "Move to",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
                     }
                     items(moveTargets, key = { kanbanColumnKey(it) }) { target ->
                         val account = accounts.firstOrNull { it.id == target.accountId }
@@ -1084,25 +1171,46 @@ internal fun KanbanThreadActionDialog(
 }
 
 @Composable
-internal fun DialogAction(label: String, onClick: () -> Unit) {
+internal fun DialogAction(
+    label: String,
+    onClick: () -> Unit,
+) {
     TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Text(label, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-internal fun SidebarLikeDialogRow(selected: Boolean, title: String, subtitle: String?, onClick: () -> Unit) {
+internal fun SidebarLikeDialogRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (subtitle != null) {
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    subtitle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

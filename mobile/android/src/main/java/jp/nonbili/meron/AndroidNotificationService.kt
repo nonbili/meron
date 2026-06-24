@@ -19,33 +19,38 @@ object AndroidNotificationService {
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Mail sync",
-            NotificationManager.IMPORTANCE_DEFAULT,
-        ).apply {
-            description = "Background mail refresh status"
-        }
+        val channel =
+            NotificationChannel(
+                CHANNEL_ID,
+                "Mail sync",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = "Background mail refresh status"
+            }
         manager.createNotificationChannel(channel)
     }
 
-    fun canNotify(context: Context): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+    fun canNotify(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
-    }
 
-    fun notifyRefreshComplete(context: Context, body: String) {
+    fun notifyRefreshComplete(
+        context: Context,
+        body: String,
+    ) {
         if (!canNotify(context)) return
         ensureChannels(context)
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("Meron refresh complete")
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
+        val notification =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentTitle("Meron refresh complete")
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {

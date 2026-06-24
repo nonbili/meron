@@ -183,9 +183,7 @@ data class MailUiState(
     val error: String? = null,
 )
 
-fun accountSummaryIsRss(account: AccountSummary): Boolean {
-    return account.engine == "rss" || account.provider == "rss" || account.authType == "rss"
-}
+fun accountSummaryIsRss(account: AccountSummary): Boolean = account.engine == "rss" || account.provider == "rss" || account.authType == "rss"
 
 fun threadIdIsRss(threadId: String): Boolean = threadId.contains("#rss#")
 
@@ -199,7 +197,10 @@ fun formatContactSuggestion(contact: ContactSuggestion): String {
     }
 }
 
-fun replaceRecipientTail(value: String, contact: ContactSuggestion): String {
+fun replaceRecipientTail(
+    value: String,
+    contact: ContactSuggestion,
+): String {
     val index = value.lastIndexOf(',')
     val head = if (index < 0) "" else value.substring(0, index + 1)
     val prefix = if (head.isBlank()) "" else "$head "
@@ -212,45 +213,50 @@ fun recipientTail(value: String): String {
 }
 
 fun accountSendIdentities(account: AccountSummary): List<SendIdentity> {
-    val primary = SendIdentity(
-        accountId = account.id,
-        email = account.email,
-        name = account.senderName,
-    )
-    val aliases = account.aliases.map { alias ->
+    val primary =
         SendIdentity(
             accountId = account.id,
-            email = alias.email,
-            name = alias.name.ifBlank { account.senderName },
+            email = account.email,
+            name = account.senderName,
         )
-    }
+    val aliases =
+        account.aliases.map { alias ->
+            SendIdentity(
+                accountId = account.id,
+                email = alias.email,
+                name = alias.name.ifBlank { account.senderName },
+            )
+        }
     return (listOf(primary) + aliases).filter { it.email.isNotBlank() }
 }
 
-fun ownAddressList(accounts: List<AccountSummary>): List<String> {
-    return accounts
+fun ownAddressList(accounts: List<AccountSummary>): List<String> =
+    accounts
         .flatMap { account -> listOf(account.email) + account.aliases.map { it.email } }
         .map { it.trim().lowercase() }
         .filter { it.isNotBlank() }
         .distinct()
-}
 
-fun formatSendIdentity(identity: SendIdentity): String {
-    return if (identity.name.isNotBlank()) {
+fun formatSendIdentity(identity: SendIdentity): String =
+    if (identity.name.isNotBlank()) {
         "${identity.name} <${identity.email}>"
     } else {
         identity.email
     }
-}
 
-fun detectReplyFromIdentity(message: MessageBody, account: AccountSummary): String {
-    val recipients = splitAddressList(listOf(message.to, message.cc).filter { it.isNotBlank() }.joinToString(", "))
-        .map { bareAddress(it).lowercase() }
-        .filter { it.isNotBlank() }
-        .toSet()
-    val match = accountSendIdentities(account).firstOrNull { identity ->
-        recipients.contains(identity.email.trim().lowercase())
-    } ?: return ""
+fun detectReplyFromIdentity(
+    message: MessageBody,
+    account: AccountSummary,
+): String {
+    val recipients =
+        splitAddressList(listOf(message.to, message.cc).filter { it.isNotBlank() }.joinToString(", "))
+            .map { bareAddress(it).lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    val match =
+        accountSendIdentities(account).firstOrNull { identity ->
+            recipients.contains(identity.email.trim().lowercase())
+        } ?: return ""
     return if (match.email.equals(account.email, ignoreCase = true)) "" else match.email
 }
 
@@ -264,35 +270,40 @@ fun forwardedSubject(subject: String): String {
 }
 
 fun forwardedPlainBody(message: MessageBody): String {
-    val headers = listOf(
-        "---------- Forwarded message ---------",
-        headerLine("From", message.from.ifBlank { message.fromAddr }),
-        headerLine("Subject", message.subject.ifBlank { "(no subject)" }),
-        headerLine("To", message.to),
-        headerLine("Cc", message.cc),
-    ).filter { it.isNotBlank() }
+    val headers =
+        listOf(
+            "---------- Forwarded message ---------",
+            headerLine("From", message.from.ifBlank { message.fromAddr }),
+            headerLine("Subject", message.subject.ifBlank { "(no subject)" }),
+            headerLine("To", message.to),
+            headerLine("Cc", message.cc),
+        ).filter { it.isNotBlank() }
     return "\n\n${headers.joinToString("\n")}\n\n${message.body}"
 }
 
-fun forwardableAttachments(message: MessageBody): List<MessageAttachment> {
-    return message.attachments.filter { attachment ->
+fun forwardableAttachments(message: MessageBody): List<MessageAttachment> =
+    message.attachments.filter { attachment ->
         val key = attachment.key.trim()
         key.isNotBlank() && attachment.url.isBlank() && !message.bodyHtml.contains("/media/$key")
     }
-}
 
-fun attachmentToDraftAttachment(attachment: MessageAttachment, dataBase64: String): DraftAttachment {
-    return DraftAttachment(
+fun attachmentToDraftAttachment(
+    attachment: MessageAttachment,
+    dataBase64: String,
+): DraftAttachment =
+    DraftAttachment(
         id = attachment.key.ifBlank { attachment.filename },
         displayName = attachment.filename,
         mimeType = attachment.mimeType.ifBlank { "application/octet-stream" },
         sizeBytes = attachment.sizeBytes,
         dataBase64 = dataBase64,
     )
-}
 
-fun messageForwardDraft(message: MessageBody, attachments: List<DraftAttachment> = emptyList()): ComposeDraft {
-    return ComposeDraft(
+fun messageForwardDraft(
+    message: MessageBody,
+    attachments: List<DraftAttachment> = emptyList(),
+): ComposeDraft =
+    ComposeDraft(
         to = "",
         cc = "",
         bcc = "",
@@ -300,10 +311,12 @@ fun messageForwardDraft(message: MessageBody, attachments: List<DraftAttachment>
         body = forwardedPlainBody(message),
         attachments = attachments,
     )
-}
 
-fun messageEditAsNewDraft(message: MessageBody, attachments: List<DraftAttachment> = emptyList()): ComposeDraft {
-    return ComposeDraft(
+fun messageEditAsNewDraft(
+    message: MessageBody,
+    attachments: List<DraftAttachment> = emptyList(),
+): ComposeDraft =
+    ComposeDraft(
         to = message.to,
         cc = message.cc,
         bcc = message.bcc,
@@ -311,30 +324,38 @@ fun messageEditAsNewDraft(message: MessageBody, attachments: List<DraftAttachmen
         body = message.body,
         attachments = attachments,
     )
-}
 
-private fun headerLine(label: String, value: String): String {
+private fun headerLine(
+    label: String,
+    value: String,
+): String {
     val trimmed = value.trim()
     return if (trimmed.isBlank()) "" else "$label: $trimmed"
 }
 
-fun buildReplyRecipients(message: MessageBody, ownAddresses: List<String> = emptyList()): ReplyRecipients {
+fun buildReplyRecipients(
+    message: MessageBody,
+    ownAddresses: List<String> = emptyList(),
+): ReplyRecipients {
     val own = ownAddresses.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
     val isOwnSender = own.contains(message.fromAddr.trim().lowercase())
-    val toSource = if (isOwnSender) {
-        message.to
-    } else {
-        message.replyTo.ifBlank { message.fromAddr }.ifBlank { message.from }
-    }
-    val toList = splitAddressList(toSource).filter { entry ->
-        val addr = bareAddress(entry).lowercase()
-        addr.isNotBlank() && !own.contains(addr)
-    }
+    val toSource =
+        if (isOwnSender) {
+            message.to
+        } else {
+            message.replyTo.ifBlank { message.fromAddr }.ifBlank { message.from }
+        }
+    val toList =
+        splitAddressList(toSource).filter { entry ->
+            val addr = bareAddress(entry).lowercase()
+            addr.isNotBlank() && !own.contains(addr)
+        }
     val toAddrs = toList.map { bareAddress(it).lowercase() }.toSet()
-    val ccList = splitAddressList(message.cc).filter { entry ->
-        val addr = bareAddress(entry).lowercase()
-        addr.isNotBlank() && !own.contains(addr) && !toAddrs.contains(addr)
-    }
+    val ccList =
+        splitAddressList(message.cc).filter { entry ->
+            val addr = bareAddress(entry).lowercase()
+            addr.isNotBlank() && !own.contains(addr) && !toAddrs.contains(addr)
+        }
     return ReplyRecipients(
         to = toList.joinToString(", "),
         cc = ccList.joinToString(", "),
@@ -351,23 +372,43 @@ fun splitAddressList(value: String): List<String> {
             quote != null -> {
                 if (ch == quote) quote = null
             }
-            ch == '"' || ch == '\'' -> quote = ch
-            ch == '<' -> angleDepth += 1
-            ch == '>' && angleDepth > 0 -> angleDepth -= 1
+
+            ch == '"' || ch == '\'' -> {
+                quote = ch
+            }
+
+            ch == '<' -> {
+                angleDepth += 1
+            }
+
+            ch == '>' && angleDepth > 0 -> {
+                angleDepth -= 1
+            }
+
             ch == ',' && angleDepth == 0 -> {
-                value.substring(start, index).trim().takeIf { it.isNotBlank() }?.let { entries += it }
+                value
+                    .substring(start, index)
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { entries += it }
                 start = index + 1
             }
         }
     }
-    value.substring(start).trim().takeIf { it.isNotBlank() }?.let { entries += it }
+    value
+        .substring(start)
+        .trim()
+        .takeIf { it.isNotBlank() }
+        ?.let { entries += it }
     return entries
 }
 
 fun bareAddress(value: String): String {
     val trimmed = value.trim()
-    val insideAngles = trimmed.substringAfter('<', missingDelimiterValue = "")
-        .substringBefore('>')
-        .trim()
+    val insideAngles =
+        trimmed
+            .substringAfter('<', missingDelimiterValue = "")
+            .substringBefore('>')
+            .trim()
     return insideAngles.ifBlank { trimmed }.trim().trim('"', '\'')
 }

@@ -10,8 +10,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import jp.nonbili.meron.shared.backgroundRefreshUsesRssProtocol
 import jp.nonbili.meron.shared.backgroundRefreshSummary
+import jp.nonbili.meron.shared.backgroundRefreshUsesRssProtocol
 import jp.nonbili.meron.shared.shouldBackgroundRefreshAccount
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -25,8 +25,9 @@ class AndroidBackgroundSyncWorker(
         MeronCoreNative.initJson(applicationContext.filesDir.absolutePath, MeronDbKey.get(applicationContext))
 
         val listResponse = JSONObject(MeronCoreNative.invokeJson(requestJson(1, "account.list")))
-        val accounts = listResponse.optJSONObject("result")?.optJSONArray("accounts")
-            ?: return Result.success()
+        val accounts =
+            listResponse.optJSONObject("result")?.optJSONArray("accounts")
+                ?: return Result.success()
 
         var refreshed = 0
         var skipped = 0
@@ -58,7 +59,10 @@ internal data class AndroidRefreshSyncRequest(
     val requestJson: String,
 )
 
-internal fun androidRefreshSyncRequest(account: JSONObject, id: Long): AndroidRefreshSyncRequest? {
+internal fun androidRefreshSyncRequest(
+    account: JSONObject,
+    id: Long,
+): AndroidRefreshSyncRequest? {
     val accountId = account.optString("id")
     if (!shouldBackgroundRefreshAccount(
             accountId = accountId,
@@ -69,20 +73,22 @@ internal fun androidRefreshSyncRequest(account: JSONObject, id: Long): AndroidRe
         return null
     }
 
-    val usesRssProtocol = backgroundRefreshUsesRssProtocol(
-        engine = account.optString("engine"),
-        provider = account.optString("provider"),
-        authType = account.optString("auth_type"),
-    )
-    val syncParams = if (usesRssProtocol) {
-        JSONObject().put("account_id", accountId)
-    } else {
-        JSONObject()
-            .put("account_id", accountId)
-            .put("folder_id", "inbox")
-            .put("limit", 50)
-            .put("folders", true)
-    }
+    val usesRssProtocol =
+        backgroundRefreshUsesRssProtocol(
+            engine = account.optString("engine"),
+            provider = account.optString("provider"),
+            authType = account.optString("auth_type"),
+        )
+    val syncParams =
+        if (usesRssProtocol) {
+            JSONObject().put("account_id", accountId)
+        } else {
+            JSONObject()
+                .put("account_id", accountId)
+                .put("folder_id", "inbox")
+                .put("limit", 50)
+                .put("folders", true)
+        }
     val syncMethod = if (usesRssProtocol) "rss.sync" else "mail.sync"
     return AndroidRefreshSyncRequest(
         method = syncMethod,
@@ -96,9 +102,10 @@ object AndroidBackgroundSyncScheduler {
     private const val ONCE_WORK_NAME = "meron-background-sync-once"
 
     fun schedule(context: Context) {
-        val request = PeriodicWorkRequestBuilder<AndroidBackgroundSyncWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(networkConstraints())
-            .build()
+        val request =
+            PeriodicWorkRequestBuilder<AndroidBackgroundSyncWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(networkConstraints())
+                .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             PERIODIC_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
@@ -107,9 +114,10 @@ object AndroidBackgroundSyncScheduler {
     }
 
     fun runOnce(context: Context) {
-        val request = OneTimeWorkRequestBuilder<AndroidBackgroundSyncWorker>()
-            .setConstraints(networkConstraints())
-            .build()
+        val request =
+            OneTimeWorkRequestBuilder<AndroidBackgroundSyncWorker>()
+                .setConstraints(networkConstraints())
+                .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             ONCE_WORK_NAME,
             ExistingWorkPolicy.REPLACE,
@@ -117,17 +125,20 @@ object AndroidBackgroundSyncScheduler {
         )
     }
 
-    private fun networkConstraints(): Constraints {
-        return Constraints.Builder()
+    private fun networkConstraints(): Constraints =
+        Constraints
+            .Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
-    }
 }
 
-private fun requestJson(id: Long, method: String, params: JSONObject = JSONObject()): String {
-    return JSONObject()
+private fun requestJson(
+    id: Long,
+    method: String,
+    params: JSONObject = JSONObject(),
+): String =
+    JSONObject()
         .put("id", id)
         .put("method", method)
         .put("params", params)
         .toString()
-}

@@ -19,23 +19,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,17 +52,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -82,42 +79,42 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,8 +132,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -146,8 +141,12 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,6 +158,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -170,15 +170,15 @@ import jp.nonbili.meron.shared.AccountNameParams
 import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
-import jp.nonbili.meron.shared.AttachmentReadParams
-import jp.nonbili.meron.shared.AutodiscoverAccountParams
-import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddOAuthAccountParams
+import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
+import jp.nonbili.meron.shared.AttachmentReadParams
+import jp.nonbili.meron.shared.AutodiscoverAccountParams
 import jp.nonbili.meron.shared.ComposeDraft
-import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.ContactSuggestParams
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.CopyThreadParams
 import jp.nonbili.meron.shared.DiscardDraftParams
 import jp.nonbili.meron.shared.DraftAttachment
@@ -188,20 +188,20 @@ import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderListParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ImportOpmlParams
-import jp.nonbili.meron.shared.MessageAttachment
-import jp.nonbili.meron.shared.MessageBody
-import jp.nonbili.meron.shared.MobileMailCommandClient
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MessageAttachment
+import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
+import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
-import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.RssThreadParams
+import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -211,40 +211,40 @@ import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.accountSendIdentities
+import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
+import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.defaultOAuthRedirectUri
+import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
-import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
+import jp.nonbili.meron.shared.forwardableAttachments
+import jp.nonbili.meron.shared.isOAuthCallbackUrl
+import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
-import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
+import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
+import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
+import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
-import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
-import jp.nonbili.meron.shared.parseMailtoUrl
+import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
-import jp.nonbili.meron.shared.defaultOAuthRedirectUri
-import jp.nonbili.meron.shared.detectReplyFromIdentity
-import jp.nonbili.meron.shared.isOAuthCallbackUrl
-import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
-import jp.nonbili.meron.shared.ownAddressList
-import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -264,7 +264,11 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-internal fun MeronMobileState.syncCoreThreads(accountOverride: String? = null, folderOverride: String? = null, syncFirst: Boolean = true) {
+internal fun MeronMobileState.syncCoreThreads(
+    accountOverride: String? = null,
+    folderOverride: String? = null,
+    syncFirst: Boolean = true,
+) {
     if (!MeronCoreNative.isLoaded()) {
         status = "Rust core not packaged."
         return
@@ -273,11 +277,12 @@ internal fun MeronMobileState.syncCoreThreads(accountOverride: String? = null, f
     val requestedFolder = folderOverride ?: selectedCoreFolder.ifBlank { INBOX_FOLDER }
     val query = mailSearch
     val filter = mailFilter
-    val selectedAccounts = if (accountId == UNIFIED_ACCOUNT_ID) {
-        coreAccounts.filter { it.includedInUnified }
-    } else {
-        coreAccounts.filter { it.id == accountId }
-    }
+    val selectedAccounts =
+        if (accountId == UNIFIED_ACCOUNT_ID) {
+            coreAccounts.filter { it.includedInUnified }
+        } else {
+            coreAccounts.filter { it.id == accountId }
+        }
     if (selectedAccounts.isEmpty()) {
         status = if (accountId == UNIFIED_ACCOUNT_ID) "No accounts are included in Unified inbox." else "No account selected."
         return
@@ -288,23 +293,26 @@ internal fun MeronMobileState.syncCoreThreads(accountOverride: String? = null, f
             withContext(Dispatchers.IO) {
                 val client = MobileMailCommandClient(JniMeronCore())
                 if (accountId == UNIFIED_ACCOUNT_ID) {
-                    val results = selectedAccounts.map { account ->
-                        account.id to loadAccountInbox(
-                            client,
-                            account,
-                            INBOX_FOLDER,
-                            query = query,
-                            filter = filter,
-                            syncFirst = syncFirst,
-                        )
-                    }
+                    val results =
+                        selectedAccounts.map { account ->
+                            account.id to
+                                loadAccountInbox(
+                                    client,
+                                    account,
+                                    INBOX_FOLDER,
+                                    query = query,
+                                    filter = filter,
+                                    syncFirst = syncFirst,
+                                )
+                        }
                     MailboxLoadResult(
                         folders = results.flatMap { it.second.folders },
                         folder = INBOX_FOLDER,
                         threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
-                        accountCursors = results
-                            .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
-                            .toMap(),
+                        accountCursors =
+                            results
+                                .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
+                                .toMap(),
                     )
                 } else {
                     loadAccountInbox(
@@ -334,11 +342,12 @@ internal fun MeronMobileState.syncCoreThreads(accountOverride: String? = null, f
             }
             syncing = false
             errorBanner = null
-            status = if (accountId == UNIFIED_ACCOUNT_ID) {
-                "${parsedThreads.size} ${filter.label().lowercase()} message(s) in Unified inbox"
-            } else {
-                "${parsedThreads.size} ${filter.label().lowercase()} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
-            }
+            status =
+                if (accountId == UNIFIED_ACCOUNT_ID) {
+                    "${parsedThreads.size} ${filter.label().lowercase()} message(s) in Unified inbox"
+                } else {
+                    "${parsedThreads.size} ${filter.label().lowercase()} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
+                }
         }.onFailure {
             syncing = false
             errorBanner = it.message ?: "Sync failed"
@@ -387,11 +396,12 @@ internal fun MeronMobileState.loadMoreCoreThreads() {
     val requestedFolder = selectedCoreFolder.ifBlank { INBOX_FOLDER }
     val query = mailSearch
     val filter = mailFilter
-    val selectedAccounts = if (accountId == UNIFIED_ACCOUNT_ID) {
-        coreAccounts.filter { it.includedInUnified && mailboxAccountCursors[it.id].orEmpty().isNotBlank() }
-    } else {
-        coreAccounts.filter { it.id == accountId && mailboxCursor.isNotBlank() }
-    }
+    val selectedAccounts =
+        if (accountId == UNIFIED_ACCOUNT_ID) {
+            coreAccounts.filter { it.includedInUnified && mailboxAccountCursors[it.id].orEmpty().isNotBlank() }
+        } else {
+            coreAccounts.filter { it.id == accountId && mailboxCursor.isNotBlank() }
+        }
     if (selectedAccounts.isEmpty()) return
     loadingMoreThreads = true
     scope.launch {
@@ -399,24 +409,27 @@ internal fun MeronMobileState.loadMoreCoreThreads() {
             withContext(Dispatchers.IO) {
                 val client = MobileMailCommandClient(JniMeronCore())
                 if (accountId == UNIFIED_ACCOUNT_ID) {
-                    val results = selectedAccounts.map { account ->
-                        account.id to loadAccountInbox(
-                            client,
-                            account,
-                            INBOX_FOLDER,
-                            query = query,
-                            filter = filter,
-                            syncFirst = false,
-                            beforeCursor = mailboxAccountCursors[account.id],
-                        )
-                    }
+                    val results =
+                        selectedAccounts.map { account ->
+                            account.id to
+                                loadAccountInbox(
+                                    client,
+                                    account,
+                                    INBOX_FOLDER,
+                                    query = query,
+                                    filter = filter,
+                                    syncFirst = false,
+                                    beforeCursor = mailboxAccountCursors[account.id],
+                                )
+                        }
                     MailboxLoadResult(
                         folders = results.flatMap { it.second.folders },
                         folder = INBOX_FOLDER,
                         threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
-                        accountCursors = results
-                            .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
-                            .toMap(),
+                        accountCursors =
+                            results
+                                .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
+                                .toMap(),
                     )
                 } else {
                     loadAccountInbox(
@@ -471,7 +484,10 @@ internal fun MeronMobileState.loadStarredItems() {
     }
 }
 
-internal fun MeronMobileState.openDraftCompose(message: MessageBody, thread: ThreadSummary) {
+internal fun MeronMobileState.openDraftCompose(
+    message: MessageBody,
+    thread: ThreadSummary,
+) {
     if (!MeronCoreNative.isLoaded()) {
         status = "Rust core not packaged."
         return
@@ -494,7 +510,11 @@ internal fun MeronMobileState.openDraftCompose(message: MessageBody, thread: Thr
             attachments = copiedAttachments
             composeFromAccountId = thread.accountId
             composeFromEmail = ""
-            composeDraftId = message.messageId.trim().trim('<', '>').ifBlank { newDraftMessageId(thread.accountId) }
+            composeDraftId =
+                message.messageId
+                    .trim()
+                    .trim('<', '>')
+                    .ifBlank { newDraftMessageId(thread.accountId) }
             composeDraftSaved = true
             previousTopScreen = Screen.Mail
             screen = Screen.Compose
@@ -619,8 +639,11 @@ internal fun MeronMobileState.toggleStarredItemRead(item: StarredItemSummary) {
         item = item,
         label = if (item.unread) "Mark read" else "Mark unread",
         action = {
-            if (isRssItem) markRssRead(RssMarkReadParams(threadId = item.threadId, seen = item.unread, itemKeys = listOf(item.id)))
-            else markRead(MarkReadParams(threadId = item.threadId, seen = item.unread, messageIds = listOf(item.id)))
+            if (isRssItem) {
+                markRssRead(RssMarkReadParams(threadId = item.threadId, seen = item.unread, itemKeys = listOf(item.id)))
+            } else {
+                markRead(MarkReadParams(threadId = item.threadId, seen = item.unread, messageIds = listOf(item.id)))
+            }
         },
         update = { rows -> rows.map { if (it.id == item.id) it.copy(unread = !item.unread) else it } },
     )
@@ -632,8 +655,11 @@ internal fun MeronMobileState.unstarStarredItem(item: StarredItemSummary) {
         item = item,
         label = "Unstar",
         action = {
-            if (isRssItem) markRssStarred(RssMarkStarredParams(threadId = item.threadId, starred = false, itemKeys = listOf(item.id)))
-            else markStarred(MarkStarredParams(threadId = item.threadId, starred = false, messageIds = listOf(item.id)))
+            if (isRssItem) {
+                markRssStarred(RssMarkStarredParams(threadId = item.threadId, starred = false, itemKeys = listOf(item.id)))
+            } else {
+                markStarred(MarkStarredParams(threadId = item.threadId, starred = false, messageIds = listOf(item.id)))
+            }
         },
         update = { rows -> rows.filterNot { it.id == item.id } },
     )
@@ -671,11 +697,12 @@ internal fun MeronMobileState.runCoreThreadAction(
             coreThreads = update(coreThreads)
             kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
             if (undoMessage != null && onUndo != null) {
-                val result = snackbarHost.showSnackbar(
-                    message = undoMessage,
-                    actionLabel = "Undo",
-                    duration = SnackbarDuration.Long,
-                )
+                val result =
+                    snackbarHost.showSnackbar(
+                        message = undoMessage,
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Long,
+                    )
                 if (result == SnackbarResult.ActionPerformed) onUndo()
             } else {
                 status = "$label complete"
@@ -717,8 +744,11 @@ internal fun MeronMobileState.toggleStar(thread: ThreadSummary) {
         thread = thread,
         label = if (thread.starred) "Unstar" else "Star",
         action = {
-            if (isRssThread) markRssStarred(RssMarkStarredParams(threadId = thread.id, starred = !thread.starred))
-            else markStarred(MarkStarredParams(threadId = thread.id, starred = !thread.starred))
+            if (isRssThread) {
+                markRssStarred(RssMarkStarredParams(threadId = thread.id, starred = !thread.starred))
+            } else {
+                markStarred(MarkStarredParams(threadId = thread.id, starred = !thread.starred))
+            }
         },
         update = { threads -> threads.map { if (it.id == thread.id) it.copy(starred = !thread.starred) else it } },
     )
@@ -730,14 +760,20 @@ internal fun MeronMobileState.toggleRead(thread: ThreadSummary) {
         thread = thread,
         label = if (thread.unread) "Mark read" else "Mark unread",
         action = {
-            if (isRssThread) markRssRead(RssMarkReadParams(threadId = thread.id, seen = thread.unread))
-            else markRead(MarkReadParams(threadId = thread.id, seen = thread.unread))
+            if (isRssThread) {
+                markRssRead(RssMarkReadParams(threadId = thread.id, seen = thread.unread))
+            } else {
+                markRead(MarkReadParams(threadId = thread.id, seen = thread.unread))
+            }
         },
         update = { threads -> threads.map { if (it.id == thread.id) it.copy(unread = !thread.unread) else it } },
     )
 }
 
-internal fun MeronMobileState.updateMessageEverywhere(messageId: String, update: (MessageBody) -> MessageBody) {
+internal fun MeronMobileState.updateMessageEverywhere(
+    messageId: String,
+    update: (MessageBody) -> MessageBody,
+) {
     messages = messages.map { if (it.id == messageId) update(it) else it }
 }
 
@@ -821,16 +857,17 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
         return
     }
     val accountsById = coreAccounts.associateBy { it.id }
-    val mailTargets = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-        unread
-            .map { it.accountId }
-            .distinct()
-            .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
-            .map { accountId -> accountId to INBOX_FOLDER }
-    } else {
-        val account = accountsById[selectedCoreAccountId]
-        if (account != null && !accountSummaryIsRss(account)) listOf(selectedCoreAccountId to selectedCoreFolder) else emptyList()
-    }
+    val mailTargets =
+        if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+            unread
+                .map { it.accountId }
+                .distinct()
+                .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
+                .map { accountId -> accountId to INBOX_FOLDER }
+        } else {
+            val account = accountsById[selectedCoreAccountId]
+            if (account != null && !accountSummaryIsRss(account)) listOf(selectedCoreAccountId to selectedCoreFolder) else emptyList()
+        }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
     scope.launch {
         runCatching {
@@ -845,9 +882,10 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
             }
         }.onSuccess {
             coreThreads = coreThreads.map { if (it.unread) it.copy(unread = false) else it }
-            kanbanColumns = kanbanColumns.mapValues { (_, state) ->
-                state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
-            }
+            kanbanColumns =
+                kanbanColumns.mapValues { (_, state) ->
+                    state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
+                }
             status = "Marked ${unread.size} unread item(s) read"
             syncCoreThreads(syncFirst = false)
         }.onFailure {
@@ -868,16 +906,17 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
         return
     }
     val accountsById = coreAccounts.associateBy { it.id }
-    val mailTargets = if (column.accountId == UNIFIED_ACCOUNT_ID) {
-        unread
-            .map { it.accountId }
-            .distinct()
-            .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
-            .map { accountId -> accountId to INBOX_FOLDER }
-    } else {
-        val account = accountsById[column.accountId]
-        if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to column.folderId) else emptyList()
-    }
+    val mailTargets =
+        if (column.accountId == UNIFIED_ACCOUNT_ID) {
+            unread
+                .map { it.accountId }
+                .distinct()
+                .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
+                .map { accountId -> accountId to INBOX_FOLDER }
+        } else {
+            val account = accountsById[column.accountId]
+            if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to column.folderId) else emptyList()
+        }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
     scope.launch {
         runCatching {
@@ -894,9 +933,10 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
             updateKanbanColumn(key) { state ->
                 state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
             }
-            coreThreads = coreThreads.map { thread ->
-                if (unread.any { it.id == thread.id }) thread.copy(unread = false) else thread
-            }
+            coreThreads =
+                coreThreads.map { thread ->
+                    if (unread.any { it.id == thread.id }) thread.copy(unread = false) else thread
+                }
             status = "Marked ${unread.size} Kanban card(s) read"
         }.onFailure {
             status = "Kanban mark all read failed: ${it.message}"
@@ -939,7 +979,11 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
     )
 }
 
-internal fun MeronMobileState.moveThreadToFolder(thread: ThreadSummary, targetFolderId: String, onMoved: () -> Unit = {}) {
+internal fun MeronMobileState.moveThreadToFolder(
+    thread: ThreadSummary,
+    targetFolderId: String,
+    onMoved: () -> Unit = {},
+) {
     if (threadIdIsRss(thread.id)) {
         status = "RSS feeds move between RSS accounts from Kanban."
         return
@@ -974,7 +1018,10 @@ internal fun MeronMobileState.moveThreadToFolder(thread: ThreadSummary, targetFo
     }
 }
 
-internal fun MeronMobileState.copyThreadToFolder(thread: ThreadSummary, target: FolderSummary) {
+internal fun MeronMobileState.copyThreadToFolder(
+    thread: ThreadSummary,
+    target: FolderSummary,
+) {
     if (threadIdIsRss(thread.id)) {
         status = "RSS feeds can't be copied to mail folders."
         return
@@ -1009,7 +1056,11 @@ internal fun MeronMobileState.copyThreadToFolder(thread: ThreadSummary, target: 
     }
 }
 
-internal fun MeronMobileState.createFolderAndMoveThread(thread: ThreadSummary, name: String, onMoved: () -> Unit = {}) {
+internal fun MeronMobileState.createFolderAndMoveThread(
+    thread: ThreadSummary,
+    name: String,
+    onMoved: () -> Unit = {},
+) {
     val trimmed = name.trim()
     if (threadIdIsRss(thread.id)) {
         status = "RSS feeds move between RSS accounts from Kanban."
@@ -1057,7 +1108,10 @@ internal fun MeronMobileState.createFolderAndMoveThread(thread: ThreadSummary, n
     }
 }
 
-internal fun MeronMobileState.moveThreadToColumn(thread: ThreadSummary, target: KanbanColumnSpec) {
+internal fun MeronMobileState.moveThreadToColumn(
+    thread: ThreadSummary,
+    target: KanbanColumnSpec,
+) {
     if (target.accountId == UNIFIED_ACCOUNT_ID) {
         status = "Move to an account folder column."
         return
@@ -1109,4 +1163,3 @@ internal fun MeronMobileState.moveThreadToColumn(thread: ThreadSummary, target: 
         }
     }
 }
-

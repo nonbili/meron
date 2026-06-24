@@ -9,10 +9,11 @@ fun parseMailtoUrl(rawUrl: String): ComposeDraft? {
     val query = payload.substringAfter('?', missingDelimiterValue = "")
     val fields = parseMailtoQuery(query)
 
-    val recipients = buildList {
-        addAll(splitAddressField(percentDecode(path, plusAsSpace = false)))
-        fields["to"]?.let { addAll(splitAddressField(it)) }
-    }.distinctBy { it.lowercase() }
+    val recipients =
+        buildList {
+            addAll(splitAddressField(percentDecode(path, plusAsSpace = false)))
+            fields["to"]?.let { addAll(splitAddressField(it)) }
+        }.distinctBy { it.lowercase() }
 
     return ComposeDraft(
         to = recipients.joinToString(", "),
@@ -26,7 +27,8 @@ fun parseMailtoUrl(rawUrl: String): ComposeDraft? {
 private fun parseMailtoQuery(query: String): Map<String, String> {
     if (query.isBlank()) return emptyMap()
     val fields = linkedMapOf<String, MutableList<String>>()
-    query.split('&')
+    query
+        .split('&')
         .filter { it.isNotEmpty() }
         .forEach { pair ->
             val key = pair.substringBefore('=').lowercase()
@@ -43,14 +45,16 @@ private fun parseMailtoQuery(query: String): Map<String, String> {
     }
 }
 
-private fun splitAddressField(value: String): List<String> {
-    return value
+private fun splitAddressField(value: String): List<String> =
+    value
         .split(',', ';')
         .map { it.trim() }
         .filter { it.isNotEmpty() }
-}
 
-private fun percentDecode(value: String, plusAsSpace: Boolean): String {
+private fun percentDecode(
+    value: String,
+    plusAsSpace: Boolean,
+): String {
     val bytes = mutableListOf<Byte>()
     var index = 0
     while (index < value.length) {
@@ -66,8 +70,14 @@ private fun percentDecode(value: String, plusAsSpace: Boolean): String {
                     index += 2
                 }
             }
-            ch == '+' && plusAsSpace -> bytes.add(' '.code.toByte())
-            else -> ch.toString().encodeToByteArray().forEach(bytes::add)
+
+            ch == '+' && plusAsSpace -> {
+                bytes.add(' '.code.toByte())
+            }
+
+            else -> {
+                ch.toString().encodeToByteArray().forEach(bytes::add)
+            }
         }
         index += 1
     }

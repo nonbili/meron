@@ -19,23 +19,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,17 +52,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -82,42 +79,42 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,8 +132,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -146,8 +141,12 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,6 +158,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -170,15 +170,15 @@ import jp.nonbili.meron.shared.AccountNameParams
 import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
-import jp.nonbili.meron.shared.AttachmentReadParams
-import jp.nonbili.meron.shared.AutodiscoverAccountParams
-import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddOAuthAccountParams
+import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
+import jp.nonbili.meron.shared.AttachmentReadParams
+import jp.nonbili.meron.shared.AutodiscoverAccountParams
 import jp.nonbili.meron.shared.ComposeDraft
-import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.ContactSuggestParams
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.CopyThreadParams
 import jp.nonbili.meron.shared.DiscardDraftParams
 import jp.nonbili.meron.shared.DraftAttachment
@@ -188,20 +188,20 @@ import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderListParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ImportOpmlParams
-import jp.nonbili.meron.shared.MessageAttachment
-import jp.nonbili.meron.shared.MessageBody
-import jp.nonbili.meron.shared.MobileMailCommandClient
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MessageAttachment
+import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
+import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
-import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.RssThreadParams
+import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -211,40 +211,40 @@ import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.accountSendIdentities
+import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
+import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.defaultOAuthRedirectUri
+import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
-import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
+import jp.nonbili.meron.shared.forwardableAttachments
+import jp.nonbili.meron.shared.isOAuthCallbackUrl
+import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
-import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
+import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
+import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
+import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
-import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
-import jp.nonbili.meron.shared.parseMailtoUrl
+import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
-import jp.nonbili.meron.shared.defaultOAuthRedirectUri
-import jp.nonbili.meron.shared.detectReplyFromIdentity
-import jp.nonbili.meron.shared.isOAuthCallbackUrl
-import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
-import jp.nonbili.meron.shared.ownAddressList
-import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -316,17 +316,29 @@ internal fun ThreadScreen(
     val normalizedSearch = threadSearch.trim().lowercase()
     val currentThreadAccountId = thread?.accountId.orEmpty()
     val currentThreadFolder = thread?.folder.orEmpty()
-    val targetMoveFolders = remember(currentThreadFolder, moveFolders) {
-        moveFolders.filterNot { folder -> folder.name.equals(currentThreadFolder, ignoreCase = true) }
-    }
-    val targetCopyFolders = remember(currentThreadAccountId, currentThreadFolder, copyFolders) {
-        copyFolders.filterNot { folder ->
-            folder.accountId == currentThreadAccountId && folder.name.equals(currentThreadFolder, ignoreCase = true)
+    val targetMoveFolders =
+        remember(currentThreadFolder, moveFolders) {
+            moveFolders.filterNot { folder -> folder.name.equals(currentThreadFolder, ignoreCase = true) }
         }
-    }
-    val searchMatches = remember(messages, normalizedSearch) {
-        if (normalizedSearch.isBlank()) emptyList() else messages.filter { threadMessageSearchText(it).contains(normalizedSearch) }.map { it.id }
-    }
+    val targetCopyFolders =
+        remember(currentThreadAccountId, currentThreadFolder, copyFolders) {
+            copyFolders.filterNot { folder ->
+                folder.accountId == currentThreadAccountId && folder.name.equals(currentThreadFolder, ignoreCase = true)
+            }
+        }
+    val searchMatches =
+        remember(messages, normalizedSearch) {
+            if (normalizedSearch.isBlank()) {
+                emptyList()
+            } else {
+                messages
+                    .filter {
+                        threadMessageSearchText(
+                            it,
+                        ).contains(normalizedSearch)
+                    }.map { it.id }
+            }
+        }
     val activeSearchId = searchMatches.getOrNull(activeSearchIndex).orEmpty()
     val listState = rememberLazyListState()
     LaunchedEffect(normalizedSearch) {
@@ -347,11 +359,12 @@ internal fun ThreadScreen(
     fun goToSearchMatch(delta: Int) {
         if (searchMatches.isEmpty()) return
         val next = activeSearchIndex + delta
-        activeSearchIndex = when {
-            next < 0 -> searchMatches.lastIndex
-            next > searchMatches.lastIndex -> 0
-            else -> next
-        }
+        activeSearchIndex =
+            when {
+                next < 0 -> searchMatches.lastIndex
+                next > searchMatches.lastIndex -> 0
+                else -> next
+            }
     }
 
     Scaffold(
@@ -632,7 +645,10 @@ internal fun ConversationDetailsDialog(
                             Column(Modifier.weight(1f)) {
                                 Text(attachment.filename.ifBlank { "Attachment" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
-                                    listOf(attachment.mimeType, formatBytes(attachment.sizeBytes)).filter { it.isNotBlank() }.joinToString(" · "),
+                                    listOf(
+                                        attachment.mimeType,
+                                        formatBytes(attachment.sizeBytes),
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -682,9 +698,10 @@ internal fun MoveThreadDialog(
                         onValueChange = { newFolderName = it },
                         label = { Text("New folder") },
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
                     )
                 }
                 item {
@@ -752,11 +769,12 @@ internal fun CopyThreadDialog(
                     }
                 } else {
                     items(folders, key = { "${it.accountId}\n${it.name}" }) { folder ->
-                        val label = if (folder.accountId.isBlank() || folder.accountId == thread.accountId) {
-                            folder.name.replaceFirstChar { it.uppercase() }
-                        } else {
-                            "${folder.accountId} / ${folder.name.replaceFirstChar { it.uppercase() }}"
-                        }
+                        val label =
+                            if (folder.accountId.isBlank() || folder.accountId == thread.accountId) {
+                                folder.name.replaceFirstChar { it.uppercase() }
+                            } else {
+                                "${folder.accountId} / ${folder.name.replaceFirstChar { it.uppercase() }}"
+                            }
                         DialogAction(label) {
                             onCopy(folder)
                         }
@@ -771,7 +789,10 @@ internal fun CopyThreadDialog(
 }
 
 @Composable
-internal fun AssistiveStat(label: String, value: String) {
+internal fun AssistiveStat(
+    label: String,
+    value: String,
+) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -881,11 +902,12 @@ internal fun MessageBubble(
     onCopyMessageText: (String, String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val bubbleShape = if (outgoing) {
-        RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
-    } else {
-        RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
-    }
+    val bubbleShape =
+        if (outgoing) {
+            RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
+        } else {
+            RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
+        }
     val bubbleColor = if (outgoing) chat.bubbleOut else chat.bubbleIn
     val textColor = if (outgoing) chat.bubbleOutText else chat.bubbleInText
     Row(
@@ -902,8 +924,7 @@ internal fun MessageBubble(
                     } else {
                         Modifier
                     },
-                )
-                .background(bubbleColor)
+                ).background(bubbleColor)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -1017,8 +1038,8 @@ internal fun MessageBubble(
     }
 }
 
-internal fun threadMessageSearchText(message: MessageBody): String {
-    return listOf(
+internal fun threadMessageSearchText(message: MessageBody): String =
+    listOf(
         message.subject,
         message.from,
         message.fromAddr,
@@ -1028,34 +1049,45 @@ internal fun threadMessageSearchText(message: MessageBody): String {
         message.bodyHtml.replace(Regex("<[^>]+>"), " "),
         message.attachments.joinToString(" ") { it.filename },
     ).joinToString(" ").lowercase()
-}
 
-internal fun threadDeleteActionLabel(folder: String): String {
-    return when {
+internal fun threadDeleteActionLabel(folder: String): String =
+    when {
         folderIsDrafts(folder) -> "Discard draft"
         folderIsTrash(folder) -> "Delete forever"
         else -> "Move to Trash"
     }
-}
 
-internal fun messagePlainText(message: MessageBody): String {
-    return message.body.ifBlank {
-        message.bodyHtml
-            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-            .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
-            .replace(Regex("<[^>]+>"), " ")
-            .replace(Regex("[ \\t]+"), " ")
-            .trim()
-    }.ifBlank { "(no content)" }
-}
+internal fun messagePlainText(message: MessageBody): String =
+    message.body
+        .ifBlank {
+            message.bodyHtml
+                .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+                .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
+                .replace(Regex("<[^>]+>"), " ")
+                .replace(Regex("[ \\t]+"), " ")
+                .trim()
+        }.ifBlank { "(no content)" }
 
-internal fun conversationParticipants(messages: List<MessageBody>, ownEmail: String, isRss: Boolean): List<ConversationParticipant> {
+internal fun conversationParticipants(
+    messages: List<MessageBody>,
+    ownEmail: String,
+    isRss: Boolean,
+): List<ConversationParticipant> {
     if (isRss) return emptyList()
-    data class MutableParticipant(var name: String, val email: String, var count: Int, val isSelf: Boolean)
+
+    data class MutableParticipant(
+        var name: String,
+        val email: String,
+        var count: Int,
+        val isSelf: Boolean,
+    )
     val own = ownEmail.trim().lowercase()
     val byEmail = linkedMapOf<String, MutableParticipant>()
 
-    fun add(name: String, email: String) {
+    fun add(
+        name: String,
+        email: String,
+    ) {
         val normalized = email.trim().trim('<', '>', ',', ';').lowercase()
         if (normalized.isBlank() || !normalized.contains("@")) return
         val existing = byEmail[normalized]
@@ -1065,12 +1097,13 @@ internal fun conversationParticipants(messages: List<MessageBody>, ownEmail: Str
                 existing.name = name
             }
         } else {
-            byEmail[normalized] = MutableParticipant(
-                name = name.takeIf { it.isNotBlank() && it != email } ?: normalized,
-                email = normalized,
-                count = 1,
-                isSelf = normalized == own,
-            )
+            byEmail[normalized] =
+                MutableParticipant(
+                    name = name.takeIf { it.isNotBlank() && it != email } ?: normalized,
+                    email = normalized,
+                    count = 1,
+                    isSelf = normalized == own,
+                )
         }
     }
 
@@ -1099,12 +1132,20 @@ internal fun parseAddressList(value: String): List<Pair<String, String>> {
     }
 }
 
-internal fun copyToClipboard(context: Context, label: String, value: String) {
+internal fun copyToClipboard(
+    context: Context,
+    label: String,
+    value: String,
+) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
 }
 
-internal fun highlightedMessageText(text: String, query: String, active: Boolean): AnnotatedString {
+internal fun highlightedMessageText(
+    text: String,
+    query: String,
+    active: Boolean,
+): AnnotatedString {
     if (query.isBlank()) return AnnotatedString(text)
     val lower = text.lowercase()
     val needle = query.lowercase()
@@ -1134,9 +1175,10 @@ internal fun highlightedMessageText(text: String, query: String, active: Boolean
 @Composable
 internal fun HtmlMessageBody(html: String) {
     AndroidView(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 160.dp, max = 420.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 160.dp, max = 420.dp),
         factory = { context ->
             WebView(context).apply {
                 webViewClient = WebViewClient()
@@ -1261,16 +1303,17 @@ internal fun ReplyBar(
                     onValueChange = onChange,
                     placeholder = { Text("Reply") },
                     supportingText = { Text("${sendShortcutMode.label()} sends") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .onPreviewKeyEvent { event ->
-                            if (shouldSendFromEditor(event, sendShortcutMode) && (value.isNotBlank() || attachments.isNotEmpty())) {
-                                onSend()
-                                true
-                            } else {
-                                false
-                            }
-                        },
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent { event ->
+                                if (shouldSendFromEditor(event, sendShortcutMode) && (value.isNotBlank() || attachments.isNotEmpty())) {
+                                    onSend()
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                     maxLines = 4,
                 )
                 IconButton(onClick = onAttach) {

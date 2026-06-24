@@ -21,9 +21,10 @@ class MailViewModelTest {
 
     @Test
     fun parseMailtoUrlBuildsComposeDraft() {
-        val draft = parseMailtoUrl(
-            "mailto:a@example.com,b@example.com?to=c@example.com&cc=d@example.com&e=ignored&subject=Hello%20there&body=Line+one%0ALine+two",
-        )
+        val draft =
+            parseMailtoUrl(
+                "mailto:a@example.com,b@example.com?to=c@example.com&cc=d@example.com&e=ignored&subject=Hello%20there&body=Line+one%0ALine+two",
+            )
 
         require(draft != null)
         assertEquals("a@example.com, b@example.com, c@example.com", draft.to)
@@ -61,7 +62,12 @@ class MailViewModelTest {
 
         assertFalse(vm.state.syncing)
         assertEquals(null, vm.state.error)
-        assertEquals("Hello", vm.state.threads.single().subject)
+        assertEquals(
+            "Hello",
+            vm.state.threads
+                .single()
+                .subject,
+        )
     }
 
     @Test
@@ -81,7 +87,12 @@ class MailViewModelTest {
         assertEquals("a1", vm.state.selectedAccountId)
         assertEquals("INBOX", vm.state.selectedFolder)
         assertEquals("t1", vm.state.selectedThreadId)
-        assertEquals("m1", vm.state.selectedThread.single().id)
+        assertEquals(
+            "m1",
+            vm.state.selectedThread
+                .single()
+                .id,
+        )
     }
 
     @Test
@@ -93,8 +104,16 @@ class MailViewModelTest {
         vm.setThreadRead("t1", read = true)
         vm.archiveThread("t2")
 
-        assertTrue(vm.state.threads.single { it.id == "t1" }.starred)
-        assertFalse(vm.state.threads.single { it.id == "t1" }.unread)
+        assertTrue(
+            vm.state.threads
+                .single { it.id == "t1" }
+                .starred,
+        )
+        assertFalse(
+            vm.state.threads
+                .single { it.id == "t1" }
+                .unread,
+        )
         assertEquals(listOf("t1"), vm.state.threads.map { it.id })
     }
 
@@ -120,22 +139,24 @@ class MailViewModelTest {
 
     @Test
     fun composeDraftMapsAttachmentsToSendMailParams() {
-        val params = ComposeDraft(
-            to = "a@example.com",
-            cc = "c@example.com",
-            bcc = "b@example.com",
-            subject = "Hi",
-            body = "Body",
-            attachments = listOf(
-                DraftAttachment(
-                    id = "att1",
-                    displayName = "note.txt",
-                    mimeType = "text/plain",
-                    sizeBytes = 4,
-                    dataBase64 = "Tm90ZQ==",
-                ),
-            ),
-        ).toSendMailParams(accountId = "me@example.com", from = "sender@example.com")
+        val params =
+            ComposeDraft(
+                to = "a@example.com",
+                cc = "c@example.com",
+                bcc = "b@example.com",
+                subject = "Hi",
+                body = "Body",
+                attachments =
+                    listOf(
+                        DraftAttachment(
+                            id = "att1",
+                            displayName = "note.txt",
+                            mimeType = "text/plain",
+                            sizeBytes = 4,
+                            dataBase64 = "Tm90ZQ==",
+                        ),
+                    ),
+            ).toSendMailParams(accountId = "me@example.com", from = "sender@example.com")
 
         assertEquals("me@example.com", params.accountId)
         assertEquals("sender@example.com", params.from)
@@ -146,8 +167,11 @@ class MailViewModelTest {
         assertEquals("Tm90ZQ==", params.attachments.single().data)
     }
 
-    private fun thread(id: String, unread: Boolean = false): ThreadSummary {
-        return ThreadSummary(
+    private fun thread(
+        id: String,
+        unread: Boolean = false,
+    ): ThreadSummary =
+        ThreadSummary(
             id = id,
             accountId = "a1",
             folder = "INBOX",
@@ -155,5 +179,4 @@ class MailViewModelTest {
             sender = "a@example.com",
             unread = unread,
         )
-    }
 }

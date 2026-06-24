@@ -5,7 +5,5 @@ object SharedMobileContract {
 
     fun pingJson(id: Long = 1): String = pingRequest(id).toJson()
 
-    fun transportName(coreLoaded: Boolean): String {
-        return if (coreLoaded) "Rust core" else "Java fallback"
-    }
+    fun transportName(coreLoaded: Boolean): String = if (coreLoaded) "Rust core" else "Java fallback"
 }

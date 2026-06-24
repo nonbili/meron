@@ -8,9 +8,10 @@ import kotlin.test.assertTrue
 class MobileResponseParsersTest {
     @Test
     fun parsesAccountListEnvelope() {
-        val accounts = parseAccountListResponse(
-            """{"id":1,"result":{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","needs_reconnect":false}]}}""",
-        )
+        val accounts =
+            parseAccountListResponse(
+                """{"id":1,"result":{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","needs_reconnect":false}]}}""",
+            )
 
         assertEquals(1, accounts.size)
         assertEquals("acc1", accounts[0].id)
@@ -21,9 +22,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesStorageUsageEnvelope() {
-        val usage = parseStorageUsageResponse(
-            """{"id":40,"result":{"cacheBytes":1234,"dbBytes":5678}}""",
-        )
+        val usage =
+            parseStorageUsageResponse(
+                """{"id":40,"result":{"cacheBytes":1234,"dbBytes":5678}}""",
+            )
 
         assertEquals(1234, usage.cacheBytes)
         assertEquals(5678, usage.dbBytes)
@@ -31,9 +33,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesAutodiscoverEnvelope() {
-        val discovered = parseAutodiscoverResponse(
-            """{"id":10,"result":{"imap_host":"imap.gmail.com","imap_port":993,"smtp_host":"smtp.gmail.com","smtp_port":465,"username":"me@gmail.com","provider_name":"Gmail","source":"known","app_password_hint":{"provider":"Gmail","url":"https://example.com/passwords"}}}""",
-        )
+        val discovered =
+            parseAutodiscoverResponse(
+                """{"id":10,"result":{"imap_host":"imap.gmail.com","imap_port":993,"smtp_host":"smtp.gmail.com","smtp_port":465,"username":"me@gmail.com","provider_name":"Gmail","source":"known","app_password_hint":{"provider":"Gmail","url":"https://example.com/passwords"}}}""",
+            )
 
         assertEquals("imap.gmail.com", discovered.imapHost)
         assertEquals(993, discovered.imapPort)
@@ -48,9 +51,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesAccountPrefsAndAliases() {
-        val accounts = parseAccountListResponse(
-            """{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","sender_name":"Sender","avatar_url":"https://example.com/avatar.png","load_remote_images":true,"included_in_unified":false,"muted":true,"paused":true,"conversation_html":false,"rss_sync_interval_minutes":30,"chat_wallpaper":{"kind":"preset","presetId":"grid"},"aliases":[{"email":"alias@example.com","name":"Alias"}]}]}""",
-        )
+        val accounts =
+            parseAccountListResponse(
+                """{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","sender_name":"Sender","avatar_url":"https://example.com/avatar.png","load_remote_images":true,"included_in_unified":false,"muted":true,"paused":true,"conversation_html":false,"rss_sync_interval_minutes":30,"chat_wallpaper":{"kind":"preset","presetId":"grid"},"aliases":[{"email":"alias@example.com","name":"Alias"}]}]}""",
+            )
 
         val account = accounts.single()
         assertEquals("Sender", account.senderName)
@@ -69,9 +73,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesThreadListEnvelope() {
-        val threads = parseThreadListResponse(
-            """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Ada","subject":"Hello","preview":"Snippet","date":1700000000,"unread":true,"starred":true,"feed_url":"https://example.com/feed.xml"}]}}""",
-        )
+        val threads =
+            parseThreadListResponse(
+                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Ada","subject":"Hello","preview":"Snippet","date":1700000000,"unread":true,"starred":true,"feed_url":"https://example.com/feed.xml"}]}}""",
+            )
 
         assertEquals(1, threads.size)
         assertEquals("acc#INBOX#t", threads[0].id)
@@ -88,9 +93,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesThreadListNextCursor() {
-        val page = parseThreadListPage(
-            """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","date":1700000000}],"next_cursor":"1700000000:1"}}""",
-        )
+        val page =
+            parseThreadListPage(
+                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","date":1700000000}],"next_cursor":"1700000000:1"}}""",
+            )
 
         assertEquals(1, page.threads.size)
         assertEquals("1700000000:1", page.nextCursor)
@@ -105,9 +111,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesAccountEngineMetadataForRssBranching() {
-        val accounts = parseAccountListResponse(
-            """{"accounts":[{"id":"rss-1","email":"rss-1.local","display_name":"Feeds","provider":"rss","auth_type":"rss"},{"id":"mail-1","email":"me@example.com","engine":"meron_mail","provider":"gmail","auth_type":"gmail_oauth"}]}""",
-        )
+        val accounts =
+            parseAccountListResponse(
+                """{"accounts":[{"id":"rss-1","email":"rss-1.local","display_name":"Feeds","provider":"rss","auth_type":"rss"},{"id":"mail-1","email":"me@example.com","engine":"meron_mail","provider":"gmail","auth_type":"gmail_oauth"}]}""",
+            )
 
         assertTrue(accountSummaryIsRss(accounts[0]))
         assertFalse(accountSummaryIsRss(accounts[1]))
@@ -116,9 +123,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesFolderListEnvelopeAndRssFolderShape() {
-        val folders = parseFolderListResponse(
-            """{"id":4,"result":{"folders":[{"id":"INBOX","account_id":"acc","name":"INBOX","unread":3},{"id":"inbox","role":"inbox","unread":2}]}}""",
-        )
+        val folders =
+            parseFolderListResponse(
+                """{"id":4,"result":{"folders":[{"id":"INBOX","account_id":"acc","name":"INBOX","unread":3},{"id":"inbox","role":"inbox","unread":2}]}}""",
+            )
 
         assertEquals(2, folders.size)
         assertEquals("acc", folders[0].accountId)
@@ -130,9 +138,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesContactSuggestionsAndFormatsRecipients() {
-        val contacts = parseContactSuggestResponse(
-            """{"id":5,"result":{"contacts":[{"name":"Bea","addr":"bea@example.com"},{"name":"","addr":"aki@example.com"}]}}""",
-        )
+        val contacts =
+            parseContactSuggestResponse(
+                """{"id":5,"result":{"contacts":[{"name":"Bea","addr":"bea@example.com"},{"name":"","addr":"aki@example.com"}]}}""",
+            )
 
         assertEquals(2, contacts.size)
         assertEquals("Bea <bea@example.com>", formatContactSuggestion(contacts[0]))
@@ -143,12 +152,13 @@ class MobileResponseParsersTest {
 
     @Test
     fun buildsSendIdentitiesAndDetectsReplyAlias() {
-        val account = AccountSummary(
-            id = "acc1",
-            email = "me@example.com",
-            senderName = "Me",
-            aliases = listOf(AccountAlias(email = "alias@example.com")),
-        )
+        val account =
+            AccountSummary(
+                id = "acc1",
+                email = "me@example.com",
+                senderName = "Me",
+                aliases = listOf(AccountAlias(email = "alias@example.com")),
+            )
         val identities = accountSendIdentities(account)
 
         assertEquals(2, identities.size)
@@ -200,9 +210,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesThreadReadEnvelope() {
-        val messages = parseThreadReadResponse(
-            """{"id":3,"result":{"messages":[{"id":"acc#INBOX#t#9","from_name":"Ada","from_addr":"ada@example.com","to":"Me <me@example.com>","cc":"Copy <copy@example.com>","bcc":"Hidden <hidden@example.com>","subject":"Cached subject","body":"Hello from cache","body_html":"<p>Hello from cache</p>","date":300,"unread":true,"starred":true,"reply_to":"Team <team@example.com>","message_id":"m1@example.com","references":"<root@example.com>","has_attachments":true,"attachments":[{"filename":"note.txt","mime":"text/plain","size":2,"key":"acc/INBOX/9/1.txt"},{"filename":"remote.jpg","mime":"image/jpeg","size":0,"url":"https://example.com/remote.jpg"}]}]}}""",
-        )
+        val messages =
+            parseThreadReadResponse(
+                """{"id":3,"result":{"messages":[{"id":"acc#INBOX#t#9","from_name":"Ada","from_addr":"ada@example.com","to":"Me <me@example.com>","cc":"Copy <copy@example.com>","bcc":"Hidden <hidden@example.com>","subject":"Cached subject","body":"Hello from cache","body_html":"<p>Hello from cache</p>","date":300,"unread":true,"starred":true,"reply_to":"Team <team@example.com>","message_id":"m1@example.com","references":"<root@example.com>","has_attachments":true,"attachments":[{"filename":"note.txt","mime":"text/plain","size":2,"key":"acc/INBOX/9/1.txt"},{"filename":"remote.jpg","mime":"image/jpeg","size":0,"url":"https://example.com/remote.jpg"}]}]}}""",
+            )
 
         assertEquals(1, messages.size)
         assertEquals("acc#INBOX#t#9", messages[0].id)
@@ -231,9 +242,10 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesThreadReadNextCursor() {
-        val page = parseThreadReadPage(
-            """{"id":3,"result":{"messages":[{"id":"acc#INBOX#t#8","date":200}],"next_cursor":"uid:8"}}""",
-        )
+        val page =
+            parseThreadReadPage(
+                """{"id":3,"result":{"messages":[{"id":"acc#INBOX#t#8","date":200}],"next_cursor":"uid:8"}}""",
+            )
 
         assertEquals(1, page.messages.size)
         assertEquals("uid:8", page.nextCursor)

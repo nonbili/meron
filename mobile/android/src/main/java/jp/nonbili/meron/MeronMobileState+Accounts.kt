@@ -19,23 +19,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,17 +52,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -82,42 +79,42 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,8 +132,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -146,8 +141,12 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,6 +158,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -170,15 +170,15 @@ import jp.nonbili.meron.shared.AccountNameParams
 import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
-import jp.nonbili.meron.shared.AttachmentReadParams
-import jp.nonbili.meron.shared.AutodiscoverAccountParams
-import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddOAuthAccountParams
+import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
+import jp.nonbili.meron.shared.AttachmentReadParams
+import jp.nonbili.meron.shared.AutodiscoverAccountParams
 import jp.nonbili.meron.shared.ComposeDraft
-import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.ContactSuggestParams
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.CopyThreadParams
 import jp.nonbili.meron.shared.DiscardDraftParams
 import jp.nonbili.meron.shared.DraftAttachment
@@ -188,20 +188,20 @@ import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderListParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ImportOpmlParams
-import jp.nonbili.meron.shared.MessageAttachment
-import jp.nonbili.meron.shared.MessageBody
-import jp.nonbili.meron.shared.MobileMailCommandClient
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MessageAttachment
+import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
+import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
-import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.RssThreadParams
+import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -211,40 +211,40 @@ import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.accountSendIdentities
+import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
+import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.defaultOAuthRedirectUri
+import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
-import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
+import jp.nonbili.meron.shared.forwardableAttachments
+import jp.nonbili.meron.shared.isOAuthCallbackUrl
+import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
-import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
+import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
+import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
+import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
-import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
-import jp.nonbili.meron.shared.parseMailtoUrl
+import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
-import jp.nonbili.meron.shared.defaultOAuthRedirectUri
-import jp.nonbili.meron.shared.detectReplyFromIdentity
-import jp.nonbili.meron.shared.isOAuthCallbackUrl
-import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
-import jp.nonbili.meron.shared.ownAddressList
-import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -264,7 +264,10 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-internal fun MeronMobileState.applyAccounts(json: String, preferEmail: String? = null) {
+internal fun MeronMobileState.applyAccounts(
+    json: String,
+    preferEmail: String? = null,
+) {
     accountJson = json
     val parsed = parseAccountListResponse(json)
     coreAccounts = parsed
@@ -345,18 +348,19 @@ internal fun MeronMobileState.addPasswordAccount() {
         status = "Rust core not packaged."
         return
     }
-    val params = AddPasswordAccountParams(
-        email = email.trim(),
-        displayName = displayName.trim(),
-        senderName = senderName.trim(),
-        imapHost = host.trim(),
-        imapPort = imapPort.trim().toIntOrNull() ?: 993,
-        smtpHost = smtpHost.trim(),
-        smtpPort = smtpPort.trim().toIntOrNull() ?: 465,
-        username = username.trim().ifBlank { email.trim() },
-        password = password,
-        tls = true,
-    )
+    val params =
+        AddPasswordAccountParams(
+            email = email.trim(),
+            displayName = displayName.trim(),
+            senderName = senderName.trim(),
+            imapHost = host.trim(),
+            imapPort = imapPort.trim().toIntOrNull() ?: 993,
+            smtpHost = smtpHost.trim(),
+            smtpPort = smtpPort.trim().toIntOrNull() ?: 465,
+            username = username.trim().ifBlank { email.trim() },
+            password = password,
+            tls = true,
+        )
     status = "Adding password account..."
     scope.launch {
         runCatching {
@@ -400,11 +404,16 @@ internal fun MeronMobileState.autodiscoverPasswordAccount() {
             if (discovered.smtpHost.isNotBlank()) smtpHost = discovered.smtpHost
             if (discovered.smtpPort > 0) smtpPort = discovered.smtpPort.toString()
             if (discovered.username.isNotBlank()) username = discovered.username
-            status = when {
-                discovered.appPasswordProvider.isNotBlank() -> "${discovered.providerName.ifBlank { discovered.appPasswordProvider }} settings found. Use an app password."
-                discovered.source == "guess" -> "Settings guessed. Verify the servers before adding."
-                else -> "Settings found${discovered.providerName.takeIf { it.isNotBlank() }?.let { " for $it" }.orEmpty()}."
-            }
+            status =
+                when {
+                    discovered.appPasswordProvider.isNotBlank() -> "${discovered.providerName.ifBlank {
+                        discovered.appPasswordProvider
+                    }} settings found. Use an app password."
+
+                    discovered.source == "guess" -> "Settings guessed. Verify the servers before adding."
+
+                    else -> "Settings found${discovered.providerName.takeIf { it.isNotBlank() }?.let { " for $it" }.orEmpty()}."
+                }
         }.onFailure {
             status = "Settings lookup failed: ${it.message}"
         }
@@ -481,16 +490,16 @@ internal fun MeronMobileState.saveAccountSettings(
         status = "Rust core not packaged."
         return
     }
-    val aliases = aliasesText
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .map { line ->
-            val parts = line.split(",", limit = 2).map { it.trim() }
-            AccountAliasParams(email = parts[0], name = parts.getOrElse(1) { "" })
-        }
-        .filter { it.email.isNotBlank() }
-        .toList()
+    val aliases =
+        aliasesText
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .map { line ->
+                val parts = line.split(",", limit = 2).map { it.trim() }
+                AccountAliasParams(email = parts[0], name = parts.getOrElse(1) { "" })
+            }.filter { it.email.isNotBlank() }
+            .toList()
     scope.launch {
         runCatching {
             withContext(Dispatchers.IO) {
@@ -522,12 +531,16 @@ internal fun MeronMobileState.saveAccountSettings(
     }
 }
 
-internal fun MeronMobileState.setAccountNavigationVisible(account: AccountSummary, visible: Boolean) {
-    hiddenNavigationAccountIds = if (visible) {
-        hiddenNavigationAccountIds - account.id
-    } else {
-        hiddenNavigationAccountIds + account.id
-    }
+internal fun MeronMobileState.setAccountNavigationVisible(
+    account: AccountSummary,
+    visible: Boolean,
+) {
+    hiddenNavigationAccountIds =
+        if (visible) {
+            hiddenNavigationAccountIds - account.id
+        } else {
+            hiddenNavigationAccountIds + account.id
+        }
     saveAppStringSet(context, HIDDEN_NAV_ACCOUNTS_PREF, hiddenNavigationAccountIds)
     if (!visible && selectedCoreAccountId == account.id) {
         selectedCoreAccountId = UNIFIED_ACCOUNT_ID
@@ -569,7 +582,10 @@ internal fun MeronMobileState.removeAccount(account: AccountSummary) {
     }
 }
 
-internal fun MeronMobileState.moveAccount(account: AccountSummary, delta: Int) {
+internal fun MeronMobileState.moveAccount(
+    account: AccountSummary,
+    delta: Int,
+) {
     if (!MeronCoreNative.isLoaded()) {
         status = "Rust core not packaged."
         return
@@ -606,15 +622,16 @@ internal fun MeronMobileState.addOAuthAccount() {
         status = "OAuth refresh token is required."
         return
     }
-    val params = AddOAuthAccountParams(
-        email = oauthEmail.trim(),
-        provider = oauthProvider,
-        displayName = displayName.trim(),
-        senderName = senderName.trim(),
-        accessToken = oauthAccessToken.trim(),
-        refreshToken = refreshToken,
-        tokenExpiresAt = oauthExpiresAt.trim().toLongOrNull() ?: 0,
-    )
+    val params =
+        AddOAuthAccountParams(
+            email = oauthEmail.trim(),
+            provider = oauthProvider,
+            displayName = displayName.trim(),
+            senderName = senderName.trim(),
+            accessToken = oauthAccessToken.trim(),
+            refreshToken = refreshToken,
+            tokenExpiresAt = oauthExpiresAt.trim().toLongOrNull() ?: 0,
+        )
     status = "Adding ${oauthProvider.replaceFirstChar { it.uppercase() }} account..."
     scope.launch {
         runCatching {
@@ -650,17 +667,18 @@ internal fun MeronMobileState.exchangeOAuthCode() {
         status = "OAuth client ID is required."
         return
     }
-    val params = ExchangeOAuthCodeParams(
-        email = oauthEmail.trim(),
-        provider = oauthProvider,
-        displayName = displayName.trim(),
-        senderName = senderName.trim(),
-        code = code,
-        clientId = clientId,
-        clientSecret = oauthClientSecret.trim(),
-        redirectUri = oauthRedirectUri.trim(),
-        codeVerifier = oauthVerifier,
-    )
+    val params =
+        ExchangeOAuthCodeParams(
+            email = oauthEmail.trim(),
+            provider = oauthProvider,
+            displayName = displayName.trim(),
+            senderName = senderName.trim(),
+            code = code,
+            clientId = clientId,
+            clientSecret = oauthClientSecret.trim(),
+            redirectUri = oauthRedirectUri.trim(),
+            codeVerifier = oauthVerifier,
+        )
     status = "Exchanging OAuth code..."
     scope.launch {
         runCatching {
@@ -689,16 +707,17 @@ internal fun MeronMobileState.launchOAuthFlow() {
     }
     oauthState = UUID.randomUUID().toString()
     oauthVerifier = UUID.randomUUID().toString() + UUID.randomUUID().toString()
-    val url = buildOAuthAuthorizationUrl(
-        OAuthAuthorizationRequest(
-            provider = oauthProvider,
-            clientId = clientId,
-            redirectUri = oauthRedirectUri.trim(),
-            state = oauthState,
-            codeChallenge = oauthVerifier.pkceChallenge(),
-            loginHint = oauthEmail.trim(),
-        ),
-    )
+    val url =
+        buildOAuthAuthorizationUrl(
+            OAuthAuthorizationRequest(
+                provider = oauthProvider,
+                clientId = clientId,
+                redirectUri = oauthRedirectUri.trim(),
+                state = oauthState,
+                codeChallenge = oauthVerifier.pkceChallenge(),
+                loginHint = oauthEmail.trim(),
+            ),
+        )
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }.onSuccess {
@@ -732,19 +751,21 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     // Server folder names are case-sensitive ("INBOX"), but the default
     // request uses "inbox"; match case-insensitively and fall back to a real
     // inbox before the first folder.
-    val folder = folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
-        ?: folders.firstOrNull { it.name.equals(INBOX_FOLDER, ignoreCase = true) }?.name
-        ?: folders.firstOrNull()?.name
-        ?: requestedFolder
-    val threadsJson = client.listThreads(
-        ThreadListParams(
-            accountId = account.id,
-            folderId = folder,
-            query = query.trim(),
-            filter = filter.protocolValue(),
-            beforeCursor = beforeCursor,
-        ),
-    )
+    val folder =
+        folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
+            ?: folders.firstOrNull { it.name.equals(INBOX_FOLDER, ignoreCase = true) }?.name
+            ?: folders.firstOrNull()?.name
+            ?: requestedFolder
+    val threadsJson =
+        client.listThreads(
+            ThreadListParams(
+                accountId = account.id,
+                folderId = folder,
+                query = query.trim(),
+                filter = filter.protocolValue(),
+                beforeCursor = beforeCursor,
+            ),
+        )
     val page = parseThreadListPage(threadsJson)
     return MailboxLoadResult(
         folders = folders.filter { it.name.equals(folder, ignoreCase = true) },
@@ -754,8 +775,10 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     )
 }
 
-internal suspend fun MeronMobileState.loadAccountFolders(client: MobileMailCommandClient, account: AccountSummary): List<FolderSummary> {
+internal suspend fun MeronMobileState.loadAccountFolders(
+    client: MobileMailCommandClient,
+    account: AccountSummary,
+): List<FolderSummary> {
     val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
     return parseFolderListResponse(foldersJson)
 }
-

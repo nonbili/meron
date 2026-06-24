@@ -57,12 +57,11 @@ data class AddRssAccountParams(
     val feedUrl: String,
     val displayName: String = "",
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "feed_url" to feedUrl.jsonString(),
             "display_name" to displayName.jsonString(),
         )
-    }
 }
 
 data class AddPasswordAccountParams(
@@ -77,8 +76,8 @@ data class AddPasswordAccountParams(
     val password: String,
     val tls: Boolean = true,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "email" to email.jsonString(),
             "display_name" to displayName.jsonString(),
             "sender_name" to senderName.jsonString(),
@@ -90,7 +89,6 @@ data class AddPasswordAccountParams(
             "password" to password.jsonString(),
             "tls" to tls.toString(),
         )
-    }
 }
 
 data class AutodiscoverAccountParams(
@@ -114,8 +112,8 @@ data class AddOAuthAccountParams(
     val smtpHost: String = "",
     val smtpPort: Int? = null,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "email" to email.jsonString(),
             "provider" to provider.jsonString(),
             "display_name" to displayName.jsonString(),
@@ -130,7 +128,6 @@ data class AddOAuthAccountParams(
             "smtp_host" to smtpHost.takeIf { it.isNotBlank() }?.jsonString(),
             "smtp_port" to smtpPort?.toString(),
         )
-    }
 }
 
 data class ExchangeOAuthCodeParams(
@@ -144,8 +141,8 @@ data class ExchangeOAuthCodeParams(
     val redirectUri: String,
     val codeVerifier: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "email" to email.jsonString(),
             "provider" to provider.jsonString(),
             "display_name" to displayName.jsonString(),
@@ -156,19 +153,17 @@ data class ExchangeOAuthCodeParams(
             "redirect_uri" to redirectUri.jsonString(),
             "code_verifier" to codeVerifier.jsonString(),
         )
-    }
 }
 
 data class AddRssFeedParams(
     val accountId: String,
     val feedUrl: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account" to accountId.jsonString(),
             "feed_url" to feedUrl.jsonString(),
         )
-    }
 }
 
 data class RemoveRssFeedParams(
@@ -181,12 +176,11 @@ data class MoveRssFeedParams(
     val threadId: String,
     val targetAccountId: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "target_account" to targetAccountId.jsonString(),
         )
-    }
 }
 
 data class ExportOpmlParams(
@@ -199,12 +193,11 @@ data class ImportOpmlParams(
     val accountId: String,
     val opml: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account" to accountId.jsonString(),
             "opml" to opml.jsonString(),
         )
-    }
 }
 
 data class AccountIdParams(
@@ -217,24 +210,22 @@ data class AccountNameParams(
     val accountId: String,
     val name: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "name" to name.jsonString(),
         )
-    }
 }
 
 data class AccountAvatarParams(
     val accountId: String,
     val avatarUrl: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "avatar_url" to avatarUrl.jsonString(),
         )
-    }
 }
 
 data class AccountMediaFileParams(
@@ -243,14 +234,13 @@ data class AccountMediaFileParams(
     val mime: String,
     val data: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "filename" to filename.jsonString(),
             "mime" to mime.jsonString(),
             "data" to data.jsonString(),
         )
-    }
 }
 
 data class AccountChatWallpaperParams(
@@ -259,17 +249,26 @@ data class AccountChatWallpaperParams(
     val customUrl: String = "",
 ) {
     fun toJson(): String {
-        val wallpaper = when {
-            presetId.isNotBlank() -> jsonObject(
-                "kind" to "preset".jsonString(),
-                "presetId" to presetId.jsonString(),
-            )
-            customUrl.isNotBlank() -> jsonObject(
-                "kind" to "custom".jsonString(),
-                "url" to customUrl.jsonString(),
-            )
-            else -> "null"
-        }
+        val wallpaper =
+            when {
+                presetId.isNotBlank() -> {
+                    jsonObject(
+                        "kind" to "preset".jsonString(),
+                        "presetId" to presetId.jsonString(),
+                    )
+                }
+
+                customUrl.isNotBlank() -> {
+                    jsonObject(
+                        "kind" to "custom".jsonString(),
+                        "url" to customUrl.jsonString(),
+                    )
+                }
+
+                else -> {
+                    "null"
+                }
+            }
         return jsonObject(
             "id" to accountId.jsonString(),
             "wallpaper" to wallpaper,
@@ -281,58 +280,53 @@ data class AccountFlagParams(
     val accountId: String,
     val enabled: Boolean,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "enabled" to enabled.toString(),
         )
-    }
 }
 
 data class AccountRssSyncIntervalParams(
     val accountId: String,
     val minutes: Int,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "minutes" to minutes.toString(),
         )
-    }
 }
 
 data class AccountAliasParams(
     val email: String,
     val name: String = "",
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "email" to email.jsonString(),
             "name" to name.jsonString(),
         )
-    }
 }
 
 data class AccountAliasesParams(
     val accountId: String,
     val aliases: List<AccountAliasParams>,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "id" to accountId.jsonString(),
             "aliases" to aliases.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toJson() },
         )
-    }
 }
 
 data class AccountReorderParams(
     val accountIds: List<String>,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "accounts" to accountIds.jsonStringArray(),
         )
-    }
 }
 
 data class FolderListParams(
@@ -345,12 +339,11 @@ data class FolderCreateParams(
     val accountId: String,
     val name: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "name" to name.jsonString(),
         )
-    }
 }
 
 data class ContactSuggestParams(
@@ -358,13 +351,12 @@ data class ContactSuggestParams(
     val query: String = "",
     val limit: Int = 8,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account" to accountId.jsonString(),
             "query" to query.jsonString(),
             "limit" to limit.toString(),
         )
-    }
 }
 
 data class ThreadListParams(
@@ -375,8 +367,8 @@ data class ThreadListParams(
     val beforeCursor: String? = null,
     val refresh: Boolean = false,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "folder_id" to folderId.jsonString(),
             "query" to query.jsonString(),
@@ -384,7 +376,6 @@ data class ThreadListParams(
             "before_cursor" to beforeCursor?.jsonString(),
             "refresh" to refresh.toString(),
         )
-    }
 }
 
 data class ThreadReadParams(
@@ -392,13 +383,12 @@ data class ThreadReadParams(
     val beforeCursor: String? = null,
     val limit: Int? = null,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "before_cursor" to beforeCursor?.jsonString(),
             "limit" to limit?.toString(),
         )
-    }
 }
 
 data class AttachmentReadParams(
@@ -413,14 +403,13 @@ data class SyncMailParams(
     val limit: Int = 50,
     val folders: Boolean = true,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "folder_id" to folderId.jsonString(),
             "limit" to limit.toString(),
             "folders" to folders.toString(),
         )
-    }
 }
 
 data class SyncRssParams(
@@ -434,13 +423,12 @@ data class RssThreadParams(
     val beforeCursor: String? = null,
     val limit: Int? = null,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "before_cursor" to beforeCursor?.jsonString(),
             "limit" to limit?.toString(),
         )
-    }
 }
 
 data class MobileAttachmentInput(
@@ -449,14 +437,13 @@ data class MobileAttachmentInput(
     val data: String,
     val inlineId: String = "",
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "filename" to filename.jsonString(),
             "mime" to mime.jsonString(),
             "data" to data.jsonString(),
             "inline_id" to inlineId.jsonString(),
         )
-    }
 }
 
 data class SendMailParams(
@@ -474,8 +461,8 @@ data class SendMailParams(
     val messageId: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "from" to from.jsonString(),
             "to" to to.jsonString(),
@@ -490,7 +477,6 @@ data class SendMailParams(
             "message_id" to messageId.jsonString(),
             "attachments" to attachments.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toJson() },
         )
-    }
 }
 
 data class SaveDraftParams(
@@ -508,8 +494,8 @@ data class SaveDraftParams(
     val references: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "draft_id" to draftId.jsonString(),
             "from" to from.jsonString(),
@@ -524,23 +510,24 @@ data class SaveDraftParams(
             "references" to references.jsonString(),
             "attachments" to attachments.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toJson() },
         )
-    }
 }
 
 data class DiscardDraftParams(
     val accountId: String,
     val draftId: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "draft_id" to draftId.jsonString(),
         )
-    }
 }
 
-fun ComposeDraft.toSendMailParams(accountId: String, from: String = ""): SendMailParams {
-    return SendMailParams(
+fun ComposeDraft.toSendMailParams(
+    accountId: String,
+    from: String = "",
+): SendMailParams =
+    SendMailParams(
         accountId = accountId,
         from = from,
         to = to,
@@ -548,18 +535,22 @@ fun ComposeDraft.toSendMailParams(accountId: String, from: String = ""): SendMai
         bcc = bcc,
         subject = subject,
         body = body,
-        attachments = attachments.map {
-            MobileAttachmentInput(
-                filename = it.displayName,
-                mime = it.mimeType,
-                data = it.dataBase64,
-            )
-        },
+        attachments =
+            attachments.map {
+                MobileAttachmentInput(
+                    filename = it.displayName,
+                    mime = it.mimeType,
+                    data = it.dataBase64,
+                )
+            },
     )
-}
 
-fun ComposeDraft.toSaveDraftParams(accountId: String, draftId: String, from: String = ""): SaveDraftParams {
-    return SaveDraftParams(
+fun ComposeDraft.toSaveDraftParams(
+    accountId: String,
+    draftId: String,
+    from: String = "",
+): SaveDraftParams =
+    SaveDraftParams(
         accountId = accountId,
         draftId = draftId,
         from = from,
@@ -568,15 +559,15 @@ fun ComposeDraft.toSaveDraftParams(accountId: String, draftId: String, from: Str
         bcc = bcc,
         subject = subject,
         body = body,
-        attachments = attachments.map {
-            MobileAttachmentInput(
-                filename = it.displayName,
-                mime = it.mimeType,
-                data = it.dataBase64,
-            )
-        },
+        attachments =
+            attachments.map {
+                MobileAttachmentInput(
+                    filename = it.displayName,
+                    mime = it.mimeType,
+                    data = it.dataBase64,
+                )
+            },
     )
-}
 
 fun MessageBody.toReplyMailParams(
     accountId: String,
@@ -589,9 +580,10 @@ fun MessageBody.toReplyMailParams(
     val replySubject = if (subject.startsWith("Re:", ignoreCase = true)) subject else "Re: $subject"
     val parentMessageId = messageId.trim().trim('<', '>')
     val parentReference = parentMessageId.takeIf { it.isNotBlank() }?.let { "<$it>" }.orEmpty()
-    val nextReferences = listOf(references.trim(), parentReference)
-        .filter { it.isNotBlank() }
-        .joinToString(" ")
+    val nextReferences =
+        listOf(references.trim(), parentReference)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
     return SendMailParams(
         accountId = accountId,
         from = from,
@@ -601,13 +593,14 @@ fun MessageBody.toReplyMailParams(
         body = body,
         inReplyTo = parentReference,
         references = nextReferences,
-        attachments = attachments.map {
-            MobileAttachmentInput(
-                filename = it.displayName,
-                mime = it.mimeType,
-                data = it.dataBase64,
-            )
-        },
+        attachments =
+            attachments.map {
+                MobileAttachmentInput(
+                    filename = it.displayName,
+                    mime = it.mimeType,
+                    data = it.dataBase64,
+                )
+            },
     )
 }
 
@@ -618,25 +611,23 @@ data class ThreadActionParams(
 ) {
     fun archiveJson(): String = jsonObject("thread_id" to threadId.jsonString())
 
-    fun deleteJson(): String {
-        return jsonObject(
+    fun deleteJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "folder" to folderId?.jsonString(),
             "message_ids" to messageIds.takeUnless { it.isEmpty() }?.jsonStringArray(),
         )
-    }
 }
 
 data class MoveThreadParams(
     val threadId: String,
     val targetFolderId: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "target_folder_id" to targetFolderId.jsonString(),
         )
-    }
 }
 
 data class CopyThreadParams(
@@ -644,13 +635,12 @@ data class CopyThreadParams(
     val targetAccountId: String,
     val targetFolderId: String,
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "target_account_id" to targetAccountId.jsonString(),
             "target_folder_id" to targetFolderId.jsonString(),
         )
-    }
 }
 
 data class MarkReadParams(
@@ -658,25 +648,23 @@ data class MarkReadParams(
     val seen: Boolean = true,
     val messageIds: List<String> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "seen" to seen.toString(),
             "message_ids" to messageIds.takeUnless { it.isEmpty() }?.jsonStringArray(),
         )
-    }
 }
 
 data class MarkAllReadParams(
     val accountId: String,
     val folderId: String = "inbox",
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "account_id" to accountId.jsonString(),
             "folder_id" to folderId.jsonString(),
         )
-    }
 }
 
 data class MarkStarredParams(
@@ -684,13 +672,12 @@ data class MarkStarredParams(
     val starred: Boolean,
     val messageIds: List<String> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "starred" to starred.toString(),
             "message_ids" to messageIds.takeUnless { it.isEmpty() }?.jsonStringArray(),
         )
-    }
 }
 
 data class RssMarkReadParams(
@@ -698,13 +685,12 @@ data class RssMarkReadParams(
     val seen: Boolean = true,
     val itemKeys: List<String> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "seen" to seen.toString(),
             "item_keys" to itemKeys.takeUnless { it.isEmpty() }?.jsonStringArray(),
         )
-    }
 }
 
 data class RssMarkStarredParams(
@@ -712,13 +698,12 @@ data class RssMarkStarredParams(
     val starred: Boolean,
     val itemKeys: List<String> = emptyList(),
 ) {
-    fun toJson(): String {
-        return jsonObject(
+    fun toJson(): String =
+        jsonObject(
             "thread_id" to threadId.jsonString(),
             "starred" to starred.toString(),
             "item_keys" to itemKeys.takeUnless { it.isEmpty() }?.jsonStringArray(),
         )
-    }
 }
 
 class MobileMailCommandClient(
@@ -730,105 +715,55 @@ class MobileMailCommandClient(
 
     suspend fun listAccounts(): String = core.invoke(MobileCommand.AccountList)
 
-    suspend fun addPasswordAccount(params: AddPasswordAccountParams): String {
-        return core.invoke(MobileCommand.AccountAddPassword, params.toJson())
-    }
+    suspend fun addPasswordAccount(params: AddPasswordAccountParams): String = core.invoke(MobileCommand.AccountAddPassword, params.toJson())
 
-    suspend fun autodiscoverAccount(params: AutodiscoverAccountParams): String {
-        return core.invoke(MobileCommand.AccountAutodiscover, params.toJson())
-    }
+    suspend fun autodiscoverAccount(params: AutodiscoverAccountParams): String = core.invoke(MobileCommand.AccountAutodiscover, params.toJson())
 
-    suspend fun addOAuthAccount(params: AddOAuthAccountParams): String {
-        return core.invoke(MobileCommand.AccountAddOAuth, params.toJson())
-    }
+    suspend fun addOAuthAccount(params: AddOAuthAccountParams): String = core.invoke(MobileCommand.AccountAddOAuth, params.toJson())
 
-    suspend fun exchangeOAuthCode(params: ExchangeOAuthCodeParams): String {
-        return core.invoke(MobileCommand.AccountExchangeOAuthCode, params.toJson())
-    }
+    suspend fun exchangeOAuthCode(params: ExchangeOAuthCodeParams): String = core.invoke(MobileCommand.AccountExchangeOAuthCode, params.toJson())
 
-    suspend fun addRssAccount(params: AddRssAccountParams): String {
-        return core.invoke(MobileCommand.AccountAddRss, params.toJson())
-    }
+    suspend fun addRssAccount(params: AddRssAccountParams): String = core.invoke(MobileCommand.AccountAddRss, params.toJson())
 
-    suspend fun removeAccount(params: AccountIdParams): String {
-        return core.invoke(MobileCommand.AccountRemove, params.toJson())
-    }
+    suspend fun removeAccount(params: AccountIdParams): String = core.invoke(MobileCommand.AccountRemove, params.toJson())
 
-    suspend fun setAccountName(params: AccountNameParams): String {
-        return core.invoke(MobileCommand.AccountSetName, params.toJson())
-    }
+    suspend fun setAccountName(params: AccountNameParams): String = core.invoke(MobileCommand.AccountSetName, params.toJson())
 
-    suspend fun setAccountSenderName(params: AccountNameParams): String {
-        return core.invoke(MobileCommand.AccountSetSenderName, params.toJson())
-    }
+    suspend fun setAccountSenderName(params: AccountNameParams): String = core.invoke(MobileCommand.AccountSetSenderName, params.toJson())
 
-    suspend fun setAccountAvatar(params: AccountAvatarParams): String {
-        return core.invoke(MobileCommand.AccountSetAvatar, params.toJson())
-    }
+    suspend fun setAccountAvatar(params: AccountAvatarParams): String = core.invoke(MobileCommand.AccountSetAvatar, params.toJson())
 
-    suspend fun writeAccountAvatarFile(params: AccountMediaFileParams): String {
-        return core.invoke(MobileCommand.AccountWriteAvatarFile, params.toJson())
-    }
+    suspend fun writeAccountAvatarFile(params: AccountMediaFileParams): String = core.invoke(MobileCommand.AccountWriteAvatarFile, params.toJson())
 
-    suspend fun setAccountChatWallpaper(params: AccountChatWallpaperParams): String {
-        return core.invoke(MobileCommand.AccountSetChatWallpaper, params.toJson())
-    }
+    suspend fun setAccountChatWallpaper(params: AccountChatWallpaperParams): String = core.invoke(MobileCommand.AccountSetChatWallpaper, params.toJson())
 
-    suspend fun writeAccountChatWallpaperFile(params: AccountMediaFileParams): String {
-        return core.invoke(MobileCommand.AccountWriteChatWallpaperFile, params.toJson())
-    }
+    suspend fun writeAccountChatWallpaperFile(params: AccountMediaFileParams): String = core.invoke(MobileCommand.AccountWriteChatWallpaperFile, params.toJson())
 
-    suspend fun setAccountImages(params: AccountFlagParams): String {
-        return core.invoke(MobileCommand.AccountSetImages, params.toJson())
-    }
+    suspend fun setAccountImages(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetImages, params.toJson())
 
-    suspend fun setAccountConversationHtml(params: AccountFlagParams): String {
-        return core.invoke(MobileCommand.AccountSetConversationHtml, params.toJson())
-    }
+    suspend fun setAccountConversationHtml(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetConversationHtml, params.toJson())
 
-    suspend fun setAccountUnified(params: AccountFlagParams): String {
-        return core.invoke(MobileCommand.AccountSetUnified, params.toJson())
-    }
+    suspend fun setAccountUnified(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetUnified, params.toJson())
 
-    suspend fun setAccountMuted(params: AccountFlagParams): String {
-        return core.invoke(MobileCommand.AccountSetMuted, params.toJson())
-    }
+    suspend fun setAccountMuted(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetMuted, params.toJson())
 
-    suspend fun setAccountPaused(params: AccountFlagParams): String {
-        return core.invoke(MobileCommand.AccountSetPaused, params.toJson())
-    }
+    suspend fun setAccountPaused(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetPaused, params.toJson())
 
-    suspend fun setAccountRssSyncInterval(params: AccountRssSyncIntervalParams): String {
-        return core.invoke(MobileCommand.AccountSetRssSyncInterval, params.toJson())
-    }
+    suspend fun setAccountRssSyncInterval(params: AccountRssSyncIntervalParams): String = core.invoke(MobileCommand.AccountSetRssSyncInterval, params.toJson())
 
-    suspend fun setAccountAliases(params: AccountAliasesParams): String {
-        return core.invoke(MobileCommand.AccountSetAliases, params.toJson())
-    }
+    suspend fun setAccountAliases(params: AccountAliasesParams): String = core.invoke(MobileCommand.AccountSetAliases, params.toJson())
 
-    suspend fun reorderAccounts(params: AccountReorderParams): String {
-        return core.invoke(MobileCommand.AccountReorder, params.toJson())
-    }
+    suspend fun reorderAccounts(params: AccountReorderParams): String = core.invoke(MobileCommand.AccountReorder, params.toJson())
 
-    suspend fun addRssFeed(params: AddRssFeedParams): String {
-        return core.invoke(MobileCommand.FeedAdd, params.toJson())
-    }
+    suspend fun addRssFeed(params: AddRssFeedParams): String = core.invoke(MobileCommand.FeedAdd, params.toJson())
 
-    suspend fun removeRssFeed(params: RemoveRssFeedParams): String {
-        return core.invoke(MobileCommand.FeedRemove, params.toJson())
-    }
+    suspend fun removeRssFeed(params: RemoveRssFeedParams): String = core.invoke(MobileCommand.FeedRemove, params.toJson())
 
-    suspend fun moveRssFeed(params: MoveRssFeedParams): String {
-        return core.invoke(MobileCommand.FeedMove, params.toJson())
-    }
+    suspend fun moveRssFeed(params: MoveRssFeedParams): String = core.invoke(MobileCommand.FeedMove, params.toJson())
 
-    suspend fun exportOpml(params: ExportOpmlParams): String {
-        return core.invoke(MobileCommand.FeedExportOpml, params.toJson())
-    }
+    suspend fun exportOpml(params: ExportOpmlParams): String = core.invoke(MobileCommand.FeedExportOpml, params.toJson())
 
-    suspend fun importOpml(params: ImportOpmlParams): String {
-        return core.invoke(MobileCommand.FeedImportOpml, params.toJson())
-    }
+    suspend fun importOpml(params: ImportOpmlParams): String = core.invoke(MobileCommand.FeedImportOpml, params.toJson())
 
     suspend fun listFolders(params: FolderListParams): String = core.invoke(MobileCommand.FolderList, params.toJson())
 
@@ -881,204 +816,245 @@ class MobileMailCommandClient(
 
 fun accountListRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.AccountList)
 
-fun accountAddPasswordRequest(id: Long = 1, params: AddPasswordAccountParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountAddPassword, params.toJson())
-}
+fun accountAddPasswordRequest(
+    id: Long = 1,
+    params: AddPasswordAccountParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountAddPassword, params.toJson())
 
-fun accountAutodiscoverRequest(id: Long = 1, params: AutodiscoverAccountParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountAutodiscover, params.toJson())
-}
+fun accountAutodiscoverRequest(
+    id: Long = 1,
+    params: AutodiscoverAccountParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountAutodiscover, params.toJson())
 
-fun accountAddOAuthRequest(id: Long = 1, params: AddOAuthAccountParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountAddOAuth, params.toJson())
-}
+fun accountAddOAuthRequest(
+    id: Long = 1,
+    params: AddOAuthAccountParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountAddOAuth, params.toJson())
 
-fun accountExchangeOAuthCodeRequest(id: Long = 1, params: ExchangeOAuthCodeParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountExchangeOAuthCode, params.toJson())
-}
+fun accountExchangeOAuthCodeRequest(
+    id: Long = 1,
+    params: ExchangeOAuthCodeParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountExchangeOAuthCode, params.toJson())
 
-fun accountAddRssRequest(id: Long = 1, params: AddRssAccountParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountAddRss, params.toJson())
-}
+fun accountAddRssRequest(
+    id: Long = 1,
+    params: AddRssAccountParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountAddRss, params.toJson())
 
-fun accountRemoveRequest(id: Long = 1, params: AccountIdParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountRemove, params.toJson())
-}
+fun accountRemoveRequest(
+    id: Long = 1,
+    params: AccountIdParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountRemove, params.toJson())
 
-fun accountSetNameRequest(id: Long = 1, params: AccountNameParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetName, params.toJson())
-}
+fun accountSetNameRequest(
+    id: Long = 1,
+    params: AccountNameParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetName, params.toJson())
 
-fun accountSetSenderNameRequest(id: Long = 1, params: AccountNameParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetSenderName, params.toJson())
-}
+fun accountSetSenderNameRequest(
+    id: Long = 1,
+    params: AccountNameParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetSenderName, params.toJson())
 
-fun accountSetAvatarRequest(id: Long = 1, params: AccountAvatarParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetAvatar, params.toJson())
-}
+fun accountSetAvatarRequest(
+    id: Long = 1,
+    params: AccountAvatarParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetAvatar, params.toJson())
 
-fun accountWriteAvatarFileRequest(id: Long = 1, params: AccountMediaFileParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountWriteAvatarFile, params.toJson())
-}
+fun accountWriteAvatarFileRequest(
+    id: Long = 1,
+    params: AccountMediaFileParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountWriteAvatarFile, params.toJson())
 
-fun accountSetChatWallpaperRequest(id: Long = 1, params: AccountChatWallpaperParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetChatWallpaper, params.toJson())
-}
+fun accountSetChatWallpaperRequest(
+    id: Long = 1,
+    params: AccountChatWallpaperParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetChatWallpaper, params.toJson())
 
-fun accountWriteChatWallpaperFileRequest(id: Long = 1, params: AccountMediaFileParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountWriteChatWallpaperFile, params.toJson())
-}
+fun accountWriteChatWallpaperFileRequest(
+    id: Long = 1,
+    params: AccountMediaFileParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountWriteChatWallpaperFile, params.toJson())
 
-fun accountSetImagesRequest(id: Long = 1, params: AccountFlagParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetImages, params.toJson())
-}
+fun accountSetImagesRequest(
+    id: Long = 1,
+    params: AccountFlagParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetImages, params.toJson())
 
-fun accountSetConversationHtmlRequest(id: Long = 1, params: AccountFlagParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetConversationHtml, params.toJson())
-}
+fun accountSetConversationHtmlRequest(
+    id: Long = 1,
+    params: AccountFlagParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetConversationHtml, params.toJson())
 
-fun accountSetUnifiedRequest(id: Long = 1, params: AccountFlagParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetUnified, params.toJson())
-}
+fun accountSetUnifiedRequest(
+    id: Long = 1,
+    params: AccountFlagParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetUnified, params.toJson())
 
-fun accountSetMutedRequest(id: Long = 1, params: AccountFlagParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetMuted, params.toJson())
-}
+fun accountSetMutedRequest(
+    id: Long = 1,
+    params: AccountFlagParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetMuted, params.toJson())
 
-fun accountSetPausedRequest(id: Long = 1, params: AccountFlagParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetPaused, params.toJson())
-}
+fun accountSetPausedRequest(
+    id: Long = 1,
+    params: AccountFlagParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetPaused, params.toJson())
 
-fun accountSetRssSyncIntervalRequest(id: Long = 1, params: AccountRssSyncIntervalParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetRssSyncInterval, params.toJson())
-}
+fun accountSetRssSyncIntervalRequest(
+    id: Long = 1,
+    params: AccountRssSyncIntervalParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetRssSyncInterval, params.toJson())
 
-fun accountSetAliasesRequest(id: Long = 1, params: AccountAliasesParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountSetAliases, params.toJson())
-}
+fun accountSetAliasesRequest(
+    id: Long = 1,
+    params: AccountAliasesParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountSetAliases, params.toJson())
 
-fun accountReorderRequest(id: Long = 1, params: AccountReorderParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AccountReorder, params.toJson())
-}
+fun accountReorderRequest(
+    id: Long = 1,
+    params: AccountReorderParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AccountReorder, params.toJson())
 
-fun feedAddRequest(id: Long = 1, params: AddRssFeedParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FeedAdd, params.toJson())
-}
+fun feedAddRequest(
+    id: Long = 1,
+    params: AddRssFeedParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FeedAdd, params.toJson())
 
-fun feedRemoveRequest(id: Long = 1, params: RemoveRssFeedParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FeedRemove, params.toJson())
-}
+fun feedRemoveRequest(
+    id: Long = 1,
+    params: RemoveRssFeedParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FeedRemove, params.toJson())
 
-fun feedMoveRequest(id: Long = 1, params: MoveRssFeedParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FeedMove, params.toJson())
-}
+fun feedMoveRequest(
+    id: Long = 1,
+    params: MoveRssFeedParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FeedMove, params.toJson())
 
-fun feedExportOpmlRequest(id: Long = 1, params: ExportOpmlParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FeedExportOpml, params.toJson())
-}
+fun feedExportOpmlRequest(
+    id: Long = 1,
+    params: ExportOpmlParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FeedExportOpml, params.toJson())
 
-fun feedImportOpmlRequest(id: Long = 1, params: ImportOpmlParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FeedImportOpml, params.toJson())
-}
+fun feedImportOpmlRequest(
+    id: Long = 1,
+    params: ImportOpmlParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FeedImportOpml, params.toJson())
 
-fun folderListRequest(id: Long = 1, params: FolderListParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FolderList, params.toJson())
-}
+fun folderListRequest(
+    id: Long = 1,
+    params: FolderListParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FolderList, params.toJson())
 
-fun folderCreateRequest(id: Long = 1, params: FolderCreateParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.FolderCreate, params.toJson())
-}
+fun folderCreateRequest(
+    id: Long = 1,
+    params: FolderCreateParams,
+): CoreRequest = CoreRequest(id, MobileCommand.FolderCreate, params.toJson())
 
-fun contactSuggestRequest(id: Long = 1, params: ContactSuggestParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.ContactSuggest, params.toJson())
-}
+fun contactSuggestRequest(
+    id: Long = 1,
+    params: ContactSuggestParams,
+): CoreRequest = CoreRequest(id, MobileCommand.ContactSuggest, params.toJson())
 
-fun threadListRequest(id: Long = 1, params: ThreadListParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.ThreadList, params.toJson())
-}
+fun threadListRequest(
+    id: Long = 1,
+    params: ThreadListParams,
+): CoreRequest = CoreRequest(id, MobileCommand.ThreadList, params.toJson())
 
-fun starredItemsRequest(id: Long = 1): CoreRequest {
-    return CoreRequest(id, MobileCommand.StarredItems)
-}
+fun starredItemsRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.StarredItems)
 
-fun threadReadRequest(id: Long = 1, params: ThreadReadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.ThreadRead, params.toJson())
-}
+fun threadReadRequest(
+    id: Long = 1,
+    params: ThreadReadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.ThreadRead, params.toJson())
 
-fun attachmentReadRequest(id: Long = 1, params: AttachmentReadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.AttachmentRead, params.toJson())
-}
+fun attachmentReadRequest(
+    id: Long = 1,
+    params: AttachmentReadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.AttachmentRead, params.toJson())
 
 fun storageUsageRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.StorageUsage)
 
 fun storageClearCacheRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.StorageClearCache)
 
-fun syncMailRequest(id: Long = 1, params: SyncMailParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Sync, params.toJson())
-}
+fun syncMailRequest(
+    id: Long = 1,
+    params: SyncMailParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Sync, params.toJson())
 
-fun syncRssRequest(id: Long = 1, params: SyncRssParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.RssSync, params.toJson())
-}
+fun syncRssRequest(
+    id: Long = 1,
+    params: SyncRssParams,
+): CoreRequest = CoreRequest(id, MobileCommand.RssSync, params.toJson())
 
-fun rssThreadRequest(id: Long = 1, params: RssThreadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.RssThread, params.toJson())
-}
+fun rssThreadRequest(
+    id: Long = 1,
+    params: RssThreadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.RssThread, params.toJson())
 
-fun sendMailRequest(id: Long = 1, params: SendMailParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Send, params.toJson())
-}
+fun sendMailRequest(
+    id: Long = 1,
+    params: SendMailParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Send, params.toJson())
 
-fun saveDraftRequest(id: Long = 1, params: SaveDraftParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.SaveDraft, params.toJson())
-}
+fun saveDraftRequest(
+    id: Long = 1,
+    params: SaveDraftParams,
+): CoreRequest = CoreRequest(id, MobileCommand.SaveDraft, params.toJson())
 
-fun discardDraftRequest(id: Long = 1, params: DiscardDraftParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.DiscardDraft, params.toJson())
-}
+fun discardDraftRequest(
+    id: Long = 1,
+    params: DiscardDraftParams,
+): CoreRequest = CoreRequest(id, MobileCommand.DiscardDraft, params.toJson())
 
-fun archiveThreadRequest(id: Long = 1, params: ThreadActionParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Archive, params.archiveJson())
-}
+fun archiveThreadRequest(
+    id: Long = 1,
+    params: ThreadActionParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Archive, params.archiveJson())
 
-fun moveThreadRequest(id: Long = 1, params: MoveThreadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Move, params.toJson())
-}
+fun moveThreadRequest(
+    id: Long = 1,
+    params: MoveThreadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Move, params.toJson())
 
-fun copyThreadRequest(id: Long = 1, params: CopyThreadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Copy, params.toJson())
-}
+fun copyThreadRequest(
+    id: Long = 1,
+    params: CopyThreadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Copy, params.toJson())
 
-fun deleteThreadRequest(id: Long = 1, params: ThreadActionParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.Delete, params.deleteJson())
-}
+fun deleteThreadRequest(
+    id: Long = 1,
+    params: ThreadActionParams,
+): CoreRequest = CoreRequest(id, MobileCommand.Delete, params.deleteJson())
 
-fun markReadRequest(id: Long = 1, params: MarkReadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.MarkRead, params.toJson())
-}
+fun markReadRequest(
+    id: Long = 1,
+    params: MarkReadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.MarkRead, params.toJson())
 
-fun markAllReadRequest(id: Long = 1, params: MarkAllReadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.MarkAllRead, params.toJson())
-}
+fun markAllReadRequest(
+    id: Long = 1,
+    params: MarkAllReadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.MarkAllRead, params.toJson())
 
-fun markStarredRequest(id: Long = 1, params: MarkStarredParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.MarkStarred, params.toJson())
-}
+fun markStarredRequest(
+    id: Long = 1,
+    params: MarkStarredParams,
+): CoreRequest = CoreRequest(id, MobileCommand.MarkStarred, params.toJson())
 
-fun rssMarkReadRequest(id: Long = 1, params: RssMarkReadParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.RssMarkRead, params.toJson())
-}
+fun rssMarkReadRequest(
+    id: Long = 1,
+    params: RssMarkReadParams,
+): CoreRequest = CoreRequest(id, MobileCommand.RssMarkRead, params.toJson())
 
-fun rssMarkStarredRequest(id: Long = 1, params: RssMarkStarredParams): CoreRequest {
-    return CoreRequest(id, MobileCommand.RssMarkStarred, params.toJson())
-}
+fun rssMarkStarredRequest(
+    id: Long = 1,
+    params: RssMarkStarredParams,
+): CoreRequest = CoreRequest(id, MobileCommand.RssMarkStarred, params.toJson())
 
-private fun jsonObject(vararg fields: Pair<String, String?>): String {
-    return fields
+private fun jsonObject(vararg fields: Pair<String, String?>): String =
+    fields
         .filter { it.second != null }
         .joinToString(separator = ",", prefix = "{", postfix = "}") { (name, value) -> "${name.jsonString()}:$value" }
-}
 
-private fun List<String>.jsonStringArray(): String {
-    return joinToString(separator = ",", prefix = "[", postfix = "]") { it.jsonString() }
-}
+private fun List<String>.jsonStringArray(): String = joinToString(separator = ",", prefix = "[", postfix = "]") { it.jsonString() }

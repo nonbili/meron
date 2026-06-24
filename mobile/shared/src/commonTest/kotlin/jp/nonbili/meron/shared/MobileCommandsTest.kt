@@ -19,9 +19,10 @@ class MobileCommandsTest {
     @Test
     fun accountListClientUsesSharedCoreCommand() {
         val core = FakeMeronCore("""{"accounts":[]}""")
-        val response = runSuspend {
-            MobileMailCommandClient(core).listAccounts()
-        }
+        val response =
+            runSuspend {
+                MobileMailCommandClient(core).listAccounts()
+            }
 
         assertEquals(MobileCommand.AccountList, core.lastCommand)
         assertEquals("{}", core.lastPayloadJson)
@@ -30,21 +31,23 @@ class MobileCommandsTest {
 
     @Test
     fun accountAddPasswordUsesDesktopBridgePayloadShape() {
-        val request = accountAddPasswordRequest(
-            id = 7,
-            params = AddPasswordAccountParams(
-                email = "me@example.com",
-                displayName = "Me",
-                senderName = "Sender",
-                imapHost = "imap.example.com",
-                imapPort = 993,
-                smtpHost = "smtp.example.com",
-                smtpPort = 587,
-                username = "me@example.com",
-                password = "secret",
-                tls = true,
-            ),
-        )
+        val request =
+            accountAddPasswordRequest(
+                id = 7,
+                params =
+                    AddPasswordAccountParams(
+                        email = "me@example.com",
+                        displayName = "Me",
+                        senderName = "Sender",
+                        imapHost = "imap.example.com",
+                        imapPort = 993,
+                        smtpHost = "smtp.example.com",
+                        smtpPort = 587,
+                        username = "me@example.com",
+                        password = "secret",
+                        tls = true,
+                    ),
+            )
 
         assertEquals(
             """{"id":7,"method":"account.addPassword","params":{"email":"me@example.com","display_name":"Me","sender_name":"Sender","imap_host":"imap.example.com","imap_port":993,"smtp_host":"smtp.example.com","smtp_port":587,"username":"me@example.com","password":"secret","tls":true}}""",
@@ -55,17 +58,18 @@ class MobileCommandsTest {
     @Test
     fun accountAddPasswordClientUsesSharedCoreCommand() {
         val core = FakeMeronCore("""{"account":{"id":"me@example.com"}}""")
-        val response = runSuspend {
-            MobileMailCommandClient(core).addPasswordAccount(
-                AddPasswordAccountParams(
-                    email = "me@example.com",
-                    imapHost = "imap.example.com",
-                    smtpHost = "smtp.example.com",
-                    username = "me@example.com",
-                    password = "secret",
-                ),
-            )
-        }
+        val response =
+            runSuspend {
+                MobileMailCommandClient(core).addPasswordAccount(
+                    AddPasswordAccountParams(
+                        email = "me@example.com",
+                        imapHost = "imap.example.com",
+                        smtpHost = "smtp.example.com",
+                        username = "me@example.com",
+                        password = "secret",
+                    ),
+                )
+            }
 
         assertEquals(MobileCommand.AccountAddPassword, core.lastCommand)
         assertEquals(
@@ -78,9 +82,10 @@ class MobileCommandsTest {
     @Test
     fun accountAutodiscoverClientUsesSharedCoreCommand() {
         val core = FakeMeronCore("""{"imap_host":"imap.example.com"}""")
-        val response = runSuspend {
-            MobileMailCommandClient(core).autodiscoverAccount(AutodiscoverAccountParams("me@example.com"))
-        }
+        val response =
+            runSuspend {
+                MobileMailCommandClient(core).autodiscoverAccount(AutodiscoverAccountParams("me@example.com"))
+            }
 
         assertEquals(MobileCommand.AccountAutodiscover, core.lastCommand)
         assertEquals("""{"email":"me@example.com"}""", core.lastPayloadJson)
@@ -89,20 +94,22 @@ class MobileCommandsTest {
 
     @Test
     fun accountAddOAuthUsesDesktopBridgePayloadShape() {
-        val request = accountAddOAuthRequest(
-            id = 8,
-            params = AddOAuthAccountParams(
-                email = "me@gmail.com",
-                provider = "gmail",
-                displayName = "Me",
-                senderName = "Sender",
-                username = "me@gmail.com",
-                avatarUrl = "https://example.com/avatar.png",
-                accessToken = "access",
-                refreshToken = "refresh",
-                tokenExpiresAt = 1_700_000_000,
-            ),
-        )
+        val request =
+            accountAddOAuthRequest(
+                id = 8,
+                params =
+                    AddOAuthAccountParams(
+                        email = "me@gmail.com",
+                        provider = "gmail",
+                        displayName = "Me",
+                        senderName = "Sender",
+                        username = "me@gmail.com",
+                        avatarUrl = "https://example.com/avatar.png",
+                        accessToken = "access",
+                        refreshToken = "refresh",
+                        tokenExpiresAt = 1_700_000_000,
+                    ),
+            )
 
         assertEquals(
             """{"id":8,"method":"account.addOAuth","params":{"email":"me@gmail.com","provider":"gmail","display_name":"Me","sender_name":"Sender","username":"me@gmail.com","avatar_url":"https://example.com/avatar.png","access_token":"access","refresh_token":"refresh","token_expires_at":1700000000}}""",
@@ -113,15 +120,16 @@ class MobileCommandsTest {
     @Test
     fun accountAddOAuthClientUsesSharedCoreCommand() {
         val core = FakeMeronCore("""{"account":{"id":"me@gmail.com"}}""")
-        val response = runSuspend {
-            MobileMailCommandClient(core).addOAuthAccount(
-                AddOAuthAccountParams(
-                    email = "me@gmail.com",
-                    provider = "gmail",
-                    refreshToken = "refresh",
-                ),
-            )
-        }
+        val response =
+            runSuspend {
+                MobileMailCommandClient(core).addOAuthAccount(
+                    AddOAuthAccountParams(
+                        email = "me@gmail.com",
+                        provider = "gmail",
+                        refreshToken = "refresh",
+                    ),
+                )
+            }
 
         assertEquals(MobileCommand.AccountAddOAuth, core.lastCommand)
         assertEquals(
@@ -133,20 +141,22 @@ class MobileCommandsTest {
 
     @Test
     fun accountExchangeOAuthCodeUsesMobileCorePayloadShape() {
-        val request = accountExchangeOAuthCodeRequest(
-            id = 10,
-            params = ExchangeOAuthCodeParams(
-                email = "me@gmail.com",
-                provider = "gmail",
-                displayName = "Me",
-                senderName = "Sender",
-                code = "auth-code",
-                clientId = "client",
-                clientSecret = "secret",
-                redirectUri = defaultOAuthRedirectUri(),
-                codeVerifier = "verifier",
-            ),
-        )
+        val request =
+            accountExchangeOAuthCodeRequest(
+                id = 10,
+                params =
+                    ExchangeOAuthCodeParams(
+                        email = "me@gmail.com",
+                        provider = "gmail",
+                        displayName = "Me",
+                        senderName = "Sender",
+                        code = "auth-code",
+                        clientId = "client",
+                        clientSecret = "secret",
+                        redirectUri = defaultOAuthRedirectUri(),
+                        codeVerifier = "verifier",
+                    ),
+            )
 
         assertEquals(
             """{"id":10,"method":"account.exchangeOAuthCode","params":{"email":"me@gmail.com","provider":"gmail","display_name":"Me","sender_name":"Sender","code":"auth-code","client_id":"client","client_secret":"secret","redirect_uri":"jp.nonbili.meron.oauth://oauth","code_verifier":"verifier"}}""",
@@ -157,18 +167,19 @@ class MobileCommandsTest {
     @Test
     fun accountExchangeOAuthCodeClientUsesSharedCoreCommand() {
         val core = FakeMeronCore("""{"account":{"id":"me@gmail.com"}}""")
-        val response = runSuspend {
-            MobileMailCommandClient(core).exchangeOAuthCode(
-                ExchangeOAuthCodeParams(
-                    email = "me@gmail.com",
-                    provider = "gmail",
-                    code = "auth-code",
-                    clientId = "client",
-                    redirectUri = defaultOAuthRedirectUri(),
-                    codeVerifier = "verifier",
-                ),
-            )
-        }
+        val response =
+            runSuspend {
+                MobileMailCommandClient(core).exchangeOAuthCode(
+                    ExchangeOAuthCodeParams(
+                        email = "me@gmail.com",
+                        provider = "gmail",
+                        code = "auth-code",
+                        clientId = "client",
+                        redirectUri = defaultOAuthRedirectUri(),
+                        codeVerifier = "verifier",
+                    ),
+                )
+            }
 
         assertEquals(MobileCommand.AccountExchangeOAuthCode, core.lastCommand)
         assertEquals(
@@ -180,13 +191,15 @@ class MobileCommandsTest {
 
     @Test
     fun accountAddRssUsesDesktopBridgePayloadShape() {
-        val request = accountAddRssRequest(
-            id = 9,
-            params = AddRssAccountParams(
-                feedUrl = "https://example.com/feed.xml",
-                displayName = "News",
-            ),
-        )
+        val request =
+            accountAddRssRequest(
+                id = 9,
+                params =
+                    AddRssAccountParams(
+                        feedUrl = "https://example.com/feed.xml",
+                        displayName = "News",
+                    ),
+            )
 
         assertEquals(
             """{"id":9,"method":"account.addRss","params":{"feed_url":"https://example.com/feed.xml","display_name":"News"}}""",
@@ -218,7 +231,10 @@ class MobileCommandsTest {
         )
         assertEquals(
             """{"id":14,"method":"account.setAvatar","params":{"id":"acc1","avatar_url":"https://example.com/avatar.png"}}""",
-            accountSetAvatarRequest(id = 14, params = AccountAvatarParams(accountId = "acc1", avatarUrl = "https://example.com/avatar.png")).toJson(),
+            accountSetAvatarRequest(
+                id = 14,
+                params = AccountAvatarParams(accountId = "acc1", avatarUrl = "https://example.com/avatar.png"),
+            ).toJson(),
         )
         assertEquals(
             """{"id":15,"method":"account.writeAvatarFile","params":{"id":"acc1","filename":"avatar.png","mime":"image/png","data":"aGVsbG8="}}""",
@@ -270,10 +286,11 @@ class MobileCommandsTest {
             """{"id":25,"method":"account.setAliases","params":{"id":"acc1","aliases":[{"email":"alias@example.com","name":"Alias"}]}}""",
             accountSetAliasesRequest(
                 id = 25,
-                params = AccountAliasesParams(
-                    accountId = "acc1",
-                    aliases = listOf(AccountAliasParams(email = "alias@example.com", name = "Alias")),
-                ),
+                params =
+                    AccountAliasesParams(
+                        accountId = "acc1",
+                        aliases = listOf(AccountAliasParams(email = "alias@example.com", name = "Alias")),
+                    ),
             ).toJson(),
         )
         assertEquals(
@@ -299,7 +316,11 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.AccountSetAvatar, core.lastCommand)
         assertEquals("""{"id":"acc1","avatar_url":"https://example.com/avatar.png"}""", core.lastPayloadJson)
 
-        runSuspend { client.writeAccountAvatarFile(AccountMediaFileParams(accountId = "acc1", filename = "avatar.png", mime = "image/png", data = "aGVsbG8=")) }
+        runSuspend {
+            client.writeAccountAvatarFile(
+                AccountMediaFileParams(accountId = "acc1", filename = "avatar.png", mime = "image/png", data = "aGVsbG8="),
+            )
+        }
         assertEquals(MobileCommand.AccountWriteAvatarFile, core.lastCommand)
         assertEquals("""{"id":"acc1","filename":"avatar.png","mime":"image/png","data":"aGVsbG8="}""", core.lastPayloadJson)
 
@@ -307,7 +328,11 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.AccountSetChatWallpaper, core.lastCommand)
         assertEquals("""{"id":"acc1","wallpaper":{"kind":"preset","presetId":"grid"}}""", core.lastPayloadJson)
 
-        runSuspend { client.writeAccountChatWallpaperFile(AccountMediaFileParams(accountId = "acc1", filename = "wallpaper.png", mime = "image/png", data = "aGVsbG8=")) }
+        runSuspend {
+            client.writeAccountChatWallpaperFile(
+                AccountMediaFileParams(accountId = "acc1", filename = "wallpaper.png", mime = "image/png", data = "aGVsbG8="),
+            )
+        }
         assertEquals(MobileCommand.AccountWriteChatWallpaperFile, core.lastCommand)
         assertEquals("""{"id":"acc1","filename":"wallpaper.png","mime":"image/png","data":"aGVsbG8="}""", core.lastPayloadJson)
 
@@ -512,17 +537,19 @@ class MobileCommandsTest {
 
     @Test
     fun threadListPreservesFrontendWireFieldNames() {
-        val request = threadListRequest(
-            id = 4,
-            params = ThreadListParams(
-                accountId = "acc1",
-                folderId = "inbox",
-                query = "design",
-                filter = "unread",
-                beforeCursor = "1700000000:44",
-                refresh = true,
-            ),
-        )
+        val request =
+            threadListRequest(
+                id = 4,
+                params =
+                    ThreadListParams(
+                        accountId = "acc1",
+                        folderId = "inbox",
+                        query = "design",
+                        filter = "unread",
+                        beforeCursor = "1700000000:44",
+                        refresh = true,
+                    ),
+            )
 
         assertEquals(
             """{"id":4,"method":"mail.threadList","params":{"account_id":"acc1","folder_id":"inbox","query":"design","filter":"unread","before_cursor":"1700000000:44","refresh":true}}""",
@@ -555,11 +582,12 @@ class MobileCommandsTest {
             """{"id":8,"method":"mail.copy","params":{"thread_id":"acc#imap#inbox#thread","target_account_id":"acc2","target_folder_id":"Archive"}}""",
             copyThreadRequest(
                 id = 8,
-                params = CopyThreadParams(
-                    threadId = "acc#imap#inbox#thread",
-                    targetAccountId = "acc2",
-                    targetFolderId = "Archive",
-                ),
+                params =
+                    CopyThreadParams(
+                        threadId = "acc#imap#inbox#thread",
+                        targetAccountId = "acc2",
+                        targetFolderId = "Archive",
+                    ),
             ).toJson(),
         )
     }
@@ -574,15 +602,17 @@ class MobileCommandsTest {
 
     @Test
     fun syncMailMatchesMobileCorePayloadShape() {
-        val request = syncMailRequest(
-            id = 8,
-            params = SyncMailParams(
-                accountId = "acc1",
-                folderId = "INBOX",
-                limit = 25,
-                folders = false,
-            ),
-        )
+        val request =
+            syncMailRequest(
+                id = 8,
+                params =
+                    SyncMailParams(
+                        accountId = "acc1",
+                        folderId = "INBOX",
+                        limit = 25,
+                        folders = false,
+                    ),
+            )
 
         assertEquals(
             """{"id":8,"method":"mail.sync","params":{"account_id":"acc1","folder_id":"INBOX","limit":25,"folders":false}}""",
@@ -603,10 +633,11 @@ class MobileCommandsTest {
             """{"id":32,"method":"feed.move","params":{"thread_id":"rss-account#rss#feed-1","target_account":"target-rss"}}""",
             feedMoveRequest(
                 id = 32,
-                params = MoveRssFeedParams(
-                    threadId = "rss-account#rss#feed-1",
-                    targetAccountId = "target-rss",
-                ),
+                params =
+                    MoveRssFeedParams(
+                        threadId = "rss-account#rss#feed-1",
+                        targetAccountId = "target-rss",
+                    ),
             ).toJson(),
         )
         assertEquals(
@@ -617,33 +648,36 @@ class MobileCommandsTest {
             """{"id":34,"method":"rss.thread","params":{"thread_id":"rss-account#rss#feed-1","before_cursor":"1700000000:abc","limit":25}}""",
             rssThreadRequest(
                 id = 34,
-                params = RssThreadParams(
-                    threadId = "rss-account#rss#feed-1",
-                    beforeCursor = "1700000000:abc",
-                    limit = 25,
-                ),
+                params =
+                    RssThreadParams(
+                        threadId = "rss-account#rss#feed-1",
+                        beforeCursor = "1700000000:abc",
+                        limit = 25,
+                    ),
             ).toJson(),
         )
         assertEquals(
             """{"id":35,"method":"rss.markRead","params":{"thread_id":"rss-account#rss#feed-1","seen":false,"item_keys":["item-1","item-2"]}}""",
             rssMarkReadRequest(
                 id = 35,
-                params = RssMarkReadParams(
-                    threadId = "rss-account#rss#feed-1",
-                    seen = false,
-                    itemKeys = listOf("item-1", "item-2"),
-                ),
+                params =
+                    RssMarkReadParams(
+                        threadId = "rss-account#rss#feed-1",
+                        seen = false,
+                        itemKeys = listOf("item-1", "item-2"),
+                    ),
             ).toJson(),
         )
         assertEquals(
             """{"id":36,"method":"rss.markStarred","params":{"thread_id":"rss-account#rss#feed-1","starred":true,"item_keys":["item-1"]}}""",
             rssMarkStarredRequest(
                 id = 36,
-                params = RssMarkStarredParams(
-                    threadId = "rss-account#rss#feed-1",
-                    starred = true,
-                    itemKeys = listOf("item-1"),
-                ),
+                params =
+                    RssMarkStarredParams(
+                        threadId = "rss-account#rss#feed-1",
+                        starred = true,
+                        itemKeys = listOf("item-1"),
+                    ),
             ).toJson(),
         )
         assertEquals(
@@ -670,27 +704,30 @@ class MobileCommandsTest {
 
     @Test
     fun sendMailMatchesDesktopComposerPayloadShape() {
-        val request = sendMailRequest(
-            id = 6,
-            params = SendMailParams(
-                accountId = "acc1",
-                from = "me@example.com",
-                to = "you@example.com",
-                cc = "cc@example.com",
-                subject = "Hi",
-                body = "Plain",
-                html = "<p>Plain</p>",
-                inReplyTo = "<old@example.com>",
-                references = "<root@example.com>",
-                attachments = listOf(
-                    MobileAttachmentInput(
-                        filename = "note.txt",
-                        mime = "text/plain",
-                        data = "SGk=",
+        val request =
+            sendMailRequest(
+                id = 6,
+                params =
+                    SendMailParams(
+                        accountId = "acc1",
+                        from = "me@example.com",
+                        to = "you@example.com",
+                        cc = "cc@example.com",
+                        subject = "Hi",
+                        body = "Plain",
+                        html = "<p>Plain</p>",
+                        inReplyTo = "<old@example.com>",
+                        references = "<root@example.com>",
+                        attachments =
+                            listOf(
+                                MobileAttachmentInput(
+                                    filename = "note.txt",
+                                    mime = "text/plain",
+                                    data = "SGk=",
+                                ),
+                            ),
                     ),
-                ),
-            ),
-        )
+            )
 
         assertEquals(
             """{"id":6,"method":"mail.send","params":{"account_id":"acc1","from":"me@example.com","to":"you@example.com","cc":"cc@example.com","bcc":"","reply_to":"","subject":"Hi","body":"Plain","html":"<p>Plain</p>","in_reply_to":"<old@example.com>","references":"<root@example.com>","message_id":"","attachments":[{"filename":"note.txt","mime":"text/plain","data":"SGk=","inline_id":""}]}}""",
@@ -700,32 +737,35 @@ class MobileCommandsTest {
 
     @Test
     fun draftCommandsMatchDesktopComposerPayloadShape() {
-        val draft = ComposeDraft(
-            to = "you@example.com",
-            cc = "cc@example.com",
-            bcc = "bcc@example.com",
-            subject = "Draft",
-            body = "Body",
-            attachments = listOf(
-                DraftAttachment(
-                    id = "a1",
-                    displayName = "note.txt",
-                    mimeType = "text/plain",
-                    sizeBytes = 2,
-                    dataBase64 = "SGk=",
-                ),
-            ),
-        )
+        val draft =
+            ComposeDraft(
+                to = "you@example.com",
+                cc = "cc@example.com",
+                bcc = "bcc@example.com",
+                subject = "Draft",
+                body = "Body",
+                attachments =
+                    listOf(
+                        DraftAttachment(
+                            id = "a1",
+                            displayName = "note.txt",
+                            mimeType = "text/plain",
+                            sizeBytes = 2,
+                            dataBase64 = "SGk=",
+                        ),
+                    ),
+            )
 
         assertEquals(
             """{"id":41,"method":"mail.saveDraft","params":{"account_id":"acc1","draft_id":"draft@example.com","from":"me@example.com","to":"you@example.com","cc":"cc@example.com","bcc":"bcc@example.com","reply_to":"","subject":"Draft","body":"Body","html":"","in_reply_to":"","references":"","attachments":[{"filename":"note.txt","mime":"text/plain","data":"SGk=","inline_id":""}]}}""",
             saveDraftRequest(
                 id = 41,
-                params = draft.toSaveDraftParams(
-                    accountId = "acc1",
-                    draftId = "draft@example.com",
-                    from = "me@example.com",
-                ),
+                params =
+                    draft.toSaveDraftParams(
+                        accountId = "acc1",
+                        draftId = "draft@example.com",
+                        from = "me@example.com",
+                    ),
             ).toJson(),
         )
         assertEquals(
@@ -750,25 +790,27 @@ class MobileCommandsTest {
 
     @Test
     fun replyMailParamsUseReplyRecipientAndThreadingHeaders() {
-        val request = sendMailRequest(
-            id = 7,
-            params = MessageBody(
-                id = "m1",
-                from = "Ada",
-                to = "Me <me@example.com>",
-                cc = "Project <project@example.com>",
-                subject = "Design",
-                body = "Original",
-                fromAddr = "ada@example.com",
-                replyTo = "Team <team@example.com>",
-                messageId = "old@example.com",
-                references = "<root@example.com>",
-            ).toReplyMailParams(
-                accountId = "acc1",
-                body = "Quick reply",
-                ownAddresses = listOf("me@example.com"),
-            ),
-        )
+        val request =
+            sendMailRequest(
+                id = 7,
+                params =
+                    MessageBody(
+                        id = "m1",
+                        from = "Ada",
+                        to = "Me <me@example.com>",
+                        cc = "Project <project@example.com>",
+                        subject = "Design",
+                        body = "Original",
+                        fromAddr = "ada@example.com",
+                        replyTo = "Team <team@example.com>",
+                        messageId = "old@example.com",
+                        references = "<root@example.com>",
+                    ).toReplyMailParams(
+                        accountId = "acc1",
+                        body = "Quick reply",
+                        ownAddresses = listOf("me@example.com"),
+                    ),
+            )
 
         assertEquals(
             """{"id":7,"method":"mail.send","params":{"account_id":"acc1","from":"","to":"Team <team@example.com>","cc":"Project <project@example.com>","bcc":"","reply_to":"","subject":"Re: Design","body":"Quick reply","html":"","in_reply_to":"<old@example.com>","references":"<root@example.com> <old@example.com>","message_id":"","attachments":[]}}""",
@@ -778,30 +820,33 @@ class MobileCommandsTest {
 
     @Test
     fun replyMailParamsIncludeAttachments() {
-        val request = sendMailRequest(
-            id = 43,
-            params = MessageBody(
-                id = "m1",
-                from = "Ada",
-                to = "Me <me@example.com>",
-                subject = "Design",
-                body = "Original",
-                fromAddr = "ada@example.com",
-                messageId = "old@example.com",
-            ).toReplyMailParams(
-                accountId = "acc1",
-                body = "With file",
-                attachments = listOf(
-                    DraftAttachment(
-                        id = "a1",
-                        displayName = "reply.txt",
-                        mimeType = "text/plain",
-                        sizeBytes = 2,
-                        dataBase64 = "SGk=",
+        val request =
+            sendMailRequest(
+                id = 43,
+                params =
+                    MessageBody(
+                        id = "m1",
+                        from = "Ada",
+                        to = "Me <me@example.com>",
+                        subject = "Design",
+                        body = "Original",
+                        fromAddr = "ada@example.com",
+                        messageId = "old@example.com",
+                    ).toReplyMailParams(
+                        accountId = "acc1",
+                        body = "With file",
+                        attachments =
+                            listOf(
+                                DraftAttachment(
+                                    id = "a1",
+                                    displayName = "reply.txt",
+                                    mimeType = "text/plain",
+                                    sizeBytes = 2,
+                                    dataBase64 = "SGk=",
+                                ),
+                            ),
                     ),
-                ),
-            ),
-        )
+            )
 
         assertEquals(
             """{"id":43,"method":"mail.send","params":{"account_id":"acc1","from":"","to":"ada@example.com","cc":"","bcc":"","reply_to":"","subject":"Re: Design","body":"With file","html":"","in_reply_to":"<old@example.com>","references":"<old@example.com>","message_id":"","attachments":[{"filename":"reply.txt","mime":"text/plain","data":"SGk=","inline_id":""}]}}""",
@@ -811,24 +856,26 @@ class MobileCommandsTest {
 
     @Test
     fun replyMailParamsFilterOwnAddressesAndUseOriginalToWhenSenderIsSelf() {
-        val request = sendMailRequest(
-            id = 8,
-            params = MessageBody(
-                id = "m2",
-                from = "Me",
-                to = "Ada <ada@example.com>, Alias <alias@example.com>",
-                cc = "Me <me@example.com>, Project <project@example.com>, Ada <ada@example.com>",
-                subject = "Re: Design",
-                body = "Original",
-                fromAddr = "me@example.com",
-                messageId = "<old@example.com>",
-            ).toReplyMailParams(
-                accountId = "acc1",
-                body = "Follow-up",
-                from = "alias@example.com",
-                ownAddresses = listOf("me@example.com", "alias@example.com"),
-            ),
-        )
+        val request =
+            sendMailRequest(
+                id = 8,
+                params =
+                    MessageBody(
+                        id = "m2",
+                        from = "Me",
+                        to = "Ada <ada@example.com>, Alias <alias@example.com>",
+                        cc = "Me <me@example.com>, Project <project@example.com>, Ada <ada@example.com>",
+                        subject = "Re: Design",
+                        body = "Original",
+                        fromAddr = "me@example.com",
+                        messageId = "<old@example.com>",
+                    ).toReplyMailParams(
+                        accountId = "acc1",
+                        body = "Follow-up",
+                        from = "alias@example.com",
+                        ownAddresses = listOf("me@example.com", "alias@example.com"),
+                    ),
+            )
 
         assertEquals(
             """{"id":8,"method":"mail.send","params":{"account_id":"acc1","from":"alias@example.com","to":"Ada <ada@example.com>","cc":"Project <project@example.com>","bcc":"","reply_to":"","subject":"Re: Design","body":"Follow-up","html":"","in_reply_to":"<old@example.com>","references":"<old@example.com>","message_id":"","attachments":[]}}""",
@@ -838,24 +885,27 @@ class MobileCommandsTest {
 
     @Test
     fun messageForwardAndEditDraftsCarryBodyHeadersAndAttachments() {
-        val message = MessageBody(
-            id = "m3",
-            from = "Ada",
-            fromAddr = "ada@example.com",
-            to = "Me <me@example.com>",
-            cc = "Project <project@example.com>",
-            subject = "Design",
-            body = "Original",
-            bodyHtml = """<p>Original</p><img src="/media/acc/INBOX/3/inline.png">""",
-            attachments = listOf(
-                MessageAttachment(filename = "note.txt", mimeType = "text/plain", sizeBytes = 2, key = "acc/INBOX/3/note.txt"),
-                MessageAttachment(filename = "inline.png", mimeType = "image/png", sizeBytes = 4, key = "acc/INBOX/3/inline.png"),
-                MessageAttachment(filename = "remote.jpg", mimeType = "image/jpeg", url = "https://example.com/remote.jpg"),
-            ),
-        )
-        val copied = forwardableAttachments(message).map {
-            attachmentToDraftAttachment(it, "SGk=")
-        }
+        val message =
+            MessageBody(
+                id = "m3",
+                from = "Ada",
+                fromAddr = "ada@example.com",
+                to = "Me <me@example.com>",
+                cc = "Project <project@example.com>",
+                subject = "Design",
+                body = "Original",
+                bodyHtml = """<p>Original</p><img src="/media/acc/INBOX/3/inline.png">""",
+                attachments =
+                    listOf(
+                        MessageAttachment(filename = "note.txt", mimeType = "text/plain", sizeBytes = 2, key = "acc/INBOX/3/note.txt"),
+                        MessageAttachment(filename = "inline.png", mimeType = "image/png", sizeBytes = 4, key = "acc/INBOX/3/inline.png"),
+                        MessageAttachment(filename = "remote.jpg", mimeType = "image/jpeg", url = "https://example.com/remote.jpg"),
+                    ),
+            )
+        val copied =
+            forwardableAttachments(message).map {
+                attachmentToDraftAttachment(it, "SGk=")
+            }
         val forward = messageForwardDraft(message, copied)
         val edit = messageEditAsNewDraft(message, copied)
 
@@ -930,19 +980,19 @@ class MobileCommandsTest {
         var lastCommand = ""
         var lastPayloadJson = ""
 
-        override suspend fun invoke(command: String, payloadJson: String): String {
+        override suspend fun invoke(
+            command: String,
+            payloadJson: String,
+        ): String {
             lastCommand = command
             lastPayloadJson = payloadJson
             return response
         }
 
-        override fun events(): CoreEventStream {
-            return object : CoreEventStream {
-                override fun subscribe(listener: (CoreEvent) -> Unit): CloseableHandle {
-                    return CloseableHandle {}
-                }
+        override fun events(): CoreEventStream =
+            object : CoreEventStream {
+                override fun subscribe(listener: (CoreEvent) -> Unit): CloseableHandle = CloseableHandle {}
             }
-        }
 
         override suspend fun protocolVersion(): Int = EXPECTED_PROTOCOL_VERSION
     }
