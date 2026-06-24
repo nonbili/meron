@@ -18,6 +18,17 @@
 		A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* IosNotificationContractTests.swift */; };
 		A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
 		A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
+			A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
+			A10000000000000000000093 /* ContentViewComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000104 /* ContentViewComponents.swift */; };
+			A10000000000000000000094 /* ContentView+MailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000105 /* ContentView+MailViews.swift */; };
+			A10000000000000000000095 /* ContentView+ComposeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000106 /* ContentView+ComposeViews.swift */; };
+			A10000000000000000000096 /* ContentView+KanbanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000107 /* ContentView+KanbanView.swift */; };
+			A10000000000000000000097 /* ContentView+AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000108 /* ContentView+AccountsView.swift */; };
+			A10000000000000000000098 /* ContentView+Accounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000109 /* ContentView+Accounts.swift */; };
+			A10000000000000000000099 /* ContentView+Mailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000110 /* ContentView+Mailbox.swift */; };
+			A10000000000000000000100 /* ContentView+Threads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000111 /* ContentView+Threads.swift */; };
+			A10000000000000000000101 /* ContentView+Compose.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000112 /* ContentView+Compose.swift */; };
+			A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000113 /* ContentView+ThreadActions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +58,17 @@
 		A1000000000000000000001B /* IosNotificationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosNotificationContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
+			A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IosMailModels.swift"; sourceTree = "<group>"; };
+			A10000000000000000000104 /* ContentViewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentViewComponents.swift"; sourceTree = "<group>"; };
+			A10000000000000000000105 /* ContentView+MailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+MailViews.swift"; sourceTree = "<group>"; };
+			A10000000000000000000106 /* ContentView+ComposeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ComposeViews.swift"; sourceTree = "<group>"; };
+			A10000000000000000000107 /* ContentView+KanbanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+KanbanView.swift"; sourceTree = "<group>"; };
+			A10000000000000000000108 /* ContentView+AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+AccountsView.swift"; sourceTree = "<group>"; };
+			A10000000000000000000109 /* ContentView+Accounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Accounts.swift"; sourceTree = "<group>"; };
+			A10000000000000000000110 /* ContentView+Mailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Mailbox.swift"; sourceTree = "<group>"; };
+			A10000000000000000000111 /* ContentView+Threads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Threads.swift"; sourceTree = "<group>"; };
+			A10000000000000000000112 /* ContentView+Compose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Compose.swift"; sourceTree = "<group>"; };
+			A10000000000000000000113 /* ContentView+ThreadActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ThreadActions.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +103,17 @@
 			children = (
 				A10000000000000000000011 /* Meron.swift */,
 				A10000000000000000000012 /* ContentView.swift */,
+				A10000000000000000000103 /* IosMailModels.swift */,
+				A10000000000000000000104 /* ContentViewComponents.swift */,
+				A10000000000000000000105 /* ContentView+MailViews.swift */,
+				A10000000000000000000106 /* ContentView+ComposeViews.swift */,
+				A10000000000000000000107 /* ContentView+KanbanView.swift */,
+				A10000000000000000000108 /* ContentView+AccountsView.swift */,
+				A10000000000000000000109 /* ContentView+Accounts.swift */,
+				A10000000000000000000110 /* ContentView+Mailbox.swift */,
+				A10000000000000000000111 /* ContentView+Threads.swift */,
+				A10000000000000000000112 /* ContentView+Compose.swift */,
+				A10000000000000000000113 /* ContentView+ThreadActions.swift */,
 				A10000000000000000000014 /* RustCoreBridge.swift */,
 				A10000000000000000000016 /* IosBackgroundRefresh.swift */,
 				A10000000000000000000017 /* IosAppPaths.swift */,
@@ -239,6 +272,17 @@
 			files = (
 				A10000000000000000000001 /* Meron.swift in Sources */,
 				A10000000000000000000002 /* ContentView.swift in Sources */,
+				A10000000000000000000092 /* IosMailModels.swift in Sources */,
+				A10000000000000000000093 /* ContentViewComponents.swift in Sources */,
+				A10000000000000000000094 /* ContentView+MailViews.swift in Sources */,
+				A10000000000000000000095 /* ContentView+ComposeViews.swift in Sources */,
+				A10000000000000000000096 /* ContentView+KanbanView.swift in Sources */,
+				A10000000000000000000097 /* ContentView+AccountsView.swift in Sources */,
+				A10000000000000000000098 /* ContentView+Accounts.swift in Sources */,
+				A10000000000000000000099 /* ContentView+Mailbox.swift in Sources */,
+				A10000000000000000000100 /* ContentView+Threads.swift in Sources */,
+				A10000000000000000000101 /* ContentView+Compose.swift in Sources */,
+				A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */,
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
 				A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */,
 				A10000000000000000000005 /* IosAppPaths.swift in Sources */,
