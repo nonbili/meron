@@ -407,12 +407,13 @@ pub fn apply_card_identity(conn: &Connection, account: &str, headers: &mut [Mess
         std::collections::HashMap::new();
     for header in headers {
         let from = header.from_addr.trim().to_lowercase();
-        if !from.is_empty() && mine.contains(&from) {
-            if let Some(first) = header.to.first().cloned() {
-                header.recipient_overflow = (header.to.len() - 1) as u32;
-                header.from_name = first.name;
-                header.from_addr = first.addr;
-            }
+        if !from.is_empty()
+            && mine.contains(&from)
+            && let Some(first) = header.to.first().cloned()
+        {
+            header.recipient_overflow = (header.to.len() - 1) as u32;
+            header.from_name = first.name;
+            header.from_addr = first.addr;
         }
         let addr = header.from_addr.trim().to_lowercase();
         if addr.is_empty() || !is_junk_display_name(&header.from_name, &addr) {

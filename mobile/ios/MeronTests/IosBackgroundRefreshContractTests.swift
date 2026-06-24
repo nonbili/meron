@@ -1,5 +1,5 @@
-import XCTest
 @testable import Meron
+import XCTest
 
 final class IosBackgroundRefreshContractTests: XCTestCase {
     func testMailAccountBuildsMailSyncRequestForInboxRefresh() throws {

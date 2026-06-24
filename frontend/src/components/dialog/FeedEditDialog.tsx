@@ -61,9 +61,7 @@ export function FeedEditDialog() {
         {/* Feed URL */}
         {feed.url && (
           <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-semibold text-secondary px-1">
-              {t('feeds.url')}
-            </label>
+            <label className="text-[11px] font-semibold text-secondary px-1">{t('feeds.url')}</label>
             <div className="flex items-center gap-2 rounded-xl bg-hover px-3 py-2">
               <span className="flex-1 min-w-0 truncate text-[11px] font-medium text-primary">{feed.url}</span>
               <button
@@ -79,9 +77,7 @@ export function FeedEditDialog() {
 
         {/* Danger zone */}
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-semibold text-secondary px-1">
-            {t('feeds.actions.deleteFeed')}
-          </label>
+          <label className="text-[11px] font-semibold text-secondary px-1">{t('feeds.actions.deleteFeed')}</label>
           <p className="text-[10.5px] text-secondary px-1 leading-relaxed font-medium">{t('feeds.deleteHint')}</p>
         </div>
 

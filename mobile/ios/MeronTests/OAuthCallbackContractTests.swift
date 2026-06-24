@@ -1,7 +1,7 @@
-import MeronShared
 import Foundation
-import XCTest
 @testable import Meron
+import MeronShared
+import XCTest
 
 final class OAuthCallbackContractTests: XCTestCase {
     func testOAuthCallbackStoresAuthorizationCode() {

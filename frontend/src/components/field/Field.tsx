@@ -100,9 +100,7 @@ export function Field({
 }: FieldProps) {
   return (
     <label className="flex flex-col gap-1.5 w-full">
-      <span className={`pl-0.5 ${labelClassName ?? 'text-[11px] font-semibold text-secondary'}`}>
-        {label}
-      </span>
+      <span className={`pl-0.5 ${labelClassName ?? 'text-[11px] font-semibold text-secondary'}`}>{label}</span>
       <input
         type={type}
         value={value}

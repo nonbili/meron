@@ -1622,7 +1622,7 @@ fn image_filename(url: &str) -> String {
         .ok()
         .and_then(|u| {
             u.path_segments()
-                .and_then(|segs| segs.last().map(str::to_string))
+                .and_then(|mut segs| segs.next_back().map(str::to_string))
         })
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "image".to_string())
@@ -2746,12 +2746,11 @@ mod tests {
             let mut stmt = conn
                 .prepare("SELECT url FROM subscriptions WHERE account = 'rss-dst' ORDER BY url")
                 .unwrap();
-            let rows = stmt
-                .query_map([], |r| r.get::<_, String>(0))
+
+            stmt.query_map([], |r| r.get::<_, String>(0))
                 .unwrap()
                 .collect::<rusqlite::Result<Vec<_>>>()
-                .unwrap();
-            rows
+                .unwrap()
         };
         assert_eq!(
             urls,

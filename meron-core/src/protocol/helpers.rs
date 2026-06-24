@@ -16,10 +16,10 @@ pub(crate) fn is_rss_account(
 
 pub(crate) fn account_needs_reconnect(creds: &Creds) -> bool {
     if creds.is_oauth() {
-        !creds
+        creds
             .refresh_token
             .as_deref()
-            .is_some_and(|token| !token.trim().is_empty())
+            .is_none_or(|token| token.trim().is_empty())
     } else {
         creds.password.trim().is_empty()
     }

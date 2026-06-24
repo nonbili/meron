@@ -34,7 +34,8 @@ enum IosDbKey {
         var item: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data,
-              let key = String(data: data, encoding: .utf8) else {
+              let key = String(data: data, encoding: .utf8)
+        else {
             return nil
         }
         return key

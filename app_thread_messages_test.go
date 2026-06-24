@@ -170,9 +170,9 @@ func TestParseRSSThreadID(t *testing.T) {
 	}{
 		{"acc#rss#sub1#item", "acc", "sub1", true},
 		{"acc#rss#sub1", "acc", "sub1", true},
-		{"acc#rss#", "", "", false},   // empty rest
-		{"#rss#sub1", "", "", false},  // empty account
-		{"acc#sub1", "", "", false},   // not an rss id
+		{"acc#rss#", "", "", false},  // empty rest
+		{"#rss#sub1", "", "", false}, // empty account
+		{"acc#sub1", "", "", false},  // not an rss id
 		{"acc#rss#sub1#", "acc", "sub1", true},
 	}
 	for _, c := range cases {

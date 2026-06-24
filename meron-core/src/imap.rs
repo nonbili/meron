@@ -1389,11 +1389,11 @@ fn thread_key(
 }
 
 fn normalize_message_id(value: &str) -> String {
-    if let Some(start) = value.find('<') {
-        if let Some(end) = value[start..].find('>') {
-            let id = &value[start + 1..start + end];
-            return id.trim().to_ascii_lowercase();
-        }
+    if let Some(start) = value.find('<')
+        && let Some(end) = value[start..].find('>')
+    {
+        let id = &value[start + 1..start + end];
+        return id.trim().to_ascii_lowercase();
     }
     value
         .trim()

@@ -318,7 +318,7 @@ extension ContentView {
             return
         }
         coreMessages = coreMessages.map { $0.id == message.id ? $0.withFlags(unread: !seen) : $0 }
-        let updatedUnread = coreMessages.contains(where: { $0.unread })
+        let updatedUnread = coreMessages.contains(where: \.unread)
         selectedCoreThread = selectedCoreThread?.withUnread(updatedUnread)
         coreThreads = coreThreads.map { $0.id == thread.id ? $0.withUnread(updatedUnread) : $0 }
         accountStatus = seen ? "Marked read." : "Marked unread."
@@ -337,7 +337,7 @@ extension ContentView {
             return
         }
         coreMessages = coreMessages.map { $0.id == message.id ? $0.withFlags(starred: starred) : $0 }
-        let updatedStarred = coreMessages.contains(where: { $0.starred })
+        let updatedStarred = coreMessages.contains(where: \.starred)
         selectedCoreThread = selectedCoreThread.map { thread in
             ThreadSummary(
                 id: thread.id,
@@ -624,19 +624,18 @@ extension ContentView {
     }
 
     func unifiedKanbanAccounts(for cursors: [String: String]? = nil) -> [AccountSummary] {
-        let accounts = coreAccounts.filter { $0.includedInUnified }
+        let accounts = coreAccounts.filter(\.includedInUnified)
         guard let cursors else { return accounts }
         return accounts.filter { !(cursors[$0.id] ?? "").isEmpty }
     }
 
     func syncKanbanAccount(_ account: AccountSummary, folderId: String) -> Bool {
-        let response: String
-        if MailStateKt.accountSummaryIsRss(account: account) {
-            response = RustCoreBridge.invokeJson(
+        let response: String = if MailStateKt.accountSummaryIsRss(account: account) {
+            RustCoreBridge.invokeJson(
                 MobileCommandsKt.syncRssRequest(id: 33, params: SyncRssParams(accountId: account.id)).toJson()
             )
         } else {
-            response = RustCoreBridge.invokeJson(
+            RustCoreBridge.invokeJson(
                 MobileCommandsKt.syncMailRequest(
                     id: 33,
                     params: SyncMailParams(accountId: account.id, folderId: folderId, limit: 50, folders: true)
@@ -695,7 +694,7 @@ extension ContentView {
                     return
                 }
                 threads.append(contentsOf: page.threads)
-                if trimmedQuery.isEmpty && !page.nextCursor.isEmpty {
+                if trimmedQuery.isEmpty, !page.nextCursor.isEmpty {
                     nextCursors[account.id] = page.nextCursor
                 }
             }
@@ -772,7 +771,7 @@ extension ContentView {
     }
 
     func markKanbanColumnAllRead(_ column: IosKanbanColumnSpec) {
-        let unreadThreads = (kanbanThreadsByColumn[column.id] ?? []).filter { $0.unread }
+        let unreadThreads = (kanbanThreadsByColumn[column.id] ?? []).filter(\.unread)
         guard !unreadThreads.isEmpty else {
             accountStatus = "No unread cards."
             return
@@ -798,7 +797,8 @@ extension ContentView {
                 }
             }
         } else if let account = coreAccounts.first(where: { $0.id == column.accountId }),
-                  !MailStateKt.accountSummaryIsRss(account: account) {
+                  !MailStateKt.accountSummaryIsRss(account: account)
+        {
             let request = MobileCommandsKt.markAllReadRequest(
                 id: 49,
                 params: MarkAllReadParams(accountId: column.accountId, folderId: column.folderId)
@@ -872,14 +872,13 @@ extension ContentView {
     }
 
     func moveKanbanThread(_ thread: ThreadSummary, from source: IosKanbanColumnSpec, to target: IosKanbanColumnSpec) {
-        let request: String
-        if isRssThread(thread) {
-            request = MobileCommandsKt.feedMoveRequest(
+        let request: String = if isRssThread(thread) {
+            MobileCommandsKt.feedMoveRequest(
                 id: 39,
                 params: MoveRssFeedParams(threadId: thread.id, targetAccountId: target.accountId)
             ).toJson()
         } else {
-            request = MobileCommandsKt.moveThreadRequest(
+            MobileCommandsKt.moveThreadRequest(
                 id: 39,
                 params: MoveThreadParams(threadId: thread.id, targetFolderId: target.folderId)
             ).toJson()

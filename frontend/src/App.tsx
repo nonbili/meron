@@ -26,10 +26,18 @@ import { ConnectivityBanner } from './components/banner/ConnectivityBanner'
 // State-gated screens, code-split so they stay out of the initial bundle and only
 // load when first opened. Each is a named export, so unwrap it to a default for lazy().
 const SetupScreen = lazy(() => import('./components/setup/SetupScreen').then((m) => ({ default: m.SetupScreen })))
-const AccountDialog = lazy(() => import('./components/dialog/AccountDialog').then((m) => ({ default: m.AccountDialog })))
-const SettingsDialog = lazy(() => import('./components/dialog/SettingsDialog').then((m) => ({ default: m.SettingsDialog })))
-const AddFeedDialog = lazy(() => import('./components/dialog/AddFeedDialog').then((m) => ({ default: m.AddFeedDialog })))
-const FeedEditDialog = lazy(() => import('./components/dialog/FeedEditDialog').then((m) => ({ default: m.FeedEditDialog })))
+const AccountDialog = lazy(() =>
+  import('./components/dialog/AccountDialog').then((m) => ({ default: m.AccountDialog })),
+)
+const SettingsDialog = lazy(() =>
+  import('./components/dialog/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
+)
+const AddFeedDialog = lazy(() =>
+  import('./components/dialog/AddFeedDialog').then((m) => ({ default: m.AddFeedDialog })),
+)
+const FeedEditDialog = lazy(() =>
+  import('./components/dialog/FeedEditDialog').then((m) => ({ default: m.FeedEditDialog })),
+)
 
 export default function App() {
   const { t } = useTranslation()

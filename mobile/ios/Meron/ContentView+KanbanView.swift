@@ -195,5 +195,4 @@ extension ContentView {
         }
         .listStyle(.insetGrouped)
     }
-
 }

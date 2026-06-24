@@ -140,7 +140,7 @@ extension ContentView {
             accountStatus = "No account selected."
             return
         }
-        let unreadThreads = coreThreads.filter { $0.unread }
+        let unreadThreads = coreThreads.filter(\.unread)
         guard !unreadThreads.isEmpty else {
             accountStatus = "No unread messages."
             return
@@ -150,7 +150,8 @@ extension ContentView {
         if accountId == iosUnifiedAccountId {
             for (threadAccountId, threads) in Dictionary(grouping: unreadThreads, by: \.accountId) {
                 if let account = coreAccounts.first(where: { $0.id == threadAccountId }),
-                   MailStateKt.accountSummaryIsRss(account: account) {
+                   MailStateKt.accountSummaryIsRss(account: account)
+                {
                     for thread in threads {
                         let request = MobileCommandsKt.rssMarkReadRequest(
                             id: 44,
@@ -220,5 +221,4 @@ extension ContentView {
             loadCoreFoldersAndThreads(accountId: accountId, requestedFolder: selectedCoreFolder)
         }
     }
-
 }

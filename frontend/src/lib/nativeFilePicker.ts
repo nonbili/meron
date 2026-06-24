@@ -26,7 +26,6 @@ export async function pickImageFile(title = 'Choose image'): Promise<File | null
   return pickedToFile(res as PickedFile)
 }
 
-
 export async function pickFiles(title = 'Choose files'): Promise<File[]> {
   const res = await invoke<{ files: PickedFile[] } | { cancelled: true }>('system.pickFiles', { title })
   if ('cancelled' in res && res.cancelled) return []

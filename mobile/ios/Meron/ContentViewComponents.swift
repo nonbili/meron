@@ -8,11 +8,11 @@ import WebKit
 struct ShareSheet: UIViewControllerRepresentable {
     let url: URL
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
+    func makeUIViewController(context _: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
 }
 
 struct ImagePreviewSheet: View {
@@ -139,7 +139,7 @@ struct AccountSettingsEditor: View {
                     .keyboardType(.numberPad)
             } else {
                 TextField("Aliases, one per line: email, optional name", text: $aliasesText, axis: .vertical)
-                    .lineLimit(2...5)
+                    .lineLimit(2 ... 5)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
@@ -173,11 +173,10 @@ struct AccountSettingsEditor: View {
     }
 }
 
-
 struct HtmlMessageWebView: UIViewRepresentable {
     let html: String
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context _: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = false
@@ -189,7 +188,7 @@ struct HtmlMessageWebView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    func updateUIView(_ webView: WKWebView, context _: Context) {
         webView.loadHTMLString(html, baseURL: nil)
     }
 }
@@ -206,7 +205,7 @@ struct SenderAvatar: View {
             if urls.indices.contains(urlIndex) {
                 AsyncImage(url: urls[urlIndex]) { phase in
                     switch phase {
-                    case .success(let image):
+                    case let .success(image):
                         image
                             .resizable()
                             .scaledToFill()
@@ -247,13 +246,14 @@ struct SenderAvatar: View {
 func senderImageUrls(_ label: String) -> [URL] {
     guard let email = extractEmail(label),
           let domain = email.split(separator: "@").last,
-          !domain.isEmpty else {
+          !domain.isEmpty
+    else {
         return []
     }
     let hash = md5Hex(email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     return [
         URL(string: "https://www.gravatar.com/avatar/\(hash)?s=96&d=404"),
-        URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=96")
+        URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=96"),
     ].compactMap { $0 }
 }
 
@@ -285,7 +285,7 @@ func avatarInitials(_ value: String) -> String {
         .replacingOccurrences(of: "<", with: " ")
         .replacingOccurrences(of: ">", with: " ")
         .split { $0.isWhitespace || $0 == "@" || $0 == "." }
-    let letters = parts.prefix(2).compactMap { $0.first }.map { String($0).uppercased() }
+    let letters = parts.prefix(2).compactMap(\.first).map { String($0).uppercased() }
     return letters.isEmpty ? "?" : letters.joined()
 }
 
@@ -928,7 +928,8 @@ struct KanbanThreadCard: View {
 
 func loadIosKanbanBoards() -> [IosKanbanBoardSpec] {
     guard let data = UserDefaults.standard.data(forKey: "ios_kanban_boards_v1"),
-          let boards = try? JSONDecoder().decode([IosKanbanBoardSpec].self, from: data) else {
+          let boards = try? JSONDecoder().decode([IosKanbanBoardSpec].self, from: data)
+    else {
         return []
     }
     return boards
@@ -947,10 +948,10 @@ func attachmentDetail(_ attachment: MessageAttachment) -> String {
 }
 
 func attachmentActionHint(_ attachment: MessageAttachment) -> String {
-    if attachment.url.isEmpty && attachment.key.isEmpty {
+    if attachment.url.isEmpty, attachment.key.isEmpty {
         return "Not cached"
     }
-    if attachment.url.isEmpty && !attachment.mimeType.hasPrefix("image/") {
+    if attachment.url.isEmpty, !attachment.mimeType.hasPrefix("image/") {
         return "Share or save to Files"
     }
     if attachment.mimeType.hasPrefix("image/") {

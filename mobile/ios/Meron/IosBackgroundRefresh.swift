@@ -35,7 +35,7 @@ enum IosBackgroundRefresh {
 
     @discardableResult
     static func register() -> Bool {
-        return BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
             guard let refreshTask = task as? BGAppRefreshTask else {
                 task.setTaskCompleted(success: false)
                 return
@@ -91,7 +91,8 @@ enum IosBackgroundRefresh {
         _ = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory(), dbKey: IosDbKey.get())
         let accountList = invoke(id: 1, method: "account.list", params: [:])
         guard let accounts = accountList["result"] as? [String: Any],
-              let accountRows = accounts["accounts"] as? [[String: Any]] else {
+              let accountRows = accounts["accounts"] as? [[String: Any]]
+        else {
             return RefreshResult(refreshed: 0, skipped: 0, failed: 1)
         }
 
@@ -137,13 +138,15 @@ enum IosBackgroundRefresh {
             "params": params,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: request),
-              let json = String(data: data, encoding: .utf8) else {
+              let json = String(data: data, encoding: .utf8)
+        else {
             return ["error": ["message": "failed to encode request"]]
         }
         let response = RustCoreBridge.invokeJson(json)
         guard let responseData = response.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: responseData),
-              let dictionary = object as? [String: Any] else {
+              let dictionary = object as? [String: Any]
+        else {
             return ["error": ["message": "failed to decode response"]]
         }
         return dictionary

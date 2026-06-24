@@ -1,6 +1,6 @@
+@testable import Meron
 import UserNotifications
 import XCTest
-@testable import Meron
 
 final class IosNotificationContractTests: XCTestCase {
     func testRefreshNotificationContentUsesExpectedTitleBodyAndSound() {

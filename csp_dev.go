@@ -10,6 +10,7 @@ package main
 //     eval for HMR module evaluation, so allow 'unsafe-inline' and 'unsafe-eval'.
 //   - connect-src: HMR needs the Vite websocket (ws://127.0.0.1:5178) and the
 //     Wails runtime websocket (ws://wails.localhost:34115), so allow ws:/wss:.
+//
 // Everything else mirrors csp_prod.go. This file is never compiled into a
 // production build (which adds the `production` tag).
 const contentSecurityPolicy = "default-src 'self'; " +

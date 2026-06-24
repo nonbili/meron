@@ -408,40 +408,34 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 missing.entry(folder).or_default().push(header.uid);
             }
         }
-        if !missing.is_empty() {
-            if let Ok(creds) = load_mobile_account_creds(&conn, &parsed.account) {
-                if !account_needs_reconnect(&creds) {
-                    let media_root = std::path::PathBuf::from(data_dir).join("attachments");
-                    let fetched = run_mobile_async(async {
-                        let mut session = imap::connect(&creds).await?;
-                        let mut all = Vec::new();
-                        for (folder, uids) in &missing {
-                            let bodies = imap::fetch_bodies(
-                                &mut session,
-                                folder,
-                                uids,
-                                media_root.clone(),
-                                &parsed.account,
-                            )
-                            .await?;
-                            for (uid, message) in bodies {
-                                all.push((folder.clone(), uid, message));
-                            }
-                        }
-                        let _ = session.logout().await;
-                        anyhow::Ok(all)
-                    });
-                    if let Ok(fetched) = fetched {
-                        for (folder, uid, message) in fetched {
-                            let _ = store::save_cached_message(
-                                &conn,
-                                &parsed.account,
-                                &folder,
-                                uid,
-                                &message,
-                            );
-                        }
+        if !missing.is_empty()
+            && let Ok(creds) = load_mobile_account_creds(&conn, &parsed.account)
+            && !account_needs_reconnect(&creds)
+        {
+            let media_root = std::path::PathBuf::from(data_dir).join("attachments");
+            let fetched = run_mobile_async(async {
+                let mut session = imap::connect(&creds).await?;
+                let mut all = Vec::new();
+                for (folder, uids) in &missing {
+                    let bodies = imap::fetch_bodies(
+                        &mut session,
+                        folder,
+                        uids,
+                        media_root.clone(),
+                        &parsed.account,
+                    )
+                    .await?;
+                    for (uid, message) in bodies {
+                        all.push((folder.clone(), uid, message));
                     }
+                }
+                let _ = session.logout().await;
+                anyhow::Ok(all)
+            });
+            if let Ok(fetched) = fetched {
+                for (folder, uid, message) in fetched {
+                    let _ =
+                        store::save_cached_message(&conn, &parsed.account, &folder, uid, &message);
                 }
             }
         }

@@ -36,14 +36,14 @@ fn parse_addrs(raw: &str) -> Vec<String> {
 /// the display name in `name` where it belongs.
 fn split_name_addr(entry: &str) -> (String, String) {
     let trimmed = entry.trim();
-    if let Some(start) = trimmed.find('<') {
-        if let Some(end_rel) = trimmed[start + 1..].find('>') {
-            let name = trimmed[..start].trim();
-            // Strip surrounding quotes from quoted display names.
-            let name = name.trim_matches('"').trim();
-            let addr = trimmed[start + 1..start + 1 + end_rel].trim();
-            return (name.to_string(), addr.to_string());
-        }
+    if let Some(start) = trimmed.find('<')
+        && let Some(end_rel) = trimmed[start + 1..].find('>')
+    {
+        let name = trimmed[..start].trim();
+        // Strip surrounding quotes from quoted display names.
+        let name = name.trim_matches('"').trim();
+        let addr = trimmed[start + 1..start + 1 + end_rel].trim();
+        return (name.to_string(), addr.to_string());
     }
     (String::new(), trimmed.to_string())
 }
@@ -117,7 +117,7 @@ pub fn build_message(
     }
     let refs_bare: Vec<String> = references
         .split_whitespace()
-        .map(|tok| bare_id(tok))
+        .map(bare_id)
         .filter(|tok| !tok.is_empty())
         .collect();
     if !refs_bare.is_empty() {
@@ -310,10 +310,10 @@ pub async fn send(
 /// display-name form, so all envelope addresses pass through this first.
 fn bare_addr(entry: &str) -> String {
     let trimmed = entry.trim();
-    if let Some(start) = trimmed.find('<') {
-        if let Some(end) = trimmed[start + 1..].find('>') {
-            return trimmed[start + 1..start + 1 + end].trim().to_string();
-        }
+    if let Some(start) = trimmed.find('<')
+        && let Some(end) = trimmed[start + 1..].find('>')
+    {
+        return trimmed[start + 1..start + 1 + end].trim().to_string();
     }
     trimmed.to_string()
 }

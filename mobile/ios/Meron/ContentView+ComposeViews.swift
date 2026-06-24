@@ -113,7 +113,7 @@ extension ContentView {
 
     @ViewBuilder
     func contactSuggestionRows(field: String) -> some View {
-        if recipientSuggestionField == field && !recipientSuggestions.isEmpty {
+        if recipientSuggestionField == field, !recipientSuggestions.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     ForEach(recipientSuggestions, id: \.addr) { contact in
@@ -166,5 +166,4 @@ extension ContentView {
             }
         }
     }
-
 }

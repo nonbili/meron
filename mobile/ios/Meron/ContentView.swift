@@ -187,12 +187,12 @@ struct ContentView: View {
             .tag(IosAppTab.accounts)
         }
         .onChange(of: showStarredTab) { _, visible in
-            if !visible && selectedTab == .starred {
+            if !visible, selectedTab == .starred {
                 selectedTab = .mail
             }
         }
         .onChange(of: showUnifiedInbox) { _, visible in
-            if !visible && selectedCoreAccountId == iosUnifiedAccountId {
+            if !visible, selectedCoreAccountId == iosUnifiedAccountId {
                 selectedCoreAccountId = visibleNavigationAccounts.first?.id ?? ""
                 selectedCoreFolder = iosInboxFolderId
                 coreFolders = []
@@ -225,33 +225,33 @@ struct ContentView: View {
         }
         .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.item]) { result in
             switch result {
-            case .success(let url):
+            case let .success(url):
                 addAttachment(from: url)
-            case .failure(let error):
+            case let .failure(error):
                 attachmentError = error.localizedDescription
             }
         }
         .fileImporter(isPresented: $isQuickReplyFileImporterPresented, allowedContentTypes: [.item]) { result in
             switch result {
-            case .success(let url):
+            case let .success(url):
                 addQuickReplyAttachment(from: url)
-            case .failure(let error):
+            case let .failure(error):
                 attachmentError = error.localizedDescription
             }
         }
         .fileImporter(isPresented: $isOpmlImporterPresented, allowedContentTypes: [.xml, .item]) { result in
             switch result {
-            case .success(let url):
+            case let .success(url):
                 importOpml(from: url)
-            case .failure(let error):
+            case let .failure(error):
                 accountStatus = "OPML import failed: \(error.localizedDescription)"
             }
         }
         .fileImporter(isPresented: $isAccountMediaImporterPresented, allowedContentTypes: [.image]) { result in
             switch result {
-            case .success(let url):
+            case let .success(url):
                 importAccountMedia(from: url)
-            case .failure(let error):
+            case let .failure(error):
                 accountStatus = "Media import failed: \(error.localizedDescription)"
             }
         }
@@ -264,7 +264,7 @@ struct ContentView: View {
             switch result {
             case .success:
                 accountStatus = "Exported OPML."
-            case .failure(let error):
+            case let .failure(error):
                 accountStatus = "OPML export failed: \(error.localizedDescription)"
             }
         }
@@ -323,5 +323,4 @@ struct ContentView: View {
             loadStorageUsage(showStatus: false)
         }
     }
-
 }

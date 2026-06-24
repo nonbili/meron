@@ -25,7 +25,7 @@ extension ContentView {
     }
 
     func unifiedMailboxAccounts(for cursors: [String: String]? = nil) -> [AccountSummary] {
-        let accounts = coreAccounts.filter { $0.includedInUnified }
+        let accounts = coreAccounts.filter(\.includedInUnified)
         guard let cursors else { return accounts }
         return accounts.filter { !(cursors[$0.id] ?? "").isEmpty }
     }
@@ -78,7 +78,7 @@ extension ContentView {
                 return
             }
             threads.append(contentsOf: page.threads)
-            if mailSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !page.nextCursor.isEmpty {
+            if mailSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !page.nextCursor.isEmpty {
                 nextCursors[account.id] = page.nextCursor
             }
         }
@@ -215,7 +215,8 @@ extension ContentView {
         accountStatus = "Loaded \(coreMessages.count) message(s)."
         if !isRssThread(thread),
            MailStateKt.folderIsDrafts(folder: thread.folder),
-           let draftMessage = coreMessages.last {
+           let draftMessage = coreMessages.last
+        {
             openDraftCompose(draftMessage, thread: thread)
         }
     }
@@ -264,5 +265,4 @@ extension ContentView {
             )
         )
     }
-
 }

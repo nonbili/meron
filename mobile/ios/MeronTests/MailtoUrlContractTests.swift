@@ -1,6 +1,6 @@
+@testable import Meron
 import MeronShared
 import XCTest
-@testable import Meron
 
 final class MailtoUrlContractTests: XCTestCase {
     func testMailtoUrlPrefillsComposeFields() throws {

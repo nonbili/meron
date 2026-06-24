@@ -1095,18 +1095,18 @@ fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     let stmt = db
         .prepare("SELECT display_name, email FROM accounts WHERE id = ?1")
         .ok();
-    if let Some(mut s) = stmt {
-        if let Ok((display_name, email)) = s.query_row(rusqlite::params![account], |row| {
+    if let Some(mut s) = stmt
+        && let Ok((display_name, email)) = s.query_row(rusqlite::params![account], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            let mail = email.trim();
-            if !mail.is_empty() {
-                return mail.to_string();
-            }
-            let label = display_name.trim();
-            if !label.is_empty() {
-                return label.to_string();
-            }
+        })
+    {
+        let mail = email.trim();
+        if !mail.is_empty() {
+            return mail.to_string();
+        }
+        let label = display_name.trim();
+        if !label.is_empty() {
+            return label.to_string();
         }
     }
     account.to_string()
@@ -2022,10 +2022,10 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             // result list rather than a per-folder UID space.
             let (headers, next_cursor) = if let Some(limit) = limit {
                 let mut headers = headers;
-                if let Some(cursor) = before_cursor {
-                    if let Some(idx) = headers.iter().position(|h| h.uid == cursor) {
-                        headers.truncate(idx);
-                    }
+                if let Some(cursor) = before_cursor
+                    && let Some(idx) = headers.iter().position(|h| h.uid == cursor)
+                {
+                    headers.truncate(idx);
                 }
                 let total = headers.len();
                 let limit_usize = limit as usize;

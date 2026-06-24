@@ -64,7 +64,7 @@ extension ContentView {
                         mailboxAccountCursors = [:]
                     }
 
-                    if selectedCoreAccountId != iosUnifiedAccountId && !coreFolders.isEmpty {
+                    if selectedCoreAccountId != iosUnifiedAccountId, !coreFolders.isEmpty {
                         Picker("Folder", selection: $selectedCoreFolder) {
                             ForEach(coreFolders, id: \.name) { folder in
                                 Text(folder.unread > 0 ? "\(folder.name) (\(folder.unread))" : folder.name)
@@ -123,7 +123,7 @@ extension ContentView {
                             Label("Export OPML", systemImage: "square.and.arrow.up")
                         }
                     }
-                    if coreThreads.contains(where: { $0.unread }) {
+                    if coreThreads.contains(where: \.unread) {
                         Button {
                             markSelectedMailboxAllRead()
                         } label: {
@@ -380,8 +380,9 @@ extension ContentView {
                     quickReplyFailure = ""
                 }
                 .onKeyPress(keys: [.return]) { press in
-                    if sendShortcutMatches(press, mode: sendShortcutMode) &&
-                        (!quickReplyBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !quickReplyAttachments.isEmpty) {
+                    if sendShortcutMatches(press, mode: sendShortcutMode),
+                       !quickReplyBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !quickReplyAttachments.isEmpty
+                    {
                         sendQuickReply()
                         return .handled
                     }
@@ -461,7 +462,7 @@ extension ContentView {
             message.cc,
             message.body,
             message.bodyHtml.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression),
-            message.attachments.map(\.filename).joined(separator: " ")
+            message.attachments.map(\.filename).joined(separator: " "),
         ].joined(separator: " ").lowercased()
     }
 
@@ -484,9 +485,10 @@ extension ContentView {
             guard !normalized.isEmpty, normalized.contains("@") else { return }
             if var existing = rows[normalized] {
                 existing.count += 1
-                if (existing.name.isEmpty || existing.name == existing.email),
+                if existing.name.isEmpty || existing.name == existing.email,
                    !name.isEmpty,
-                   name != email {
+                   name != email
+                {
                     existing.name = name
                 }
                 rows[normalized] = existing
@@ -525,11 +527,10 @@ extension ContentView {
                     let name = entry[..<open]
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                         .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-                    let email = entry[entry.index(after: open)..<close].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let email = entry[entry.index(after: open) ..< close].trimmingCharacters(in: .whitespacesAndNewlines)
                     return (name, email)
                 }
                 return (entry, entry)
             }
     }
-
 }

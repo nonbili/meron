@@ -54,4 +54,3 @@ func TestFilePickerDefaultDirResolvesSymlink(t *testing.T) {
 		t.Fatalf("filePickerDefaultDir(%q) = %q, want %q", link, got, expected)
 	}
 }
-

@@ -92,11 +92,19 @@ describe('messageHelpers text and link helpers', () => {
 
   it('splits fenced code blocks while keeping inline text parsed', () => {
     expect(splitFencedCodeBlocks('before https://example.com\n```\nconst x = 1\n```\nafter')).toEqual([
-      { type: 'inline', parts: [{ type: 'text', content: 'before ' }, { type: 'link', content: 'https://example.com' }] },
+      {
+        type: 'inline',
+        parts: [
+          { type: 'text', content: 'before ' },
+          { type: 'link', content: 'https://example.com' },
+        ],
+      },
       { type: 'code', content: 'const x = 1' },
       { type: 'inline', parts: [{ type: 'text', content: 'after' }] },
     ])
-    expect(splitFencedCodeBlocks('```\nunclosed')).toEqual([{ type: 'inline', parts: [{ type: 'text', content: '```\nunclosed' }] }])
+    expect(splitFencedCodeBlocks('```\nunclosed')).toEqual([
+      { type: 'inline', parts: [{ type: 'text', content: '```\nunclosed' }] },
+    ])
   })
 
   it('extracts address data and searchable message text', () => {
@@ -109,8 +117,8 @@ describe('messageHelpers text and link helpers', () => {
     expect(parseAddressList('Display Name <display@example.com>')).toEqual([
       { name: 'Display Name', email: 'display@example.com', original: 'Display Name <display@example.com>' },
     ])
-    expect(messageSearchText({ subject: 'Hello', from_name: 'Ada', from_addr: 'ada@example.com', body: 'World' } as any)).toBe(
-      'hello\nada\nada@example.com\nworld',
-    )
+    expect(
+      messageSearchText({ subject: 'Hello', from_name: 'Ada', from_addr: 'ada@example.com', body: 'World' } as any),
+    ).toBe('hello\nada\nada@example.com\nworld')
   })
 })

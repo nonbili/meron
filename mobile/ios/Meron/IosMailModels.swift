@@ -28,9 +28,9 @@ struct IosThemeOption: Identifiable {
 
 func iosColor(_ rgb: UInt32) -> Color {
     Color(
-        red: Double((rgb >> 16) & 0xff) / 255.0,
-        green: Double((rgb >> 8) & 0xff) / 255.0,
-        blue: Double(rgb & 0xff) / 255.0
+        red: Double((rgb >> 16) & 0xFF) / 255.0,
+        green: Double((rgb >> 8) & 0xFF) / 255.0,
+        blue: Double(rgb & 0xFF) / 255.0
     )
 }
 
@@ -64,7 +64,7 @@ struct IosKanbanColumnSpec: Codable, Identifiable, Hashable {
     init(accountId: String, folderId: String) {
         self.accountId = accountId
         self.folderId = folderId
-        self.id = "\(accountId)::\(folderId)"
+        id = "\(accountId)::\(folderId)"
     }
 }
 
@@ -146,13 +146,15 @@ enum IosFilterMode: String, CaseIterable, Identifiable {
     case unread
     case starred
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {
-        case .all: return "All"
-        case .unread: return "Unread"
-        case .starred: return "Starred"
+        case .all: "All"
+        case .unread: "Unread"
+        case .starred: "Starred"
         }
     }
 }
@@ -200,7 +202,9 @@ func identityKey(_ identity: SendIdentity) -> String {
 }
 
 struct OpmlDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.xml] }
+    static var readableContentTypes: [UTType] {
+        [.xml]
+    }
 
     var text: String
 
@@ -216,7 +220,7 @@ struct OpmlDocument: FileDocument {
         }
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }
@@ -284,10 +288,12 @@ struct IosImagePreview: Identifiable {
 }
 
 struct ConversationParticipant: Identifiable, Hashable {
-    var id: String { email }
+    var id: String {
+        email
+    }
+
     let name: String
     let email: String
     let count: Int
     let isSelf: Bool
 }
-

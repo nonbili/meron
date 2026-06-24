@@ -62,9 +62,7 @@ export function AddFeedDialog() {
 
         {/* Content */}
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-semibold text-secondary px-1">
-            {t('feeds.url')}
-          </label>
+          <label className="text-[11px] font-semibold text-secondary px-1">{t('feeds.url')}</label>
           <input
             autoFocus
             value={url}

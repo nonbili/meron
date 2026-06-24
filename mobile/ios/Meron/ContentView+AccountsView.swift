@@ -65,7 +65,7 @@ extension ContentView {
             Section("Kanban") {
                 Stepper(
                     value: $kanbanColumnWidth,
-                    in: iosKanbanColumnMinWidth...iosKanbanColumnMaxWidth,
+                    in: iosKanbanColumnMinWidth ... iosKanbanColumnMaxWidth,
                     step: 20
                 ) {
                     LabeledContent("Column width", value: "\(Int(kanbanColumnWidth)) pt")
@@ -130,7 +130,7 @@ extension ContentView {
                                 }
                                 .disabled(index == coreAccounts.count - 1)
 
-                                if account.needsReconnect && !MailStateKt.accountSummaryIsRss(account: account) {
+                                if account.needsReconnect, !MailStateKt.accountSummaryIsRss(account: account) {
                                     Button {
                                         reconnectAccount(account)
                                     } label: {
@@ -291,5 +291,4 @@ extension ContentView {
         }
         .listStyle(.insetGrouped)
     }
-
 }

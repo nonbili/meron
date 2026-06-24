@@ -542,7 +542,8 @@ function activateOpenDraftCompose(draft: Message): boolean {
         tab.compose?.sourceDraft &&
         (tab.compose.sourceDraft.messageId === draft.id ||
           (!!draft.message_id && tab.compose.draftMessageId === draft.message_id) ||
-          (tab.compose.sourceDraft.threadId === draft.thread_id && tab.compose.sourceDraft.folderId === draft.folder_id)),
+          (tab.compose.sourceDraft.threadId === draft.thread_id &&
+            tab.compose.sourceDraft.folderId === draft.folder_id)),
     )
   if (!existing) return false
   compose$.activeTab.set(existing.id)

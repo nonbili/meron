@@ -159,7 +159,13 @@ export function SortableAccount({
             }`}
             title={needsReconnect ? 'Needs reconnect' : isPaused ? 'Paused' : 'Muted'}
           >
-            {needsReconnect ? <KeyRound size={10} /> : isPaused ? <Pause size={9} className="fill-current" /> : <BellOff size={9} />}
+            {needsReconnect ? (
+              <KeyRound size={10} />
+            ) : isPaused ? (
+              <Pause size={9} className="fill-current" />
+            ) : (
+              <BellOff size={9} />
+            )}
           </span>
         )}
         <UnreadCountBadge count={unreadCount} />

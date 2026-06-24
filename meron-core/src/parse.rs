@@ -130,11 +130,11 @@ pub fn decode_words(raw: &str) -> String {
 
 /// Split a `From`-style value ("Display Name <addr@host>") into name and address.
 pub fn split_address(raw: &str) -> (String, String) {
-    if let Ok(list) = addrparse(raw) {
-        if let Some(mailparse::MailAddr::Single(info)) = list.first() {
-            let name = info.display_name.clone().unwrap_or_default();
-            return (name, info.addr.clone());
-        }
+    if let Ok(list) = addrparse(raw)
+        && let Some(mailparse::MailAddr::Single(info)) = list.first()
+    {
+        let name = info.display_name.clone().unwrap_or_default();
+        return (name, info.addr.clone());
     }
     (String::new(), raw.to_string())
 }
@@ -407,17 +407,17 @@ pub fn prepare_html(source: &str, load_remote_images: bool) -> String {
 /// after `<html ...>` as a new head, or as a prepended document otherwise.
 fn inject_head(html: &str, head_extra: &str) -> String {
     let lower = html.to_ascii_lowercase();
-    if let Some(head) = lower.find("<head") {
-        if let Some(rel) = lower[head..].find('>') {
-            let at = head + rel + 1;
-            return format!("{}{head_extra}{}", &html[..at], &html[at..]);
-        }
+    if let Some(head) = lower.find("<head")
+        && let Some(rel) = lower[head..].find('>')
+    {
+        let at = head + rel + 1;
+        return format!("{}{head_extra}{}", &html[..at], &html[at..]);
     }
-    if let Some(htmltag) = lower.find("<html") {
-        if let Some(rel) = lower[htmltag..].find('>') {
-            let at = htmltag + rel + 1;
-            return format!("{}<head>{head_extra}</head>{}", &html[..at], &html[at..]);
-        }
+    if let Some(htmltag) = lower.find("<html")
+        && let Some(rel) = lower[htmltag..].find('>')
+    {
+        let at = htmltag + rel + 1;
+        return format!("{}<head>{head_extra}</head>{}", &html[..at], &html[at..]);
     }
     format!("<!doctype html><html><head>{head_extra}</head><body>{html}</body></html>")
 }
@@ -478,16 +478,16 @@ fn collect_attachments(
 
     // Map this inline image's Content-ID to its served key so HTML mode can
     // rewrite `cid:` references (`<foo@host>` headers — strip the angle brackets).
-    if let Some(key) = &key {
-        if let Some(cid) = part.headers.get_first_value("Content-ID") {
-            let cid = cid
-                .trim()
-                .trim_start_matches('<')
-                .trim_end_matches('>')
-                .trim();
-            if !cid.is_empty() {
-                cid_keys.push((cid.to_string(), key.clone()));
-            }
+    if let Some(key) = &key
+        && let Some(cid) = part.headers.get_first_value("Content-ID")
+    {
+        let cid = cid
+            .trim()
+            .trim_start_matches('<')
+            .trim_end_matches('>')
+            .trim();
+        if !cid.is_empty() {
+            cid_keys.push((cid.to_string(), key.clone()));
         }
     }
 
@@ -631,13 +631,13 @@ pub fn html_to_text(html: &str) -> String {
         .ok()
         .and_then(|result| result.content)
         .unwrap_or_default();
-    if markdown.trim().is_empty() {
-        if let Some(body) = body_inner_html(&clean_html) {
-            markdown = convert(&format!("<div>{body}</div>"), Some(options))
-                .ok()
-                .and_then(|result| result.content)
-                .unwrap_or_default();
-        }
+    if markdown.trim().is_empty()
+        && let Some(body) = body_inner_html(&clean_html)
+    {
+        markdown = convert(&format!("<div>{body}</div>"), Some(options))
+            .ok()
+            .and_then(|result| result.content)
+            .unwrap_or_default();
     }
     normalize_text(&compact_image_links(&strip_heading_markers(
         &rewrite_image_markdown(&markdown),

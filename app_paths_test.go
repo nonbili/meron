@@ -145,4 +145,3 @@ func assertEnvContains(t *testing.T, env []string, want string) {
 	}
 	t.Fatalf("env missing %q; matching keys: %v", want, matches)
 }
-

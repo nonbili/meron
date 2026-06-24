@@ -306,7 +306,7 @@ extension ContentView {
         let response = RustCoreBridge.invokeJson(
             MobileCommandsKt.accountReorderRequest(
                 id: 58,
-                params: AccountReorderParams(accountIds: next.map { $0.id })
+                params: AccountReorderParams(accountIds: next.map(\.id))
             ).toJson()
         )
         if response.contains(#""error""#) {
@@ -452,7 +452,7 @@ extension ContentView {
             hidden.insert(accountId)
         }
         hiddenNavigationAccountsValue = hidden.sorted().joined(separator: "\n")
-        if !visible && selectedCoreAccountId == accountId {
+        if !visible, selectedCoreAccountId == accountId {
             selectedCoreAccountId = iosUnifiedAccountId
             selectedCoreFolder = iosInboxFolderId
             coreFolders = []
@@ -464,5 +464,4 @@ extension ContentView {
             loadUnifiedInbox(syncFirst: false)
         }
     }
-
 }

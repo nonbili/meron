@@ -9,7 +9,8 @@ extension ContentView {
     func defaultSendAccountId() -> String {
         if !selectedCoreAccountId.isEmpty,
            let account = coreAccounts.first(where: { $0.id == selectedCoreAccountId }),
-           !MailStateKt.accountSummaryIsRss(account: account) {
+           !MailStateKt.accountSummaryIsRss(account: account)
+        {
             return selectedCoreAccountId
         }
         return coreAccounts.first(where: { !MailStateKt.accountSummaryIsRss(account: $0) })?.id ?? ""
@@ -100,7 +101,8 @@ extension ContentView {
         }
         guard !composeTo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !composeSubject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              (!composeBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) else {
+              !composeBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+        else {
             accountStatus = "Complete To, Subject, and Body or Attachments before sending."
             return
         }
@@ -128,7 +130,7 @@ extension ContentView {
             accountJson = response
             return
         }
-        if composeDraftSaved && !composeDraftId.isEmpty {
+        if composeDraftSaved, !composeDraftId.isEmpty {
             _ = RustCoreBridge.invokeJson(
                 MobileCommandsKt.discardDraftRequest(
                     id: 62,
@@ -201,11 +203,11 @@ extension ContentView {
     func discardComposeDraft() {
         let identity = selectedComposeIdentity()
         let accountId = identity?.accountId ?? defaultSendAccountId()
-        if composeDraftSaved && !composeDraftId.isEmpty && accountId.isEmpty {
+        if composeDraftSaved, !composeDraftId.isEmpty, accountId.isEmpty {
             accountStatus = "Select or add an account before discarding."
             return
         }
-        if composeDraftSaved && !composeDraftId.isEmpty {
+        if composeDraftSaved, !composeDraftId.isEmpty {
             let response = RustCoreBridge.invokeJson(
                 MobileCommandsKt.discardDraftRequest(
                     id: 63,
@@ -305,5 +307,4 @@ extension ContentView {
         selectedTab = .compose
         accountStatus = "Reply opened in full editor."
     }
-
 }

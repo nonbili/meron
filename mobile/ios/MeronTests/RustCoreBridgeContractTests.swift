@@ -1,5 +1,5 @@
-import XCTest
 @testable import Meron
+import XCTest
 
 final class RustCoreBridgeContractTests: XCTestCase {
     func testRustCoreMatchesProtocolAndHandlesPing() throws {

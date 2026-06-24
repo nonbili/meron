@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { discardPendingSend, getPendingSend, isLocalSendId, LOCAL_SEND_PREFIX, setPendingSend, type PendingSend } from './pendingSends'
+import {
+  discardPendingSend,
+  getPendingSend,
+  isLocalSendId,
+  LOCAL_SEND_PREFIX,
+  setPendingSend,
+  type PendingSend,
+} from './pendingSends'
 
 const payload: PendingSend = {
   account_id: 'acct-1',

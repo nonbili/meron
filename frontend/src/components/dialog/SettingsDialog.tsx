@@ -480,9 +480,7 @@ function StorageGroup() {
             onClick={clearCache}
             disabled={clearing || (usage?.cacheBytes ?? 0) === 0}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold text-[10px] cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              confirming
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-hover hover:bg-active text-primary'
+              confirming ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-hover hover:bg-active text-primary'
             }`}
           >
             <Trash2 size={12} />
