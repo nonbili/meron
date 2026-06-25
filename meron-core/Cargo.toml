@@ -41,6 +41,7 @@ sha2 = "0.11.0"
 chrono = "0.4.44"
 url = "2.5.8"
 uuid = { version = "1.23.1", features = ["v4"] }
+hickory-resolver = { version = "0.26.1", features = ["system-config"] }
 
 # Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
 [patch.crates-io]

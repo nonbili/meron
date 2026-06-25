@@ -553,6 +553,8 @@ internal fun AddAccountScreen(
     onSmtpHostChange: (String) -> Unit,
     smtpPort: String,
     onSmtpPortChange: (String) -> Unit,
+    serverSettingsOpen: Boolean,
+    onServerSettingsOpenChange: (Boolean) -> Unit,
     onAutodiscover: () -> Unit,
     onAddPassword: () -> Unit,
     oauthAuthorizationCode: String,
@@ -634,15 +636,23 @@ internal fun AddAccountScreen(
                             SetupField(displayName, onDisplayNameChange, stringResource(R.string.accounts_fields_display_name_meron_only))
                             SetupField(senderName, onSenderNameChange, stringResource(R.string.accounts_fields_sender_name_outgoing))
                             SetupField(email, onEmailChange, stringResource(R.string.accounts_fields_email_address))
-                            SetupField(username, onUsernameChange, stringResource(R.string.accounts_fields_username))
                             SetupField(password, onPasswordChange, stringResource(R.string.accounts_fields_password), isPassword = true)
                             OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
                                 Text(stringResource(R.string.mobile_accounts_find_mail_settings))
                             }
-                            SetupField(host, onHostChange, stringResource(R.string.accounts_fields_imap_host))
-                            SetupField(imapPort, onImapPortChange, stringResource(R.string.accounts_fields_imap_port))
-                            SetupField(smtpHost, onSmtpHostChange, stringResource(R.string.accounts_fields_smtp_host))
-                            SetupField(smtpPort, onSmtpPortChange, stringResource(R.string.accounts_fields_smtp_port))
+                            TextButton(
+                                onClick = { onServerSettingsOpenChange(!serverSettingsOpen) },
+                                modifier = Modifier.align(Alignment.Start),
+                            ) {
+                                Text(stringResource(R.string.accounts_advanced_server_settings))
+                            }
+                            if (serverSettingsOpen) {
+                                SetupField(username, onUsernameChange, stringResource(R.string.accounts_fields_username))
+                                SetupField(host, onHostChange, stringResource(R.string.accounts_fields_imap_host))
+                                SetupField(imapPort, onImapPortChange, stringResource(R.string.accounts_fields_imap_port))
+                                SetupField(smtpHost, onSmtpHostChange, stringResource(R.string.accounts_fields_smtp_host))
+                                SetupField(smtpPort, onSmtpPortChange, stringResource(R.string.accounts_fields_smtp_port))
+                            }
                             Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.accounts_actions_add_account)) }
                         }
                     }

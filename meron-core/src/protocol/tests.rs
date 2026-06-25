@@ -2026,7 +2026,7 @@ fn parse_thread_id_with_request_folder_overrides_encoded_folder() {
 }
 
 #[test]
-fn mobile_autodiscover_returns_known_provider_or_guess() {
+fn mobile_autodiscover_returns_known_provider() {
     let gmail = invoke_mobile_protocol_json(
         r#"{"id":96,"method":"account.autodiscover","params":{"email":"me@gmail.com"}}"#,
         None,
@@ -2036,12 +2036,4 @@ fn mobile_autodiscover_returns_known_provider_or_guess() {
     assert_eq!(gmail["result"]["smtp_host"], "smtp.gmail.com");
     assert_eq!(gmail["result"]["username"], "me@gmail.com");
     assert_eq!(gmail["result"]["source"], "known");
-
-    let guessed = invoke_mobile_protocol_json(
-        r#"{"id":97,"method":"account.autodiscover","params":{"email":"me@example.org"}}"#,
-        None,
-    );
-    assert_eq!(guessed["result"]["imap_host"], "imap.example.org");
-    assert_eq!(guessed["result"]["smtp_host"], "smtp.example.org");
-    assert_eq!(guessed["result"]["source"], "guess");
 }

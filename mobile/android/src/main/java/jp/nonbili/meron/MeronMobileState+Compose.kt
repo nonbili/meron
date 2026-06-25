@@ -719,6 +719,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
     when {
         accountSummaryIsRss(account) -> {
             addSection = 2
+            passwordServerSettingsOpen = false
         }
 
         isOAuth -> {
@@ -726,6 +727,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
             if (account.provider == "gmail" || account.provider == "outlook") oauthProvider = account.provider
             oauthAuthorizationCode = ""
             addSection = 0
+            passwordServerSettingsOpen = false
         }
 
         else -> {
@@ -737,6 +739,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
             if (account.smtpHost.isNotBlank()) smtpHost = account.smtpHost
             if (account.smtpPort > 0) smtpPort = account.smtpPort.toString()
             addSection = 1
+            passwordServerSettingsOpen = true
         }
     }
     errorBanner = null

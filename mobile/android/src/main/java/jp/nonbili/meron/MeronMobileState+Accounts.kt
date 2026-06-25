@@ -417,11 +417,15 @@ internal fun MeronMobileState.autodiscoverPasswordAccount() {
                         discovered.appPasswordProvider
                     }} settings found. Use an app password."
 
-                    discovered.source == "guess" -> "Settings guessed. Verify the servers before adding."
+                    discovered.source == "guess" -> {
+                        passwordServerSettingsOpen = true
+                        "Settings guessed. Verify the servers before adding."
+                    }
 
                     else -> "Settings found${discovered.providerName.takeIf { it.isNotBlank() }?.let { " for $it" }.orEmpty()}."
                 }
         }.onFailure {
+            passwordServerSettingsOpen = true
             status = "Settings lookup failed: ${it.message}"
         }
     }

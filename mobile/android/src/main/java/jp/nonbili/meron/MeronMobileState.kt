@@ -285,6 +285,7 @@ internal class MeronMobileState(
     var imapPort by mutableStateOf("993")
     var smtpHost by mutableStateOf("")
     var smtpPort by mutableStateOf("465")
+    var passwordServerSettingsOpen by mutableStateOf(false)
     // Set to a managed account id when its on-device Google token can no longer
     // be silently refreshed, signalling the user must reconnect it.
     var googleReauthAccountId by mutableStateOf<String?>(null)

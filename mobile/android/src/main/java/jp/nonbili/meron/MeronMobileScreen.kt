@@ -575,6 +575,7 @@ internal fun MeronMobileScreen(
                     if (result != null) {
                         oauthAuthorizationCode = result.code
                         addSection = 0
+                        passwordServerSettingsOpen = false
                         screen = Screen.AddAccount
                         status = "Finishing ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in..."
                         clearPendingOAuthFlow(context)
@@ -837,6 +838,8 @@ internal fun MeronMobileScreen(
                     onSmtpHostChange = { smtpHost = it },
                     smtpPort = smtpPort,
                     onSmtpPortChange = { smtpPort = it },
+                    serverSettingsOpen = passwordServerSettingsOpen,
+                    onServerSettingsOpenChange = { passwordServerSettingsOpen = it },
                     onAutodiscover = ::autodiscoverPasswordAccount,
                     onAddPassword = ::addPasswordAccount,
                     oauthAuthorizationCode = oauthAuthorizationCode,
@@ -877,11 +880,13 @@ internal fun MeronMobileScreen(
                     onCreateKanbanBoard = ::createKanbanBoard,
                     onAddMailAccount = {
                         addSection = 0
+                        passwordServerSettingsOpen = false
                         previousTopScreen = Screen.Settings
                         screen = Screen.AddAccount
                     },
                     onAddFeedAccount = {
                         addSection = 2
+                        passwordServerSettingsOpen = false
                         previousTopScreen = Screen.Settings
                         screen = Screen.AddAccount
                     },
@@ -1030,6 +1035,7 @@ internal fun MeronMobileScreen(
                             },
                             onAddAccount = {
                                 addSection = 0
+                                passwordServerSettingsOpen = false
                                 previousTopScreen = Screen.Starred
                                 screen = Screen.AddAccount
                                 scope.launch { drawerState.close() }
@@ -1157,6 +1163,7 @@ internal fun MeronMobileScreen(
                             },
                             onAddAccount = {
                                 addSection = 0
+                                passwordServerSettingsOpen = false
                                 previousTopScreen = Screen.Kanban
                                 screen = Screen.AddAccount
                                 scope.launch { drawerState.close() }
@@ -1485,6 +1492,7 @@ internal fun MeronMobileScreen(
                             },
                             onAddAccount = {
                                 addSection = 0
+                                passwordServerSettingsOpen = false
                                 previousTopScreen = screen
                                 screen = Screen.AddAccount
                                 scope.launch { drawerState.close() }
@@ -1764,6 +1772,7 @@ internal fun MeronMobileScreen(
                                             actionLabel = stringResource(R.string.accounts_actions_add_account),
                                             onAction = {
                                                 addSection = 0
+                                                passwordServerSettingsOpen = false
                                                 screen = Screen.AddAccount
                                             },
                                         )
