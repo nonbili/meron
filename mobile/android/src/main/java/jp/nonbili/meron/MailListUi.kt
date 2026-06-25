@@ -535,7 +535,7 @@ internal fun MailHeaderSearchField(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .heightIn(min = 52.dp)
                 .onPreviewKeyEvent { event ->
                     if (
                         event.type == KeyEventType.KeyUp &&

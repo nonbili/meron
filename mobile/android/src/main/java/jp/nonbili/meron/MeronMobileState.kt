@@ -331,6 +331,7 @@ internal class MeronMobileState(
     var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
     var kanbanFilter by mutableStateOf(loadKanbanFilter(context))
     var kanbanSearch by mutableStateOf(loadKanbanSearch(context))
+    var kanbanSearchScope by mutableStateOf(loadKanbanSearchScope(context))
     var kanbanActionThread by mutableStateOf<ThreadSummary?>(null)
     var kanbanSettingsTargetId by mutableStateOf<String?>(null)
     var kanbanMenuOpen by mutableStateOf(false)

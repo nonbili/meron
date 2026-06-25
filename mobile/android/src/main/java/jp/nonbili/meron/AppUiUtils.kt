@@ -388,8 +388,7 @@ internal fun columnTitle(
         } else {
             folder
         }
-    val accountLabel = account?.displayName?.ifBlank { account.email } ?: column.accountId
-    return "$accountLabel / $folderLabel"
+    return folderLabel
 }
 
 internal fun KanbanBoardSpec.hasBoardStyle(): Boolean = avatarUrl.isNotBlank() || wallpaperPresetId.isNotBlank() || wallpaperUrl.isNotBlank()
@@ -593,6 +592,20 @@ internal fun saveKanbanSearch(
         .getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE)
         .edit()
         .putString(KANBAN_SEARCH_PREF, search)
+        .apply()
+}
+
+internal fun loadKanbanSearchScope(context: Context): String =
+    context.getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE).getString(KANBAN_SEARCH_SCOPE_PREF, "all").orEmpty().ifBlank { "all" }
+
+internal fun saveKanbanSearchScope(
+    context: Context,
+    scope: String,
+) {
+    context
+        .getSharedPreferences(KANBAN_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KANBAN_SEARCH_SCOPE_PREF, scope.ifBlank { "all" })
         .apply()
 }
 

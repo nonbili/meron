@@ -616,11 +616,19 @@ internal fun MeronMobileScreen(
             } else {
                 selectedAccount?.email?.ifBlank { selectedAccount.displayName }.orEmpty()
             }
-        val selectedMailThreads = coreThreads.filter { it.id in selectedMailThreadIds }
+        val selectedMailThreads =
+            (coreThreads + kanbanColumns.values.flatMap { it.threads })
+                .distinctBy { it.id }
+                .filter { it.id in selectedMailThreadIds }
         val mailSelectionActive = selectedMailThreadIds.isNotEmpty()
 
-        LaunchedEffect(coreThreads) {
-            val visibleThreadIds = coreThreads.map { it.id }.toSet()
+        LaunchedEffect(screen, coreThreads, kanbanColumns) {
+            val visibleThreadIds =
+                if (screen == Screen.Kanban) {
+                    kanbanColumns.values.flatMap { it.threads }.map { it.id }.toSet()
+                } else {
+                    coreThreads.map { it.id }.toSet()
+                }
             val retainedThreadIds = selectedMailThreadIds.intersect(visibleThreadIds)
             if (retainedThreadIds.size != selectedMailThreadIds.size) {
                 selectedMailThreadIds = retainedThreadIds
@@ -628,11 +636,11 @@ internal fun MeronMobileScreen(
         }
 
         // Hardware back from a sub-screen returns to the inbox instead of exiting.
-        BackHandler(enabled = screen == Screen.Mail && mailSelectionActive) {
+        BackHandler(enabled = (screen == Screen.Mail || screen == Screen.Kanban) && mailSelectionActive) {
             selectedMailThreadIds = emptySet()
             mailSelectionMenuOpen = false
         }
-        BackHandler(enabled = screen != Screen.Mail) {
+        BackHandler(enabled = screen != Screen.Mail && !(screen == Screen.Kanban && mailSelectionActive)) {
             screen =
                 if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount ||
                     screen == Screen.Settings
@@ -1171,78 +1179,184 @@ internal fun MeronMobileScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    MailHeaderSearchField(
-                                        search = kanbanSearch,
-                                        placeholder = "Search board",
-                                        onSearchChange = ::persistKanbanSearch,
-                                        onSearchSubmit = { loadKanbanBoard(refresh = true) },
-                                    )
+                                    if (mailSelectionActive) {
+                                        Text(
+                                            "${selectedMailThreads.size} selected",
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    } else {
+                                        KanbanHeaderSearchField(
+                                            search = kanbanSearch,
+                                            searchScope = kanbanSearchScope,
+                                            columns = activeKanbanBoard?.columns.orEmpty(),
+                                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
+                                            foldersByAccount = foldersByAccount,
+                                            onSearchChange = ::persistKanbanSearch,
+                                            onSearchScopeChange = ::persistKanbanSearchScope,
+                                            onSearchSubmit = { loadKanbanBoard(refresh = true) },
+                                        )
+                                    }
                                 },
                                 navigationIcon = {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.mobile_actions_open_navigation))
+                                    if (mailSelectionActive) {
+                                        IconButton(onClick = {
+                                            selectedMailThreadIds = emptySet()
+                                            mailSelectionMenuOpen = false
+                                        }) {
+                                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.mobile_actions_clear_selection))
+                                        }
+                                    } else {
+                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                            Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.mobile_actions_open_navigation))
+                                        }
                                     }
                                 },
                                 actions = {
-                                    Box {
-                                        IconButton(onClick = { kanbanMenuOpen = true }) {
-                                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_board_options))
+                                    if (mailSelectionActive) {
+                                        IconButton(onClick = {
+                                            selectedMailThreads.forEach(::archiveOrRemove)
+                                            selectedMailThreadIds = emptySet()
+                                        }) {
+                                            Icon(Icons.Filled.Archive, contentDescription = stringResource(R.string.threads_actions_archive_thread))
                                         }
-                                        DropdownMenu(expanded = kanbanMenuOpen, onDismissRequest = { kanbanMenuOpen = false }) {
-                                            FilterMode.values().forEach { mode ->
+                                        IconButton(onClick = {
+                                            selectedMailThreads.forEach(::deleteThread)
+                                            selectedMailThreadIds = emptySet()
+                                        }) {
+                                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.buttons_delete))
+                                        }
+                                        Box {
+                                            IconButton(onClick = { mailSelectionMenuOpen = true }) {
+                                                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.chat_more_actions))
+                                            }
+                                            DropdownMenu(
+                                                expanded = mailSelectionMenuOpen,
+                                                onDismissRequest = { mailSelectionMenuOpen = false },
+                                            ) {
+                                                val markRead = selectedMailThreads.any { it.unread }
                                                 DropdownMenuItem(
-                                                    text = { Text(mode.label()) },
+                                                    text = { Text(if (markRead) stringResource(R.string.threads_actions_mark_as_read) else stringResource(R.string.threads_actions_mark_as_unread)) },
+                                                    leadingIcon = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null) },
+                                                    onClick = {
+                                                        mailSelectionMenuOpen = false
+                                                        selectedMailThreads
+                                                            .filter { it.unread == markRead }
+                                                            .forEach(::toggleRead)
+                                                        selectedMailThreadIds = emptySet()
+                                                    },
+                                                )
+                                                val star = selectedMailThreads.any { !it.starred }
+                                                DropdownMenuItem(
+                                                    text = { Text(if (star) stringResource(R.string.chat_star) else stringResource(R.string.chat_unstar)) },
                                                     leadingIcon = {
-                                                        RadioButton(
-                                                            selected = kanbanFilter == mode,
-                                                            onClick = null,
+                                                        Icon(
+                                                            if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
+                                                            contentDescription = null,
                                                         )
                                                     },
                                                     onClick = {
+                                                        mailSelectionMenuOpen = false
+                                                        selectedMailThreads
+                                                            .filter { it.starred != star }
+                                                            .forEach(::toggleStar)
+                                                        selectedMailThreadIds = emptySet()
+                                                    },
+                                                )
+                                                val singleSelectedMailThread =
+                                                    selectedMailThreads
+                                                        .singleOrNull()
+                                                        ?.takeUnless { threadIdIsRss(it.id) }
+                                                if (singleSelectedMailThread != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text(stringResource(R.string.threads_actions_move_to)) },
+                                                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                                                        onClick = {
+                                                            mailSelectionMenuOpen = false
+                                                            ensureThreadActionFolders(
+                                                                thread = singleSelectedMailThread,
+                                                                includeAllMailAccounts = false,
+                                                            ) {
+                                                                selectedMailMoveThread = singleSelectedMailThread
+                                                            }
+                                                        },
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text(stringResource(R.string.threads_actions_copy_to)) },
+                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                                        onClick = {
+                                                            mailSelectionMenuOpen = false
+                                                            ensureThreadActionFolders(
+                                                                thread = singleSelectedMailThread,
+                                                                includeAllMailAccounts = true,
+                                                            ) {
+                                                                selectedMailCopyThread = singleSelectedMailThread
+                                                            }
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Box {
+                                            IconButton(onClick = { kanbanMenuOpen = true }) {
+                                                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_board_options))
+                                            }
+                                            DropdownMenu(expanded = kanbanMenuOpen, onDismissRequest = { kanbanMenuOpen = false }) {
+                                                FilterMode.values().forEach { mode ->
+                                                    DropdownMenuItem(
+                                                        text = { Text(mode.label()) },
+                                                        leadingIcon = {
+                                                            RadioButton(
+                                                                selected = kanbanFilter == mode,
+                                                                onClick = null,
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            kanbanMenuOpen = false
+                                                            persistKanbanFilter(mode)
+                                                            loadKanbanBoard(refresh = true)
+                                                        },
+                                                    )
+                                                }
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.mobile_actions_refresh_board)) },
+                                                    leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                                                    onClick = {
                                                         kanbanMenuOpen = false
-                                                        persistKanbanFilter(mode)
                                                         loadKanbanBoard(refresh = true)
                                                     },
                                                 )
-                                            }
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.mobile_actions_refresh_board)) },
-                                                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                                                onClick = {
-                                                    kanbanMenuOpen = false
-                                                    loadKanbanBoard(refresh = true)
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.kanban_actions_add_column)) },
-                                                leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                                                onClick = {
-                                                    kanbanMenuOpen = false
-                                                    coreAccounts.forEach { account ->
-                                                        scope.launch {
-                                                            runCatching {
-                                                                withContext(Dispatchers.IO) {
-                                                                    val client = MobileMailCommandClient(JniMeronCore())
-                                                                    loadAccountFolders(client, account)
-                                                                }
-                                                            }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.kanban_actions_add_column)) },
+                                                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                                    onClick = {
+                                                        kanbanMenuOpen = false
+                                                        coreAccounts.forEach { account ->
+                                                            scope.launch {
+                                                                runCatching {
+                                                                    withContext(Dispatchers.IO) {
+                                                                        val client = MobileMailCommandClient(JniMeronCore())
+                                                                        loadAccountFolders(client, account)
+                                                                    }
+                                                                }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
+                                                            }
                                                         }
-                                                    }
-                                                    showKanbanColumnDialog = true
-                                                },
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.kanban_actions_board_options)) },
-                                                enabled = activeKanbanBoard != null,
-                                                onClick = {
-                                                    kanbanMenuOpen = false
-                                                    activeKanbanBoard?.let { board ->
-                                                        kanbanSettingsTargetId = board.id
-                                                        previousTopScreen = Screen.Kanban
-                                                        screen = Screen.Settings
-                                                    }
-                                                },
-                                            )
+                                                        showKanbanColumnDialog = true
+                                                    },
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.kanban_actions_board_options)) },
+                                                    enabled = activeKanbanBoard != null,
+                                                    onClick = {
+                                                        kanbanMenuOpen = false
+                                                        activeKanbanBoard?.let { board ->
+                                                            kanbanSettingsTargetId = board.id
+                                                            previousTopScreen = Screen.Kanban
+                                                            screen = Screen.Settings
+                                                        }
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 },
@@ -1267,14 +1381,39 @@ internal fun MeronMobileScreen(
                             foldersByAccount = foldersByAccount,
                             filter = kanbanFilter,
                             search = kanbanSearch,
+                            searchScope = kanbanSearchScope,
                             onOpen = ::readCoreThread,
-                            onLongPress = { kanbanActionThread = it },
+                            selectedThreadIds = selectedMailThreadIds,
+                            selectionActive = mailSelectionActive,
+                            onToggleSelected = { thread ->
+                                selectedMailThreadIds =
+                                    if (thread.id in selectedMailThreadIds) {
+                                        selectedMailThreadIds - thread.id
+                                    } else {
+                                        selectedMailThreadIds + thread.id
+                                    }
+                                if (selectedMailThreadIds.isEmpty()) {
+                                    mailSelectionMenuOpen = false
+                                }
+                            },
+                            onLongPress = { thread ->
+                                selectedMailThreadIds =
+                                    if (thread.id in selectedMailThreadIds) {
+                                        selectedMailThreadIds
+                                    } else {
+                                        selectedMailThreadIds + thread.id
+                                    }
+                            },
                             onToggleStar = ::toggleStar,
                             onRefreshColumn = { loadKanbanColumn(it, refresh = true) },
                             onLoadMoreColumn = ::loadMoreKanbanColumn,
                             onMarkColumnAllRead = ::markKanbanColumnAllRead,
                             onRemoveColumn = ::removeKanbanColumn,
                             onMoveColumn = ::moveKanbanColumn,
+                            onSearchColumn = { column ->
+                                persistKanbanSearchScope(kanbanColumnKey(column))
+                                if (kanbanSearch.isNotBlank()) loadKanbanBoard(refresh = true)
+                            },
                             onAddColumn = { showKanbanColumnDialog = true },
                             showSenderImages = showSenderImages,
                             kanbanColumnWidth = kanbanColumnWidth.dp,

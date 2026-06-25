@@ -411,17 +411,19 @@ internal fun ThreadScreen(
                             tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onArchive) {
-                        Icon(
-                            if (isRss) Icons.Filled.Delete else Icons.Filled.Archive,
-                            contentDescription = if (isRss) "Remove" else "Archive",
-                        )
-                    }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
                         }
                         DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (isRss) "Remove feed" else "Archive") },
+                                leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
+                                onClick = {
+                                    overflowOpen = false
+                                    onArchive()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Search conversation") },
                                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -728,8 +730,7 @@ internal fun MoveThreadDialog(
     onCreateAndMove: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var newFolderName by remember(thread.id) { mutableStateOf("") }
-    val trimmedNewFolderName = newFolderName.trim()
+    val unusedCreateAndMove = onCreateAndMove
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Move conversation") },
@@ -744,27 +745,6 @@ internal fun MoveThreadDialog(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                item {
-                    OutlinedTextField(
-                        value = newFolderName,
-                        onValueChange = { newFolderName = it },
-                        label = { Text("New folder") },
-                        singleLine = true,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                    )
-                }
-                item {
-                    Button(
-                        onClick = { onCreateAndMove(trimmedNewFolderName) },
-                        enabled = trimmedNewFolderName.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Create & Move")
-                    }
-                }
                 if (folders.isEmpty()) {
                     item {
                         Text(
@@ -776,7 +756,7 @@ internal fun MoveThreadDialog(
                     }
                 } else {
                     items(folders, key = { "${it.accountId}\n${it.name}" }) { folder ->
-                        DialogAction(folder.name.replaceFirstChar { it.uppercase() }) {
+                        FolderDestinationAction(folder) {
                             onMove(folder)
                         }
                     }
@@ -787,6 +767,7 @@ internal fun MoveThreadDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+    unusedCreateAndMove
 }
 
 @Composable
@@ -865,7 +846,7 @@ internal fun CopyThreadDialog(
                             }
                         } else {
                             items(accountFolders, key = { "$accountId\n${it.name}" }) { folder ->
-                                DialogAction(folder.name.replaceFirstChar { it.uppercase() }) {
+                                FolderDestinationAction(folder) {
                                     onCopy(folder)
                                 }
                             }
@@ -878,6 +859,29 @@ internal fun CopyThreadDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+@Composable
+internal fun FolderDestinationAction(
+    folder: FolderSummary,
+    onClick: () -> Unit,
+) {
+    val icon = folderIcon(folder.name)
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            folder.name.replaceFirstChar { it.uppercase() },
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
@@ -1039,6 +1043,8 @@ internal fun MessageBubble(
                 Text(
                     highlightedMessageText(message.body.ifBlank { "(no content)" }, searchQuery, activeSearchMatch),
                     color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
+                    fontSize = 15.5.sp,
+                    lineHeight = 21.sp,
                 )
             }
             if (message.attachments.isNotEmpty()) {
@@ -1301,6 +1307,41 @@ internal fun highlightedMessageText(
 
 @Composable
 internal fun HtmlMessageBody(html: String) {
+    val mobileHtml =
+        remember(html) {
+            """
+            <!doctype html>
+            <html>
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <style>
+                html, body {
+                  margin: 0;
+                  padding: 0;
+                  width: 100%;
+                  overflow-wrap: anywhere;
+                  word-break: normal;
+                  font-size: 16px;
+                  line-height: 1.45;
+                }
+                body, p, div, span, td, th, li, a {
+                  font-size: 16px !important;
+                  line-height: 1.45 !important;
+                }
+                table {
+                  max-width: 100% !important;
+                  width: auto !important;
+                }
+                img {
+                  max-width: 100% !important;
+                  height: auto !important;
+                }
+              </style>
+            </head>
+            <body>$html</body>
+            </html>
+            """.trimIndent()
+        }
     AndroidView(
         modifier =
             Modifier
@@ -1311,14 +1352,16 @@ internal fun HtmlMessageBody(html: String) {
                 webViewClient = WebViewClient()
                 settings.javaScriptEnabled = false
                 settings.domStorageEnabled = false
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = false
+                settings.useWideViewPort = false
+                settings.defaultFontSize = 16
+                settings.textZoom = 115
                 isVerticalScrollBarEnabled = true
                 isHorizontalScrollBarEnabled = false
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            webView.loadDataWithBaseURL(null, mobileHtml, "text/html", "UTF-8", null)
         },
     )
 }

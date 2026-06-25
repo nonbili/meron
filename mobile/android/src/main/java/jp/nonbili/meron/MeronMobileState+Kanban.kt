@@ -283,6 +283,18 @@ internal fun MeronMobileState.persistKanbanSearch(next: String) {
     saveKanbanSearch(context, next)
 }
 
+internal fun MeronMobileState.persistKanbanSearchScope(next: String) {
+    kanbanSearchScope = next.ifBlank { "all" }
+    saveKanbanSearchScope(context, kanbanSearchScope)
+}
+
+internal fun MeronMobileState.kanbanColumnSearchQuery(column: KanbanColumnSpec): String {
+    val query = kanbanSearch.trim()
+    if (query.isBlank()) return ""
+    val scope = kanbanSearchScope.ifBlank { "all" }
+    return if (scope == "all" || scope == kanbanColumnKey(column)) query else ""
+}
+
 internal fun MeronMobileState.updateKanbanColumn(
     key: String,
     update: (KanbanColumnState) -> KanbanColumnState,
@@ -322,6 +334,7 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
     beforeCursor: String? = null,
     accountCursors: Map<String, String> = emptyMap(),
 ): MailboxLoadResult {
+    val columnQuery = kanbanColumnSearchQuery(column)
     return if (column.accountId == UNIFIED_ACCOUNT_ID) {
         val unifiedAccounts = coreAccounts.filter { it.includedInUnified }
         val accounts =
@@ -337,7 +350,7 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
                         client,
                         account,
                         INBOX_FOLDER,
-                        query = kanbanSearch,
+                        query = columnQuery,
                         filter = kanbanFilter,
                         syncFirst = refresh,
                         beforeCursor = accountCursors[account.id],
@@ -371,7 +384,7 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
                 ThreadListParams(
                     accountId = account.id,
                     folderId = folder,
-                    query = kanbanSearch.trim(),
+                    query = columnQuery,
                     filter = kanbanFilter.protocolValue(),
                     beforeCursor = beforeCursor,
                 ),
@@ -403,6 +416,7 @@ internal fun MeronMobileState.loadKanbanColumn(
                 fetchKanbanColumn(client, column, refresh)
             }
         }.onSuccess { result ->
+            val columnQuery = kanbanColumnSearchQuery(column)
             if (result.folders.isNotEmpty()) {
                 foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
             }
@@ -412,8 +426,8 @@ internal fun MeronMobileState.loadKanbanColumn(
                     loading = false,
                     loadingMore = false,
                     error = null,
-                    nextCursor = if (kanbanSearch.isBlank()) result.nextCursor else "",
-                    accountCursors = if (kanbanSearch.isBlank()) result.accountCursors else emptyMap(),
+                    nextCursor = if (columnQuery.isBlank()) result.nextCursor else "",
+                    accountCursors = if (columnQuery.isBlank()) result.accountCursors else emptyMap(),
                 )
             }
         }.onFailure {
@@ -424,7 +438,7 @@ internal fun MeronMobileState.loadKanbanColumn(
 }
 
 internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
-    if (!MeronCoreNative.isLoaded() || kanbanSearch.isNotBlank()) return
+    if (!MeronCoreNative.isLoaded() || kanbanColumnSearchQuery(column).isNotBlank()) return
     val key = kanbanColumnKey(column)
     val state = kanbanColumns[key] ?: return
     val hasCursor = if (column.accountId == UNIFIED_ACCOUNT_ID) state.accountCursors.isNotEmpty() else state.nextCursor.isNotBlank()
@@ -466,5 +480,8 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
 
 internal fun MeronMobileState.loadKanbanBoard(refresh: Boolean = false) {
     val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    if (kanbanSearchScope != "all" && board.columns.none { kanbanColumnKey(it) == kanbanSearchScope }) {
+        persistKanbanSearchScope("all")
+    }
     board.columns.forEach { column -> loadKanbanColumn(column, refresh) }
 }
