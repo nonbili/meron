@@ -302,6 +302,7 @@ internal const val SHOW_UNIFIED_INBOX_PREF = "show_unified_inbox_v1"
 internal const val SHOW_STARRED_NAV_PREF = "show_starred_nav_v1"
 internal const val SHOW_SENDER_IMAGES_PREF = "show_sender_images_v1"
 internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
+internal const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val HIDDEN_NAV_ACCOUNTS_PREF = "hidden_navigation_accounts_v1"
 internal const val KANBAN_COLUMN_WIDTH_PREF = "kanban_column_width_v1"
 internal const val KANBAN_COLUMN_MIN_WIDTH = 240

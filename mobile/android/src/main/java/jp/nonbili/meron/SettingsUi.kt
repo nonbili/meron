@@ -154,6 +154,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -323,6 +324,8 @@ internal fun SettingsScreen(
     onRemoveAccount: (AccountSummary) -> Unit,
     appearanceMode: AppAppearanceMode,
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
+    appLanguageTag: String,
+    onAppLanguageChange: (String) -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
     showUnreadBadges: Boolean,
@@ -347,6 +350,7 @@ internal fun SettingsScreen(
     onShowAbout: () -> Unit,
 ) {
     var showThemePicker by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
     LaunchedEffect(initialAccountId) {
         if (!initialAccountId.isNullOrBlank()) {
@@ -367,16 +371,23 @@ internal fun SettingsScreen(
             onDismiss = { showThemePicker = false },
         )
     }
+    if (showLanguagePicker) {
+        LanguagePickerDialog(
+            currentTag = appLanguageTag,
+            onSelect = onAppLanguageChange,
+            onDismiss = { showLanguagePicker = false },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         when (page) {
-                            SettingsPage.Root -> "Settings"
-                            SettingsPage.General -> "General"
-                            is SettingsPage.AccountDetail -> "Account"
-                            is SettingsPage.KanbanBoardDetail -> "Kanban board"
+                            SettingsPage.Root -> stringResource(R.string.settings_label)
+                            SettingsPage.General -> stringResource(R.string.settings_sections_general)
+                            is SettingsPage.AccountDetail -> stringResource(R.string.settings_account_account)
+                            is SettingsPage.KanbanBoardDetail -> stringResource(R.string.kanban_board_label)
                         },
                     )
                 },
@@ -388,7 +399,7 @@ internal fun SettingsScreen(
                             page = SettingsPage.Root
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.buttons_back))
                     }
                 },
             )
@@ -399,6 +410,8 @@ internal fun SettingsScreen(
                 SettingsGeneralPage(
                     appearanceMode = appearanceMode,
                     onOpenTheme = { showThemePicker = true },
+                    appLanguageTag = appLanguageTag,
+                    onOpenLanguage = { showLanguagePicker = true },
                     showSenderImages = showSenderImages,
                     onToggleSenderImages = onToggleSenderImages,
                     showUnreadBadges = showUnreadBadges,
@@ -507,31 +520,36 @@ internal fun SettingsScreen(
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Settings,
-                            title = "General",
-                            subtitle = "Appearance, sidebar, kanban, composer, storage",
+                            title = stringResource(R.string.settings_sections_general),
+                            subtitle = stringResource(R.string.settings_root_general_subtitle),
                             onClick = { page = SettingsPage.General },
                         )
                     }
-                    item { SettingsSectionLabel("Kanban boards") }
+                    item { SettingsSectionLabel(stringResource(R.string.settings_sections_kanban_boards)) }
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
                             icon = Icons.Filled.ViewKanban,
                             title = board.name,
-                            subtitle = "${board.columns.size} columns${if (board.id == activeKanbanBoardId) " · Active" else ""}",
+                            subtitle =
+                                if (board.id == activeKanbanBoardId) {
+                                    stringResource(R.string.settings_kanban_board_columns_active, board.columns.size)
+                                } else {
+                                    stringResource(R.string.settings_kanban_board_columns, board.columns.size)
+                                },
                             onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
                         )
                     }
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Add,
-                            title = "New Kanban board",
-                            subtitle = "Create a board from current accounts",
+                            title = stringResource(R.string.settings_kanban_new_board),
+                            subtitle = stringResource(R.string.settings_kanban_new_board_hint),
                             onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
                         )
                     }
-                    item { SettingsSectionLabel("Mail accounts") }
+                    item { SettingsSectionLabel(stringResource(R.string.settings_sections_mail_accounts)) }
                     if (mailAccounts.isEmpty()) {
-                        item { SettingsEmptyLabel("No mail accounts") }
+                        item { SettingsEmptyLabel(stringResource(R.string.settings_sections_no_mail_accounts)) }
                     } else {
                         items(mailAccounts, key = { it.id }) { account ->
                             SettingsAccountRow(
@@ -544,14 +562,14 @@ internal fun SettingsScreen(
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Add,
-                            title = "Add mail account",
-                            subtitle = "Connect an IMAP or OAuth account",
+                            title = stringResource(R.string.settings_account_add_mail_account),
+                            subtitle = stringResource(R.string.settings_account_add_mail_account_hint),
                             onClick = onAddMailAccount,
                         )
                     }
-                    item { SettingsSectionLabel("Feed accounts") }
+                    item { SettingsSectionLabel(stringResource(R.string.settings_sections_feed_accounts)) }
                     if (feedAccounts.isEmpty()) {
-                        item { SettingsEmptyLabel("No feed accounts") }
+                        item { SettingsEmptyLabel(stringResource(R.string.settings_sections_no_feed_accounts)) }
                     } else {
                         items(feedAccounts, key = { it.id }) { account ->
                             SettingsAccountRow(
@@ -564,8 +582,8 @@ internal fun SettingsScreen(
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Add,
-                            title = "Add RSS account",
-                            subtitle = "Subscribe to feeds",
+                            title = stringResource(R.string.mobile_accounts_add_rss_account),
+                            subtitle = stringResource(R.string.accounts_providers_rss_description),
                             onClick = onAddFeedAccount,
                         )
                     }
@@ -596,6 +614,8 @@ private sealed class SettingsPage {
 internal fun SettingsGeneralPage(
     appearanceMode: AppAppearanceMode,
     onOpenTheme: () -> Unit,
+    appLanguageTag: String,
+    onOpenLanguage: () -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
     showUnreadBadges: Boolean,
@@ -621,23 +641,41 @@ internal fun SettingsGeneralPage(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier) {
-        item { SettingsSectionLabel("Appearance") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_pages_appearance)) }
         item {
             val displayedAppearanceMode =
                 if (appearanceMode == AppAppearanceMode.System) AppAppearanceMode.Indigo else appearanceMode
             SettingsRow(
                 icon = Icons.Filled.Visibility,
-                title = "Theme",
-                subtitle = "Color presets shared with desktop",
+                title = stringResource(R.string.common_theme),
+                subtitle = stringResource(R.string.settings_general_theme_hint),
                 onClick = onOpenTheme,
                 trailing = { Text(displayedAppearanceMode.label, color = MaterialTheme.colorScheme.primary) },
             )
         }
         item {
+            SettingsRow(
+                icon = Icons.Filled.Settings,
+                title = stringResource(R.string.settings_language_label),
+                subtitle = stringResource(R.string.settings_language_hint),
+                onClick = onOpenLanguage,
+                trailing = {
+                    Text(
+                        if (appLanguageTag.isBlank()) {
+                            stringResource(R.string.settings_language_system)
+                        } else {
+                            appLanguageDisplayName(appLanguageTag)
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+            )
+        }
+        item {
             SettingsToggleRow(
                 icon = Icons.Filled.Visibility,
-                title = "Sender images",
-                subtitle = "Use Gravatar and site icons",
+                title = stringResource(R.string.settings_appearance_show_sender_images),
+                subtitle = stringResource(R.string.settings_appearance_show_sender_images_hint),
                 checked = showSenderImages,
                 onToggle = onToggleSenderImages,
             )
@@ -645,19 +683,19 @@ internal fun SettingsGeneralPage(
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Inbox,
-                title = "Unread badges",
-                subtitle = "Show counts in the drawer",
+                title = stringResource(R.string.settings_appearance_show_unread_account_badge),
+                subtitle = stringResource(R.string.settings_appearance_show_unread_account_badge_hint),
                 checked = showUnreadBadges,
                 onToggle = onToggleUnreadBadges,
             )
         }
 
-        item { SettingsSectionLabel("Sidebar") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_sections_side_nav)) }
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Inbox,
-                title = "Unified inbox",
-                subtitle = "Show in the navigation drawer",
+                title = stringResource(R.string.settings_side_nav_show_unified_inbox),
+                subtitle = stringResource(R.string.settings_navigation_drawer_hint),
                 checked = showUnifiedInboxNav,
                 onToggle = onToggleUnifiedInboxNav,
             )
@@ -665,41 +703,41 @@ internal fun SettingsGeneralPage(
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Star,
-                title = "Starred",
-                subtitle = "Show in the navigation drawer",
+                title = stringResource(R.string.settings_side_nav_show_starred),
+                subtitle = stringResource(R.string.settings_navigation_drawer_hint),
                 checked = showStarredNav,
                 onToggle = onToggleStarredNav,
             )
         }
 
-        item { SettingsSectionLabel("Kanban") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_sections_kanban)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.ViewKanban,
-                title = "Column width",
-                subtitle = "Adjust board density",
+                title = stringResource(R.string.settings_kanban_column_width),
+                subtitle = stringResource(R.string.settings_kanban_column_width_hint),
                 onClick = onCycleKanbanColumnWidth,
-                trailing = { Text("${kanbanColumnWidth}dp", color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(stringResource(R.string.settings_kanban_column_width_value, kanbanColumnWidth), color = MaterialTheme.colorScheme.primary) },
             )
         }
 
-        item { SettingsSectionLabel("Composer") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_sections_composer)) }
         item {
             SettingsRow(
                 icon = Icons.AutoMirrored.Filled.Send,
-                title = "Send shortcut",
-                subtitle = "Hardware keyboard behavior",
+                title = stringResource(R.string.settings_composer_send_message_with),
+                subtitle = stringResource(R.string.settings_composer_send_shortcut_hint),
                 onClick = onToggleSendShortcut,
                 trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
             )
         }
 
-        item { SettingsSectionLabel("Sync & notifications") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_sync_notifications)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.Refresh,
-                title = "Refresh in background",
-                subtitle = "Queue a sync for all accounts",
+                title = stringResource(R.string.settings_refresh_background),
+                subtitle = stringResource(R.string.settings_refresh_background_hint),
                 onClick = onRefreshBackground,
             )
         }
@@ -707,40 +745,45 @@ internal fun SettingsGeneralPage(
             item {
                 SettingsRow(
                     icon = Icons.Filled.MarkEmailUnread,
-                    title = "Enable notifications",
-                    subtitle = "Allow new mail alerts",
+                    title = stringResource(R.string.mobile_accounts_enable_notifications),
+                    subtitle = stringResource(R.string.settings_notifications_enable_hint),
                     onClick = onEnableNotifications,
                 )
             }
         }
 
-        item { SettingsSectionLabel("Storage") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_sections_storage)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.Info,
-                title = "Storage usage",
+                title = stringResource(R.string.settings_storage_usage_title),
                 subtitle =
-                    storageUsage?.let { "Cache ${formatBytes(it.cacheBytes)} · Database ${formatBytes(it.dbBytes)}" }
-                        ?: if (storageBusy) "Loading..." else "Tap to refresh",
+                    storageUsage?.let {
+                        stringResource(
+                            R.string.settings_storage_usage_summary,
+                            formatBytes(it.cacheBytes),
+                            formatBytes(it.dbBytes),
+                        )
+                    } ?: if (storageBusy) stringResource(R.string.common_loading) else stringResource(R.string.settings_storage_tap_to_refresh),
                 onClick = onRefreshStorage,
             )
         }
         item {
             SettingsRow(
                 icon = Icons.Filled.Delete,
-                title = if (storageClearConfirming) "Confirm clear cache" else "Clear cache",
-                subtitle = if (storageBusy) "Working..." else "Remove cached attachments only",
+                title = if (storageClearConfirming) stringResource(R.string.mobile_accounts_confirm_clear_cache) else stringResource(R.string.settings_storage_clear_title),
+                subtitle = if (storageBusy) stringResource(R.string.settings_storage_working) else stringResource(R.string.settings_storage_clear_cached_attachments_only),
                 onClick = onClearStorageCache,
                 trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
             )
         }
 
-        item { SettingsSectionLabel("About") }
+        item { SettingsSectionLabel(stringResource(R.string.about_title)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.Info,
-                title = "About Meron",
-                subtitle = "Version and support",
+                title = stringResource(R.string.about_title),
+                subtitle = stringResource(R.string.settings_about_hint),
                 onClick = onShowAbout,
                 trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             )
@@ -796,18 +839,18 @@ internal fun SettingsAccountDetailPage(
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove account?") },
-            text = { Text("Remove ${account.email.ifBlank { account.id }}? Cached mail for this account will be deleted from this device.") },
+            title = { Text(stringResource(R.string.settings_account_remove_account_title)) },
+            text = { Text(stringResource(R.string.settings_account_remove_account_text, account.email.ifBlank { account.id })) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false
                     onRemove()
                 }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.settings_account_remove_account), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.buttons_cancel)) }
             },
         )
     }
@@ -867,11 +910,11 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel("Profile") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_profile)) }
         item {
             SettingsTextRow(
                 value = displayName,
-                label = if (isRss) "Feed group name" else "Account name",
+                label = if (isRss) stringResource(R.string.settings_account_feed_group_name) else stringResource(R.string.accounts_fields_account_name),
                 onValueChange = {
                     displayName = it
                     persist()
@@ -882,7 +925,7 @@ internal fun SettingsAccountDetailPage(
             item {
                 SettingsTextRow(
                     value = senderName,
-                    label = "Sender name",
+                    label = stringResource(R.string.settings_account_sender_name),
                     onValueChange = {
                         senderName = it
                         persist()
@@ -890,7 +933,7 @@ internal fun SettingsAccountDetailPage(
                 )
             }
         }
-        item { SettingsSectionLabel("Chat background") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_chat_background)) }
         item {
             ChatWallpaperPreview(
                 presetId = wallpaperPresetId,
@@ -909,17 +952,17 @@ internal fun SettingsAccountDetailPage(
         item {
             SettingsRow(
                 icon = Icons.Filled.Image,
-                title = "Choose wallpaper image",
-                subtitle = "Use a custom chat background",
+                title = stringResource(R.string.settings_choose_wallpaper_image),
+                subtitle = stringResource(R.string.settings_account_chat_background_hint),
                 onClick = onPickWallpaper,
             )
         }
 
-        item { SettingsSectionLabel("Visibility") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_visibility)) }
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Inbox,
-                title = "Show in unified inbox",
+                title = stringResource(R.string.settings_account_show_in_unified_inbox),
                 subtitle = null,
                 checked = includedInUnified,
             ) {
@@ -930,7 +973,7 @@ internal fun SettingsAccountDetailPage(
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Visibility,
-                title = "Show in navigation",
+                title = stringResource(R.string.settings_account_show_in_side_nav),
                 subtitle = null,
                 checked = visibleInNavigation,
             ) {
@@ -939,11 +982,11 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel("Notifications & sync") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_notifications_sync)) }
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.NotificationsOff,
-                title = "Mute notifications",
+                title = stringResource(R.string.settings_account_mute_notifications),
                 subtitle = null,
                 checked = muted,
             ) {
@@ -954,7 +997,7 @@ internal fun SettingsAccountDetailPage(
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.PauseCircle,
-                title = "Pause automatic sync",
+                title = stringResource(R.string.settings_account_pause_account),
                 subtitle = null,
                 checked = paused,
             ) {
@@ -966,8 +1009,8 @@ internal fun SettingsAccountDetailPage(
             item {
                 SettingsTextRow(
                     value = intervalText,
-                    label = "Sync interval (minutes)",
-                    supporting = "Between 5 and 1440",
+                    label = stringResource(R.string.settings_account_sync_interval_minutes),
+                    supporting = stringResource(R.string.settings_account_sync_interval_range),
                     keyboardDigits = true,
                     onValueChange = {
                         intervalText = it.filter(Char::isDigit).take(4)
@@ -977,11 +1020,11 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel("Content") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_content)) }
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Image,
-                title = "Load remote images",
+                title = stringResource(R.string.settings_account_load_remote_images),
                 subtitle = null,
                 checked = loadRemoteImages,
             ) {
@@ -992,7 +1035,7 @@ internal fun SettingsAccountDetailPage(
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Code,
-                title = "Render HTML messages",
+                title = stringResource(R.string.settings_account_render_html_messages),
                 subtitle = null,
                 checked = conversationHtml,
             ) {
@@ -1002,7 +1045,7 @@ internal fun SettingsAccountDetailPage(
         }
 
         if (!isRss) {
-            item { SettingsSectionLabel("Send-as aliases") }
+            item { SettingsSectionLabel(stringResource(R.string.settings_account_aliases)) }
             itemsIndexed(aliasEntries) { index, (email, name) ->
                 AliasEditorRow(
                     email = email,
@@ -1024,20 +1067,20 @@ internal fun SettingsAccountDetailPage(
             item {
                 SettingsRow(
                     icon = Icons.Filled.Add,
-                    title = "Add alias",
-                    subtitle = "Send mail from another address",
+                    title = stringResource(R.string.settings_account_add_alias),
+                    subtitle = stringResource(R.string.settings_account_add_alias_hint),
                     onClick = { aliasEntries = aliasEntries + ("" to "") },
                 )
             }
         }
 
         if (canMoveUp || canMoveDown) {
-            item { SettingsSectionLabel("Order") }
+            item { SettingsSectionLabel(stringResource(R.string.settings_account_order)) }
             if (canMoveUp) {
                 item {
                     SettingsRow(
                         icon = Icons.Filled.KeyboardArrowUp,
-                        title = "Move up",
+                        title = stringResource(R.string.mobile_accounts_move_up),
                         subtitle = null,
                         onClick = onMoveUp,
                     )
@@ -1047,7 +1090,7 @@ internal fun SettingsAccountDetailPage(
                 item {
                     SettingsRow(
                         icon = Icons.Filled.KeyboardArrowDown,
-                        title = "Move down",
+                        title = stringResource(R.string.mobile_accounts_move_down),
                         subtitle = null,
                         onClick = onMoveDown,
                     )
@@ -1055,12 +1098,12 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel("Danger zone") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_danger_zone)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.Delete,
-                title = "Remove account",
-                subtitle = "Delete cached mail from this device",
+                title = stringResource(R.string.settings_account_remove_account),
+                subtitle = stringResource(R.string.settings_account_delete_cached_mail_hint),
                 onClick = { confirmRemove = true },
                 destructive = true,
             )
@@ -1378,7 +1421,7 @@ internal fun AliasEditorRow(
                 OutlinedTextField(
                     value = email,
                     onValueChange = onEmailChange,
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.accounts_fields_email_address)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(),
@@ -1386,7 +1429,7 @@ internal fun AliasEditorRow(
                 OutlinedTextField(
                     value = name,
                     onValueChange = onNameChange,
-                    label = { Text("Display name (optional)") },
+                    label = { Text(stringResource(R.string.accounts_fields_display_name_meron_only)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1394,7 +1437,7 @@ internal fun AliasEditorRow(
             IconButton(onClick = onRemove) {
                 Icon(
                     Icons.Filled.Close,
-                    contentDescription = "Remove alias",
+                    contentDescription = stringResource(R.string.settings_account_remove_alias),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -1429,7 +1472,7 @@ internal fun AccountAvatarEditor(
         if (bmp != null) {
             Image(
                 bitmap = bmp.asImageBitmap(),
-                contentDescription = "Avatar",
+                contentDescription = stringResource(R.string.avatar_edit),
                 modifier = Modifier.size(64.dp).clip(CircleShape),
                 contentScale = ContentScale.Crop,
             )
@@ -1448,7 +1491,7 @@ internal fun AccountAvatarEditor(
             ) {
                 Icon(
                     Icons.Filled.Edit,
-                    contentDescription = "Change avatar",
+                    contentDescription = stringResource(R.string.settings_account_change_avatar),
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(13.dp),
                 )
@@ -1505,18 +1548,18 @@ internal fun SettingsKanbanBoardDetailPage(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete board?") },
-            text = { Text("Delete ${board.name}?") },
+            title = { Text(stringResource(R.string.kanban_board_delete_title)) },
+            text = { Text(stringResource(R.string.settings_kanban_delete_board_text, board.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     onDelete()
                 }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.kanban_board_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.buttons_cancel)) }
             },
         )
     }
@@ -1542,7 +1585,11 @@ internal fun SettingsKanbanBoardDetailPage(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        "${board.columns.size} columns${if (active) " · Active" else ""}",
+                        if (active) {
+                            stringResource(R.string.settings_kanban_board_columns_active, board.columns.size)
+                        } else {
+                            stringResource(R.string.settings_kanban_board_columns, board.columns.size)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1550,11 +1597,11 @@ internal fun SettingsKanbanBoardDetailPage(
             }
         }
 
-        item { SettingsSectionLabel("Profile") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_profile)) }
         item {
             SettingsTextRow(
                 value = name,
-                label = "Board name",
+                label = stringResource(R.string.kanban_board_name),
                 onValueChange = {
                     name = it
                     persist(it, avatarUrl, wallpaperPresetId, wallpaperUrl)
@@ -1562,7 +1609,7 @@ internal fun SettingsKanbanBoardDetailPage(
             )
         }
 
-        item { SettingsSectionLabel("Chat background") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_account_chat_background)) }
         item {
             ChatWallpaperPreview(
                 presetId = wallpaperPresetId,
@@ -1582,18 +1629,18 @@ internal fun SettingsKanbanBoardDetailPage(
         item {
             SettingsRow(
                 icon = Icons.Filled.Image,
-                title = "Choose wallpaper image",
-                subtitle = "Use a custom board background",
+                title = stringResource(R.string.settings_choose_wallpaper_image),
+                subtitle = stringResource(R.string.settings_kanban_board_background_hint),
                 onClick = onPickWallpaper,
             )
         }
 
-        item { SettingsSectionLabel("Danger zone") }
+        item { SettingsSectionLabel(stringResource(R.string.settings_danger_zone)) }
         item {
             SettingsRow(
                 icon = Icons.Filled.Delete,
-                title = "Delete board",
-                subtitle = "Remove this Kanban board",
+                title = stringResource(R.string.kanban_board_delete),
+                subtitle = stringResource(R.string.settings_kanban_delete_board_hint),
                 onClick = { confirmDelete = true },
                 destructive = true,
             )
@@ -1635,8 +1682,8 @@ internal fun SettingsAccountRow(
         subtitle =
             listOfNotNull(
                 account.email.takeIf { it.isNotBlank() && it != label },
-                if (hidden) "Hidden from navigation" else null,
-            ).joinToString(" · ").ifBlank { "Account settings" },
+                if (hidden) stringResource(R.string.settings_account_hidden_from_navigation) else null,
+            ).joinToString(" · ").ifBlank { stringResource(R.string.settings_account_account_settings) },
         onClick = onClick,
     )
 }
@@ -1718,7 +1765,7 @@ internal fun ThemePickerDialog(
     val selectableModes = AppAppearanceMode.entries.filterNot { it == AppAppearanceMode.System }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Theme") },
+        title = { Text(stringResource(R.string.common_theme)) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
                 items(selectableModes) { mode ->
@@ -1740,6 +1787,57 @@ internal fun ThemePickerDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_done)) } },
+    )
+}
+
+@Composable
+internal fun LanguagePickerDialog(
+    currentTag: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_language_label)) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
+                item {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelect("")
+                                onDismiss()
+                            }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = currentTag.isBlank(), onClick = {
+                            onSelect("")
+                            onDismiss()
+                        })
+                        Text(stringResource(R.string.settings_language_system), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+                items(supportedAppLanguageTags) { tag ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelect(tag)
+                                onDismiss()
+                            }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = tag == currentTag, onClick = {
+                            onSelect(tag)
+                            onDismiss()
+                        })
+                        Text(appLanguageDisplayName(tag), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_done)) } },
     )
 }

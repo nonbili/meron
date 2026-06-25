@@ -588,10 +588,10 @@ internal fun AddAccountScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add account") },
+                title = { Text(stringResource(R.string.accounts_actions_add_account)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.buttons_back))
                     }
                 },
             )
@@ -604,7 +604,11 @@ internal fun AddAccountScreen(
         ) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Password", "OAuth", "RSS").forEachIndexed { index, label ->
+                    listOf(
+                        stringResource(R.string.accounts_setup_password_tab),
+                        stringResource(R.string.accounts_setup_oauth_tab),
+                        stringResource(R.string.accounts_setup_rss_tab),
+                    ).forEachIndexed { index, label ->
                         FilterChip(
                             selected = section == index,
                             onClick = { section = index },
@@ -616,61 +620,70 @@ internal fun AddAccountScreen(
             when (section) {
                 0 -> {
                     item {
-                        SetupCard(title = "IMAP / SMTP account") {
-                            SetupField(displayName, onDisplayNameChange, "Display name", placeholder = "Work")
-                            SetupField(senderName, onSenderNameChange, "Sender name", placeholder = "Jane Doe")
-                            SetupField(email, onEmailChange, "Email", placeholder = "you@example.com")
-                            SetupField(username, onUsernameChange, "Username", placeholder = "you@example.com")
-                            SetupField(password, onPasswordChange, "Password", isPassword = true)
+                        SetupCard(title = stringResource(R.string.accounts_setup_imap_smtp_account)) {
+                            SetupField(displayName, onDisplayNameChange, stringResource(R.string.accounts_fields_display_name_meron_only), placeholder = "Work")
+                            SetupField(senderName, onSenderNameChange, stringResource(R.string.accounts_fields_sender_name_outgoing), placeholder = "Jane Doe")
+                            SetupField(email, onEmailChange, stringResource(R.string.accounts_fields_email_address), placeholder = "you@example.com")
+                            SetupField(username, onUsernameChange, stringResource(R.string.accounts_fields_username), placeholder = "you@example.com")
+                            SetupField(password, onPasswordChange, stringResource(R.string.accounts_fields_password), isPassword = true)
                             OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
-                                Text("Find mail settings")
+                                Text(stringResource(R.string.mobile_accounts_find_mail_settings))
                             }
-                            SetupField(host, onHostChange, "IMAP host", placeholder = "imap.example.com")
-                            SetupField(imapPort, onImapPortChange, "IMAP port", placeholder = "993")
-                            SetupField(smtpHost, onSmtpHostChange, "SMTP host", placeholder = "smtp.example.com")
-                            SetupField(smtpPort, onSmtpPortChange, "SMTP port", placeholder = "465")
-                            Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text("Add account") }
+                            SetupField(host, onHostChange, stringResource(R.string.accounts_fields_imap_host), placeholder = "imap.example.com")
+                            SetupField(imapPort, onImapPortChange, stringResource(R.string.accounts_fields_imap_port), placeholder = "993")
+                            SetupField(smtpHost, onSmtpHostChange, stringResource(R.string.accounts_fields_smtp_host), placeholder = "smtp.example.com")
+                            SetupField(smtpPort, onSmtpPortChange, stringResource(R.string.accounts_fields_smtp_port), placeholder = "465")
+                            Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.accounts_actions_add_account)) }
                         }
                     }
                 }
 
                 1 -> {
                     item {
-                        SetupCard(title = if (oauthProvider == "gmail") "Google account" else "Outlook account") {
+                        SetupCard(title = if (oauthProvider == "gmail") stringResource(R.string.accounts_providers_gmail_description) else stringResource(R.string.accounts_oauth_outlook_account)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(oauthProvider == "gmail", { onOauthProviderChange("gmail") }, { Text("Gmail") })
-                                FilterChip(oauthProvider == "outlook", { onOauthProviderChange("outlook") }, { Text("Outlook") })
+                                FilterChip(oauthProvider == "gmail", { onOauthProviderChange("gmail") }, { Text(stringResource(R.string.accounts_providers_gmail_name)) })
+                                FilterChip(oauthProvider == "outlook", { onOauthProviderChange("outlook") }, { Text(stringResource(R.string.accounts_providers_outlook_name)) })
                             }
-                            SetupField(oauthEmail, onOauthEmailChange, "Email", placeholder = "you@gmail.com")
+                            SetupField(oauthEmail, onOauthEmailChange, stringResource(R.string.accounts_fields_email_address), placeholder = "you@gmail.com")
                             Button(
                                 onClick = if (oauthProvider == "gmail") onConnectGoogleDeviceAccount else onLaunchOAuth,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text(if (oauthProvider == "gmail") "Sign in with Google" else "Sign in with Outlook")
+                                Text(
+                                    stringResource(
+                                        R.string.accounts_oauth_sign_in_with_provider,
+                                        if (oauthProvider == "gmail") {
+                                            stringResource(R.string.accounts_providers_google_name)
+                                        } else {
+                                            stringResource(R.string.accounts_providers_outlook_name)
+                                        },
+                                    ),
+                                )
                             }
                             if (oauthAuthorizationCode.isNotBlank()) {
                                 Text(
-                                    "Finishing sign-in...",
+                                    stringResource(R.string.accounts_oauth_finishing_sign_in),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             }
                             TextButton(onClick = { showOAuthAdvanced = !showOAuthAdvanced }) {
-                                Text(if (showOAuthAdvanced) "Hide advanced options" else "Advanced options")
+                                Text(if (showOAuthAdvanced) stringResource(R.string.accounts_oauth_hide_advanced_options) else stringResource(R.string.accounts_oauth_advanced_options))
                             }
                             if (showOAuthAdvanced) {
-                                SetupField(oauthClientId, onOauthClientIdChange, "Client ID")
-                                SetupField(oauthClientSecret, onOauthClientSecretChange, "Client secret (optional)")
-                                SetupField(oauthRedirectUri, onOauthRedirectUriChange, "Redirect URI")
+                                SetupField(oauthClientId, onOauthClientIdChange, stringResource(R.string.mobile_accounts_oauth_client_id))
+                                SetupField(oauthClientSecret, onOauthClientSecretChange, stringResource(R.string.mobile_accounts_oauth_client_secret_optional))
+                                SetupField(oauthRedirectUri, onOauthRedirectUriChange, stringResource(R.string.mobile_accounts_redirect_uri))
                                 if (oauthAuthorizationCode.isNotBlank()) {
-                                    Button(onClick = onExchangeOAuth, modifier = Modifier.fillMaxWidth()) { Text("Finish sign-in") }
+                                    Button(onClick = onExchangeOAuth, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.accounts_oauth_finish_sign_in)) }
                                 }
                                 HorizontalDivider()
-                                Text("Paste tokens manually", style = MaterialTheme.typography.labelLarge)
-                                SetupField(oauthAccessToken, onOauthAccessTokenChange, "Access token")
-                                SetupField(oauthRefreshToken, onOauthRefreshTokenChange, "Refresh token")
-                                SetupField(oauthExpiresAt, onOauthExpiresAtChange, "Token expires at")
-                                Button(onClick = onAddOAuth, modifier = Modifier.fillMaxWidth()) { Text("Add with tokens") }
+                                Text(stringResource(R.string.accounts_oauth_paste_tokens_manually), style = MaterialTheme.typography.labelLarge)
+                                SetupField(oauthAccessToken, onOauthAccessTokenChange, stringResource(R.string.mobile_accounts_access_token))
+                                SetupField(oauthRefreshToken, onOauthRefreshTokenChange, stringResource(R.string.mobile_accounts_refresh_token))
+                                SetupField(oauthExpiresAt, onOauthExpiresAtChange, stringResource(R.string.mobile_accounts_token_expires_at))
+                                Button(onClick = onAddOAuth, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.accounts_oauth_add_with_tokens)) }
                             }
                         }
                     }
@@ -678,10 +691,10 @@ internal fun AddAccountScreen(
 
                 else -> {
                     item {
-                        SetupCard(title = "RSS feed") {
-                            SetupField(rssFeedUrl, onRssFeedUrlChange, "Feed URL", placeholder = "https://example.com/feed.xml")
-                            SetupField(rssDisplayName, onRssDisplayNameChange, "Feed name", placeholder = "Example Feed")
-                            Button(onClick = onAddRss, modifier = Modifier.fillMaxWidth()) { Text("Add feed") }
+                        SetupCard(title = stringResource(R.string.feeds_fallback_name)) {
+                            SetupField(rssFeedUrl, onRssFeedUrlChange, stringResource(R.string.feeds_url), placeholder = "https://example.com/feed.xml")
+                            SetupField(rssDisplayName, onRssDisplayNameChange, stringResource(R.string.accounts_rss_feed_name), placeholder = "Example Feed")
+                            Button(onClick = onAddRss, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.feeds_actions_add_feed)) }
                         }
                     }
                 }

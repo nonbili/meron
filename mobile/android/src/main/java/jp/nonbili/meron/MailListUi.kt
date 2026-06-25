@@ -144,6 +144,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -345,18 +346,18 @@ internal fun StarredItemRow(
         }
         Box {
             IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Starred item actions")
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.starred_item_actions))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text(if (item.unread) "Mark read" else "Mark unread") },
+                    text = { Text(if (item.unread) stringResource(R.string.threads_actions_mark_as_read) else stringResource(R.string.threads_actions_mark_as_unread)) },
                     onClick = {
                         menuOpen = false
                         onToggleRead()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Unstar") },
+                    text = { Text(stringResource(R.string.chat_unstar)) },
                     onClick = {
                         menuOpen = false
                         onUnstar()
@@ -364,7 +365,7 @@ internal fun StarredItemRow(
                 )
                 if (!isRssItem) {
                     DropdownMenuItem(
-                        text = { Text("Delete message", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.chat_actions_delete_message), color = MaterialTheme.colorScheme.error) },
                         onClick = {
                             menuOpen = false
                             onDelete()
@@ -513,7 +514,7 @@ internal fun MailList(
                         CircularProgressIndicator(Modifier.size(24.dp))
                     } else {
                         OutlinedButton(onClick = onLoadMore) {
-                            Text("Load older")
+                            Text(stringResource(R.string.threads_actions_load_more))
                         }
                     }
                 }
@@ -525,10 +526,11 @@ internal fun MailList(
 @Composable
 internal fun MailHeaderSearchField(
     search: String,
-    placeholder: String = "Search mail",
+    placeholder: String? = null,
     onSearchChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
 ) {
+    val effectivePlaceholder = placeholder ?: stringResource(R.string.mobile_mail_search_cached_mail)
     OutlinedTextField(
         value = search,
         onValueChange = onSearchChange,
@@ -548,7 +550,7 @@ internal fun MailHeaderSearchField(
                     }
         },
         textStyle = MaterialTheme.typography.bodyMedium,
-        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
+        placeholder = { Text(effectivePlaceholder, style = MaterialTheme.typography.bodyMedium) },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
         trailingIcon = {
             if (search.isNotBlank()) {
@@ -559,7 +561,7 @@ internal fun MailHeaderSearchField(
                     },
                     modifier = Modifier.size(34.dp),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_clear_search), modifier = Modifier.size(18.dp))
                 }
             }
         },
@@ -624,6 +626,7 @@ internal fun MailRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    val unreadContentDescription = stringResource(R.string.filters_unread)
                     Text(
                         formatRelativeTime(thread.dateEpochSeconds),
                         fontSize = 11.sp,
@@ -636,7 +639,7 @@ internal fun MailRow(
                                 .size(8.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary)
-                                .semantics { contentDescription = "Unread" },
+                                .semantics { contentDescription = unreadContentDescription },
                         )
                     }
                 }
@@ -680,7 +683,7 @@ internal fun MailRow(
                 IconButton(onClick = onCopyFeedUrl, modifier = Modifier.size(24.dp)) {
                     Icon(
                         Icons.Filled.MoreVert,
-                        contentDescription = "Copy feed URL",
+                        contentDescription = stringResource(R.string.feeds_copy_url),
                         tint = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(18.dp),
                     )
@@ -712,7 +715,7 @@ internal fun SenderAvatar(
     if (enabled && bitmap != null) {
         Image(
             bitmap = bitmap!!.asImageBitmap(),
-            contentDescription = "Avatar for $label",
+            contentDescription = stringResource(R.string.avatar_for_label, label),
             modifier = Modifier.size(size).clip(CircleShape),
         )
     } else {

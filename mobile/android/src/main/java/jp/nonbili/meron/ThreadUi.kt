@@ -147,6 +147,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -400,24 +401,24 @@ internal fun ThreadScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.buttons_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = onToggleStar) {
                         Icon(
                             if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "Star",
+                            contentDescription = stringResource(R.string.chat_star),
                             tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More actions")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.chat_more_actions))
                         }
                         DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text(if (isRss) "Remove feed" else "Archive") },
+                                text = { Text(if (isRss) stringResource(R.string.feeds_actions_delete_feed) else stringResource(R.string.threads_actions_archive_thread)) },
                                 leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
                                 onClick = {
                                     overflowOpen = false
@@ -425,7 +426,7 @@ internal fun ThreadScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Search conversation") },
+                                text = { Text(stringResource(R.string.chat_search_thread)) },
                                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                                 onClick = {
                                     overflowOpen = false
@@ -433,7 +434,7 @@ internal fun ThreadScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Conversation details") },
+                                text = { Text(stringResource(R.string.chat_conversation_details)) },
                                 leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
                                 onClick = {
                                     overflowOpen = false
@@ -450,7 +451,7 @@ internal fun ThreadScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Move to folder") },
+                                    text = { Text(stringResource(R.string.threads_actions_move_to)) },
                                     leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
                                     onClick = {
                                         overflowOpen = false
@@ -458,7 +459,7 @@ internal fun ThreadScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Copy to folder") },
+                                    text = { Text(stringResource(R.string.threads_actions_copy_to)) },
                                     leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                                     onClick = {
                                         overflowOpen = false
@@ -567,7 +568,7 @@ internal fun ThreadScreen(
                                         CircularProgressIndicator(Modifier.size(24.dp))
                                     } else {
                                         OutlinedButton(onClick = onLoadOlder) {
-                                            Text("Load older")
+                                            Text(stringResource(R.string.threads_actions_load_more))
                                         }
                                     }
                                 }
@@ -630,7 +631,7 @@ internal fun ConversationDetailsDialog(
     val fileCount = attachments.size - mediaCount
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Conversation details") },
+        title = { Text(stringResource(R.string.chat_conversation_details)) },
         text = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 460.dp),
@@ -638,17 +639,17 @@ internal fun ConversationDetailsDialog(
             ) {
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistiveStat("People", participants.size.toString())
-                        AssistiveStat("Media", mediaCount.toString())
-                        AssistiveStat("Files", fileCount.toString())
+                        AssistiveStat(stringResource(R.string.chat_people_label), participants.size.toString())
+                        AssistiveStat(stringResource(R.string.chat_media), mediaCount.toString())
+                        AssistiveStat(stringResource(R.string.chat_files), fileCount.toString())
                     }
                 }
                 item {
-                    Text("People", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.chat_people_label), fontWeight = FontWeight.SemiBold)
                 }
                 if (participants.isEmpty()) {
                     item {
-                        Text("No conversation participants.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.chat_no_conversation_participants), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     items(participants, key = { it.email }) { person ->
@@ -660,7 +661,7 @@ internal fun ConversationDetailsDialog(
                             Avatar(person.name.ifBlank { person.email }, 34.dp)
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    person.name.ifBlank { person.email } + if (person.isSelf) " (you)" else "",
+                                    person.name.ifBlank { person.email } + if (person.isSelf) " (${stringResource(R.string.chat_you)})" else "",
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -672,20 +673,20 @@ internal fun ConversationDetailsDialog(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            TextButton(onClick = { onCopy("Email address", person.email) }) { Text("Copy") }
+                            TextButton(onClick = { onCopy("Email address", person.email) }) { Text(stringResource(R.string.chat_copy_email_address)) }
                             if (!person.isSelf) {
-                                TextButton(onClick = { onComposeTo(person.email) }) { Text("Mail") }
+                                TextButton(onClick = { onComposeTo(person.email) }) { Text(stringResource(R.string.mobile_tabs_mail)) }
                             }
                         }
                     }
                 }
                 item {
                     HorizontalDivider()
-                    Text("Shared files", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(R.string.chat_shared_files), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (attachments.isEmpty()) {
                     item {
-                        Text("No shared files in loaded messages.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.chat_no_shared_files_loaded), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     items(attachments.withIndex().toList(), key = { it.index }) { indexed ->
@@ -697,7 +698,7 @@ internal fun ConversationDetailsDialog(
                         ) {
                             Icon(Icons.Filled.AttachFile, contentDescription = null)
                             Column(Modifier.weight(1f)) {
-                                Text(attachment.filename.ifBlank { "Attachment" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(attachment.filename.ifBlank { stringResource(R.string.chat_attachment) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     listOf(
                                         attachment.mimeType,
@@ -709,15 +710,15 @@ internal fun ConversationDetailsDialog(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            TextButton(onClick = { onOpenAttachment(attachment) }) { Text("Open") }
-                            TextButton(onClick = { onSaveAttachment(attachment) }) { Text("Save") }
+                            TextButton(onClick = { onOpenAttachment(attachment) }) { Text(stringResource(R.string.kanban_actions_open_thread)) }
+                            TextButton(onClick = { onSaveAttachment(attachment) }) { Text(stringResource(R.string.buttons_save)) }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_done)) }
         },
     )
 }
@@ -733,12 +734,12 @@ internal fun MoveThreadDialog(
     val unusedCreateAndMove = onCreateAndMove
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Move conversation") },
+        title = { Text(stringResource(R.string.threads_move_conversation)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item {
                     Text(
-                        thread.subject.ifBlank { "(no subject)" },
+                        thread.subject.ifBlank { stringResource(R.string.threads_no_subject) },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
@@ -748,7 +749,7 @@ internal fun MoveThreadDialog(
                 if (folders.isEmpty()) {
                     item {
                         Text(
-                            "No other folders available.",
+                            stringResource(R.string.folders_no_other_available),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(vertical = 12.dp),
@@ -764,7 +765,7 @@ internal fun MoveThreadDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_cancel)) }
         },
     )
     unusedCreateAndMove
@@ -796,12 +797,12 @@ internal fun CopyThreadDialog(
         }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Copy conversation") },
+        title = { Text(stringResource(R.string.threads_copy_conversation)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item {
                     Text(
-                        thread.subject.ifBlank { "(no subject)" },
+                        thread.subject.ifBlank { stringResource(R.string.threads_no_subject) },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
@@ -811,7 +812,7 @@ internal fun CopyThreadDialog(
                 if (copyTargetCount == 0) {
                     item {
                         Text(
-                            "No copy targets available.",
+                            stringResource(R.string.folders_no_copy_targets),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(vertical = 12.dp),
@@ -838,7 +839,7 @@ internal fun CopyThreadDialog(
                         if (accountFolders.isEmpty()) {
                             item(key = "empty:$accountId") {
                                 Text(
-                                    "No folders available.",
+                                    stringResource(R.string.folders_none_available),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -856,7 +857,7 @@ internal fun CopyThreadDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_cancel)) }
         },
     )
 }
@@ -930,11 +931,11 @@ internal fun ImagePreviewDialog(
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onShare) { Text("Share") }
-                TextButton(onClick = onCopy) { Text("Copy") }
+                TextButton(onClick = onShare) { Text(stringResource(R.string.common_share)) }
+                TextButton(onClick = onCopy) { Text(stringResource(R.string.common_copy)) }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_done)) } },
     )
 }
 
@@ -957,12 +958,12 @@ internal fun ConversationSearchBar(
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                placeholder = { Text("Search conversation") },
+                placeholder = { Text(stringResource(R.string.chat_search_thread)) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotBlank()) {
                         IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_clear_search))
                         }
                     }
                 },
@@ -970,10 +971,10 @@ internal fun ConversationSearchBar(
                 modifier = Modifier.weight(1f),
             )
             Text(matchLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(42.dp))
-            TextButton(onClick = onPrevious, enabled = canNavigate) { Text("Prev") }
-            TextButton(onClick = onNext, enabled = canNavigate) { Text("Next") }
+            TextButton(onClick = onPrevious, enabled = canNavigate) { Text(stringResource(R.string.chat_previous_match)) }
+            TextButton(onClick = onNext, enabled = canNavigate) { Text(stringResource(R.string.chat_next_match)) }
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close search")
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.chat_close_thread_search))
             }
         }
     }
@@ -1070,69 +1071,73 @@ internal fun MessageBubble(
                     color = textColor.copy(alpha = 0.55f),
                 )
                 Box {
+                    val messageTextLabel = stringResource(R.string.chat_message_text)
+                    val subjectLabel = stringResource(R.string.composer_fields_subject)
+                    val messageIdLabel = stringResource(R.string.chat_message_id)
+                    val noSubjectLabel = stringResource(R.string.threads_no_subject)
                     IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
                         Icon(
                             Icons.Filled.MoreVert,
-                            contentDescription = "Message actions",
+                            contentDescription = stringResource(R.string.chat_more_message_actions),
                             modifier = Modifier.size(16.dp),
                             tint = textColor.copy(alpha = 0.55f),
                         )
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text("Copy message text") },
+                            text = { Text(stringResource(R.string.chat_copy_message_text)) },
                             onClick = {
                                 menuOpen = false
-                                onCopyMessageText("Message text", messagePlainText(message))
+                                onCopyMessageText(messageTextLabel, messagePlainText(message))
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Copy subject") },
+                            text = { Text(stringResource(R.string.chat_copy_subject)) },
                             onClick = {
                                 menuOpen = false
-                                onCopyMessageText("Subject", message.subject.ifBlank { "(no subject)" })
+                                onCopyMessageText(subjectLabel, message.subject.ifBlank { noSubjectLabel })
                             },
                         )
                         if (message.messageId.isNotBlank()) {
                             DropdownMenuItem(
-                                text = { Text("Copy message ID") },
+                                text = { Text(stringResource(R.string.chat_copy_message_id)) },
                                 onClick = {
                                     menuOpen = false
-                                    onCopyMessageText("Message ID", message.messageId)
+                                    onCopyMessageText(messageIdLabel, message.messageId)
                                 },
                             )
                         }
                         if (actionsEnabled) {
                             DropdownMenuItem(
-                                text = { Text(if (message.unread) "Mark read" else "Mark unread") },
+                                text = { Text(if (message.unread) stringResource(R.string.threads_actions_mark_as_read) else stringResource(R.string.threads_actions_mark_as_unread)) },
                                 onClick = {
                                     menuOpen = false
                                     onToggleRead(message)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(if (message.starred) "Unstar" else "Star") },
+                                text = { Text(if (message.starred) stringResource(R.string.chat_unstar) else stringResource(R.string.chat_star)) },
                                 onClick = {
                                     menuOpen = false
                                     onToggleStarred(message)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Forward") },
+                                text = { Text(stringResource(R.string.chat_actions_forward)) },
                                 onClick = {
                                     menuOpen = false
                                     onForward(message)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Edit as new") },
+                                text = { Text(stringResource(R.string.chat_actions_edit_as_new_message)) },
                                 onClick = {
                                     menuOpen = false
                                     onEditAsNew(message)
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Delete message", color = MaterialTheme.colorScheme.error) },
+                                text = { Text(stringResource(R.string.chat_actions_delete_message), color = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     menuOpen = false
                                     onDelete(message)
@@ -1401,7 +1406,7 @@ internal fun AttachmentRow(
                 )
             }
             TextButton(onClick = onSave) {
-                Text("Save")
+                Text(stringResource(R.string.buttons_save))
             }
         }
     }
@@ -1452,13 +1457,13 @@ internal fun ReplyBar(
                 ) {
                     Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Text(
-                        "Reply failed. Your draft is still here.",
+                        stringResource(R.string.reply_failed_draft_kept),
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     TextButton(onClick = onSend, enabled = value.isNotBlank() || attachments.isNotEmpty()) {
-                        Text("Retry")
+                        Text(stringResource(R.string.chat_retry))
                     }
                 }
             }
@@ -1471,7 +1476,7 @@ internal fun ReplyBar(
                 TextField(
                     value = value,
                     onValueChange = onChange,
-                    placeholder = { Text("Message") },
+                    placeholder = { Text(stringResource(R.string.composer_placeholders_quick_message)) },
                     shape = RoundedCornerShape(24.dp),
                     colors =
                         TextFieldDefaults.colors(
@@ -1484,10 +1489,10 @@ internal fun ReplyBar(
                     trailingIcon = {
                         Row {
                             IconButton(onClick = onAttach) {
-                                Icon(Icons.Filled.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Filled.AttachFile, contentDescription = stringResource(R.string.composer_actions_attach_files), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             IconButton(onClick = onOpenFullEditor) {
-                                Icon(Icons.Filled.OpenInFull, contentDescription = "Open full editor", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Filled.OpenInFull, contentDescription = stringResource(R.string.composer_actions_open_full_editor), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     },
@@ -1509,7 +1514,7 @@ internal fun ReplyBar(
                     enabled = canSend,
                     modifier = Modifier.size(48.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply")
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.reply_send))
                 }
             }
         }

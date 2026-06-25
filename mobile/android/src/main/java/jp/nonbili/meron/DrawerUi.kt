@@ -143,6 +143,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -293,7 +294,7 @@ internal fun MailDrawer(
         LazyColumn(contentPadding = PaddingValues(vertical = 16.dp)) {
             item {
                 Text(
-                    "Meron",
+                    stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = chat.onSidebar,
@@ -301,7 +302,7 @@ internal fun MailDrawer(
                 )
             }
             if (accounts.isNotEmpty()) {
-                item { DrawerLabel("Inboxes", chat) }
+                item { DrawerLabel(stringResource(R.string.drawer_inboxes), chat) }
                 if (showUnifiedInboxNav) {
                     item {
                         val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
@@ -311,8 +312,8 @@ internal fun MailDrawer(
                             chat = chat,
                             onClick = onSelectUnified,
                             leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            title = "Unified inbox",
-                            subtitle = "All accounts",
+                            title = stringResource(R.string.kanban_columns_unified_inbox),
+                            subtitle = stringResource(R.string.kanban_all_accounts),
                             trailing = if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
                         )
                     }
@@ -340,9 +341,9 @@ internal fun MailDrawer(
                         title = label,
                         subtitle =
                             if (needsGoogleReauth) {
-                                "Tap to reconnect"
+                                stringResource(R.string.drawer_tap_to_reconnect)
                             } else {
-                                account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox"
+                                account.email.takeIf { it.isNotBlank() && it != label } ?: stringResource(R.string.mobile_tabs_mail)
                             },
                         trailing =
                             if (account.needsReconnect || needsGoogleReauth) {
@@ -356,7 +357,7 @@ internal fun MailDrawer(
                 }
             }
             if (accounts.isNotEmpty()) {
-                item { DrawerLabel("Views", chat) }
+                item { DrawerLabel(stringResource(R.string.drawer_views), chat) }
                 if (showStarredNav) {
                     item {
                         SidebarRow(
@@ -364,8 +365,8 @@ internal fun MailDrawer(
                             chat = chat,
                             onClick = onSelectStarred,
                             leading = { Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            title = "Starred",
-                            subtitle = "All starred items",
+                            title = stringResource(R.string.mobile_tabs_starred),
+                            subtitle = stringResource(R.string.mobile_mail_starred_subtitle),
                             trailing = null,
                         )
                     }
@@ -377,8 +378,8 @@ internal fun MailDrawer(
                             chat = chat,
                             onClick = onSelectKanban,
                             leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            title = "Kanban",
-                            subtitle = "Boards and columns",
+                            title = stringResource(R.string.mobile_tabs_kanban),
+                            subtitle = stringResource(R.string.drawer_kanban_subtitle),
                             trailing = null,
                         )
                     }
@@ -390,7 +391,7 @@ internal fun MailDrawer(
                             onClick = { onSelectKanbanBoard(board) },
                             leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
                             title = board.name,
-                            subtitle = "${board.columns.size} columns",
+                            subtitle = stringResource(R.string.settings_kanban_board_columns, board.columns.size),
                             trailing = null,
                         )
                     }
@@ -408,7 +409,7 @@ internal fun MailDrawer(
                     chat = chat,
                     onClick = onAddAccount,
                     leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Add account",
+                    title = stringResource(R.string.accounts_actions_add_account),
                     subtitle = null,
                     trailing = null,
                 )
@@ -419,8 +420,8 @@ internal fun MailDrawer(
                     chat = chat,
                     onClick = onOpenSettings,
                     leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = "Settings",
-                    subtitle = "Appearance, navigation, storage",
+                    title = stringResource(R.string.settings_label),
+                    subtitle = stringResource(R.string.drawer_settings_subtitle),
                     trailing = null,
                 )
             }
@@ -439,36 +440,36 @@ internal fun AboutDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("About Meron") },
+        title = { Text(stringResource(R.string.about_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Meron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Version $appVersion · Package $packageName",
+                    stringResource(R.string.about_version_package, appVersion, packageName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "Core protocol $coreProtocolVersion · Shared protocol $sharedProtocolVersion",
+                    stringResource(R.string.about_protocol_versions, coreProtocolVersion, sharedProtocolVersion),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { onOpenUrl("https://github.com/sponsors/nonbili") }) {
-                        Text("GitHub Sponsors")
+                        Text(stringResource(R.string.about_github_sponsors))
                     }
                     OutlinedButton(onClick = { onOpenUrl("https://liberapay.com/nonbili") }) {
-                        Text("Liberapay")
+                        Text(stringResource(R.string.about_liberapay))
                     }
                     OutlinedButton(onClick = { onOpenUrl("https://www.paypal.com/paypalme/nonbili") }) {
-                        Text("PayPal")
+                        Text(stringResource(R.string.about_paypal))
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(stringResource(R.string.buttons_close))
             }
         },
     )
@@ -572,7 +573,7 @@ internal fun StatusBanner(
             }
             if (onDismiss != null) {
                 IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.buttons_close), modifier = Modifier.size(18.dp))
                 }
             }
         }

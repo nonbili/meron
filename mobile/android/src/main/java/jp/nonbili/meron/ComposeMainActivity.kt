@@ -268,6 +268,11 @@ class ComposeMainActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
 
+    override fun attachBaseContext(newBase: Context) {
+        syncAppLanguageFromSystemSetting(newBase)
+        super.attachBaseContext(localizedAppContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -281,9 +286,10 @@ class ComposeMainActivity : ComponentActivity() {
                 MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
             } else {
                 ""
-            }
+        }
         setContent {
             var appearanceMode by remember { mutableStateOf(loadAppearanceMode(this)) }
+            var appLanguageTag by remember { mutableStateOf(loadAppLanguageTag(this)) }
             MeronTheme(appearanceMode = appearanceMode) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MeronMobileScreen(
@@ -294,6 +300,12 @@ class ComposeMainActivity : ComponentActivity() {
                         onAppearanceModeChange = { mode ->
                             appearanceMode = mode
                             saveAppearanceMode(this, mode)
+                        },
+                        appLanguageTag = appLanguageTag,
+                        onAppLanguageChange = { tag ->
+                            appLanguageTag = tag
+                            saveAppLanguageTag(this, tag)
+                            recreate()
                         },
                     )
                 }

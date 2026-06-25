@@ -1,15 +1,18 @@
 package jp.nonbili.meron
 
 import android.Manifest
+import android.app.LocaleManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.LocaleList
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.WebView
@@ -690,6 +693,87 @@ internal fun saveAppearanceMode(
         .edit()
         .putString(APPEARANCE_MODE_PREF, mode.storageValue)
         .apply()
+}
+
+internal val supportedAppLanguageTags =
+    listOf(
+        "en",
+        "ar",
+        "zh-Hans",
+        "zh-Hant",
+        "de",
+        "el",
+        "es",
+        "et",
+        "fr",
+        "it",
+        "ja",
+        "ko",
+        "lv",
+        "pl",
+        "pt",
+        "pt-BR",
+        "sv",
+        "tr",
+        "vi",
+    )
+
+internal fun loadAppLanguageTag(context: Context): String =
+    context
+        .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .getString(APP_LANGUAGE_PREF, "")
+        .orEmpty()
+        .takeIf { it in supportedAppLanguageTags }
+        .orEmpty()
+
+internal fun saveAppLanguageTag(
+    context: Context,
+    tag: String,
+) {
+    val normalized = tag.takeIf { it in supportedAppLanguageTags }.orEmpty()
+    context
+        .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(APP_LANGUAGE_PREF, normalized)
+        .apply()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.getSystemService(LocaleManager::class.java).applicationLocales =
+            if (normalized.isBlank()) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(normalized)
+    }
+}
+
+internal fun syncAppLanguageFromSystemSetting(context: Context): String {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return loadAppLanguageTag(context)
+    val tag = context.getSystemService(LocaleManager::class.java).applicationLocales.toLanguageTags()
+    val normalized = tag.substringBefore(",").takeIf { it in supportedAppLanguageTags }.orEmpty()
+    if (normalized != loadAppLanguageTag(context)) {
+        context
+            .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(APP_LANGUAGE_PREF, normalized)
+            .apply()
+    }
+    return normalized
+}
+
+internal fun localizedAppContext(base: Context): Context {
+    val tag = loadAppLanguageTag(base)
+    if (tag.isBlank()) return base
+    val locale = Locale.forLanguageTag(tag)
+    Locale.setDefault(locale)
+    val configuration = Configuration(base.resources.configuration)
+    configuration.setLocale(locale)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        configuration.setLocales(LocaleList(locale))
+    }
+    return base.createConfigurationContext(configuration)
+}
+
+internal fun appLanguageDisplayName(tag: String): String {
+    val locale = Locale.forLanguageTag(tag)
+    return locale.getDisplayName(locale).replaceFirstChar { char ->
+        if (char.isLowerCase()) char.titlecase(locale) else char.toString()
+    }
 }
 
 internal fun loadAppBoolean(

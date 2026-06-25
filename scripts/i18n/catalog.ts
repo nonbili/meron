@@ -437,7 +437,6 @@ function androidEscape(value: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/'/g, "\\'")
-    .replace(/%/g, '%%')
   if (/^[?@]/.test(out)) out = `\\${out}`
   return out
 }

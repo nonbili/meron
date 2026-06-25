@@ -273,6 +273,8 @@ internal fun MeronMobileScreen(
     incomingOAuthCallbackUrl: String?,
     appearanceMode: AppAppearanceMode,
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
+    appLanguageTag: String,
+    onAppLanguageChange: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val appVersion = remember { appVersionName(context) }
@@ -940,6 +942,8 @@ internal fun MeronMobileScreen(
                     onRemoveAccount = ::removeAccount,
                     appearanceMode = appearanceMode,
                     onAppearanceModeChange = onAppearanceModeChange,
+                    appLanguageTag = appLanguageTag,
+                    onAppLanguageChange = onAppLanguageChange,
                     showSenderImages = showSenderImages,
                     onToggleSenderImages = {
                         showSenderImages = !showSenderImages
@@ -1267,6 +1271,7 @@ internal fun MeronMobileScreen(
                                                         .singleOrNull()
                                                         ?.takeUnless { threadIdIsRss(it.id) }
                                                 if (singleSelectedMailThread != null) {
+                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                     DropdownMenuItem(
                                                         text = { Text(stringResource(R.string.threads_actions_move_to)) },
                                                         leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
@@ -1318,6 +1323,7 @@ internal fun MeronMobileScreen(
                                                         },
                                                     )
                                                 }
+                                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                 DropdownMenuItem(
                                                     text = { Text(stringResource(R.string.mobile_actions_refresh_board)) },
                                                     leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
@@ -1326,6 +1332,7 @@ internal fun MeronMobileScreen(
                                                         loadKanbanBoard(refresh = true)
                                                     },
                                                 )
+                                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                 DropdownMenuItem(
                                                     text = { Text(stringResource(R.string.kanban_actions_add_column)) },
                                                     leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -1587,6 +1594,7 @@ internal fun MeronMobileScreen(
                                                         .singleOrNull()
                                                         ?.takeUnless { threadIdIsRss(it.id) }
                                                 if (singleSelectedMailThread != null) {
+                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                     DropdownMenuItem(
                                                         text = { Text(stringResource(R.string.threads_actions_move_to)) },
                                                         leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
@@ -1622,6 +1630,8 @@ internal fun MeronMobileScreen(
                                                 Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.threads_actions_title))
                                             }
                                             DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
+                                                val showMarkAllRead = coreThreads.any { it.unread }
+                                                val showAccountActions = selectedAccount != null
                                                 FilterMode.values().forEach { mode ->
                                                     DropdownMenuItem(
                                                         text = { Text(mode.label()) },
@@ -1638,7 +1648,10 @@ internal fun MeronMobileScreen(
                                                         },
                                                     )
                                                 }
-                                                if (coreThreads.any { it.unread }) {
+                                                if (showMarkAllRead || showAccountActions) {
+                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                                }
+                                                if (showMarkAllRead) {
                                                     DropdownMenuItem(
                                                         text = { Text(stringResource(R.string.threads_actions_mark_all_as_read)) },
                                                         leadingIcon = {
@@ -1650,7 +1663,10 @@ internal fun MeronMobileScreen(
                                                         },
                                                     )
                                                 }
-                                                if (selectedAccount != null) {
+                                                if (showAccountActions) {
+                                                    if (showMarkAllRead) {
+                                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                                    }
                                                     DropdownMenuItem(
                                                         text = { Text(stringResource(R.string.settings_account_account_settings)) },
                                                         onClick = {
@@ -1661,6 +1677,7 @@ internal fun MeronMobileScreen(
                                                         },
                                                     )
                                                     if (selectedAccount.let(::accountSummaryIsRss)) {
+                                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                         DropdownMenuItem(
                                                             text = { Text(stringResource(R.string.feeds_actions_add_feed)) },
                                                             onClick = {
@@ -1747,9 +1764,9 @@ internal fun MeronMobileScreen(
                                     coreAccounts.isEmpty() -> {
                                         EmptyState(
                                             icon = Icons.Filled.PersonAdd,
-                                            title = "Welcome to Meron",
-                                            text = "Add a mail or RSS account to start reading your inbox.",
-                                            actionLabel = "Add account",
+                                            title = stringResource(R.string.empty_welcome_title),
+                                            text = stringResource(R.string.empty_mail_or_rss_setup_text),
+                                            actionLabel = stringResource(R.string.accounts_actions_add_account),
                                             onAction = {
                                                 addSection = 0
                                                 screen = Screen.AddAccount
@@ -1768,17 +1785,17 @@ internal fun MeronMobileScreen(
                                                 if (mailSearch.isBlank() &&
                                                     mailFilter == FilterMode.All
                                                 ) {
-                                                    "Nothing here yet"
+                                                    stringResource(R.string.empty_nothing_here_yet)
                                                 } else {
-                                                    "No matching mail"
+                                                    stringResource(R.string.empty_no_matching_mail)
                                                 },
                                             text =
                                                 if (mailSearch.isBlank() && mailFilter == FilterMode.All) {
-                                                    "Pull in your latest messages from the server."
+                                                    stringResource(R.string.empty_pull_latest_messages)
                                                 } else {
-                                                    "Adjust the search or filter, then try again."
+                                                    stringResource(R.string.empty_adjust_search_filter)
                                                 },
-                                            actionLabel = "Sync now",
+                                            actionLabel = stringResource(R.string.mobile_mail_sync_mailbox),
                                             onAction = ::syncCoreThreads,
                                         )
                                     }
@@ -1837,24 +1854,24 @@ internal fun MeronMobileScreen(
         if (showAddFeedDialog) {
             AlertDialog(
                 onDismissRequest = { showAddFeedDialog = false },
-                title = { Text("Add feed") },
+                title = { Text(stringResource(R.string.feeds_actions_add_feed)) },
                 text = {
                     OutlinedTextField(
                         value = addFeedUrl,
                         onValueChange = { addFeedUrl = it },
-                        label = { Text("Feed URL") },
+                        label = { Text(stringResource(R.string.feeds_url)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = ::addFeedToSelectedRssAccount) {
-                        Text("Add")
+                        Text(stringResource(R.string.common_add))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddFeedDialog = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.buttons_cancel))
                     }
                 },
             )
@@ -1942,23 +1959,23 @@ internal fun MeronMobileScreen(
         showKanbanCreateFolderDialog?.let { account ->
             AlertDialog(
                 onDismissRequest = { showKanbanCreateFolderDialog = null },
-                title = { Text("Create folder") },
+                title = { Text(stringResource(R.string.folders_create)) },
                 text = {
                     OutlinedTextField(
                         value = kanbanFolderNameInput,
                         onValueChange = { kanbanFolderNameInput = it },
-                        label = { Text("Folder name") },
+                        label = { Text(stringResource(R.string.folders_name_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = { createFolderForKanban(account, kanbanFolderNameInput) }) {
-                        Text("Create")
+                        Text(stringResource(R.string.folders_create))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showKanbanCreateFolderDialog = null }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.buttons_cancel))
                     }
                 },
             )

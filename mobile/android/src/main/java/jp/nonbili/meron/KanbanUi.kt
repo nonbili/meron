@@ -142,6 +142,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -280,7 +281,7 @@ internal fun MailSearchFilterBar(
             onValueChange = onSearchChange,
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
             textStyle = MaterialTheme.typography.bodyMedium,
-            placeholder = { Text("Search mail", style = MaterialTheme.typography.bodyMedium) },
+            placeholder = { Text(stringResource(R.string.mobile_mail_search_cached_mail), style = MaterialTheme.typography.bodyMedium) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
             trailingIcon = {
                 if (search.isNotBlank()) {
@@ -291,7 +292,7 @@ internal fun MailSearchFilterBar(
                         },
                         modifier = Modifier.size(34.dp),
                     ) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_clear_search), modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -307,7 +308,7 @@ internal fun MailSearchFilterBar(
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onSearchSubmit) {
-                Text("Apply")
+                Text(stringResource(R.string.buttons_done))
             }
         }
     }
@@ -387,7 +388,7 @@ internal fun KanbanHeaderSearchField(
                         },
                         modifier = Modifier.size(36.dp),
                     ) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_clear_search), modifier = Modifier.size(18.dp))
                     }
                 }
                 Box(
@@ -424,7 +425,7 @@ internal fun KanbanHeaderSearchField(
         ) {
             DropdownMenu(expanded = scopeMenuOpen, onDismissRequest = { scopeMenuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("All columns") },
+                    text = { Text(stringResource(R.string.kanban_search_scope_all_columns)) },
                     leadingIcon = { Icon(Icons.Filled.ViewKanban, contentDescription = null) },
                     onClick = {
                         scopeMenuOpen = false
@@ -477,9 +478,9 @@ internal fun KanbanScreen(
     if (accounts.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.PersonAdd,
-            title = "Welcome to Meron",
-            text = "Add an account to use Kanban.",
-            actionLabel = "Add account",
+            title = stringResource(R.string.empty_welcome_title),
+            text = stringResource(R.string.empty_kanban_setup_text),
+            actionLabel = stringResource(R.string.accounts_actions_add_account),
             onAction = {},
         )
         return
@@ -499,9 +500,9 @@ internal fun KanbanScreen(
         if (boardColumns.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.ViewKanban,
-                title = "No columns",
-                text = "Add a column to start using this board.",
-                actionLabel = "Add column",
+                title = stringResource(R.string.empty_no_columns),
+                text = stringResource(R.string.empty_no_columns_text),
+                actionLabel = stringResource(R.string.kanban_actions_add_column),
                 onAction = onAddColumn,
             )
         } else {
@@ -561,7 +562,7 @@ internal fun FilterModeButton(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.FilterList, contentDescription = "Filter")
+            Icon(Icons.Filled.FilterList, contentDescription = stringResource(R.string.filters_label))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             FilterMode.values().forEach { mode ->
@@ -648,7 +649,17 @@ internal fun KanbanColumn(
             if (!state.loading && visibleThreads.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(18.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        if (search.isBlank()) "No ${filter.emptyNoun()} here" else "No matches",
+                        if (search.isBlank()) {
+                            stringResource(
+                                when (filter) {
+                                    FilterMode.All -> R.string.kanban_empty_all_column
+                                    FilterMode.Unread -> R.string.kanban_empty_unread_column
+                                    FilterMode.Starred -> R.string.kanban_empty_starred_column
+                                },
+                            )
+                        } else {
+                            stringResource(R.string.mobile_mail_no_search_matches)
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
@@ -689,7 +700,7 @@ internal fun KanbanColumn(
                             onToggleStar = { onToggleStar(thread) },
                             onCopyFeedUrl = null,
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                     }
                     if (canLoadMore || state.loadingMore) {
                         item {
@@ -698,7 +709,7 @@ internal fun KanbanColumn(
                                     CircularProgressIndicator(Modifier.size(22.dp))
                                 } else {
                                     OutlinedButton(onClick = onLoadMore) {
-                                        Text("Load older")
+                                        Text(stringResource(R.string.threads_actions_load_more))
                                     }
                                 }
                             }
@@ -752,40 +763,42 @@ internal fun KanbanColumnHeader(
             }
         }
         IconButton(onClick = onMinimize, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Filled.Remove, contentDescription = "Minimize column", modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.kanban_actions_minimize_column), modifier = Modifier.size(18.dp))
         }
         Box {
             IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(34.dp)) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Column actions", modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_column_actions), modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("Search") }, leadingIcon = {
+                DropdownMenuItem(text = { Text(stringResource(R.string.kanban_actions_search_column)) }, leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = null)
                 }, onClick = {
                     menuOpen = false
                     onSearch()
                 })
-                DropdownMenuItem(text = { Text("Refresh") }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(R.string.mobile_actions_refresh)) }, onClick = {
                     menuOpen = false
                     onRefresh()
                 })
-                DropdownMenuItem(text = { Text("Mark all read") }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(R.string.threads_actions_mark_all_as_read)) }, onClick = {
                     menuOpen = false
                     onMarkAllRead()
                 }, enabled = unread > 0)
-                DropdownMenuItem(text = { Text("Move left") }, onClick = {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                DropdownMenuItem(text = { Text(stringResource(R.string.kanban_actions_move_column_left)) }, onClick = {
                     menuOpen = false
                     onMoveLeft()
                 })
-                DropdownMenuItem(text = { Text("Move right") }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(R.string.kanban_actions_move_column_right)) }, onClick = {
                     menuOpen = false
                     onMoveRight()
                 })
-                DropdownMenuItem(text = { Text("Minimize column") }, onClick = {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                DropdownMenuItem(text = { Text(stringResource(R.string.kanban_actions_minimize_column)) }, onClick = {
                     menuOpen = false
                     onMinimize()
                 })
-                DropdownMenuItem(text = { Text("Remove column") }, onClick = {
+                DropdownMenuItem(text = { Text(stringResource(R.string.kanban_actions_hide_column)) }, onClick = {
                     menuOpen = false
                     onRemove()
                 })
@@ -984,15 +997,15 @@ internal fun KanbanColumnDialog(
             .toSet()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add column") },
+        title = { Text(stringResource(R.string.kanban_actions_add_column)) },
         text = {
             LazyColumn(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 item {
                     val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
                     SidebarLikeDialogRow(
                         selected = selected.contains(kanbanColumnKey(unified)),
-                        title = "Unified inbox",
-                        subtitle = "All accounts",
+                        title = stringResource(R.string.kanban_columns_unified_inbox),
+                        subtitle = stringResource(R.string.kanban_all_accounts),
                         onClick = { onAddColumn(unified) },
                     )
                 }
@@ -1012,7 +1025,7 @@ internal fun KanbanColumnDialog(
                             TextButton(onClick = { onCreateFolder(account) }) {
                                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Create folder")
+                                Text(stringResource(R.string.folders_create))
                             }
                         }
                     }
@@ -1027,7 +1040,7 @@ internal fun KanbanColumnDialog(
                         SidebarLikeDialogRow(
                             selected = selected.contains(kanbanColumnKey(column)),
                             title = folder.name.replaceFirstChar { it.uppercase() },
-                            subtitle = if (accountSummaryIsRss(account)) "Feed" else account.email,
+                            subtitle = if (accountSummaryIsRss(account)) stringResource(R.string.feeds_fallback_name) else account.email,
                             onClick = { onAddColumn(column) },
                         )
                     }
@@ -1035,7 +1048,7 @@ internal fun KanbanColumnDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_done)) }
         },
     )
 }
@@ -1057,16 +1070,16 @@ internal fun KanbanThreadActionDialog(
     val deleteLabel = threadDeleteActionLabel(thread.folder)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(thread.subject.ifBlank { "(no subject)" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        title = { Text(thread.subject.ifBlank { stringResource(R.string.threads_no_subject) }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                item { DialogAction("Open", onOpen) }
-                item { DialogAction(if (thread.starred) "Unstar" else "Star", onToggleStar) }
-                item { DialogAction(if (thread.unread) "Mark read" else "Mark unread", onToggleRead) }
+                item { DialogAction(stringResource(R.string.kanban_actions_open_thread), onOpen) }
+                item { DialogAction(if (thread.starred) stringResource(R.string.chat_unstar) else stringResource(R.string.chat_star), onToggleStar) }
+                item { DialogAction(if (thread.unread) stringResource(R.string.threads_actions_mark_as_read) else stringResource(R.string.threads_actions_mark_as_unread), onToggleRead) }
                 if (threadIdIsRss(thread.id) && thread.feedUrl.isNotBlank()) {
-                    item { DialogAction("Copy feed URL", onCopyFeedUrl) }
+                    item { DialogAction(stringResource(R.string.feeds_copy_url), onCopyFeedUrl) }
                 }
-                item { DialogAction(if (threadIdIsRss(thread.id)) "Remove feed" else "Archive", onArchive) }
+                item { DialogAction(if (threadIdIsRss(thread.id)) stringResource(R.string.feeds_actions_delete_feed) else stringResource(R.string.threads_actions_archive_thread), onArchive) }
                 if (!threadIdIsRss(thread.id)) {
                     item { DialogAction(deleteLabel, onDelete) }
                 }
@@ -1082,7 +1095,7 @@ internal fun KanbanThreadActionDialog(
                 if (moveTargets.isNotEmpty()) {
                     item {
                         Text(
-                            "Move to",
+                            stringResource(R.string.threads_actions_move_to),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1091,7 +1104,8 @@ internal fun KanbanThreadActionDialog(
                     }
                     items(moveTargets, key = { kanbanColumnKey(it) }) { target ->
                         val account = accounts.firstOrNull { it.id == target.accountId }
-                        DialogAction("${account?.displayName?.ifBlank { account.email } ?: target.accountId} / ${target.folderId}") {
+                        val targetLabel = listOf(account?.displayName?.ifBlank { account.email } ?: target.accountId, target.folderId).joinToString(" / ")
+                        DialogAction(targetLabel) {
                             onMove(target)
                         }
                     }
@@ -1099,7 +1113,7 @@ internal fun KanbanThreadActionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.buttons_close)) }
         },
     )
 }
