@@ -662,9 +662,10 @@ internal fun loadAppearanceMode(context: Context): AppAppearanceMode {
     val stored =
         context
             .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
-            .getString(APPEARANCE_MODE_PREF, AppAppearanceMode.System.storageValue)
+            .getString(APPEARANCE_MODE_PREF, AppAppearanceMode.Indigo.storageValue)
             .orEmpty()
-    return AppAppearanceMode.entries.firstOrNull { it.storageValue == stored } ?: AppAppearanceMode.System
+    return AppAppearanceMode.entries.firstOrNull { it.storageValue == stored && it != AppAppearanceMode.System }
+        ?: AppAppearanceMode.Indigo
 }
 
 internal fun saveAppearanceMode(
@@ -745,8 +746,9 @@ internal fun saveAppStringSet(
 internal fun onOffLabel(enabled: Boolean): String = if (enabled) "On" else "Off"
 
 internal fun AppAppearanceMode.next(): AppAppearanceMode {
-    val values = AppAppearanceMode.entries
-    return values[(ordinal + 1) % values.size]
+    val values = AppAppearanceMode.entries.filterNot { it == AppAppearanceMode.System }
+    val index = values.indexOf(this).takeIf { it >= 0 } ?: 0
+    return values[(index + 1) % values.size]
 }
 
 internal fun formatRelativeTime(epochSeconds: Long): String {

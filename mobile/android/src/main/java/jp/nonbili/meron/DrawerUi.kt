@@ -273,10 +273,13 @@ internal fun MailDrawer(
     showUnreadBadges: Boolean,
     showUnifiedInboxNav: Boolean,
     showStarredNav: Boolean,
+    kanbanBoards: List<KanbanBoardSpec>,
+    activeKanbanBoardId: String,
     onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
     onSelectStarred: () -> Unit,
     onSelectKanban: () -> Unit,
+    onSelectKanbanBoard: (KanbanBoardSpec) -> Unit,
     onAddAccount: () -> Unit,
     onOpenSettings: () -> Unit,
     googleReauthAccountId: String? = null,
@@ -367,16 +370,30 @@ internal fun MailDrawer(
                         )
                     }
                 }
-                item {
-                    SidebarRow(
-                        selected = currentScreen == Screen.Kanban,
-                        chat = chat,
-                        onClick = onSelectKanban,
-                        leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        title = "Kanban",
-                        subtitle = "Boards and columns",
-                        trailing = null,
-                    )
+                if (kanbanBoards.isEmpty()) {
+                    item {
+                        SidebarRow(
+                            selected = currentScreen == Screen.Kanban,
+                            chat = chat,
+                            onClick = onSelectKanban,
+                            leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            title = "Kanban",
+                            subtitle = "Boards and columns",
+                            trailing = null,
+                        )
+                    }
+                } else {
+                    items(kanbanBoards, key = { it.id }) { board ->
+                        SidebarRow(
+                            selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
+                            chat = chat,
+                            onClick = { onSelectKanbanBoard(board) },
+                            leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            title = board.name,
+                            subtitle = "${board.columns.size} columns",
+                            trailing = null,
+                        )
+                    }
                 }
             }
             item {

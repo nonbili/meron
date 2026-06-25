@@ -494,6 +494,36 @@ internal fun MeronMobileScreen(
                     }
                 }
             }
+        val kanbanBoardMediaPicker =
+            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                val target = kanbanBoardMediaTarget
+                kanbanBoardMediaTarget = null
+                if (uri != null && target != null) {
+                    runCatching {
+                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    val mediaUrl = uri.toString()
+                    if (target.wallpaper) {
+                        updateKanbanBoard(
+                            target.board.id,
+                            target.board.name,
+                            target.board.avatarUrl,
+                            "",
+                            mediaUrl,
+                        )
+                        status = "Updated board wallpaper"
+                    } else {
+                        updateKanbanBoard(
+                            target.board.id,
+                            target.board.name,
+                            mediaUrl,
+                            target.board.wallpaperPresetId,
+                            target.board.wallpaperUrl,
+                        )
+                        status = "Updated board avatar"
+                    }
+                }
+            }
         launchOpmlExport = { opmlExportPicker.launch(it) }
         launchAttachmentSave = { attachmentSavePicker.launch(it) }
 
@@ -839,14 +869,17 @@ internal fun MeronMobileScreen(
                     onDeleteKanbanBoard = { board ->
                         deleteKanbanBoard(board.id)
                     },
-                    onSetActiveKanbanBoard = { board ->
-                        activeKanbanBoardId = board.id
-                        saveActiveKanbanBoardId(context, board.id)
-                        if (screen == Screen.Kanban || previousTopScreen == Screen.Kanban) {
-                            loadKanbanBoard(refresh = false)
-                        }
-                    },
                     onCreateKanbanBoard = ::createKanbanBoard,
+                    onAddMailAccount = {
+                        addSection = 0
+                        previousTopScreen = Screen.Settings
+                        screen = Screen.AddAccount
+                    },
+                    onAddFeedAccount = {
+                        addSection = 2
+                        previousTopScreen = Screen.Settings
+                        screen = Screen.AddAccount
+                    },
                     onSaveAccountSettings = {
                         account,
                         displayName,
@@ -885,6 +918,14 @@ internal fun MeronMobileScreen(
                     onPickAccountWallpaper = { account ->
                         accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
                         accountMediaPicker.launch(arrayOf("image/*"))
+                    },
+                    onPickKanbanBoardAvatar = { board ->
+                        kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = false)
+                        kanbanBoardMediaPicker.launch(arrayOf("image/*"))
+                    },
+                    onPickKanbanBoardWallpaper = { board ->
+                        kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = true)
+                        kanbanBoardMediaPicker.launch(arrayOf("image/*"))
                     },
                     onMoveAccountUp = { account -> moveAccount(account, -1) },
                     onMoveAccountDown = { account -> moveAccount(account, 1) },
@@ -951,6 +992,8 @@ internal fun MeronMobileScreen(
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
                             showStarredNav = showStarredNav,
+                            kanbanBoards = kanbanBoards,
+                            activeKanbanBoardId = activeKanbanBoardId,
                             onSelectUnified = {
                                 screen = Screen.Mail
                                 syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
@@ -965,6 +1008,14 @@ internal fun MeronMobileScreen(
                             },
                             onSelectStarred = { scope.launch { drawerState.close() } },
                             onSelectKanban = {
+                                screen = Screen.Kanban
+                                previousTopScreen = Screen.Kanban
+                                loadKanbanBoard(refresh = false)
+                                scope.launch { drawerState.close() }
+                            },
+                            onSelectKanbanBoard = { board ->
+                                activeKanbanBoardId = board.id
+                                saveActiveKanbanBoardId(context, board.id)
                                 screen = Screen.Kanban
                                 previousTopScreen = Screen.Kanban
                                 loadKanbanBoard(refresh = false)
@@ -1055,6 +1106,8 @@ internal fun MeronMobileScreen(
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
                             showStarredNav = showStarredNav,
+                            kanbanBoards = kanbanBoards,
+                            activeKanbanBoardId = activeKanbanBoardId,
                             onSelectUnified = {
                                 screen = Screen.Mail
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
@@ -1087,6 +1140,14 @@ internal fun MeronMobileScreen(
                                 scope.launch { drawerState.close() }
                             },
                             onSelectKanban = { scope.launch { drawerState.close() } },
+                            onSelectKanbanBoard = { board ->
+                                if (activeKanbanBoardId != board.id) {
+                                    activeKanbanBoardId = board.id
+                                    saveActiveKanbanBoardId(context, board.id)
+                                    loadKanbanBoard(refresh = false)
+                                }
+                                scope.launch { drawerState.close() }
+                            },
                             onAddAccount = {
                                 addSection = 0
                                 previousTopScreen = Screen.Kanban
@@ -1110,20 +1171,12 @@ internal fun MeronMobileScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        KanbanBoardTile(activeKanbanBoard, 36.dp)
-                                        Column {
-                                            Text(activeKanbanBoard?.name ?: stringResource(R.string.kanban_board_default_name), fontWeight = FontWeight.SemiBold)
-                                            Text(
-                                                "${activeKanbanBoard?.columns?.size ?: 0} columns${if (activeKanbanBoard?.hasBoardStyle() == true) " · styled" else ""}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
+                                    MailHeaderSearchField(
+                                        search = kanbanSearch,
+                                        placeholder = "Search board",
+                                        onSearchChange = ::persistKanbanSearch,
+                                        onSearchSubmit = { loadKanbanBoard(refresh = true) },
+                                    )
                                 },
                                 navigationIcon = {
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -1131,32 +1184,66 @@ internal fun MeronMobileScreen(
                                     }
                                 },
                                 actions = {
-                                    IconButton(onClick = {
-                                        activeKanbanBoard?.let { board ->
-                                            kanbanSettingsTargetId = board.id
-                                            previousTopScreen = Screen.Kanban
-                                            screen = Screen.Settings
+                                    Box {
+                                        IconButton(onClick = { kanbanMenuOpen = true }) {
+                                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_board_options))
                                         }
-                                    }) {
-                                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.kanban_actions_board_options))
-                                    }
-                                    IconButton(onClick = {
-                                        coreAccounts.forEach { account ->
-                                            scope.launch {
-                                                runCatching {
-                                                    withContext(Dispatchers.IO) {
-                                                        val client = MobileMailCommandClient(JniMeronCore())
-                                                        loadAccountFolders(client, account)
-                                                    }
-                                                }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
+                                        DropdownMenu(expanded = kanbanMenuOpen, onDismissRequest = { kanbanMenuOpen = false }) {
+                                            FilterMode.values().forEach { mode ->
+                                                DropdownMenuItem(
+                                                    text = { Text(mode.label()) },
+                                                    leadingIcon = {
+                                                        RadioButton(
+                                                            selected = kanbanFilter == mode,
+                                                            onClick = null,
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        kanbanMenuOpen = false
+                                                        persistKanbanFilter(mode)
+                                                        loadKanbanBoard(refresh = true)
+                                                    },
+                                                )
                                             }
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.mobile_actions_refresh_board)) },
+                                                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                                                onClick = {
+                                                    kanbanMenuOpen = false
+                                                    loadKanbanBoard(refresh = true)
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.kanban_actions_add_column)) },
+                                                leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                                onClick = {
+                                                    kanbanMenuOpen = false
+                                                    coreAccounts.forEach { account ->
+                                                        scope.launch {
+                                                            runCatching {
+                                                                withContext(Dispatchers.IO) {
+                                                                    val client = MobileMailCommandClient(JniMeronCore())
+                                                                    loadAccountFolders(client, account)
+                                                                }
+                                                            }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
+                                                        }
+                                                    }
+                                                    showKanbanColumnDialog = true
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.kanban_actions_board_options)) },
+                                                enabled = activeKanbanBoard != null,
+                                                onClick = {
+                                                    kanbanMenuOpen = false
+                                                    activeKanbanBoard?.let { board ->
+                                                        kanbanSettingsTargetId = board.id
+                                                        previousTopScreen = Screen.Kanban
+                                                        screen = Screen.Settings
+                                                    }
+                                                },
+                                            )
                                         }
-                                        showKanbanColumnDialog = true
-                                    }) {
-                                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.kanban_actions_add_column))
-                                    }
-                                    IconButton(onClick = { loadKanbanBoard(refresh = true) }) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.mobile_actions_refresh_board))
                                     }
                                 },
                             )
@@ -1180,12 +1267,9 @@ internal fun MeronMobileScreen(
                             foldersByAccount = foldersByAccount,
                             filter = kanbanFilter,
                             search = kanbanSearch,
-                            onFilter = ::persistKanbanFilter,
-                            onSearch = ::persistKanbanSearch,
                             onOpen = ::readCoreThread,
                             onLongPress = { kanbanActionThread = it },
                             onToggleStar = ::toggleStar,
-                            onArchive = ::archiveOrRemove,
                             onRefreshColumn = { loadKanbanColumn(it, refresh = true) },
                             onLoadMoreColumn = ::loadMoreKanbanColumn,
                             onMarkColumnAllRead = ::markKanbanColumnAllRead,
@@ -1211,6 +1295,8 @@ internal fun MeronMobileScreen(
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
                             showStarredNav = showStarredNav,
+                            kanbanBoards = kanbanBoards,
+                            activeKanbanBoardId = activeKanbanBoardId,
                             onSelectUnified = {
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                                     selectedCoreAccountId = UNIFIED_ACCOUNT_ID
@@ -1243,6 +1329,14 @@ internal fun MeronMobileScreen(
                                 scope.launch { drawerState.close() }
                             },
                             onSelectKanban = {
+                                screen = Screen.Kanban
+                                previousTopScreen = Screen.Kanban
+                                loadKanbanBoard(refresh = false)
+                                scope.launch { drawerState.close() }
+                            },
+                            onSelectKanbanBoard = { board ->
+                                activeKanbanBoardId = board.id
+                                saveActiveKanbanBoardId(context, board.id)
                                 screen = Screen.Kanban
                                 previousTopScreen = Screen.Kanban
                                 loadKanbanBoard(refresh = false)

@@ -525,6 +525,7 @@ internal fun MailList(
 @Composable
 internal fun MailHeaderSearchField(
     search: String,
+    placeholder: String = "Search mail",
     onSearchChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
 ) {
@@ -534,7 +535,7 @@ internal fun MailHeaderSearchField(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(44.dp)
                 .onPreviewKeyEvent { event ->
                     if (
                         event.type == KeyEventType.KeyUp &&
@@ -545,9 +546,10 @@ internal fun MailHeaderSearchField(
                     } else {
                         false
                     }
-                },
-        placeholder = { Text("Search mail") },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        },
+        textStyle = MaterialTheme.typography.bodyMedium,
+        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
         trailingIcon = {
             if (search.isNotBlank()) {
                 IconButton(
@@ -555,8 +557,9 @@ internal fun MailHeaderSearchField(
                         onSearchChange("")
                         onSearchSubmit()
                     },
+                    modifier = Modifier.size(34.dp),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
                 }
             }
         },
@@ -617,17 +620,28 @@ internal fun MailRow(
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    formatRelativeTime(thread.dateEpochSeconds),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        formatRelativeTime(thread.dateEpochSeconds),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (unread) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .semantics { contentDescription = "Unread" },
+                        )
+                    }
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                if (thread.starred) {
-                    Icon(Icons.Filled.Star, contentDescription = null, tint = chat.star, modifier = Modifier.size(11.dp))
-                }
                 Text(
                     buildAnnotatedString {
                         withStyle(
@@ -649,26 +663,19 @@ internal fun MailRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (unread) {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .semantics { contentDescription = "Unread" },
-                    )
+                if (!selectionActive) {
+                    IconButton(onClick = onToggleStar, modifier = Modifier.size(30.dp)) {
+                        Icon(
+                            if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = if (thread.starred) "Unstar" else "Star",
+                            tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
         }
         if (!selectionActive) {
-            IconButton(onClick = onToggleStar, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = if (thread.starred) "Unstar" else "Star",
-                    tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
             if (onCopyFeedUrl != null) {
                 IconButton(onClick = onCopyFeedUrl, modifier = Modifier.size(24.dp)) {
                     Icon(

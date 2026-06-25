@@ -271,6 +271,11 @@ internal data class AccountMediaUploadTarget(
     val wallpaper: Boolean,
 )
 
+internal data class KanbanBoardMediaTarget(
+    val board: KanbanBoardSpec,
+    val wallpaper: Boolean,
+)
+
 internal data class AndroidImagePreview(
     val title: String,
     val bitmap: Bitmap,

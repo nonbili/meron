@@ -58,7 +58,7 @@ struct ContentView: View {
     @State var oauthAccessToken = ""
     @State var oauthRefreshToken = ""
     @State var oauthExpiresAt = "0"
-    @State var oauthClientId = ""
+    @State var oauthClientId = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com"
     @State var oauthClientSecret = ""
     @State var oauthRedirectUri = OAuthFlowKt.defaultOAuthRedirectUri()
     @State var oauthState = UUID().uuidString

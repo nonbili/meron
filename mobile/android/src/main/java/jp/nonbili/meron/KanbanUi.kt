@@ -107,15 +107,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -279,16 +276,20 @@ internal fun MailSearchFilterBar(
         OutlinedTextField(
             value = search,
             onValueChange = onSearchChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search mail") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            placeholder = { Text("Search mail", style = MaterialTheme.typography.bodyMedium) },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
             trailingIcon = {
                 if (search.isNotBlank()) {
-                    IconButton(onClick = {
-                        onSearchChange("")
-                        onSearchSubmit()
-                    }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    IconButton(
+                        onClick = {
+                            onSearchChange("")
+                            onSearchSubmit()
+                        },
+                        modifier = Modifier.size(34.dp),
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -319,12 +320,9 @@ internal fun KanbanScreen(
     foldersByAccount: Map<String, List<FolderSummary>>,
     filter: FilterMode,
     search: String,
-    onFilter: (FilterMode) -> Unit,
-    onSearch: (String) -> Unit,
     onOpen: (ThreadSummary) -> Unit,
     onLongPress: (ThreadSummary) -> Unit,
     onToggleStar: (ThreadSummary) -> Unit,
-    onArchive: (ThreadSummary) -> Unit,
     onRefreshColumn: (KanbanColumnSpec) -> Unit,
     onLoadMoreColumn: (KanbanColumnSpec) -> Unit,
     onMarkColumnAllRead: (KanbanColumnSpec) -> Unit,
@@ -355,24 +353,6 @@ internal fun KanbanScreen(
             },
         ),
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (board?.hasBoardStyle() == true) {
-                KanbanBoardTile(board, 38.dp)
-            }
-            OutlinedTextField(
-                value = search,
-                onValueChange = onSearch,
-                placeholder = { Text("Search board") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            FilterModeButton(filter, onFilter)
-        }
         if (boardColumns.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.ViewKanban,
@@ -398,7 +378,6 @@ internal fun KanbanScreen(
                         onOpen = onOpen,
                         onLongPress = onLongPress,
                         onToggleStar = onToggleStar,
-                        onArchive = onArchive,
                         onRefresh = { onRefreshColumn(column) },
                         onLoadMore = { onLoadMoreColumn(column) },
                         onMarkAllRead = { onMarkColumnAllRead(column) },
@@ -449,7 +428,6 @@ internal fun KanbanColumn(
     onOpen: (ThreadSummary) -> Unit,
     onLongPress: (ThreadSummary) -> Unit,
     onToggleStar: (ThreadSummary) -> Unit,
-    onArchive: (ThreadSummary) -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onMarkAllRead: () -> Unit,
@@ -519,18 +497,20 @@ internal fun KanbanColumn(
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     state = columnListState,
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     items(visibleThreads, key = { it.id }) { thread ->
-                        KanbanThreadCard(
+                        MailRow(
                             thread = thread,
                             showSenderImages = showSenderImages,
+                            selected = false,
+                            selectionActive = false,
                             onOpen = { onOpen(thread) },
                             onLongPress = { onLongPress(thread) },
                             onToggleStar = { onToggleStar(thread) },
-                            onArchive = { onArchive(thread) },
+                            onCopyFeedUrl = null,
                         )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
                     if (canLoadMore || state.loadingMore) {
                         item {
@@ -627,102 +607,75 @@ internal fun KanbanThreadCard(
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     onToggleStar: () -> Unit,
-    onArchive: () -> Unit,
 ) {
     val chat = LocalChatColors.current
-    val dismissState = rememberSwipeToDismissBoxState()
-    var dismissHandled by remember(thread.id) { mutableStateOf(false) }
-    LaunchedEffect(dismissState.currentValue) {
-        if (!dismissHandled && dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-            dismissHandled = true
-            onArchive()
-        }
-    }
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        backgroundContent = {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clip(
-                        RoundedCornerShape(8.dp),
-                    ).background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Icon(if (threadIdIsRss(thread.id)) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null)
-            }
-        },
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
+        shape = RoundedCornerShape(8.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (thread.unread) {
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha = 0.08f,
+                        )
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+            ),
     ) {
-        Card(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
-            shape = RoundedCornerShape(8.dp),
-            colors =
-                CardDefaults.cardColors(
-                    containerColor =
-                        if (thread.unread) {
-                            MaterialTheme.colorScheme.primary.copy(
-                                alpha = 0.08f,
-                            )
-                        } else {
-                            MaterialTheme.colorScheme.surface
-                        },
-                ),
-        ) {
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SenderAvatar(
-                        label = thread.sender.ifBlank { thread.accountId },
-                        enabled = showSenderImages,
-                        size = 26.dp,
-                    )
-                    Text(
-                        thread.sender.ifBlank { thread.accountId }.substringBefore('@'),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        formatRelativeTime(thread.dateEpochSeconds),
-                        fontSize = 10.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SenderAvatar(
+                    label = thread.sender.ifBlank { thread.accountId },
+                    enabled = showSenderImages,
+                    size = 26.dp,
+                )
                 Text(
-                    thread.subject.ifBlank { "(no subject)" },
+                    thread.sender.ifBlank { thread.accountId }.substringBefore('@'),
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp,
-                    fontWeight = if (thread.unread) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    formatRelativeTime(thread.dateEpochSeconds),
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                thread.subject.ifBlank { "(no subject)" },
+                fontSize = 12.sp,
+                fontWeight = if (thread.unread) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (thread.preview.isNotBlank()) {
+                Text(
+                    thread.preview,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (thread.preview.isNotBlank()) {
-                    Text(
-                        thread.preview,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (thread.unread) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (thread.unread) {
-                        Box(Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                    }
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = onToggleStar, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = if (thread.starred) "Unstar" else "Star",
-                            tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onToggleStar, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                        contentDescription = if (thread.starred) "Unstar" else "Star",
+                        tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }

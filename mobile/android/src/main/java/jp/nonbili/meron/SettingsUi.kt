@@ -296,8 +296,9 @@ internal fun SettingsScreen(
         wallpaperUrl: String,
     ) -> Unit,
     onDeleteKanbanBoard: (KanbanBoardSpec) -> Unit,
-    onSetActiveKanbanBoard: (KanbanBoardSpec) -> Unit,
     onCreateKanbanBoard: () -> String,
+    onAddMailAccount: () -> Unit,
+    onAddFeedAccount: () -> Unit,
     onSaveAccountSettings: (
         account: AccountSummary,
         displayName: String,
@@ -315,6 +316,8 @@ internal fun SettingsScreen(
     ) -> Unit,
     onPickAccountAvatar: (AccountSummary) -> Unit,
     onPickAccountWallpaper: (AccountSummary) -> Unit,
+    onPickKanbanBoardAvatar: (KanbanBoardSpec) -> Unit,
+    onPickKanbanBoardWallpaper: (KanbanBoardSpec) -> Unit,
     onMoveAccountUp: (AccountSummary) -> Unit,
     onMoveAccountDown: (AccountSummary) -> Unit,
     onRemoveAccount: (AccountSummary) -> Unit,
@@ -484,7 +487,8 @@ internal fun SettingsScreen(
                         onSave = { name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
                             onSaveKanbanBoard(board, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
                         },
-                        onSetActive = { onSetActiveKanbanBoard(board) },
+                        onPickAvatar = { onPickKanbanBoardAvatar(board) },
+                        onPickWallpaper = { onPickKanbanBoardWallpaper(board) },
                         onDelete = {
                             onDeleteKanbanBoard(board)
                             page = SettingsPage.Root
@@ -509,20 +513,20 @@ internal fun SettingsScreen(
                         )
                     }
                     item { SettingsSectionLabel("Kanban boards") }
-                    item {
-                        SettingsRow(
-                            icon = Icons.Filled.Add,
-                            title = "New Kanban board",
-                            subtitle = "Create a board from current accounts",
-                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
-                        )
-                    }
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
                             icon = Icons.Filled.ViewKanban,
                             title = board.name,
                             subtitle = "${board.columns.size} columns${if (board.id == activeKanbanBoardId) " · Active" else ""}",
                             onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
+                        )
+                    }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Add,
+                            title = "New Kanban board",
+                            subtitle = "Create a board from current accounts",
+                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
                         )
                     }
                     item { SettingsSectionLabel("Mail accounts") }
@@ -537,6 +541,14 @@ internal fun SettingsScreen(
                             )
                         }
                     }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Add,
+                            title = "Add mail account",
+                            subtitle = "Connect an IMAP or OAuth account",
+                            onClick = onAddMailAccount,
+                        )
+                    }
                     item { SettingsSectionLabel("Feed accounts") }
                     if (feedAccounts.isEmpty()) {
                         item { SettingsEmptyLabel("No feed accounts") }
@@ -548,6 +560,14 @@ internal fun SettingsScreen(
                                 onClick = { page = SettingsPage.AccountDetail(account.id) },
                             )
                         }
+                    }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Add,
+                            title = "Add RSS account",
+                            subtitle = "Subscribe to feeds",
+                            onClick = onAddFeedAccount,
+                        )
                     }
                     item { Spacer(Modifier.height(24.dp)) }
                 }
@@ -603,12 +623,14 @@ internal fun SettingsGeneralPage(
     LazyColumn(modifier) {
         item { SettingsSectionLabel("Appearance") }
         item {
+            val displayedAppearanceMode =
+                if (appearanceMode == AppAppearanceMode.System) AppAppearanceMode.Indigo else appearanceMode
             SettingsRow(
                 icon = Icons.Filled.Visibility,
                 title = "Theme",
                 subtitle = "Color presets shared with desktop",
                 onClick = onOpenTheme,
-                trailing = { Text(appearanceMode.label, color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(displayedAppearanceMode.label, color = MaterialTheme.colorScheme.primary) },
             )
         }
         item {
@@ -1135,12 +1157,13 @@ internal fun ChatWallpaperBackground(
     fallback: Color = MaterialTheme.colorScheme.background,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val context = LocalContext.current
 
     var customBitmap by remember(customUrl) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(customUrl) {
         customBitmap = null
         if (customUrl.isNotBlank()) {
-            customBitmap = withContext(Dispatchers.IO) { loadFirstBitmap(listOf(customUrl)) }
+            customBitmap = withContext(Dispatchers.IO) { loadBitmapValue(context, customUrl) }
         }
     }
 
@@ -1386,11 +1409,12 @@ internal fun AccountAvatarEditor(
     onPick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(url) {
         bitmap = null
         if (url.isNotBlank()) {
-            bitmap = withContext(Dispatchers.IO) { loadFirstBitmap(listOf(url)) }
+            bitmap = withContext(Dispatchers.IO) { loadBitmapValue(context, url) }
         }
     }
     Box(
@@ -1433,6 +1457,20 @@ internal fun AccountAvatarEditor(
     }
 }
 
+private fun loadBitmapValue(
+    context: Context,
+    value: String,
+): Bitmap? {
+    if (value.startsWith("content://")) {
+        return runCatching {
+            context.contentResolver.openInputStream(Uri.parse(value)).use { stream ->
+                BitmapFactory.decodeStream(stream)
+            }
+        }.getOrNull()
+    }
+    return loadFirstBitmap(listOf(value))
+}
+
 @Composable
 internal fun SettingsKanbanBoardDetailPage(
     board: KanbanBoardSpec,
@@ -1443,18 +1481,26 @@ internal fun SettingsKanbanBoardDetailPage(
         wallpaperPresetId: String,
         wallpaperUrl: String,
     ) -> Unit,
-    onSetActive: () -> Unit,
+    onPickAvatar: () -> Unit,
+    onPickWallpaper: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var name by remember(board.id) { mutableStateOf(board.name) }
-    var avatarUrl by remember(board.id) { mutableStateOf(board.avatarUrl) }
-    var wallpaperPresetId by remember(board.id) { mutableStateOf(board.wallpaperPresetId) }
-    var wallpaperUrl by remember(board.id) { mutableStateOf(board.wallpaperUrl) }
+    var name by remember(board.id, board.name) { mutableStateOf(board.name) }
+    var avatarUrl by remember(board.id, board.avatarUrl) { mutableStateOf(board.avatarUrl) }
+    var wallpaperPresetId by remember(board.id, board.wallpaperPresetId) { mutableStateOf(board.wallpaperPresetId) }
+    var wallpaperUrl by remember(board.id, board.wallpaperUrl) { mutableStateOf(board.wallpaperUrl) }
     var confirmDelete by remember(board.id) { mutableStateOf(false) }
 
     // Autosave on every change, like the desktop board panel.
-    val persist = { onSave(name, avatarUrl, wallpaperPresetId, wallpaperUrl) }
+    val persist: (
+        nextName: String,
+        nextAvatarUrl: String,
+        nextWallpaperPresetId: String,
+        nextWallpaperUrl: String,
+    ) -> Unit = { nextName, nextAvatarUrl, nextWallpaperPresetId, nextWallpaperUrl ->
+        onSave(nextName, nextAvatarUrl, nextWallpaperPresetId, nextWallpaperUrl)
+    }
 
     if (confirmDelete) {
         AlertDialog(
@@ -1485,7 +1531,7 @@ internal fun SettingsKanbanBoardDetailPage(
                 AccountAvatarEditor(
                     name = name.ifBlank { board.name },
                     url = avatarUrl,
-                    onPick = null,
+                    onPick = onPickAvatar,
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -1511,55 +1557,34 @@ internal fun SettingsKanbanBoardDetailPage(
                 label = "Board name",
                 onValueChange = {
                     name = it
-                    persist()
-                },
-            )
-        }
-        item {
-            SettingsTextRow(
-                value = avatarUrl,
-                label = "Board image URL",
-                onValueChange = {
-                    avatarUrl = it
-                    persist()
+                    persist(it, avatarUrl, wallpaperPresetId, wallpaperUrl)
                 },
             )
         }
 
         item { SettingsSectionLabel("Chat background") }
         item {
+            ChatWallpaperPreview(
+                presetId = wallpaperPresetId,
+                customUrl = wallpaperUrl,
+            )
+        }
+        item {
             WallpaperPresetChips(
                 selected = wallpaperPresetId,
                 onSelect = {
                     wallpaperPresetId = it
-                    persist()
+                    wallpaperUrl = ""
+                    persist(name, avatarUrl, it, "")
                 },
             )
         }
-        item {
-            SettingsTextRow(
-                value = wallpaperUrl,
-                label = "Wallpaper image URL",
-                onValueChange = {
-                    wallpaperUrl = it
-                    persist()
-                },
-            )
-        }
-
-        item { SettingsSectionLabel("Board") }
         item {
             SettingsRow(
-                icon = Icons.Filled.Star,
-                title = if (active) "Active board" else "Set as active board",
-                subtitle = if (active) "Shown when Kanban opens" else "Show this board when Kanban opens",
-                onClick = { if (!active) onSetActive() },
-                trailing =
-                    if (active) {
-                        { Text("Active", color = MaterialTheme.colorScheme.primary) }
-                    } else {
-                        null
-                    },
+                icon = Icons.Filled.Image,
+                title = "Choose wallpaper image",
+                subtitle = "Use a custom board background",
+                onClick = onPickWallpaper,
             )
         }
 
@@ -1690,12 +1715,13 @@ internal fun ThemePickerDialog(
     onSelect: (AppAppearanceMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val selectableModes = AppAppearanceMode.entries.filterNot { it == AppAppearanceMode.System }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Theme") },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 480.dp)) {
-                items(AppAppearanceMode.entries) { mode ->
+                items(selectableModes) { mode ->
                     Row(
                         Modifier
                             .fillMaxWidth()
