@@ -332,10 +332,10 @@ internal fun MailDrawer(
                             if (needsGoogleReauth) onReconnectGoogle(account) else onSelectAccount(account)
                         },
                         leading = {
-                            Icon(
-                                if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
+                            AccountBadgeAvatar(
+                                label = label,
+                                avatarUrl = account.avatarUrl,
+                                size = 24.dp,
                             )
                         },
                         title = label,
@@ -389,7 +389,17 @@ internal fun MailDrawer(
                             selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
                             chat = chat,
                             onClick = { onSelectKanbanBoard(board) },
-                            leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            leading = {
+                                if (board.avatarUrl.isNotBlank()) {
+                                    AccountBadgeAvatar(
+                                        label = board.name,
+                                        avatarUrl = board.avatarUrl,
+                                        size = 24.dp,
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp))
+                                }
+                            },
                             title = board.name,
                             subtitle = stringResource(R.string.settings_kanban_board_columns, board.columns.size),
                             trailing = null,
@@ -524,11 +534,21 @@ internal fun SidebarRow(
         if (trailing != null) {
             Box(
                 Modifier
+                    .height(28.dp)
+                    .widthIn(min = 28.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(trailing, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    trailing,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                )
             }
         }
     }

@@ -382,6 +382,7 @@ internal fun StarredItemRow(
 @Composable
 internal fun MailList(
     threads: List<ThreadSummary>,
+    accounts: List<AccountSummary>,
     canLoadMore: Boolean,
     loadingMore: Boolean,
     onOpen: (ThreadSummary) -> Unit,
@@ -395,8 +396,10 @@ internal fun MailList(
     onLongPress: (ThreadSummary) -> Unit,
     onLoadMore: () -> Unit,
     showSenderImages: Boolean,
+    showAccountBadge: Boolean,
 ) {
     val listState = rememberLazyListState()
+    val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     val nearBottom by remember {
         derivedStateOf {
             val lastVisible =
@@ -414,6 +417,7 @@ internal fun MailList(
             if (selectionActive) {
                 MailRow(
                     thread = thread,
+                    account = accountsById[thread.accountId].takeIf { showAccountBadge },
                     showSenderImages = showSenderImages,
                     selected = thread.id in selectedThreadIds,
                     selectionActive = true,
@@ -491,6 +495,7 @@ internal fun MailList(
                 ) {
                     MailRow(
                         thread = thread,
+                        account = accountsById[thread.accountId].takeIf { showAccountBadge },
                         showSenderImages = showSenderImages,
                         selected = false,
                         selectionActive = false,
@@ -599,6 +604,7 @@ internal fun MailHeaderSearchField(
 @Composable
 internal fun MailRow(
     thread: ThreadSummary,
+    account: AccountSummary?,
     showSenderImages: Boolean,
     selected: Boolean,
     selectionActive: Boolean,
@@ -635,7 +641,11 @@ internal fun MailRow(
                 )
             }
         } else {
-            SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 42.dp)
+            ThreadAvatarWithAccountBadge(
+                senderLabel = senderLabel,
+                showSenderImages = showSenderImages,
+                account = account,
+            )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -716,6 +726,57 @@ internal fun MailRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun ThreadAvatarWithAccountBadge(
+    senderLabel: String,
+    showSenderImages: Boolean,
+    account: AccountSummary?,
+) {
+    Box(Modifier.size(42.dp)) {
+        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 42.dp)
+        if (account != null) {
+            val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+            ) {
+                AccountBadgeAvatar(label = label, avatarUrl = account.avatarUrl, size = 18.dp)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AccountBadgeAvatar(
+    label: String,
+    avatarUrl: String,
+    size: Dp,
+) {
+    val context = LocalContext.current
+    var bitmap by remember(avatarUrl) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(context, avatarUrl) {
+        bitmap = null
+        if (avatarUrl.isNotBlank()) {
+            bitmap = withContext(Dispatchers.IO) { loadAccountAvatarBitmap(context, avatarUrl) }
+        }
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = stringResource(R.string.avatar_for_label, label),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(CircleShape),
+        )
+    } else {
+        Avatar(label, size)
     }
 }
 
@@ -802,4 +863,31 @@ internal fun loadFirstBitmap(urls: List<String>): Bitmap? {
         if (bitmap != null) return bitmap
     }
     return null
+}
+
+internal fun loadAccountAvatarBitmap(
+    context: Context,
+    avatarUrl: String,
+): Bitmap? {
+    val bitmap =
+        if (avatarUrl.startsWith("/media/")) {
+            val relative = avatarUrl.removePrefix("/media/").trimStart('/')
+            if (relative.isBlank() || relative.split('/').any { it == ".." || it.isBlank() }) {
+                null
+            } else {
+                runCatching {
+                    val root = File(context.filesDir, "media").canonicalFile
+                    val file = File(root, relative).canonicalFile
+                    if (!file.startsWith(root)) return null
+                    BitmapFactory.decodeFile(file.absolutePath)
+                }.getOrNull()
+            }
+        } else {
+            runCatching {
+                URL(avatarUrl).openStream().use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+    return bitmap
 }

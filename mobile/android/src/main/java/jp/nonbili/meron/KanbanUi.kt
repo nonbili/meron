@@ -608,6 +608,8 @@ internal fun KanbanColumn(
     val columnSearch = if (searchScope.ifBlank { "all" } == "all" || searchScope == columnKey) search else ""
     val visibleThreads = state.threads.filteredKanbanThreads(filter, columnSearch)
     val canLoadMore = columnSearch.isBlank() && (state.nextCursor.isNotBlank() || state.accountCursors.isNotEmpty())
+    val accountsById = remember(accounts) { accounts.associateBy { it.id } }
+    val showAccountBadge = column.accountId == UNIFIED_ACCOUNT_ID
     Card(
         modifier =
             Modifier
@@ -686,6 +688,7 @@ internal fun KanbanColumn(
                     items(visibleThreads, key = { it.id }) { thread ->
                         MailRow(
                             thread = thread,
+                            account = accountsById[thread.accountId].takeIf { showAccountBadge },
                             showSenderImages = showSenderImages,
                             selected = thread.id in selectedThreadIds,
                             selectionActive = selectionActive,

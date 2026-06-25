@@ -1798,6 +1798,7 @@ internal fun MeronMobileScreen(
                                     else -> {
                                         MailList(
                                             threads = coreThreads,
+                                            accounts = coreAccounts,
                                             canLoadMore =
                                                 if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
                                                     mailboxAccountCursors.isNotEmpty()
@@ -1836,6 +1837,7 @@ internal fun MeronMobileScreen(
                                             },
                                             onLoadMore = ::loadMoreCoreThreads,
                                             showSenderImages = showSenderImages,
+                                            showAccountBadge = selectedCoreAccountId == UNIFIED_ACCOUNT_ID,
                                         )
                                     }
                                 }

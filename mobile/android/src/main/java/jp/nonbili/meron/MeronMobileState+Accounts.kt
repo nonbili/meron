@@ -380,6 +380,7 @@ internal fun MeronMobileState.addPasswordAccount() {
             screen = Screen.Mail
             errorBanner = null
             status = "Added ${params.email}"
+            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
         }.onFailure {
             errorBanner = it.message ?: "Add account failed"
             status = "Add account failed: ${it.message}"
@@ -650,6 +651,7 @@ internal fun MeronMobileState.addOAuthAccount() {
             screen = Screen.Mail
             errorBanner = null
             status = "Added ${params.email}"
+            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
         }.onFailure {
             errorBanner = it.message ?: "Add OAuth failed"
             status = "Add OAuth failed: ${it.message}"
@@ -799,6 +801,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
             screen = Screen.Mail
             errorBanner = null
             status = if (params.email.isBlank()) "Connected account" else "Connected ${params.email}"
+            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
         }.onFailure {
             errorBanner = it.message ?: "OAuth exchange failed"
             status = "OAuth exchange failed: ${it.message}"
