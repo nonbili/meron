@@ -23,7 +23,10 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         };
     let username = opt_str(params, "username");
     let access_token = opt_str(params, "access_token");
-    let refresh_token = req_str(params, "refresh_token")?;
+    // `refresh_token` is optional: platform-managed accounts (e.g. Android
+    // Gmail via AccountManager) have no refresh token because the OS re-mints
+    // short-lived access tokens and pushes them in via `account.updateOAuthToken`.
+    let refresh_token = opt_str(params, "refresh_token");
     let imap_host = params
         .get("imap_host")
         .and_then(Value::as_str)
@@ -65,7 +68,11 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         } else {
             Some(access_token)
         },
-        refresh_token: Some(refresh_token),
+        refresh_token: if refresh_token.is_empty() {
+            None
+        } else {
+            Some(refresh_token)
+        },
         token_expires_at,
     };
     let id = account_id(&email);
@@ -96,6 +103,46 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
     })
 }
 
+/// Refresh the stored access token for a platform-managed OAuth account.
+///
+/// Used by Android Gmail (AccountManager), where the OS — not `meron-core` —
+/// holds the long-lived credential and mints short-lived access tokens. The
+/// platform calls this right before a sync to push the freshly minted token.
+pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_id(params)?;
+    let access_token = req_str(params, "access_token")?;
+    if access_token.trim().is_empty() {
+        return Err("access_token is required".to_string());
+    }
+    let token_expires_at = params
+        .get("token_expires_at")
+        .and_then(Value::as_i64)
+        .unwrap_or_else(|| now_epoch_seconds() + 3600);
+
+    with_mobile_db(data_dir, |conn| {
+        let mut creds = load_mobile_account_creds(&conn, &id)?;
+        if !creds.is_oauth() {
+            return Err(format!("account is not oauth: {id}"));
+        }
+        creds.access_token = Some(access_token.clone());
+        creds.token_expires_at = token_expires_at;
+        store::save_account_config(&conn, &id, &creds).map_err(|err| err.to_string())?;
+        store_mobile_secret(&conn, &id, &creds)?;
+        let mut account = store::list_accounts(&conn)
+            .map_err(|err| err.to_string())?
+            .into_iter()
+            .find(|account| account.get("id").and_then(Value::as_str) == Some(id.as_str()))
+            .ok_or_else(|| "account not found after update".to_string())?;
+        if let Some(obj) = account.as_object_mut() {
+            obj.insert(
+                "needs_reconnect".to_string(),
+                json!(account_needs_reconnect(&creds)),
+            );
+        }
+        Ok(json!({ "ok": true, "account": account }))
+    })
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct OAuthCodeTokenResponse {
     access_token: String,
@@ -108,8 +155,8 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     let provider = req_str(params, "provider")?.to_lowercase();
     let code = req_str(params, "code")?;
     let client_id = req_str(params, "client_id")?;
-    let redirect_uri = req_str(params, "redirect_uri")?;
-    let code_verifier = req_str(params, "code_verifier")?;
+    let redirect_uri = opt_str(params, "redirect_uri");
+    let code_verifier = opt_str(params, "code_verifier");
     let client_secret = opt_str(params, "client_secret");
     let token_url = params
         .get("token_url")
@@ -176,9 +223,13 @@ pub(crate) fn exchange_oauth_code_blocking(
         ("client_id", client_id),
         ("code", code),
         ("grant_type", "authorization_code"),
-        ("redirect_uri", redirect_uri),
-        ("code_verifier", code_verifier),
     ];
+    if !redirect_uri.is_empty() {
+        form.push(("redirect_uri", redirect_uri));
+    }
+    if !code_verifier.is_empty() {
+        form.push(("code_verifier", code_verifier));
+    }
     if !client_secret.is_empty() {
         form.push(("client_secret", client_secret));
     }

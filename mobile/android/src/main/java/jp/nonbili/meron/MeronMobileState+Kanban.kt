@@ -360,6 +360,7 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
             if (accountSummaryIsRss(account)) {
                 client.syncRss(SyncRssParams(accountId = account.id))
             } else {
+                ensureManagedGoogleToken(client, account.id)
                 client.sync(SyncMailParams(accountId = account.id, folderId = column.folderId, limit = 50, folders = true))
             }
         }

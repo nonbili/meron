@@ -573,6 +573,7 @@ internal fun AddAccountScreen(
     oauthExpiresAt: String,
     onOauthExpiresAtChange: (String) -> Unit,
     onLaunchOAuth: () -> Unit,
+    onConnectGoogleDeviceAccount: () -> Unit,
     onExchangeOAuth: () -> Unit,
     onAddOAuth: () -> Unit,
     rssFeedUrl: String,
@@ -583,6 +584,7 @@ internal fun AddAccountScreen(
     diagnostics: String,
 ) {
     var section by remember(initialSection) { mutableStateOf(initialSection) }
+    var showOAuthAdvanced by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -634,30 +636,42 @@ internal fun AddAccountScreen(
 
                 1 -> {
                     item {
-                        SetupCard(title = "Gmail / Outlook") {
+                        SetupCard(title = if (oauthProvider == "gmail") "Google account" else "Outlook account") {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(oauthProvider == "gmail", { onOauthProviderChange("gmail") }, { Text("Gmail") })
                                 FilterChip(oauthProvider == "outlook", { onOauthProviderChange("outlook") }, { Text("Outlook") })
                             }
                             SetupField(oauthEmail, onOauthEmailChange, "Email", placeholder = "you@gmail.com")
-                            SetupField(oauthClientId, onOauthClientIdChange, "Client ID")
-                            SetupField(oauthClientSecret, onOauthClientSecretChange, "Client secret (optional)")
-                            SetupField(oauthRedirectUri, onOauthRedirectUriChange, "Redirect URI")
-                            Button(onClick = onLaunchOAuth, modifier = Modifier.fillMaxWidth()) { Text("Sign in with browser") }
+                            Button(
+                                onClick = if (oauthProvider == "gmail") onConnectGoogleDeviceAccount else onLaunchOAuth,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(if (oauthProvider == "gmail") "Sign in with Google" else "Sign in with Outlook")
+                            }
                             if (oauthAuthorizationCode.isNotBlank()) {
                                 Text(
-                                    "Authorization code received.",
+                                    "Finishing sign-in...",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
-                                Button(onClick = onExchangeOAuth, modifier = Modifier.fillMaxWidth()) { Text("Finish sign-in") }
                             }
-                            HorizontalDivider()
-                            Text("Or paste tokens manually", style = MaterialTheme.typography.labelLarge)
-                            SetupField(oauthAccessToken, onOauthAccessTokenChange, "Access token")
-                            SetupField(oauthRefreshToken, onOauthRefreshTokenChange, "Refresh token")
-                            SetupField(oauthExpiresAt, onOauthExpiresAtChange, "Token expires at")
-                            Button(onClick = onAddOAuth, modifier = Modifier.fillMaxWidth()) { Text("Add with tokens") }
+                            TextButton(onClick = { showOAuthAdvanced = !showOAuthAdvanced }) {
+                                Text(if (showOAuthAdvanced) "Hide advanced options" else "Advanced options")
+                            }
+                            if (showOAuthAdvanced) {
+                                SetupField(oauthClientId, onOauthClientIdChange, "Client ID")
+                                SetupField(oauthClientSecret, onOauthClientSecretChange, "Client secret (optional)")
+                                SetupField(oauthRedirectUri, onOauthRedirectUriChange, "Redirect URI")
+                                if (oauthAuthorizationCode.isNotBlank()) {
+                                    Button(onClick = onExchangeOAuth, modifier = Modifier.fillMaxWidth()) { Text("Finish sign-in") }
+                                }
+                                HorizontalDivider()
+                                Text("Paste tokens manually", style = MaterialTheme.typography.labelLarge)
+                                SetupField(oauthAccessToken, onOauthAccessTokenChange, "Access token")
+                                SetupField(oauthRefreshToken, onOauthRefreshTokenChange, "Refresh token")
+                                SetupField(oauthExpiresAt, onOauthExpiresAtChange, "Token expires at")
+                                Button(onClick = onAddOAuth, modifier = Modifier.fillMaxWidth()) { Text("Add with tokens") }
+                            }
                         }
                     }
                 }

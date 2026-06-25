@@ -478,6 +478,58 @@ fn mobile_protocol_persists_oauth_account_metadata() {
 }
 
 #[test]
+fn mobile_protocol_persists_platform_managed_oauth_account_without_refresh_token() {
+    let data_dir = unique_data_dir("oauth-managed");
+    let unique = unique_test_suffix();
+    let email = format!("me+{unique}@gmail.com");
+    let expires_at = now_epoch_seconds() + 3600;
+    // Android AccountManager Gmail: access token only, no refresh token.
+    let request = format!(
+        r#"{{"id":70,"method":"account.addOAuth","params":{{"email":"{email}","provider":"gmail","display_name":"Gmail","access_token":"access-1","token_expires_at":{expires_at}}}}}"#
+    );
+
+    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    assert_eq!(added["id"], 70, "{added}");
+    assert_eq!(added["result"]["account"]["id"], email.as_str(), "{added}");
+    assert_eq!(added["result"]["account"]["auth_type"], "gmail_oauth", "{added}");
+    // No refresh token, but a live access token => not flagged for reconnect.
+    assert_eq!(added["result"]["account"]["needs_reconnect"], false, "{added}");
+
+    // Platform pushes a freshly minted token before sync.
+    let new_expires = now_epoch_seconds() + 3600;
+    let update = format!(
+        r#"{{"id":71,"method":"account.updateOAuthToken","params":{{"account_id":"{email}","access_token":"access-2","token_expires_at":{new_expires}}}}}"#
+    );
+    let updated = invoke_mobile_protocol_json(&update, Some(data_dir.to_str().unwrap()));
+    assert_eq!(updated["id"], 71, "{updated}");
+    assert_eq!(updated["result"]["ok"], true, "{updated}");
+    assert_eq!(
+        updated["result"]["account"]["needs_reconnect"], false,
+        "{updated}"
+    );
+
+    let listed = invoke_mobile_protocol_json(
+        r#"{"id":72,"method":"account.list","params":{}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(
+        listed["result"]["accounts"][0]["needs_reconnect"], false,
+        "{listed}"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_update_oauth_token_rejects_unknown_account() {
+    let data_dir = unique_data_dir("oauth-managed-missing");
+    let update = r#"{"id":73,"method":"account.updateOAuthToken","params":{"account_id":"nobody@gmail.com","access_token":"x"}}"#;
+    let updated = invoke_mobile_protocol_json(update, Some(data_dir.to_str().unwrap()));
+    assert!(updated["error"]["message"].is_string(), "{updated}");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
     let data_dir = unique_data_dir("oauth-code");
     let token_url = one_shot_oauth_token_server();

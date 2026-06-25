@@ -6,6 +6,7 @@ object MobileCommand {
     const val AccountAutodiscover = "account.autodiscover"
     const val AccountAddOAuth = "account.addOAuth"
     const val AccountExchangeOAuthCode = "account.exchangeOAuthCode"
+    const val AccountUpdateOAuthToken = "account.updateOAuthToken"
     const val AccountAddRss = "account.addRss"
     const val AccountRemove = "account.remove"
     const val AccountSetName = "account.setName"
@@ -105,7 +106,9 @@ data class AddOAuthAccountParams(
     val username: String = "",
     val avatarUrl: String = "",
     val accessToken: String = "",
-    val refreshToken: String,
+    // Empty for platform-managed accounts (e.g. Android Gmail via AccountManager),
+    // where the OS holds the long-lived credential and re-mints access tokens.
+    val refreshToken: String = "",
     val tokenExpiresAt: Long = 0,
     val imapHost: String = "",
     val imapPort: Int? = null,
@@ -130,6 +133,19 @@ data class AddOAuthAccountParams(
         )
 }
 
+data class UpdateOAuthTokenParams(
+    val accountId: String,
+    val accessToken: String,
+    val tokenExpiresAt: Long = 0,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "account_id" to accountId.jsonString(),
+            "access_token" to accessToken.jsonString(),
+            "token_expires_at" to tokenExpiresAt.toString(),
+        )
+}
+
 data class ExchangeOAuthCodeParams(
     val email: String,
     val provider: String,
@@ -150,8 +166,8 @@ data class ExchangeOAuthCodeParams(
             "code" to code.jsonString(),
             "client_id" to clientId.jsonString(),
             "client_secret" to clientSecret.takeIf { it.isNotBlank() }?.jsonString(),
-            "redirect_uri" to redirectUri.jsonString(),
-            "code_verifier" to codeVerifier.jsonString(),
+            "redirect_uri" to redirectUri.takeIf { it.isNotBlank() }?.jsonString(),
+            "code_verifier" to codeVerifier.takeIf { it.isNotBlank() }?.jsonString(),
         )
 }
 
@@ -722,6 +738,8 @@ class MobileMailCommandClient(
     suspend fun addOAuthAccount(params: AddOAuthAccountParams): String = core.invoke(MobileCommand.AccountAddOAuth, params.toJson())
 
     suspend fun exchangeOAuthCode(params: ExchangeOAuthCodeParams): String = core.invoke(MobileCommand.AccountExchangeOAuthCode, params.toJson())
+
+    suspend fun updateOAuthToken(params: UpdateOAuthTokenParams): String = core.invoke(MobileCommand.AccountUpdateOAuthToken, params.toJson())
 
     suspend fun addRssAccount(params: AddRssAccountParams): String = core.invoke(MobileCommand.AccountAddRss, params.toJson())
 

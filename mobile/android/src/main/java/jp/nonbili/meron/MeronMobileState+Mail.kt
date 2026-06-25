@@ -1015,6 +1015,7 @@ internal fun MeronMobileState.ensureThreadActionFolders(
                 accounts.associate { account ->
                     var folders = loadAccountFolders(client, account)
                     if (folders.hasOnlyBootstrapInbox()) {
+                        ensureManagedGoogleToken(client, account.id)
                         client.sync(
                             SyncMailParams(
                                 accountId = account.id,

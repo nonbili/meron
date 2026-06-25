@@ -16,10 +16,18 @@ pub(crate) fn is_rss_account(
 
 pub(crate) fn account_needs_reconnect(creds: &Creds) -> bool {
     if creds.is_oauth() {
-        creds
+        // Healthy when we hold a refresh token (iOS/desktop refresh in-core) OR
+        // an access token (Android AccountManager keeps it fresh out-of-core via
+        // `account.updateOAuthToken`). Only flag reconnect when both are absent.
+        let has_refresh_token = creds
             .refresh_token
             .as_deref()
-            .is_none_or(|token| token.trim().is_empty())
+            .is_some_and(|token| !token.trim().is_empty());
+        let has_access_token = creds
+            .access_token
+            .as_deref()
+            .is_some_and(|token| !token.trim().is_empty());
+        !has_refresh_token && !has_access_token
     } else {
         creds.password.trim().is_empty()
     }

@@ -275,6 +275,7 @@ internal class MeronMobileState(
     // Wired by the composable after its activity-result launchers are created.
     var launchOpmlExport: (String) -> Unit = {}
     var launchAttachmentSave: (String) -> Unit = {}
+    var launchGoogleAccountPicker: () -> Unit = {}
 
     var host by mutableStateOf(if (labDefaults) "10.0.2.2" else "")
     var email by mutableStateOf(if (labDefaults) "user1@mail.localhost" else "")
@@ -285,6 +286,9 @@ internal class MeronMobileState(
     var imapPort by mutableStateOf("993")
     var smtpHost by mutableStateOf(if (labDefaults) "10.0.2.2" else "")
     var smtpPort by mutableStateOf("465")
+    // Set to a managed account id when its on-device Google token can no longer
+    // be silently refreshed, signalling the user must reconnect it.
+    var googleReauthAccountId by mutableStateOf<String?>(null)
     var oauthProvider by mutableStateOf("gmail")
     var oauthEmail by mutableStateOf(if (labDefaults) "me@gmail.com" else "")
     var oauthAccessToken by mutableStateOf("")

@@ -279,6 +279,8 @@ internal fun MailDrawer(
     onSelectKanban: () -> Unit,
     onAddAccount: () -> Unit,
     onOpenSettings: () -> Unit,
+    googleReauthAccountId: String? = null,
+    onReconnectGoogle: (AccountSummary) -> Unit = {},
 ) {
     val chat = LocalChatColors.current
     ModalDrawerSheet(
@@ -318,10 +320,13 @@ internal fun MailDrawer(
                         folders
                             .filter { it.accountId == account.id && it.name.equals(INBOX_FOLDER, ignoreCase = true) }
                             .sumOf { it.unread }
+                    val needsGoogleReauth = account.id == googleReauthAccountId
                     SidebarRow(
                         selected = account.id == selectedAccountId,
                         chat = chat,
-                        onClick = { onSelectAccount(account) },
+                        onClick = {
+                            if (needsGoogleReauth) onReconnectGoogle(account) else onSelectAccount(account)
+                        },
                         leading = {
                             Icon(
                                 if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox,
@@ -330,9 +335,14 @@ internal fun MailDrawer(
                             )
                         },
                         title = label,
-                        subtitle = account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox",
+                        subtitle =
+                            if (needsGoogleReauth) {
+                                "Tap to reconnect"
+                            } else {
+                                account.email.takeIf { it.isNotBlank() && it != label } ?: "Inbox"
+                            },
                         trailing =
-                            if (account.needsReconnect) {
+                            if (account.needsReconnect || needsGoogleReauth) {
                                 "!"
                             } else if (showUnreadBadges) {
                                 unread.takeIf { it > 0 }?.toString()

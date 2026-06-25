@@ -285,6 +285,16 @@ internal fun MeronMobileScreen(
                 notificationPermissionGranted = granted
                 status = if (granted) "Notifications enabled" else "Notifications are disabled"
             }
+        val googleAccountPicker =
+            rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                val name = result.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+                if (result.resultCode == android.app.Activity.RESULT_OK && !name.isNullOrBlank()) {
+                    onGoogleDeviceAccountPicked(name)
+                } else {
+                    status = "No Google account selected"
+                }
+            }
+        launchGoogleAccountPicker = { googleAccountPicker.launch(GoogleAccountManagerAuth.chooseAccountIntent()) }
         val opmlImportPicker =
             rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) {
@@ -527,7 +537,8 @@ internal fun MeronMobileScreen(
                         oauthAuthorizationCode = result.code
                         addSection = 1
                         screen = Screen.AddAccount
-                        status = "OAuth authorization code received; exchange it to add the account."
+                        status = "Finishing ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in..."
+                        exchangeOAuthCode()
                     }
                 }.onFailure {
                     status = "OAuth callback failed: ${it.message}"
@@ -798,6 +809,7 @@ internal fun MeronMobileScreen(
                     oauthExpiresAt = oauthExpiresAt,
                     onOauthExpiresAtChange = { oauthExpiresAt = it },
                     onLaunchOAuth = ::launchOAuthFlow,
+                    onConnectGoogleDeviceAccount = ::connectGoogleDeviceAccount,
                     onExchangeOAuth = ::exchangeOAuthCode,
                     onAddOAuth = ::addOAuthAccount,
                     rssFeedUrl = rssFeedUrl,
@@ -969,6 +981,11 @@ internal fun MeronMobileScreen(
                                 screen = Screen.Settings
                                 scope.launch { drawerState.close() }
                             },
+                            googleReauthAccountId = googleReauthAccountId,
+                            onReconnectGoogle = {
+                                connectGoogleDeviceAccount()
+                                scope.launch { drawerState.close() }
+                            },
                         )
                     },
                 ) {
@@ -1079,6 +1096,11 @@ internal fun MeronMobileScreen(
                             onOpenSettings = {
                                 previousTopScreen = screen
                                 screen = Screen.Settings
+                                scope.launch { drawerState.close() }
+                            },
+                            googleReauthAccountId = googleReauthAccountId,
+                            onReconnectGoogle = {
+                                connectGoogleDeviceAccount()
                                 scope.launch { drawerState.close() }
                             },
                         )
@@ -1235,6 +1257,11 @@ internal fun MeronMobileScreen(
                             onOpenSettings = {
                                 previousTopScreen = screen
                                 screen = Screen.Settings
+                                scope.launch { drawerState.close() }
+                            },
+                            googleReauthAccountId = googleReauthAccountId,
+                            onReconnectGoogle = {
+                                connectGoogleDeviceAccount()
                                 scope.launch { drawerState.close() }
                             },
                         )

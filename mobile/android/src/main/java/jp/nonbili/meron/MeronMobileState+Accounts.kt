@@ -1,6 +1,7 @@
 package jp.nonbili.meron
 
 import android.Manifest
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -171,6 +172,7 @@ import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.AddOAuthAccountParams
+import jp.nonbili.meron.shared.UpdateOAuthTokenParams
 import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
@@ -655,6 +657,108 @@ internal fun MeronMobileState.addOAuthAccount() {
     }
 }
 
+/**
+ * Gmail via the on-device Google account (AccountManager). Launches the system
+ * account picker; [onGoogleDeviceAccountPicked] finishes once a name comes back.
+ */
+internal fun MeronMobileState.connectGoogleDeviceAccount() {
+    if (!MeronCoreNative.isLoaded()) {
+        status = "Rust core not packaged."
+        return
+    }
+    launchGoogleAccountPicker()
+}
+
+internal fun MeronMobileState.onGoogleDeviceAccountPicked(accountName: String) {
+    if (!MeronCoreNative.isLoaded()) {
+        status = "Rust core not packaged."
+        return
+    }
+    val activity = context as? Activity
+    if (activity == null) {
+        status = "Cannot start Google sign-in."
+        return
+    }
+    status = "Connecting $accountName..."
+    scope.launch {
+        runCatching {
+            val token = GoogleAccountManagerAuth.interactiveToken(activity, accountName)
+            // The picker only yields the account email; read the holder's display
+            // name from the profile-scoped token, falling back to the address.
+            val profileName = GoogleAccountManagerAuth.fetchUserName(token).orEmpty()
+            val params =
+                AddOAuthAccountParams(
+                    email = accountName,
+                    provider = "gmail",
+                    displayName = profileName,
+                    senderName = profileName,
+                    username = accountName,
+                    accessToken = token,
+                    // No refresh token: AccountManager re-mints access tokens.
+                    refreshToken = "",
+                    tokenExpiresAt = System.currentTimeMillis() / 1000L + 3600L,
+                )
+            withContext(Dispatchers.IO) {
+                val client = MobileMailCommandClient(JniMeronCore())
+                client.addOAuthAccount(params)
+                client.listAccounts()
+            }
+        }.onSuccess { accounts ->
+            // meron-core keys accounts by lower-cased email.
+            val accountId = accountName.trim().lowercase()
+            GoogleAccountManagerAuth.register(context, accountId, accountName)
+            GoogleAccountManagerAuth.recordExpiry(
+                context,
+                accountId,
+                System.currentTimeMillis() / 1000L + GoogleAccountManagerAuth.TOKEN_LIFETIME_SECONDS,
+            )
+            if (googleReauthAccountId == accountId) googleReauthAccountId = null
+            applyAccounts(accounts, preferEmail = accountName)
+            screen = Screen.Mail
+            errorBanner = null
+            status = "Connected $accountName"
+            // Fetch the inbox immediately instead of waiting for a manual sync.
+            syncCoreThreads(accountOverride = accountId, folderOverride = INBOX_FOLDER, syncFirst = true)
+        }.onFailure {
+            errorBanner = it.message ?: "Google sign-in failed"
+            status = "Google sign-in failed: ${it.message}"
+        }
+    }
+}
+
+/**
+ * For AccountManager-managed Gmail accounts, mint a fresh access token and push
+ * it into meron-core before a sync. No-op for browser-flow / non-managed
+ * accounts. Failures are swallowed so a stale token still attempts the sync.
+ */
+internal suspend fun MeronMobileState.ensureManagedGoogleToken(
+    client: MobileMailCommandClient,
+    accountId: String,
+) {
+    when (val refresh = GoogleAccountManagerAuth.mintIfNeeded(context, accountId)) {
+        is GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> Unit
+        is GoogleAccountManagerAuth.TokenRefresh.Refreshed -> {
+            runCatching {
+                client.updateOAuthToken(
+                    UpdateOAuthTokenParams(
+                        accountId = accountId,
+                        accessToken = refresh.token,
+                        tokenExpiresAt = refresh.expiresAt,
+                    ),
+                )
+            }.onSuccess {
+                GoogleAccountManagerAuth.recordExpiry(context, accountId, refresh.expiresAt)
+                if (googleReauthAccountId == accountId) googleReauthAccountId = null
+            }
+        }
+        is GoogleAccountManagerAuth.TokenRefresh.Failed -> {
+            // OS could not silently mint a token (e.g. consent revoked).
+            googleReauthAccountId = accountId
+            errorBanner = "Google sign-in expired. Reconnect the account on this device."
+        }
+    }
+}
+
 internal fun MeronMobileState.exchangeOAuthCode() {
     if (!MeronCoreNative.isLoaded()) {
         status = "Rust core not packaged."
@@ -746,6 +850,7 @@ internal suspend fun MeronMobileState.loadAccountInbox(
         if (accountSummaryIsRss(account)) {
             client.syncRss(SyncRssParams(accountId = account.id))
         } else {
+            ensureManagedGoogleToken(client, account.id)
             client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 50, folders = true))
         }
     }
