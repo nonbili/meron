@@ -4,18 +4,27 @@
 //! from the desktop sidecar binary. Android/JNI and iOS can use these functions
 //! to assert protocol compatibility before calling the future command API.
 
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
+use std::path::Path;
 use std::ptr;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
 use jni::JNIEnv;
 use jni::JavaVM;
-use jni::objects::{JClass, JObject, JString, JValue};
+use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jstring};
+use serde_json::{Value, json};
 
-use crate::protocol::{PROTOCOL_VERSION, invoke_mobile_protocol_json, ping_response, ready_event};
+use crate::protocol::{
+    PROTOCOL_VERSION, Request, account_needs_reconnect, canon_folder, invoke_mobile_protocol_json,
+    is_rss_account, load_mobile_account_creds, mobile_db_key, ping_response, ready_event,
+    req_account_id, req_str, sync_mobile_mail,
+};
 
 type EventCallback = unsafe extern "C" fn(event_json: *const c_char, user_data: *mut c_void);
 
@@ -28,6 +37,7 @@ struct EventSink {
 static EVENT_SINK: Mutex<Option<EventSink>> = Mutex::new(None);
 static MOBILE_CONFIG: Mutex<Option<MobileConfig>> = Mutex::new(None);
 static ANDROID_EVENT_DISPATCHER: OnceLock<AndroidEventDispatcher> = OnceLock::new();
+static MOBILE_IDLE_WATCHES: Mutex<Option<HashMap<String, Arc<AtomicBool>>>> = Mutex::new(None);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MobileConfig {
@@ -38,6 +48,7 @@ struct MobileConfig {
 
 struct AndroidEventDispatcher {
     vm: JavaVM,
+    class: GlobalRef,
 }
 
 #[unsafe(no_mangle)]
@@ -124,12 +135,15 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJsonKe
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreRegisterEventCallback(
     env: JNIEnv,
-    _class: JClass,
+    class: JClass,
 ) {
     let Ok(vm) = env.get_java_vm() else {
         return;
     };
-    let _ = ANDROID_EVENT_DISPATCHER.set(AndroidEventDispatcher { vm });
+    let Ok(class) = env.new_global_ref(class) else {
+        return;
+    };
+    let _ = ANDROID_EVENT_DISPATCHER.set(AndroidEventDispatcher { vm, class });
     meron_core_register_event_callback(Some(android_event_callback), ptr::null_mut());
 }
 
@@ -278,6 +292,16 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         .unwrap()
         .as_ref()
         .map(|config| config.data_dir.clone());
+    if let Some(data_dir) = data_dir.as_deref()
+        && let Ok(req) = serde_json::from_str::<Request>(request)
+        && matches!(req.method.as_str(), "watch.start" | "watch.stop")
+    {
+        let result = dispatch_mobile_watch_request(data_dir, &req);
+        return match result {
+            Ok(result) => json!({ "id": req.id, "result": result }),
+            Err(message) => json!({ "id": req.id, "error": { "message": message } }),
+        };
+    }
     invoke_mobile_protocol_json(request, data_dir.as_deref())
 }
 
@@ -299,6 +323,289 @@ fn emit_event(name: &str, detail: serde_json::Value) -> bool {
     true
 }
 
+fn dispatch_mobile_watch_request(data_dir: &str, req: &Request) -> Result<Value, String> {
+    let account = req_account_id(&req.params)?;
+    let folder =
+        canon_folder(&req_str(&req.params, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+    match req.method.as_str() {
+        "watch.start" => start_mobile_idle_watch(data_dir, account, folder),
+        "watch.stop" => stop_mobile_idle_watch(&account, &folder),
+        _ => Err(format!("unknown watch method: {}", req.method)),
+    }
+}
+
+fn watch_key(account: &str, folder: &str) -> String {
+    format!("{account}\n{folder}")
+}
+
+fn mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {
+    let db_path = Path::new(data_dir.trim()).join("meron.db");
+    match mobile_db_key() {
+        Some(key) => crate::store::open_at_keyed(&db_path, &key),
+        None => crate::store::open_at(&db_path),
+    }
+    .map_err(|err| err.to_string())
+}
+
+fn start_mobile_idle_watch(
+    data_dir: &str,
+    account: String,
+    folder: String,
+) -> Result<Value, String> {
+    {
+        let conn = mobile_db(data_dir)?;
+        if is_rss_account(&conn, &account)? {
+            return Ok(json!({ "ok": true, "rss": true }));
+        }
+        if crate::store::account_paused(&conn, &account).map_err(|err| err.to_string())? {
+            return Ok(json!({ "ok": true, "paused": true }));
+        }
+        let creds = load_mobile_account_creds(&conn, &account)?;
+        if account_needs_reconnect(&creds) {
+            return Err(format!("account needs reconnect: {account}"));
+        }
+    }
+
+    let key = watch_key(&account, &folder);
+    let mut watches = MOBILE_IDLE_WATCHES.lock().unwrap();
+    let watches = watches.get_or_insert_with(HashMap::new);
+    if watches.contains_key(&key) {
+        return Ok(json!({ "ok": true, "already": true }));
+    }
+    let stop = Arc::new(AtomicBool::new(false));
+    watches.insert(key, stop.clone());
+    let data_dir = data_dir.to_string();
+    std::thread::Builder::new()
+        .name(format!("meron-idle-{account}-{folder}"))
+        .spawn({
+            let account = account.clone();
+            let folder = folder.clone();
+            move || mobile_idle_thread(data_dir, account, folder, stop)
+        })
+        .map_err(|err| format!("spawn idle watcher: {err}"))?;
+    Ok(json!({ "ok": true, "already": false }))
+}
+
+fn stop_mobile_idle_watch(account: &str, folder: &str) -> Result<Value, String> {
+    let key = watch_key(account, folder);
+    let removed = MOBILE_IDLE_WATCHES
+        .lock()
+        .unwrap()
+        .as_mut()
+        .and_then(|watches| watches.remove(&key));
+    if let Some(stop) = removed.as_ref() {
+        stop.store(true, Ordering::SeqCst);
+    }
+    Ok(json!({ "ok": true, "stopped": removed.is_some() }))
+}
+
+fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: Arc<AtomicBool>) {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            emit_event(
+                "error",
+                json!({ "message": format!("idle runtime: {err}") }),
+            );
+            return;
+        }
+    };
+    runtime.block_on(async {
+        while !stop.load(Ordering::SeqCst) {
+            match mobile_idle_once(&data_dir, &account, &folder, &stop).await {
+                Ok(()) => {}
+                Err(err) => {
+                    emit_event(
+                        "error",
+                        json!({ "message": format!("idle {account}/{folder}: {err:#}") }),
+                    );
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                }
+            }
+        }
+        let _ = MOBILE_IDLE_WATCHES
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|watches| watches.remove(&watch_key(&account, &folder)));
+    });
+}
+
+async fn mobile_idle_once(
+    data_dir: &str,
+    account: &str,
+    folder: &str,
+    stop: &AtomicBool,
+) -> anyhow::Result<()> {
+    let creds = {
+        let conn = mobile_db(data_dir).map_err(|err| anyhow::anyhow!(err))?;
+        if crate::store::account_paused(&conn, account).unwrap_or(false) {
+            return Ok(());
+        }
+        let creds =
+            load_mobile_account_creds(&conn, account).map_err(|err| anyhow::anyhow!(err))?;
+        if account_needs_reconnect(&creds) {
+            anyhow::bail!("account needs reconnect: {account}");
+        }
+        creds
+    };
+    let mut session = crate::imap::connect(&creds).await?;
+    session.select(folder).await?;
+    mobile_sync_and_notify(data_dir, account, folder).await?;
+
+    while !stop.load(Ordering::SeqCst) {
+        let mut handle = session.idle();
+        handle.init().await?;
+        let response = {
+            let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
+            idle_fut.await
+        };
+        session = handle.done().await?;
+        if let async_imap::extensions::idle::IdleResponse::NewData(_) = response? {
+            mobile_sync_and_notify(data_dir, account, folder).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> anyhow::Result<()> {
+    let before = mobile_inbox_uid_next(data_dir, account).unwrap_or(0);
+    let data_dir_owned = data_dir.to_string();
+    let account_owned = account.to_string();
+    let folder_owned = folder.to_string();
+    let sync = tokio::task::spawn_blocking(move || {
+        sync_mobile_mail(
+            &data_dir_owned,
+            &json!({
+                "account_id": account_owned,
+                "folder_id": folder_owned,
+                "limit": 50,
+                "folders": false,
+            }),
+        )
+    })
+    .await?
+    .map_err(|err| anyhow::anyhow!(err))?;
+    let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
+    let after = mobile_inbox_uid_next(data_dir, account).unwrap_or(0);
+
+    if folder.eq_ignore_ascii_case("INBOX")
+        && let Some((count, latest)) = mobile_new_unread_summary(data_dir, account, before, after)
+    {
+        emit_event(
+            "mail.newMessages",
+            json!({
+                "account": account,
+                "accountName": mobile_account_label(data_dir, account),
+                "folder": "inbox",
+                "count": count,
+                "muted": mobile_account_muted(data_dir, account),
+                "from": display_from(&latest),
+                "subject": latest.subject,
+                "threadKey": latest.thread_key,
+            }),
+        );
+    } else {
+        emit_event(
+            "mail.synced",
+            json!({ "account": account, "folder": folder, "synced": synced }),
+        );
+    }
+    Ok(())
+}
+
+fn mobile_inbox_uid_next(data_dir: &str, account: &str) -> Option<u32> {
+    let conn = mobile_db(data_dir).ok()?;
+    crate::store::get_folder_state(&conn, account, "INBOX")
+        .ok()
+        .flatten()
+        .map(|(_, uid_next)| uid_next)
+}
+
+fn mobile_new_unread_summary(
+    data_dir: &str,
+    account: &str,
+    uid_next_before: u32,
+    uid_next_after: u32,
+) -> Option<(u32, crate::imap::MessageHeader)> {
+    if uid_next_before == 0 || uid_next_after <= uid_next_before {
+        return None;
+    }
+    let conn = mobile_db(data_dir).ok()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key
+             FROM messages
+             WHERE account = ?1 AND folder = 'INBOX'
+               AND uid >= ?2 AND uid < ?3 AND seen = 0
+             ORDER BY uid DESC",
+        )
+        .ok()?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![account, uid_next_before as i64, uid_next_after as i64],
+            |row| {
+                let uid = row.get(0)?;
+                Ok(crate::imap::MessageHeader {
+                    uid,
+                    subject: row.get(1)?,
+                    from_name: row.get(2)?,
+                    from_addr: row.get(3)?,
+                    date: row.get(4)?,
+                    seen: row.get::<_, i64>(5)? != 0,
+                    starred: row.get::<_, i64>(6)? != 0,
+                    thread_key: row
+                        .get::<_, Option<String>>(7)?
+                        .filter(|key| !key.is_empty())
+                        .unwrap_or_else(|| format!("uid:{uid}")),
+                    ..Default::default()
+                })
+            },
+        )
+        .ok()?;
+    let headers = rows.collect::<rusqlite::Result<Vec<_>>>().ok()?;
+    Some((headers.len() as u32, headers.first()?.clone()))
+}
+
+fn mobile_account_label(data_dir: &str, account: &str) -> String {
+    let Ok(conn) = mobile_db(data_dir) else {
+        return account.to_string();
+    };
+    conn.query_row(
+        "SELECT display_name, email FROM accounts WHERE id = ?1",
+        rusqlite::params![account],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )
+    .map(|(display_name, email)| {
+        if !email.trim().is_empty() {
+            email
+        } else if !display_name.trim().is_empty() {
+            display_name
+        } else {
+            account.to_string()
+        }
+    })
+    .unwrap_or_else(|_| account.to_string())
+}
+
+fn mobile_account_muted(data_dir: &str, account: &str) -> bool {
+    mobile_db(data_dir)
+        .ok()
+        .and_then(|conn| crate::store::account_muted(&conn, account).ok())
+        .unwrap_or(false)
+}
+
+fn display_from(header: &crate::imap::MessageHeader) -> String {
+    if !header.from_name.trim().is_empty() {
+        header.from_name.trim().to_string()
+    } else {
+        header.from_addr.trim().to_string()
+    }
+}
+
 unsafe extern "C" fn android_event_callback(event_json: *const c_char, _user_data: *mut c_void) {
     if event_json.is_null() {
         return;
@@ -314,12 +621,16 @@ unsafe extern "C" fn android_event_callback(event_json: *const c_char, _user_dat
         return;
     };
     let event = JObject::from(event);
+    let class = unsafe { JClass::from_raw(dispatcher.class.as_raw() as jni::sys::jclass) };
     let _ = env.call_static_method(
-        "jp/nonbili/meron/MeronCoreNative",
+        class,
         "dispatchCoreEventFromNative",
         "(Ljava/lang/String;)V",
         &[JValue::Object(&event)],
     );
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
 }
 
 fn java_string(env: &JNIEnv, value: String) -> jstring {

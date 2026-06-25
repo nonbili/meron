@@ -450,6 +450,8 @@
     <string name="settings_language_hint">Choose a language or follow system language.</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_language_system">System</string>
+    <string name="settings_live_mail_push">Live mail push</string>
+    <string name="settings_live_mail_push_hint">Keep IMAP IDLE connected with a foreground service</string>
     <string name="settings_navigation_drawer_hint">Show in the navigation drawer</string>
     <string name="settings_notifications_enable_hint">Allow new mail alerts</string>
     <string name="settings_pages_appearance">Appearance</string>

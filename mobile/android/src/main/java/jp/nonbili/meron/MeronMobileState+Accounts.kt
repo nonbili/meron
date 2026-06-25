@@ -295,6 +295,7 @@ internal fun MeronMobileState.listAccounts() {
             withContext(Dispatchers.IO) { MobileMailCommandClient(JniMeronCore()).listAccounts() }
         }.onSuccess {
             applyAccounts(it)
+            AndroidMailPushService.sync(context)
             status = "Loaded accounts"
         }.onFailure {
             status = "Account list failed: ${it.message}"

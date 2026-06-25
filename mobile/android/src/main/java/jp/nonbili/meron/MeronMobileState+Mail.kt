@@ -566,6 +566,86 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
     }
 }
 
+internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
+    if (!MeronCoreNative.isLoaded()) {
+        status = "Rust core not packaged."
+        return
+    }
+    mailSearch = ""
+    mailFilter = FilterMode.All
+    selectedCoreAccountId = target.accountId
+    selectedCoreFolder = target.folder
+    syncing = true
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val client = MobileMailCommandClient(JniMeronCore())
+                val accounts =
+                    coreAccounts.takeIf { accounts -> accounts.any { it.id == target.accountId } }
+                        ?: parseAccountListResponse(client.listAccounts())
+                val account = accounts.firstOrNull { it.id == target.accountId }
+                    ?: error("Account not found: ${target.accountId}")
+                val expectedThreadId = notificationThreadId(target)
+                var result =
+                    loadAccountInbox(
+                        client = client,
+                        account = account,
+                        requestedFolder = target.folder,
+                        query = "",
+                        filter = FilterMode.All,
+                        syncFirst = false,
+                    )
+                var thread = result.threads.firstOrNull { it.id == expectedThreadId }
+                if (thread == null) {
+                    result =
+                        loadAccountInbox(
+                            client = client,
+                            account = account,
+                            requestedFolder = target.folder,
+                            query = "",
+                            filter = FilterMode.All,
+                            syncFirst = true,
+                        )
+                    thread = result.threads.firstOrNull { it.id == expectedThreadId }
+                }
+                Triple(accounts, result, thread ?: error("Thread not found"))
+            }
+        }.onSuccess { (accounts, result, thread) ->
+            if (coreAccounts.isEmpty()) {
+                coreAccounts = accounts
+            }
+            coreFolders = result.folders
+            if (result.folders.isNotEmpty()) {
+                foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
+            }
+            selectedCoreFolder = result.folder
+            coreThreads = result.threads
+            mailboxCursor = result.nextCursor
+            mailboxAccountCursors = result.accountCursors
+            syncing = false
+            initialThreadsLoaded = true
+            selectedMailThreadIds = emptySet()
+            readCoreThread(thread)
+        }.onFailure {
+            syncing = false
+            status = "Could not open notification: ${it.message}"
+        }
+    }
+}
+
+private fun notificationThreadId(target: NotificationThreadTarget): String {
+    val folder = if (target.folder.equals(INBOX_FOLDER, ignoreCase = true)) "INBOX" else target.folder
+    target.threadKey.removePrefix("uid:").takeIf { target.threadKey.startsWith("uid:") }?.let { uid ->
+        return "${target.accountId}#$folder#$uid"
+    }
+    val encoded =
+        Base64.encodeToString(
+            target.threadKey.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+    return "${target.accountId}#$folder#t.$encoded"
+}
+
 internal fun MeronMobileState.loadMoreThreadMessages() {
     val thread = selectedCoreThread ?: return
     if (!MeronCoreNative.isLoaded() || messageCursor.isBlank() || loadingMoreMessages) return

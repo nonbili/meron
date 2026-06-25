@@ -356,6 +356,7 @@ internal class MeronMobileState(
     var showUnifiedInboxNav by mutableStateOf(loadAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, true))
     var showStarredNav by mutableStateOf(loadAppBoolean(context, SHOW_STARRED_NAV_PREF, true))
     var showSenderImages by mutableStateOf(loadAppBoolean(context, SHOW_SENDER_IMAGES_PREF, false))
+    var liveMailPushEnabled by mutableStateOf(loadAppBoolean(context, LIVE_MAIL_PUSH_PREF, false))
     var sendShortcutMode by mutableStateOf(loadSendShortcutMode(context))
     var kanbanColumnWidth by mutableStateOf(
         loadAppInt(context, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)

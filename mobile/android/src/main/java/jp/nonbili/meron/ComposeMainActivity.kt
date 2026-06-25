@@ -267,6 +267,7 @@ import kotlin.math.abs
 class ComposeMainActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
+    private var incomingNotificationThreadTarget by mutableStateOf<NotificationThreadTarget?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         syncAppLanguageFromSystemSetting(newBase)
@@ -279,6 +280,7 @@ class ComposeMainActivity : ComponentActivity() {
         enableEdgeToEdge()
         incomingMailtoDraft = intent.toMailtoDraft()
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
+        incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
         AndroidNotificationService.ensureChannels(this)
         AndroidBackgroundSyncScheduler.schedule(this)
         val coreInitJson =
@@ -296,6 +298,7 @@ class ComposeMainActivity : ComponentActivity() {
                         coreInitJson = coreInitJson,
                         incomingMailtoDraft = incomingMailtoDraft,
                         incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                        incomingNotificationThreadTarget = incomingNotificationThreadTarget,
                         appearanceMode = appearanceMode,
                         onAppearanceModeChange = { mode ->
                             appearanceMode = mode
@@ -318,9 +321,18 @@ class ComposeMainActivity : ComponentActivity() {
         setIntent(intent)
         incomingMailtoDraft = intent.toMailtoDraft()
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
+        incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
     }
 
     fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
 
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
+}
+
+private fun Intent.toNotificationThreadTarget(): NotificationThreadTarget? {
+    val account = getStringExtra(AndroidNotificationService.EXTRA_ACCOUNT_ID).orEmpty()
+    val folder = getStringExtra(AndroidNotificationService.EXTRA_FOLDER).orEmpty()
+    val threadKey = getStringExtra(AndroidNotificationService.EXTRA_THREAD_KEY).orEmpty()
+    if (account.isBlank() || folder.isBlank() || threadKey.isBlank()) return null
+    return NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
 }

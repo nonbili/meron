@@ -117,6 +117,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -271,6 +272,7 @@ internal fun MeronMobileScreen(
     coreInitJson: String,
     incomingMailtoDraft: ComposeDraft?,
     incomingOAuthCallbackUrl: String?,
+    incomingNotificationThreadTarget: NotificationThreadTarget?,
     appearanceMode: AppAppearanceMode,
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
     appLanguageTag: String,
@@ -282,11 +284,58 @@ internal fun MeronMobileScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val state = remember { MeronMobileState(context, scope) }
     with(state) {
+        DisposableEffect(Unit) {
+            val core = JniMeronCore()
+            val handle =
+                if (core.isLoaded()) {
+                    core.events().subscribe { event ->
+                        when (event.name) {
+                            "mail.newMessages" -> {
+                                val detail = JSONObject(event.detailJson)
+                                if (!liveMailPushEnabled && !detail.optBoolean("muted")) {
+                                    AndroidNotificationService.notifyNewMail(
+                                        context = context,
+                                        accountName = detail.optString("accountName"),
+                                        from = detail.optString("from"),
+                                        subject = detail.optString("subject"),
+                                        count = detail.optInt("count", 1),
+                                        accountId = detail.optString("account"),
+                                        folder = detail.optString("folder"),
+                                        threadKey = detail.optString("threadKey"),
+                                    )
+                                }
+                                scope.launch {
+                                    syncCoreThreads(
+                                        accountOverride = selectedCoreAccountId,
+                                        folderOverride = selectedCoreFolder,
+                                        syncFirst = false,
+                                    )
+                                }
+                            }
+                            "mail.synced" -> {
+                                scope.launch {
+                                    syncCoreThreads(
+                                        accountOverride = selectedCoreAccountId,
+                                        folderOverride = selectedCoreFolder,
+                                        syncFirst = false,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    null
+                }
+            onDispose { handle?.close() }
+        }
         val notificationPermissionLauncher =
             rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                 notificationPermissionGranted = granted
                 status = if (granted) "Notifications enabled" else "Notifications are disabled"
             }
+        LaunchedEffect(liveMailPushEnabled) {
+            AndroidMailPushService.sync(context)
+        }
         val googleAccountPicker =
             rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 val name = result.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
@@ -585,6 +634,10 @@ internal fun MeronMobileScreen(
                     status = "OAuth callback failed: ${it.message}"
                 }
             }
+        }
+
+        LaunchedEffect(incomingNotificationThreadTarget) {
+            incomingNotificationThreadTarget?.let(::openNotificationThread)
         }
 
         // Load persisted accounts once on startup so they survive app restarts.
@@ -978,6 +1031,14 @@ internal fun MeronMobileScreen(
                     },
                     notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
                     onEnableNotifications = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                    liveMailPushEnabled = liveMailPushEnabled,
+                    onToggleLiveMailPush = {
+                        val next = !liveMailPushEnabled
+                        liveMailPushEnabled = next
+                        saveAppBoolean(context, LIVE_MAIL_PUSH_PREF, next)
+                        AndroidMailPushService.sync(context)
+                        status = if (next) "Live mail push enabled" else "Live mail push disabled"
+                    },
                     onRefreshBackground = {
                         AndroidBackgroundSyncScheduler.runOnce(context)
                         status = "Queued background refresh"

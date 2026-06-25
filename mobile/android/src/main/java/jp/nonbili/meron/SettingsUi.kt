@@ -340,6 +340,8 @@ internal fun SettingsScreen(
     onCycleKanbanColumnWidth: () -> Unit,
     notificationsNeedPermission: Boolean,
     onEnableNotifications: () -> Unit,
+    liveMailPushEnabled: Boolean,
+    onToggleLiveMailPush: () -> Unit,
     onRefreshBackground: () -> Unit,
     storageUsage: StorageUsage?,
     storageBusy: Boolean,
@@ -426,6 +428,8 @@ internal fun SettingsScreen(
                     onToggleSendShortcut = onToggleSendShortcut,
                     notificationsNeedPermission = notificationsNeedPermission,
                     onEnableNotifications = onEnableNotifications,
+                    liveMailPushEnabled = liveMailPushEnabled,
+                    onToggleLiveMailPush = onToggleLiveMailPush,
                     onRefreshBackground = onRefreshBackground,
                     storageUsage = storageUsage,
                     storageBusy = storageBusy,
@@ -630,6 +634,8 @@ internal fun SettingsGeneralPage(
     onToggleSendShortcut: () -> Unit,
     notificationsNeedPermission: Boolean,
     onEnableNotifications: () -> Unit,
+    liveMailPushEnabled: Boolean,
+    onToggleLiveMailPush: () -> Unit,
     onRefreshBackground: () -> Unit,
     storageUsage: StorageUsage?,
     storageBusy: Boolean,
@@ -733,6 +739,15 @@ internal fun SettingsGeneralPage(
         }
 
         item { SettingsSectionLabel(stringResource(R.string.settings_sync_notifications)) }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.MarkEmailUnread,
+                title = stringResource(R.string.settings_live_mail_push),
+                subtitle = stringResource(R.string.settings_live_mail_push_hint),
+                checked = liveMailPushEnabled,
+                onToggle = onToggleLiveMailPush,
+            )
+        }
         item {
             SettingsRow(
                 icon = Icons.Filled.Refresh,
