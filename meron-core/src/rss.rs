@@ -80,8 +80,8 @@ pub fn add(db: &Mutex<Connection>, feed_url: &str, display_name: &str) -> Result
     let conn = db.lock().unwrap();
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO accounts(id, engine, provider, display_name, config, created_at, updated_at)
-         VALUES(?1, 'rss', 'rss', ?2, '{}', ?3, ?3)
+        "INSERT INTO accounts(id, engine, provider, display_name, config, created_at, updated_at, sort_order)
+         VALUES(?1, 'rss', 'rss', ?2, '{}', ?3, ?3, COALESCE((SELECT MAX(sort_order) + 1 FROM accounts), 0))
          ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at",
         params![account_id, account_title, now],
     )?;

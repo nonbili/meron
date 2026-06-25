@@ -558,6 +558,13 @@ internal fun MeronMobileScreen(
 
         LaunchedEffect(incomingOAuthCallbackUrl) {
             incomingOAuthCallbackUrl?.let { rawUrl ->
+                loadPendingOAuthFlow(context)?.let { pending ->
+                    oauthProvider = pending.provider
+                    oauthState = pending.state
+                    oauthVerifier = pending.verifier
+                    oauthRedirectUri = pending.redirectUri
+                    oauthEmail = pending.email
+                }
                 runCatching {
                     parseOAuthCallbackUrlForRedirect(
                         rawUrl = rawUrl,
@@ -567,9 +574,10 @@ internal fun MeronMobileScreen(
                 }.onSuccess { result ->
                     if (result != null) {
                         oauthAuthorizationCode = result.code
-                        addSection = 1
+                        addSection = 0
                         screen = Screen.AddAccount
                         status = "Finishing ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in..."
+                        clearPendingOAuthFlow(context)
                         exchangeOAuthCode()
                     }
                 }.onFailure {
@@ -831,33 +839,20 @@ internal fun MeronMobileScreen(
                     onSmtpPortChange = { smtpPort = it },
                     onAutodiscover = ::autodiscoverPasswordAccount,
                     onAddPassword = ::addPasswordAccount,
-                    oauthProvider = oauthProvider,
-                    onOauthProviderChange = { oauthProvider = it },
-                    oauthEmail = oauthEmail,
-                    onOauthEmailChange = { oauthEmail = it },
-                    oauthClientId = oauthClientId,
-                    onOauthClientIdChange = { oauthClientId = it },
-                    oauthClientSecret = oauthClientSecret,
-                    onOauthClientSecretChange = { oauthClientSecret = it },
-                    oauthRedirectUri = oauthRedirectUri,
-                    onOauthRedirectUriChange = { oauthRedirectUri = it },
                     oauthAuthorizationCode = oauthAuthorizationCode,
-                    oauthAccessToken = oauthAccessToken,
-                    onOauthAccessTokenChange = { oauthAccessToken = it },
-                    oauthRefreshToken = oauthRefreshToken,
-                    onOauthRefreshTokenChange = { oauthRefreshToken = it },
-                    oauthExpiresAt = oauthExpiresAt,
-                    onOauthExpiresAtChange = { oauthExpiresAt = it },
-                    onLaunchOAuth = ::launchOAuthFlow,
-                    onConnectGoogleDeviceAccount = ::connectGoogleDeviceAccount,
-                    onExchangeOAuth = ::exchangeOAuthCode,
-                    onAddOAuth = ::addOAuthAccount,
+                    onLaunchOAuth = {
+                        oauthProvider = "outlook"
+                        launchOAuthFlow()
+                    },
+                    onConnectGoogleDeviceAccount = {
+                        oauthProvider = "gmail"
+                        connectGoogleDeviceAccount()
+                    },
                     rssFeedUrl = rssFeedUrl,
                     onRssFeedUrlChange = { rssFeedUrl = it },
                     rssDisplayName = rssDisplayName,
                     onRssDisplayNameChange = { rssDisplayName = it },
                     onAddRss = ::addRssAccount,
-                    diagnostics = coreStatus(coreInitJson),
                 )
             }
 

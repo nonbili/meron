@@ -219,16 +219,6 @@ extension ContentView {
                     Text("Outlook").tag("outlook")
                 }
                 .pickerStyle(.segmented)
-                TextField(String(localized: "mobile.accounts.oauthEmail"), text: $oauthEmail)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextField(String(localized: "mobile.accounts.oauthClientId"), text: $oauthClientId)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                SecureField(String(localized: "mobile.accounts.oauthClientSecretOptional"), text: $oauthClientSecret)
-                TextField(String(localized: "mobile.accounts.redirectUri"), text: $oauthRedirectUri)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
                 Button {
                     launchOAuthFlow()
                 } label: {
@@ -236,22 +226,11 @@ extension ContentView {
                 }
                 if !oauthAuthorizationCode.isEmpty {
                     LabeledContent(String(localized: "mobile.accounts.authorizationCode"), value: oauthAuthorizationCode)
-                }
-                Button {
-                    exchangeOAuthCode()
-                } label: {
-                    Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.exchangeCodeAndAddAccount") : String(localized: "mobile.accounts.exchangeCodeAndReconnect"), systemImage: "arrow.triangle.2.circlepath")
-                }
-                TextField(String(localized: "mobile.accounts.accessToken"), text: $oauthAccessToken)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                SecureField(String(localized: "mobile.accounts.refreshToken"), text: $oauthRefreshToken)
-                TextField(String(localized: "mobile.accounts.tokenExpiresAt"), text: $oauthExpiresAt)
-                    .keyboardType(.numberPad)
-                Button {
-                    addOAuthAccount()
-                } label: {
-                    Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.addOAuthAccount") : String(localized: "mobile.accounts.reconnectOAuthAccount"), systemImage: "person.crop.circle.badge.checkmark")
+                    Button {
+                        exchangeOAuthCode()
+                    } label: {
+                        Label(reconnectingAccountId.isEmpty ? String(localized: "mobile.accounts.exchangeCodeAndAddAccount") : String(localized: "mobile.accounts.exchangeCodeAndReconnect"), systemImage: "arrow.triangle.2.circlepath")
+                    }
                 }
             }
 

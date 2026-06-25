@@ -55,7 +55,7 @@ fun buildOAuthAuthorizationUrl(request: OAuthAuthorizationRequest): String {
 
             "outlook" -> {
                 "https://login.microsoftonline.com/common/oauth2/v2.0/authorize" to
-                    "offline_access openid email https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send"
+                    "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send"
             }
 
             else -> {

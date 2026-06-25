@@ -305,6 +305,19 @@ internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
 internal const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val HIDDEN_NAV_ACCOUNTS_PREF = "hidden_navigation_accounts_v1"
 internal const val KANBAN_COLUMN_WIDTH_PREF = "kanban_column_width_v1"
+internal const val OAUTH_PENDING_PROVIDER_PREF = "oauth_pending_provider_v1"
+internal const val OAUTH_PENDING_STATE_PREF = "oauth_pending_state_v1"
+internal const val OAUTH_PENDING_VERIFIER_PREF = "oauth_pending_verifier_v1"
+internal const val OAUTH_PENDING_REDIRECT_URI_PREF = "oauth_pending_redirect_uri_v1"
+internal const val OAUTH_PENDING_EMAIL_PREF = "oauth_pending_email_v1"
+
+internal data class PendingOAuthFlow(
+    val provider: String,
+    val state: String,
+    val verifier: String,
+    val redirectUri: String,
+    val email: String,
+)
 internal const val KANBAN_COLUMN_MIN_WIDTH = 240
 internal const val KANBAN_COLUMN_DEFAULT_WIDTH = 320
 internal const val KANBAN_COLUMN_MAX_WIDTH = 520

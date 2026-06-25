@@ -769,7 +769,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
         status = "OAuth authorization code is required."
         return
     }
-    val clientId = oauthClientId.trim()
+    val clientId = resolvedOAuthClientId()
     if (clientId.isBlank()) {
         status = "OAuth client ID is required."
         return
@@ -798,7 +798,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
             applyAccounts(it, preferEmail = params.email)
             screen = Screen.Mail
             errorBanner = null
-            status = "Connected ${params.email}"
+            status = if (params.email.isBlank()) "Connected account" else "Connected ${params.email}"
         }.onFailure {
             errorBanner = it.message ?: "OAuth exchange failed"
             status = "OAuth exchange failed: ${it.message}"
@@ -807,19 +807,31 @@ internal fun MeronMobileState.exchangeOAuthCode() {
 }
 
 internal fun MeronMobileState.launchOAuthFlow() {
-    val clientId = oauthClientId.trim()
+    val clientId = resolvedOAuthClientId()
     if (clientId.isBlank()) {
         status = "OAuth client ID is required."
         return
     }
+    val redirectUri = resolvedOAuthRedirectUri()
+    oauthRedirectUri = redirectUri
     oauthState = UUID.randomUUID().toString()
     oauthVerifier = UUID.randomUUID().toString() + UUID.randomUUID().toString()
+    savePendingOAuthFlow(
+        context,
+        PendingOAuthFlow(
+            provider = oauthProvider,
+            state = oauthState,
+            verifier = oauthVerifier,
+            redirectUri = redirectUri,
+            email = oauthEmail.trim(),
+        ),
+    )
     val url =
         buildOAuthAuthorizationUrl(
             OAuthAuthorizationRequest(
                 provider = oauthProvider,
                 clientId = clientId,
-                redirectUri = oauthRedirectUri.trim(),
+                redirectUri = redirectUri,
                 state = oauthState,
                 codeChallenge = oauthVerifier.pkceChallenge(),
                 loginHint = oauthEmail.trim(),
@@ -833,6 +845,20 @@ internal fun MeronMobileState.launchOAuthFlow() {
         status = "OAuth browser launch failed: ${it.message}"
     }
 }
+
+private fun MeronMobileState.resolvedOAuthClientId(): String =
+    oauthClientId.trim().ifBlank {
+        when (oauthProvider) {
+            "outlook" -> BuildConfig.MERON_OUTLOOK_CLIENT_ID
+            else -> ""
+        }
+    }.trim()
+
+private fun MeronMobileState.resolvedOAuthRedirectUri(): String =
+    when (oauthProvider) {
+        "outlook" -> BuildConfig.MERON_OUTLOOK_REDIRECT_URI
+        else -> oauthRedirectUri.ifBlank { defaultOAuthRedirectUri() }
+    }.trim()
 
 internal suspend fun MeronMobileState.loadAccountInbox(
     client: MobileMailCommandClient,

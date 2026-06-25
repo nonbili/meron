@@ -327,6 +327,8 @@ internal fun MeronMobileState.syncCoreThreads(
                 }
             }
         }.onSuccess { result ->
+            val wasInitialLoad = !initialThreadsLoaded
+            val existingIds = coreThreads.map { it.id }.toSet()
             coreFolders = result.folders
             if (result.folders.isNotEmpty()) {
                 foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
@@ -344,12 +346,8 @@ internal fun MeronMobileState.syncCoreThreads(
             syncing = false
             initialThreadsLoaded = true
             errorBanner = null
-            status =
-                if (accountId == UNIFIED_ACCOUNT_ID) {
-                    "${parsedThreads.size} ${filter.label().lowercase()} message(s) in Unified inbox"
-                } else {
-                    "${parsedThreads.size} ${filter.label().lowercase()} message(s) in ${folder.replaceFirstChar { it.uppercase() }}"
-                }
+            val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
+            status = if (newCount > 0) "$newCount new message(s)" else ""
         }.onFailure {
             syncing = false
             initialThreadsLoaded = true

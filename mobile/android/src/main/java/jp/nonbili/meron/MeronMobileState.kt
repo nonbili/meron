@@ -269,7 +269,6 @@ internal class MeronMobileState(
     val context: Context,
     val scope: CoroutineScope,
 ) {
-    val labDefaults = BuildConfig.DEBUG
     val snackbarHost = SnackbarHostState()
 
     // Wired by the composable after its activity-result launchers are created.
@@ -277,20 +276,20 @@ internal class MeronMobileState(
     var launchAttachmentSave: (String) -> Unit = {}
     var launchGoogleAccountPicker: () -> Unit = {}
 
-    var host by mutableStateOf(if (labDefaults) "10.0.2.2" else "")
-    var email by mutableStateOf(if (labDefaults) "user1@mail.localhost" else "")
+    var host by mutableStateOf("")
+    var email by mutableStateOf("")
     var username by mutableStateOf("")
-    var password by mutableStateOf(if (labDefaults) "user1password" else "")
-    var displayName by mutableStateOf(if (labDefaults) "Local Test" else "")
-    var senderName by mutableStateOf(if (labDefaults) "Local Test" else "")
+    var password by mutableStateOf("")
+    var displayName by mutableStateOf("")
+    var senderName by mutableStateOf("")
     var imapPort by mutableStateOf("993")
-    var smtpHost by mutableStateOf(if (labDefaults) "10.0.2.2" else "")
+    var smtpHost by mutableStateOf("")
     var smtpPort by mutableStateOf("465")
     // Set to a managed account id when its on-device Google token can no longer
     // be silently refreshed, signalling the user must reconnect it.
     var googleReauthAccountId by mutableStateOf<String?>(null)
     var oauthProvider by mutableStateOf("gmail")
-    var oauthEmail by mutableStateOf(if (labDefaults) "me@gmail.com" else "")
+    var oauthEmail by mutableStateOf("")
     var oauthAccessToken by mutableStateOf("")
     var oauthRefreshToken by mutableStateOf("")
     var oauthExpiresAt by mutableStateOf("0")
@@ -300,8 +299,8 @@ internal class MeronMobileState(
     var oauthState by mutableStateOf(UUID.randomUUID().toString())
     var oauthVerifier by mutableStateOf(UUID.randomUUID().toString() + UUID.randomUUID().toString())
     var oauthAuthorizationCode by mutableStateOf("")
-    var rssFeedUrl by mutableStateOf(if (labDefaults) "https://example.com/feed.xml" else "")
-    var rssDisplayName by mutableStateOf(if (labDefaults) "Example Feed" else "")
+    var rssFeedUrl by mutableStateOf("")
+    var rssDisplayName by mutableStateOf("")
     var accountJson by mutableStateOf("")
     var coreAccounts by mutableStateOf(emptyList<AccountSummary>())
     var selectedCoreAccountId by mutableStateOf(UNIFIED_ACCOUNT_ID)

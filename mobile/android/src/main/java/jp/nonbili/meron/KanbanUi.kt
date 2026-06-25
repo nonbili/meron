@@ -279,7 +279,7 @@ internal fun MailSearchFilterBar(
         OutlinedTextField(
             value = search,
             onValueChange = onSearchChange,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            modifier = Modifier.fillMaxWidth().height(44.dp),
             textStyle = MaterialTheme.typography.bodyMedium,
             placeholder = { Text(stringResource(R.string.mobile_mail_search_cached_mail), style = MaterialTheme.typography.bodyMedium) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
@@ -339,13 +339,13 @@ internal fun KanbanHeaderSearchField(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 14.dp),
+                    .padding(start = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     Icons.Filled.Search,
                     contentDescription = null,
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 BasicTextField(
@@ -356,7 +356,7 @@ internal fun KanbanHeaderSearchField(
                     modifier =
                         Modifier
                             .weight(1f)
-                            .padding(start = 12.dp)
+                            .padding(start = 10.dp)
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
                                     onSearchSubmit()
@@ -400,7 +400,7 @@ internal fun KanbanHeaderSearchField(
                 )
                 Box(
                     Modifier
-                        .height(52.dp)
+                        .height(44.dp)
                         .widthIn(min = 66.dp, max = 112.dp)
                         .clickable { scopeMenuOpen = true },
                     contentAlignment = Alignment.Center,

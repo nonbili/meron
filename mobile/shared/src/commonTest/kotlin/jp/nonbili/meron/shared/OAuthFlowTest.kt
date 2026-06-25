@@ -50,6 +50,7 @@ class OAuthFlowTest {
 
         assertTrue(url.startsWith("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"))
         assertTrue(url.contains("offline_access"))
+        assertTrue(url.contains("profile"))
         assertTrue(url.contains("IMAP.AccessAsUser.All"))
         assertTrue(url.contains("SMTP.Send"))
     }

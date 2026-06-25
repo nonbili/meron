@@ -2,7 +2,7 @@ use super::*;
 
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const OUTLOOK_SCOPES: &str = "offline_access openid email https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
+const OUTLOOK_SCOPES: &str = "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
 
 pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result<Value, String> {
     let email = req_str(params, "email")?;
@@ -148,10 +148,11 @@ pub(crate) struct OAuthCodeTokenResponse {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: Option<i64>,
+    id_token: Option<String>,
 }
 
 pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Result<Value, String> {
-    let email = req_str(params, "email")?;
+    let requested_email = opt_str(params, "email");
     let provider = req_str(params, "provider")?.to_lowercase();
     let code = req_str(params, "code")?;
     let client_id = req_str(params, "client_id")?;
@@ -194,13 +195,38 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
         })
         .ok_or_else(|| "oauth response missing refresh_token".to_string())?;
     let token_expires_at = now_epoch_seconds() + token.expires_in.unwrap_or(3600);
+    let (claim_email, claim_name) =
+        parse_oauth_id_token_claims(token.id_token.as_deref().unwrap_or(""));
+    let email = if requested_email.contains('@') {
+        requested_email
+    } else {
+        claim_email
+    };
+    if !email.contains('@') {
+        return Err("invalid email".to_string());
+    }
 
     let mut add_params = params.clone();
+    let display_name_missing = opt_str(&add_params, "display_name").is_empty();
+    let sender_name_missing = opt_str(&add_params, "sender_name").is_empty();
     let obj = add_params
         .as_object_mut()
         .ok_or_else(|| "params must be an object".to_string())?;
-    obj.insert("email".to_string(), Value::String(email));
-    obj.insert("provider".to_string(), Value::String(provider));
+    obj.insert("email".to_string(), Value::String(email.clone()));
+    obj.insert("provider".to_string(), Value::String(provider.clone()));
+    if display_name_missing {
+        obj.insert(
+            "display_name".to_string(),
+            Value::String(if claim_name.is_empty() {
+                email.clone()
+            } else {
+                claim_name.clone()
+            }),
+        );
+    }
+    if sender_name_missing && !claim_name.is_empty() {
+        obj.insert("sender_name".to_string(), Value::String(claim_name));
+    }
     obj.insert(
         "access_token".to_string(),
         Value::String(token.access_token),
@@ -208,6 +234,63 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     obj.insert("refresh_token".to_string(), Value::String(refresh_token));
     obj.insert("token_expires_at".to_string(), json!(token_expires_at));
     add_mobile_oauth_account(data_dir, &add_params)
+}
+
+fn parse_oauth_id_token_claims(id_token: &str) -> (String, String) {
+    let Some(payload) = id_token.split('.').nth(1) else {
+        return (String::new(), String::new());
+    };
+    let decoded = match base64_url_decode(payload) {
+        Ok(bytes) => bytes,
+        Err(_) => return (String::new(), String::new()),
+    };
+    let claims: Value = match serde_json::from_slice(&decoded) {
+        Ok(value) => value,
+        Err(_) => return (String::new(), String::new()),
+    };
+    let email = claims
+        .get("email")
+        .and_then(Value::as_str)
+        .or_else(|| claims.get("preferred_username").and_then(Value::as_str))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let name = claims
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let name = if name.is_empty() {
+        let given_name = claims
+            .get("given_name")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let family_name = claims
+            .get("family_name")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        [given_name, family_name]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        name
+    };
+    (email, name)
+}
+
+fn base64_url_decode(value: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    use base64::Engine;
+
+    let mut padded = value.to_string();
+    while padded.len() % 4 != 0 {
+        padded.push('=');
+    }
+    base64::engine::general_purpose::URL_SAFE.decode(padded)
 }
 
 pub(crate) fn exchange_oauth_code_blocking(

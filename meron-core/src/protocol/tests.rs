@@ -491,9 +491,15 @@ fn mobile_protocol_persists_platform_managed_oauth_account_without_refresh_token
     let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
     assert_eq!(added["id"], 70, "{added}");
     assert_eq!(added["result"]["account"]["id"], email.as_str(), "{added}");
-    assert_eq!(added["result"]["account"]["auth_type"], "gmail_oauth", "{added}");
+    assert_eq!(
+        added["result"]["account"]["auth_type"], "gmail_oauth",
+        "{added}"
+    );
     // No refresh token, but a live access token => not flagged for reconnect.
-    assert_eq!(added["result"]["account"]["needs_reconnect"], false, "{added}");
+    assert_eq!(
+        added["result"]["account"]["needs_reconnect"], false,
+        "{added}"
+    );
 
     // Platform pushes a freshly minted token before sync.
     let new_expires = now_epoch_seconds() + 3600;
@@ -526,6 +532,38 @@ fn mobile_protocol_update_oauth_token_rejects_unknown_account() {
     let update = r#"{"id":73,"method":"account.updateOAuthToken","params":{"account_id":"nobody@gmail.com","access_token":"x"}}"#;
     let updated = invoke_mobile_protocol_json(update, Some(data_dir.to_str().unwrap()));
     assert!(updated["error"]["message"].is_string(), "{updated}");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_appends_new_accounts() {
+    let data_dir = unique_data_dir("account-append");
+    let data_dir_str = data_dir.to_str().unwrap();
+    for (email, name) in [
+        ("z-first@example.com", "Z First"),
+        ("a-second@example.com", "A Second"),
+        ("m-third@example.com", "M Third"),
+    ] {
+        let add_request = format!(
+            r#"{{"id":93,"method":"account.addPassword","params":{{"email":"{email}","display_name":"{name}","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
+        );
+        assert!(
+            invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+                .get("error")
+                .is_none()
+        );
+    }
+    let listed = invoke_mobile_protocol_json(
+        r#"{"id":95,"method":"account.list","params":{}}"#,
+        Some(data_dir_str),
+    );
+    let accounts = listed["result"]["accounts"].as_array().unwrap();
+    let labels: Vec<_> = accounts
+        .iter()
+        .map(|account| account["display_name"].as_str().unwrap())
+        .collect();
+    assert_eq!(labels, vec!["Z First", "A Second", "M Third"]);
+
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -577,6 +615,26 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
 }
 
 #[test]
+fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
+    let data_dir = unique_data_dir("oauth-code-claims");
+    let token_url =
+        one_shot_oauth_token_server_with_id_token("outlook.user@example.com", "Outlook User");
+    let request = format!(
+        r#"{{"id":68,"method":"account.exchangeOAuthCode","params":{{"email":"","provider":"outlook","display_name":"","sender_name":"","code":"auth-code","client_id":"client","redirect_uri":"msauth://jp.nonbili.meron/example","code_verifier":"verifier","token_url":"{token_url}"}}}}"#
+    );
+
+    let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    assert_eq!(exchanged["id"], 68, "{exchanged}");
+    let account = &exchanged["result"]["account"];
+    assert_eq!(account["id"], "outlook.user@example.com", "{exchanged}");
+    assert_eq!(account["provider"], "outlook", "{exchanged}");
+    assert_eq!(account["display_name"], "Outlook User", "{exchanged}");
+    assert_eq!(account["sender_name"], "Outlook User", "{exchanged}");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_rejects_unsupported_oauth_provider() {
     let data_dir = unique_data_dir("oauth-provider");
     let value = invoke_mobile_protocol_json(
@@ -590,6 +648,27 @@ fn mobile_protocol_rejects_unsupported_oauth_provider() {
 }
 
 fn one_shot_oauth_token_server() -> String {
+    one_shot_oauth_token_server_with_body(
+        r#"{"access_token":"access-from-code","refresh_token":"refresh-from-code","expires_in":3600}"#
+            .to_string(),
+    )
+}
+
+fn one_shot_oauth_token_server_with_id_token(email: &str, name: &str) -> String {
+    use base64::Engine;
+
+    let claims = serde_json::json!({
+        "preferred_username": email,
+        "name": name,
+    });
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
+    let id_token = format!("header.{payload}.signature");
+    one_shot_oauth_token_server_with_body(format!(
+        r#"{{"access_token":"access-from-code","refresh_token":"refresh-from-code","expires_in":3600,"id_token":"{id_token}"}}"#
+    ))
+}
+
+fn one_shot_oauth_token_server_with_body(body: String) -> String {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::time::Duration;
@@ -631,7 +710,6 @@ fn one_shot_oauth_token_server() -> String {
             if request.is_empty() {
                 continue;
             }
-            let body = r#"{"access_token":"access-from-code","refresh_token":"refresh-from-code","expires_in":3600}"#;
             write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

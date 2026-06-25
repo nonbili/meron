@@ -17,11 +17,15 @@ def releaseVersionCode = releaseProp("meronVersionCode", "MERON_VERSION_CODE", "
 def releaseVersionName = releaseProp("meronVersionName", "MERON_VERSION_NAME", "0.1.0")
 def oauthAppLinkHost = releaseProp("oauthAppLinkHost", "MERON_OAUTH_APP_LINK_HOST", "oauth.example.invalid")
 def oauthAppLinkPathPrefix = releaseProp("oauthAppLinkPathPrefix", "MERON_OAUTH_APP_LINK_PATH_PREFIX", "/meron/oauth")
+def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")
+def outlookRedirectUriDebug = releaseProp("outlookRedirectUriDebug", "MERON_OUTLOOK_REDIRECT_URI_DEBUG", "msauth://jp.nonbili.meron/lvGC0B4SWYU8tNPHg%2FbdMjQinZQ%3D")
+def outlookRedirectUriRelease = releaseProp("outlookRedirectUriRelease", "MERON_OUTLOOK_REDIRECT_URI_RELEASE", "msauth://jp.nonbili.meron/aJtUZr4euDojxsYjMaCe3sjZhwo%3D")
 def releaseKeystore = releaseProp("meronReleaseStoreFile", "MERON_ANDROID_RELEASE_STORE_FILE")
 def releaseStorePassword = releaseProp("meronReleaseStorePassword", "MERON_ANDROID_RELEASE_STORE_PASSWORD")
 def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE_KEY_ALIAS")
 def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseStorePassword)
 def hasReleaseSigning = releaseKeystore && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+def javaString = { String value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
 
 android {
     namespace "jp.nonbili.meron"
@@ -42,6 +46,7 @@ android {
             oauthAppLinkHost: oauthAppLinkHost,
             oauthAppLinkPathPrefix: oauthAppLinkPathPrefix,
         ]
+        buildConfigField "String", "MERON_OUTLOOK_CLIENT_ID", javaString(outlookClientId)
     }
 
     signingConfigs {
@@ -57,8 +62,10 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField "String", "MERON_OUTLOOK_REDIRECT_URI", javaString(outlookRedirectUriDebug)
         }
         release {
+            buildConfigField "String", "MERON_OUTLOOK_REDIRECT_URI", javaString(outlookRedirectUriRelease)
             signingConfig hasReleaseSigning ? signingConfigs.release : null
         }
     }

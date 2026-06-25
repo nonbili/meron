@@ -840,6 +840,50 @@ internal fun saveAppStringSet(
         .apply()
 }
 
+internal fun savePendingOAuthFlow(
+    context: Context,
+    flow: PendingOAuthFlow,
+) {
+    context
+        .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(OAUTH_PENDING_PROVIDER_PREF, flow.provider)
+        .putString(OAUTH_PENDING_STATE_PREF, flow.state)
+        .putString(OAUTH_PENDING_VERIFIER_PREF, flow.verifier)
+        .putString(OAUTH_PENDING_REDIRECT_URI_PREF, flow.redirectUri)
+        .putString(OAUTH_PENDING_EMAIL_PREF, flow.email)
+        .apply()
+}
+
+internal fun loadPendingOAuthFlow(context: Context): PendingOAuthFlow? {
+    val prefs = context.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+    val provider = prefs.getString(OAUTH_PENDING_PROVIDER_PREF, null).orEmpty()
+    val state = prefs.getString(OAUTH_PENDING_STATE_PREF, null).orEmpty()
+    val verifier = prefs.getString(OAUTH_PENDING_VERIFIER_PREF, null).orEmpty()
+    val redirectUri = prefs.getString(OAUTH_PENDING_REDIRECT_URI_PREF, null).orEmpty()
+    val email = prefs.getString(OAUTH_PENDING_EMAIL_PREF, null).orEmpty()
+    if (provider.isBlank() || state.isBlank() || verifier.isBlank() || redirectUri.isBlank()) return null
+    return PendingOAuthFlow(
+        provider = provider,
+        state = state,
+        verifier = verifier,
+        redirectUri = redirectUri,
+        email = email,
+    )
+}
+
+internal fun clearPendingOAuthFlow(context: Context) {
+    context
+        .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .remove(OAUTH_PENDING_PROVIDER_PREF)
+        .remove(OAUTH_PENDING_STATE_PREF)
+        .remove(OAUTH_PENDING_VERIFIER_PREF)
+        .remove(OAUTH_PENDING_REDIRECT_URI_PREF)
+        .remove(OAUTH_PENDING_EMAIL_PREF)
+        .apply()
+}
+
 internal fun onOffLabel(enabled: Boolean): String = if (enabled) "On" else "Off"
 
 internal fun AppAppearanceMode.next(): AppAppearanceMode {

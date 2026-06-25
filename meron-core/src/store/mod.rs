@@ -235,8 +235,8 @@ pub fn upsert_account(
 ) -> Result<()> {
     let now = now_unix();
     conn.execute(
-        "INSERT INTO accounts(id, engine, provider, email, display_name, avatar_url, config, created_at, updated_at, sender_name)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9)
+        "INSERT INTO accounts(id, engine, provider, email, display_name, avatar_url, config, created_at, updated_at, sender_name, sort_order)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, COALESCE((SELECT MAX(sort_order) + 1 FROM accounts), 0))
          ON CONFLICT(id) DO UPDATE SET
            engine       = excluded.engine,
            provider     = excluded.provider,

@@ -44,17 +44,17 @@ struct ContentView: View {
     @State var storageDbBytes: Int64?
     @State var storageBusy = false
     @State var storageClearConfirming = false
-    @State var accountEmail = "user1@mail.localhost"
+    @State var accountEmail = ""
     @State var accountUsername = ""
-    @State var accountPassword = "user1password"
-    @State var accountDisplayName = "Local Test"
-    @State var accountSenderName = "Local Test"
-    @State var imapHost = "10.0.2.2"
+    @State var accountPassword = ""
+    @State var accountDisplayName = ""
+    @State var accountSenderName = ""
+    @State var imapHost = ""
     @State var imapPort = "993"
-    @State var smtpHost = "10.0.2.2"
+    @State var smtpHost = ""
     @State var smtpPort = "465"
     @State var oauthProvider = "gmail"
-    @State var oauthEmail = "me@gmail.com"
+    @State var oauthEmail = ""
     @State var oauthAccessToken = ""
     @State var oauthRefreshToken = ""
     @State var oauthExpiresAt = "0"
@@ -65,8 +65,8 @@ struct ContentView: View {
     @State var oauthVerifier = UUID().uuidString + UUID().uuidString
     @State var oauthAuthorizationCode = ""
     @State var reconnectingAccountId = ""
-    @State var rssFeedUrl = "https://example.com/feed.xml"
-    @State var rssDisplayName = "Example Feed"
+    @State var rssFeedUrl = ""
+    @State var rssDisplayName = ""
     @State var accountStatus = "Not loaded."
     @State var accountJson = ""
     @State var coreAccounts: [AccountSummary] = []

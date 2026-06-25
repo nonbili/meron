@@ -725,7 +725,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
             oauthEmail = account.email
             if (account.provider == "gmail" || account.provider == "outlook") oauthProvider = account.provider
             oauthAuthorizationCode = ""
-            addSection = 1
+            addSection = 0
         }
 
         else -> {
@@ -736,7 +736,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
             if (account.imapPort > 0) imapPort = account.imapPort.toString()
             if (account.smtpHost.isNotBlank()) smtpHost = account.smtpHost
             if (account.smtpPort > 0) smtpPort = account.smtpPort.toString()
-            addSection = 0
+            addSection = 1
         }
     }
     errorBanner = null

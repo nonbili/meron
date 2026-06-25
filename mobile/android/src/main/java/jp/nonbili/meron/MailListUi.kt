@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -531,28 +532,54 @@ internal fun MailHeaderSearchField(
     onSearchSubmit: () -> Unit,
 ) {
     val effectivePlaceholder = placeholder ?: stringResource(R.string.mobile_mail_search_cached_mail)
-    OutlinedTextField(
-        value = search,
-        onValueChange = onSearchChange,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .onPreviewKeyEvent { event ->
-                    if (
-                        event.type == KeyEventType.KeyUp &&
-                        event.key == Key.Enter
-                    ) {
-                        onSearchSubmit()
-                        true
-                    } else {
-                        false
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(44.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BasicTextField(
+                value = search,
+                onValueChange = onSearchChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 10.dp)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
+                                onSearchSubmit()
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (search.isBlank()) {
+                            Text(
+                                effectivePlaceholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        innerTextField()
                     }
-        },
-        textStyle = MaterialTheme.typography.bodyMedium,
-        placeholder = { Text(effectivePlaceholder, style = MaterialTheme.typography.bodyMedium) },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(19.dp)) },
-        trailingIcon = {
+                },
+            )
             if (search.isNotBlank()) {
                 IconButton(
                     onClick = {
@@ -564,9 +591,8 @@ internal fun MailHeaderSearchField(
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.common_clear_search), modifier = Modifier.size(18.dp))
                 }
             }
-        },
-        singleLine = true,
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
