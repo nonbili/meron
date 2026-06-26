@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -283,6 +285,7 @@ internal fun ThreadScreen(
     var threadSearch by remember(thread?.id) { mutableStateOf("") }
     var activeSearchIndex by remember(thread?.id) { mutableStateOf(0) }
     var detailsOpen by remember(thread?.id) { mutableStateOf(false) }
+    var readerMessage by remember(thread?.id) { mutableStateOf<MessageBody?>(null) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var overflowOpen by remember(thread?.id) { mutableStateOf(false) }
@@ -338,6 +341,20 @@ internal fun ThreadScreen(
                 next > searchMatches.lastIndex -> 0
                 else -> next
             }
+    }
+
+    // Open a single message in a full-screen reader (the mobile equivalent of the
+    // desktop "open in new tab"); show it instead of the thread until dismissed.
+    readerMessage?.let { reader ->
+        MessageReaderScreen(
+            message = reader,
+            preferHtml = preferHtml,
+            onBack = { readerMessage = null },
+            onCopy = { label, value -> services.copyText(label, value) },
+            onOpenAttachment = onOpenAttachment,
+            onSaveAttachment = onSaveAttachment,
+        )
+        return
     }
 
     Scaffold(
@@ -557,6 +574,7 @@ internal fun ThreadScreen(
                                 onOpenAttachment = onOpenAttachment,
                                 onSaveAttachment = onSaveAttachment,
                                 onCopyMessageText = onCopyMessageText,
+                                onOpenMessage = { readerMessage = it },
                             )
                         }
                     }
@@ -962,6 +980,7 @@ internal fun MessageBubble(
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
+    onOpenMessage: (MessageBody) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val bubbleShape =
@@ -978,7 +997,10 @@ internal fun MessageBubble(
     ) {
         Column(
             Modifier
-                .widthIn(max = 300.dp)
+                // Bubble width tracks the screen: ~85% of available width so it
+                // grows on tablets, capped so it stays readable on wide screens.
+                .fillMaxWidth(0.85f)
+                .widthIn(max = 560.dp)
                 .shadow(3.dp, bubbleShape, clip = false)
                 .clip(bubbleShape)
                 .then(
@@ -991,50 +1013,39 @@ internal fun MessageBubble(
                 .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 6.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            if (!outgoing) {
-                Text(
-                    message.from.ifBlank { message.fromAddr },
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
-                HtmlMessageBody(html = message.bodyHtml)
-            } else {
-                // Subject is the conversation title (top bar); the bubble shows the
-                // message body, matching the desktop chat reader.
-                Text(
-                    highlightedMessageText(message.body.ifBlank { "(no content)" }, searchQuery, activeSearchMatch),
-                    color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
-                    fontSize = 15.5.sp,
-                    lineHeight = 21.sp,
-                )
-            }
-            if (message.attachments.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    message.attachments.forEach { attachment ->
-                        AttachmentRow(
-                            attachment = attachment,
-                            textColor = textColor,
-                            onOpen = { onOpenAttachment(attachment) },
-                            onSave = { onSaveAttachment(attachment) },
-                        )
-                    }
-                }
-            }
+            // Sender, timestamp and the actions menu share one row to keep the
+            // bubble compact, matching the desktop reader's header layout.
             Row(
-                modifier = Modifier.align(Alignment.End),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (!outgoing) {
+                    Text(
+                        message.from.ifBlank { message.fromAddr },
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
                 Text(
                     formatRelativeTime(message.dateEpochSeconds),
                     fontSize = 10.5.sp,
                     color = textColor.copy(alpha = 0.55f),
                 )
+                IconButton(onClick = { onOpenMessage(message) }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Filled.OpenInFull,
+                        contentDescription = tr("threads.actions.openInNewTab"),
+                        modifier = Modifier.size(15.dp),
+                        tint = textColor.copy(alpha = 0.55f),
+                    )
+                }
                 Box {
                     val messageTextLabel = tr("chat.messageText")
                     val subjectLabel = tr("composer.fields.subject")
@@ -1112,8 +1123,130 @@ internal fun MessageBubble(
                     }
                 }
             }
+            if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
+                HtmlMessageBody(html = message.bodyHtml, maxHeight = 360.dp)
+            } else {
+                // Subject is the conversation title (top bar); the bubble shows the
+                // message body, matching the desktop chat reader.
+                Text(
+                    highlightedMessageText(message.body.ifBlank { "(no content)" }, searchQuery, activeSearchMatch),
+                    color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
+                    fontSize = 15.5.sp,
+                    lineHeight = 21.sp,
+                )
+            }
+            if (message.attachments.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    message.attachments.forEach { attachment ->
+                        AttachmentRow(
+                            attachment = attachment,
+                            textColor = textColor,
+                            onOpen = { onOpenAttachment(attachment) },
+                            onSave = { onSaveAttachment(attachment) },
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+// Full-screen reader for a single message — the mobile equivalent of the desktop
+// "open in new tab" reader, showing the full header plus the message body.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MessageReaderScreen(
+    message: MessageBody,
+    preferHtml: Boolean,
+    onBack: () -> Unit,
+    onCopy: (String, String) -> Unit,
+    onOpenAttachment: (MessageAttachment) -> Unit,
+    onSaveAttachment: (MessageAttachment) -> Unit,
+) {
+    val messageTextLabel = tr("chat.messageText")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        message.subject.ifBlank { tr("threads.noSubject") },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { onCopy(messageTextLabel, messagePlainText(message)) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = tr("chat.copyMessageText"))
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    message.from.ifBlank { message.fromAddr },
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                MessageReaderHeaderRow(tr("composer.fields.to"), message.to)
+                MessageReaderHeaderRow(tr("composer.fields.cc"), message.cc)
+                Text(
+                    formatRelativeTime(message.dateEpochSeconds),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HorizontalDivider()
+            if (preferHtml && message.bodyHtml.isNotBlank()) {
+                HtmlMessageBody(html = message.bodyHtml)
+            } else {
+                Text(
+                    message.body.ifBlank { "(no content)" },
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            if (message.attachments.isNotEmpty()) {
+                HorizontalDivider()
+                message.attachments.forEach { attachment ->
+                    AttachmentRow(
+                        attachment = attachment,
+                        textColor = MaterialTheme.colorScheme.onSurface,
+                        onOpen = { onOpenAttachment(attachment) },
+                        onSave = { onSaveAttachment(attachment) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageReaderHeaderRow(
+    label: String,
+    value: String,
+) {
+    if (value.isBlank()) return
+    Text(
+        "$label: $value",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 // One-line header subtitle: who's in the conversation plus message count, so the
@@ -1268,7 +1401,15 @@ internal fun highlightedMessageText(
 }
 
 @Composable
-internal fun HtmlMessageBody(html: String) {
+internal fun HtmlMessageBody(
+    html: String,
+    maxHeight: Dp = Dp.Unspecified,
+) {
+    // The WebView can't tell Compose how tall its content is, so a tiny script
+    // reports document height through a platform bridge and we size the view to
+    // it. The bubble caps the height (desktop uses 360px) and the WebView scrolls
+    // past that; the full-screen reader passes no cap and shows the whole email.
+    var contentHeight by remember(html) { mutableStateOf(0.dp) }
     val mobileHtml =
         remember(html) {
             """
@@ -1300,16 +1441,57 @@ internal fun HtmlMessageBody(html: String) {
                 }
               </style>
             </head>
-            <body>$html</body>
+            <body>$html
+              <script>
+                (function () {
+                  function report() {
+                    var h = Math.ceil(
+                      Math.max(
+                        document.documentElement.scrollHeight || 0,
+                        document.body ? document.body.scrollHeight : 0
+                      )
+                    );
+                    if (window.MeronHeight && window.MeronHeight.report) {
+                      window.MeronHeight.report(h);
+                    } else if (
+                      window.webkit &&
+                      window.webkit.messageHandlers &&
+                      window.webkit.messageHandlers.meronHeight
+                    ) {
+                      window.webkit.messageHandlers.meronHeight.postMessage(h);
+                    }
+                  }
+                  window.addEventListener('load', report);
+                  document.addEventListener('DOMContentLoaded', report);
+                  if (window.ResizeObserver) {
+                    new ResizeObserver(report).observe(document.documentElement);
+                  }
+                  setTimeout(report, 300);
+                })();
+              </script>
+            </body>
             </html>
             """.trimIndent()
         }
+    val resolvedHeight =
+        when {
+            contentHeight <= 0.dp -> Dp.Unspecified
+            maxHeight != Dp.Unspecified -> contentHeight.coerceAtMost(maxHeight)
+            else -> contentHeight
+        }
     MailWebView(
         html = mobileHtml,
+        onContentHeight = { contentHeight = it },
         modifier =
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 160.dp, max = 420.dp),
+                .then(
+                    if (resolvedHeight != Dp.Unspecified) {
+                        Modifier.height(resolvedHeight)
+                    } else {
+                        Modifier.heightIn(min = 80.dp)
+                    },
+                ),
     )
 }
 

@@ -1,28 +1,59 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.CoreGraphics.CGRectMake
+import platform.Foundation.NSNumber
+import platform.WebKit.WKScriptMessage
+import platform.WebKit.WKScriptMessageHandlerProtocol
+import platform.WebKit.WKUserContentController
 import platform.WebKit.WKWebView
 import platform.WebKit.WKWebViewConfiguration
+import platform.darwin.NSObject
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun MailWebView(
     html: String,
     modifier: Modifier,
+    onContentHeight: (Dp) -> Unit,
 ) {
+    val latestOnHeight = rememberUpdatedState(onContentHeight)
     UIKitView(
         modifier = modifier,
         factory = {
             val config = WKWebViewConfiguration()
-            config.defaultWebpagePreferences.allowsContentJavaScript = false
-            WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config)
+            // JS runs the height-reporting script; matches the desktop reader,
+            // whose iframe also runs email scripts.
+            config.defaultWebpagePreferences.allowsContentJavaScript = true
+            config.userContentController.addScriptMessageHandler(
+                scriptMessageHandler = HeightMessageHandler { cssPx -> latestOnHeight.value(cssPx.dp) },
+                name = "meronHeight",
+            )
+            WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config).apply {
+                // Scrolling stays on so a body taller than the bubble's cap can
+                // scroll inside it; unclamped (reader) bodies fit and won't scroll.
+                setOpaque(false)
+            }
         },
         update = { webView ->
             webView.loadHTMLString(html, baseURL = null)
         },
     )
+}
+
+private class HeightMessageHandler(
+    private val onHeight: (Int) -> Unit,
+) : NSObject(), WKScriptMessageHandlerProtocol {
+    override fun userContentController(
+        userContentController: WKUserContentController,
+        didReceiveScriptMessage: WKScriptMessage,
+    ) {
+        (didReceiveScriptMessage.body as? NSNumber)?.let { onHeight(it.intValue) }
+    }
 }
