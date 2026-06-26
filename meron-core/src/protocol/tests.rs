@@ -571,10 +571,14 @@ fn mobile_protocol_appends_new_accounts() {
 fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
     let data_dir = unique_data_dir("oauth-code");
     let token_url = one_shot_oauth_token_server();
+    let userinfo_url = one_shot_json_server(
+        "/userinfo",
+        r#"{"email":"google.user@gmail.com","name":"Google User","picture":"https://lh3.googleusercontent.com/avatar"}"#,
+    );
     let unique = unique_test_suffix();
     let email = format!("me+{unique}@gmail.com");
     let request = format!(
-        r#"{{"id":66,"method":"account.exchangeOAuthCode","params":{{"email":"{email}","provider":"gmail","display_name":"Gmail","sender_name":"Sender","code":"auth-code","client_id":"client","client_secret":"secret","redirect_uri":"jp.nonbili.meron.oauth://oauth","code_verifier":"verifier","token_url":"{token_url}"}}}}"#
+        r#"{{"id":66,"method":"account.exchangeOAuthCode","params":{{"email":"{email}","provider":"gmail","display_name":"","sender_name":"","code":"auth-code","client_id":"client","client_secret":"secret","redirect_uri":"jp.nonbili.meron.oauth://oauth","code_verifier":"verifier","token_url":"{token_url}","userinfo_url":"{userinfo_url}"}}}}"#
     );
 
     let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
@@ -590,6 +594,21 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
     );
     assert_eq!(
         exchanged["result"]["account"]["auth_type"], "gmail_oauth",
+        "{exchanged}"
+    );
+    assert_eq!(
+        exchanged["result"]["account"]["display_name"],
+        "Google User",
+        "{exchanged}"
+    );
+    assert_eq!(
+        exchanged["result"]["account"]["sender_name"],
+        "Google User",
+        "{exchanged}"
+    );
+    assert_eq!(
+        exchanged["result"]["account"]["avatar_url"],
+        "https://lh3.googleusercontent.com/avatar",
         "{exchanged}"
     );
     assert_eq!(
@@ -669,12 +688,19 @@ fn one_shot_oauth_token_server_with_id_token(email: &str, name: &str) -> String 
 }
 
 fn one_shot_oauth_token_server_with_body(body: String) -> String {
+    one_shot_json_server("/token", &body)
+}
+
+fn one_shot_json_server(path: &str, body: &str) -> String {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::time::Duration;
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
+    let body = body.to_string();
+    let path = path.to_string();
+    let server_path = path.clone();
     std::thread::spawn(move || {
         for _ in 0..4 {
             let (mut stream, _) = listener.accept().unwrap();
@@ -710,6 +736,11 @@ fn one_shot_oauth_token_server_with_body(body: String) -> String {
             if request.is_empty() {
                 continue;
             }
+            let request_line = String::from_utf8_lossy(&request);
+            let expected = format!(" {server_path} ");
+            if !request_line.lines().next().unwrap_or("").contains(&expected) {
+                continue;
+            }
             write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -721,7 +752,7 @@ fn one_shot_oauth_token_server_with_body(body: String) -> String {
             return;
         }
     });
-    format!("http://{addr}/token")
+    format!("http://{addr}{path}")
 }
 
 #[test]

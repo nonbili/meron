@@ -211,7 +211,6 @@ import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
-import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
@@ -225,15 +224,124 @@ import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import jp.nonbili.meron.shared.MeronCore
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MeronMobileScreen(
+fun MeronApp(
+    core: MeronCore,
+    coreLoaded: Boolean,
+    prefs: AppPreferences,
+    kanbanPrefs: AppPreferences,
+    services: PlatformServices,
+    locale: LocaleController,
+    mobileHost: MobileHost = DefaultMobileHost(),
+    coreInitJson: String,
+    incomingMailtoDraft: ComposeDraft? = null,
+    incomingOAuthCallbackUrl: String? = null,
+    incomingNotificationThreadTarget: NotificationThreadTarget? = null,
+    appearanceMode: AppAppearanceMode = loadAppearanceMode(prefs),
+    onAppearanceModeChange: (AppAppearanceMode) -> Unit = { saveAppearanceMode(prefs, it) },
+    appLanguageTag: String = loadAppLanguageTag(prefs),
+    onAppLanguageChange: (String) -> Unit = {},
+) {
+    val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val state =
+        remember(core, prefs, kanbanPrefs, services, locale, mobileHost) {
+            MeronMobileState(
+                scope = scope,
+                core = core,
+                coreLoaded = coreLoaded,
+                prefs = prefs,
+                kanbanPrefs = kanbanPrefs,
+                services = services,
+                locale = locale,
+                mobileHost = mobileHost,
+            )
+        }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAppLocale provides appLanguageTag.ifBlank { locale.currentLanguageTag().ifBlank { "en" } },
+        LocalPlatformServices provides services,
+    ) {
+        MeronTheme(appearanceMode) {
+            MeronMobileScreenContent(
+                state = state,
+                drawerState = drawerState,
+                coreInitJson = coreInitJson,
+                incomingMailtoDraft = incomingMailtoDraft,
+                incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                incomingNotificationThreadTarget = incomingNotificationThreadTarget,
+                appearanceMode = appearanceMode,
+                onAppearanceModeChange = onAppearanceModeChange,
+                appLanguageTag = appLanguageTag,
+                onAppLanguageChange = onAppLanguageChange,
+                packageName = mobileHost.packageName,
+                appVersion = mobileHost.appVersionName,
+                coreProtocolVersion = mobileHost.coreProtocolVersion,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun PickedFile.toDraftAttachment(): DraftAttachment =
+    DraftAttachment(
+        id = name,
+        displayName = name.ifBlank { "attachment" },
+        mimeType = mimeType.ifBlank { "application/octet-stream" },
+        sizeBytes = bytes.size.toLong(),
+        dataBase64 = Base64.Default.encode(bytes),
+    )
+
+private fun String.jsonStringValue(key: String): String {
+    val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*"((?:\\.|[^"\\])*)"""")
+    return pattern.find(this)?.groupValues?.get(1)?.decodeJsonString().orEmpty()
+}
+
+private fun String.jsonIntValue(
+    key: String,
+    defaultValue: Int,
+): Int {
+    val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*(-?\d+)""")
+    return pattern.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: defaultValue
+}
+
+private fun String.decodeJsonString(): String {
+    val out = StringBuilder()
+    var index = 0
+    while (index < length) {
+        val ch = this[index]
+        if (ch == '\\' && index + 1 < length) {
+            when (val escaped = this[index + 1]) {
+                '"', '\\', '/' -> out.append(escaped)
+                'b' -> out.append('\b')
+                'f' -> out.append('\u000c')
+                'n' -> out.append('\n')
+                'r' -> out.append('\r')
+                't' -> out.append('\t')
+                else -> out.append(escaped)
+            }
+            index += 2
+        } else {
+            out.append(ch)
+            index += 1
+        }
+    }
+    return out.toString()
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalEncodingApi::class)
+@Composable
+private fun MeronMobileScreenContent(
+    state: MeronMobileState,
+    drawerState: androidx.compose.material3.DrawerState,
     coreInitJson: String,
     incomingMailtoDraft: ComposeDraft?,
     incomingOAuthCallbackUrl: String?,
@@ -242,31 +350,26 @@ internal fun MeronMobileScreen(
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
     appLanguageTag: String,
     onAppLanguageChange: (String) -> Unit,
+    packageName: String,
+    appVersion: String,
+    coreProtocolVersion: Int,
 ) {
-    val context = LocalContext.current
-    val appVersion = remember { appVersionName(context) }
-    val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val state = remember { MeronMobileState(context, scope) }
     with(state) {
         DisposableEffect(Unit) {
-            val core = JniMeronCore()
             val handle =
-                if (core.isLoaded()) {
+                if (coreLoaded) {
                     core.events().subscribe { event ->
                         when (event.name) {
                             "mail.newMessages" -> {
-                                val detail = JSONObject(event.detailJson)
-                                if (!liveMailPushEnabled && !detail.optBoolean("muted")) {
-                                    AndroidNotificationService.notifyNewMail(
-                                        context = context,
-                                        accountName = detail.optString("accountName"),
-                                        from = detail.optString("from"),
-                                        subject = detail.optString("subject"),
-                                        count = detail.optInt("count", 1),
-                                        accountId = detail.optString("account"),
-                                        folder = detail.optString("folder"),
-                                        threadKey = detail.optString("threadKey"),
+                                if (!liveMailPushEnabled) {
+                                    mobileHost.notifyNewMail(
+                                        accountName = event.detailJson.jsonStringValue("accountName"),
+                                        from = event.detailJson.jsonStringValue("from"),
+                                        subject = event.detailJson.jsonStringValue("subject"),
+                                        count = event.detailJson.jsonIntValue("count", 1),
+                                        accountId = event.detailJson.jsonStringValue("account"),
+                                        folder = event.detailJson.jsonStringValue("folder"),
+                                        threadKey = event.detailJson.jsonStringValue("threadKey"),
                                     )
                                 }
                                 scope.launch {
@@ -293,35 +396,13 @@ internal fun MeronMobileScreen(
                 }
             onDispose { handle?.close() }
         }
-        val notificationPermissionLauncher =
-            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                notificationPermissionGranted = granted
-                status = if (granted) "Notifications enabled" else "Notifications are disabled"
-            }
         LaunchedEffect(liveMailPushEnabled) {
-            AndroidMailPushService.sync(context)
+            mobileHost.syncLiveMailPush(liveMailPushEnabled)
         }
-        val googleAccountPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                val name = result.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
-                if (result.resultCode == android.app.Activity.RESULT_OK && !name.isNullOrBlank()) {
-                    onGoogleDeviceAccountPicked(name)
-                } else {
-                    status = "No Google account selected"
-                }
-            }
-        launchGoogleAccountPicker = { googleAccountPicker.launch(GoogleAccountManagerAuth.chooseAccountIntent()) }
-        val opmlImportPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) {
-                    runCatching {
-                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    runCatching {
-                        context.contentResolver.openInputStream(uri).use { stream ->
-                            stream?.readBytes()?.decodeToString().orEmpty()
-                        }
-                    }.onSuccess { opml ->
+        val importOpml: (PickedFile?) -> Unit = { picked ->
+            if (picked != null) {
+                runCatching { picked.bytes.decodeToString() }
+                    .onSuccess { opml ->
                         val accountId = selectedCoreAccountId
                         if (accountId == UNIFIED_ACCOUNT_ID || accountId.isBlank()) {
                             status = "Select an RSS account first."
@@ -362,117 +443,55 @@ internal fun MeronMobileScreen(
                     }.onFailure {
                         status = "OPML file read failed: ${it.message}"
                     }
-                }
             }
-        val opmlExportPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/xml")) { uri ->
-                if (uri != null) {
+        }
+        launchOpmlExport = { fileName ->
+            services.saveFile(pendingOpmlExport.encodeToByteArray(), fileName, "text/xml")
+            pendingOpmlExport = ""
+            status = "Exported OPML"
+        }
+        launchAttachmentSave = { fileName ->
+            val attachment = pendingAttachmentSave
+            pendingAttachmentSave = null
+            if (attachment != null) {
+                scope.launch {
                     runCatching {
-                        context.contentResolver.openOutputStream(uri).use { stream ->
-                            stream?.write(pendingOpmlExport.toByteArray())
-                        }
-                    }.onSuccess {
-                        status = "Exported OPML"
-                        pendingOpmlExport = ""
+                        withContext(ioDispatcher) { readAttachmentBytes(attachment) }
+                    }.onSuccess { bytes ->
+                        services.saveFile(bytes, fileName, attachment.mimeType.ifBlank { "application/octet-stream" })
+                        status = "Saved ${attachment.filename.ifBlank { "attachment" }}"
                     }.onFailure {
-                        status = "OPML export failed: ${it.message}"
+                        status = "Attachment save failed: ${it.message}"
                     }
                 }
             }
-        val attachmentSavePicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
-                val attachment = pendingAttachmentSave
-                pendingAttachmentSave = null
-                if (uri != null && attachment != null) {
-                    scope.launch {
-                        runCatching {
-                            withContext(ioDispatcher) {
-                                val response = MobileMailCommandClient(core).readAttachment(AttachmentReadParams(attachment.key))
-                                val data = parseAttachmentDataResponse(response)
-                                if (data.isBlank()) error("Attachment data is empty")
-                                val bytes = Base64.decode(data, Base64.DEFAULT)
-                                context.contentResolver.openOutputStream(uri).use { stream ->
-                                    stream?.write(bytes) ?: error("Could not open destination")
-                                }
-                            }
-                        }.onSuccess {
-                            status = "Saved ${attachment.filename.ifBlank { "attachment" }}"
+        }
+        val pickAttachmentInto: ((DraftAttachment) -> Unit) -> Unit = { onPicked ->
+            services.pickFile(listOf("*/*")) { picked ->
+                if (picked != null) {
+                    runCatching { picked.toDraftAttachment() }
+                        .onSuccess {
+                            onPicked(it)
+                            status = "Attached ${it.displayName}"
                         }.onFailure {
-                            status = "Attachment save failed: ${it.message}"
+                            status = "Attachment failed: ${it.message}"
                         }
-                    }
                 }
             }
-        val attachmentPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) {
+        }
+        val pickAccountMedia: () -> Unit = {
+            val target = accountMediaUploadTarget
+            accountMediaUploadTarget = null
+            if (target != null) {
+                services.pickImage { picked ->
+                    if (picked == null) return@pickImage
                     runCatching {
-                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    runCatching {
-                        context.contentResolver.openInputStream(uri).use { stream ->
-                            val bytes = stream?.readBytes() ?: ByteArray(0)
-                            val name = context.displayNameFor(uri)
-                            DraftAttachment(
-                                id = uri.toString(),
-                                displayName = name,
-                                mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream",
-                                sizeBytes = bytes.size.toLong(),
-                                dataBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
-                            )
-                        }
-                    }.onSuccess {
-                        attachments = attachments + it
-                        status = "Attached ${it.displayName}"
-                    }.onFailure {
-                        status = "Attachment failed: ${it.message}"
-                    }
-                }
-            }
-        val quickReplyAttachmentPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) {
-                    runCatching {
-                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    runCatching {
-                        context.contentResolver.openInputStream(uri).use { stream ->
-                            val bytes = stream?.readBytes() ?: ByteArray(0)
-                            val name = context.displayNameFor(uri)
-                            DraftAttachment(
-                                id = uri.toString(),
-                                displayName = name,
-                                mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream",
-                                sizeBytes = bytes.size.toLong(),
-                                dataBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
-                            )
-                        }
-                    }.onSuccess {
-                        quickReplyAttachments = quickReplyAttachments + it
-                        status = "Attached ${it.displayName}"
-                    }.onFailure {
-                        status = "Attachment failed: ${it.message}"
-                    }
-                }
-            }
-        val accountMediaPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                val target = accountMediaUploadTarget
-                accountMediaUploadTarget = null
-                if (uri != null && target != null) {
-                    runCatching {
-                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    runCatching {
-                        context.contentResolver.openInputStream(uri).use { stream ->
-                            val bytes = stream?.readBytes() ?: ByteArray(0)
-                            AccountMediaFileParams(
-                                accountId = target.account.id,
-                                filename = context.displayNameFor(uri),
-                                mime = context.contentResolver.getType(uri) ?: "application/octet-stream",
-                                data = Base64.encodeToString(bytes, Base64.NO_WRAP),
-                            )
-                        }
+                        AccountMediaFileParams(
+                            accountId = target.account.id,
+                            filename = picked.name,
+                            mime = picked.mimeType.ifBlank { "application/octet-stream" },
+                            data = Base64.Default.encode(picked.bytes),
+                        )
                     }.onSuccess { params ->
                         if (!coreLoaded) {
                             status = "Rust core not packaged."
@@ -510,15 +529,14 @@ internal fun MeronMobileScreen(
                     }
                 }
             }
-        val kanbanBoardMediaPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                val target = kanbanBoardMediaTarget
-                kanbanBoardMediaTarget = null
-                if (uri != null && target != null) {
-                    runCatching {
-                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    val mediaUrl = uri.toString()
+        }
+        val pickKanbanBoardMedia: () -> Unit = {
+            val target = kanbanBoardMediaTarget
+            kanbanBoardMediaTarget = null
+            if (target != null) {
+                services.pickImage { picked ->
+                    if (picked == null) return@pickImage
+                    val mediaUrl = "data:${picked.mimeType.ifBlank { "application/octet-stream" }};base64,${Base64.Default.encode(picked.bytes)}"
                     if (target.wallpaper) {
                         updateKanbanBoard(
                             target.board.id,
@@ -540,8 +558,7 @@ internal fun MeronMobileScreen(
                     }
                 }
             }
-        launchOpmlExport = { opmlExportPicker.launch(it) }
-        launchAttachmentSave = { attachmentSavePicker.launch(it) }
+        }
 
         LaunchedEffect(storageClearConfirming) {
             if (storageClearConfirming) {
@@ -572,32 +589,7 @@ internal fun MeronMobileScreen(
 
         LaunchedEffect(incomingOAuthCallbackUrl) {
             incomingOAuthCallbackUrl?.let { rawUrl ->
-                loadPendingOAuthFlow(context)?.let { pending ->
-                    oauthProvider = pending.provider
-                    oauthState = pending.state
-                    oauthVerifier = pending.verifier
-                    oauthRedirectUri = pending.redirectUri
-                    oauthEmail = pending.email
-                }
-                runCatching {
-                    parseOAuthCallbackUrlForRedirect(
-                        rawUrl = rawUrl,
-                        expectedState = oauthState,
-                        redirectUri = oauthRedirectUri.trim(),
-                    )
-                }.onSuccess { result ->
-                    if (result != null) {
-                        oauthAuthorizationCode = result.code
-                        addSection = 0
-                        passwordServerSettingsOpen = false
-                        screen = Screen.AddAccount
-                        status = "Finishing ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in..."
-                        clearPendingOAuthFlow(context)
-                        exchangeOAuthCode()
-                    }
-                }.onFailure {
-                    status = "OAuth callback failed: ${it.message}"
-                }
+                handleOAuthCallback(rawUrl)
             }
         }
 
@@ -662,22 +654,6 @@ internal fun MeronMobileScreen(
             if (retainedThreadIds.size != selectedMailThreadIds.size) {
                 selectedMailThreadIds = retainedThreadIds
             }
-        }
-
-        // Hardware back from a sub-screen returns to the inbox instead of exiting.
-        BackHandler(enabled = (screen == Screen.Mail || screen == Screen.Kanban) && mailSelectionActive) {
-            selectedMailThreadIds = emptySet()
-            mailSelectionMenuOpen = false
-        }
-        BackHandler(enabled = screen != Screen.Mail && !(screen == Screen.Kanban && mailSelectionActive)) {
-            screen =
-                if (screen == Screen.Thread || screen == Screen.Compose || screen == Screen.AddAccount ||
-                    screen == Screen.Settings
-                ) {
-                    previousTopScreen
-                } else {
-                    Screen.Mail
-                }
         }
 
         when (screen) {
@@ -755,7 +731,12 @@ internal fun MeronMobileScreen(
                     quickReplyAttachments = quickReplyAttachments,
                     quickReplyFailure = quickReplyFailure,
                     sendShortcutMode = sendShortcutMode,
-                    onQuickReplyAttach = { quickReplyAttachmentPicker.launch(arrayOf("*/*")) },
+                    onQuickReplyAttach = {
+                        pickAttachmentInto { picked ->
+                            quickReplyAttachments = quickReplyAttachments + picked
+                            quickReplyFailure = ""
+                        }
+                    },
                     onRemoveQuickReplyAttachment = { attachment ->
                         quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
                         quickReplyFailure = ""
@@ -783,7 +764,7 @@ internal fun MeronMobileScreen(
                         screen = Screen.Compose
                     },
                     onCopyMessageText = { label, value ->
-                        copyToClipboard(context, label, value)
+                        services.copyText(label, value)
                         status = "Copied ${label.lowercase()}"
                     },
                 )
@@ -824,7 +805,11 @@ internal fun MeronMobileScreen(
                     recipientSuggestions = recipientSuggestions,
                     onRecipientFocus = { field, value -> loadRecipientSuggestions(field, value) },
                     onAcceptRecipientSuggestion = ::acceptRecipientSuggestion,
-                    onAttach = { attachmentPicker.launch(arrayOf("*/*")) },
+                    onAttach = {
+                        pickAttachmentInto { picked ->
+                            attachments = attachments + picked
+                        }
+                    },
                     onClearAttachments = { attachments = emptyList() },
                     sendShortcutMode = sendShortcutMode,
                     onSaveDraft = ::saveComposeDraft,
@@ -941,19 +926,19 @@ internal fun MeronMobileScreen(
                     },
                     onPickAccountAvatar = { account ->
                         accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
-                        accountMediaPicker.launch(arrayOf("image/*"))
+                        pickAccountMedia()
                     },
                     onPickAccountWallpaper = { account ->
                         accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
-                        accountMediaPicker.launch(arrayOf("image/*"))
+                        pickAccountMedia()
                     },
                     onPickKanbanBoardAvatar = { board ->
                         kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = false)
-                        kanbanBoardMediaPicker.launch(arrayOf("image/*"))
+                        pickKanbanBoardMedia()
                     },
                     onPickKanbanBoardWallpaper = { board ->
                         kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = true)
-                        kanbanBoardMediaPicker.launch(arrayOf("image/*"))
+                        pickKanbanBoardMedia()
                     },
                     onMoveAccountUp = { account -> moveAccount(account, -1) },
                     onMoveAccountDown = { account -> moveAccount(account, 1) },
@@ -965,47 +950,50 @@ internal fun MeronMobileScreen(
                     showSenderImages = showSenderImages,
                     onToggleSenderImages = {
                         showSenderImages = !showSenderImages
-                        saveAppBoolean(context, SHOW_SENDER_IMAGES_PREF, showSenderImages)
+                        saveAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, showSenderImages)
                     },
                     showUnreadBadges = showUnreadBadges,
                     onToggleUnreadBadges = {
                         showUnreadBadges = !showUnreadBadges
-                        saveAppBoolean(context, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
+                        saveAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
                     },
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     onToggleUnifiedInboxNav = {
                         showUnifiedInboxNav = !showUnifiedInboxNav
-                        saveAppBoolean(context, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
+                        saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
                     },
                     showStarredNav = showStarredNav,
                     onToggleStarredNav = {
                         showStarredNav = !showStarredNav
-                        saveAppBoolean(context, SHOW_STARRED_NAV_PREF, showStarredNav)
+                        saveAppBoolean(prefs, SHOW_STARRED_NAV_PREF, showStarredNav)
                     },
                     sendShortcutMode = sendShortcutMode,
                     onToggleSendShortcut = {
                         val next = sendShortcutMode.next()
                         sendShortcutMode = next
-                        saveSendShortcutMode(context, next)
+                        saveSendShortcutMode(prefs, next)
                     },
                     kanbanColumnWidth = kanbanColumnWidth,
                     onCycleKanbanColumnWidth = {
                         val next = nextKanbanColumnWidth(kanbanColumnWidth)
                         kanbanColumnWidth = next
-                        saveAppInt(context, KANBAN_COLUMN_WIDTH_PREF, next)
+                        saveAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, next)
                     },
-                    notificationsNeedPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionGranted,
-                    onEnableNotifications = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                    notificationsNeedPermission = !notificationPermissionGranted,
+                    onEnableNotifications = {
+                        mobileHost.requestNotificationPermission()
+                        notificationPermissionGranted = mobileHost.notificationsEnabled()
+                    },
                     liveMailPushEnabled = liveMailPushEnabled,
                     onToggleLiveMailPush = {
                         val next = !liveMailPushEnabled
                         liveMailPushEnabled = next
-                        saveAppBoolean(context, LIVE_MAIL_PUSH_PREF, next)
-                        AndroidMailPushService.sync(context)
+                        saveAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, next)
+                        mobileHost.syncLiveMailPush(next)
                         status = if (next) "Live mail push enabled" else "Live mail push disabled"
                     },
                     onRefreshBackground = {
-                        AndroidBackgroundSyncScheduler.runOnce(context)
+                        mobileHost.runBackgroundRefreshOnce()
                         status = "Queued background refresh"
                     },
                     storageUsage = storageUsage,
@@ -1053,7 +1041,7 @@ internal fun MeronMobileScreen(
                             },
                             onSelectKanbanBoard = { board ->
                                 activeKanbanBoardId = board.id
-                                saveActiveKanbanBoardId(context, board.id)
+                                saveActiveKanbanBoardId(kanbanPrefs, board.id)
                                 screen = Screen.Kanban
                                 previousTopScreen = Screen.Kanban
                                 loadKanbanBoard(refresh = false)
@@ -1182,7 +1170,7 @@ internal fun MeronMobileScreen(
                             onSelectKanbanBoard = { board ->
                                 if (activeKanbanBoardId != board.id) {
                                     activeKanbanBoardId = board.id
-                                    saveActiveKanbanBoardId(context, board.id)
+                                    saveActiveKanbanBoardId(kanbanPrefs, board.id)
                                     loadKanbanBoard(refresh = false)
                                 }
                                 scope.launch { drawerState.close() }
@@ -1510,7 +1498,7 @@ internal fun MeronMobileScreen(
                             },
                             onSelectKanbanBoard = { board ->
                                 activeKanbanBoardId = board.id
-                                saveActiveKanbanBoardId(context, board.id)
+                                saveActiveKanbanBoardId(kanbanPrefs, board.id)
                                 screen = Screen.Kanban
                                 previousTopScreen = Screen.Kanban
                                 loadKanbanBoard(refresh = false)
@@ -1719,7 +1707,10 @@ internal fun MeronMobileScreen(
                                                             text = { Text(tr("common.import")) },
                                                             onClick = {
                                                                 mailboxMenuOpen = false
-                                                                opmlImportPicker.launch(arrayOf("text/xml", "application/xml", "text/*", "*/*"))
+                                                                services.pickFile(
+                                                                    listOf("text/xml", "application/xml", "text/*", "*/*"),
+                                                                    importOpml,
+                                                                )
                                                             },
                                                         )
                                                         DropdownMenuItem(
@@ -1846,7 +1837,7 @@ internal fun MeronMobileScreen(
                                             onArchive = ::archiveOrRemove,
                                             onDelete = ::deleteThread,
                                             onCopyFeedUrl = { thread ->
-                                                copyToClipboard(context, "Feed URL", thread.feedUrl)
+                                                services.copyText("Feed URL", thread.feedUrl)
                                                 status = "Copied feed URL"
                                             },
                                             selectedThreadIds = selectedMailThreadIds,
@@ -1952,12 +1943,10 @@ internal fun MeronMobileScreen(
         if (showAboutDialog) {
             AboutDialog(
                 appVersion = appVersion,
-                packageName = context.packageName,
-                coreProtocolVersion = if (coreLoaded) MeronCoreNative.protocolVersion() else 0,
+                packageName = packageName,
+                coreProtocolVersion = coreProtocolVersion,
                 sharedProtocolVersion = SharedMobileContract.protocolVersion,
-                onOpenUrl = { url ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                },
+                onOpenUrl = services::openUrl,
                 onDismiss = { showAboutDialog = false },
             )
         }
@@ -2041,7 +2030,7 @@ internal fun MeronMobileScreen(
                 },
                 onCopyFeedUrl = {
                     kanbanActionThread = null
-                    copyToClipboard(context, "Feed URL", thread.feedUrl)
+                    services.copyText("Feed URL", thread.feedUrl)
                     status = "Copied feed URL"
                 },
                 onMove = { target ->

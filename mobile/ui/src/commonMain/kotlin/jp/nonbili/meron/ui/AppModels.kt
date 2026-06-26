@@ -44,7 +44,7 @@ internal data class ImagePreview(
     }
 }
 
-internal data class NotificationThreadTarget(
+data class NotificationThreadTarget(
     val accountId: String,
     val folder: String,
     val threadKey: String,

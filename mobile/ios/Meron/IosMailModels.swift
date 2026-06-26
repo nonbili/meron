@@ -1,5 +1,5 @@
 import CryptoKit
-import MeronShared
+import MeronUI
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers

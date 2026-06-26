@@ -34,11 +34,33 @@ interface MobileHost {
 
     fun runBackgroundRefreshOnce()
 
+    fun notifyNewMail(
+        accountName: String,
+        from: String,
+        subject: String,
+        count: Int,
+        accountId: String,
+        folder: String,
+        threadKey: String,
+    )
+
     /** Outlook OAuth client id baked into the build (empty when unset). */
     val outlookClientId: String
 
     /** Outlook OAuth redirect URI baked into the build (empty when unset). */
     val outlookRedirectUri: String
+
+    /** Google OAuth client id baked into the build (empty when unset). */
+    val googleClientId: String
+
+    /** Google OAuth redirect URI baked into the build (empty when unset). */
+    val googleRedirectUri: String
+
+    val packageName: String
+
+    val appVersionName: String
+
+    val coreProtocolVersion: Int
 
     /** Whether the platform offers system Google account sign-in (Android only). */
     val supportsGoogleDeviceAuth: Boolean
@@ -62,6 +84,8 @@ interface MobileHost {
 open class DefaultMobileHost(
     override val outlookClientId: String = "",
     override val outlookRedirectUri: String = "",
+    override val googleClientId: String = "",
+    override val googleRedirectUri: String = "",
 ) : MobileHost {
     override fun notificationsEnabled(): Boolean = true
 
@@ -71,7 +95,23 @@ open class DefaultMobileHost(
 
     override fun runBackgroundRefreshOnce() {}
 
+    override fun notifyNewMail(
+        accountName: String,
+        from: String,
+        subject: String,
+        count: Int,
+        accountId: String,
+        folder: String,
+        threadKey: String,
+    ) {}
+
     override val supportsGoogleDeviceAuth: Boolean = false
+
+    override val packageName: String = ""
+
+    override val appVersionName: String = ""
+
+    override val coreProtocolVersion: Int = 0
 
     override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) = onResult(null)
 

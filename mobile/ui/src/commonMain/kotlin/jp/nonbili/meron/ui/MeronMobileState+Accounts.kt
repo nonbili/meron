@@ -645,7 +645,7 @@ internal fun MeronMobileState.connectGoogleDeviceAccount() {
         return
     }
     if (!mobileHost.supportsGoogleDeviceAuth) {
-        status = "System Google sign-in is not available on this device."
+        launchOAuthFlow()
         return
     }
     mobileHost.connectGoogleDeviceAccount { account ->
@@ -805,12 +805,43 @@ internal fun MeronMobileState.launchOAuthFlow() {
                 loginHint = oauthEmail.trim(),
             ),
         )
+    status = "Opened ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in"
+    services.openOAuthUrl(
+        url = url,
+        callbackScheme = redirectUri.substringBefore(':', missingDelimiterValue = ""),
+        onCallback = ::handleOAuthCallback,
+        onFailure = { message -> status = "OAuth browser launch failed: $message" },
+    )
+}
+
+internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
+    loadPendingOAuthFlow(prefs)?.let { pending ->
+        oauthProvider = pending.provider
+        oauthState = pending.state
+        oauthVerifier = pending.verifier
+        oauthRedirectUri = pending.redirectUri
+        oauthEmail = pending.email
+    }
     runCatching {
-        services.openUrl(url)
-    }.onSuccess {
-        status = "Opened ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in"
+        parseOAuthCallbackUrlForRedirect(
+            rawUrl = rawUrl,
+            expectedState = oauthState,
+            redirectUri = oauthRedirectUri.trim(),
+        )
+    }.onSuccess { result ->
+        if (result != null) {
+            oauthAuthorizationCode = result.code
+            addSection = 0
+            passwordServerSettingsOpen = false
+            screen = Screen.AddAccount
+            status = "Finishing ${oauthProvider.replaceFirstChar { it.uppercase() }} sign-in..."
+            clearPendingOAuthFlow(prefs)
+            exchangeOAuthCode()
+        } else {
+            status = "OAuth callback did not match expected redirect URI."
+        }
     }.onFailure {
-        status = "OAuth browser launch failed: ${it.message}"
+        status = "OAuth callback failed: ${it.message}"
     }
 }
 
@@ -818,6 +849,7 @@ private fun MeronMobileState.resolvedOAuthClientId(): String =
     oauthClientId.trim().ifBlank {
         when (oauthProvider) {
             "outlook" -> mobileHost.outlookClientId
+            "gmail" -> mobileHost.googleClientId
             else -> ""
         }
     }.trim()
@@ -825,6 +857,7 @@ private fun MeronMobileState.resolvedOAuthClientId(): String =
 private fun MeronMobileState.resolvedOAuthRedirectUri(): String =
     when (oauthProvider) {
         "outlook" -> mobileHost.outlookRedirectUri
+        "gmail" -> mobileHost.googleRedirectUri.ifBlank { oauthRedirectUri.ifBlank { defaultOAuthRedirectUri() } }
         else -> oauthRedirectUri.ifBlank { defaultOAuthRedirectUri() }
     }.trim()
 

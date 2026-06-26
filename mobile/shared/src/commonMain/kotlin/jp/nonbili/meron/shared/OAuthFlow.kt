@@ -28,9 +28,12 @@ fun isOAuthCallbackUrl(
     val trimmed = rawUrl.trim()
     val expected = redirectUri.trim()
     if (expected.isBlank()) return isOAuthCallbackUrl(trimmed)
+    val expectedWithSlash = if (expected.endsWith('/')) expected else "$expected/"
     return trimmed == expected ||
         trimmed.startsWith("$expected?") ||
-        trimmed.startsWith("$expected#")
+        trimmed.startsWith("$expected#") ||
+        trimmed.startsWith("$expectedWithSlash?") ||
+        trimmed.startsWith("$expectedWithSlash#")
 }
 
 fun isPotentialOAuthCallbackUrl(rawUrl: String): Boolean {
@@ -50,7 +53,7 @@ fun buildOAuthAuthorizationUrl(request: OAuthAuthorizationRequest): String {
         when (provider) {
             "gmail" -> {
                 "https://accounts.google.com/o/oauth2/v2/auth" to
-                    "openid email https://mail.google.com/"
+                    "openid email profile https://mail.google.com/"
             }
 
             "outlook" -> {
@@ -105,7 +108,9 @@ private fun parseOAuthCallbackFields(
     expectedState: String,
 ): OAuthCallbackResult {
     val trimmed = rawUrl.trim()
-    val query = trimmed.substringAfter('?', missingDelimiterValue = "")
+    val query =
+        trimmed.substringAfter('?', missingDelimiterValue = "")
+            .ifBlank { trimmed.substringAfter('#', missingDelimiterValue = "") }
     val fields = parseUrlQuery(query)
     val error = fields["error"]
     require(error.isNullOrBlank()) {

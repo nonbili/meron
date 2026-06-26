@@ -73,7 +73,14 @@ if [[ "$RUN_DESKTOP" -eq 1 ]]; then
 fi
 
 run "$MOBILE_DIR/scripts/verify-oauth-association.sh"
-run gradle -p "$MOBILE_DIR" :shared:check :android:assembleDebug :android:assembleAndroidTest
+run gradle -p "$MOBILE_DIR" \
+  :shared:check \
+  :ui:compileAndroidMain \
+  :ui:compileKotlinIosArm64 \
+  :ui:compileKotlinIosSimulatorArm64 \
+  :ui:linkDebugFrameworkIosSimulatorArm64 \
+  :android:assembleDebug \
+  :android:assembleAndroidTest
 
 if [[ "$RUN_ANDROID_CONNECTED" -eq 1 ]]; then
   if has_android_device; then

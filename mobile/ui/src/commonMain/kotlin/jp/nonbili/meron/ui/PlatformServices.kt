@@ -30,6 +30,15 @@ data class PickedFile(
 interface PlatformServices {
     fun openUrl(url: String)
 
+    fun openOAuthUrl(
+        url: String,
+        callbackScheme: String,
+        onCallback: (String) -> Unit,
+        onFailure: (String) -> Unit,
+    ) {
+        runCatching { openUrl(url) }.onFailure { onFailure(it.message ?: "OAuth browser launch failed") }
+    }
+
     fun copyText(
         label: String,
         value: String,

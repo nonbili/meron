@@ -26,7 +26,7 @@ class OAuthFlowTest {
         assertTrue(url.contains("client_id=client%20id"))
         assertTrue(url.contains("redirect_uri=jp.nonbili.meron.oauth%3A%2F%2Foauth"))
         assertTrue(url.contains("response_type=code"))
-        assertTrue(url.contains("scope=openid%20email%20https%3A%2F%2Fmail.google.com%2F"))
+        assertTrue(url.contains("scope=openid%20email%20profile%20https%3A%2F%2Fmail.google.com%2F"))
         assertTrue(url.contains("state=state"))
         assertTrue(url.contains("code_challenge=challenge"))
         assertTrue(url.contains("code_challenge_method=S256"))
@@ -81,6 +81,29 @@ class OAuthFlowTest {
         assertTrue(isOAuthCallbackUrl("${defaultOAuthRedirectUri()}?code=abc"))
         assertTrue(isOAuthCallbackUrl("JP.NONBILI.MERON.OAUTH://oauth?code=abc"))
         assertNull(parseOAuthCallbackUrl("https://example.com/oauth?code=abc", expectedState = "state"))
+    }
+
+    @Test
+    fun callbackParserAcceptsProviderNormalizedRedirectForms() {
+        val redirectUri = "msauth.jp.nonbili.meron://auth"
+
+        assertTrue(isOAuthCallbackUrl("$redirectUri/?code=abc&state=expected", redirectUri))
+        assertEquals(
+            "abc",
+            parseOAuthCallbackUrlForRedirect(
+                rawUrl = "$redirectUri/?code=abc&state=expected",
+                expectedState = "expected",
+                redirectUri = redirectUri,
+            )?.code,
+        )
+        assertEquals(
+            "fragment-code",
+            parseOAuthCallbackUrlForRedirect(
+                rawUrl = "$redirectUri#code=fragment-code&state=expected",
+                expectedState = "expected",
+                redirectUri = redirectUri,
+            )?.code,
+        )
     }
 
     @Test

@@ -1,5 +1,5 @@
 @testable import Meron
-import MeronShared
+import MeronUI
 import XCTest
 
 final class MailtoUrlContractTests: XCTestCase {

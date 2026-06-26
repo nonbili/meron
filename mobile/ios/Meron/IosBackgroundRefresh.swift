@@ -1,6 +1,6 @@
 import BackgroundTasks
 import Foundation
-import MeronShared
+import MeronUI
 import UIKit
 import UserNotifications
 

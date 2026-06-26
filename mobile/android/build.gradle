@@ -18,6 +18,8 @@ def releaseVersionName = releaseProp("meronVersionName", "MERON_VERSION_NAME", "
 def oauthAppLinkHost = releaseProp("oauthAppLinkHost", "MERON_OAUTH_APP_LINK_HOST", "oauth.example.invalid")
 def oauthAppLinkPathPrefix = releaseProp("oauthAppLinkPathPrefix", "MERON_OAUTH_APP_LINK_PATH_PREFIX", "/meron/oauth")
 def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")
+def googleClientId = releaseProp("googleClientId", "MERON_GOOGLE_CLIENT_ID")
+def googleRedirectUri = releaseProp("googleRedirectUri", "MERON_GOOGLE_REDIRECT_URI")
 def outlookRedirectUriDebug = releaseProp("outlookRedirectUriDebug", "MERON_OUTLOOK_REDIRECT_URI_DEBUG", "msauth://jp.nonbili.meron/lvGC0B4SWYU8tNPHg%2FbdMjQinZQ%3D")
 def outlookRedirectUriRelease = releaseProp("outlookRedirectUriRelease", "MERON_OUTLOOK_REDIRECT_URI_RELEASE", "msauth://jp.nonbili.meron/aJtUZr4euDojxsYjMaCe3sjZhwo%3D")
 def releaseKeystore = releaseProp("meronReleaseStoreFile", "MERON_ANDROID_RELEASE_STORE_FILE")
@@ -47,6 +49,8 @@ android {
             oauthAppLinkPathPrefix: oauthAppLinkPathPrefix,
         ]
         buildConfigField "String", "MERON_OUTLOOK_CLIENT_ID", javaString(outlookClientId)
+        buildConfigField "String", "MERON_GOOGLE_CLIENT_ID", javaString(googleClientId)
+        buildConfigField "String", "MERON_GOOGLE_REDIRECT_URI", javaString(googleRedirectUri)
     }
 
     signingConfigs {
@@ -90,6 +94,7 @@ android {
 
 dependencies {
     implementation project(":shared")
+    implementation project(":ui")
     implementation platform("androidx.compose:compose-bom:2025.12.01")
     implementation "androidx.activity:activity-compose:1.12.1"
     implementation "androidx.compose.foundation:foundation"

@@ -1,6 +1,7 @@
 use super::*;
 
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
 const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const OUTLOOK_SCOPES: &str = "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
 
@@ -151,6 +152,13 @@ pub(crate) struct OAuthCodeTokenResponse {
     id_token: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct GoogleUserInfo {
+    email: Option<String>,
+    name: Option<String>,
+    picture: Option<String>,
+}
+
 pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Result<Value, String> {
     let requested_email = opt_str(params, "email");
     let provider = req_str(params, "provider")?.to_lowercase();
@@ -197,8 +205,43 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     let token_expires_at = now_epoch_seconds() + token.expires_in.unwrap_or(3600);
     let (claim_email, claim_name) =
         parse_oauth_id_token_claims(token.id_token.as_deref().unwrap_or(""));
+    let profile_missing = requested_email.is_empty()
+        || opt_str(params, "display_name").is_empty()
+        || opt_str(params, "sender_name").is_empty()
+        || opt_str(params, "avatar_url").is_empty();
+    let google_profile = if provider == "gmail" && profile_missing {
+        let userinfo_url = params
+            .get("userinfo_url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(GOOGLE_USERINFO_URL);
+        fetch_google_userinfo_blocking(userinfo_url, &token.access_token).unwrap_or_default()
+    } else {
+        GoogleUserInfo::default()
+    };
+    let profile_email = google_profile
+        .email
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let profile_name = google_profile
+        .name
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let profile_picture = google_profile
+        .picture
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let email = if requested_email.contains('@') {
-        requested_email
+        requested_email.clone()
+    } else if profile_email.contains('@') {
+        profile_email
     } else {
         claim_email
     };
@@ -217,15 +260,29 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     if display_name_missing {
         obj.insert(
             "display_name".to_string(),
-            Value::String(if claim_name.is_empty() {
-                email.clone()
-            } else {
-                claim_name.clone()
-            }),
+            Value::String(
+                if !profile_name.is_empty() {
+                    profile_name.clone()
+                } else if !claim_name.is_empty() {
+                    claim_name.clone()
+                } else {
+                    email.clone()
+                },
+            ),
         );
     }
-    if sender_name_missing && !claim_name.is_empty() {
-        obj.insert("sender_name".to_string(), Value::String(claim_name));
+    if sender_name_missing {
+        let sender_name = if !profile_name.is_empty() {
+            profile_name
+        } else {
+            claim_name
+        };
+        if !sender_name.is_empty() {
+            obj.insert("sender_name".to_string(), Value::String(sender_name));
+        }
+    }
+    if opt_str(params, "avatar_url").is_empty() && !profile_picture.is_empty() {
+        obj.insert("avatar_url".to_string(), Value::String(profile_picture));
     }
     obj.insert(
         "access_token".to_string(),
@@ -234,6 +291,32 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     obj.insert("refresh_token".to_string(), Value::String(refresh_token));
     obj.insert("token_expires_at".to_string(), json!(token_expires_at));
     add_mobile_oauth_account(data_dir, &add_params)
+}
+
+fn fetch_google_userinfo_blocking(
+    userinfo_url: &str,
+    access_token: &str,
+) -> Result<GoogleUserInfo, String> {
+    if access_token.trim().is_empty() {
+        return Ok(GoogleUserInfo::default());
+    }
+    let mut resp = ureq::get(userinfo_url)
+        .header("Authorization", &format!("Bearer {access_token}"))
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(8)))
+        .build()
+        .call()
+        .map_err(|err| format!("Google userinfo request: {err:#}"))?;
+    let status = resp.status();
+    let body = resp
+        .body_mut()
+        .read_to_string()
+        .map_err(|err| format!("read Google userinfo response: {err:#}"))?;
+    if !status.is_success() {
+        return Err(format!("Google userinfo failed ({status}): {body}"));
+    }
+    serde_json::from_str(&body).map_err(|err| format!("parse Google userinfo response: {err}"))
 }
 
 fn parse_oauth_id_token_claims(id_token: &str) -> (String, String) {

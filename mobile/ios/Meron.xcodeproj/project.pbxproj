@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* Meron.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Meron.swift */; };
-		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* ContentView.swift */; };
 		A10000000000000000000003 /* RustCoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* RustCoreBridge.swift */; };
 		A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* IosBackgroundRefresh.swift */; };
 		A10000000000000000000005 /* IosAppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* IosAppPaths.swift */; };
@@ -16,21 +15,13 @@
 		A10000000000000000000006 /* RustCoreBridgeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* RustCoreBridgeContractTests.swift */; };
 		A10000000000000000000007 /* MailtoUrlContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* MailtoUrlContractTests.swift */; };
 		A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* IosNotificationContractTests.swift */; };
-		A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
-		A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
-		A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
+			A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
+			A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
+			A1000000000000000000011B /* IosComposeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011C /* IosComposeHost.swift */; };
+			A1000000000000000000011D /* IosContractHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011E /* IosContractHelpers.swift */; };
+			A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
 		A10000000000000000000117 /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000118 /* LocalizationContractTests.swift */; };
 			A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
-			A10000000000000000000093 /* ContentViewComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000104 /* ContentViewComponents.swift */; };
-			A10000000000000000000094 /* ContentView+MailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000105 /* ContentView+MailViews.swift */; };
-			A10000000000000000000095 /* ContentView+ComposeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000106 /* ContentView+ComposeViews.swift */; };
-			A10000000000000000000096 /* ContentView+KanbanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000107 /* ContentView+KanbanView.swift */; };
-			A10000000000000000000097 /* ContentView+AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000108 /* ContentView+AccountsView.swift */; };
-			A10000000000000000000098 /* ContentView+Accounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000109 /* ContentView+Accounts.swift */; };
-			A10000000000000000000099 /* ContentView+Mailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000110 /* ContentView+Mailbox.swift */; };
-			A10000000000000000000100 /* ContentView+Threads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000111 /* ContentView+Threads.swift */; };
-			A10000000000000000000101 /* ContentView+Compose.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000112 /* ContentView+Compose.swift */; };
-			A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000113 /* ContentView+ThreadActions.swift */; };
 			A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
 /* End PBXBuildFile section */
 
@@ -47,7 +38,6 @@
 /* Begin PBXFileReference section */
 		A10000000000000000000010 /* Meron.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Meron.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000011 /* Meron.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meron.swift; sourceTree = "<group>"; };
-		A10000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000014 /* RustCoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RustCoreBridge.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* Meron-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Meron-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -59,20 +49,12 @@
 		A10000000000000000000019 /* MeronTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeronTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000001A /* MailtoUrlContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailtoUrlContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001B /* IosNotificationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosNotificationContractTests.swift; sourceTree = "<group>"; };
-		A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
-		A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
-		A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
+			A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
+			A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
+			A1000000000000000000011C /* IosComposeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosComposeHost.swift; sourceTree = "<group>"; };
+			A1000000000000000000011E /* IosContractHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosContractHelpers.swift; sourceTree = "<group>"; };
+			A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 			A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IosMailModels.swift"; sourceTree = "<group>"; };
-			A10000000000000000000104 /* ContentViewComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentViewComponents.swift"; sourceTree = "<group>"; };
-			A10000000000000000000105 /* ContentView+MailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+MailViews.swift"; sourceTree = "<group>"; };
-			A10000000000000000000106 /* ContentView+ComposeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ComposeViews.swift"; sourceTree = "<group>"; };
-			A10000000000000000000107 /* ContentView+KanbanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+KanbanView.swift"; sourceTree = "<group>"; };
-			A10000000000000000000108 /* ContentView+AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+AccountsView.swift"; sourceTree = "<group>"; };
-			A10000000000000000000109 /* ContentView+Accounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Accounts.swift"; sourceTree = "<group>"; };
-			A10000000000000000000110 /* ContentView+Mailbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Mailbox.swift"; sourceTree = "<group>"; };
-			A10000000000000000000111 /* ContentView+Threads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Threads.swift"; sourceTree = "<group>"; };
-			A10000000000000000000112 /* ContentView+Compose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Compose.swift"; sourceTree = "<group>"; };
-			A10000000000000000000113 /* ContentView+ThreadActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ThreadActions.swift"; sourceTree = "<group>"; };
 			A10000000000000000000115 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = "Localizable.xcstrings"; sourceTree = "<group>"; };
 			A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalizedCatalog.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -108,18 +90,9 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000011 /* Meron.swift */,
-				A10000000000000000000012 /* ContentView.swift */,
+				A1000000000000000000011C /* IosComposeHost.swift */,
+				A1000000000000000000011E /* IosContractHelpers.swift */,
 				A10000000000000000000103 /* IosMailModels.swift */,
-				A10000000000000000000104 /* ContentViewComponents.swift */,
-				A10000000000000000000105 /* ContentView+MailViews.swift */,
-				A10000000000000000000106 /* ContentView+ComposeViews.swift */,
-				A10000000000000000000107 /* ContentView+KanbanView.swift */,
-				A10000000000000000000108 /* ContentView+AccountsView.swift */,
-				A10000000000000000000109 /* ContentView+Accounts.swift */,
-				A10000000000000000000110 /* ContentView+Mailbox.swift */,
-				A10000000000000000000111 /* ContentView+Threads.swift */,
-				A10000000000000000000112 /* ContentView+Compose.swift */,
-				A10000000000000000000113 /* ContentView+ThreadActions.swift */,
 				A1000000000000000000011A /* LocalizedCatalog.swift */,
 				A10000000000000000000014 /* RustCoreBridge.swift */,
 				A10000000000000000000016 /* IosBackgroundRefresh.swift */,
@@ -162,7 +135,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000070 /* Build configuration list for PBXNativeTarget "Meron" */;
 			buildPhases = (
-				A10000000000000000000060 /* Build MeronShared */,
+				A10000000000000000000060 /* Build MeronUI */,
 				A10000000000000000000061 /* Build meron-core */,
 				A10000000000000000000050 /* Sources */,
 				A10000000000000000000020 /* Frameworks */,
@@ -262,7 +235,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A10000000000000000000060 /* Build MeronShared */ = {
+		A10000000000000000000060 /* Build MeronUI */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -272,15 +245,15 @@
 			);
 			inputPaths = (
 			);
-			name = "Build MeronShared";
+			name = "Build MeronUI";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework/MeronShared.framework/MeronShared",
+				"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework/MeronUI.framework/MeronUI",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  gradle -p \"$SRCROOT/..\" :shared:linkDebugFrameworkIosArm64\nelse\n  gradle -p \"$SRCROOT/..\" :shared:linkDebugFrameworkIosSimulatorArm64\nfi\n";
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosArm64\nelse\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosSimulatorArm64\nfi\n\nRESOURCE_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/compose-resources/composeResources/jp.nonbili.meron.ui.resources\"\nrm -rf \"$RESOURCE_DEST\"\nmkdir -p \"$RESOURCE_DEST\"\nfind \"$SRCROOT/../ui/build/generated/compose/resourceGenerator/preparedResources\" -type d -name composeResources | while read -r resource_dir; do\n  rsync -a \"$resource_dir/\" \"$RESOURCE_DEST/\"\ndone\n";
 		};
 		A10000000000000000000061 /* Build meron-core */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -308,20 +281,11 @@
 		A10000000000000000000050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				A10000000000000000000001 /* Meron.swift in Sources */,
-				A10000000000000000000002 /* ContentView.swift in Sources */,
-				A10000000000000000000092 /* IosMailModels.swift in Sources */,
-				A10000000000000000000093 /* ContentViewComponents.swift in Sources */,
-				A10000000000000000000094 /* ContentView+MailViews.swift in Sources */,
-				A10000000000000000000095 /* ContentView+ComposeViews.swift in Sources */,
-				A10000000000000000000096 /* ContentView+KanbanView.swift in Sources */,
-				A10000000000000000000097 /* ContentView+AccountsView.swift in Sources */,
-				A10000000000000000000098 /* ContentView+Accounts.swift in Sources */,
-				A10000000000000000000099 /* ContentView+Mailbox.swift in Sources */,
-				A10000000000000000000100 /* ContentView+Threads.swift in Sources */,
-				A10000000000000000000101 /* ContentView+Compose.swift in Sources */,
-				A10000000000000000000102 /* ContentView+ThreadActions.swift in Sources */,
+				files = (
+					A10000000000000000000001 /* Meron.swift in Sources */,
+					A1000000000000000000011B /* IosComposeHost.swift in Sources */,
+					A1000000000000000000011D /* IosContractHelpers.swift in Sources */,
+					A10000000000000000000092 /* IosMailModels.swift in Sources */,
 				A10000000000000000000119 /* LocalizedCatalog.swift in Sources */,
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
 				A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */,
@@ -479,11 +443,11 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Meron/Info.plist;
@@ -497,17 +461,17 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
-				MERON_GOOGLE_CLIENT_ID = "";
+				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
-				MERON_GOOGLE_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
-				MERON_OUTLOOK_CLIENT_ID = "";
+				MERON_GOOGLE_REDIRECT_URI = "com.googleusercontent.apps.247266375404-5cdrkea888lsttjh65fjtp3504h45r2k:/oauth2redirect/google";
+				MERON_OUTLOOK_CLIENT_ID = "7af51167-6eda-4f66-8514-e5163e4069eb";
 				MERON_OUTLOOK_CLIENT_SECRET = "";
-				MERON_OUTLOOK_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
+				MERON_OUTLOOK_REDIRECT_URI = "msauth.jp.nonbili.meron://auth";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lmeron_core",
 					"-framework",
-					MeronShared,
+					MeronUI,
 					"-framework",
 					SystemConfiguration,
 				);
@@ -530,11 +494,11 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Meron/Info.plist;
@@ -548,17 +512,17 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
-				MERON_GOOGLE_CLIENT_ID = "";
+				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
-				MERON_GOOGLE_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
-				MERON_OUTLOOK_CLIENT_ID = "";
+				MERON_GOOGLE_REDIRECT_URI = "com.googleusercontent.apps.247266375404-5cdrkea888lsttjh65fjtp3504h45r2k:/oauth2redirect/google";
+				MERON_OUTLOOK_CLIENT_ID = "7af51167-6eda-4f66-8514-e5163e4069eb";
 				MERON_OUTLOOK_CLIENT_SECRET = "";
-				MERON_OUTLOOK_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
+				MERON_OUTLOOK_REDIRECT_URI = "msauth.jp.nonbili.meron://auth";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lmeron_core",
 					"-framework",
-					MeronShared,
+					MeronUI,
 					"-framework",
 					SystemConfiguration,
 				);
@@ -579,11 +543,11 @@
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -610,11 +574,11 @@
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

@@ -1,6 +1,6 @@
 import Foundation
 @testable import Meron
-import MeronShared
+import MeronUI
 import XCTest
 
 final class OAuthCallbackContractTests: XCTestCase {

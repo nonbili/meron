@@ -267,7 +267,7 @@ import kotlin.math.abs
 class ComposeMainActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
-    private var incomingNotificationThreadTarget by mutableStateOf<NotificationThreadTarget?>(null)
+    private var incomingNotificationThreadTarget by mutableStateOf<jp.nonbili.meron.ui.NotificationThreadTarget?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         syncAppLanguageFromSystemSetting(newBase)
@@ -283,36 +283,42 @@ class ComposeMainActivity : ComponentActivity() {
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
         AndroidNotificationService.ensureChannels(this)
         AndroidBackgroundSyncScheduler.schedule(this)
+        jp.nonbili.meron.ui.androidImageContext = this
         val coreInitJson =
             if (MeronCoreNative.isLoaded()) {
                 MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
             } else {
                 ""
         }
+        val appPrefs = jp.nonbili.meron.ui.AndroidAppPreferences(this, "meron_app")
+        val kanbanPrefs = jp.nonbili.meron.ui.AndroidAppPreferences(this, "meron_kanban")
+        val localeController = jp.nonbili.meron.ui.AndroidLocaleController(this, appPrefs)
+        val platformServices = AndroidPlatformServices(this)
+        val mobileHost = AndroidMobileHost(this)
         setContent {
-            var appearanceMode by remember { mutableStateOf(loadAppearanceMode(this)) }
-            var appLanguageTag by remember { mutableStateOf(loadAppLanguageTag(this)) }
-            MeronTheme(appearanceMode = appearanceMode) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MeronMobileScreen(
-                        coreInitJson = coreInitJson,
-                        incomingMailtoDraft = incomingMailtoDraft,
-                        incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-                        incomingNotificationThreadTarget = incomingNotificationThreadTarget,
-                        appearanceMode = appearanceMode,
-                        onAppearanceModeChange = { mode ->
-                            appearanceMode = mode
-                            saveAppearanceMode(this, mode)
-                        },
-                        appLanguageTag = appLanguageTag,
-                        onAppLanguageChange = { tag ->
-                            appLanguageTag = tag
-                            saveAppLanguageTag(this, tag)
-                            recreate()
-                        },
-                    )
-                }
-            }
+            var appearanceMode by remember { mutableStateOf(jp.nonbili.meron.ui.AppAppearanceMode.Indigo) }
+            var appLanguageTag by remember { mutableStateOf(localeController.currentLanguageTag()) }
+            jp.nonbili.meron.ui.MeronApp(
+                core = JniMeronCore(),
+                coreLoaded = MeronCoreNative.isLoaded(),
+                prefs = appPrefs,
+                kanbanPrefs = kanbanPrefs,
+                services = platformServices,
+                locale = localeController,
+                mobileHost = mobileHost,
+                coreInitJson = coreInitJson,
+                incomingMailtoDraft = incomingMailtoDraft,
+                incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                incomingNotificationThreadTarget = incomingNotificationThreadTarget,
+                appearanceMode = appearanceMode,
+                onAppearanceModeChange = { mode -> appearanceMode = mode },
+                appLanguageTag = appLanguageTag,
+                onAppLanguageChange = { tag ->
+                    appLanguageTag = tag
+                    localeController.apply(tag)
+                    recreate()
+                },
+            )
         }
     }
 
@@ -329,10 +335,10 @@ class ComposeMainActivity : ComponentActivity() {
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
 }
 
-private fun Intent.toNotificationThreadTarget(): NotificationThreadTarget? {
+private fun Intent.toNotificationThreadTarget(): jp.nonbili.meron.ui.NotificationThreadTarget? {
     val account = getStringExtra(AndroidNotificationService.EXTRA_ACCOUNT_ID).orEmpty()
     val folder = getStringExtra(AndroidNotificationService.EXTRA_FOLDER).orEmpty()
     val threadKey = getStringExtra(AndroidNotificationService.EXTRA_THREAD_KEY).orEmpty()
     if (account.isBlank() || folder.isBlank() || threadKey.isBlank()) return null
-    return NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
+    return jp.nonbili.meron.ui.NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
 }
