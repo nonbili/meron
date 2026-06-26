@@ -1024,13 +1024,13 @@ private fun MeronMobileScreenContent(
                             activeKanbanBoardId = activeKanbanBoardId,
                             onSelectUnified = {
                                 screen = Screen.Mail
+                                selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
                                 syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 scope.launch { drawerState.close() }
                             },
                             onSelectAccount = { account ->
                                 screen = Screen.Mail
-                                selectedCoreAccountId = account.id
-                                selectedCoreFolder = INBOX_FOLDER
+                                selectCoreMailbox(account.id, INBOX_FOLDER)
                                 syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 scope.launch { drawerState.close() }
                             },
@@ -1140,11 +1140,7 @@ private fun MeronMobileScreenContent(
                             onSelectUnified = {
                                 screen = Screen.Mail
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                                    selectedCoreAccountId = UNIFIED_ACCOUNT_ID
-                                    selectedCoreFolder = INBOX_FOLDER
-                                    coreThreads = emptyList()
-                                    selectedCoreThread = null
-                                    messages = emptyList()
+                                    selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
                                     syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
                                 }
                                 scope.launch { drawerState.close() }
@@ -1152,12 +1148,7 @@ private fun MeronMobileScreenContent(
                             onSelectAccount = { account ->
                                 screen = Screen.Mail
                                 if (selectedCoreAccountId != account.id) {
-                                    selectedCoreAccountId = account.id
-                                    selectedCoreFolder = INBOX_FOLDER
-                                    coreFolders = emptyList()
-                                    coreThreads = emptyList()
-                                    selectedCoreThread = null
-                                    messages = emptyList()
+                                    selectCoreMailbox(account.id, INBOX_FOLDER)
                                     syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
                                 }
                                 scope.launch { drawerState.close() }
@@ -1463,11 +1454,7 @@ private fun MeronMobileScreenContent(
                             activeKanbanBoardId = activeKanbanBoardId,
                             onSelectUnified = {
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                                    selectedCoreAccountId = UNIFIED_ACCOUNT_ID
-                                    selectedCoreFolder = INBOX_FOLDER
-                                    coreThreads = emptyList()
-                                    selectedCoreThread = null
-                                    messages = emptyList()
+                                    selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
                                     syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
                                 }
                                 screen = Screen.Mail
@@ -1475,12 +1462,7 @@ private fun MeronMobileScreenContent(
                             },
                             onSelectAccount = { account ->
                                 if (selectedCoreAccountId != account.id) {
-                                    selectedCoreAccountId = account.id
-                                    selectedCoreFolder = INBOX_FOLDER
-                                    coreFolders = emptyList()
-                                    coreThreads = emptyList()
-                                    selectedCoreThread = null
-                                    messages = emptyList()
+                                    selectCoreMailbox(account.id, INBOX_FOLDER)
                                     syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
                                 }
                                 screen = Screen.Mail
@@ -1773,8 +1755,12 @@ private fun MeronMobileScreenContent(
                                     )
                                 }
                             }
+                            val showingBlockingInboxLoad =
+                                !initialAccountsLoaded ||
+                                    accountsLoading ||
+                                    (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded))
                             PullToRefreshBox(
-                                isRefreshing = syncing,
+                                isRefreshing = syncing && !showingBlockingInboxLoad,
                                 onRefresh = { syncCoreThreads() },
                                 modifier = Modifier.fillMaxSize(),
                             ) {

@@ -273,7 +273,7 @@ internal fun MailDrawer(
                         val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
                         val unread = folders.filter { it.accountId in includedAccountIds }.sumOf { it.unread }
                         SidebarRow(
-                            selected = selectedAccountId == UNIFIED_ACCOUNT_ID,
+                            selected = currentScreen == Screen.Mail && selectedAccountId == UNIFIED_ACCOUNT_ID,
                             chat = chat,
                             onClick = onSelectUnified,
                             leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
@@ -291,7 +291,7 @@ internal fun MailDrawer(
                             .sumOf { it.unread }
                     val needsGoogleReauth = account.id == googleReauthAccountId
                     SidebarRow(
-                        selected = account.id == selectedAccountId,
+                        selected = currentScreen == Screen.Mail && account.id == selectedAccountId,
                         chat = chat,
                         onClick = {
                             if (needsGoogleReauth) onReconnectGoogle(account) else onSelectAccount(account)

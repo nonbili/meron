@@ -101,6 +101,13 @@ internal data class MailboxLoadResult(
     val accountCursors: Map<String, String> = emptyMap(),
 )
 
+internal data class MailboxCacheKey(
+    val accountId: String,
+    val folderId: String,
+    val query: String,
+    val filter: FilterMode,
+)
+
 internal data class KanbanColumnSpec(
     val accountId: String,
     val folderId: String,

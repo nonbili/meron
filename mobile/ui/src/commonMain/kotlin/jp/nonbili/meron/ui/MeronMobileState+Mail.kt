@@ -231,6 +231,76 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
+private fun mailboxCacheKey(
+    accountId: String,
+    folderId: String,
+    query: String,
+    filter: FilterMode,
+): MailboxCacheKey =
+    MailboxCacheKey(
+        accountId = accountId.ifBlank { UNIFIED_ACCOUNT_ID },
+        folderId = folderId.ifBlank { INBOX_FOLDER }.lowercase(),
+        query = query.trim(),
+        filter = filter,
+    )
+
+private fun MeronMobileState.cacheVisibleMailbox() {
+    if (!initialThreadsLoaded) return
+    val accountId = selectedCoreAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
+    val folderId = selectedCoreFolder.ifBlank { INBOX_FOLDER }
+    val key = mailboxCacheKey(accountId, folderId, mailSearch, mailFilter)
+    mailboxCache =
+        mailboxCache +
+            (key to
+                MailboxLoadResult(
+                    folders = coreFolders,
+                    folder = folderId,
+                    threads = coreThreads,
+                    nextCursor = mailboxCursor,
+                    accountCursors = mailboxAccountCursors,
+                ))
+}
+
+private fun MeronMobileState.restoreCachedMailbox(
+    accountId: String,
+    folderId: String,
+): Boolean {
+    val cached = mailboxCache[mailboxCacheKey(accountId, folderId, mailSearch, mailFilter)] ?: return false
+    coreFolders = cached.folders
+    if (cached.folders.isNotEmpty()) {
+        foldersByAccount = foldersByAccount + cached.folders.groupBy { it.accountId }
+    }
+    selectedCoreFolder = cached.folder
+    coreThreads = cached.threads
+    mailboxCursor = cached.nextCursor
+    mailboxAccountCursors = cached.accountCursors
+    initialThreadsLoaded = true
+    errorBanner = null
+    return true
+}
+
+internal fun MeronMobileState.selectCoreMailbox(
+    accountId: String,
+    folderId: String = INBOX_FOLDER,
+) {
+    cacheVisibleMailbox()
+    selectedCoreAccountId = accountId.ifBlank { UNIFIED_ACCOUNT_ID }
+    selectedCoreFolder = folderId.ifBlank { INBOX_FOLDER }
+    selectedCoreThread = null
+    selectedMailThreadIds = emptySet()
+    mailSelectionMenuOpen = false
+    messages = emptyList()
+    messageCursor = ""
+    loadingMoreMessages = false
+    if (!restoreCachedMailbox(selectedCoreAccountId, selectedCoreFolder)) {
+        coreFolders = if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) coreFolders else emptyList()
+        coreThreads = emptyList()
+        mailboxCursor = ""
+        mailboxAccountCursors = emptyMap()
+        initialThreadsLoaded = false
+    }
+}
+
 internal fun MeronMobileState.syncCoreThreads(
     accountOverride: String? = null,
     folderOverride: String? = null,
@@ -255,6 +325,8 @@ internal fun MeronMobileState.syncCoreThreads(
         initialThreadsLoaded = true
         return
     }
+    val requestKey = mailboxCacheKey(accountId, requestedFolder, query, filter)
+    activeMailboxLoadKey = requestKey
     syncing = true
     scope.launch {
         runCatching {
@@ -294,6 +366,18 @@ internal fun MeronMobileState.syncCoreThreads(
                 }
             }
         }.onSuccess { result ->
+            val resultKey = mailboxCacheKey(accountId, result.folder, query, filter)
+            mailboxCache =
+                mailboxCache +
+                    (resultKey to
+                        result.copy(
+                            folders = result.folders,
+                            folder = result.folder,
+                            threads = result.threads,
+                            nextCursor = result.nextCursor,
+                            accountCursors = result.accountCursors,
+                        ))
+            if (activeMailboxLoadKey != requestKey) return@onSuccess
             val wasInitialLoad = !initialThreadsLoaded
             val existingIds = coreThreads.map { it.id }.toSet()
             coreFolders = result.folders
@@ -310,12 +394,15 @@ internal fun MeronMobileState.syncCoreThreads(
                 selectedCoreThread = null
                 messages = emptyList()
             }
+            activeMailboxLoadKey = null
             syncing = false
             initialThreadsLoaded = true
             errorBanner = null
             val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
             status = if (newCount > 0) "$newCount new message(s)" else ""
         }.onFailure {
+            if (activeMailboxLoadKey != requestKey) return@onFailure
+            activeMailboxLoadKey = null
             syncing = false
             initialThreadsLoaded = true
             errorBanner = it.message ?: "Sync failed"
@@ -421,6 +508,7 @@ internal fun MeronMobileState.loadMoreCoreThreads() {
             coreThreads = (coreThreads + appended).sortedByDescending { it.dateEpochSeconds }
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
+            cacheVisibleMailbox()
             loadingMoreThreads = false
             errorBanner = null
             status = if (appended.isEmpty()) "No older messages." else "Loaded ${appended.size} older message(s)."
