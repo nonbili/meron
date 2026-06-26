@@ -582,6 +582,7 @@ private fun MeronMobileScreenContent(
                 bcc = draft.bcc
                 subject = draft.subject
                 body = draft.body
+                composeReturnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
                 screen = Screen.Compose
                 status = "Loaded compose draft from mailto link"
             }
@@ -761,6 +762,7 @@ private fun MeronMobileScreenContent(
                         attachments = emptyList()
                         composeDraftId = ""
                         composeDraftSaved = false
+                        composeReturnScreen = Screen.Thread
                         screen = Screen.Compose
                     },
                     onCopyMessageText = { label, value ->
@@ -815,7 +817,7 @@ private fun MeronMobileScreenContent(
                     onSaveDraft = ::saveComposeDraft,
                     onDiscardDraft = ::discardComposeDraft,
                     onSend = ::sendMail,
-                    onBack = { screen = previousTopScreen },
+                    onBack = ::closeCompose,
                 )
             }
 

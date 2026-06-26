@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,8 +34,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -233,6 +238,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -290,6 +296,7 @@ internal fun ComposeScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
                 title = { Text(tr("composer.actions.newMessage")) },
@@ -332,84 +339,103 @@ internal fun ComposeScreen(
             )
         },
     ) { innerPadding ->
-        Column(
-            Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(innerPadding)
+                .navigationBarsPadding()
+                .imePadding(),
         ) {
-            if (sendIdentities.size > 1) {
-                FromIdentitySelector(
-                    identities = sendIdentities,
-                    selectedKey = selectedFromKey,
-                    onSelect = onFromChange,
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ComposeField(
-                    value = to,
-                    onChange = onToChange,
-                    label = tr("composer.fields.to"),
-                    field = "to",
-                    suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
-                    onFocus = onRecipientFocus,
-                    onAcceptSuggestion = onAcceptRecipientSuggestion,
-                    modifier = Modifier.weight(1f),
-                )
-                if (!showCcBcc) {
-                    TextButton(onClick = { showCcBcc = true }) { Text(tr("composer.actions.ccBcc")) }
-                }
-            }
-            if (showCcBcc) {
-                ComposeField(
-                    value = cc,
-                    onChange = onCcChange,
-                    label = tr("composer.fields.cc"),
-                    field = "cc",
-                    suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
-                    onFocus = onRecipientFocus,
-                    onAcceptSuggestion = onAcceptRecipientSuggestion,
-                )
-                ComposeField(
-                    value = bcc,
-                    onChange = onBccChange,
-                    label = tr("composer.fields.bcc"),
-                    field = "bcc",
-                    suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
-                    onFocus = onRecipientFocus,
-                    onAcceptSuggestion = onAcceptRecipientSuggestion,
-                )
-            }
-            ComposeField(subject, onSubjectChange, tr("composer.fields.subject"))
-            OutlinedTextField(
-                value = body,
-                onValueChange = onBodyChange,
-                placeholder = { Text(tr("composer.placeholders.message")) },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .onPreviewKeyEvent { event ->
-                            if (shouldSendFromEditor(event, sendShortcutMode)) {
-                                onSend()
-                                true
-                            } else {
-                                false
-                            }
-                        },
-            )
-            attachments.forEach { attachment ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(
-                        "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+            val optionalFieldsHeight = (if (sendIdentities.size > 1) 56 else 0) + (if (showCcBcc) 128 else 0)
+            val attachmentHeight = attachments.size * 26 + if (attachments.isNotEmpty()) 44 else 0
+            val bodyMinHeight =
+                max(
+                    280f,
+                    maxHeight.value - optionalFieldsHeight - attachmentHeight - 220f,
+                ).dp
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (sendIdentities.size > 1) {
+                    FromIdentitySelector(
+                        identities = sendIdentities,
+                        selectedKey = selectedFromKey,
+                        onSelect = onFromChange,
                     )
                 }
-            }
-            if (attachments.isNotEmpty()) {
-                TextButton(onClick = onClearAttachments) { Text(tr("mobile.compose.clearAttachments")) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ComposeField(
+                        value = to,
+                        onChange = onToChange,
+                        label = tr("composer.fields.to"),
+                        field = "to",
+                        suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
+                        onFocus = onRecipientFocus,
+                        onAcceptSuggestion = onAcceptRecipientSuggestion,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (!showCcBcc) {
+                        TextButton(onClick = { showCcBcc = true }) { Text(tr("composer.actions.ccBcc")) }
+                    }
+                }
+                if (showCcBcc) {
+                    ComposeField(
+                        value = cc,
+                        onChange = onCcChange,
+                        label = tr("composer.fields.cc"),
+                        field = "cc",
+                        suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
+                        onFocus = onRecipientFocus,
+                        onAcceptSuggestion = onAcceptRecipientSuggestion,
+                    )
+                    ComposeField(
+                        value = bcc,
+                        onChange = onBccChange,
+                        label = tr("composer.fields.bcc"),
+                        field = "bcc",
+                        suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
+                        onFocus = onRecipientFocus,
+                        onAcceptSuggestion = onAcceptRecipientSuggestion,
+                    )
+                }
+                ComposeField(subject, onSubjectChange, tr("composer.fields.subject"))
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = onBodyChange,
+                    placeholder = { Text(tr("composer.placeholders.message")) },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = bodyMinHeight)
+                            .onPreviewKeyEvent { event ->
+                                if (shouldSendFromEditor(event, sendShortcutMode)) {
+                                    onSend()
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
+                )
+                attachments.forEach { attachment ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(
+                            "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                if (attachments.isNotEmpty()) {
+                    TextButton(onClick = onClearAttachments) { Text(tr("mobile.compose.clearAttachments")) }
+                }
             }
         }
     }

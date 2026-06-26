@@ -342,7 +342,7 @@ internal fun MeronMobileState.sendMail() {
             }
         }.onSuccess {
             clearComposeDraftState()
-            screen = previousTopScreen
+            closeCompose()
             errorBanner = null
             status = "Message sent"
             syncCoreThreads()
@@ -435,9 +435,9 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
     quickReplyBody = ""
     quickReplyAttachments = emptyList()
     quickReplyFailure = ""
-    previousTopScreen = Screen.Thread
+    composeReturnScreen = Screen.Thread
     screen = Screen.Compose
-    status = "Reply opened in full editor"
+    status = ""
 }
 
 internal fun MeronMobileState.discardComposeDraft() {
@@ -460,7 +460,7 @@ internal fun MeronMobileState.discardComposeDraft() {
             }
         }.onSuccess {
             clearComposeDraftState()
-            screen = previousTopScreen
+            closeCompose()
             status = "Draft discarded"
             syncCoreThreads(syncFirst = false)
         }.onFailure {
@@ -553,7 +553,7 @@ internal fun MeronMobileState.openMessageCompose(
             composeFromEmail = ""
             composeDraftId = ""
             composeDraftSaved = false
-            previousTopScreen = Screen.Thread
+            composeReturnScreen = Screen.Thread
             screen = Screen.Compose
             status = if (forward) "Forward draft ready" else "Copied message into compose"
         }.onFailure {
@@ -646,8 +646,12 @@ internal fun MeronMobileState.openCompose() {
     attachments = emptyList()
     composeDraftId = ""
     composeDraftSaved = false
-    previousTopScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
+    composeReturnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
     screen = Screen.Compose
+}
+
+internal fun MeronMobileState.closeCompose() {
+    screen = composeReturnScreen
 }
 
 // Re-open account setup pre-filled so the user can fix credentials. OAuth

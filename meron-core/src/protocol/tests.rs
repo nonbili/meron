@@ -1185,7 +1185,7 @@ fn mobile_protocol_reads_uid_thread_message_from_store() {
 }
 
 #[test]
-fn mobile_protocol_mark_read_and_starred_require_server_credentials() {
+fn mobile_protocol_mark_read_persists_locally_before_server_sync() {
     let data_dir = unique_data_dir("thread-actions");
     seed_mobile_account(&data_dir, "me@example.com");
     let conn = store::open_at(data_dir.join("meron.db")).unwrap();
@@ -1245,12 +1245,7 @@ fn mobile_protocol_mark_read_and_starred_require_server_credentials() {
         Some(data_dir.to_str().unwrap()),
     );
     assert_eq!(mark_all["id"], 72);
-    assert!(
-        mark_all["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("account needs reconnect")
-    );
+    assert_eq!(mark_all["result"]["ok"], true);
 
     let threads = invoke_mobile_protocol_json(
         r#"{"id":70,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"all"}}"#,
@@ -1258,21 +1253,21 @@ fn mobile_protocol_mark_read_and_starred_require_server_credentials() {
     );
     let first = &threads["result"]["threads"][0];
     assert_eq!(first["thread_id"], "me@example.com#INBOX#t.dG9waWM");
-    assert_eq!(first["unread"], true);
-    assert_eq!(first["unread_count"], 1);
+    assert_eq!(first["unread"], false);
+    assert_eq!(first["unread_count"], 0);
     assert_eq!(first["starred"], false);
 
     let unread = invoke_mobile_protocol_json(
         r#"{"id":71,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"unread"}}"#,
         Some(data_dir.to_str().unwrap()),
     );
-    assert_eq!(unread["result"]["threads"].as_array().unwrap().len(), 1);
+    assert_eq!(unread["result"]["threads"].as_array().unwrap().len(), 0);
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
-fn mobile_protocol_marks_uid_thread_read_requires_server_credentials() {
+fn mobile_protocol_marks_uid_thread_read_locally_before_server_sync() {
     let data_dir = unique_data_dir("uid-thread-actions");
     seed_mobile_account(&data_dir, "me@example.com");
     let conn = store::open_at(data_dir.join("meron.db")).unwrap();
@@ -1308,7 +1303,7 @@ fn mobile_protocol_marks_uid_thread_read_requires_server_credentials() {
         r#"{"id":73,"method":"mail.threadRead","params":{"thread_id":"me@example.com#Drafts#4"}}"#,
         Some(data_dir.to_str().unwrap()),
     );
-    assert_eq!(read["result"]["messages"][0]["unread"], true);
+    assert_eq!(read["result"]["messages"][0]["unread"], false);
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

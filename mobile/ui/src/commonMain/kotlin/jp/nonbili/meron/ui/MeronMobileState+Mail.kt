@@ -484,7 +484,7 @@ internal fun MeronMobileState.openDraftCompose(
                     .trim('<', '>')
                     .ifBlank { newDraftMessageId(thread.accountId) }
             composeDraftSaved = true
-            previousTopScreen = Screen.Mail
+            composeReturnScreen = Screen.Mail
             screen = Screen.Compose
             status = "Draft ready"
         }.onFailure {
@@ -511,11 +511,22 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                if (threadIdIsRss(thread.id)) {
-                    client.readRssThread(RssThreadParams(threadId = thread.id))
-                } else {
-                    client.readThread(ThreadReadParams(threadId = thread.id))
+                val response =
+                    if (threadIdIsRss(thread.id)) {
+                        client.readRssThread(RssThreadParams(threadId = thread.id))
+                    } else {
+                        client.readThread(ThreadReadParams(threadId = thread.id))
+                    }
+                if (thread.unread) {
+                    runCatching {
+                        if (threadIdIsRss(thread.id)) {
+                            client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true))
+                        } else {
+                            client.markRead(MarkReadParams(threadId = thread.id, seen = true))
+                        }
+                    }
                 }
+                response
             }
         }.onSuccess {
             val page = parseThreadReadPage(it)

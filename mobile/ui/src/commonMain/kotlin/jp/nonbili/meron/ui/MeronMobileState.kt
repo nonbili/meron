@@ -87,6 +87,7 @@ internal class MeronMobileState(
     var selectedCoreThread by mutableStateOf<ThreadSummary?>(null)
     var conversationHtmlOverrides by mutableStateOf(emptyMap<String, Boolean>())
     var previousTopScreen by mutableStateOf(Screen.Mail)
+    var composeReturnScreen by mutableStateOf(Screen.Mail)
     var kanbanBoards by mutableStateOf(loadKanbanBoards(kanbanPrefs, emptyList()))
     var activeKanbanBoardId by mutableStateOf(loadActiveKanbanBoardId(kanbanPrefs))
     var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
