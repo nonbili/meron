@@ -58,6 +58,14 @@ func TestNotificationThreadIDUIDKeyHasNoSubject(t *testing.T) {
 	}
 }
 
+func TestNotificationThreadIDGmailThreadIDHasNoSubject(t *testing.T) {
+	got := notificationThreadID("acc-1", "inbox", "gmthrid:123", "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)")
+	want := formatImapThreadID("acc-1", "INBOX", "gmthrid:123")
+	if got != want {
+		t.Fatalf("notificationThreadID() = %q, want %q", got, want)
+	}
+}
+
 func TestNotificationThreadIDEmptyWithoutKey(t *testing.T) {
 	if got := notificationThreadID("", "INBOX", "k", "s"); got != "" {
 		t.Errorf("missing account: got %q, want empty", got)

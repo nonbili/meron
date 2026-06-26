@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -169,7 +168,7 @@ func notificationThreadID(account, folder, threadKey, subject string) string {
 	// id lines up with the thread-list card the user clicks regardless of whether
 	// the list spelled the folder "inbox" or "INBOX".
 	compoundKey := threadKey
-	if !strings.HasPrefix(threadKey, "uid:") {
+	if shouldBranchThreadBySubject(threadKey) {
 		// Must use the grouping variant (not normalizeThreadSubject): threadRead's
 		// subjectFilter is matched against threadGroupingSubject, which strips
 		// leading bracket tags ([github], [EXTERNAL], …). Using the display variant

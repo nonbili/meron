@@ -171,7 +171,7 @@ func (a *App) starredItems(payload map[string]any) (any, error) {
 			threadKey = fmt.Sprintf("uid:%d", uid)
 		}
 		compoundKey := threadKey
-		if !strings.HasPrefix(threadKey, "uid:") {
+		if shouldBranchThreadBySubject(threadKey) {
 			compoundKey = threadKey + "#" + threadGroupingSubject(jsonString(msg["subject"]))
 		}
 		// IDs must match threadsJSON/threadMessagesJSON exactly so opening the

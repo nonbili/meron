@@ -93,7 +93,7 @@ func threadsJSON(accountID, folder string, raw any) any {
 		}
 		compoundKey := threadKey
 		normSub := ""
-		if !strings.HasPrefix(threadKey, "uid:") {
+		if shouldBranchThreadBySubject(threadKey) {
 			normSub = threadGroupingSubject(jsonString(msg["subject"]))
 			compoundKey = threadKey + "#" + normSub
 		}
@@ -103,7 +103,7 @@ func threadsJSON(accountID, folder string, raw any) any {
 
 			// Compute OriginalThreadID if this is a branched thread
 			var originalThreadID string
-			if !strings.HasPrefix(threadKey, "uid:") {
+			if shouldBranchThreadBySubject(threadKey) {
 				origSubject := oldestGroupSubject[threadKey]
 				if normSub != origSubject {
 					originalThreadID = formatImapThreadID(accountID, msgFolder, threadKey+"#"+origSubject)
@@ -273,6 +273,10 @@ func canonThreadFolder(folder string) string {
 func formatImapThreadID(accountID, folder, threadKey string) string {
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(threadKey))
 	return fmt.Sprintf("%s#%s#t.%s", accountID, canonThreadFolder(folder), encoded)
+}
+
+func shouldBranchThreadBySubject(threadKey string) bool {
+	return !strings.HasPrefix(threadKey, "uid:") && !strings.HasPrefix(threadKey, "gmthrid:")
 }
 
 func formatParsedImapThreadIDInFolder(ids ImapThreadIDs, folder string) string {

@@ -120,6 +120,31 @@ func TestThreadsJSONBranchedThreadGetsOriginalThreadID(t *testing.T) {
 	}
 }
 
+func TestThreadsJSONDoesNotBranchGmailThreadIDBySubject(t *testing.T) {
+	raw := map[string]any{
+		"messages": []any{
+			msg(10, map[string]any{"thread_key": "gmthrid:123", "subject": "[nonbili/Nora] Profiles bug (Issue #295)", "seen": true}),
+			msg(11, map[string]any{"thread_key": "gmthrid:123", "subject": "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)", "seen": false}),
+		},
+	}
+
+	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
+	if len(byID) != 1 {
+		t.Fatalf("got %d threads, want 1 Gmail thread despite subject drift: %#v", len(byID), byID)
+	}
+	wantID := formatImapThreadID("acc", "INBOX", "gmthrid:123")
+	thread, ok := byID[wantID]
+	if !ok {
+		t.Fatalf("missing Gmail thread id %q in %#v", wantID, byID)
+	}
+	if thread.OriginalThreadID != "" {
+		t.Errorf("Gmail thread should not get a branch OriginalThreadID, got %q", thread.OriginalThreadID)
+	}
+	if !thread.Unread || thread.UnreadCount != 1 {
+		t.Errorf("unread aggregation = (%v, %d), want (true, 1)", thread.Unread, thread.UnreadCount)
+	}
+}
+
 func TestThreadsJSONFoldsGatewayTagsIntoSameThread(t *testing.T) {
 	// A gateway-tagged inbound copy must thread with its untagged counterpart.
 	raw := map[string]any{

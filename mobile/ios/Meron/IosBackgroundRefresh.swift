@@ -39,7 +39,12 @@ func iosNotificationThreadId(_ target: IosNotificationThreadTarget) -> String {
     if target.threadKey.hasPrefix("uid:") {
         return "\(target.accountId)#\(folder)#\(String(target.threadKey.dropFirst(4)))"
     }
-    let compoundKey = target.threadKey + "#" + iosThreadGroupingSubject(target.subject)
+    let compoundKey: String
+    if target.threadKey.hasPrefix("gmthrid:") {
+        compoundKey = target.threadKey
+    } else {
+        compoundKey = target.threadKey + "#" + iosThreadGroupingSubject(target.subject)
+    }
     let encoded = Data(compoundKey.utf8)
         .base64EncodedString()
         .replacingOccurrences(of: "+", with: "-")

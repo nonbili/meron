@@ -57,4 +57,20 @@ final class IosNotificationContractTests: XCTestCase {
 
         XCTAssertEqual(iosNotificationThreadId(target), "acct#INBOX#42")
     }
+
+    func testNotificationThreadIdGmailThreadIdHasNoSubject() {
+        let target = IosNotificationThreadTarget(
+            accountId: "acct",
+            folder: "inbox",
+            threadKey: "gmthrid:123",
+            subject: "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)"
+        )
+        let expectedEncoded = Data("gmthrid:123".utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
+        XCTAssertEqual(iosNotificationThreadId(target), "acct#INBOX#t.\(expectedEncoded)")
+    }
 }

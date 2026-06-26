@@ -1033,6 +1033,54 @@ fn mobile_protocol_lists_threads_from_store() {
 }
 
 #[test]
+fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
+    let data_dir = unique_data_dir("gmail-thread-id");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[
+            MessageHeader {
+                uid: 10,
+                subject: "[nonbili/Nora] Profiles bug (Issue #295)".to_string(),
+                from_name: "NightStars".to_string(),
+                date: 100,
+                seen: true,
+                thread_key: "gmthrid:123".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 11,
+                subject: "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)".to_string(),
+                from_name: "NightStars".to_string(),
+                date: 200,
+                seen: false,
+                thread_key: "gmthrid:123".to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":166,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"all"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let threads = value["result"]["threads"].as_array().unwrap();
+    assert_eq!(threads.len(), 1, "{value}");
+    assert_eq!(
+        threads[0]["thread_id"],
+        "me@example.com#INBOX#t.Z210aHJpZDoxMjM"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_reads_cached_thread_messages_from_store() {
     let data_dir = unique_data_dir("thread-read");
     seed_mobile_account(&data_dir, "me@example.com");
