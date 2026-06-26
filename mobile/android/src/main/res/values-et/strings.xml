@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Kuva navigeerimissahtlis</string>
     <string name="settings_notifications_enable_hint">Luba uute kirjade märguanded</string>
     <string name="settings_pages_appearance">Välimus</string>
+    <string name="settings_poll_interval">Kontrolli posti</string>
+    <string name="settings_poll_interval_hint">Kui sageli kontrollida, kui rakendus on avatud. Taustakontrollid sõltuvad iOS-ist.</string>
+    <string name="settings_poll_interval_off">Väljas</string>
     <string name="settings_refresh_background">Värskenda taustal</string>
     <string name="settings_refresh_background_hint">Pange kõigi kontode sünkroonimine järjekorda</string>
     <string name="settings_root_general_subtitle">Välimus, külgriba, kanban, helilooja, salvestusruum</string>

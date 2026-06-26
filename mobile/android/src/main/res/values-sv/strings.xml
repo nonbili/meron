@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Visa i navigeringslådan</string>
     <string name="settings_notifications_enable_hint">Tillåt nya e-postvarningar</string>
     <string name="settings_pages_appearance">Utseende</string>
+    <string name="settings_poll_interval">Sök efter e-post</string>
+    <string name="settings_poll_interval_hint">Hur ofta det kontrolleras medan appen är öppen. Bakgrundskontroller beror på iOS.</string>
+    <string name="settings_poll_interval_off">Av</string>
     <string name="settings_refresh_background">Uppdatera i bakgrunden</string>
     <string name="settings_refresh_background_hint">Ställ en synkronisering i kö för alla konton</string>
     <string name="settings_root_general_subtitle">Utseende, sidofält, kanban, kompositör, lagring</string>

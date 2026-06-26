@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Show in the navigation drawer</string>
     <string name="settings_notifications_enable_hint">Allow new mail alerts</string>
     <string name="settings_pages_appearance">Appearance</string>
+    <string name="settings_poll_interval">Check for mail</string>
+    <string name="settings_poll_interval_hint">How often to check while the app is open. Background checks depend on iOS.</string>
+    <string name="settings_poll_interval_off">Off</string>
     <string name="settings_refresh_background">Refresh in background</string>
     <string name="settings_refresh_background_hint">Queue a sync for all accounts</string>
     <string name="settings_root_general_subtitle">Appearance, sidebar, kanban, composer, storage</string>

@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">عرض في درج التنقل</string>
     <string name="settings_notifications_enable_hint">السماح بتنبيهات البريد الجديدة</string>
     <string name="settings_pages_appearance">المظهر</string>
+    <string name="settings_poll_interval">التحقق من البريد</string>
+    <string name="settings_poll_interval_hint">عدد مرات التحقق أثناء فتح التطبيق. تعتمد عمليات التحقق في الخلفية على نظام iOS.</string>
+    <string name="settings_poll_interval_off">إيقاف</string>
     <string name="settings_refresh_background">تحديث في الخلفية</string>
     <string name="settings_refresh_background_hint">قائمة انتظار المزامنة لجميع الحسابات</string>
     <string name="settings_root_general_subtitle">المظهر، الشريط الجانبي، كانبان، الملحن، التخزين</string>

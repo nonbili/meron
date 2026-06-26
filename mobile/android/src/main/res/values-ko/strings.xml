@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">탐색 창에 표시</string>
     <string name="settings_notifications_enable_hint">새 메일 알림 허용</string>
     <string name="settings_pages_appearance">모양</string>
+    <string name="settings_poll_interval">메일 확인</string>
+    <string name="settings_poll_interval_hint">앱이 열려 있는 동안 확인하는 빈도입니다. 백그라운드 확인은 iOS에 따라 달라집니다.</string>
+    <string name="settings_poll_interval_off">끄기</string>
     <string name="settings_refresh_background">백그라운드에서 새로고침</string>
     <string name="settings_refresh_background_hint">모든 계정에 대한 동기화 대기열에 넣기</string>
     <string name="settings_root_general_subtitle">모양, 사이드바, 칸반, 작곡가, 저장 공간</string>

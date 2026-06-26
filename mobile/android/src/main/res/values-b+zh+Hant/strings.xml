@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">在導航抽屜中顯示</string>
     <string name="settings_notifications_enable_hint">允許新郵件提醒</string>
     <string name="settings_pages_appearance">外觀</string>
+    <string name="settings_poll_interval">檢查郵件</string>
+    <string name="settings_poll_interval_hint">應用程式開啟時的檢查頻率。背景檢查取決於 iOS。</string>
+    <string name="settings_poll_interval_off">關閉</string>
     <string name="settings_refresh_background">後台刷新</string>
     <string name="settings_refresh_background_hint">為所有帳戶排隊同步</string>
     <string name="settings_root_general_subtitle">外觀、側邊欄、看板、撰寫、儲存空間</string>

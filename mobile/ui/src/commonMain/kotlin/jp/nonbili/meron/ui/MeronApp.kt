@@ -203,6 +203,7 @@ import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.nextPollIntervalMinutes
 import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
@@ -398,6 +399,35 @@ private fun MeronMobileScreenContent(
         }
         LaunchedEffect(liveMailPushEnabled) {
             mobileHost.syncLiveMailPush(liveMailPushEnabled)
+        }
+        // Foreground refresh for platforms without a real background channel
+        // (iOS): re-sync the visible mailbox on the chosen interval while the app
+        // is open, and immediately when it returns to the foreground. Both honor
+        // "Off" (interval 0). The timer suspends with the app and resumes on
+        // return; the foreground signal covers the gap after a long suspension.
+        if (!mobileHost.supportsBackgroundPush) {
+            LaunchedEffect(pollIntervalMinutes, coreLoaded) {
+                if (!coreLoaded || pollIntervalMinutes <= 0) return@LaunchedEffect
+                while (true) {
+                    delay(pollIntervalMinutes * 60_000L)
+                    syncCoreThreads(
+                        accountOverride = selectedCoreAccountId,
+                        folderOverride = selectedCoreFolder,
+                        syncFirst = true,
+                    )
+                }
+            }
+            LaunchedEffect(coreLoaded) {
+                if (!coreLoaded) return@LaunchedEffect
+                AppForegroundSignal.events.collect {
+                    if (pollIntervalMinutes <= 0) return@collect
+                    syncCoreThreads(
+                        accountOverride = selectedCoreAccountId,
+                        folderOverride = selectedCoreFolder,
+                        syncFirst = true,
+                    )
+                }
+            }
         }
         val importOpml: (PickedFile?) -> Unit = { picked ->
             if (picked != null) {
@@ -986,6 +1016,7 @@ private fun MeronMobileScreenContent(
                         mobileHost.requestNotificationPermission()
                         notificationPermissionGranted = mobileHost.notificationsEnabled()
                     },
+                    supportsBackgroundPush = mobileHost.supportsBackgroundPush,
                     liveMailPushEnabled = liveMailPushEnabled,
                     onToggleLiveMailPush = {
                         val next = !liveMailPushEnabled
@@ -997,6 +1028,12 @@ private fun MeronMobileScreenContent(
                     onRefreshBackground = {
                         mobileHost.runBackgroundRefreshOnce()
                         status = "Queued background refresh"
+                    },
+                    pollIntervalMinutes = pollIntervalMinutes,
+                    onCyclePollInterval = {
+                        val next = nextPollIntervalMinutes(pollIntervalMinutes)
+                        pollIntervalMinutes = next
+                        saveAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, next)
                     },
                     storageUsage = storageUsage,
                     storageBusy = storageBusy,

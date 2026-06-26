@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Mostra nel riquadro di navigazione</string>
     <string name="settings_notifications_enable_hint">Consenti nuovi avvisi di posta</string>
     <string name="settings_pages_appearance">Aspetto</string>
+    <string name="settings_poll_interval">Controlla la posta</string>
+    <string name="settings_poll_interval_hint">Con quale frequenza controllare mentre l\'app è aperta. I controlli in background dipendono da iOS.</string>
+    <string name="settings_poll_interval_off">Disattivato</string>
     <string name="settings_refresh_background">Aggiorna in background</string>
     <string name="settings_refresh_background_hint">Metti in coda una sincronizzazione per tutti gli account</string>
     <string name="settings_root_general_subtitle">Aspetto, barra laterale, kanban, compositore, archiviazione</string>

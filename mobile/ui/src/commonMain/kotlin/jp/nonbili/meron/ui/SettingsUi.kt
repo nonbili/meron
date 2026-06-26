@@ -323,9 +323,12 @@ internal fun SettingsScreen(
     onCycleKanbanColumnWidth: () -> Unit,
     notificationsNeedPermission: Boolean,
     onEnableNotifications: () -> Unit,
+    supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
     onRefreshBackground: () -> Unit,
+    pollIntervalMinutes: Int,
+    onCyclePollInterval: () -> Unit,
     storageUsage: StorageUsage?,
     storageBusy: Boolean,
     storageClearConfirming: Boolean,
@@ -411,9 +414,12 @@ internal fun SettingsScreen(
                     onToggleSendShortcut = onToggleSendShortcut,
                     notificationsNeedPermission = notificationsNeedPermission,
                     onEnableNotifications = onEnableNotifications,
+                    supportsBackgroundPush = supportsBackgroundPush,
                     liveMailPushEnabled = liveMailPushEnabled,
                     onToggleLiveMailPush = onToggleLiveMailPush,
                     onRefreshBackground = onRefreshBackground,
+                    pollIntervalMinutes = pollIntervalMinutes,
+                    onCyclePollInterval = onCyclePollInterval,
                     storageUsage = storageUsage,
                     storageBusy = storageBusy,
                     storageClearConfirming = storageClearConfirming,
@@ -617,9 +623,12 @@ internal fun SettingsGeneralPage(
     onToggleSendShortcut: () -> Unit,
     notificationsNeedPermission: Boolean,
     onEnableNotifications: () -> Unit,
+    supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
     onRefreshBackground: () -> Unit,
+    pollIntervalMinutes: Int,
+    onCyclePollInterval: () -> Unit,
     storageUsage: StorageUsage?,
     storageBusy: Boolean,
     storageClearConfirming: Boolean,
@@ -722,22 +731,46 @@ internal fun SettingsGeneralPage(
         }
 
         item { SettingsSectionLabel(tr("settings.syncNotifications")) }
-        item {
-            SettingsToggleRow(
-                icon = Icons.Filled.MarkEmailUnread,
-                title = tr("settings.liveMailPush"),
-                subtitle = tr("settings.liveMailPushHint"),
-                checked = liveMailPushEnabled,
-                onToggle = onToggleLiveMailPush,
-            )
-        }
-        item {
-            SettingsRow(
-                icon = Icons.Filled.Refresh,
-                title = tr("settings.refreshBackground"),
-                subtitle = tr("settings.refreshBackgroundHint"),
-                onClick = onRefreshBackground,
-            )
+        if (supportsBackgroundPush) {
+            // Android: a real background channel keeps mail fresh while suspended.
+            item {
+                SettingsToggleRow(
+                    icon = Icons.Filled.MarkEmailUnread,
+                    title = tr("settings.liveMailPush"),
+                    subtitle = tr("settings.liveMailPushHint"),
+                    checked = liveMailPushEnabled,
+                    onToggle = onToggleLiveMailPush,
+                )
+            }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Refresh,
+                    title = tr("settings.refreshBackground"),
+                    subtitle = tr("settings.refreshBackgroundHint"),
+                    onClick = onRefreshBackground,
+                )
+            }
+        } else {
+            // iOS: no persistent background socket. Offer a foreground poll
+            // interval instead; background checks fall back to best-effort.
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Refresh,
+                    title = tr("settings.pollInterval"),
+                    subtitle = tr("settings.pollIntervalHint"),
+                    onClick = onCyclePollInterval,
+                    trailing = {
+                        Text(
+                            if (pollIntervalMinutes <= 0) {
+                                tr("settings.pollIntervalOff")
+                            } else {
+                                tr("settings.pollIntervalValue", mapOf("minutes" to pollIntervalMinutes))
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                )
+            }
         }
         if (notificationsNeedPermission) {
             item {

@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Pokaż w szufladzie nawigacji</string>
     <string name="settings_notifications_enable_hint">Zezwalaj na powiadomienia o nowych e-mailach</string>
     <string name="settings_pages_appearance">Wygląd</string>
+    <string name="settings_poll_interval">Sprawdzaj pocztę</string>
+    <string name="settings_poll_interval_hint">Jak często sprawdzać, gdy aplikacja jest otwarta. Sprawdzanie w tle zależy od iOS.</string>
+    <string name="settings_poll_interval_off">Wył.</string>
     <string name="settings_refresh_background">Odśwież w tle</string>
     <string name="settings_refresh_background_hint">Kolejkuj synchronizację dla wszystkich kont</string>
     <string name="settings_root_general_subtitle">Wygląd, pasek boczny, Kanban, kompozytor, pamięć</string>

@@ -14,6 +14,7 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.ThreadSummary
+import jp.nonbili.meron.shared.coercePollIntervalMinutes
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import kotlinx.coroutines.CoroutineScope
 import kotlin.uuid.ExperimentalUuidApi
@@ -121,6 +122,9 @@ internal class MeronMobileState(
     var showStarredNav by mutableStateOf(loadAppBoolean(prefs, SHOW_STARRED_NAV_PREF, true))
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
+    var pollIntervalMinutes by mutableStateOf(
+        coercePollIntervalMinutes(loadAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, 15)),
+    )
     var sendShortcutMode by mutableStateOf(loadSendShortcutMode(prefs))
     var kanbanColumnWidth by mutableStateOf(
         loadAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)

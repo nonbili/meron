@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Εμφάνιση στο συρτάρι πλοήγησης</string>
     <string name="settings_notifications_enable_hint">Να επιτρέπονται νέες ειδοποιήσεις αλληλογραφίας</string>
     <string name="settings_pages_appearance">Εμφάνιση</string>
+    <string name="settings_poll_interval">Έλεγχος για αλληλογραφία</string>
+    <string name="settings_poll_interval_hint">Πόσο συχνά να ελέγχει όσο η εφαρμογή είναι ανοιχτή. Οι έλεγχοι στο παρασκήνιο εξαρτώνται από το iOS.</string>
+    <string name="settings_poll_interval_off">Ανενεργό</string>
     <string name="settings_refresh_background">Ανανέωση στο παρασκήνιο</string>
     <string name="settings_refresh_background_hint">Ουρά συγχρονισμού για όλους τους λογαριασμούς</string>
     <string name="settings_root_general_subtitle">Εμφάνιση, πλαϊνή γραμμή, kanban, συνθέτης, αποθήκευση</string>

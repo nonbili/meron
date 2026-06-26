@@ -30,6 +30,13 @@ interface MobileHost {
 
     fun requestNotificationPermission()
 
+    /** Whether the platform can keep mail fresh while suspended via a real
+     *  background mechanism (Android foreground service / WorkManager). When
+     *  false (iOS), the UI hides live push & manual background refresh and offers
+     *  a foreground poll interval instead. */
+    val supportsBackgroundPush: Boolean
+        get() = true
+
     fun syncLiveMailPush(enabled: Boolean)
 
     fun runBackgroundRefreshOnce()
@@ -87,6 +94,8 @@ open class DefaultMobileHost(
     override val googleClientId: String = "",
     override val googleRedirectUri: String = "",
 ) : MobileHost {
+    override val supportsBackgroundPush: Boolean = false
+
     override fun notificationsEnabled(): Boolean = true
 
     override fun requestNotificationPermission() {}

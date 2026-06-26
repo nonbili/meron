@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">In der Navigationsleiste anzeigen</string>
     <string name="settings_notifications_enable_hint">Erlauben Sie neue E-Mail-Benachrichtigungen</string>
     <string name="settings_pages_appearance">Aussehen</string>
+    <string name="settings_poll_interval">Nach E-Mails suchen</string>
+    <string name="settings_poll_interval_hint">Wie oft bei geöffneter App geprüft wird. Hintergrundprüfungen hängen von iOS ab.</string>
+    <string name="settings_poll_interval_off">Aus</string>
     <string name="settings_refresh_background">Im Hintergrund aktualisieren</string>
     <string name="settings_refresh_background_hint">Stellen Sie eine Synchronisierung für alle Konten in die Warteschlange</string>
     <string name="settings_root_general_subtitle">Erscheinungsbild, Seitenleiste, Kanban, Komponist, Speicher</string>

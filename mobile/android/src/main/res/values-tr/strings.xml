@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Gezinme çekmecesinde göster</string>
     <string name="settings_notifications_enable_hint">Yeni posta uyarılarına izin ver</string>
     <string name="settings_pages_appearance">Görünüm</string>
+    <string name="settings_poll_interval">Posta denetle</string>
+    <string name="settings_poll_interval_hint">Uygulama açıkken ne sıklıkla denetleneceği. Arka plan denetimleri iOS\'a bağlıdır.</string>
+    <string name="settings_poll_interval_off">Kapalı</string>
     <string name="settings_refresh_background">Arka planda yenile</string>
     <string name="settings_refresh_background_hint">Tüm hesaplar için senkronizasyonu sıraya koy</string>
     <string name="settings_root_general_subtitle">Görünüm, kenar çubuğu, kanban, besteci, depolama</string>

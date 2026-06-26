@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Hiển thị trong ngăn điều hướng</string>
     <string name="settings_notifications_enable_hint">Cho phép thông báo thư mới</string>
     <string name="settings_pages_appearance">Giao diện</string>
+    <string name="settings_poll_interval">Kiểm tra thư</string>
+    <string name="settings_poll_interval_hint">Tần suất kiểm tra khi ứng dụng đang mở. Việc kiểm tra nền phụ thuộc vào iOS.</string>
+    <string name="settings_poll_interval_off">Tắt</string>
     <string name="settings_refresh_background">Làm mới trong nền</string>
     <string name="settings_refresh_background_hint">Xếp hàng đồng bộ hóa cho tất cả các tài khoản</string>
     <string name="settings_root_general_subtitle">Giao diện, thanh bên, kanban, nhà soạn nhạc, bộ lưu trữ</string>

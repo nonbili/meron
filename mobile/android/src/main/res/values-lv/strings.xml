@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Rādīt navigācijas atvilktnē</string>
     <string name="settings_notifications_enable_hint">Atļaut jaunu pasta brīdinājumus</string>
     <string name="settings_pages_appearance">Izskats</string>
+    <string name="settings_poll_interval">Pārbaudīt pastu</string>
+    <string name="settings_poll_interval_hint">Cik bieži pārbaudīt, kamēr lietotne ir atvērta. Fona pārbaudes ir atkarīgas no iOS.</string>
+    <string name="settings_poll_interval_off">Izslēgts</string>
     <string name="settings_refresh_background">Atsvaidzināt fonā</string>
     <string name="settings_refresh_background_hint">Ievietojiet sinhronizāciju rindā visiem kontiem</string>
     <string name="settings_root_general_subtitle">Izskats, sānjosla, kanban, komponists, krātuve</string>

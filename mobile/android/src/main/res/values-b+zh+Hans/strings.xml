@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">在导航抽屉中显示</string>
     <string name="settings_notifications_enable_hint">允许新邮件提醒</string>
     <string name="settings_pages_appearance">外观</string>
+    <string name="settings_poll_interval">检查邮件</string>
+    <string name="settings_poll_interval_hint">应用打开时的检查频率。后台检查取决于 iOS。</string>
+    <string name="settings_poll_interval_off">关闭</string>
     <string name="settings_refresh_background">后台刷新</string>
     <string name="settings_refresh_background_hint">为所有帐户排队同步</string>
     <string name="settings_root_general_subtitle">外观、侧边栏、看板、撰写、存储</string>

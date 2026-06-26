@@ -269,9 +269,16 @@ enum IosBackgroundRefresh {
         }
     }
 
+    // Mirrors IosAppPreferences("meron_app") + POLL_INTERVAL_MINUTES_PREF so the
+    // best-effort background task honors the user's chosen poll interval.
+    private static let pollIntervalDefaultsKey = "meron_app.poll_interval_minutes_v1"
+
     static func schedule() {
+        let storedMinutes = Int32(UserDefaults.standard.integer(forKey: pollIntervalDefaultsKey))
         let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        request.earliestBeginDate = Date(
+            timeIntervalSinceNow: BackgroundRefreshKt.backgroundRefreshDelaySeconds(pollIntervalMinutes: storedMinutes)
+        )
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {

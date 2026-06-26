@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">Mostrar en el cajón de navegación</string>
     <string name="settings_notifications_enable_hint">Permitir alertas de correo nuevo</string>
     <string name="settings_pages_appearance">Apariencia</string>
+    <string name="settings_poll_interval">Buscar correo</string>
+    <string name="settings_poll_interval_hint">Con qué frecuencia comprobar mientras la app está abierta. Las comprobaciones en segundo plano dependen de iOS.</string>
+    <string name="settings_poll_interval_off">Desactivado</string>
     <string name="settings_refresh_background">Actualizar en segundo plano</string>
     <string name="settings_refresh_background_hint">Poner en cola una sincronización para todas las cuentas</string>
     <string name="settings_root_general_subtitle">Apariencia, barra lateral, kanban, compositor, almacenamiento</string>

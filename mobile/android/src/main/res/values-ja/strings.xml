@@ -682,6 +682,9 @@
     <string name="settings_navigation_drawer_hint">ナビゲーションドロワーに表示</string>
     <string name="settings_notifications_enable_hint">新着メール通知を許可する</string>
     <string name="settings_pages_appearance">外観</string>
+    <string name="settings_poll_interval">メールを確認</string>
+    <string name="settings_poll_interval_hint">アプリを開いている間の確認頻度。バックグラウンドでの確認は iOS に依存します。</string>
+    <string name="settings_poll_interval_off">オフ</string>
     <string name="settings_refresh_background">バックグラウンドで更新</string>
     <string name="settings_refresh_background_hint">すべてのアカウントの同期をキューに入れる</string>
     <string name="settings_root_general_subtitle">外観、サイドバー、カンバン、コンポーザー、ストレージ</string>

@@ -1,5 +1,6 @@
 import SwiftUI
 import MeronUI
+import UIKit
 
 @main
 struct Meron: App {
@@ -43,6 +44,11 @@ struct Meron: App {
                         threadKey: target.threadKey,
                         nonce: Int64(Date().timeIntervalSince1970 * 1000)
                     )
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Refresh the visible mailbox right away on return from the
+                // background, instead of waiting out the remaining poll tick.
+                AppForegroundSignal.shared.signal()
             }
         }
     }
