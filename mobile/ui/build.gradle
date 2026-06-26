@@ -1,0 +1,59 @@
+plugins {
+    id "org.jetbrains.kotlin.multiplatform"
+    id "com.android.kotlin.multiplatform.library"
+    id "org.jetbrains.compose"
+    id "org.jetbrains.kotlin.plugin.compose"
+    id "org.jetbrains.kotlin.plugin.serialization"
+}
+
+kotlin {
+    android {
+        namespace = "jp.nonbili.meron.ui"
+        compileSdk = 36
+        minSdk = 23
+    }
+
+    iosArm64()
+    iosSimulatorArm64()
+
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget).configureEach {
+        binaries.framework {
+            baseName = "MeronUI"
+            isStatic = true
+            export(project(":shared"))
+        }
+    }
+
+    jvmToolchain(17)
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                api project(":shared")
+                implementation compose.runtime
+                implementation compose.foundation
+                implementation compose.material3
+                implementation compose.materialIconsExtended
+                implementation compose.ui
+                implementation compose.components.resources
+                implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
+                implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin("test")
+            }
+        }
+        androidMain {
+            dependencies {
+                implementation "androidx.activity:activity-compose:1.12.1"
+            }
+        }
+    }
+}
+
+compose.resources {
+    packageOfResClass = "jp.nonbili.meron.ui.resources"
+    generateResClass = "always"
+}

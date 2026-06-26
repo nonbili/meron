@@ -1,0 +1,154 @@
+package jp.nonbili.meron.ui
+
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.ContactSuggestion
+import jp.nonbili.meron.shared.DraftAttachment
+import jp.nonbili.meron.shared.FolderSummary
+import jp.nonbili.meron.shared.MeronCore
+import jp.nonbili.meron.shared.MessageAttachment
+import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.StarredItemSummary
+import jp.nonbili.meron.shared.StorageUsage
+import jp.nonbili.meron.shared.ThreadSummary
+import jp.nonbili.meron.shared.defaultOAuthRedirectUri
+import kotlinx.coroutines.CoroutineScope
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+@OptIn(ExperimentalUuidApi::class)
+internal class MeronMobileState(
+    val scope: CoroutineScope,
+    val core: MeronCore,
+    val coreLoaded: Boolean,
+    val prefs: AppPreferences,
+    val kanbanPrefs: AppPreferences,
+    val services: PlatformServices,
+    val locale: LocaleController,
+    val mobileHost: MobileHost,
+) {
+    val snackbarHost = SnackbarHostState()
+
+    // Wired by the composable after its platform pickers/launchers are created.
+    var launchOpmlExport: (String) -> Unit = {}
+    var launchAttachmentSave: (String) -> Unit = {}
+    var launchGoogleAccountPicker: () -> Unit = {}
+
+    var host by mutableStateOf("")
+    var email by mutableStateOf("")
+    var username by mutableStateOf("")
+    var password by mutableStateOf("")
+    var displayName by mutableStateOf("")
+    var senderName by mutableStateOf("")
+    var imapPort by mutableStateOf("993")
+    var smtpHost by mutableStateOf("")
+    var smtpPort by mutableStateOf("465")
+    var passwordServerSettingsOpen by mutableStateOf(false)
+    // Set to a managed account id when its on-device Google token can no longer
+    // be silently refreshed, signalling the user must reconnect it.
+    var googleReauthAccountId by mutableStateOf<String?>(null)
+    var oauthProvider by mutableStateOf("gmail")
+    var oauthEmail by mutableStateOf("")
+    var oauthAccessToken by mutableStateOf("")
+    var oauthRefreshToken by mutableStateOf("")
+    var oauthExpiresAt by mutableStateOf("0")
+    var oauthClientId by mutableStateOf("")
+    var oauthClientSecret by mutableStateOf("")
+    var oauthRedirectUri by mutableStateOf(defaultOAuthRedirectUri())
+    var oauthState by mutableStateOf(Uuid.random().toString())
+    var oauthVerifier by mutableStateOf(Uuid.random().toString() + Uuid.random().toString())
+    var oauthAuthorizationCode by mutableStateOf("")
+    var rssFeedUrl by mutableStateOf("")
+    var rssDisplayName by mutableStateOf("")
+    var accountJson by mutableStateOf("")
+    var coreAccounts by mutableStateOf(emptyList<AccountSummary>())
+    var selectedCoreAccountId by mutableStateOf(UNIFIED_ACCOUNT_ID)
+    var coreFolders by mutableStateOf(emptyList<FolderSummary>())
+    var foldersByAccount by mutableStateOf(emptyMap<String, List<FolderSummary>>())
+    var selectedCoreFolder by mutableStateOf(INBOX_FOLDER)
+    var mailSearch by mutableStateOf("")
+    var mailFilter by mutableStateOf(FilterMode.All)
+    var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
+    var selectedMailThreadIds by mutableStateOf(emptySet<String>())
+    var selectedMailMoveThread by mutableStateOf<ThreadSummary?>(null)
+    var selectedMailCopyThread by mutableStateOf<ThreadSummary?>(null)
+
+    // False until the first inbox load (cache or server) settles, so the list can
+    // show a loading indicator instead of an empty state on cold start.
+    var initialThreadsLoaded by mutableStateOf(false)
+    var initialAccountsLoaded by mutableStateOf(false)
+    var mailboxCursor by mutableStateOf("")
+    var mailboxAccountCursors by mutableStateOf(emptyMap<String, String>())
+    var loadingMoreThreads by mutableStateOf(false)
+    var starredItems by mutableStateOf(emptyList<StarredItemSummary>())
+    var selectedCoreThread by mutableStateOf<ThreadSummary?>(null)
+    var conversationHtmlOverrides by mutableStateOf(emptyMap<String, Boolean>())
+    var previousTopScreen by mutableStateOf(Screen.Mail)
+    var kanbanBoards by mutableStateOf(loadKanbanBoards(kanbanPrefs, emptyList()))
+    var activeKanbanBoardId by mutableStateOf(loadActiveKanbanBoardId(kanbanPrefs))
+    var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
+    var kanbanFilter by mutableStateOf(loadKanbanFilter(kanbanPrefs))
+    var kanbanSearch by mutableStateOf(loadKanbanSearch(kanbanPrefs))
+    var kanbanSearchScope by mutableStateOf(loadKanbanSearchScope(kanbanPrefs))
+    var kanbanActionThread by mutableStateOf<ThreadSummary?>(null)
+    var kanbanSettingsTargetId by mutableStateOf<String?>(null)
+    var kanbanMenuOpen by mutableStateOf(false)
+    var showKanbanColumnDialog by mutableStateOf(false)
+    var showKanbanCreateFolderDialog by mutableStateOf<AccountSummary?>(null)
+    var kanbanFolderNameInput by mutableStateOf("")
+    var to by mutableStateOf("")
+    var composeFromAccountId by mutableStateOf("")
+    var composeFromEmail by mutableStateOf("")
+    var composeDraftId by mutableStateOf("")
+    var composeDraftSaved by mutableStateOf(false)
+    var composeInReplyTo by mutableStateOf("")
+    var composeReferences by mutableStateOf("")
+    var subject by mutableStateOf("")
+    var body by mutableStateOf("")
+    var quickReplyBody by mutableStateOf("")
+    var quickReplyAttachments by mutableStateOf(emptyList<DraftAttachment>())
+    var quickReplyFailure by mutableStateOf("")
+    var status by mutableStateOf("")
+    var syncing by mutableStateOf(false)
+    var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))
+    var showUnifiedInboxNav by mutableStateOf(loadAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, true))
+    var showStarredNav by mutableStateOf(loadAppBoolean(prefs, SHOW_STARRED_NAV_PREF, true))
+    var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
+    var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
+    var sendShortcutMode by mutableStateOf(loadSendShortcutMode(prefs))
+    var kanbanColumnWidth by mutableStateOf(
+        loadAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)
+            .coerceIn(KANBAN_COLUMN_MIN_WIDTH, KANBAN_COLUMN_MAX_WIDTH),
+    )
+    var hiddenNavigationAccountIds by mutableStateOf(loadAppStringSet(prefs, HIDDEN_NAV_ACCOUNTS_PREF))
+    var messages by mutableStateOf(emptyList<MessageBody>())
+    var messageCursor by mutableStateOf("")
+    var loadingMoreMessages by mutableStateOf(false)
+    var attachments by mutableStateOf(emptyList<DraftAttachment>())
+    var cc by mutableStateOf("")
+    var bcc by mutableStateOf("")
+    var recipientSuggestionField by mutableStateOf("")
+    var recipientSuggestions by mutableStateOf(emptyList<ContactSuggestion>())
+    var screen by mutableStateOf(Screen.Mail)
+    var errorBanner by mutableStateOf<String?>(null)
+    var addSection by mutableStateOf(0)
+    var notificationPermissionGranted by mutableStateOf(mobileHost.notificationsEnabled())
+    var accountsLoading by mutableStateOf(false)
+    var mailboxMenuOpen by mutableStateOf(false)
+    var mailSelectionMenuOpen by mutableStateOf(false)
+    var accountSettingsTargetId by mutableStateOf<String?>(null)
+    var showAddFeedDialog by mutableStateOf(false)
+    var addFeedUrl by mutableStateOf("")
+    var showAboutDialog by mutableStateOf(false)
+    var pendingOpmlExport by mutableStateOf("")
+    var accountMediaUploadTarget by mutableStateOf<AccountMediaUploadTarget?>(null)
+    var kanbanBoardMediaTarget by mutableStateOf<KanbanBoardMediaTarget?>(null)
+    var storageUsage by mutableStateOf<StorageUsage?>(null)
+    var storageBusy by mutableStateOf(false)
+    var storageClearConfirming by mutableStateOf(false)
+    var imagePreview by mutableStateOf<ImagePreview?>(null)
+    var pendingAttachmentSave by mutableStateOf<MessageAttachment?>(null)
+}

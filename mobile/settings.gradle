@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "MeronMobile"
 include ":android"
 include ":shared"
+include ":ui"
