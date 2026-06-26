@@ -12,6 +12,18 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>MERON_GOOGLE_CLIENT_ID</key>
+	<string>$(MERON_GOOGLE_CLIENT_ID)</string>
+	<key>MERON_GOOGLE_CLIENT_SECRET</key>
+	<string>$(MERON_GOOGLE_CLIENT_SECRET)</string>
+	<key>MERON_GOOGLE_REDIRECT_URI</key>
+	<string>$(MERON_GOOGLE_REDIRECT_URI)</string>
+	<key>MERON_OUTLOOK_CLIENT_ID</key>
+	<string>$(MERON_OUTLOOK_CLIENT_ID)</string>
+	<key>MERON_OUTLOOK_CLIENT_SECRET</key>
+	<string>$(MERON_OUTLOOK_CLIENT_SECRET)</string>
+	<key>MERON_OUTLOOK_REDIRECT_URI</key>
+	<string>$(MERON_OUTLOOK_REDIRECT_URI)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

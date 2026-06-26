@@ -99,5 +99,6 @@ describe('platform mapping helpers', () => {
   test('escapes Android XML string values', () => {
     expect(androidName('buttons.cancel')).toBe('buttons_cancel')
     expect(androidEscape("@Don't use <x> or 50%")).toBe("\\@Don\\'t use &lt;x&gt; or 50%%")
+    expect(androidEscape('Version %1$s · Package %2$s')).toBe('Version %1$s · Package %2$s')
   })
 })

@@ -9,7 +9,7 @@ extension ContentView {
     func syncSelectedAccount() {
         let accountId = selectedMailboxAccountId()
         guard !accountId.isEmpty else {
-            accountStatus = "No account selected."
+            accountStatus = String(localized: "mobile.ios.noAccountSelected")
             return
         }
         if accountId == iosUnifiedAccountId {
@@ -27,7 +27,7 @@ extension ContentView {
             syncResponse = RustCoreBridge.invokeJson(MobileCommandsKt.syncMailRequest(id: 15, params: syncParams).toJson())
         }
         if syncResponse.contains(#""error""#) {
-            accountStatus = "Core sync failed."
+            accountStatus = String(localized: "mobile.ios.coreSyncFailed")
             accountJson = syncResponse
             return
         }
@@ -38,7 +38,7 @@ extension ContentView {
     func searchSelectedMailbox() {
         let accountId = selectedMailboxAccountId()
         guard !accountId.isEmpty else {
-            accountStatus = "No account selected."
+            accountStatus = String(localized: "mobile.ios.noAccountSelected")
             return
         }
         if accountId == iosUnifiedAccountId {
@@ -48,15 +48,25 @@ extension ContentView {
         loadCoreFoldersAndThreads(accountId: accountId, requestedFolder: selectedCoreFolder)
     }
 
+    func openSelectedMailboxAccountSettings() {
+        let accountId = selectedMailboxAccountId()
+        guard !accountId.isEmpty, accountId != iosUnifiedAccountId else {
+            accountStatus = String(localized: "mobile.ios.noAccountSelected")
+            return
+        }
+        focusedAccountSettingsId = accountId
+        selectedTab = .accounts
+    }
+
     func addFeedToSelectedRssAccount() {
         let accountId = selectedCoreAccountId
         let feedUrl = addFeedUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !accountId.isEmpty, selectedAccountIsRss(accountId) else {
-            accountStatus = "Select an RSS account first."
+            accountStatus = String(localized: "mobile.ios.selectRssAccountFirst")
             return
         }
         guard !feedUrl.isEmpty else {
-            accountStatus = "Feed URL is required."
+            accountStatus = String(localized: "mobile.ios.feedUrlRequired")
             return
         }
         let response = RustCoreBridge.invokeJson(
@@ -66,19 +76,21 @@ extension ContentView {
             ).toJson()
         )
         if response.contains(#""error""#) {
-            accountStatus = "Add feed failed."
+            accountStatus = String(localized: "mobile.ios.addFeedFailed")
             accountJson = response
             return
         }
         addFeedUrl = ""
-        accountStatus = "Feed added."
+        accountStatus = String(localized: "feeds.added")
         syncSelectedAccount()
     }
 
-    func importOpml(from url: URL) {
-        let accountId = selectedCoreAccountId.isEmpty ? (coreAccounts.first?.id ?? "") : selectedCoreAccountId
+    func importOpml(from url: URL, accountId requestedAccountId: String = "") {
+        let accountId = requestedAccountId.isEmpty
+            ? (selectedCoreAccountId.isEmpty ? (coreAccounts.first?.id ?? "") : selectedCoreAccountId)
+            : requestedAccountId
         guard !accountId.isEmpty, selectedAccountIsRss(accountId) else {
-            accountStatus = "Select an RSS account first."
+            accountStatus = String(localized: "mobile.ios.selectRssAccountFirst")
             return
         }
         let scoped = url.startAccessingSecurityScopedResource()
@@ -96,22 +108,28 @@ extension ContentView {
                 ).toJson()
             )
             if response.contains(#""error""#) {
-                accountStatus = "OPML import failed."
+                accountStatus = String(localized: "mobile.ios.opmlImportFailed")
                 accountJson = response
                 return
             }
             let imported = MobileResponseParsersKt.parseOpmlImportCountResponse(responseJson: response)
-            accountStatus = imported == 0 ? "No new feeds imported." : "Imported \(imported) feed(s)."
-            syncSelectedAccount()
+            accountStatus = imported == 0
+                ? String(localized: "mobile.ios.noNewFeedsImported")
+                : localizedCatalogString("mobile.ios.importedFeedCount", args: ["count": Int(imported)])
+            if selectedCoreAccountId == accountId {
+                syncSelectedAccount()
+            }
         } catch {
-            accountStatus = "OPML file read failed: \(error.localizedDescription)"
+            accountStatus = "\(String(localized: "mobile.ios.opmlFileReadFailed")): \(error.localizedDescription)"
         }
     }
 
-    func exportSelectedAccountOpml() {
-        let accountId = selectedCoreAccountId.isEmpty ? (coreAccounts.first?.id ?? "") : selectedCoreAccountId
+    func exportSelectedAccountOpml(accountId requestedAccountId: String = "") {
+        let accountId = requestedAccountId.isEmpty
+            ? (selectedCoreAccountId.isEmpty ? (coreAccounts.first?.id ?? "") : selectedCoreAccountId)
+            : requestedAccountId
         guard !accountId.isEmpty, selectedAccountIsRss(accountId) else {
-            accountStatus = "Select an RSS account first."
+            accountStatus = String(localized: "mobile.ios.selectRssAccountFirst")
             return
         }
         let response = RustCoreBridge.invokeJson(
@@ -121,13 +139,13 @@ extension ContentView {
             ).toJson()
         )
         if response.contains(#""error""#) {
-            accountStatus = "OPML export failed."
+            accountStatus = String(localized: "mobile.ios.opmlExportFailed")
             accountJson = response
             return
         }
         let opml = MobileResponseParsersKt.parseOpmlExportResponse(responseJson: response)
         guard !opml.isEmpty else {
-            accountStatus = "No OPML content to export."
+            accountStatus = String(localized: "mobile.ios.noOpmlContentToExport")
             return
         }
         opmlExportDocument = OpmlDocument(text: opml)
@@ -137,12 +155,12 @@ extension ContentView {
     func markSelectedMailboxAllRead() {
         let accountId = selectedMailboxAccountId()
         guard !accountId.isEmpty else {
-            accountStatus = "No account selected."
+            accountStatus = String(localized: "mobile.ios.noAccountSelected")
             return
         }
         let unreadThreads = coreThreads.filter(\.unread)
         guard !unreadThreads.isEmpty else {
-            accountStatus = "No unread messages."
+            accountStatus = String(localized: "mobile.ios.noUnreadMessages")
             return
         }
 
@@ -195,26 +213,21 @@ extension ContentView {
         }
 
         if failedResponse.contains(#""error""#) {
-            accountStatus = "Mark all read failed."
+            accountStatus = String(localized: "mobile.ios.markAllReadFailed")
             accountJson = failedResponse
             return
         }
 
-        coreThreads = coreThreads.map { thread in
-            thread.unread ? ThreadSummary(
-                id: thread.id,
-                accountId: thread.accountId,
-                folder: thread.folder,
-                subject: thread.subject,
-                sender: thread.sender,
-                preview: thread.preview,
-                unread: false,
-                starred: thread.starred,
-                dateEpochSeconds: thread.dateEpochSeconds,
-                feedUrl: thread.feedUrl
-            ) : thread
+        let unreadIds = Set(unreadThreads.map(\.id))
+        coreThreads = threadsAfterMarkingThreadIdsRead(coreThreads, threadIds: unreadIds)
+        if let selectedCoreThread, unreadIds.contains(selectedCoreThread.id) {
+            self.selectedCoreThread = selectedCoreThread.withUnread(false)
+            coreMessages = messagesAfterThreadReadState(coreMessages, unread: false)
         }
-        accountStatus = "Marked \(unreadThreads.count) unread item(s) read."
+        for threadId in unreadIds {
+            updateKanbanThreadCaches(threadId: threadId, unread: false)
+        }
+        accountStatus = localizedCatalogString("mobile.ios.markedUnreadItemCountRead", args: ["count": unreadThreads.count])
         if accountId == iosUnifiedAccountId {
             loadUnifiedInbox(syncFirst: false)
         } else {

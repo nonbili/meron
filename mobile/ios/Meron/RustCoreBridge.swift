@@ -5,6 +5,16 @@ enum RustCoreBridge {
         var events: [String] = []
     }
 
+    private final class EventHandlerBox {
+        let handler: (String) -> Void
+
+        init(handler: @escaping (String) -> Void) {
+            self.handler = handler
+        }
+    }
+
+    private static var retainedEventHandler: Unmanaged<EventHandlerBox>?
+
     static func protocolVersion() -> Int {
         Int(meron_core_protocol_version())
     }
@@ -30,6 +40,30 @@ enum RustCoreBridge {
         request.withCString { pointer in
             ownedString(meron_core_invoke_json(pointer))
         }
+    }
+
+    static func setEventHandler(_ handler: ((String) -> Void)?) {
+        if let retainedEventHandler {
+            meron_core_register_event_callback(nil, nil)
+            retainedEventHandler.release()
+            self.retainedEventHandler = nil
+        }
+        guard let handler else {
+            return
+        }
+        let box = EventHandlerBox(handler: handler)
+        let retained = Unmanaged.passRetained(box)
+        retainedEventHandler = retained
+        meron_core_register_event_callback({ eventJson, userData in
+            guard let eventJson, let userData else {
+                return
+            }
+            let box = Unmanaged<EventHandlerBox>.fromOpaque(userData).takeUnretainedValue()
+            let json = String(cString: eventJson)
+            DispatchQueue.main.async {
+                box.handler(json)
+            }
+        }, retained.toOpaque())
     }
 
     static func readyEvents() -> [String] {

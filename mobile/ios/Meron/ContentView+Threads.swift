@@ -16,6 +16,7 @@ extension ContentView {
         )
         let parsedFolders = MobileResponseParsersKt.parseFolderListResponse(responseJson: folderResponse)
         coreFolders = parsedFolders
+        accountInboxUnreadCounts[accountId] = inboxUnreadCount(folders: parsedFolders, accountId: accountId)
         let fallbackFolder = parsedFolders.first?.name ?? "inbox"
         let folderId = parsedFolders.contains(where: { $0.name == (requestedFolder ?? selectedCoreFolder) })
             ? (requestedFolder ?? selectedCoreFolder)
@@ -57,24 +58,25 @@ extension ContentView {
             mailboxCursor = ""
             mailboxAccountCursors = [:]
             selectedCoreFolder = "inbox"
-            accountStatus = "No accounts are included in Unified inbox."
+            accountStatus = String(localized: "mobile.ios.noAccountsInUnifiedInbox")
             return
         }
 
         if syncFirst {
             for account in accounts {
                 if !syncKanbanAccount(account, folderId: iosInboxFolderId) {
-                    accountStatus = "Core sync failed."
+                    accountStatus = String(localized: "mobile.ios.coreSyncFailed")
                     return
                 }
             }
+            refreshAccountInboxUnreadCounts()
         }
 
         var threads: [ThreadSummary] = []
         var nextCursors: [String: String] = [:]
         for account in accounts {
             guard let page = mailThreadListPage(accountId: account.id, folderId: iosInboxFolderId, beforeCursor: nil) else {
-                accountStatus = "Unified inbox load failed."
+                accountStatus = String(localized: "mobile.ios.unifiedInboxLoadFailed")
                 return
             }
             threads.append(contentsOf: page.threads)
@@ -92,7 +94,10 @@ extension ContentView {
             self.selectedCoreThread = nil
             coreMessages = []
         }
-        accountStatus = "Loaded \(coreThreads.count) \(mailFilter.label.lowercased()) thread(s) from Unified inbox."
+        accountStatus = localizedCatalogString(
+            "mobile.ios.loadedFilteredThreadCountFromUnifiedInbox",
+            args: ["count": coreThreads.count, "filter": mailFilter.label.lowercased()]
+        )
     }
 
     func loadCoreThreads(accountId: String, folderId: String) {
@@ -114,7 +119,10 @@ extension ContentView {
             self.selectedCoreThread = nil
             coreMessages = []
         }
-        accountStatus = "Loaded \(coreThreads.count) \(mailFilter.label.lowercased()) thread(s) from \(folderId)."
+        accountStatus = localizedCatalogString(
+            "mobile.ios.loadedFilteredThreadCountFromFolder",
+            args: ["count": coreThreads.count, "filter": mailFilter.label.lowercased(), "folder": folderId]
+        )
     }
 
     func loadMoreCoreThreads() {
@@ -138,7 +146,7 @@ extension ContentView {
         isLoadingMoreThreads = false
         accountJson = threadResponse
         if threadResponse.contains(#""error""#) {
-            accountStatus = "Load older failed."
+            accountStatus = String(localized: "mobile.ios.loadOlderFailed")
             return
         }
         let page = MobileResponseParsersKt.parseThreadListPage(responseJson: threadResponse)
@@ -146,7 +154,9 @@ extension ContentView {
         let appended = page.threads.filter { !existingIds.contains($0.id) }
         coreThreads = (coreThreads + appended).sorted { $0.dateEpochSeconds > $1.dateEpochSeconds }
         mailboxCursor = page.nextCursor
-        accountStatus = appended.isEmpty ? "No older messages." : "Loaded \(appended.count) older message(s)."
+        accountStatus = appended.isEmpty
+            ? String(localized: "mobile.ios.noOlderMessages")
+            : localizedCatalogString("mobile.ios.loadedOlderMessageCount", args: ["count": appended.count])
     }
 
     func loadMoreUnifiedInbox() {
@@ -160,7 +170,7 @@ extension ContentView {
         for account in accounts {
             guard let page = mailThreadListPage(accountId: account.id, folderId: iosInboxFolderId, beforeCursor: cursors[account.id]) else {
                 isLoadingMoreThreads = false
-                accountStatus = "Load older failed."
+                accountStatus = String(localized: "mobile.ios.loadOlderFailed")
                 return
             }
             threads.append(contentsOf: page.threads)
@@ -174,19 +184,21 @@ extension ContentView {
         coreThreads = (coreThreads + appended).sorted { $0.dateEpochSeconds > $1.dateEpochSeconds }
         mailboxAccountCursors = nextCursors
         mailboxCursor = ""
-        accountStatus = appended.isEmpty ? "No older messages." : "Loaded \(appended.count) older message(s)."
+        accountStatus = appended.isEmpty
+            ? String(localized: "mobile.ios.noOlderMessages")
+            : localizedCatalogString("mobile.ios.loadedOlderMessageCount", args: ["count": appended.count])
     }
 
     func loadStarredItems() {
         let response = RustCoreBridge.invokeJson(MobileCommandsKt.starredItemsRequest(id: 40).toJson())
         if response.contains(#""error""#) {
-            accountStatus = "Starred load failed."
+            accountStatus = String(localized: "mobile.ios.starredLoadFailed")
             accountJson = response
             return
         }
         starredItems = MobileResponseParsersKt.parseStarredItemsResponse(responseJson: response)
         accountJson = response
-        accountStatus = "Loaded \(starredItems.count) starred item(s)."
+        accountStatus = localizedCatalogString("mobile.ios.loadedStarredItemCount", args: ["count": starredItems.count])
     }
 
     func readThread(_ thread: ThreadSummary) {
@@ -194,6 +206,8 @@ extension ContentView {
         messageCursor = ""
         isLoadingMoreMessages = false
         threadSearch = ""
+        threadSearchPresented = false
+        conversationDetailsPresented = false
         activeThreadSearchIndex = 0
         let response: String
         if isRssThread(thread) {
@@ -204,7 +218,7 @@ extension ContentView {
             response = RustCoreBridge.invokeJson(MobileCommandsKt.threadReadRequest(id: 21, params: params).toJson())
         }
         if response.contains(#""error""#) {
-            accountStatus = "Thread read failed."
+            accountStatus = String(localized: "mobile.ios.threadReadFailed")
             accountJson = response
             return
         }
@@ -212,13 +226,160 @@ extension ContentView {
         coreMessages = page.messages
         messageCursor = page.nextCursor
         accountJson = response
-        accountStatus = "Loaded \(coreMessages.count) message(s)."
+        accountStatus = localizedCatalogString("mobile.ios.loadedMessageCount", args: ["count": coreMessages.count])
         if !isRssThread(thread),
            MailStateKt.folderIsDrafts(folder: thread.folder),
            let draftMessage = coreMessages.last
         {
             openDraftCompose(draftMessage, thread: thread)
         }
+    }
+
+    func openNotificationThread(_ target: IosNotificationThreadTarget) {
+        mailSearch = ""
+        mailFilter = .all
+        selectedTab = .mail
+        selectedCoreAccountId = target.accountId
+        selectedCoreFolder = target.folder
+        selectedMailThreadIds = []
+        let accounts: [AccountSummary]
+        if coreAccounts.isEmpty {
+            let response = RustCoreBridge.invokeJson(MobileCommandsKt.accountListRequest(id: 92).toJson())
+            if response.contains(#""error""#) {
+                accountStatus = String(localized: "mobile.ios.accountLoadFailed")
+                accountJson = response
+                return
+            }
+            accounts = MobileResponseParsersKt.parseAccountListResponse(responseJson: response)
+            coreAccounts = accounts
+        } else {
+            accounts = coreAccounts
+        }
+        guard let account = accounts.first(where: { $0.id == target.accountId }) else {
+            accountStatus = String(localized: "mobile.ios.noAccountSelected")
+            return
+        }
+
+        loadCoreFoldersAndThreads(accountId: target.accountId, requestedFolder: target.folder)
+        let expectedThreadId = iosNotificationThreadId(target)
+        if let thread = coreThreads.first(where: { $0.id == expectedThreadId }) {
+            readThread(thread)
+            return
+        }
+        if syncKanbanAccount(account, folderId: target.folder) {
+            loadCoreFoldersAndThreads(accountId: target.accountId, requestedFolder: target.folder)
+        }
+        guard let thread = coreThreads.first(where: { $0.id == expectedThreadId }) else {
+            accountStatus = String(localized: "mobile.ios.threadReadFailed")
+            return
+        }
+        readThread(thread)
+    }
+
+    func handleOpenedNotification(_ notification: Notification) {
+        if let target = iosNotificationThreadTarget(userInfo: notification.userInfo ?? [:]) {
+            openNotificationThread(target)
+        }
+    }
+
+    func installNotificationOpenObserver() {
+        guard notificationOpenObserver == nil else { return }
+        notificationOpenObserver = NotificationCenter.default.addObserver(
+            forName: .iosNotificationThreadTargetOpened,
+            object: nil,
+            queue: .main
+        ) { notification in
+            handleOpenedNotification(notification)
+        }
+    }
+
+    func installCoreEventHandler() {
+        guard !coreEventHandlerInstalled else { return }
+        coreEventHandlerInstalled = true
+        RustCoreBridge.setEventHandler { eventJson in
+            handleCoreEvent(eventJson)
+        }
+    }
+
+    func handleCoreEvent(_ eventJson: String) {
+        guard let data = eventJson.data(using: .utf8),
+              let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let event = envelope["event"] as? String
+        else {
+            return
+        }
+        switch event {
+        case "mail.newMessages":
+            let detail = envelope["detail"] as? [String: Any] ?? [:]
+            clearCoreSyncError(accountId: detail["account"] as? String)
+            if !liveMailPushEnabled, detail["muted"] as? Bool != true {
+                IosNotificationService.notifyNewMail(
+                    accountName: detail["accountName"] as? String ?? detail["account"] as? String ?? "",
+                    from: detail["from"] as? String ?? "",
+                    subject: detail["subject"] as? String ?? "",
+                    count: detail["count"] as? Int ?? 1,
+                    accountId: detail["account"] as? String ?? "",
+                    folder: detail["folder"] as? String ?? "",
+                    threadKey: detail["threadKey"] as? String ?? ""
+                )
+            }
+            refreshCurrentMailboxFromCoreEvent()
+        case "mail.synced":
+            let detail = envelope["detail"] as? [String: Any] ?? [:]
+            clearCoreSyncError(accountId: detail["account"] as? String)
+            if detail["folders"] as? Bool == true {
+                refreshAccountInboxUnreadCounts()
+            }
+            refreshCurrentMailboxFromCoreEvent()
+        case "mail.syncError":
+            let detail = envelope["detail"] as? [String: Any] ?? [:]
+            coreSyncErrorAccountId = detail["account"] as? String ?? ""
+            coreSyncErrorMessage = detail["message"] as? String ?? String(localized: "mobile.ios.syncFailed")
+            accountStatus = coreSyncErrorMessage
+        default:
+            break
+        }
+    }
+
+    func refreshCurrentMailboxFromCoreEvent() {
+        guard !coreAccounts.isEmpty else { return }
+        let accountId = selectedMailboxAccountId()
+        guard !accountId.isEmpty else { return }
+        if accountId == iosUnifiedAccountId {
+            loadUnifiedInbox(syncFirst: false)
+        } else {
+            loadCoreFoldersAndThreads(accountId: accountId, requestedFolder: selectedCoreFolder)
+        }
+        if selectedTab == .starred {
+            loadStarredItems()
+        } else if selectedTab == .kanban {
+            loadActiveKanbanBoard(refresh: false)
+        }
+    }
+
+    func clearCoreSyncError(accountId: String?) {
+        if !coreSyncErrorAccountId.isEmpty, let accountId, coreSyncErrorAccountId != accountId {
+            return
+        }
+        coreSyncErrorAccountId = ""
+        coreSyncErrorMessage = ""
+    }
+
+    func handleCoreSyncErrorAction() {
+        if iosSyncErrorLooksAuthRelated(coreSyncErrorMessage),
+           let account = coreAccounts.first(where: { $0.id == coreSyncErrorAccountId })
+                ?? selectedMailboxAccountForReconnect()
+        {
+            reconnectAccount(account)
+            return
+        }
+        syncSelectedAccount()
+    }
+
+    func selectedMailboxAccountForReconnect() -> AccountSummary? {
+        let accountId = selectedMailboxAccountId()
+        guard accountId != iosUnifiedAccountId else { return nil }
+        return coreAccounts.first { $0.id == accountId }
     }
 
     func loadMoreThreadMessages() {
@@ -238,7 +399,7 @@ extension ContentView {
         isLoadingMoreMessages = false
         accountJson = response
         if response.contains(#""error""#) {
-            accountStatus = "Load older messages failed."
+            accountStatus = String(localized: "mobile.ios.loadOlderMessagesFailed")
             return
         }
         let page = MobileResponseParsersKt.parseThreadReadPage(responseJson: response)
@@ -246,10 +407,20 @@ extension ContentView {
         let older = page.messages.filter { !existingIds.contains($0.id) }
         coreMessages = (older + coreMessages).sorted { $0.dateEpochSeconds < $1.dateEpochSeconds }
         messageCursor = page.nextCursor
-        accountStatus = older.isEmpty ? "No older messages in this thread." : "Loaded \(older.count) older message(s)."
+        accountStatus = older.isEmpty
+            ? String(localized: "mobile.ios.noOlderMessagesInThread")
+            : localizedCatalogString("mobile.ios.loadedOlderMessageCount", args: ["count": older.count])
     }
 
     func readStarredItem(_ item: StarredItemSummary) {
+        starredMessageScrollTarget = ""
+        selectedCoreAccountId = item.accountId
+        selectedCoreFolder = item.folder
+        if isRssStarredItem(item) {
+            selectedTab = .mail
+            messageReaderTarget = starredItemReaderMessage(for: item)
+            return
+        }
         readThread(
             ThreadSummary(
                 id: item.threadId,
@@ -264,5 +435,9 @@ extension ContentView {
                 feedUrl: ""
             )
         )
+        selectedTab = .mail
+        DispatchQueue.main.async {
+            starredMessageScrollTarget = item.id
+        }
     }
 }

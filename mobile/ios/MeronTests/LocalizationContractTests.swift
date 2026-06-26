@@ -55,6 +55,15 @@ final class LocalizationContractTests: XCTestCase {
             "2 files"
         )
     }
+
+    func testIosAppLanguageOptionsUseGeneratedCatalogLocaleIdentifiers() {
+        XCTAssertEqual(iosNormalizedAppLanguageTag("pt-BR"), "pt-BR")
+        XCTAssertEqual(iosNormalizedAppLanguageTag("zh-Hans"), "zh-Hans")
+        XCTAssertEqual(iosNormalizedAppLanguageTag("pt_BR"), "")
+        XCTAssertEqual(iosAppLocale("ja").identifier, "ja")
+        XCTAssertEqual(iosAppLanguageDisplayName("pt-BR"), "Português (Brasil)")
+    }
+
 }
 
 private extension Bundle {

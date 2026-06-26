@@ -12,15 +12,23 @@ if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && comman
   exec nix-shell "$REPO_DIR/shell.nix" --run "$SCRIPT_DIR/$(basename "$0")"
 fi
 
-if [[ -z "${DEVELOPER_DIR:-}" || ! -d "${DEVELOPER_DIR:-}/Platforms/iPhoneSimulator.platform" ]]; then
+if [[ -z "${DEVELOPER_DIR:-}" || "${DEVELOPER_DIR:-}" == /nix/store/* ]]; then
   export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 fi
 export PATH="/usr/bin:/bin:$PATH"
-IOS_SIM_SDKROOT="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk iphonesimulator --show-sdk-path)"
-IOS_SIM_CLANG="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk iphonesimulator -find clang)"
-export SDKROOT="$IOS_SIM_SDKROOT"
-export "CC_${TARGET//-/_}=$IOS_SIM_CLANG"
-export "CFLAGS_${TARGET//-/_}=-isysroot $IOS_SIM_SDKROOT -mios-simulator-version-min=17.0"
+
+SDK_NAME="iphonesimulator"
+MIN_VER_FLAG="-mios-simulator-version-min=17.0"
+if [[ "$TARGET" == "aarch64-apple-ios" ]]; then
+  SDK_NAME="iphoneos"
+  MIN_VER_FLAG="-miphoneos-version-min=17.0"
+fi
+
+IOS_SDKROOT="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk "$SDK_NAME" --show-sdk-path)"
+IOS_CLANG="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk "$SDK_NAME" -find clang)"
+export SDKROOT="$IOS_SDKROOT"
+export "CC_${TARGET//-/_}=$IOS_CLANG"
+export "CFLAGS_${TARGET//-/_}=-isysroot $IOS_SDKROOT $MIN_VER_FLAG"
 
 if command -v rustup >/dev/null 2>&1; then
   rustup target add "$TARGET" >/dev/null

@@ -280,7 +280,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "gradle -p \"$SRCROOT/..\" :shared:linkDebugFrameworkIosSimulatorArm64\n";
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  gradle -p \"$SRCROOT/..\" :shared:linkDebugFrameworkIosArm64\nelse\n  gradle -p \"$SRCROOT/..\" :shared:linkDebugFrameworkIosSimulatorArm64\nfi\n";
 		};
 		A10000000000000000000061 /* Build meron-core */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -300,7 +300,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/../scripts/package-rust-core-ios.sh\"\n";
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  export TARGET=\"aarch64-apple-ios\"\nelse\n  export TARGET=\"aarch64-apple-ios-sim\"\nfi\n\"$SRCROOT/../scripts/package-rust-core-ios.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -475,9 +475,13 @@
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
-				FRAMEWORK_SEARCH_PATHS = (
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
 				);
@@ -493,11 +497,19 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
+				MERON_GOOGLE_CLIENT_ID = "";
+				MERON_GOOGLE_CLIENT_SECRET = "";
+				MERON_GOOGLE_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
+				MERON_OUTLOOK_CLIENT_ID = "";
+				MERON_OUTLOOK_CLIENT_SECRET = "";
+				MERON_OUTLOOK_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lmeron_core",
 					"-framework",
 					MeronShared,
+					"-framework",
+					SystemConfiguration,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -514,9 +526,13 @@
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
-				FRAMEWORK_SEARCH_PATHS = (
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
 				);
@@ -532,11 +548,19 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
+				MERON_GOOGLE_CLIENT_ID = "";
+				MERON_GOOGLE_CLIENT_SECRET = "";
+				MERON_GOOGLE_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
+				MERON_OUTLOOK_CLIENT_ID = "";
+				MERON_OUTLOOK_CLIENT_SECRET = "";
+				MERON_OUTLOOK_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lmeron_core",
 					"-framework",
 					MeronShared,
+					"-framework",
+					SystemConfiguration,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -552,8 +576,12 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				FRAMEWORK_SEARCH_PATHS = (
+				DEVELOPMENT_TEAM = NXW8RMPV8L;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
 				);
@@ -579,8 +607,12 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				FRAMEWORK_SEARCH_PATHS = (
+				DEVELOPMENT_TEAM = NXW8RMPV8L;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework",
 				);

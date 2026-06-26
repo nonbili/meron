@@ -436,6 +436,7 @@ function androidEscape(value: string) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/%(?!(?:\d+\$)?[-#+ 0,(<]*\d*(?:\.\d+)?[a-zA-Z%])/g, '%%')
     .replace(/'/g, "\\'")
   if (/^[?@]/.test(out)) out = `\\${out}`
   return out
