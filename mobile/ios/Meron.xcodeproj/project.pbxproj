@@ -20,6 +20,8 @@
 			A1000000000000000000011B /* IosComposeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011C /* IosComposeHost.swift */; };
 			A1000000000000000000011D /* IosContractHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011E /* IosContractHelpers.swift */; };
 			A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
+			A10000000000000000000201 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000200 /* Assets.xcassets */; };
+			A10000000000000000000203 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* LaunchScreen.storyboard */; };
 		A10000000000000000000117 /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000118 /* LocalizationContractTests.swift */; };
 			A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
 			A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
@@ -56,6 +58,8 @@
 			A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 			A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IosMailModels.swift"; sourceTree = "<group>"; };
 			A10000000000000000000115 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = "Localizable.xcstrings"; sourceTree = "<group>"; };
+			A10000000000000000000200 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+			A10000000000000000000202 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 			A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalizedCatalog.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -102,6 +106,8 @@
 				A10000000000000000000015 /* Meron-Bridging-Header.h */,
 				A10000000000000000000013 /* Info.plist */,
 				A10000000000000000000115 /* Localizable.xcstrings */,
+				A10000000000000000000200 /* Assets.xcassets */,
+				A10000000000000000000202 /* LaunchScreen.storyboard */,
 			);
 			path = Meron;
 			sourceTree = "<group>";
@@ -229,6 +235,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000114 /* Localizable.xcstrings in Resources */,
+				A10000000000000000000201 /* Assets.xcassets in Resources */,
+				A10000000000000000000203 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -435,7 +443,7 @@
 		A10000000000000000000082 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -486,7 +494,7 @@
 		A10000000000000000000083 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
