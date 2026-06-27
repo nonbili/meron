@@ -8,6 +8,8 @@ REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
 CORE_DIR="$REPO_DIR/meron-core"
 OUT_DIR="$MOBILE_DIR/ios/RustCore"
 
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && command -v nix-shell >/dev/null 2>&1; then
   exec nix-shell "$REPO_DIR/shell.nix" --run "$SCRIPT_DIR/$(basename "$0")"
 fi
@@ -15,20 +17,23 @@ fi
 if [[ -z "${DEVELOPER_DIR:-}" || "${DEVELOPER_DIR:-}" == /nix/store/* ]]; then
   export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 fi
-export PATH="/usr/bin:/bin:$PATH"
 
 SDK_NAME="iphonesimulator"
 MIN_VER_FLAG="-mios-simulator-version-min=17.0"
+RUST_LINK_MIN_VER_FLAG="$MIN_VER_FLAG"
 if [[ "$TARGET" == "aarch64-apple-ios" ]]; then
   SDK_NAME="iphoneos"
   MIN_VER_FLAG="-miphoneos-version-min=17.0"
+  RUST_LINK_MIN_VER_FLAG="$MIN_VER_FLAG"
 fi
 
 IOS_SDKROOT="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk "$SDK_NAME" --show-sdk-path)"
 IOS_CLANG="$(DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun --sdk "$SDK_NAME" -find clang)"
 export SDKROOT="$IOS_SDKROOT"
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-17.0}"
 export "CC_${TARGET//-/_}=$IOS_CLANG"
 export "CFLAGS_${TARGET//-/_}=-isysroot $IOS_SDKROOT $MIN_VER_FLAG"
+export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=$RUST_LINK_MIN_VER_FLAG"
 
 if command -v rustup >/dev/null 2>&1; then
   rustup target add "$TARGET" >/dev/null

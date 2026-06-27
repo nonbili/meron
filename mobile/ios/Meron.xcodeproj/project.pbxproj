@@ -261,7 +261,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosArm64\nelse\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosSimulatorArm64\nfi\n\nRESOURCE_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/compose-resources/composeResources/jp.nonbili.meron.ui.resources\"\nrm -rf \"$RESOURCE_DEST\"\nmkdir -p \"$RESOURCE_DEST\"\nfind \"$SRCROOT/../ui/build/generated/compose/resourceGenerator/preparedResources\" -type d -name composeResources | while read -r resource_dir; do\n  rsync -a \"$resource_dir/\" \"$RESOURCE_DEST/\"\ndone\n";
+			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\"\n\nif [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosArm64\nelse\n  gradle -p \"$SRCROOT/..\" :ui:linkDebugFrameworkIosSimulatorArm64\nfi\n\nRESOURCE_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/compose-resources/composeResources/jp.nonbili.meron.ui.resources\"\nrm -rf \"$RESOURCE_DEST\"\nmkdir -p \"$RESOURCE_DEST\"\nfind \"$SRCROOT/../ui/build/generated/compose/resourceGenerator/preparedResources\" -type d -name composeResources | while read -r resource_dir; do\n  rsync -a \"$resource_dir/\" \"$RESOURCE_DEST/\"\ndone\n";
 		};
 		A10000000000000000000061 /* Build meron-core */ = {
 			isa = PBXShellScriptBuildPhase;

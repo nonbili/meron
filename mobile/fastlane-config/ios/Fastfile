@@ -1,5 +1,7 @@
 default_platform(:ios)
 
+require "shellwords"
+
 platform :ios do
   private_lane :asc_api_key do
     key_id = ENV["APP_STORE_KEY_ID"]
@@ -35,15 +37,33 @@ platform :ios do
     release_notes = File.exist?(release_notes_path) ? File.read(release_notes_path).strip : nil
 
     if build_before_upload
+      team_id = ENV["APP_STORE_DEVELOPMENT_TEAM"].to_s
+      allow_provisioning_updates = ENV["IOS_ALLOW_PROVISIONING_UPDATES"] != "0"
+      xcodebuild_auth_args = []
+
+      if allow_provisioning_updates
+        xcodebuild_auth_args << "-allowProvisioningUpdates"
+        if !ENV["APP_STORE_KEY_FILEPATH"].to_s.empty?
+          xcodebuild_auth_args << "-authenticationKeyPath #{Shellwords.escape(ENV['APP_STORE_KEY_FILEPATH'])}"
+          xcodebuild_auth_args << "-authenticationKeyID #{Shellwords.escape(ENV['APP_STORE_KEY_ID'])}"
+          xcodebuild_auth_args << "-authenticationKeyIssuerID #{Shellwords.escape(ENV['APP_STORE_ISSUER_ID'])}"
+        end
+      end
+
+      build_xcargs = []
+      build_xcargs << "DEVELOPMENT_TEAM=#{team_id}" if !team_id.empty?
+      build_xcargs.concat(xcodebuild_auth_args)
+
       build_app(
         project: project_path,
         scheme: ENV["IOS_SCHEME"] || "Meron",
         configuration: ENV["IOS_CONFIGURATION"] || "Release",
         export_method: ENV["IOS_EXPORT_METHOD"] || "app-store",
+        export_team_id: team_id.empty? ? nil : team_id,
         output_directory: File.dirname(ipa_path),
         output_name: File.basename(ipa_path),
         clean: true,
-        xcargs: ENV["APP_STORE_DEVELOPMENT_TEAM"].to_s.empty? ? nil : "DEVELOPMENT_TEAM=#{ENV['APP_STORE_DEVELOPMENT_TEAM']}"
+        xcargs: build_xcargs.empty? ? nil : build_xcargs.join(" ")
       )
     end
 
