@@ -1419,7 +1419,7 @@ private fun MeronMobileScreenContent(
                             if (coreAccounts.any { !accountSummaryIsRss(it) }) {
                                 ExtendedFloatingActionButton(
                                     onClick = ::openCompose,
-                                    icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                    icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
                                     text = { Text(tr("mobile.tabs.compose")) },
                                 )
                             }
@@ -1753,7 +1753,7 @@ private fun MeronMobileScreenContent(
                             if (coreAccounts.isNotEmpty()) {
                                 ExtendedFloatingActionButton(
                                     onClick = ::openCompose,
-                                    icon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                    icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
                                     text = { Text(tr("mobile.tabs.compose")) },
                                 )
                             }

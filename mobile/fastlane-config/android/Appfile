@@ -1,0 +1,2 @@
+json_key_file("") # Path to the Google Play service account JSON file (or set GOOGLE_PLAY_JSON_KEY)
+package_name("jp.nonbili.meron")

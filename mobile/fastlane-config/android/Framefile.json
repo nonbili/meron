@@ -1,0 +1,48 @@
+{
+  "device_frame_version": "latest",
+  "default": {
+    "font": "./Regular.ttf",
+    "background": "./background.jpg",
+    "padding": 45,
+    "stack_title": true,
+    "show_complete_frame": false,
+    "title_below_image": false,
+    "keyword": {
+      "font": "./Regular.ttf",
+      "color": "#4F46E5",
+      "font_size": 140
+    },
+    "title": {
+      "font": "./Regular.ttf",
+      "color": "#FAFAF9",
+      "font_size": 120
+    }
+  },
+  "data": [
+    {
+      "filter": "01_inbox",
+      "keyword": { "text": "Unified" },
+      "title": { "text": "All your inboxes in one place" }
+    },
+    {
+      "filter": "02_thread",
+      "keyword": { "text": "Read" },
+      "title": { "text": "Conversations, clean and fast" }
+    },
+    {
+      "filter": "03_drawer",
+      "keyword": { "text": "Organize" },
+      "title": { "text": "Switch accounts and views instantly" }
+    },
+    {
+      "filter": "04_kanban",
+      "keyword": { "text": "Plan" },
+      "title": { "text": "Triage your mail on a board" }
+    },
+    {
+      "filter": "05_compose",
+      "keyword": { "text": "Write" },
+      "title": { "text": "Compose without distractions" }
+    }
+  ]
+}

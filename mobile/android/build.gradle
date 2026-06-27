@@ -22,10 +22,11 @@ def googleClientId = releaseProp("googleClientId", "MERON_GOOGLE_CLIENT_ID")
 def googleRedirectUri = releaseProp("googleRedirectUri", "MERON_GOOGLE_REDIRECT_URI")
 def outlookRedirectUriDebug = releaseProp("outlookRedirectUriDebug", "MERON_OUTLOOK_REDIRECT_URI_DEBUG", "msauth://jp.nonbili.meron/lvGC0B4SWYU8tNPHg%2FbdMjQinZQ%3D")
 def outlookRedirectUriRelease = releaseProp("outlookRedirectUriRelease", "MERON_OUTLOOK_REDIRECT_URI_RELEASE", "msauth://jp.nonbili.meron/aJtUZr4euDojxsYjMaCe3sjZhwo%3D")
-def releaseKeystore = releaseProp("meronReleaseStoreFile", "MERON_ANDROID_RELEASE_STORE_FILE")
-def releaseStorePassword = releaseProp("meronReleaseStorePassword", "MERON_ANDROID_RELEASE_STORE_PASSWORD")
-def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE_KEY_ALIAS")
-def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseStorePassword)
+// Falls back to the shared NB_UPLOAD_* keystore configured in ~/.gradle/gradle.properties.
+def releaseKeystore = releaseProp("meronReleaseStoreFile", "MERON_ANDROID_RELEASE_STORE_FILE", releaseProp("NB_UPLOAD_STORE_FILE", "NB_UPLOAD_STORE_FILE"))
+def releaseStorePassword = releaseProp("meronReleaseStorePassword", "MERON_ANDROID_RELEASE_STORE_PASSWORD", releaseProp("NB_UPLOAD_STORE_PASSWORD", "NB_UPLOAD_STORE_PASSWORD"))
+def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE_KEY_ALIAS", releaseProp("NB_UPLOAD_KEY_ALIAS", "NB_UPLOAD_KEY_ALIAS"))
+def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseProp("NB_UPLOAD_KEY_PASSWORD", "NB_UPLOAD_KEY_PASSWORD", releaseStorePassword))
 def hasReleaseSigning = releaseKeystore && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 def javaString = { String value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
 

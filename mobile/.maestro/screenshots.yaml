@@ -1,0 +1,60 @@
+appId: jp.nonbili.meron
+---
+- launchApp:
+    clearState: false
+
+# Wait for the inbox list to render
+- extendedWaitUntil:
+    visible: "Meron Tips"
+    timeout: 20000
+- waitForAnimationToEnd
+
+- takeScreenshot: 01_inbox
+
+# Open a thread
+- tapOn: "Figma"
+- extendedWaitUntil:
+    visible: "Write a message..."
+    timeout: 15000
+- waitForAnimationToEnd
+
+- takeScreenshot: 02_thread
+
+# Back to inbox
+- tapOn: "Back"
+- waitForAnimationToEnd
+
+# Open navigation drawer
+- tapOn: "Open navigation"
+- extendedWaitUntil:
+    visible: "Kanban board"
+    timeout: 5000
+- waitForAnimationToEnd
+
+- takeScreenshot: 03_drawer
+
+# Open Kanban board
+- tapOn: "Kanban board"
+- extendedWaitUntil:
+    visible: "Search board"
+    timeout: 5000
+- waitForAnimationToEnd
+
+- takeScreenshot: 04_kanban
+
+# Back to the inbox to reach the compose button
+- tapOn: "Open navigation"
+- extendedWaitUntil:
+    visible: "Unified inbox"
+    timeout: 5000
+- tapOn: "Unified inbox"
+- waitForAnimationToEnd
+
+# Open compose
+- tapOn: "Compose"
+- extendedWaitUntil:
+    visible: "New message"
+    timeout: 5000
+- waitForAnimationToEnd
+
+- takeScreenshot: 05_compose

@@ -1,0 +1,4 @@
+app_identifier("jp.nonbili.meron")
+apple_id("") # Your Apple ID (or rely on the App Store Connect API key)
+itc_team_id("") # App Store Connect Team ID
+team_id("") # Apple Developer Portal Team ID

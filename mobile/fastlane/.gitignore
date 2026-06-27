@@ -1,0 +1,18 @@
+# fastlane runtime artifacts
+report.xml
+Preview.html
+README.md
+*.html
+
+# intermediate captures + frameit config/assets; only the framed screenshots
+# under metadata/ are committed
+screenshots/
+
+# derived at upload from the shared changelogs/v<version>.txt:
+#  - default.txt (placeholder fallback)
+#  - <versionCode>.txt (generated for supply)
+#  - iOS release_notes.txt
+# Hand-authored v*.txt changelogs are kept.
+metadata/android/en-US/changelogs/default.txt
+metadata/android/en-US/changelogs/[0-9]*.txt
+metadata/ios/en-US/release_notes.txt

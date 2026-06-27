@@ -4,3 +4,7 @@
 /**/build/
 /android/src/main/jniLibs/
 /ios/RustCore/libmeron_core.a
+
+# Ruby / fastlane (bundler installs gems locally)
+/vendor/
+/.bundle/
