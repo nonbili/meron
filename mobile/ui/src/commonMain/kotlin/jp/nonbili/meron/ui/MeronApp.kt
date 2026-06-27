@@ -642,7 +642,7 @@ private fun MeronMobileScreenContent(
         // a cold start shows the cached inbox instead of an empty "Nothing here yet".
         // A server sync still happens on pull-to-refresh / "Sync now".
         LaunchedEffect(coreAccounts) {
-            if (coreAccounts.isNotEmpty() && coreThreads.isEmpty()) {
+            if (coreAccounts.isNotEmpty() && coreThreads.isEmpty() && activeMailboxLoadKey == null) {
                 syncCoreThreads(syncFirst = false)
             }
         }

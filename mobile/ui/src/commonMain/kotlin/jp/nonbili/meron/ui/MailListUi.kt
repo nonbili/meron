@@ -593,7 +593,7 @@ internal fun MailRow(
             .fillMaxWidth()
             .background(rowBackground)
             .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -613,7 +613,7 @@ internal fun MailRow(
                 account = account,
             )
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     senderLabel.substringBefore('@'),
@@ -701,8 +701,8 @@ internal fun ThreadAvatarWithAccountBadge(
     showSenderImages: Boolean,
     account: AccountSummary?,
 ) {
-    Box(Modifier.size(42.dp)) {
-        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 42.dp)
+    Box(Modifier.size(38.dp)) {
+        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 38.dp)
         if (account != null) {
             val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
             Box(

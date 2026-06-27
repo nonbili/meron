@@ -412,10 +412,17 @@ internal fun MeronMobileState.addRssAccount() {
                 client.addRssAccount(AddRssAccountParams(feedUrl = rssFeedUrl.trim(), displayName = rssDisplayName.trim()))
                 client.listAccounts()
             }
-        }.onSuccess {
-            applyAccounts(it)
+        }.onSuccess { json ->
+            val parsedNew = parseAccountListResponse(json)
+            val oldIds = coreAccounts.map { it.id }.toSet()
+            val newRssAccount = parsedNew.firstOrNull { it.id !in oldIds && it.engine == "rss" }
+            applyAccounts(json)
+            if (newRssAccount != null) {
+                selectedCoreAccountId = newRssAccount.id
+            }
             screen = Screen.Mail
             status = "Added RSS feed"
+            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
         }.onFailure {
             status = "Add RSS failed: ${it.message}"
         }
