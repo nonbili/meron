@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { compose$, openComposeTab } from '../../states/compose'
@@ -21,6 +21,7 @@ import { useThreadSearch } from './useThreadSearch'
 import { useConversationScroll } from './useConversationScroll'
 import { ArrowRight } from 'lucide-react'
 import { wallpaperCss } from '../../lib/wallpapers'
+import { clearMediaSession } from '../../lib/mediaSession'
 import type { Message, MessageTab } from '../../types'
 
 function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
@@ -120,6 +121,60 @@ export function MessagePane() {
 
   useEffect(() => {
     resetThreadView()
+  }, [activeThreadId])
+
+  useLayoutEffect(() => {
+    return () => {
+      const container = scrollRef.current
+      if (container) {
+        container.querySelectorAll<HTMLMediaElement>('video, audio').forEach((media) => {
+          try {
+            media.pause()
+            media.querySelectorAll('source').forEach((source) => source.remove())
+            media.removeAttribute('src')
+            media.load()
+          } catch {
+            // Ignore
+          }
+        })
+
+        container.querySelectorAll('iframe').forEach((iframe) => {
+          try {
+            const doc = iframe.contentDocument
+            const win = iframe.contentWindow
+            if (doc) {
+              doc.querySelectorAll<HTMLMediaElement>('video, audio').forEach((media) => {
+                try {
+                  media.pause()
+                  media.querySelectorAll('source').forEach((source) => source.remove())
+                  media.removeAttribute('src')
+                  media.load()
+                } catch {
+                  // Ignore
+                }
+              })
+              doc.querySelectorAll('iframe').forEach((nestedIframe) => {
+                try {
+                  nestedIframe.removeAttribute('src')
+                  nestedIframe.src = 'about:blank'
+                  nestedIframe.remove()
+                } catch {
+                  // Ignore
+                }
+              })
+            }
+            if (win) {
+              clearMediaSession(win)
+            }
+            iframe.removeAttribute('src')
+            iframe.src = 'about:blank'
+          } catch {
+            // Ignore
+          }
+        })
+      }
+      clearMediaSession()
+    }
   }, [activeThreadId])
 
   useEffect(() => {

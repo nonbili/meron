@@ -1,5 +1,6 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
+import { clearMediaSession } from '../../lib/mediaSession'
 import { openExternal } from '../../lib/native'
 
 const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
@@ -40,6 +41,35 @@ function openAnchor(anchor: HTMLAnchorElement, event: MouseEvent) {
   openExternal(url.href)
 }
 
+// Pause and unload every media element in a frame document. WebKitGTK keeps a
+// GStreamer pipeline (and its MPRIS "now playing" notification) alive for any
+// <video>/<audio> that gets destroyed while still playing — e.g. when an RSS
+// thread with embedded video is closed. Detaching the source and calling load()
+// tears the pipeline down so the lingering notification clears.
+function stopFrameMedia(doc: Document | null | undefined) {
+  if (!doc) return
+  doc.querySelectorAll<HTMLMediaElement>('video, audio').forEach((media) => {
+    try {
+      media.pause()
+      media.querySelectorAll('source').forEach((source) => source.remove())
+      media.removeAttribute('src')
+      media.load()
+    } catch {
+      // Ignore documents that are mid-teardown.
+    }
+  })
+  doc.querySelectorAll('iframe').forEach((iframe) => {
+    try {
+      iframe.removeAttribute('src')
+      iframe.src = 'about:blank'
+      iframe.remove()
+    } catch {
+      // Ignore
+    }
+  })
+  clearMediaSession(doc.defaultView)
+}
+
 function isEditableFrameTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
   if (!el) return false
@@ -66,6 +96,8 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   forwardedRef: Ref<HTMLIFrameElement>,
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const docRef = useRef<Document | null>(null)
+  const winRef = useRef<Window | null>(null)
   const srcDoc = useMemo(() => (prepareHtml ? prepareHtml(html) : html), [html, prepareHtml])
 
   useImperativeHandle(forwardedRef, () => iframeRef.current as HTMLIFrameElement, [])
@@ -92,6 +124,9 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     const doc = iframe.contentDocument
     const win = iframe.contentWindow
     if (!doc || !win) return
+
+    docRef.current = doc
+    winRef.current = win
 
     // Clean up previous ready hook if any
     cleanupReadyRef.current?.()
@@ -193,6 +228,13 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       activeScrollListenerRef.current = { win, listener }
     }
 
+    if (!doc.documentElement.dataset.meronFrameMediaUnloadWired) {
+      doc.documentElement.dataset.meronFrameMediaUnloadWired = '1'
+      win.addEventListener('unload', () => {
+        stopFrameMedia(doc)
+      })
+    }
+
     cleanupReadyRef.current = onReadyRef.current?.(doc, iframe) ?? undefined
   }, [])
 
@@ -216,9 +258,20 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     wire()
   }, [wire, srcDoc])
 
-  // Cleanup on unmount
-  useEffect(() => {
+  // Stop in-frame media before the document is swapped for new HTML, otherwise
+  // its orphaned pipeline keeps a "now playing" notification up.
+  useLayoutEffect(() => {
     return () => {
+      stopFrameMedia(docRef.current)
+      clearMediaSession(winRef.current)
+    }
+  }, [srcDoc])
+
+  // Cleanup on unmount
+  useLayoutEffect(() => {
+    return () => {
+      stopFrameMedia(docRef.current)
+      clearMediaSession(winRef.current)
       cleanupReadyRef.current?.()
       cleanupReadyRef.current = undefined
 

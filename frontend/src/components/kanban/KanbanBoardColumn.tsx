@@ -159,7 +159,7 @@ function KanbanColumnContent({
           <h3 className="truncate text-xs font-bold text-primary">{folderLabel(column, labelFolders, accounts)}</h3>
           {searchActive && loading && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
           {unreadCount > 0 && (
-            <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+            <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
               {unreadCount}
             </span>
           )}

@@ -75,7 +75,7 @@ export function KanbanColumnMinimized({
         {folderLabel(column, labelFolders, accounts)}
       </div>
       {unreadCount > 0 && (
-        <div className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+        <div className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
           {unreadCount}
         </div>
       )}

@@ -10,12 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import IntlMessageFormat from 'intl-messageformat'
-import {
-  languageNativeNames,
-  messages,
-  supportedI18nLanguages,
-  type SupportedI18nLanguage,
-} from '../generated/locales'
+import { languageNativeNames, messages, supportedI18nLanguages, type SupportedI18nLanguage } from '../generated/locales'
 
 export { languageNativeNames, supportedI18nLanguages, type SupportedI18nLanguage }
 
