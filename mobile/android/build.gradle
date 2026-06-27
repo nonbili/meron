@@ -88,6 +88,7 @@ android {
     sourceSets {
         main {
             jniLibs.srcDirs = ["src/main/jniLibs"]
+            assets.srcDirs += ["${buildDir}/generated/composeResources/assets"]
         }
     }
 }
@@ -119,7 +120,16 @@ tasks.register("packageRustCoreAndroid", Exec) {
     commandLine "${rootProject.projectDir}/scripts/package-rust-core-android.sh"
 }
 
+tasks.register("copyUiComposeResources", Copy) {
+    description = "Copies :ui composeResources into Android assets so Compose resource loaders find them."
+    from("${rootProject.projectDir}/ui/src/commonMain/composeResources") {
+        into("composeResources/jp.nonbili.meron.ui.resources")
+    }
+    into("${buildDir}/generated/composeResources/assets")
+}
+
 tasks.named("preBuild").configure {
+    dependsOn tasks.named("copyUiComposeResources")
     if (project.hasProperty("packageRustCore")) {
         dependsOn tasks.named("packageRustCoreAndroid")
     }
