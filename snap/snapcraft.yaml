@@ -55,4 +55,4 @@ slots:
   meron:
     interface: dbus
     bus: session
-    name: org.meron.Meron
+    name: jp.nonbili.meron

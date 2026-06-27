@@ -80,6 +80,15 @@ jobs:
         shell: bash
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
+      - name: use Strawberry Perl for vendored OpenSSL on Windows
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        # The sidecar build runs under Git bash, whose /usr/bin perl is a stripped
+        # MSYS build that lacks core modules (Locale::Maketext::Simple) needed by
+        # openssl-src's Configure script. Point openssl-src at the runner's full
+        # Strawberry Perl instead.
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+
       - name: build and stage sidecar
         shell: bash
         run: |
@@ -125,9 +134,25 @@ jobs:
 
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
+      - name: install NSIS
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          # choco updates the machine PATH, but the running job won't pick that up
+          # in later steps; expose makensis to the build step explicitly.
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       - name: build wails app
         shell: bash
-        run: wails build -clean -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}"
+        run: |
+          set -euo pipefail
+          # -nsis produces a traditional installer (Start-menu shortcut,
+          # uninstaller, mailto protocol registration) alongside the portable
+          # exe; it is only valid on Windows.
+          extra=""
+          if [[ "${{ matrix.os }}" == windows* ]]; then extra="-nsis"; fi
+          wails build -clean -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}" $extra
 
       - name: package macOS dmg
         if: startsWith(matrix.os, 'macos')
@@ -240,7 +265,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          7z a "dist/${{ matrix.artifact }}.zip" ./build/bin/meron.exe
+          7z a "dist/${{ matrix.artifact }}-portable.zip" ./build/bin/meron.exe
+
+      - name: stage windows installer
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          # wails -nsis emits build/bin/<name>-<arch>-installer.exe
+          installer=$(ls build/bin/*installer.exe)
+          cp "$installer" "dist/${{ matrix.artifact }}.exe"
 
       - name: package windows appx
         if: startsWith(matrix.os, 'windows')
@@ -343,9 +378,17 @@ jobs:
             echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
           fi
 
+      - name: prepare release note
+        run: |
+          set -euo pipefail
+          VER=$(jq -r '.info.productVersion' wails.json)
+          sed -i "s/{VER}/$VER/g" changelogs/template.txt
+          cat changelogs/template.txt changelogs/v$VER.txt > note.txt
+
       - name: release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          body_path: note.txt
           generate_release_notes: true
           files: dist/*

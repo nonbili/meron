@@ -11,14 +11,14 @@
     the values here are only placeholders for local tooling.
   -->
   <Identity
-    Name="Nonbili.Meron"
-    Publisher="CN=Meron"
+    Name="NonbiliInc.Meron"
+    Publisher="CN=E9477937-876C-417D-81DD-D63DDBACDEC2"
     Version="1.0.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>Meron</DisplayName>
-    <PublisherDisplayName>Meron</PublisherDisplayName>
+    <PublisherDisplayName>Nonbili</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Modern mail and feed client</Description>
   </Properties>
