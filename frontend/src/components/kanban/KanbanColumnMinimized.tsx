@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Pause } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
@@ -47,6 +47,7 @@ export function KanbanColumnMinimized({
   const unreadCount = rawThreads.reduce((count, thread) => count + (thread.unread ? 1 : 0), 0)
   const columnAccount = column.accountId !== 'unified' ? accounts.find((a) => a.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
+  const isPaused = !!columnAccount?.paused
 
   return (
     <section
@@ -65,13 +66,27 @@ export function KanbanColumnMinimized({
         requestAnimationFrame(wrapper.scrollIntoView)
       }}
     >
-      <Avatar
-        name={columnAccountLabel || accountLabel(column.accountId, accounts)}
-        email={columnAccount?.email}
-        src={columnAccount?.avatar_url}
-        size={26}
-      />
-      <div className="max-h-52 truncate text-xs font-bold text-primary" style={{ writingMode: 'vertical-rl' }}>
+      <div className="relative shrink-0">
+        <Avatar
+          name={columnAccountLabel || accountLabel(column.accountId, accounts)}
+          email={columnAccount?.email}
+          src={columnAccount?.avatar_url}
+          size={26}
+          className={isPaused ? 'grayscale opacity-40' : undefined}
+        />
+        {isPaused && (
+          <span
+            className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-chats"
+            title={t('settings.account.paused', { defaultValue: 'Paused' })}
+          >
+            <Pause size={7} className="fill-current" />
+          </span>
+        )}
+      </div>
+      <div
+        className={clsx('max-h-52 truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}
+        style={{ writingMode: 'vertical-rl' }}
+      >
         {folderLabel(column, labelFolders, accounts)}
       </div>
       {unreadCount > 0 && (

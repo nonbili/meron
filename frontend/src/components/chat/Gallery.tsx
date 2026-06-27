@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Copy, Download, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { copyAttachmentImage, downloadAttachment } from '../../states/mail'
@@ -169,7 +170,10 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
   }
   const canSave = mediaKeyFromSrc(current.src) !== null
 
-  return (
+  // Portal to <body> so the fixed overlay isn't trapped inside a transformed or
+  // overflow-clipped ancestor (e.g. a chat bubble's slide-up animation), which
+  // would otherwise mis-position the overlay and clip its controls.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm animate-fade-in select-none"
       onClick={onClose}
@@ -286,6 +290,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
           {current.caption || current.filename}
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

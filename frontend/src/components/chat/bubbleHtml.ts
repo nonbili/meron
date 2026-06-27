@@ -38,8 +38,11 @@ export function prepareBubbleHtml(html: string) {
       *, *::before, *::after { box-sizing: border-box; }
       img, video {
         max-width: 100% !important;
+        max-height: 320px !important;
         height: auto !important;
+        object-fit: contain;
       }
+      img { cursor: zoom-in; }
       table, pre { max-width: 100% !important; }
       pre {
         overflow-x: auto;

@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Loader2, Minus } from 'lucide-react'
+import { Loader2, Minus, Pause } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { clsx } from '../../lib/utils'
 import { accounts$ } from '../../states/accounts'
@@ -112,6 +112,7 @@ function KanbanColumnContent({
     column.accountId !== 'unified' ? accounts.find((account) => account.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
   const isRss = isRssAccount(columnAccount, column.accountId)
+  const isPaused = !!columnAccount?.paused
   const emptyText = columnEmptyText(filterMode, searchActive, rawThreads.length > 0, isRss)
   const [syncing, setSyncing] = useState(false)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null)
@@ -149,14 +150,27 @@ function KanbanColumnContent({
         onContextMenu={openHeaderMenu}
         {...wrapper.dragHandle}
       >
-        <Avatar
-          name={columnAccountLabel || accountLabel(column.accountId, accounts)}
-          email={columnAccount?.email}
-          src={columnAccount?.avatar_url}
-          size={26}
-        />
+        <div className="relative shrink-0">
+          <Avatar
+            name={columnAccountLabel || accountLabel(column.accountId, accounts)}
+            email={columnAccount?.email}
+            src={columnAccount?.avatar_url}
+            size={26}
+            className={isPaused ? 'grayscale opacity-40' : undefined}
+          />
+          {isPaused && (
+            <span
+              className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-chats"
+              title={t('settings.account.paused', { defaultValue: 'Paused' })}
+            >
+              <Pause size={7} className="fill-current" />
+            </span>
+          )}
+        </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h3 className="truncate text-xs font-bold text-primary">{folderLabel(column, labelFolders, accounts)}</h3>
+          <h3 className={clsx('truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}>
+            {folderLabel(column, labelFolders, accounts)}
+          </h3>
           {searchActive && loading && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
           {unreadCount > 0 && (
             <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
