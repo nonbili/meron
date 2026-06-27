@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
-import { compose$, openDraftCompose, openThreadTab, openThreadTabById } from './compose'
+import {
+  activateConversationTab,
+  closeMessageTab,
+  compose$,
+  openDraftCompose,
+  openMessageTab,
+  openThreadTab,
+  openThreadTabById,
+} from './compose'
 import { accounts$ } from './accounts'
 import { ui$ } from './ui'
 
@@ -189,5 +197,76 @@ describe('openThreadTabById', () => {
     expect(compose$.tabs.get()).toHaveLength(1)
     expect(compose$.activeTab.get()).toBe(firstTabId)
     expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
+  })
+})
+
+describe('tab navigation', () => {
+  beforeEach(() => {
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    compose$.conversationThread.set('')
+    ui$.selectedThread.set('')
+    accounts$.set([
+      {
+        id: 'acc-notification',
+        email: 'me@example.com',
+        display_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+  })
+
+  it('remembers the Current conversation while a thread tab is active', () => {
+    // Selecting a thread in the list mirrors into conversationThread.
+    ui$.selectedThread.set('t-current')
+    expect(compose$.conversationThread.get()).toBe('t-current')
+
+    // Opening a thread tab retargets selectedThread to load its own messages,
+    // but must not disturb the Current tab's remembered thread.
+    openThreadTab(message({ thread_id: 't-2', id: 'm2', subject: 'Thread 2' }))
+    expect(compose$.activeTab.get()).toBe('thread-t-2')
+    expect(ui$.selectedThread.get()).toBe('t-2')
+    expect(compose$.conversationThread.get()).toBe('t-current')
+  })
+
+  it('restores the Current conversation when switching back to the Current tab', () => {
+    ui$.selectedThread.set('t-current')
+    openThreadTab(message({ thread_id: 't-2', id: 'm2' }))
+    expect(ui$.selectedThread.get()).toBe('t-2')
+
+    activateConversationTab()
+    expect(compose$.activeTab.get()).toBe('')
+    expect(ui$.selectedThread.get()).toBe('t-current')
+  })
+
+  it('returns to the originating thread tab when a reader tab opened from it is closed', () => {
+    ui$.selectedThread.set('t-current')
+    openThreadTab(message({ thread_id: 't-2', id: 'm2', subject: 'Thread 2' }))
+
+    // Open a message from within the thread tab in its own reader tab.
+    openMessageTab(message({ id: 'msg-x', thread_id: 't-2', subject: 'Msg X' }))
+    expect(compose$.activeTab.get()).toBe('msg-x')
+
+    // Closing it returns to the thread tab it was opened from, not a neighbor.
+    closeMessageTab('msg-x')
+    expect(compose$.activeTab.get()).toBe('thread-t-2')
+    expect(ui$.selectedThread.get()).toBe('t-2')
+    expect(compose$.tabs.get().map((tab) => tab.id)).toEqual(['thread-t-2'])
+  })
+
+  it('falls back to the Current conversation when the last tab is closed', () => {
+    ui$.selectedThread.set('t-current')
+    openThreadTab(message({ thread_id: 't-2', id: 'm2' }))
+
+    closeMessageTab('thread-t-2')
+    expect(compose$.activeTab.get()).toBe('')
+    expect(ui$.selectedThread.get()).toBe('t-current')
+    expect(compose$.tabs.get()).toHaveLength(0)
   })
 })

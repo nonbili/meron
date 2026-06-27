@@ -282,10 +282,11 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     }
                     thread$.pendingScrollMessageId.set(thread.id)
                   }
-                  ui$.selectedThread.set(thread.thread_id)
-                  // Leave any open compose/reader tab so the picked thread's
-                  // conversation is what actually shows in the message pane.
+                  // Leave any open compose/reader/thread tab first so the
+                  // selectedThread retarget is recorded as the Current tab's
+                  // thread (conversationThread) rather than skipped.
                   compose$.activeTab.set('')
+                  ui$.selectedThread.set(thread.thread_id)
                   ui$.mobilePane.set('conversation')
                 }}
                 onContextMenu={(event) => {

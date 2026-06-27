@@ -1,7 +1,7 @@
 import { MessageSquare, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { compose$, closeMessageTab } from '../../states/compose'
+import { compose$, closeMessageTab, activateConversationTab } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 
 // The tab strip above the conversation: a fixed "Conversation" tab plus open
@@ -15,7 +15,7 @@ export function ConversationTabs() {
   return (
     <div className="flex h-10 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border bg-header px-2 select-none">
       <button
-        onClick={() => compose$.activeTab.set('')}
+        onClick={() => activateConversationTab()}
         className={`flex items-center gap-1.5 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
           activeTab === '' ? 'border-accent text-accent' : 'border-transparent text-secondary hover:text-primary'
         }`}
@@ -28,8 +28,10 @@ export function ConversationTabs() {
         <div
           key={tab.id}
           onClick={() => {
-            if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
+            // Activate the tab before retargeting selectedThread so the Current
+            // tab's remembered thread (conversationThread) isn't overwritten.
             compose$.activeTab.set(tab.id)
+            if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
           }}
           className={`group flex max-w-[200px] cursor-pointer items-center gap-1.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
             activeTab === tab.id ? 'border-accent text-accent' : 'border-transparent text-secondary hover:text-primary'

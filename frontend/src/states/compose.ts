@@ -174,6 +174,12 @@ export const compose$ = observable({
   // Re-hydrate any compose tabs whose drafts were persisted from the previous run.
   tabs: initialComposeTabs as MessageTab[],
   activeTab: '',
+  // The thread shown by the "Current" conversation tab. The message pane renders a
+  // single selectedThread, so a thread tab has to retarget selectedThread to load
+  // its own messages. We remember the Current tab's thread here so switching to a
+  // thread tab and back restores the conversation it was showing instead of
+  // adopting the thread tab's. Kept in sync below while the Current tab is active.
+  conversationThread: '',
   composer: '',
   composerAttachments: [] as ComposerAttachment[],
   // Per-thread quick-reply draft text. The active textarea reads/writes via
@@ -181,6 +187,47 @@ export const compose$ = observable({
   // lose an in-progress reply.
   quickDrafts: initialDrafts.quick as Record<string, string>,
 })
+
+// While the Current conversation tab is active (activeTab ""), mirror every
+// selectedThread change into conversationThread so it always remembers the live
+// navigation. Thread-tab activations set activeTab first, so this guard skips
+// their selectedThread retarget and leaves the Current tab's thread intact.
+ui$.selectedThread.onChange(({ value }) => {
+  if (compose$.activeTab.peek() === '') compose$.conversationThread.set(value)
+})
+
+// Return to the Current conversation tab, restoring the thread it was showing
+// before a thread tab took over selectedThread.
+export function activateConversationTab() {
+  ui$.selectedThread.set(compose$.conversationThread.peek())
+  compose$.activeTab.set('')
+}
+
+// Activation trail of tab ids ("" = Current), oldest first. Closing the active
+// tab walks this back to the tab you were on before opening it — e.g. opening a
+// message in a new tab from a thread tab and closing it returns to that thread
+// tab, not whatever happens to sit next in the strip.
+const tabHistory: string[] = []
+compose$.activeTab.onChange(({ value }) => {
+  // Collapse immediate repeats so re-activating the current tab is a no-op.
+  if (tabHistory[tabHistory.length - 1] === value) return
+  tabHistory.push(value)
+  if (tabHistory.length > 50) tabHistory.shift()
+})
+
+// Drop the closed tab from the trail, then return the most recent entry that's
+// still a live tab (or "" for Current). Pops dead entries as it goes.
+function popToPreviousTab(closedId: string, remaining: MessageTab[]): string {
+  for (let i = tabHistory.length - 1; i >= 0; i--) {
+    if (tabHistory[i] === closedId) tabHistory.splice(i, 1)
+  }
+  while (tabHistory.length > 0) {
+    const candidate = tabHistory[tabHistory.length - 1]
+    if (candidate === '' || remaining.some((tab) => tab.id === candidate)) return candidate
+    tabHistory.pop()
+  }
+  return ''
+}
 
 // Delete orphaned inline-image files from earlier sessions. writeMediaFile
 // writes one loose file per inline paste into the media root and nothing ever
@@ -319,8 +366,10 @@ export function openThreadTab(thread: Message) {
     }
     compose$.tabs.push(tab)
   }
-  ui$.selectedThread.set(thread.thread_id)
+  // Activate the tab before retargeting selectedThread so the conversationThread
+  // mirror skips this change and the Current tab keeps its own thread.
   compose$.activeTab.set(id)
+  ui$.selectedThread.set(thread.thread_id)
   ui$.mobilePane.set('conversation')
 }
 
@@ -336,8 +385,8 @@ export async function openThreadTabById(threadId: string) {
   const id = `thread-${threadId}`
   const existing = compose$.tabs.get().find((tab) => tab.id === id)
   if (existing) {
-    ui$.selectedThread.set(threadId)
     compose$.activeTab.set(id)
+    ui$.selectedThread.set(threadId)
     ui$.mobilePane.set('conversation')
     return
   }
@@ -658,9 +707,17 @@ export function closeMessageTab(id: string) {
   const next = tabs.filter((tab) => tab.id !== id)
   compose$.tabs.set(next)
   if (compose$.activeTab.get() === id) {
-    const nextTab = next[index - 1] ?? next[index] ?? null
-    if (nextTab?.kind === 'thread') ui$.selectedThread.set(nextTab.threadId)
-    compose$.activeTab.set(nextTab?.id ?? '')
+    const target = popToPreviousTab(id, next)
+    const nextTab = target ? next.find((tab) => tab.id === target) : null
+    if (!nextTab) {
+      // Falling back to the Current tab: restore the conversation it was showing.
+      activateConversationTab()
+    } else if (nextTab.kind === 'thread') {
+      compose$.activeTab.set(nextTab.id)
+      ui$.selectedThread.set(nextTab.threadId)
+    } else {
+      compose$.activeTab.set(nextTab.id)
+    }
   }
 }
 

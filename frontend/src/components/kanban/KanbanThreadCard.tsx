@@ -88,10 +88,10 @@ export function KanbanThreadCard({
             thread$.pendingScrollMessageId.set(thread.id)
           }
           ui$.selectedFolder.set(thread.folder_id)
-          ui$.selectedThread.set(thread.thread_id)
-          // Leave any open compose/reader tab so the picked thread's
-          // conversation is what actually shows in the message pane.
+          // Leave any open compose/reader/thread tab first so the selectedThread
+          // retarget is recorded as the Current tab's thread (conversationThread).
           compose$.activeTab.set('')
+          ui$.selectedThread.set(thread.thread_id)
           kanban$.paneThreadId.set(thread.thread_id)
           kanban$.paneColumnKey.set(kanbanBoardColumnKey(boardId, column))
           ui$.mobilePane.set('conversation')
