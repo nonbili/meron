@@ -61,25 +61,6 @@ export function ThreadActionsMenuItems({
       {filterItem('unread', t('filters.unread'), <Mail size={13} className="text-secondary shrink-0" />)}
       {filterItem('starred', t('filters.starred'), <Star size={13} className="text-secondary shrink-0" />)}
       <div className="my-1 border-t border-border" />
-      {onSync && (
-        <MenuItem
-          className="flex-nowrap"
-          icon={
-            <RefreshCw size={13} className={`text-secondary shrink-0 ${syncing ? 'animate-spin text-accent' : ''}`} />
-          }
-          label={
-            <span className="whitespace-nowrap shrink-0">
-              {syncing
-                ? (syncingLabel ?? t('threads.actions.syncing'))
-                : (syncLabel ?? t('threads.actions.syncMailbox'))}
-            </span>
-          }
-          onClick={() => {
-            onSync()
-            closeMenu()
-          }}
-        />
-      )}
       <MenuItem
         className="flex-nowrap disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!hasUnread}
@@ -90,20 +71,42 @@ export function ThreadActionsMenuItems({
           closeMenu()
         }}
       />
-      {(onSearch || onRemove) && (
+      {onSearch && (
+        <MenuItem
+          className="flex-nowrap"
+          icon={<Search size={13} className="text-secondary shrink-0" />}
+          label={
+            <span className="whitespace-nowrap shrink-0">
+              {searchLabel ?? t('kanban.actions.search', { defaultValue: 'Search' })}
+            </span>
+          }
+          onClick={() => {
+            onSearch()
+            closeMenu()
+          }}
+        />
+      )}
+      {(onSync || onRemove) && (
         <>
           <div className="my-1 border-t border-border" />
-          {onSearch && (
+          {onSync && (
             <MenuItem
               className="flex-nowrap"
-              icon={<Search size={13} className="text-secondary shrink-0" />}
+              icon={
+                <RefreshCw
+                  size={13}
+                  className={`text-secondary shrink-0 ${syncing ? 'animate-spin text-accent' : ''}`}
+                />
+              }
               label={
                 <span className="whitespace-nowrap shrink-0">
-                  {searchLabel ?? t('kanban.actions.search', { defaultValue: 'Search' })}
+                  {syncing
+                    ? (syncingLabel ?? t('threads.actions.syncing'))
+                    : (syncLabel ?? t('threads.actions.syncMailbox'))}
                 </span>
               }
               onClick={() => {
-                onSearch()
+                onSync()
                 closeMenu()
               }}
             />
