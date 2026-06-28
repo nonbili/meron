@@ -444,6 +444,33 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
     }
 }
 
+internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
+    accountId: String,
+    folderId: String,
+) {
+    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    val folder = folderId.ifBlank { INBOX_FOLDER }
+    val accountIncludedInUnified =
+        coreAccounts.firstOrNull { it.id == accountId }?.includedInUnified == true
+    board.columns
+        .filter { column ->
+            val directFolderMatch =
+                column.accountId == accountId &&
+                    column.folderId.equals(folder, ignoreCase = true)
+            val unifiedInboxMatch =
+                column.accountId == UNIFIED_ACCOUNT_ID &&
+                    folder.equals(INBOX_FOLDER, ignoreCase = true) &&
+                    accountIncludedInUnified
+            directFolderMatch || unifiedInboxMatch
+        }
+        .distinctBy(::kanbanColumnKey)
+        .forEach { column ->
+            // The IDLE/event path has already synced the core DB. Re-read the
+            // affected active Kanban columns from cache without another IMAP pass.
+            loadKanbanColumn(column, refresh = false)
+        }
+}
+
 internal fun MeronMobileState.loadKanbanBoard(refresh: Boolean = false) {
     val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
     if (kanbanSearchScope != "all" && board.columns.none { kanbanColumnKey(it) == kanbanSearchScope }) {

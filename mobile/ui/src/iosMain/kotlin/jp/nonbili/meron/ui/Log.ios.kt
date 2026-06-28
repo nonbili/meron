@@ -14,7 +14,10 @@ internal actual fun writeLog(
     error: Throwable?,
 ) {
     val detail = error?.let { " | ${it.stackTraceToString()}" }.orEmpty()
-    // Pass the line as a single %@ argument so a '%' in the message can't be
-    // interpreted as an NSLog format specifier.
-    NSLog("Meron.%@ [%@] %@", tag, level.name, message + detail)
+    // Build the whole line and pass it as the format string with NO varargs.
+    // Kotlin/Native's bridge for NSLog's C *object* varargs (%@) passes a bad
+    // pointer and crashes (EXC_BAD_ACCESS in CFStringAppendFormat), so we avoid
+    // varargs entirely. Escape '%' so the message can't be read as a format spec.
+    val line = "Meron.$tag [${level.name}] $message$detail".replace("%", "%%")
+    NSLog(line)
 }

@@ -168,12 +168,14 @@ fn start_foreground_idle(data_dir: &str) {
             Ok(conn) => {
                 let skip = is_rss_account(&conn, &id).unwrap_or(false)
                     || crate::store::account_paused(&conn, &id).unwrap_or(false);
-                let sent = crate::store::get_folders(&conn, &id).ok().and_then(|folders| {
-                    folders
-                        .into_iter()
-                        .map(|folder| folder.name)
-                        .find(|name| crate::imap::looks_like_sent(name))
-                });
+                let sent = crate::store::get_folders(&conn, &id)
+                    .ok()
+                    .and_then(|folders| {
+                        folders
+                            .into_iter()
+                            .map(|folder| folder.name)
+                            .find(|name| crate::imap::looks_like_sent(name))
+                    });
                 (skip, sent)
             }
             Err(_) => (true, None),

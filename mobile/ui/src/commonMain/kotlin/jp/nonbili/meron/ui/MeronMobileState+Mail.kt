@@ -177,6 +177,7 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
+import jp.nonbili.meron.shared.SendStatus
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -620,7 +621,7 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
             }
         }.onSuccess {
             val page = parseThreadReadPage(it)
-            messages = page.messages
+            messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
             updateThreadEverywhere(thread) { current -> current.copy(unread = false) }
             if (!threadIdIsRss(thread.id) && folderIsDrafts(thread.folder)) {
@@ -652,9 +653,32 @@ internal suspend fun MeronMobileState.reloadCurrentThreadMessages() {
         }
     if (selectedCoreThread?.id != thread.id) return
     val page = parseThreadReadPage(response)
-    messages = page.messages
+    messages = mergeLocalSendMessages(messages, page.messages)
     messageCursor = page.nextCursor
 }
+
+private fun mergeLocalSendMessages(
+    current: List<MessageBody>,
+    refreshed: List<MessageBody>,
+): List<MessageBody> {
+    val refreshedIds = refreshed.map { it.id }.toSet()
+    val refreshedMessageIds =
+        refreshed
+            .mapNotNull { it.messageId.normalizedMessageId().takeIf(String::isNotBlank) }
+            .toSet()
+    val local =
+        current.filter { message ->
+            val localSend = message.id.startsWith("local-send-")
+            if (!localSend && message.sendStatus == SendStatus.None) return@filter false
+            if (message.id in refreshedIds) return@filter false
+            val messageId = message.messageId.normalizedMessageId()
+            messageId.isBlank() || messageId !in refreshedMessageIds
+        }
+    if (local.isEmpty()) return refreshed
+    return (refreshed + local).sortedBy { it.dateEpochSeconds }
+}
+
+private fun String.normalizedMessageId(): String = trim().trim('<', '>').lowercase()
 
 // Re-read the open thread on a push/sync event so live IDLE updates (new mail,
 // or our own sent copy) appear in the conversation, not just the thread list.

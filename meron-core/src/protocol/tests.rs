@@ -597,18 +597,15 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         "{exchanged}"
     );
     assert_eq!(
-        exchanged["result"]["account"]["display_name"],
-        "Google User",
+        exchanged["result"]["account"]["display_name"], "Google User",
         "{exchanged}"
     );
     assert_eq!(
-        exchanged["result"]["account"]["sender_name"],
-        "Google User",
+        exchanged["result"]["account"]["sender_name"], "Google User",
         "{exchanged}"
     );
     assert_eq!(
-        exchanged["result"]["account"]["avatar_url"],
-        "https://lh3.googleusercontent.com/avatar",
+        exchanged["result"]["account"]["avatar_url"], "https://lh3.googleusercontent.com/avatar",
         "{exchanged}"
     );
     assert_eq!(
@@ -738,7 +735,12 @@ fn one_shot_json_server(path: &str, body: &str) -> String {
             }
             let request_line = String::from_utf8_lossy(&request);
             let expected = format!(" {server_path} ");
-            if !request_line.lines().next().unwrap_or("").contains(&expected) {
+            if !request_line
+                .lines()
+                .next()
+                .unwrap_or("")
+                .contains(&expected)
+            {
                 continue;
             }
             write!(
@@ -1076,6 +1078,151 @@ fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
         threads[0]["thread_id"],
         "me@example.com#INBOX#t.Z210aHJpZDoxMjM"
     );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
+    let data_dir = unique_data_dir("sent-reply-chain");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    store::ensure_folder(&conn, "me@example.com", "Sent").unwrap();
+
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 7,
+            subject: "test mailo2".to_string(),
+            from_name: "Gmail".to_string(),
+            from_addr: "sender@gmail.com".to_string(),
+            date: 100,
+            seen: true,
+            thread_key: "root@mail.gmail.com".to_string(),
+            message_id: "root@mail.gmail.com".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::save_cached_message(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        7,
+        &Message {
+            subject: "test mailo2".to_string(),
+            from_name: "Gmail".to_string(),
+            from_addr: "sender@gmail.com".to_string(),
+            to: "Me <me@example.com>".to_string(),
+            message_id: "root@mail.gmail.com".to_string(),
+            date: 100,
+            body: "root".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "Sent",
+        &[MessageHeader {
+            uid: 8,
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            date: 200,
+            seen: true,
+            thread_key: "root@mail.gmail.com".to_string(),
+            message_id: "first-reply@mailo.com".to_string(),
+            in_reply_to: "root@mail.gmail.com".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::save_cached_message(
+        &conn,
+        "me@example.com",
+        "Sent",
+        8,
+        &Message {
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            to: "sender@gmail.com".to_string(),
+            message_id: "first-reply@mailo.com".to_string(),
+            references: "root@mail.gmail.com".to_string(),
+            date: 200,
+            body: "first".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Reproduces Mailo's observed split: the second sent reply arrived from header
+    // sync with no usable References root, so its computed key fell back to
+    // In-Reply-To (the first sent reply). It should inherit the original root.
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "Sent",
+        &[MessageHeader {
+            uid: 9,
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            date: 300,
+            seen: true,
+            thread_key: "first-reply@mailo.com".to_string(),
+            message_id: "second-reply@mailo.com".to_string(),
+            in_reply_to: "first-reply@mailo.com".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::save_cached_message(
+        &conn,
+        "me@example.com",
+        "Sent",
+        9,
+        &Message {
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            to: "sender@gmail.com".to_string(),
+            message_id: "second-reply@mailo.com".to_string(),
+            references: "root@mail.gmail.com first-reply@mailo.com".to_string(),
+            date: 300,
+            body: "second".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    drop(conn);
+
+    let sent = invoke_mobile_protocol_json(
+        r#"{"id":167,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"Sent","filter":"all"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let sent_threads = sent["result"]["threads"].as_array().unwrap();
+    assert_eq!(sent_threads.len(), 1, "{sent}");
+    assert_eq!(
+        sent_threads[0]["thread_id"],
+        "me@example.com#Sent#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"
+    );
+
+    let read = invoke_mobile_protocol_json(
+        r#"{"id":168,"method":"mail.threadRead","params":{"thread_id":"me@example.com#INBOX#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let messages = read["result"]["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 3, "{read}");
+    assert_eq!(messages[0]["message_id"], "root@mail.gmail.com");
+    assert_eq!(messages[1]["message_id"], "first-reply@mailo.com");
+    assert_eq!(messages[2]["message_id"], "second-reply@mailo.com");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

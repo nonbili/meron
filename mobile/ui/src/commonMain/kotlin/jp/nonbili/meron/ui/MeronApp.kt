@@ -374,23 +374,27 @@ private fun MeronMobileScreenContent(
                                     )
                                 }
                                 val eventAccount = event.detailJson.jsonStringValue("account")
+                                val eventFolder = event.detailJson.jsonStringValue("folder")
                                 scope.launch {
                                     syncCoreThreads(
                                         accountOverride = selectedCoreAccountId,
                                         folderOverride = selectedCoreFolder,
                                         syncFirst = false,
                                     )
+                                    refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
                                     refreshOpenThreadFor(eventAccount)
                                 }
                             }
                             "mail.synced" -> {
                                 val eventAccount = event.detailJson.jsonStringValue("account")
+                                val eventFolder = event.detailJson.jsonStringValue("folder")
                                 scope.launch {
                                     syncCoreThreads(
                                         accountOverride = selectedCoreAccountId,
                                         folderOverride = selectedCoreFolder,
                                         syncFirst = false,
                                     )
+                                    refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
                                     refreshOpenThreadFor(eventAccount)
                                 }
                             }

@@ -23,11 +23,10 @@ use tokio::sync::Mutex;
 
 // The binary shares the library crate's modules (rather than recompiling its own
 // copies) so the desktop Engine and the mobile FFI operate on identical types.
-use meron_core::engine::{Engine, EngineHost};
 use meron_core::engine::*;
+use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
 use meron_core::{imap, rss, secrets, smtp, store};
-
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -150,7 +149,6 @@ fn maybe_spawn_fill_thread_gaps(
     });
 }
 
-
 /// Refresh a folder's messages from IMAP in the background (deduped), then emit
 /// `mail.synced` so the UI re-reads the now-fresh store. Keeps network I/O off
 /// the bridge's synchronous request path (which runs on the app's UI thread).
@@ -239,7 +237,6 @@ fn spawn_message_sync(
     });
 }
 
-
 /// Re-fetch an RSS account's feeds in the background (deduped, blocking pool),
 /// then emit `mail.synced` so the UI re-reads the refreshed store.
 fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
@@ -316,7 +313,6 @@ fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
     });
 }
 
-
 fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
     if engine.is_paused(&account) {
         return;
@@ -358,9 +354,7 @@ fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
     });
 }
 
-
 const IDLE_LIMIT: u32 = 50;
-
 
 /// Unread messages in the UID range that appeared during the last sync.
 /// Startup syncs can advance UIDNEXT for messages that were already read on the
@@ -412,7 +406,6 @@ fn new_unread_inbox_summary(
     Some((headers.len() as u32, latest))
 }
 
-
 /// Newest stored RSS item for an account, or None if the store is empty
 /// or the query fails. Used to enrich `mail.newMessages` with the latest
 /// sender/subject so OS notifications can show something more useful than a
@@ -442,7 +435,6 @@ fn latest_rss_header(engine: &Arc<Engine>, account: &str) -> Option<(String, Str
     .ok()
 }
 
-
 /// Friendly display name or email address of an account for user-facing notifications.
 fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     let db = engine.db.lock().unwrap();
@@ -466,7 +458,6 @@ fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     account.to_string()
 }
 
-
 /// Friendly sender label: the From display name if present, else the address,
 /// else an empty string. Mirrors how the message list renders the From column.
 fn display_from(h: &imap::MessageHeader) -> String {
@@ -476,7 +467,6 @@ fn display_from(h: &imap::MessageHeader) -> String {
     }
     h.from_addr.trim().to_string()
 }
-
 
 /// Cached UIDNEXT for an account's INBOX (0 if unknown). Used to detect whether
 /// an IDLE wake brought new mail (UIDNEXT advanced) or only a flag change.
@@ -489,11 +479,9 @@ fn inbox_uid_next(engine: &Arc<Engine>, account: &str) -> u32 {
         .unwrap_or(0)
 }
 
-
 fn watch_key(account: &str, folder: &str) -> String {
     format!("{account}\n{folder}")
 }
-
 
 fn start_idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: String) -> bool {
     let key = watch_key(&account, &folder);
@@ -507,7 +495,6 @@ fn start_idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
     tokio::spawn(idle_watch(engine, out, account, folder));
     true
 }
-
 
 /// Long-lived per-account/folder IDLE watcher. Reconnects with backoff on error
 /// so a dropped connection or server timeout resumes pushing updates.
@@ -545,7 +532,6 @@ async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
         }
     }
 }
-
 
 /// Sync `folder` and surface the result to the UI: a "new mail" toast when
 /// INBOX's UIDNEXT advanced (genuine arrivals), otherwise a silent refresh.
@@ -615,7 +601,6 @@ async fn sync_and_notify(
     Ok(())
 }
 
-
 /// One IDLE connection lifecycle: hold a dedicated session on one mailbox, and
 /// on each server notification refresh that folder in the store.
 async fn idle_once(
@@ -682,7 +667,6 @@ async fn idle_once(
     }
 }
 
-
 #[tokio::main]
 async fn main() {
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
@@ -745,7 +729,6 @@ async fn main() {
     }
 }
 
-
 async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
     match dispatch(&engine, &req, out).await {
         Ok(value) => respond(out, req.id, value).await,
@@ -757,7 +740,6 @@ async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
         }
     }
 }
-
 
 async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
     let p = &req.params;
@@ -2147,14 +2129,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
     }
 }
 
-
 /// Decode an opaque RSS pagination cursor `"ts:<i64>:<item_key>"`.
 fn parse_rss_cursor(raw: &str) -> Option<(i64, String)> {
     let rest = raw.strip_prefix("ts:")?;
     let (ts, key) = rest.split_once(':')?;
     Some((ts.parse().ok()?, key.to_string()))
 }
-
 
 /// Mail list cursor: `date:<epoch>:<uid>` — the (send time, uid) keyset of the
 /// last row of the previous page (see `store::get_recent_page`).
@@ -2164,12 +2144,10 @@ fn parse_mail_cursor(raw: &str) -> Option<(i64, u32)> {
     Some((date.parse().ok()?, uid.parse().ok()?))
 }
 
-
 /// Whether an account is RSS-backed (vs mail), per its row in the unified DB.
 fn is_rss(engine: &Arc<Engine>, account: &str) -> anyhow::Result<bool> {
     Ok(store::account_engine(&engine.db.lock().unwrap(), account)?.as_deref() == Some("rss"))
 }
-
 
 fn req_str(params: &Value, key: &str) -> anyhow::Result<String> {
     params
@@ -2179,14 +2157,12 @@ fn req_str(params: &Value, key: &str) -> anyhow::Result<String> {
         .ok_or_else(|| anyhow::anyhow!("missing string param: {key}"))
 }
 
-
 fn req_bool(params: &Value, key: &str) -> anyhow::Result<bool> {
     params
         .get(key)
         .and_then(Value::as_bool)
         .ok_or_else(|| anyhow::anyhow!("missing bool param: {key}"))
 }
-
 
 fn req_u16(params: &Value, key: &str) -> anyhow::Result<u16> {
     params
@@ -2196,7 +2172,6 @@ fn req_u16(params: &Value, key: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("missing number param: {key}"))
 }
 
-
 fn req_u32(params: &Value, key: &str) -> anyhow::Result<u32> {
     params
         .get(key)
@@ -2204,7 +2179,6 @@ fn req_u32(params: &Value, key: &str) -> anyhow::Result<u32> {
         .map(|n| n as u32)
         .ok_or_else(|| anyhow::anyhow!("missing number param: {key}"))
 }
-
 
 fn req_str_array(params: &Value, key: &str) -> anyhow::Result<Vec<String>> {
     let arr = params
@@ -2221,7 +2195,6 @@ fn req_str_array(params: &Value, key: &str) -> anyhow::Result<Vec<String>> {
     }
     Ok(out)
 }
-
 
 /// IMAP APPEND a freshly-sent message to the account's Sent folder, with
 /// `\Seen`. Best-effort: callers log and ignore errors so SMTP success doesn't
@@ -2271,7 +2244,6 @@ fn resolve_send_from(
     (creds.user.clone(), sender_name)
 }
 
-
 async fn write_line(out: &Writer, value: Value) {
     let mut line = value.to_string();
     line.push('\n');
@@ -2280,18 +2252,14 @@ async fn write_line(out: &Writer, value: Value) {
     let _ = guard.flush().await;
 }
 
-
 async fn emit(out: &Writer, name: &str, detail: Value) {
     write_line(out, json!({ "event": name, "detail": detail })).await;
 }
-
 
 async fn respond(out: &Writer, id: u64, result: Value) {
     write_line(out, json!({ "id": id, "result": result })).await;
 }
 
-
 async fn respond_error(out: &Writer, id: u64, message: &str) {
     write_line(out, json!({ "id": id, "error": { "message": message } })).await;
 }
-

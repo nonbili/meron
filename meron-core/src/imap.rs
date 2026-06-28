@@ -135,6 +135,12 @@ pub struct MessageHeader {
     pub seen: bool,
     pub starred: bool,
     pub thread_key: String,
+    /// Normalized RFC Message-ID from the envelope, when available.
+    #[serde(default)]
+    pub message_id: String,
+    /// Normalized RFC In-Reply-To from the envelope, when available.
+    #[serde(default)]
+    pub in_reply_to: String,
     /// Envelope `To`/`Cc` addressees. Populated by the envelope-fetch paths and
     /// persisted for recipient autocomplete; the cached-row SELECT paths that
     /// don't need them leave these empty.
@@ -426,6 +432,8 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
             seen,
             starred,
             thread_key,
+            message_id: ef.message_id,
+            in_reply_to: ef.in_reply_to,
             folder: String::new(),
             to: ef.to,
             cc: ef.cc,
@@ -581,6 +589,8 @@ pub async fn fetch_by_message_ids(
                 seen,
                 starred,
                 thread_key,
+                message_id: ef.message_id,
+                in_reply_to: ef.in_reply_to,
                 to: ef.to,
                 cc: ef.cc,
                 recipient_overflow: 0,
@@ -661,6 +671,8 @@ pub async fn fetch_headers_by_uid(
             seen,
             starred,
             thread_key,
+            message_id: ef.message_id,
+            in_reply_to: ef.in_reply_to,
             folder: String::new(),
             to: ef.to,
             cc: ef.cc,
@@ -1471,8 +1483,18 @@ fn address_fields(addr: &async_imap::imap_proto::Address) -> (String, String) {
 mod tests {
     use super::{
         civil_from_days, first_message_id, header_subject, imap_quote, message_id_search_criteria,
-        normalize_message_id, thread_key,
+        normalize_message_id, references_root, thread_key,
     };
+
+    #[test]
+    fn references_root_uses_first_id_of_folded_header() {
+        // A reply-to-a-reply: References spans two folded lines, root first.
+        let header = b"Subject: Re: test mailo 1\r\nReferences: <CAJ7M84+root@mail.gmail.com>\r\n\t<meron-second@mailo.com>\r\nIn-Reply-To: <meron-second@mailo.com>\r\n\r\n";
+        assert_eq!(
+            references_root(header).as_deref(),
+            Some("caj7m84+root@mail.gmail.com")
+        );
+    }
 
     #[test]
     fn header_subject_decodes_and_falls_back() {

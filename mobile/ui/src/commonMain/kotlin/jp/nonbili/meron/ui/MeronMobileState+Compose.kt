@@ -490,6 +490,7 @@ internal fun MeronMobileState.sendQuickReply() {
     quickReplyFailure = ""
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
+    val outboundMessageId = newDraftMessageId(accountId).replace("meron-draft-", "meron-")
     val params =
         parent.toReplyMailParams(
             accountId = accountId,
@@ -497,7 +498,7 @@ internal fun MeronMobileState.sendQuickReply() {
             from = replyFrom,
             ownAddresses = ownAddressList(coreAccounts),
             attachments = quickReplyAttachments,
-        )
+        ).copy(messageId = outboundMessageId)
     // Render the sent bubble optimistically — before the send round-trip — so
     // replying feels instant. The bubble shows a "Sending…" status until the
     // canonical stored message replaces it on re-fetch; on failure it flips to
@@ -513,7 +514,7 @@ internal fun MeronMobileState.sendQuickReply() {
             cc = params.cc,
             subject = params.subject,
             body = replyBody,
-            messageId = "",
+            messageId = outboundMessageId,
             references = params.references,
             dateEpochSeconds = currentTimeMillis() / 1000,
             hasAttachments = quickReplyAttachments.isNotEmpty(),
@@ -535,12 +536,9 @@ internal fun MeronMobileState.sendQuickReply() {
         }.onSuccess {
             quickReplyFailure = ""
             status = "Reply sent"
+            messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.None) else it }
             runCatching { reloadCurrentThreadMessages() }
-                .onFailure {
-                    // Keep the optimistic bubble (drop its "Sending…" status) if the
-                    // refresh fails; the send itself succeeded.
-                    messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.None) else it }
-                }
+                .onFailure { }
         }.onFailure {
             val message = it.message ?: "Send failed"
             quickReplyFailure = message

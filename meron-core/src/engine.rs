@@ -17,7 +17,6 @@ pub const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oa
 
 pub const OUTLOOK_SCOPES: &str = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile";
 
-
 /// Engine state: per-account credentials plus the on-disk store.
 /// Reads serve from SQLite; syncs reconnect to IMAP and refresh stored rows.
 pub struct Engine {
@@ -73,7 +72,6 @@ pub trait EngineHost: Send + Sync {
     ) -> anyhow::Result<()>;
 }
 
-
 /// One idle, reusable session plus when it was last returned to the pool, so
 /// stale connections (silently dropped by the server) can be evicted on acquire
 /// instead of failing an operation. Generic over the session type so the
@@ -83,7 +81,6 @@ pub struct Pooled<S> {
     pub session: S,
     pub last_used: std::time::Instant,
 }
-
 
 /// Pop the hottest still-fresh session for `account`, discarding any idle longer
 /// than `max_idle`. Pure (caller supplies `now`) so it can be tested directly.
@@ -103,16 +100,18 @@ pub fn pool_take<S>(
     None
 }
 
-
 /// Trace connection-pool decisions when `MERON_POOL_DEBUG` is set. Off by
 /// default so production runs stay quiet. Routes through the logger so the trace
 /// is visible on mobile (os_log / Logcat), not just desktop stderr.
 pub fn pool_debug(account: &str, what: &str) {
     if std::env::var_os("MERON_POOL_DEBUG").is_some() {
-        crate::mlog!(crate::log::Level::Debug, "engine.pool", "{what} account={account}");
+        crate::mlog!(
+            crate::log::Level::Debug,
+            "engine.pool",
+            "{what} account={account}"
+        );
     }
 }
-
 
 pub fn creds_have_required_secret(creds: &imap::Creds) -> bool {
     if creds.is_oauth() {
@@ -124,7 +123,6 @@ pub fn creds_have_required_secret(creds: &imap::Creds) -> bool {
         !creds.password.is_empty()
     }
 }
-
 
 /// Return a session to `account`'s free-list, or drop it if already at
 /// `max_pooled` (the transient-overflow case). Pure for testability.
@@ -145,7 +143,6 @@ pub fn pool_return<S>(
     // else: drop `session` (closes the socket) instead of pooling it.
 }
 
-
 /// Max warm sessions kept per account; extra concurrent requests open a
 /// transient connection that is closed (dropped) after use rather than pooled.
 pub const MAX_POOLED: usize = 3;
@@ -154,7 +151,6 @@ pub const MAX_POOLED: usize = 3;
 /// Comfortably under typical server idle timeouts (Gmail ~30 min), so a reused
 /// session is almost always still alive.
 pub const MAX_IDLE: Duration = Duration::from_secs(120);
-
 
 impl Engine {
     pub fn new(host: Box<dyn EngineHost>) -> anyhow::Result<Self> {
@@ -202,7 +198,8 @@ impl Engine {
                 .ok()
                 .and_then(|rows| rows.into_iter().find(|(id, _)| id == account));
             if let Some((id, mut creds)) = loaded {
-                self.host.apply_secret(&self.db.lock().unwrap(), &id, &mut creds);
+                self.host
+                    .apply_secret(&self.db.lock().unwrap(), &id, &mut creds);
                 accounts.insert(id, creds);
             }
         }
@@ -322,7 +319,12 @@ impl Engine {
     /// [`with_read_session`](Self::with_read_session) /
     /// [`with_write_session`](Self::with_write_session) instead of calling this
     /// directly.
-    pub async fn with_session<T, F>(&self, account: &str, retry: bool, mut f: F) -> anyhow::Result<T>
+    pub async fn with_session<T, F>(
+        &self,
+        account: &str,
+        retry: bool,
+        mut f: F,
+    ) -> anyhow::Result<T>
     where
         F: FnMut(&mut imap::Session) -> SessionOp<'_, T> + Send,
         T: Send,
@@ -379,7 +381,6 @@ impl Engine {
     }
 }
 
-
 /// A boxed, `Send` future produced by a session-op closure. The `'a` lifetime
 /// ties it to the borrowed `&mut Session`; closures must move any other data
 /// they need (clone owned copies) into the future so it borrows only the
@@ -387,9 +388,11 @@ impl Engine {
 pub type SessionOp<'a, T> =
     std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<T>> + Send + 'a>>;
 
-
 /// Reconnect to IMAP, list folders, and refresh the store.
-pub async fn sync_folders(engine: &Arc<Engine>, account: &str) -> anyhow::Result<Vec<imap::Folder>> {
+pub async fn sync_folders(
+    engine: &Arc<Engine>,
+    account: &str,
+) -> anyhow::Result<Vec<imap::Folder>> {
     let folders = engine
         .with_read_session(account, |session| {
             Box::pin(async move { imap::list_folders(session).await })
@@ -399,7 +402,6 @@ pub async fn sync_folders(engine: &Arc<Engine>, account: &str) -> anyhow::Result
     store::upsert_folders(&db, account, &folders)?;
     Ok(folders)
 }
-
 
 /// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into
 /// the store, resetting cached messages if the server's UIDVALIDITY changed.
@@ -470,7 +472,6 @@ pub async fn sync_messages(
     Ok(count)
 }
 
-
 /// The cached Sent mailbox name for `account`, if any — used so a chat-view
 /// search reaches the user's own replies (and old mail filed under Sent), not
 /// just the inbox. Resolved from cached folder names via the same heuristic the
@@ -482,7 +483,6 @@ pub fn cached_sent_folder(engine: &Arc<Engine>, account: &str, inbox: &str) -> O
         .map(|folder| folder.name)
         .find(|name| imap::looks_like_sent(name) && !name.eq_ignore_ascii_case(inbox))
 }
-
 
 /// Search `account` for `query` across each of `folders` (typically Inbox +
 /// Sent), merging the cached and live-IMAP hits. UIDs are folder-scoped, so
@@ -549,7 +549,6 @@ pub async fn search_mail_messages(
     messages.truncate(limit as usize);
     Ok(messages)
 }
-
 
 pub async fn starred_search_folders(
     engine: &Arc<Engine>,
@@ -627,7 +626,6 @@ pub async fn starred_search_folders(
     );
     names
 }
-
 
 pub async fn search_starred_mail_messages(
     engine: &Arc<Engine>,
@@ -719,11 +717,9 @@ pub async fn search_starred_mail_messages(
     Ok(messages)
 }
 
-
 /// How far back the body prefetcher reaches: unread mail of any age, plus
 /// everything received within this many days.
 pub const PREFETCH_DAYS: u32 = 14;
-
 
 /// Download full message bodies (RFC822, attachments included) for a folder's
 /// unread + recent messages into the store, so opening them is instant and they
@@ -785,7 +781,6 @@ pub async fn prefetch_bodies(
         .await
 }
 
-
 /// Warm a folder's bodies in the background (deduped per account/folder). Stays
 /// silent: this is an optimization, so failures go to stderr rather than
 /// surfacing as UI error toasts. The stored data it fills is observed lazily when the
@@ -814,7 +809,6 @@ pub fn spawn_body_prefetch(engine: Arc<Engine>, account: String, folder: String)
     });
 }
 
-
 /// Canonicalize folder names so "inbox"/"INBOX" map to one store key + mailbox.
 pub fn canon_folder(folder: &str) -> String {
     if folder.eq_ignore_ascii_case("inbox") {
@@ -823,7 +817,6 @@ pub fn canon_folder(folder: &str) -> String {
         folder.to_string()
     }
 }
-
 
 pub async fn append_to_sent(engine: &Arc<Engine>, account: &str, raw: &[u8]) -> anyhow::Result<()> {
     // APPEND is mutating, so this never auto-retries (a drop after the server
@@ -854,7 +847,6 @@ pub async fn append_to_sent(engine: &Arc<Engine>, account: &str, raw: &[u8]) -> 
     Ok(())
 }
 
-
 pub async fn append_to_drafts(
     engine: &Arc<Engine>,
     account: &str,
@@ -877,7 +869,6 @@ pub async fn append_to_drafts(
         .await?;
     Ok(())
 }
-
 
 /// Fetch a thread's referenced-but-unsynced ancestor messages from the server
 /// and cache them, so the reader shows the whole conversation rather than the
@@ -979,7 +970,6 @@ pub async fn fill_thread_gaps(
         .await
 }
 
-
 pub async fn read_cached_or_fetch(
     engine: &Arc<Engine>,
     account: &str,
@@ -1032,7 +1022,6 @@ pub async fn read_cached_or_fetch(
     Ok(message)
 }
 
-
 /// Turn the stored HTML source into the iframe-ready `body_html` the reader's HTML
 /// mode renders: inject the remote-image CSP gated on the account setting. Plain
 /// messages have no HTML source, so this is a no-op for them.
@@ -1041,7 +1030,6 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
         message.body_html = Some(parse::prepare_html(&html, load_remote_images));
     }
 }
-
 
 #[cfg(test)]
 mod tests {

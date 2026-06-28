@@ -260,15 +260,13 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     if display_name_missing {
         obj.insert(
             "display_name".to_string(),
-            Value::String(
-                if !profile_name.is_empty() {
-                    profile_name.clone()
-                } else if !claim_name.is_empty() {
-                    claim_name.clone()
-                } else {
-                    email.clone()
-                },
-            ),
+            Value::String(if !profile_name.is_empty() {
+                profile_name.clone()
+            } else if !claim_name.is_empty() {
+                claim_name.clone()
+            } else {
+                email.clone()
+            }),
         );
     }
     if sender_name_missing {

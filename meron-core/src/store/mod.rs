@@ -761,7 +761,14 @@ pub fn upsert_messages(
         if !m.cc.is_empty() {
             extra.insert("cc".to_string(), json!(m.cc));
         }
+        if !m.message_id.is_empty() {
+            extra.insert("message_id".to_string(), json!(m.message_id));
+        }
+        if !m.in_reply_to.is_empty() {
+            extra.insert("in_reply_to".to_string(), json!(m.in_reply_to));
+        }
         let extra_json = Value::Object(extra).to_string();
+        let thread_key = resolve_message_thread_key(&tx, account, &m.thread_key, &m.in_reply_to)?;
         tx.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, starred, thread_key, json)
              VALUES(?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
@@ -784,13 +791,46 @@ pub fn upsert_messages(
                 m.date,
                 m.seen as i64,
                 m.starred as i64,
-                m.thread_key,
+                thread_key,
                 extra_json
             ],
         )?;
     }
     tx.commit()?;
     Ok(())
+}
+
+fn resolve_message_thread_key(
+    conn: &rusqlite::Transaction<'_>,
+    account: &str,
+    thread_key: &str,
+    in_reply_to: &str,
+) -> Result<String> {
+    let key = thread_key.trim();
+    let parent_id = in_reply_to.trim();
+    if key.is_empty()
+        || parent_id.is_empty()
+        || !key.eq_ignore_ascii_case(parent_id)
+        || key.starts_with("uid:")
+        || key.starts_with("gmthrid:")
+    {
+        return Ok(thread_key.to_string());
+    }
+
+    let inherited = conn
+        .query_row(
+            "SELECT thread_key FROM messages
+             WHERE account = ?1
+               AND lower(COALESCE(json_extract(json, '$.message_id'), '')) = lower(?2)
+               AND COALESCE(thread_key, '') <> ''
+             ORDER BY date ASC, uid ASC
+             LIMIT 1",
+            params![account, parent_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    Ok(inherited.unwrap_or_else(|| thread_key.to_string()))
 }
 
 pub fn get_recent_page(
