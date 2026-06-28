@@ -61,7 +61,7 @@ Edit the keyword/title text per screen in `fastlane-config/<platform>/Framefile.
 - **iOS** (App Store Connect API key, via env):
   `APP_STORE_KEY_ID`, `APP_STORE_ISSUER_ID`, `APP_STORE_KEY_FILEPATH` (.p8).
 
-Upload lanes read release notes from the shared changelog `changelogs/v<version>.txt`
+Upload lanes read release notes from the mobile-specific changelog `mobile/changelogs/v<version>.txt`
 (version from `wails.json`): the bun scripts copy it into the Play changelog
 (`<versionCode>.txt`) and the iOS `release_notes.txt` automatically.
 

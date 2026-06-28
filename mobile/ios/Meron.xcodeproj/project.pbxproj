@@ -446,7 +446,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
@@ -467,7 +467,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustCore",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
 				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
@@ -497,7 +497,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
@@ -518,7 +518,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustCore",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
 				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
@@ -547,7 +547,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -564,7 +564,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Meron/Meron-Bridging-Header.h";
@@ -578,7 +578,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -595,7 +595,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Meron/Meron-Bridging-Header.h";

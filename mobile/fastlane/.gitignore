@@ -8,7 +8,7 @@ README.md
 # under metadata/ are committed
 screenshots/
 
-# derived at upload from the shared changelogs/v<version>.txt:
+# derived at upload from mobile/changelogs/v<version>.txt:
 #  - default.txt (placeholder fallback)
 #  - <versionCode>.txt (generated for supply)
 #  - iOS release_notes.txt
