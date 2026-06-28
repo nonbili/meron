@@ -1,8 +1,13 @@
 package jp.nonbili.meron.ui
 
 import platform.Foundation.NSLog
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.Platform
 
-actual fun writeLog(
+@OptIn(ExperimentalNativeApi::class)
+internal actual val isDebugLogBuild: Boolean = Platform.isDebugBinary
+
+internal actual fun writeLog(
     level: LogLevel,
     tag: String,
     message: String,

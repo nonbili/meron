@@ -2,7 +2,16 @@ package jp.nonbili.meron.ui
 
 import android.util.Log as AndroidLog
 
-actual fun writeLog(
+internal actual val isDebugLogBuild: Boolean by lazy {
+    runCatching {
+        Class
+            .forName("jp.nonbili.meron.BuildConfig")
+            .getField("DEBUG")
+            .getBoolean(null)
+    }.getOrDefault(false)
+}
+
+internal actual fun writeLog(
     level: LogLevel,
     tag: String,
     message: String,
