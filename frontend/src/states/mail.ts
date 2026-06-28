@@ -124,7 +124,7 @@ export function isTrashFolderId(accountId: string, folderId: string): boolean {
   return isTrashFolder(folder) || looksLikeTrashName(folderId)
 }
 
-function findLocalThread(threadId: string): Message | undefined {
+export function findLocalThread(threadId: string): Message | undefined {
   const thread = mail$.threads.get().find((item) => item.thread_id === threadId)
   if (thread) return thread
   for (const threads of Object.values(kanban$.threads.get())) {

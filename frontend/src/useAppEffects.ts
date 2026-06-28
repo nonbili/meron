@@ -3,7 +3,7 @@ import { useValue } from '@legendapp/state/react'
 import { boot } from './boot'
 import { invoke } from './lib/bridge'
 import { ui$, showToast } from './states/ui'
-import { mail$, loadFolders, loadThreads, loadThread, refreshAccountFoldersCache } from './states/mail'
+import { mail$, loadFolders, loadThreads, loadThread, findLocalThread, refreshAccountFoldersCache } from './states/mail'
 import { openMailtoCompose, openThreadTabById } from './states/compose'
 import { accounts$ } from './states/accounts'
 import { closeKanbanBoard, kanban$ } from './states/kanban'
@@ -190,12 +190,23 @@ export function useAppEffects() {
     if (!eventsOn) return
 
     const refreshCurrentMailbox = async () => {
-      const openThread = ui$.selectedThread.get()
       await loadThreads(false)
-      const currentThread = ui$.selectedThread.get()
-      if (currentThread && currentThread === openThread) {
-        await loadThread(currentThread)
+    }
+
+    // The open conversation pane shows whichever thread is selected, which may
+    // belong to a different account than the mailbox view — in a Kanban board or
+    // the Starred view it's independent of `selectedAccount`. So reload it on its
+    // own account's events, separately from the mailbox-list refresh below (which
+    // is rightly scoped to the selected account). Without this, new mail in the
+    // open thread updates the badge but never appears in the conversation.
+    const refreshOpenThread = (eventAccount?: string) => {
+      const openThread = ui$.selectedThread.get()
+      if (!openThread) return
+      if (eventAccount) {
+        const threadAccount = findLocalThread(openThread)?.account_id
+        if (threadAccount && threadAccount !== eventAccount) return
       }
+      void loadThread(openThread).catch(console.error)
     }
 
     // Mail sync/folder fetch failed (network down, bad creds, timeout) — surface a
@@ -212,6 +223,7 @@ export function useAppEffects() {
       // independent of which account/folder is selected. Clearing back to "read" is
       // handled by the reactive tray effect once folders/threads refresh.
       void invoke('tray.setUnread', { unread: true }).catch(() => {})
+      refreshOpenThread(detail?.account)
       if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
       const folder = detail?.folder ?? 'inbox'
       const count = detail?.count ?? 1
@@ -227,6 +239,7 @@ export function useAppEffects() {
           void loadFolders(selectedAccount, false)
         }
       }
+      refreshOpenThread(detail?.account)
       if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
       void refreshCurrentMailbox().catch(console.error)
     })
