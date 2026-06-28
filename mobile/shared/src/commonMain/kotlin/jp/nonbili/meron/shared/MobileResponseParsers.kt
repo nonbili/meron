@@ -1,5 +1,26 @@
 package jp.nonbili.meron.shared
 
+// The core reports failures as a {"error":{"message":...}} JSON payload rather
+// than throwing, so a raw invoke "succeeds" even when the action failed.
+private val coreErrorMessageRegex =
+    Regex("\"error\"\\s*:\\s*\\{[^{}]*\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+
+/** The error message from a core `{"error":{"message":...}}` payload, or null. */
+fun coreErrorMessage(responseJson: String): String? =
+    coreErrorMessageRegex.find(responseJson)?.groupValues?.getOrNull(1)?.let { raw ->
+        raw.replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\")
+    }
+
+/**
+ * Throws when [responseJson] is a core error payload, so a caller's
+ * runCatching/onFailure path runs instead of silently committing an optimistic
+ * change the server rejected. Returns the response unchanged on success.
+ */
+fun requireCoreOk(responseJson: String): String {
+    coreErrorMessage(responseJson)?.let { throw RuntimeException(it) }
+    return responseJson
+}
+
 fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
     val accountsJson = responseJson.findJsonArrayProperty("accounts") ?: return emptyList()
     return accountsJson.jsonArrayElements().mapNotNull { item ->
@@ -171,6 +192,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
             val fromAddr = item.findJsonStringProperty("from_addr").orEmpty()
             MessageBody(
                 id = id,
+                folderId = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
                 from = fromName.ifBlank { fromAddr },
                 to = item.findJsonStringProperty("to").orEmpty(),
                 cc = item.findJsonStringProperty("cc").orEmpty(),

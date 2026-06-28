@@ -40,11 +40,14 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -740,35 +743,41 @@ internal fun KanbanColumnHeader(
                 Icon(Icons.Filled.MoreVert, contentDescription = tr("kanban.actions.columnActions"), modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text(tr("threads.actions.markAllAsRead")) }, leadingIcon = {
+                    Icon(Icons.Filled.DoneAll, contentDescription = null)
+                }, onClick = {
+                    menuOpen = false
+                    onMarkAllRead()
+                }, enabled = unread > 0)
                 DropdownMenuItem(text = { Text(tr("kanban.actions.searchColumn")) }, leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = null)
                 }, onClick = {
                     menuOpen = false
                     onSearch()
                 })
-                DropdownMenuItem(text = { Text(tr("mobile.actions.refresh")) }, onClick = {
-                    menuOpen = false
-                    onRefresh()
-                })
-                DropdownMenuItem(text = { Text(tr("threads.actions.markAllAsRead")) }, onClick = {
-                    menuOpen = false
-                    onMarkAllRead()
-                }, enabled = unread > 0)
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                DropdownMenuItem(text = { Text(tr("kanban.actions.moveColumnLeft")) }, onClick = {
+                DropdownMenuItem(text = { Text(tr("kanban.actions.moveColumnLeft")) }, leadingIcon = {
+                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null)
+                }, onClick = {
                     menuOpen = false
                     onMoveLeft()
                 })
-                DropdownMenuItem(text = { Text(tr("kanban.actions.moveColumnRight")) }, onClick = {
+                DropdownMenuItem(text = { Text(tr("kanban.actions.moveColumnRight")) }, leadingIcon = {
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                }, onClick = {
                     menuOpen = false
                     onMoveRight()
                 })
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                DropdownMenuItem(text = { Text(tr("kanban.actions.minimizeColumn")) }, onClick = {
+                DropdownMenuItem(text = { Text(tr("mobile.actions.refresh")) }, leadingIcon = {
+                    Icon(Icons.Filled.Refresh, contentDescription = null)
+                }, onClick = {
                     menuOpen = false
-                    onMinimize()
+                    onRefresh()
                 })
-                DropdownMenuItem(text = { Text(tr("kanban.actions.hideColumn")) }, onClick = {
+                DropdownMenuItem(text = { Text(tr("kanban.actions.hideColumn")) }, leadingIcon = {
+                    Icon(Icons.Filled.VisibilityOff, contentDescription = null)
+                }, onClick = {
                     menuOpen = false
                     onRemove()
                 })

@@ -278,7 +278,6 @@ internal fun MailDrawer(
                             onClick = onSelectUnified,
                             leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
                             title = tr("kanban.columns.unifiedInbox"),
-                            subtitle = tr("kanban.allAccounts"),
                             trailing = if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
                         )
                     }
@@ -304,12 +303,6 @@ internal fun MailDrawer(
                             )
                         },
                         title = label,
-                        subtitle =
-                            if (needsGoogleReauth) {
-                                tr("drawer.tapToReconnect")
-                            } else {
-                                account.email.takeIf { it.isNotBlank() && it != label } ?: tr("mobile.tabs.mail")
-                            },
                         trailing =
                             if (account.needsReconnect || needsGoogleReauth) {
                                 "!"
@@ -331,7 +324,6 @@ internal fun MailDrawer(
                             onClick = onSelectStarred,
                             leading = { Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(20.dp)) },
                             title = tr("mobile.tabs.starred"),
-                            subtitle = tr("mobile.mail.starredSubtitle"),
                             trailing = null,
                         )
                     }
@@ -344,7 +336,6 @@ internal fun MailDrawer(
                             onClick = onSelectKanban,
                             leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
                             title = tr("mobile.tabs.kanban"),
-                            subtitle = tr("drawer.kanbanSubtitle"),
                             trailing = null,
                         )
                     }
@@ -366,7 +357,6 @@ internal fun MailDrawer(
                                 }
                             },
                             title = board.name,
-                            subtitle = trf("settings.kanban.boardColumns", board.columns.size),
                             trailing = null,
                         )
                     }
@@ -385,7 +375,6 @@ internal fun MailDrawer(
                     onClick = onAddAccount,
                     leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
                     title = tr("accounts.actions.addAccount"),
-                    subtitle = null,
                     trailing = null,
                 )
             }
@@ -396,7 +385,6 @@ internal fun MailDrawer(
                     onClick = onOpenSettings,
                     leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
                     title = tr("settings.label"),
-                    subtitle = tr("drawer.settingsSubtitle"),
                     trailing = null,
                 )
             }
@@ -457,7 +445,6 @@ internal fun SidebarRow(
     onClick: () -> Unit,
     leading: @Composable () -> Unit,
     title: String,
-    subtitle: String?,
     trailing: String?,
 ) {
     val tint = if (selected) MaterialTheme.colorScheme.primary else chat.onSidebarMuted
@@ -477,25 +464,15 @@ internal fun SidebarRow(
                 androidx.compose.material3.LocalContentColor provides tint,
             ) { leading() }
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                color = if (selected) chat.onSidebar else chat.onSidebar.copy(alpha = 0.9f),
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    color = chat.onSidebarMuted,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        Text(
+            title,
+            color = if (selected) chat.onSidebar else chat.onSidebar.copy(alpha = 0.9f),
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         if (trailing != null) {
             Box(
                 Modifier

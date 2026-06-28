@@ -90,6 +90,7 @@ data class StorageUsage(
 
 data class MessageBody(
     val id: String,
+    val folderId: String = "",
     val from: String,
     val to: String,
     val cc: String = "",

@@ -1167,6 +1167,7 @@ func kanbanThreadSummary(for item: StarredItemSummary) -> ThreadSummary {
 func starredItemReaderMessage(for item: StarredItemSummary) -> MessageBody {
     MessageBody(
         id: item.id,
+        folderId: item.folder,
         from: item.sender,
         to: "",
         cc: "",
@@ -1189,6 +1190,7 @@ func starredItemReaderMessage(for item: StarredItemSummary) -> MessageBody {
 func starredKanbanReaderMessage(for thread: ThreadSummary) -> MessageBody {
     MessageBody(
         id: thread.id,
+        folderId: thread.folder,
         from: thread.sender,
         to: "",
         cc: "",

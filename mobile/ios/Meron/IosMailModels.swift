@@ -431,6 +431,7 @@ extension MessageBody {
     func withFlags(unread nextUnread: Bool? = nil, starred nextStarred: Bool? = nil) -> MessageBody {
         MessageBody(
             id: id,
+            folderId: folderId,
             from: from,
             to: to,
             cc: cc,

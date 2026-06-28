@@ -2,7 +2,9 @@ package jp.nonbili.meron.shared
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MobileResponseParsersTest {
@@ -259,5 +261,41 @@ class MobileResponseParsersTest {
         )
         assertEquals("", parseMediaFileUrlResponse("""{}"""))
         assertEquals("SGk=", parseAttachmentDataResponse("""{"data":"SGk="}"""))
+    }
+
+    @Test
+    fun parsesMessageFolderIdSoDeletesTargetTheRightFolder() {
+        // A thread can span folders; each message carries its own folder_id, which
+        // delete/move must use instead of the thread's nominal folder.
+        val page =
+            parseThreadReadPage(
+                """{"messages":[{"id":"acc#INBOX#t#7","folder_id":"INBOX"},{"id":"acc#INBOX#t#17","folder_id":"sent"}]}""",
+            )
+
+        assertEquals(2, page.messages.size)
+        assertEquals("INBOX", page.messages[0].folderId)
+        assertEquals("sent", page.messages[1].folderId)
+    }
+
+    @Test
+    fun detectsCoreErrorEnvelope() {
+        assertEquals(
+            "UID COPY: no response",
+            coreErrorMessage("""{"error":{"message":"UID COPY: no response"},"id":1}"""),
+        )
+        // Success payloads have no top-level error object.
+        assertNull(coreErrorMessage("""{"ok":true,"deleted":1,"trash":"trash"}"""))
+    }
+
+    @Test
+    fun requireCoreOkThrowsOnErrorAndPassesThroughSuccess() {
+        val success = """{"ok":true,"deleted":1}"""
+        assertEquals(success, requireCoreOk(success))
+
+        val failure =
+            assertFailsWith<RuntimeException> {
+                requireCoreOk("""{"error":{"message":"Trash folder not found"}}""")
+            }
+        assertEquals("Trash folder not found", failure.message)
     }
 }

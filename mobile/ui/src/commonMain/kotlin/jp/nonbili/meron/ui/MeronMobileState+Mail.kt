@@ -220,10 +220,12 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
+import jp.nonbili.meron.shared.requireCoreOk
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -834,25 +836,42 @@ internal fun MeronMobileState.runCoreThreadAction(
         status = "Rust core not packaged."
         return
     }
+    // Apply optimistically so the UI reacts instantly, then revert if the core
+    // call fails. Snapshots taken here back the failure rollback.
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    coreThreads = update(coreThreads)
+    kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
+    // The action commits immediately; Undo issues a compensating action (onUndo).
+    // Track the commit so an Undo tap waits for it to finish, and is skipped if
+    // the commit itself failed (the UI has already rolled back in that case).
+    val committed = CompletableDeferred<Boolean>()
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) { MobileMailCommandClient(core).action() }
+            requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).action() })
         }.onSuccess {
-            coreThreads = update(coreThreads)
-            kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
-            if (undoMessage != null && onUndo != null) {
-                val result =
-                    snackbarHost.showSnackbar(
-                        message = undoMessage,
-                        actionLabel = "Undo",
-                        duration = SnackbarDuration.Long,
-                    )
-                if (result == SnackbarResult.ActionPerformed) onUndo()
-            } else {
-                status = "$label complete"
-            }
+            if (undoMessage == null || onUndo == null) status = "$label complete"
+            committed.complete(true)
         }.onFailure {
+            Log.w("Mail", "$label failed", it)
+            coreThreads = threadsBefore
+            kanbanColumns = kanbanBefore
             status = "$label failed: ${it.message}"
+            snackbarHost.currentSnackbarData?.dismiss()
+            committed.complete(false)
+        }
+    }
+    // Show the undo snackbar immediately rather than gating it on the round-trip,
+    // so the undo window starts the moment the user sees the optimistic change.
+    if (undoMessage != null && onUndo != null) {
+        scope.launch {
+            val result =
+                snackbarHost.showSnackbar(
+                    message = undoMessage,
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Long,
+                )
+            if (result == SnackbarResult.ActionPerformed && committed.await()) onUndo()
         }
     }
 }
@@ -924,21 +943,32 @@ internal fun MeronMobileState.updateMessageEverywhere(
 internal fun MeronMobileState.toggleMessageRead(message: MessageBody) {
     val thread = selectedCoreThread ?: return
     val seen = message.unread
+    val messagesBefore = messages
+    val selectedBefore = selectedCoreThread
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    updateMessageEverywhere(message.id) { it.copy(unread = !seen) }
+    val updatedUnread = messages.any { it.unread }
+    updateThreadEverywhere(thread) { it.copy(unread = updatedUnread) }
+    selectedCoreThread = selectedCoreThread?.copy(unread = updatedUnread)
     status = if (seen) "Marking read..." else "Marking unread..."
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) {
-                MobileMailCommandClient(core).markRead(
-                    MarkReadParams(threadId = thread.id, seen = seen, messageIds = listOf(message.id)),
-                )
-            }
+            requireCoreOk(
+                withContext(ioDispatcher) {
+                    MobileMailCommandClient(core).markRead(
+                        MarkReadParams(threadId = thread.id, seen = seen, messageIds = listOf(message.id)),
+                    )
+                },
+            )
         }.onSuccess {
-            updateMessageEverywhere(message.id) { it.copy(unread = !seen) }
-            val updatedUnread = messages.any { it.unread }
-            updateThreadEverywhere(thread) { it.copy(unread = updatedUnread) }
-            selectedCoreThread = selectedCoreThread?.copy(unread = updatedUnread)
             status = if (seen) "Marked read" else "Marked unread"
         }.onFailure {
+            messages = messagesBefore
+            selectedCoreThread = selectedBefore
+            coreThreads = threadsBefore
+            kanbanColumns = kanbanBefore
+            Log.w("Mail", "toggle message read failed", it)
             status = "Message update failed: ${it.message}"
         }
     }
@@ -969,22 +999,30 @@ internal fun MeronMobileState.toggleMessageStarred(message: MessageBody) {
 
 internal fun MeronMobileState.deleteMessage(message: MessageBody) {
     val thread = selectedCoreThread ?: return
+    // A thread can span folders (e.g. an INBOX message and its replies in Sent),
+    // so delete from the message's own folder, not the thread's nominal folder.
+    val messageFolder = message.folderId.ifBlank { thread.folder }
+    val messagesBefore = messages
+    messages = messages.filterNot { it.id == message.id }
     status = "Deleting message..."
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) {
-                MobileMailCommandClient(core).delete(
-                    ThreadActionParams(
-                        threadId = thread.id,
-                        folderId = thread.folder,
-                        messageIds = listOf(message.id),
-                    ),
-                )
-            }
+            val response =
+                withContext(ioDispatcher) {
+                    MobileMailCommandClient(core).delete(
+                        ThreadActionParams(
+                            threadId = thread.id,
+                            folderId = messageFolder,
+                            messageIds = listOf(message.id),
+                        ),
+                    )
+                }
+            requireCoreOk(response)
         }.onSuccess {
-            messages = messages.filterNot { it.id == message.id }
             status = "Delete complete"
         }.onFailure {
+            Log.w("Mail", "delete message failed", it)
+            messages = messagesBefore
             status = "Delete failed: ${it.message}"
         }
     }
@@ -1013,26 +1051,31 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
             if (account != null && !accountSummaryIsRss(account)) listOf(selectedCoreAccountId to selectedCoreFolder) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    coreThreads = coreThreads.map { if (it.unread) it.copy(unread = false) else it }
+    kanbanColumns =
+        kanbanColumns.mapValues { (_, state) ->
+            state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
+        }
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 mailTargets.forEach { (accountId, folderId) ->
-                    client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId))
+                    requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId)))
                 }
                 rssTargets.forEach { thread ->
-                    client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true))
+                    requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))
                 }
             }
         }.onSuccess {
-            coreThreads = coreThreads.map { if (it.unread) it.copy(unread = false) else it }
-            kanbanColumns =
-                kanbanColumns.mapValues { (_, state) ->
-                    state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
-                }
             status = "Marked ${unread.size} unread item(s) read"
             syncCoreThreads(syncFirst = false)
         }.onFailure {
+            Log.w("Mail", "mark all read failed", it)
+            coreThreads = threadsBefore
+            kanbanColumns = kanbanBefore
             status = "Mark all read failed: ${it.message}"
         }
     }
@@ -1062,27 +1105,32 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
             if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to column.folderId) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    updateKanbanColumn(key) { state ->
+        state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
+    }
+    coreThreads =
+        coreThreads.map { thread ->
+            if (unread.any { it.id == thread.id }) thread.copy(unread = false) else thread
+        }
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 mailTargets.forEach { (accountId, folderId) ->
-                    client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId))
+                    requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId)))
                 }
                 rssTargets.forEach { thread ->
-                    client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true))
+                    requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))
                 }
             }
         }.onSuccess {
-            updateKanbanColumn(key) { state ->
-                state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
-            }
-            coreThreads =
-                coreThreads.map { thread ->
-                    if (unread.any { it.id == thread.id }) thread.copy(unread = false) else thread
-                }
             status = "Marked ${unread.size} Kanban card(s) read"
         }.onFailure {
+            Log.w("Mail", "kanban mark all read failed", it)
+            coreThreads = threadsBefore
+            kanbanColumns = kanbanBefore
             status = "Kanban mark all read failed: ${it.message}"
         }
     }
@@ -1197,23 +1245,34 @@ internal fun MeronMobileState.moveThreadToFolder(
         status = "Rust core not packaged."
         return
     }
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    val selectedBefore = selectedCoreThread
+    val messagesBefore = messages
+    removeThreadEverywhere(thread.id)
+    if (selectedCoreThread?.id == thread.id) {
+        selectedCoreThread = null
+        messages = emptyList()
+    }
     status = "Moving..."
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) {
-                MobileMailCommandClient(core).move(
-                    MoveThreadParams(threadId = thread.id, targetFolderId = targetFolderId),
-                )
-            }
+            requireCoreOk(
+                withContext(ioDispatcher) {
+                    MobileMailCommandClient(core).move(
+                        MoveThreadParams(threadId = thread.id, targetFolderId = targetFolderId),
+                    )
+                },
+            )
         }.onSuccess {
-            removeThreadEverywhere(thread.id)
-            if (selectedCoreThread?.id == thread.id) {
-                selectedCoreThread = null
-                messages = emptyList()
-            }
             status = "Move complete"
             onMoved()
         }.onFailure {
+            Log.w("Mail", "move thread failed", it)
+            coreThreads = threadsBefore
+            kanbanColumns = kanbanBefore
+            selectedCoreThread = selectedBefore
+            messages = messagesBefore
             status = "Move failed: ${it.message}"
         }
     }

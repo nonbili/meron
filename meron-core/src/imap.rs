@@ -826,10 +826,25 @@ pub async fn move_to_folder(
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    session
-        .uid_mv(uid_set, dest_folder)
-        .await
-        .context("UID MOVE")?;
+    // UID MOVE is the RFC 6851 MOVE extension; servers that don't advertise it
+    // (e.g. mailo) reject it with "Unknown command". Fall back to the classic
+    // COPY + \Deleted + EXPUNGE sequence, which every IMAP server supports.
+    let supports_move = match session.capabilities().await {
+        Ok(caps) => caps.has_str("MOVE"),
+        Err(_) => false,
+    };
+    if supports_move {
+        session
+            .uid_mv(&uid_set, dest_folder)
+            .await
+            .context("UID MOVE")?;
+    } else {
+        session
+            .uid_copy(&uid_set, dest_folder)
+            .await
+            .context("UID COPY")?;
+        expunge_uids(session, source_folder, uids).await?;
+    }
     Ok(())
 }
 
