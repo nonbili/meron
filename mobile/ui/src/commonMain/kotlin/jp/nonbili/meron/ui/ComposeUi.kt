@@ -67,6 +67,8 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.AlertDialog
@@ -113,6 +115,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -408,6 +415,7 @@ internal fun ComposeScreen(
                     value = body,
                     onValueChange = onBodyChange,
                     placeholder = { Text(tr("composer.placeholders.message")) },
+                    keyboardOptions = nativeTextKeyboardOptions,
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -493,18 +501,42 @@ internal fun ComposeField(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onChange,
-            label = { Text(label) },
-            singleLine = true,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged {
-                        if (it.isFocused && field.isNotBlank()) onFocus(field, value)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onChange,
+                label = { Text(label) },
+                singleLine = true,
+                keyboardOptions = nativeTextKeyboardOptions,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .onFocusChanged {
+                            if (it.isFocused && field.isNotBlank()) onFocus(field, value)
+                        },
+            )
+
+            if (value.isEmpty()) {
+                val clipboardManager = LocalClipboardManager.current
+                IconButton(
+                    onClick = {
+                        val text = clipboardManager.getText()?.text.orEmpty()
+                        if (text.isNotEmpty()) {
+                            onChange(text)
+                        }
                     },
-        )
+                ) {
+                    Icon(
+                        Icons.Filled.ContentPaste,
+                        contentDescription = "Paste",
+                    )
+                }
+            }
+        }
         if (suggestions.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(suggestions, key = { it.addr }) { contact ->
@@ -551,6 +583,7 @@ internal fun AddAccountScreen(
     serverSettingsOpen: Boolean,
     onServerSettingsOpenChange: (Boolean) -> Unit,
     onAutodiscover: () -> Unit,
+    onEmailBlur: () -> Unit,
     onAddPassword: () -> Unit,
     oauthAuthorizationCode: String,
     onLaunchOAuth: () -> Unit,
@@ -575,7 +608,10 @@ internal fun AddAccountScreen(
         },
     ) { innerPadding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(innerPadding),
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -624,7 +660,7 @@ internal fun AddAccountScreen(
                         SetupCard(title = tr("accounts.setup.imapSmtpAccount")) {
                             SetupField(displayName, onDisplayNameChange, tr("accounts.fields.displayNameMeronOnly"))
                             SetupField(senderName, onSenderNameChange, tr("accounts.fields.senderNameOutgoing"))
-                            SetupField(email, onEmailChange, tr("accounts.fields.emailAddress"))
+                            SetupField(email, onEmailChange, tr("accounts.fields.emailAddress"), onFocusLost = onEmailBlur)
                             SetupField(password, onPasswordChange, tr("accounts.fields.password"), isPassword = true)
                             OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
                                 Text(tr("mobile.accounts.findMailSettings"))
@@ -733,19 +769,78 @@ internal fun SetupField(
     label: String,
     isPassword: Boolean = false,
     placeholder: String? = null,
+    onFocusLost: (() -> Unit)? = null,
 ) {
-    var revealed by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value,
-        onChange,
-        label = { Text(label) },
-        placeholder = placeholder?.let { { Text(it) } },
-        singleLine = true,
+    // Compose Multiplatform on iOS doesn't show the long-press paste menu while a
+    // PasswordVisualTransformation is active, so reveal the password by default
+    // there; the eye toggle still lets the user hide it. Android keeps it masked.
+    var revealed by remember { mutableStateOf(isPassword && maskPasswordsByDefault.not()) }
+    var wasFocused by remember { mutableStateOf(false) }
+
+    // Use TextFieldState so that nativeTextKeyboardOptions (usingNativeTextInput
+    // on iOS) actually takes effect – the value/onValueChange overload ignores it.
+    val textFieldState = rememberTextFieldState(initialText = value)
+
+    // Sync external value → internal state (e.g. when the parent clears the form).
+    LaunchedEffect(value) {
+        if (textFieldState.text.toString() != value) {
+            textFieldState.edit { replace(0, length, value) }
+        }
+    }
+
+    // Propagate internal edits → external onChange callback.
+    LaunchedEffect(textFieldState) {
+        snapshotFlow { textFieldState.text.toString() }
+            .collect { newText ->
+                if (newText != value) onChange(newText)
+            }
+    }
+
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        visualTransformation = if (isPassword && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
-        trailingIcon =
-            if (isPassword) {
-                {
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            state = textFieldState,
+            label = { Text(label) },
+            placeholder = placeholder?.let { { Text(it) } },
+            lineLimits = TextFieldLineLimits.SingleLine,
+            keyboardOptions = nativeTextKeyboardOptions,
+            modifier =
+                Modifier.weight(1f).let { m ->
+                    if (onFocusLost != null) {
+                        m.onFocusChanged { focusState ->
+                            if (wasFocused && !focusState.isFocused) onFocusLost()
+                            wasFocused = focusState.isFocused
+                        }
+                    } else {
+                        m
+                    }
+                },
+            outputTransformation = if (isPassword && !revealed) PasswordOutputTransformation else null,
+        )
+
+        if (isPassword || value.isEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                val clipboardManager = LocalClipboardManager.current
+                if (value.isEmpty()) {
+                    IconButton(onClick = {
+                        val text = clipboardManager.getText()?.text.orEmpty()
+                        if (text.isNotEmpty()) {
+                            onChange(text)
+                        }
+                    }) {
+                        Icon(
+                            Icons.Filled.ContentPaste,
+                            contentDescription = "Paste",
+                        )
+                    }
+                }
+                if (isPassword) {
                     IconButton(onClick = { revealed = !revealed }) {
                         Icon(
                             if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
@@ -753,8 +848,18 @@ internal fun SetupField(
                         )
                     }
                 }
-            } else {
-                null
-            },
-    )
+            }
+        }
+    }
+}
+
+/**
+ * [OutputTransformation] that masks every character with a bullet (●),
+ * equivalent to [PasswordVisualTransformation] but for the TextFieldState API.
+ */
+private object PasswordOutputTransformation : OutputTransformation {
+    override fun TextFieldBuffer.transformOutput() {
+        val masked = "●".repeat(length)
+        replace(0, length, masked)
+    }
 }

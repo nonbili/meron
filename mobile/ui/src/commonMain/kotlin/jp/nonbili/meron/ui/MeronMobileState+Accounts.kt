@@ -356,12 +356,17 @@ internal fun MeronMobileState.addPasswordAccount() {
     }
 }
 
-internal fun MeronMobileState.autodiscoverPasswordAccount() {
+internal fun MeronMobileState.autodiscoverPasswordAccount(auto: Boolean = false) {
     val emailValue = email.trim()
     if (!emailValue.contains('@') || emailValue.endsWith('@')) {
-        status = "Enter an email address first."
+        // Don't nag while the user is still typing the address.
+        if (!auto) status = "Enter an email address first."
         return
     }
+    // The on-blur trigger fires whenever focus leaves the email field; skip the
+    // lookup unless the address actually changed since the last attempt.
+    if (auto && emailValue.equals(lastAutodiscoverEmail, ignoreCase = true)) return
+    lastAutodiscoverEmail = emailValue
     if (!coreLoaded) {
         status = "Rust core not packaged."
         return

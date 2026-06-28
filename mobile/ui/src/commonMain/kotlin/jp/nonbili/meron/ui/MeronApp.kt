@@ -876,6 +876,7 @@ private fun MeronMobileScreenContent(
                     serverSettingsOpen = passwordServerSettingsOpen,
                     onServerSettingsOpenChange = { passwordServerSettingsOpen = it },
                     onAutodiscover = ::autodiscoverPasswordAccount,
+                    onEmailBlur = { autodiscoverPasswordAccount(auto = true) },
                     onAddPassword = ::addPasswordAccount,
                     oauthAuthorizationCode = oauthAuthorizationCode,
                     onLaunchOAuth = {

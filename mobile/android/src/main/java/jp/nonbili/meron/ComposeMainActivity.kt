@@ -21,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -274,7 +275,9 @@ class ComposeMainActivity : ComponentActivity() {
         super.attachBaseContext(localizedAppContext(newBase))
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        ComposeFoundationFlags.isNewContextMenuEnabled = true
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

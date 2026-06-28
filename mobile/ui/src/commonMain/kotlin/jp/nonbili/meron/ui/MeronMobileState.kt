@@ -48,6 +48,9 @@ internal class MeronMobileState(
     var smtpHost by mutableStateOf("")
     var smtpPort by mutableStateOf("465")
     var passwordServerSettingsOpen by mutableStateOf(false)
+    // Last email we ran autodiscovery for, so the automatic (on-blur) lookup
+    // doesn't repeat for an unchanged address.
+    var lastAutodiscoverEmail by mutableStateOf("")
     // Set to a managed account id when its on-device Google token can no longer
     // be silently refreshed, signalling the user must reconnect it.
     var googleReauthAccountId by mutableStateOf<String?>(null)

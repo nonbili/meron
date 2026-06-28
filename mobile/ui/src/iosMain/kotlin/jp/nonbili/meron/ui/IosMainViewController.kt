@@ -1,5 +1,7 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.ui.window.ComposeUIViewController
 import jp.nonbili.meron.shared.MeronCore
 import platform.AuthenticationServices.ASPresentationAnchor
@@ -13,6 +15,7 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
 
+@OptIn(ExperimentalFoundationApi::class)
 fun MainViewController(
     core: MeronCore,
     coreLoaded: Boolean,
@@ -26,6 +29,7 @@ fun MainViewController(
     googleRedirectUri: String = "",
     coreProtocolVersion: Int = 0,
 ): UIViewController {
+    ComposeFoundationFlags.isNewContextMenuEnabled = true
     val appPrefs = IosAppPreferences("meron_app")
     val kanbanPrefs = IosAppPreferences("meron_kanban")
     val locale = IosLocaleController(appPrefs)

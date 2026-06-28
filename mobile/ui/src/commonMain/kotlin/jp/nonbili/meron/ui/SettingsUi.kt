@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -82,6 +83,8 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.AlertDialog
@@ -427,7 +430,7 @@ internal fun SettingsScreen(
                     onClearStorageCache = onClearStorageCache,
                     appVersion = appVersion,
                     onShowAbout = onShowAbout,
-                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
                 )
             }
 
@@ -477,7 +480,7 @@ internal fun SettingsScreen(
                         onMoveUp = { onMoveAccountUp(account) },
                         onMoveDown = { onMoveAccountDown(account) },
                         onRemove = { onRemoveAccount(account) },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
                     )
                 }
             }
@@ -499,7 +502,7 @@ internal fun SettingsScreen(
                             onDeleteKanbanBoard(board)
                             page = SettingsPage.Root
                         },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
                     )
                 }
             }
@@ -509,7 +512,7 @@ internal fun SettingsScreen(
                 // then Kanban boards, Mail accounts, and Feed accounts sections.
                 val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
                 val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
-                LazyColumn(Modifier.fillMaxSize().padding(innerPadding)) {
+                LazyColumn(Modifier.fillMaxSize().padding(innerPadding).imePadding()) {
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Settings,
@@ -1447,21 +1450,66 @@ internal fun AliasEditorRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = onEmailChange,
-                    label = { Text(tr("accounts.fields.emailAddress")) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = onNameChange,
-                    label = { Text(tr("accounts.fields.displayNameMeronOnly")) },
-                    singleLine = true,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = onEmailChange,
+                        label = { Text(tr("accounts.fields.emailAddress")) },
+                        singleLine = true,
+                        keyboardOptions = nativeTextKeyboardOptions.copy(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (email.isEmpty()) {
+                        val clipboardManager = LocalClipboardManager.current
+                        IconButton(
+                            onClick = {
+                                val text = clipboardManager.getText()?.text.orEmpty()
+                                if (text.isNotEmpty()) {
+                                    onEmailChange(text)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Filled.ContentPaste,
+                                contentDescription = "Paste",
+                            )
+                        }
+                    }
+                }
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = onNameChange,
+                        label = { Text(tr("accounts.fields.displayNameMeronOnly")) },
+                        singleLine = true,
+                        keyboardOptions = nativeTextKeyboardOptions,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (name.isEmpty()) {
+                        val clipboardManager = LocalClipboardManager.current
+                        IconButton(
+                            onClick = {
+                                val text = clipboardManager.getText()?.text.orEmpty()
+                                if (text.isNotEmpty()) {
+                                    onNameChange(text)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Filled.ContentPaste,
+                                contentDescription = "Paste",
+                            )
+                        }
+                    }
+                }
             }
             IconButton(onClick = onRemove) {
                 Icon(
@@ -1745,9 +1793,9 @@ internal fun SettingsTextRow(
             minLines = minLines,
             keyboardOptions =
                 if (keyboardDigits) {
-                    KeyboardOptions(keyboardType = KeyboardType.Number)
+                    nativeTextKeyboardOptions.copy(keyboardType = KeyboardType.Number)
                 } else {
-                    KeyboardOptions.Default
+                    nativeTextKeyboardOptions
                 },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
