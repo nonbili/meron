@@ -1125,22 +1125,40 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
     )
     .unwrap();
 
+    // Reproduces a fresh account add / Sent sync: newest rows can be processed
+    // before older parents. The second sent reply has no usable References root,
+    // so its computed key fell back to In-Reply-To (the first sent reply), even
+    // though that parent appears later in the same batch.
     store::upsert_messages(
         &conn,
         "me@example.com",
         "Sent",
-        &[MessageHeader {
-            uid: 8,
-            subject: "Re: test mailo2".to_string(),
-            from_name: "Me".to_string(),
-            from_addr: "me@example.com".to_string(),
-            date: 200,
-            seen: true,
-            thread_key: "root@mail.gmail.com".to_string(),
-            message_id: "first-reply@mailo.com".to_string(),
-            in_reply_to: "root@mail.gmail.com".to_string(),
-            ..Default::default()
-        }],
+        &[
+            MessageHeader {
+                uid: 9,
+                subject: "Re: test mailo2".to_string(),
+                from_name: "Me".to_string(),
+                from_addr: "me@example.com".to_string(),
+                date: 300,
+                seen: true,
+                thread_key: "first-reply@mailo.com".to_string(),
+                message_id: "second-reply@mailo.com".to_string(),
+                in_reply_to: "first-reply@mailo.com".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 8,
+                subject: "Re: test mailo2".to_string(),
+                from_name: "Me".to_string(),
+                from_addr: "me@example.com".to_string(),
+                date: 200,
+                seen: true,
+                thread_key: "root@mail.gmail.com".to_string(),
+                message_id: "first-reply@mailo.com".to_string(),
+                in_reply_to: "root@mail.gmail.com".to_string(),
+                ..Default::default()
+            },
+        ],
     )
     .unwrap();
     store::save_cached_message(
@@ -1159,28 +1177,6 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
             body: "first".to_string(),
             ..Default::default()
         },
-    )
-    .unwrap();
-
-    // Reproduces Mailo's observed split: the second sent reply arrived from header
-    // sync with no usable References root, so its computed key fell back to
-    // In-Reply-To (the first sent reply). It should inherit the original root.
-    store::upsert_messages(
-        &conn,
-        "me@example.com",
-        "Sent",
-        &[MessageHeader {
-            uid: 9,
-            subject: "Re: test mailo2".to_string(),
-            from_name: "Me".to_string(),
-            from_addr: "me@example.com".to_string(),
-            date: 300,
-            seen: true,
-            thread_key: "first-reply@mailo.com".to_string(),
-            message_id: "second-reply@mailo.com".to_string(),
-            in_reply_to: "first-reply@mailo.com".to_string(),
-            ..Default::default()
-        }],
     )
     .unwrap();
     store::save_cached_message(

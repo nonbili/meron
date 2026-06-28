@@ -796,6 +796,7 @@ pub fn upsert_messages(
             ],
         )?;
     }
+    reconcile_account_thread_keys(&tx, account)?;
     tx.commit()?;
     Ok(())
 }
@@ -831,6 +832,50 @@ fn resolve_message_thread_key(
         .optional()?;
 
     Ok(inherited.unwrap_or_else(|| thread_key.to_string()))
+}
+
+fn reconcile_account_thread_keys(conn: &rusqlite::Transaction<'_>, account: &str) -> Result<()> {
+    // A fresh folder sync may upsert replies newest-first, so a child can arrive
+    // before the parent row whose Message-ID would reveal the canonical root key.
+    // Re-run the same parent-key inheritance over the complete account cache.
+    for _ in 0..16 {
+        let changed = conn.execute(
+            "UPDATE messages AS child
+                SET thread_key = (
+                    SELECT parent.thread_key
+                      FROM messages parent
+                     WHERE parent.account = child.account
+                       AND lower(COALESCE(json_extract(parent.json, '$.message_id'), '')) =
+                           lower(COALESCE(json_extract(child.json, '$.in_reply_to'), ''))
+                       AND COALESCE(parent.thread_key, '') <> ''
+                       AND parent.thread_key <> child.thread_key
+                     ORDER BY parent.date ASC, parent.uid ASC
+                     LIMIT 1
+                )
+              WHERE child.account = ?1
+                AND child.uid <> 0
+                AND COALESCE(child.thread_key, '') <> ''
+                AND COALESCE(json_extract(child.json, '$.in_reply_to'), '') <> ''
+                AND lower(COALESCE(child.thread_key, '')) =
+                    lower(COALESCE(json_extract(child.json, '$.in_reply_to'), ''))
+                AND child.thread_key NOT LIKE 'uid:%'
+                AND child.thread_key NOT LIKE 'gmthrid:%'
+                AND EXISTS (
+                    SELECT 1
+                      FROM messages parent
+                     WHERE parent.account = child.account
+                       AND lower(COALESCE(json_extract(parent.json, '$.message_id'), '')) =
+                           lower(COALESCE(json_extract(child.json, '$.in_reply_to'), ''))
+                       AND COALESCE(parent.thread_key, '') <> ''
+                       AND parent.thread_key <> child.thread_key
+                )",
+            params![account],
+        )?;
+        if changed == 0 {
+            break;
+        }
+    }
+    Ok(())
 }
 
 pub fn get_recent_page(
