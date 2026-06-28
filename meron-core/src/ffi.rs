@@ -20,10 +20,11 @@ use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jstring};
 use serde_json::{Value, json};
 
+use crate::engine::Engine;
 use crate::protocol::{
-    PROTOCOL_VERSION, Request, account_needs_reconnect, canon_folder, invoke_mobile_protocol_json,
-    is_rss_account, load_mobile_account_creds, mobile_db_key, ping_response, ready_event,
-    req_account_id, req_str, sync_mobile_mail,
+    MobileHost, PROTOCOL_VERSION, Request, account_needs_reconnect, canon_folder,
+    invoke_mobile_protocol_json, is_rss_account, load_mobile_account_creds, mobile_db_key,
+    ping_response, ready_event, req_account_id, req_str, sync_mobile_mail,
 };
 
 type EventCallback = unsafe extern "C" fn(event_json: *const c_char, user_data: *mut c_void);
@@ -38,6 +39,90 @@ static EVENT_SINK: Mutex<Option<EventSink>> = Mutex::new(None);
 static MOBILE_CONFIG: Mutex<Option<MobileConfig>> = Mutex::new(None);
 static ANDROID_EVENT_DISPATCHER: OnceLock<AndroidEventDispatcher> = OnceLock::new();
 static MOBILE_IDLE_WATCHES: Mutex<Option<HashMap<String, Arc<AtomicBool>>>> = Mutex::new(None);
+
+/// The shared mail [`Engine`], hosted while the app is foreground so the request
+/// path reuses warm IMAP sessions (and, later, drives foreground IDLE) instead
+/// of reconnecting per FFI call. Built on `engine.foreground`, kept across calls,
+/// and parked (pool cleared) on `engine.background`. `None` until the first
+/// foreground transition.
+static ENGINE: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
+
+/// Long-lived multi-thread tokio runtime that owns the Engine's async work
+/// (pooled session ops and, later, IDLE watcher tasks). Built once, lazily, so
+/// individual FFI calls can `block_on` engine ops without spinning up a runtime
+/// each time (as the stateless `run_mobile_async` path does).
+static ENGINE_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+/// The Engine's runtime, built on first use. Returns `None` only if the runtime
+/// failed to build (host out of threads/memory), which the caller surfaces.
+fn engine_runtime() -> Option<&'static tokio::runtime::Runtime> {
+    if ENGINE_RT.get().is_none() {
+        match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => {
+                let _ = ENGINE_RT.set(rt);
+            }
+            Err(err) => {
+                eprintln!("meron-core: engine runtime build failed: {err}");
+                return None;
+            }
+        }
+    }
+    ENGINE_RT.get()
+}
+
+/// A clone of the live Engine handle, if one is hosted (app is foreground).
+// Consumed by the mobile command handlers in Phase 2 (op routing).
+#[allow(dead_code)]
+pub(crate) fn current_engine() -> Option<Arc<Engine>> {
+    ENGINE.lock().unwrap().clone()
+}
+
+/// Run an async engine op on the shared runtime, blocking the calling FFI thread
+/// until it completes. Used by the mobile command handlers once routed through
+/// the Engine.
+// Consumed by the mobile command handlers in Phase 2 (op routing).
+#[allow(dead_code)]
+pub(crate) fn engine_block_on<F, T>(future: F) -> Result<T, String>
+where
+    F: std::future::Future<Output = anyhow::Result<T>>,
+{
+    let rt = engine_runtime().ok_or_else(|| "engine runtime unavailable".to_string())?;
+    rt.block_on(future).map_err(|err| format!("{err:#}"))
+}
+
+/// Build and host the Engine for the foreground session (idempotent). The Engine
+/// holds its own DB connection and warm session pool for the lifetime of the
+/// foreground state.
+fn engine_foreground() -> Result<Value, String> {
+    let data_dir = MOBILE_CONFIG
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|config| config.data_dir.clone())
+        .ok_or_else(|| "mobile core is not initialized".to_string())?;
+    // Make sure the runtime is ready so the first routed op doesn't pay for it.
+    engine_runtime().ok_or_else(|| "engine runtime unavailable".to_string())?;
+    let mut slot = ENGINE.lock().unwrap();
+    if slot.is_none() {
+        let host = Box::new(MobileHost { data_dir });
+        let engine = Engine::new(host).map_err(|err| format!("{err:#}"))?;
+        *slot = Some(Arc::new(engine));
+    }
+    Ok(json!({ "ok": true }))
+}
+
+/// Park the Engine for the background state: drop warm pooled sockets (the OS
+/// will freeze/reclaim them anyway) but keep the Engine (DB + creds) so the next
+/// foreground transition resumes instantly. IDLE teardown is added in Phase 3.
+fn engine_background() -> Result<Value, String> {
+    if let Some(engine) = ENGINE.lock().unwrap().as_ref() {
+        engine.clear_all_pools();
+    }
+    Ok(json!({ "ok": true }))
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MobileConfig {
@@ -294,9 +379,16 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         .map(|config| config.data_dir.clone());
     if let Some(data_dir) = data_dir.as_deref()
         && let Ok(req) = serde_json::from_str::<Request>(request)
-        && matches!(req.method.as_str(), "watch.start" | "watch.stop")
+        && matches!(
+            req.method.as_str(),
+            "watch.start" | "watch.stop" | "engine.foreground" | "engine.background"
+        )
     {
-        let result = dispatch_mobile_watch_request(data_dir, &req);
+        let result = match req.method.as_str() {
+            "engine.foreground" => engine_foreground(),
+            "engine.background" => engine_background(),
+            _ => dispatch_mobile_watch_request(data_dir, &req),
+        };
         return match result {
             Ok(result) => json!({ "id": req.id, "result": result }),
             Err(message) => json!({ "id": req.id, "error": { "message": message } }),
