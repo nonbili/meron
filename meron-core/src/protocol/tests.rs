@@ -2111,3 +2111,56 @@ fn mobile_autodiscover_returns_known_provider() {
     assert_eq!(gmail["result"]["username"], "me@gmail.com");
     assert_eq!(gmail["result"]["source"], "known");
 }
+
+fn add_password_account(data_dir_str: &str, email: &str) {
+    let add = format!(
+        r#"{{"id":1,"method":"account.addPassword","params":{{"email":"{email}","display_name":"E","sender_name":"E","imap_host":"imap.example.com","imap_port":993,"smtp_host":"smtp.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true}}}}"#
+    );
+    let added = invoke_mobile_protocol_json(&add, Some(data_dir_str));
+    assert_eq!(added["result"]["account"]["id"], email);
+}
+
+#[test]
+fn engine_loads_password_account_with_secret_from_store() {
+    let data_dir = unique_data_dir("engine-load");
+    let data_dir_str = data_dir.to_str().unwrap();
+    let email = format!("eng+{}@example.com", unique_test_suffix());
+    add_password_account(data_dir_str, &email);
+
+    // MobileHost opens the same store and applies the secret onto the creds.
+    let engine = crate::engine::Engine::new(Box::new(MobileHost {
+        data_dir: data_dir_str.to_string(),
+    }))
+    .expect("engine builds");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let creds = rt
+        .block_on(engine.ensure_valid_creds(&email))
+        .expect("account loaded with secret");
+    assert_eq!(creds.user, email);
+    assert_eq!(creds.password, "secret");
+}
+
+#[test]
+fn engine_hydrates_account_added_after_construction() {
+    let data_dir = unique_data_dir("engine-hydrate");
+    let data_dir_str = data_dir.to_str().unwrap();
+    // Build the Engine before any account exists, mirroring a long-lived
+    // foreground Engine that outlives an out-of-band account add.
+    let engine = crate::engine::Engine::new(Box::new(MobileHost {
+        data_dir: data_dir_str.to_string(),
+    }))
+    .expect("engine builds");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let email = format!("late+{}@example.com", unique_test_suffix());
+    assert!(
+        rt.block_on(engine.ensure_valid_creds(&email)).is_err(),
+        "unknown account should error before it exists"
+    );
+
+    add_password_account(data_dir_str, &email);
+
+    let creds = rt
+        .block_on(engine.ensure_valid_creds(&email))
+        .expect("account hydrated from store on next use");
+    assert_eq!(creds.password, "secret");
+}

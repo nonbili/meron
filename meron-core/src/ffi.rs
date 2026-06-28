@@ -152,34 +152,56 @@ fn engine_background() -> Result<Value, String> {
     Ok(json!({ "ok": true }))
 }
 
-/// Start INBOX IDLE for each active (non-RSS, non-paused, connected) account,
-/// recording the ones we actually started so `engine_background` can stop exactly
-/// those. Deduped against any existing watch (e.g. opt-in live push), which we
-/// leave alone.
+/// Start IDLE for each active (non-RSS, non-paused) account on both INBOX and the
+/// account's Sent folder — INBOX so received mail appears live, Sent so mail sent
+/// from another client (each IDLE connection watches a single mailbox) also shows
+/// up live in the cross-folder conversation view. Records the watches we actually
+/// started so `engine_background` stops exactly those, leaving any opt-in
+/// live-push watches alone.
 fn start_foreground_idle(data_dir: &str) {
     let accounts = match mobile_db(data_dir) {
         Ok(conn) => crate::store::load_accounts(&conn).unwrap_or_default(),
         Err(_) => return,
     };
-    let folder = "INBOX".to_string();
     for (id, _creds) in accounts {
-        let skip = match mobile_db(data_dir) {
+        let (skip, sent) = match mobile_db(data_dir) {
             Ok(conn) => {
-                is_rss_account(&conn, &id).unwrap_or(false)
-                    || crate::store::account_paused(&conn, &id).unwrap_or(false)
+                let skip = is_rss_account(&conn, &id).unwrap_or(false)
+                    || crate::store::account_paused(&conn, &id).unwrap_or(false);
+                let sent = crate::store::get_folders(&conn, &id).ok().and_then(|folders| {
+                    folders
+                        .into_iter()
+                        .map(|folder| folder.name)
+                        .find(|name| crate::imap::looks_like_sent(name))
+                });
+                (skip, sent)
             }
-            Err(_) => true,
+            Err(_) => (true, None),
         };
         if skip {
             continue;
         }
-        if let Ok(result) = start_mobile_idle_watch(data_dir, id.clone(), folder.clone())
-            && result.get("already").and_then(Value::as_bool) != Some(true)
-            && result.get("rss").is_none()
-            && result.get("paused").is_none()
+        start_owned_watch(data_dir, &id, "INBOX");
+        if let Some(sent) = sent
+            && !sent.eq_ignore_ascii_case("INBOX")
         {
-            ENGINE_OWNED_WATCHES.lock().unwrap().push((id, folder.clone()));
+            start_owned_watch(data_dir, &id, &sent);
         }
+    }
+}
+
+/// Start one IDLE watch and, if it was newly started (not already running and not
+/// skipped as rss/paused), record it as engine-owned for teardown on background.
+fn start_owned_watch(data_dir: &str, account: &str, folder: &str) {
+    if let Ok(result) = start_mobile_idle_watch(data_dir, account.to_string(), folder.to_string())
+        && result.get("already").and_then(Value::as_bool) != Some(true)
+        && result.get("rss").is_none()
+        && result.get("paused").is_none()
+    {
+        ENGINE_OWNED_WATCHES
+            .lock()
+            .unwrap()
+            .push((account.to_string(), folder.to_string()));
     }
 }
 

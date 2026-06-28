@@ -75,6 +75,7 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
     let requested_from = opt_str(params, "from");
     let attachments = parse_mobile_attachments(params)?;
 
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let creds = load_mobile_account_creds(&conn, &account_id)?;
         if account_needs_reconnect(&creds) {
@@ -101,15 +102,17 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
         .map_err(|err| format!("{err:#}"))?;
         let saved_id = draft_id.clone();
         let saved_bytes = raw.len();
-        run_mobile_async(async move {
-            let mut session = imap::connect(&creds).await?;
-            let drafts = imap::find_drafts_folder(&mut session)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-            imap::replace_draft(&mut session, &drafts, &raw, &saved_id).await?;
-            let _ = session.logout().await;
-            anyhow::Ok(())
-        })?;
+        crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
+            let raw = raw.clone();
+            let saved_id = saved_id.clone();
+            Box::pin(async move {
+                let drafts = imap::find_drafts_folder(session)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+                imap::replace_draft(session, &drafts, &raw, &saved_id).await?;
+                anyhow::Ok(())
+            })
+        }))?;
         Ok(json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes }))
     })
 }
@@ -120,20 +123,25 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
     if draft_id.trim().is_empty() {
         return Ok(json!({ "ok": true, "deleted": 0, "permanent": true }));
     }
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let creds = load_mobile_account_creds(&conn, &account_id)?;
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
         }
-        let deleted = run_mobile_async(async move {
-            let mut session = imap::connect(&creds).await?;
-            let drafts = imap::find_drafts_folder(&mut session)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-            let deleted = imap::discard_draft(&mut session, &drafts, &draft_id).await?;
-            let _ = session.logout().await;
-            anyhow::Ok(deleted)
-        })?;
+        let deleted = crate::ffi::engine_block_on(engine.with_write_session(
+            &account_id,
+            move |session| {
+                let draft_id = draft_id.clone();
+                Box::pin(async move {
+                    let drafts = imap::find_drafts_folder(session)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+                    let deleted = imap::discard_draft(session, &drafts, &draft_id).await?;
+                    anyhow::Ok(deleted)
+                })
+            },
+        ))?;
         Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
     })
 }
@@ -474,6 +482,7 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
     let thread_id = req_str(params, "thread_id")?;
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
         .ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if uids.is_empty() {
@@ -483,27 +492,32 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
-        let delete_result = run_mobile_async(async {
-            let mut session = imap::connect(&creds).await?;
-            let drafts = imap::find_drafts_folder(&mut session).await?;
-            let trash = if drafts.as_deref() == Some(parsed.folder.as_str()) {
-                imap::expunge_uids(&mut session, &parsed.folder, &uids).await?;
-                None
-            } else {
-                let trash = imap::find_trash_folder(&mut session)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("Trash folder not found for this account"))?;
-                if trash == parsed.folder {
-                    imap::expunge_uids(&mut session, &parsed.folder, &uids).await?;
-                    None
-                } else {
-                    imap::move_to_folder(&mut session, &parsed.folder, &trash, &uids).await?;
-                    Some(trash)
-                }
-            };
-            let _ = session.logout().await;
-            anyhow::Ok(trash)
-        })?;
+        let folder = parsed.folder.clone();
+        let op_uids = uids.clone();
+        let delete_result =
+            crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
+                let folder = folder.clone();
+                let uids = op_uids.clone();
+                Box::pin(async move {
+                    let drafts = imap::find_drafts_folder(session).await?;
+                    let trash = if drafts.as_deref() == Some(folder.as_str()) {
+                        imap::expunge_uids(session, &folder, &uids).await?;
+                        None
+                    } else {
+                        let trash = imap::find_trash_folder(session).await?.ok_or_else(|| {
+                            anyhow::anyhow!("Trash folder not found for this account")
+                        })?;
+                        if trash == folder {
+                            imap::expunge_uids(session, &folder, &uids).await?;
+                            None
+                        } else {
+                            imap::move_to_folder(session, &folder, &trash, &uids).await?;
+                            Some(trash)
+                        }
+                    };
+                    anyhow::Ok(trash)
+                })
+            }))?;
         let deleted = store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids)
             .map_err(|err| err.to_string())?;
         match delete_result {
@@ -516,6 +530,7 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
 pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let target_folder = find_cached_archive_folder(&conn, &parsed.account)?;
         if parsed.folder == target_folder {
@@ -539,14 +554,21 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
-        let target_batch = run_mobile_async(async {
-            let mut session = imap::connect(&creds).await?;
-            imap::move_to_folder(&mut session, &parsed.folder, &target_folder, &uids).await?;
-            let batch =
-                imap::fetch_recent(&mut session, &target_folder, 50.max(uids.len() as u32)).await?;
-            let _ = session.logout().await;
-            anyhow::Ok(batch)
-        })?;
+        let op_folder = parsed.folder.clone();
+        let op_target = target_folder.clone();
+        let op_uids = uids.clone();
+        let target_batch =
+            crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
+                let source = op_folder.clone();
+                let target = op_target.clone();
+                let uids = op_uids.clone();
+                Box::pin(async move {
+                    imap::move_to_folder(session, &source, &target, &uids).await?;
+                    let batch =
+                        imap::fetch_recent(session, &target, 50.max(uids.len() as u32)).await?;
+                    anyhow::Ok(batch)
+                })
+            }))?;
         store::ensure_folder(&conn, &parsed.account, &target_folder)
             .map_err(|err| err.to_string())?;
         store::upsert_messages(
@@ -591,6 +613,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             json!({ "ok": true, "moved": 0, "folder": target_folder, "thread_id": thread_id }),
         );
     }
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = cached_thread_uids(&conn, &parsed)?;
         if uids.is_empty() {
@@ -602,14 +625,21 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
-        let target_batch = run_mobile_async(async {
-            let mut session = imap::connect(&creds).await?;
-            imap::move_to_folder(&mut session, &parsed.folder, &target_folder, &uids).await?;
-            let batch =
-                imap::fetch_recent(&mut session, &target_folder, 50.max(uids.len() as u32)).await?;
-            let _ = session.logout().await;
-            anyhow::Ok(batch)
-        })?;
+        let op_folder = parsed.folder.clone();
+        let op_target = target_folder.clone();
+        let op_uids = uids.clone();
+        let target_batch =
+            crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
+                let source = op_folder.clone();
+                let target = op_target.clone();
+                let uids = op_uids.clone();
+                Box::pin(async move {
+                    imap::move_to_folder(session, &source, &target, &uids).await?;
+                    let batch =
+                        imap::fetch_recent(session, &target, 50.max(uids.len() as u32)).await?;
+                    anyhow::Ok(batch)
+                })
+            }))?;
         store::ensure_folder(&conn, &parsed.account, &target_folder)
             .map_err(|err| err.to_string())?;
         store::upsert_messages(
@@ -650,6 +680,7 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
     let target_account = req_str(params, "target_account_id")?;
     let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = cached_thread_uids(&conn, &parsed)?;
         if uids.is_empty() {
@@ -669,25 +700,32 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         if account_needs_reconnect(&target_creds) {
             return Err(format!("account needs reconnect: {target_account}"));
         }
-        let target_batch = run_mobile_async(async {
-            let raw_messages = {
-                let mut session = imap::connect(&source_creds).await?;
-                let messages =
-                    imap::fetch_raw_messages_for_copy(&mut session, &parsed.folder, &uids).await?;
-                let _ = session.logout().await;
-                messages
-            };
-            let copied = raw_messages.len();
-            let mut session = imap::connect(&target_creds).await?;
-            for message in &raw_messages {
-                imap::append_copied_message(&mut session, &target_folder, message).await?;
-            }
-            let batch =
-                imap::fetch_recent(&mut session, &target_folder, 50.max(copied as u32)).await?;
-            let _ = session.logout().await;
-            anyhow::Ok((copied, batch))
-        })?;
-        let (copied, batch) = target_batch;
+        let source_folder = parsed.folder.clone();
+        let fetch_uids = uids.clone();
+        let raw_messages =
+            crate::ffi::engine_block_on(engine.with_read_session(&parsed.account, move |session| {
+                let folder = source_folder.clone();
+                let uids = fetch_uids.clone();
+                Box::pin(async move {
+                    imap::fetch_raw_messages_for_copy(session, &folder, &uids).await
+                })
+            }))?;
+        let copied = raw_messages.len();
+        let target_folder_op = target_folder.clone();
+        let batch =
+            crate::ffi::engine_block_on(engine.with_write_session(&target_account, move |session| {
+                let target = target_folder_op.clone();
+                let raw_messages = raw_messages.clone();
+                Box::pin(async move {
+                    for message in &raw_messages {
+                        imap::append_copied_message(session, &target, message).await?;
+                    }
+                    let batch =
+                        imap::fetch_recent(session, &target, 50.max(raw_messages.len() as u32))
+                            .await?;
+                    anyhow::Ok(batch)
+                })
+            }))?;
         store::ensure_folder(&conn, &target_account, &target_folder)
             .map_err(|err| err.to_string())?;
         store::upsert_messages(&conn, &target_account, &target_folder, &batch.messages)
@@ -717,6 +755,7 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
         return mark_mobile_rss_thread_read(data_dir, params);
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
         update_mobile_read_state(&conn, &parsed, params, &uids, seen)?;
@@ -725,12 +764,15 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
             if account_needs_reconnect(&creds) {
                 return Err(format!("account needs reconnect: {}", parsed.account));
             }
-            run_mobile_async(async {
-                let mut session = imap::connect(&creds).await?;
-                imap::set_seen(&mut session, &parsed.folder, &uids, seen).await?;
-                let _ = session.logout().await;
-                anyhow::Ok(())
-            })?;
+            let folder = parsed.folder.clone();
+            crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
+                let folder = folder.clone();
+                let uids = uids.clone();
+                Box::pin(async move {
+                    imap::set_seen(session, &folder, &uids, seen).await?;
+                    anyhow::Ok(())
+                })
+            }))?;
         }
         Ok(json!({ "ok": true }))
     })
@@ -746,27 +788,32 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         .map(canon_folder)
         .unwrap_or_else(|| "INBOX".to_string());
 
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Ok(json!({ "ok": true, "updated": 0, "rss": true }));
         }
         let uids =
             store::get_unseen_uids(&conn, &account_id, &folder).map_err(|err| err.to_string())?;
+        let updated = uids.len();
         if !uids.is_empty() {
             let creds = load_mobile_account_creds(&conn, &account_id)?;
             if account_needs_reconnect(&creds) {
                 return Err(format!("account needs reconnect: {account_id}"));
             }
-            run_mobile_async(async {
-                let mut session = imap::connect(&creds).await?;
-                imap::set_seen(&mut session, &folder, &uids, true).await?;
-                let _ = session.logout().await;
-                anyhow::Ok(())
-            })?;
+            let folder = folder.clone();
+            crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
+                let folder = folder.clone();
+                let uids = uids.clone();
+                Box::pin(async move {
+                    imap::set_seen(session, &folder, &uids, true).await?;
+                    anyhow::Ok(())
+                })
+            }))?;
         }
         store::mark_folder_seen(&conn, &account_id, &folder, true)
             .map_err(|err| err.to_string())?;
-        Ok(json!({ "ok": true, "updated": uids.len(), "folder": folder }))
+        Ok(json!({ "ok": true, "updated": updated, "folder": folder }))
     })
 }
 
@@ -777,6 +824,7 @@ pub(crate) fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Resu
         return mark_mobile_rss_thread_starred(data_dir, params);
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if !uids.is_empty() {
@@ -784,12 +832,16 @@ pub(crate) fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Resu
             if account_needs_reconnect(&creds) {
                 return Err(format!("account needs reconnect: {}", parsed.account));
             }
-            run_mobile_async(async {
-                let mut session = imap::connect(&creds).await?;
-                imap::set_starred(&mut session, &parsed.folder, &uids, starred).await?;
-                let _ = session.logout().await;
-                anyhow::Ok(())
-            })?;
+            let folder = parsed.folder.clone();
+            let uids = uids.clone();
+            crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
+                let folder = folder.clone();
+                let uids = uids.clone();
+                Box::pin(async move {
+                    imap::set_starred(session, &folder, &uids, starred).await?;
+                    anyhow::Ok(())
+                })
+            }))?;
         }
         if has_requested_mobile_message_ids(params) {
             for uid in uids {
