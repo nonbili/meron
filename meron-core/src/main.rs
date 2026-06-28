@@ -13,795 +13,143 @@
 //! per-account connection pool (see `Engine::with_session`); IDLE watchers hold
 //! their own dedicated long-lived connections.
 
-mod imap;
-mod parse;
-mod rss;
-mod secrets;
-mod smtp;
-mod store;
-
 use anyhow::Context as _;
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 
+// The binary shares the library crate's modules (rather than recompiling its own
+// copies) so the desktop Engine and the mobile FFI operate on identical types.
+use meron_core::engine::{Engine, EngineHost};
+use meron_core::engine::*;
 use meron_core::protocol::{Request, ping_response, ready_event};
+use meron_core::{imap, rss, secrets, smtp, store};
 
-const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const OUTLOOK_SCOPES: &str = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile";
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
 
-/// Engine state: per-account credentials plus the on-disk store.
-/// Reads serve from SQLite; syncs reconnect to IMAP and refresh stored rows.
-struct Engine {
-    accounts: Mutex<HashMap<String, imap::Creds>>,
-    db: std::sync::Mutex<rusqlite::Connection>,
-    /// Accounts with a live IDLE task, to avoid spawning duplicates.
-    /// Keyed by `account\nfolder` because IMAP IDLE watches one selected mailbox
-    /// per connection.
-    watched: std::sync::Mutex<HashSet<String>>,
-    /// In-flight background sync keys, to dedupe concurrent refreshes.
-    syncing: std::sync::Mutex<HashSet<String>>,
-    /// Per-thread set of referenced-but-missing message-ids we've already tried
-    /// to fetch this session, keyed by `account|thread_key`. A negative cache:
-    /// most gaps are permanent (ancestors that were never delivered to this
-    /// mailbox, e.g. GitHub notification threads), so without this every thread
-    /// open would re-open an IMAP connection to re-search for them. Cleared on
-    /// restart, which lets a genuinely-late ancestor be retried.
-    gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
-    /// Pulsed when an account is paused so live IDLE watchers wake and re-check
-    /// their paused state (and stop) instead of blocking up to the IDLE timeout.
-    pause_signal: Notify,
-    /// Pulsed on OS resume (`system.resumed`) so IDLE watchers abandon sockets
-    /// that died during suspend and reconnect, instead of blocking up to the
-    /// IDLE timeout / TCP keepalive while no new mail is pushed.
-    resume_signal: Notify,
-    /// Warm, authenticated IMAP sessions reused by the request path so each
-    /// thread open / search / sync doesn't pay a fresh TLS + LOGIN/XOAUTH2
-    /// handshake. Keyed by account; per-account `Vec` is a LIFO free-list
-    /// (reuse the hottest session first). IDLE watcher connections are *not*
-    /// pooled — they have a different, long-lived lifecycle. See `with_session`.
-    pool: std::sync::Mutex<HashMap<String, Vec<Pooled<imap::Session>>>>,
-}
+/// Desktop host integration for the shared [`Engine`]: the default on-disk store
+/// plus OS-keychain secret storage (with one-time migration of any legacy
+/// secrets that older builds wrote into SQLite).
+struct DesktopHost;
 
-/// One idle, reusable session plus when it was last returned to the pool, so
-/// stale connections (silently dropped by the server) can be evicted on acquire
-/// instead of failing an operation. Generic over the session type so the
-/// free-list policy ([`pool_take`]/[`pool_return`]) is unit-testable without a
-/// live IMAP `Session`.
-struct Pooled<S> {
-    session: S,
-    last_used: std::time::Instant,
-}
+impl EngineHost for DesktopHost {
+    fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+        store::open()
+    }
 
-/// Pop the hottest still-fresh session for `account`, discarding any idle longer
-/// than `max_idle`. Pure (caller supplies `now`) so it can be tested directly.
-fn pool_take<S>(
-    map: &mut HashMap<String, Vec<Pooled<S>>>,
-    account: &str,
-    now: std::time::Instant,
-    max_idle: Duration,
-) -> Option<S> {
-    let list = map.get_mut(account)?;
-    while let Some(p) = list.pop() {
-        if now.saturating_duration_since(p.last_used) < max_idle {
-            return Some(p.session);
+    fn apply_secret(&self, conn: &rusqlite::Connection, account: &str, creds: &mut imap::Creds) {
+        let stored = match secrets::load(account) {
+            Ok(stored) => stored,
+            Err(err) => {
+                eprintln!("meron-core: could not load keychain secret for {account}: {err:#}");
+                secrets::Secrets::default()
+            }
+        };
+        if stored.is_empty() {
+            // Legacy row from a build that stored secrets in SQLite: migrate
+            // whatever's there into the keychain, then scrub the plaintext. The
+            // in-memory `creds` already carry the DB-loaded secret, so they stay
+            // usable after the scrub.
+            let from_db = secrets::Secrets::from_creds(creds);
+            if !from_db.is_empty() {
+                let _ = secrets::store(account, &from_db);
+                let _ = store::scrub_account_secrets(conn, account);
+            }
+        } else {
+            stored.apply_to(creds);
         }
-        // else: too old to trust — drop it and try the next.
     }
-    None
-}
 
-/// Trace connection-pool decisions to stderr when `MERON_POOL_DEBUG` is set.
-/// Off by default so production runs stay quiet.
-fn pool_debug(account: &str, what: &str) {
-    if std::env::var_os("MERON_POOL_DEBUG").is_some() {
-        eprintln!("meron-core: pool {what} account={account}");
-    }
-}
-
-fn creds_have_required_secret(creds: &imap::Creds) -> bool {
-    if creds.is_oauth() {
-        creds
-            .refresh_token
-            .as_deref()
-            .is_some_and(|s| !s.is_empty())
-    } else {
-        !creds.password.is_empty()
+    fn store_secret(
+        &self,
+        _conn: &rusqlite::Connection,
+        account: &str,
+        secrets: &secrets::Secrets,
+    ) -> anyhow::Result<()> {
+        secrets::store(account, secrets)
     }
 }
 
-/// Return a session to `account`'s free-list, or drop it if already at
-/// `max_pooled` (the transient-overflow case). Pure for testability.
-fn pool_return<S>(
-    map: &mut HashMap<String, Vec<Pooled<S>>>,
+/// Decide whether a thread has *new* ancestor gaps worth fetching, and if so
+/// run [`fill_thread_gaps`] in the background so the read it was called from
+/// returns immediately. Two guards keep this cheap:
+///   - the gap set is computed from the local DB (no network) before spawning;
+///   - a per-thread negative cache (`Engine::gap_attempts`) drops ids we've
+///     already tried this session, so re-opening a thread whose ancestors will
+///     never arrive (the common case) does no network work at all.
+/// When the fill actually stores something, it emits `mail.synced` so the open
+/// thread re-reads; the re-read sees no new gaps and won't reconnect.
+fn maybe_spawn_fill_thread_gaps(
+    engine: &Arc<Engine>,
+    out: &Writer,
     account: &str,
-    session: S,
-    now: std::time::Instant,
-    max_pooled: usize,
+    thread_key: &str,
 ) {
-    let list = map.entry(account.to_string()).or_default();
-    if list.len() < max_pooled {
-        list.push(Pooled {
-            session,
-            last_used: now,
-        });
-    }
-    // else: drop `session` (closes the socket) instead of pooling it.
-}
-
-/// Max warm sessions kept per account; extra concurrent requests open a
-/// transient connection that is closed (dropped) after use rather than pooled.
-const MAX_POOLED: usize = 3;
-/// Drop a pooled session rather than reuse it once it's been idle this long.
-/// Comfortably under typical server idle timeouts (Gmail ~30 min), so a reused
-/// session is almost always still alive.
-const MAX_IDLE: Duration = Duration::from_secs(120);
-
-impl Engine {
-    fn new() -> anyhow::Result<Self> {
-        let conn = store::open()?;
-        let mut accounts: HashMap<String, imap::Creds> = HashMap::new();
-        for (id, mut creds) in store::load_accounts(&conn)? {
-            let stored = match secrets::load(&id) {
-                Ok(stored) => stored,
-                Err(err) => {
-                    eprintln!("meron-core: could not load keychain secret for {id}: {err:#}");
-                    secrets::Secrets::default()
-                }
-            };
-            if stored.is_empty() {
-                // Legacy row from a build that stored secrets in SQLite: migrate
-                // whatever's there into the keychain, then scrub the plaintext.
-                let from_db = secrets::Secrets::from_creds(&creds);
-                if !from_db.is_empty() {
-                    secrets::store(&id, &from_db)?;
-                    store::scrub_account_secrets(&conn, &id)?;
-                }
-            } else {
-                stored.apply_to(&mut creds);
-            }
-            if !creds_have_required_secret(&creds) {
-                eprintln!("meron-core: account {id} needs reconnect; no keychain secret found");
-                continue;
-            }
-            accounts.insert(id, creds);
-        }
-        Ok(Self {
-            accounts: Mutex::new(accounts),
-            db: std::sync::Mutex::new(conn),
-            watched: std::sync::Mutex::new(HashSet::new()),
-            syncing: std::sync::Mutex::new(HashSet::new()),
-            gap_attempts: std::sync::Mutex::new(HashMap::new()),
-            pause_signal: Notify::new(),
-            resume_signal: Notify::new(),
-            pool: std::sync::Mutex::new(HashMap::new()),
-        })
-    }
-
-    /// Whether automatic checking is paused for an account (per its stored pref).
-    fn is_paused(&self, account: &str) -> bool {
-        store::account_paused(&self.db.lock().unwrap(), account).unwrap_or(false)
-    }
-
-    /// Whether desktop notifications are suppressed for an account.
-    fn is_muted(&self, account: &str) -> bool {
-        store::account_muted(&self.db.lock().unwrap(), account).unwrap_or(false)
-    }
-
-    async fn ensure_valid_creds(&self, account: &str) -> anyhow::Result<imap::Creds> {
-        let mut accounts = self.accounts.lock().await;
-        let creds = accounts
-            .get_mut(account)
-            .ok_or_else(|| anyhow::anyhow!("account needs reconnect: {account}"))?;
-
-        if creds.is_oauth() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-
-            // If token is expired or expires in less than 5 minutes (300s)
-            if creds.token_expires_at <= now + 300 {
-                // Provider-specific endpoint / credentials. Google needs a client
-                // secret; Microsoft is a public client (PKCE) with no secret but
-                // must request the resource scopes on refresh.
-                let (token_url, client_id, client_secret, scope): (
-                    &str,
-                    String,
-                    String,
-                    Option<&str>,
-                ) = match creds.auth_type.as_str() {
-                    "outlook_oauth" => (
-                        OUTLOOK_TOKEN_URL,
-                        std::env::var("MERON_OUTLOOK_CLIENT_ID").context(
-                            "MERON_OUTLOOK_CLIENT_ID is required for Outlook OAuth refresh",
-                        )?,
-                        String::new(),
-                        Some(OUTLOOK_SCOPES),
-                    ),
-                    _ => (
-                        GOOGLE_TOKEN_URL,
-                        std::env::var("MERON_GOOGLE_CLIENT_ID").context(
-                            "MERON_GOOGLE_CLIENT_ID is required for Gmail OAuth refresh",
-                        )?,
-                        std::env::var("MERON_GOOGLE_CLIENT_SECRET").context(
-                            "MERON_GOOGLE_CLIENT_SECRET is required for Gmail OAuth refresh",
-                        )?,
-                        None,
-                    ),
-                };
-                let refresh_token = creds.refresh_token.as_deref().unwrap_or("");
-
-                let (new_access, expires_in) = imap::refresh_oauth_token(
-                    token_url,
-                    &client_id,
-                    &client_secret,
-                    refresh_token,
-                    scope,
-                )
-                .await?;
-                creds.access_token = Some(new_access);
-                creds.token_expires_at = now + expires_in;
-
-                // Persist: token_expires_at to SQLite, the new access token to
-                // the keychain.
-                {
-                    let db = self.db.lock().unwrap();
-                    store::save_account_config(&db, account, creds)?;
-                }
-                secrets::store(account, &secrets::Secrets::from_creds(creds))?;
-            }
-        }
-
-        Ok(creds.clone())
-    }
-
-    /// Pop the hottest non-expired pooled session for `account`, discarding any
-    /// that have been idle past `MAX_IDLE` (likely dropped by the server).
-    fn take_pooled(&self, account: &str) -> Option<imap::Session> {
-        pool_take(
-            &mut self.pool.lock().unwrap(),
-            account,
-            std::time::Instant::now(),
-            MAX_IDLE,
-        )
-    }
-
-    /// Return a healthy session to the pool, or drop it if the account is
-    /// already at `MAX_POOLED` (the transient-overflow case).
-    fn return_pooled(&self, account: &str, session: imap::Session) {
-        pool_return(
-            &mut self.pool.lock().unwrap(),
-            account,
-            session,
-            std::time::Instant::now(),
-            MAX_POOLED,
-        );
-    }
-
-    /// Drop every pooled session for `account`. Called when credentials become
-    /// invalid (account removed) or checking is paused, so we never reuse a
-    /// session built from stale creds.
-    fn clear_pool(&self, account: &str) {
-        self.pool.lock().unwrap().remove(account);
-    }
-
-    /// Drop every warm pooled session. Used on OS resume: a session's freshness
-    /// is judged by elapsed `Instant`, but the monotonic clock is frozen across
-    /// suspend, so a connection dead for hours still looks recently used and
-    /// dodges the `MAX_IDLE` eviction. Clearing forces the next op to reconnect.
-    fn clear_all_pools(&self) {
-        self.pool.lock().unwrap().clear();
-    }
-
-    /// Run `f` against a warm pooled session when one is available, otherwise a
-    /// freshly connected one. On success the session is returned to the pool.
-    ///
-    /// `retry`: when a *pooled* session fails (the likely cause being that the
-    /// server silently dropped it), reconnect fresh and run `f` once more. Only
-    /// safe for read-only operations — a stale pooled connection fails on its
-    /// first command (before any mutation), but a connection that drops *after*
-    /// a mutating command reached the server must not be retried. Use
-    /// [`with_read_session`](Self::with_read_session) /
-    /// [`with_write_session`](Self::with_write_session) instead of calling this
-    /// directly.
-    async fn with_session<T, F>(&self, account: &str, retry: bool, mut f: F) -> anyhow::Result<T>
-    where
-        F: FnMut(&mut imap::Session) -> SessionOp<'_, T> + Send,
-        T: Send,
-    {
-        if let Some(mut session) = self.take_pooled(account) {
-            match f(&mut session).await {
-                Ok(val) => {
-                    pool_debug(account, "reuse");
-                    self.return_pooled(account, session);
-                    return Ok(val);
-                }
-                Err(err) => {
-                    // Discard the suspect session (do not pool it).
-                    drop(session);
-                    if !retry {
-                        return Err(err);
-                    }
-                    pool_debug(account, "stale-retry");
-                    // Fall through to a fresh connection and try once more.
-                }
-            }
-        }
-
-        pool_debug(account, "fresh-connect");
-        let creds = self.ensure_valid_creds(account).await?;
-        let mut session = imap::connect(&creds).await?;
-        match f(&mut session).await {
-            Ok(val) => {
-                self.return_pooled(account, session);
-                Ok(val)
-            }
-            Err(err) => Err(err),
-        }
-    }
-
-    /// Run a read-only operation against a pooled (or fresh) session, retrying
-    /// once on a stale-connection failure.
-    async fn with_read_session<T, F>(&self, account: &str, f: F) -> anyhow::Result<T>
-    where
-        F: FnMut(&mut imap::Session) -> SessionOp<'_, T> + Send,
-        T: Send,
-    {
-        self.with_session(account, true, f).await
-    }
-
-    /// Run a mutating operation against a pooled (or fresh) session. Never
-    /// auto-retries, so a connection dropped mid-command can't double-apply.
-    async fn with_write_session<T, F>(&self, account: &str, f: F) -> anyhow::Result<T>
-    where
-        F: FnMut(&mut imap::Session) -> SessionOp<'_, T> + Send,
-        T: Send,
-    {
-        self.with_session(account, false, f).await
-    }
-}
-
-/// A boxed, `Send` future produced by a session-op closure. The `'a` lifetime
-/// ties it to the borrowed `&mut Session`; closures must move any other data
-/// they need (clone owned copies) into the future so it borrows only the
-/// session — letting the closure be re-invoked for the stale-retry path.
-type SessionOp<'a, T> =
-    std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<T>> + Send + 'a>>;
-
-/// Reconnect to IMAP, list folders, and refresh the store.
-async fn sync_folders(engine: &Arc<Engine>, account: &str) -> anyhow::Result<Vec<imap::Folder>> {
-    let folders = engine
-        .with_read_session(account, |session| {
-            Box::pin(async move { imap::list_folders(session).await })
-        })
-        .await?;
-    let db = engine.db.lock().unwrap();
-    store::upsert_folders(&db, account, &folders)?;
-    Ok(folders)
-}
-
-/// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into
-/// the store, resetting cached messages if the server's UIDVALIDITY changed.
-async fn sync_messages(
-    engine: &Arc<Engine>,
-    account: &str,
-    folder: &str,
-    limit: u32,
-) -> anyhow::Result<usize> {
-    // Read the prior sync position before any network I/O so we can ask the
-    // server for only the flag changes since then (CONDSTORE CHANGEDSINCE).
-    let (prior_modseq, prior_validity) = {
-        let db = engine.db.lock().unwrap();
-        let modseq = store::get_folder_modseq(&db, account, folder)?;
-        let validity = store::get_folder_state(&db, account, folder)?
-            .map(|(v, _)| v)
-            .unwrap_or(0);
-        (modseq, validity)
-    };
-
-    let (batch, flag_sync, server_uids) = engine
-        .with_read_session(account, |session| {
-            let folder = folder.to_string();
-            Box::pin(async move {
-                let batch = imap::fetch_recent(session, &folder, limit).await?;
-                // Reconcile \Seen across the whole folder (catches reads on other
-                // devices, even for messages older than the recent window).
-                // Best-effort: a no-op when there's no baseline, UIDVALIDITY changed,
-                // or the server lacks CONDSTORE.
-                let validity_matches = prior_validity != 0 && prior_validity == batch.uidvalidity;
-                let flag_sync = imap::sync_flags(session, &folder, prior_modseq, validity_matches)
-                    .await
-                    .ok();
-                // Server-side UID set so we can drop locally cached messages another
-                // client moved or deleted. Best-effort: a failure here skips the prune.
-                let server_uids = imap::list_all_uids(session, &folder).await.ok();
-                anyhow::Ok((batch, flag_sync, server_uids))
-            })
-        })
-        .await?;
-
-    let count = batch.messages.len();
-    let db = engine.db.lock().unwrap();
-    if prior_validity != 0 && prior_validity != batch.uidvalidity {
-        store::clear_folder_messages(&db, account, folder)?;
-    }
-    store::upsert_messages(&db, account, folder, &batch.messages)?;
-    // Make sure the folder is represented in the folders table so its unread
-    // count surfaces (tray dot / badges) even before a full folder LIST sync —
-    // which, in the unified view, may never run for this account.
-    store::ensure_folder(&db, account, folder)?;
-    if let Some(uids) = server_uids.as_ref() {
-        let validity_ok = prior_validity == 0 || prior_validity == batch.uidvalidity;
-        if validity_ok {
-            store::prune_missing_messages(&db, account, folder, uids)?;
-        }
-    }
-    if let Some(fs) = flag_sync {
-        for &(uid, seen, starred) in &fs.changes {
-            store::update_message_seen(&db, account, folder, uid, seen)?;
-            store::update_message_starred(&db, account, folder, uid, starred)?;
-        }
-        if fs.highest_modseq > 0 {
-            store::set_folder_modseq(&db, account, folder, fs.highest_modseq)?;
-        }
-    }
-    store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)?;
-    Ok(count)
-}
-
-/// The cached Sent mailbox name for `account`, if any — used so a chat-view
-/// search reaches the user's own replies (and old mail filed under Sent), not
-/// just the inbox. Resolved from cached folder names via the same heuristic the
-/// session-based resolver uses; `inbox` is excluded so we never list it twice.
-fn cached_sent_folder(engine: &Arc<Engine>, account: &str, inbox: &str) -> Option<String> {
-    let folders = store::get_folders(&engine.db.lock().unwrap(), account).ok()?;
-    folders
-        .into_iter()
-        .map(|folder| folder.name)
-        .find(|name| imap::looks_like_sent(name) && !name.eq_ignore_ascii_case(inbox))
-}
-
-/// Search `account` for `query` across each of `folders` (typically Inbox +
-/// Sent), merging the cached and live-IMAP hits. UIDs are folder-scoped, so
-/// results are keyed by (folder, uid) and ordered newest-first by date — the
-/// only ordering comparable across mailboxes. Each returned header carries its
-/// source `folder` so the bridge can build per-message thread IDs correctly.
-async fn search_mail_messages(
-    engine: &Arc<Engine>,
-    account: &str,
-    folders: &[String],
-    query: &str,
-    limit: u32,
-) -> anyhow::Result<Vec<imap::MessageHeader>> {
-    let mut by_key: HashMap<(String, u32), imap::MessageHeader> = HashMap::new();
-    {
-        let db = engine.db.lock().unwrap();
-        for folder in folders {
-            for mut message in store::search_messages(&db, account, folder, query, limit)? {
-                message.folder = folder.clone();
-                by_key.insert((folder.clone(), message.uid), message);
-            }
-        }
-    }
-
-    // Live search, one SELECT + UID SEARCH per folder on a shared session.
-    // Best-effort: any failure falls back to the cached hits already collected.
-    let server_headers = engine
-        .with_read_session(account, |session| {
-            let folders = folders.to_vec();
-            let query = query.to_string();
-            Box::pin(async move {
-                let mut all = Vec::new();
-                for folder in &folders {
-                    let uids = imap::search_uids(session, folder, &query, limit).await?;
-                    let mut headers = imap::fetch_headers_by_uid(session, folder, &uids).await?;
-                    for header in &mut headers {
-                        header.folder = folder.clone();
-                    }
-                    all.push((folder.clone(), headers));
-                }
-                anyhow::Ok(all)
-            })
-        })
-        .await
-        .ok();
-
-    if let Some(per_folder) = server_headers {
-        {
-            let db = engine.db.lock().unwrap();
-            for (folder, headers) in &per_folder {
-                store::upsert_messages(&db, account, folder, headers)?;
-            }
-        }
-        for (folder, headers) in per_folder {
-            for message in headers {
-                by_key.insert((folder.clone(), message.uid), message);
-            }
-        }
-    }
-
-    let mut messages = by_key.into_values().collect::<Vec<_>>();
-    // Newest first by epoch send time; unknown dates (0) sort last.
-    messages.sort_unstable_by(|a, b| b.date.cmp(&a.date).then_with(|| b.uid.cmp(&a.uid)));
-    messages.truncate(limit as usize);
-    Ok(messages)
-}
-
-async fn starred_search_folders(
-    engine: &Arc<Engine>,
-    account: &str,
-    requested: &str,
-) -> Vec<String> {
-    let is_gmail = {
-        let accounts = engine.accounts.lock().await;
-        accounts
-            .get(account)
-            .map(|creds| creds.auth_type == "gmail_oauth")
-            .unwrap_or(false)
-    };
-    eprintln!(
-        "meron-core: starred folders account={account} requested={requested} gmail={is_gmail}"
-    );
-    if !is_gmail {
-        return vec![requested.to_string()];
-    }
-    let mut folders = store::get_folders(&engine.db.lock().unwrap(), account).unwrap_or_default();
-    let find_starred = |folders: &[imap::Folder]| {
-        folders
-            .iter()
-            .map(|folder| folder.name.as_str())
-            .find(|name| {
-                name.eq_ignore_ascii_case("starred")
-                    || name.eq_ignore_ascii_case("[gmail]/starred")
-                    || name.eq_ignore_ascii_case("[google mail]/starred")
-            })
-            .map(str::to_string)
-    };
-    eprintln!(
-        "meron-core: starred folders cached_count={} account={account}",
-        folders.len()
-    );
-    if let Some(folder) = find_starred(&folders) {
-        eprintln!("meron-core: starred folders using_starred_mailbox={folder}");
-        return vec![folder];
-    }
-    let fresh = engine
-        .with_read_session(account, |session| {
-            Box::pin(async move { imap::list_folders(session).await })
-        })
-        .await;
-    match fresh {
-        Ok(fresh) => {
-            eprintln!(
-                "meron-core: starred folders fresh_count={} account={account}",
-                fresh.len()
-            );
-            if let Ok(db) = engine.db.lock() {
-                let _ = store::upsert_folders(&db, account, &fresh);
-            }
-            folders = fresh;
-            if let Some(folder) = find_starred(&folders) {
-                eprintln!("meron-core: starred folders using_starred_mailbox={folder}");
-                return vec![folder];
-            }
-        }
-        Err(err) => {
-            eprintln!("meron-core: starred folders LIST/connect failed account={account}: {err:#}");
-        }
-    }
-    let mut names = folders
-        .into_iter()
-        .map(|folder| folder.name)
-        .collect::<Vec<_>>();
-    if names.is_empty() {
-        names.push(requested.to_string());
-    }
-    eprintln!(
-        "meron-core: starred folders scan_count={} names={}",
-        names.len(),
-        names.join(", ")
-    );
-    names
-}
-
-async fn search_starred_mail_messages(
-    engine: &Arc<Engine>,
-    account: &str,
-    folders: &[String],
-    limit: u32,
-    refresh: bool,
-) -> anyhow::Result<Vec<imap::MessageHeader>> {
-    let mut by_uid = HashMap::new();
-    let mut cached_count = 0usize;
-    for folder in folders {
-        let cached = store::get_starred(&engine.db.lock().unwrap(), account, folder, limit)?;
-        cached_count += cached.len();
-        for message in cached {
-            by_uid.insert(format!("{folder}:{}", message.uid), message);
-        }
-    }
-    eprintln!(
-        "meron-core: starred search account={account} folders={} cached_hits={} refresh={refresh}",
-        folders.len(),
-        cached_count
-    );
-
-    if refresh {
-        // Best-effort per folder: a single folder's failure is logged and
-        // skipped, so the closure always succeeds (no stale-retry needed here).
-        let server_headers = engine
-            .with_read_session(account, |session| {
-                let folders = folders.to_vec();
-                Box::pin(async move {
-                    let mut headers = Vec::new();
-                    for folder in &folders {
-                        let result = async {
-                            let uids = imap::search_starred_uids(session, folder, limit).await?;
-                            imap::fetch_headers_by_uid(session, folder, &uids).await
-                        }
-                        .await;
-                        if let Ok(mut found) = result {
-                            eprintln!(
-                                "meron-core: starred search folder={folder} hits={}",
-                                found.len()
-                            );
-                            for header in &mut found {
-                                header.folder = folder.to_string();
-                                header.starred = true;
-                            }
-                            headers.extend(found);
-                        } else if let Err(err) = result {
-                            eprintln!("meron-core: starred search folder={folder} failed: {err:#}");
-                        }
-                    }
-                    anyhow::Ok(headers)
-                })
-            })
-            .await
-            .map_err(|err| {
-                eprintln!("meron-core: starred search connect failed account={account}: {err:#}");
-                err
-            })
-            .ok();
-
-        if let Some(headers) = server_headers {
-            {
-                let db = engine.db.lock().unwrap();
-                let mut by_folder: HashMap<String, Vec<imap::MessageHeader>> = HashMap::new();
-                for header in &headers {
-                    by_folder
-                        .entry(header.folder.clone())
-                        .or_default()
-                        .push(header.clone());
-                }
-                for (folder, headers) in by_folder {
-                    store::upsert_messages(&db, account, &folder, &headers)?;
-                }
-            }
-            for message in headers {
-                by_uid.insert(format!("{}:{}", message.folder, message.uid), message);
-            }
-        }
-    }
-
-    let mut messages = by_uid.into_values().collect::<Vec<_>>();
-    messages.sort_unstable_by(|a, b| b.date.cmp(&a.date).then_with(|| b.uid.cmp(&a.uid)));
-    messages.truncate(limit as usize);
-    eprintln!(
-        "meron-core: starred search account={account} returning={}",
-        messages.len()
-    );
-    Ok(messages)
-}
-
-/// How far back the body prefetcher reaches: unread mail of any age, plus
-/// everything received within this many days.
-const PREFETCH_DAYS: u32 = 14;
-
-/// Download full message bodies (RFC822, attachments included) for a folder's
-/// unread + recent messages into the store, so opening them is instant and they
-/// read offline. Reuses one connection: SELECT + SEARCH once, then UID FETCH
-/// each pending UID. Skips messages whose body is already cached, so repeat runs
-/// converge to a cheap SEARCH; a run cut short (timeout) resumes on the next
-/// trigger since saved bodies persist. Layered over the on-demand reader, which
-/// still handles anything opened before the prefetcher reaches it.
-async fn prefetch_bodies(
-    engine: &Arc<Engine>,
-    account: &str,
-    folder: &str,
-) -> anyhow::Result<usize> {
-    engine
-        .with_read_session(account, |session| {
-            let engine = engine.clone();
-            let account = account.to_string();
-            let folder = folder.to_string();
-            Box::pin(async move {
-                let uids = imap::search_prefetch_uids(session, &folder, PREFETCH_DAYS).await?;
-
-                let pending: Vec<u32> = {
-                    let db = engine.db.lock().unwrap();
-                    uids.into_iter()
-                        .filter(|uid| {
-                            store::has_message(&db, &account, &folder, *uid).unwrap_or(false)
-                                && !store::has_cached_body(&db, &account, &folder, *uid)
-                                    .unwrap_or(false)
-                        })
-                        .collect()
-                };
-
-                let mut fetched = 0usize;
-                for uid in pending {
-                    let media = parse::MediaCtx {
-                        root: parse::media_root(),
-                        account: account.to_string(),
-                        folder: folder.to_string(),
-                        uid,
-                    };
-                    // peek = true: warming bodies must not flip unread mail to read.
-                    match imap::fetch_full_message(session, uid, &media, true).await {
-                        Ok(Some(message)) => {
-                            let db = engine.db.lock().unwrap();
-                            let _ =
-                                store::save_cached_message(&db, &account, &folder, uid, &message);
-                            fetched += 1;
-                        }
-                        // Vanished between SEARCH and FETCH (e.g. moved/expunged): skip.
-                        Ok(None) => {}
-                        // Background warming: log and keep going so one bad message
-                        // doesn't abort the whole backlog.
-                        Err(e) => eprintln!("meron-core: prefetch {folder} uid {uid}: {e:#}"),
-                    }
-                }
-                anyhow::Ok(fetched)
-            })
-        })
-        .await
-}
-
-/// Warm a folder's bodies in the background (deduped per account/folder). Stays
-/// silent: this is an optimization, so failures go to stderr rather than
-/// surfacing as UI error toasts. The stored data it fills is observed lazily when the
-/// user opens a message.
-fn spawn_body_prefetch(engine: Arc<Engine>, account: String, folder: String) {
-    if engine.is_paused(&account) {
+    // Synthetic `uid:` keys (drafts / headerless messages) have no References to
+    // chase.
+    if thread_key.starts_with("uid:") {
         return;
     }
-    let key = format!("body:{account}/{folder}");
-    if !engine.syncing.lock().unwrap().insert(key.clone()) {
+
+    let gaps = {
+        let db = engine.db.lock().unwrap();
+        match store::get_thread_reference_gaps(&db, account, thread_key) {
+            Ok(gaps) => gaps,
+            Err(err) => {
+                eprintln!("meron-core: thread reference gaps thread_key={thread_key}: {err:#}");
+                return;
+            }
+        }
+    };
+    if gaps.is_empty() {
         return;
     }
+
+    // Keep only ids not tried yet this session; record them as tried up front so
+    // a second open (or a concurrent one) before this finishes won't re-spawn.
+    let cache_key = format!("{account}|{thread_key}");
+    let has_new = {
+        let mut attempts = engine.gap_attempts.lock().unwrap();
+        let tried = attempts.entry(cache_key).or_default();
+        let mut has_new = false;
+        for id in &gaps {
+            if tried.insert(id.clone()) {
+                has_new = true;
+            }
+        }
+        has_new
+    };
+    if !has_new {
+        return;
+    }
+
+    let engine = engine.clone();
+    let out = out.clone();
+    let account = account.to_string();
+    let thread_key = thread_key.to_string();
     tokio::spawn(async move {
-        let result = tokio::time::timeout(
-            Duration::from_secs(600),
-            prefetch_bodies(&engine, &account, &folder),
-        )
-        .await;
-        engine.syncing.lock().unwrap().remove(&key);
-        match result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => eprintln!("meron-core: prefetch {folder}: {e:#}"),
-            // Partial progress persisted; the next trigger resumes the rest.
-            Err(_) => eprintln!("meron-core: prefetch {folder}: timed out (will resume)"),
+        match fill_thread_gaps(&engine, &account, &thread_key).await {
+            Ok(true) => {
+                emit(
+                    &out,
+                    "mail.synced",
+                    json!({ "account": account, "folder": "inbox", "synced": 0 }),
+                )
+                .await;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                eprintln!("meron-core: fill thread gaps thread_key={thread_key}: {err:#}");
+            }
         }
     });
 }
 
-/// Canonicalize folder names so "inbox"/"INBOX" map to one store key + mailbox.
-fn canon_folder(folder: &str) -> String {
-    if folder.eq_ignore_ascii_case("inbox") {
-        "INBOX".to_string()
-    } else {
-        folder.to_string()
-    }
-}
 
 /// Refresh a folder's messages from IMAP in the background (deduped), then emit
 /// `mail.synced` so the UI re-reads the now-fresh store. Keeps network I/O off
@@ -891,6 +239,7 @@ fn spawn_message_sync(
     });
 }
 
+
 /// Re-fetch an RSS account's feeds in the background (deduped, blocking pool),
 /// then emit `mail.synced` so the UI re-reads the refreshed store.
 fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
@@ -967,6 +316,7 @@ fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
     });
 }
 
+
 fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
     if engine.is_paused(&account) {
         return;
@@ -1008,7 +358,9 @@ fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
     });
 }
 
+
 const IDLE_LIMIT: u32 = 50;
+
 
 /// Unread messages in the UID range that appeared during the last sync.
 /// Startup syncs can advance UIDNEXT for messages that were already read on the
@@ -1018,7 +370,7 @@ fn new_unread_inbox_summary(
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
-) -> Option<(u32, crate::imap::MessageHeader)> {
+) -> Option<(u32, imap::MessageHeader)> {
     if uid_next_before == 0 || uid_next_after <= uid_next_before {
         return None;
     }
@@ -1038,7 +390,7 @@ fn new_unread_inbox_summary(
             rusqlite::params![account, uid_next_before as i64, uid_next_after as i64],
             |row| {
                 let uid = row.get(0)?;
-                Ok(crate::imap::MessageHeader {
+                Ok(imap::MessageHeader {
                     uid,
                     subject: row.get(1)?,
                     from_name: row.get(2)?,
@@ -1059,6 +411,7 @@ fn new_unread_inbox_summary(
     let latest = headers.first()?.clone();
     Some((headers.len() as u32, latest))
 }
+
 
 /// Newest stored RSS item for an account, or None if the store is empty
 /// or the query fails. Used to enrich `mail.newMessages` with the latest
@@ -1089,6 +442,7 @@ fn latest_rss_header(engine: &Arc<Engine>, account: &str) -> Option<(String, Str
     .ok()
 }
 
+
 /// Friendly display name or email address of an account for user-facing notifications.
 fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     let db = engine.db.lock().unwrap();
@@ -1112,15 +466,17 @@ fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     account.to_string()
 }
 
+
 /// Friendly sender label: the From display name if present, else the address,
 /// else an empty string. Mirrors how the message list renders the From column.
-fn display_from(h: &crate::imap::MessageHeader) -> String {
+fn display_from(h: &imap::MessageHeader) -> String {
     let name = h.from_name.trim();
     if !name.is_empty() {
         return name.to_string();
     }
     h.from_addr.trim().to_string()
 }
+
 
 /// Cached UIDNEXT for an account's INBOX (0 if unknown). Used to detect whether
 /// an IDLE wake brought new mail (UIDNEXT advanced) or only a flag change.
@@ -1133,9 +489,11 @@ fn inbox_uid_next(engine: &Arc<Engine>, account: &str) -> u32 {
         .unwrap_or(0)
 }
 
+
 fn watch_key(account: &str, folder: &str) -> String {
     format!("{account}\n{folder}")
 }
+
 
 fn start_idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: String) -> bool {
     let key = watch_key(&account, &folder);
@@ -1149,6 +507,7 @@ fn start_idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
     tokio::spawn(idle_watch(engine, out, account, folder));
     true
 }
+
 
 /// Long-lived per-account/folder IDLE watcher. Reconnects with backoff on error
 /// so a dropped connection or server timeout resumes pushing updates.
@@ -1186,6 +545,7 @@ async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String, folder: S
         }
     }
 }
+
 
 /// Sync `folder` and surface the result to the UI: a "new mail" toast when
 /// INBOX's UIDNEXT advanced (genuine arrivals), otherwise a silent refresh.
@@ -1255,6 +615,7 @@ async fn sync_and_notify(
     Ok(())
 }
 
+
 /// One IDLE connection lifecycle: hold a dedicated session on one mailbox, and
 /// on each server notification refresh that folder in the store.
 async fn idle_once(
@@ -1321,10 +682,11 @@ async fn idle_once(
     }
 }
 
+
 #[tokio::main]
 async fn main() {
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
-    let engine = match Engine::new() {
+    let engine = match Engine::new(Box::new(DesktopHost)) {
         Ok(engine) => Arc::new(engine),
         Err(e) => {
             emit(
@@ -1383,6 +745,7 @@ async fn main() {
     }
 }
 
+
 async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
     match dispatch(&engine, &req, out).await {
         Ok(value) => respond(out, req.id, value).await,
@@ -1394,6 +757,7 @@ async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
         }
     }
 }
+
 
 async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
     let p = &req.params;
@@ -2783,12 +2147,14 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
     }
 }
 
+
 /// Decode an opaque RSS pagination cursor `"ts:<i64>:<item_key>"`.
 fn parse_rss_cursor(raw: &str) -> Option<(i64, String)> {
     let rest = raw.strip_prefix("ts:")?;
     let (ts, key) = rest.split_once(':')?;
     Some((ts.parse().ok()?, key.to_string()))
 }
+
 
 /// Mail list cursor: `date:<epoch>:<uid>` — the (send time, uid) keyset of the
 /// last row of the previous page (see `store::get_recent_page`).
@@ -2798,10 +2164,12 @@ fn parse_mail_cursor(raw: &str) -> Option<(i64, u32)> {
     Some((date.parse().ok()?, uid.parse().ok()?))
 }
 
+
 /// Whether an account is RSS-backed (vs mail), per its row in the unified DB.
 fn is_rss(engine: &Arc<Engine>, account: &str) -> anyhow::Result<bool> {
     Ok(store::account_engine(&engine.db.lock().unwrap(), account)?.as_deref() == Some("rss"))
 }
+
 
 fn req_str(params: &Value, key: &str) -> anyhow::Result<String> {
     params
@@ -2811,12 +2179,14 @@ fn req_str(params: &Value, key: &str) -> anyhow::Result<String> {
         .ok_or_else(|| anyhow::anyhow!("missing string param: {key}"))
 }
 
+
 fn req_bool(params: &Value, key: &str) -> anyhow::Result<bool> {
     params
         .get(key)
         .and_then(Value::as_bool)
         .ok_or_else(|| anyhow::anyhow!("missing bool param: {key}"))
 }
+
 
 fn req_u16(params: &Value, key: &str) -> anyhow::Result<u16> {
     params
@@ -2826,6 +2196,7 @@ fn req_u16(params: &Value, key: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("missing number param: {key}"))
 }
 
+
 fn req_u32(params: &Value, key: &str) -> anyhow::Result<u32> {
     params
         .get(key)
@@ -2833,6 +2204,7 @@ fn req_u32(params: &Value, key: &str) -> anyhow::Result<u32> {
         .map(|n| n as u32)
         .ok_or_else(|| anyhow::anyhow!("missing number param: {key}"))
 }
+
 
 fn req_str_array(params: &Value, key: &str) -> anyhow::Result<Vec<String>> {
     let arr = params
@@ -2849,6 +2221,7 @@ fn req_str_array(params: &Value, key: &str) -> anyhow::Result<Vec<String>> {
     }
     Ok(out)
 }
+
 
 /// IMAP APPEND a freshly-sent message to the account's Sent folder, with
 /// `\Seen`. Best-effort: callers log and ignore errors so SMTP success doesn't
@@ -2898,293 +2271,6 @@ fn resolve_send_from(
     (creds.user.clone(), sender_name)
 }
 
-async fn append_to_sent(engine: &Arc<Engine>, account: &str, raw: &[u8]) -> anyhow::Result<()> {
-    // APPEND is mutating, so this never auto-retries (a drop after the server
-    // accepted the message must not re-APPEND a duplicate copy).
-    let (sent, batch) = engine
-        .with_write_session(account, |session| {
-            let raw = raw.to_vec();
-            Box::pin(async move {
-                let sent = imap::find_sent_folder(session)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("no Sent folder found"))?;
-                imap::append_to_sent(session, &sent, &raw).await?;
-                // Refresh local Sent-folder envelopes so the new row is queryable
-                // by the cross-folder thread view immediately. A small limit is
-                // enough — the server delivers our just-APPENDed message at the
-                // highest UID.
-                let batch = imap::fetch_recent(session, &sent, 20).await?;
-                anyhow::Ok((sent, batch))
-            })
-        })
-        .await?;
-    {
-        let db = engine.db.lock().unwrap();
-        store::upsert_messages(&db, account, &sent, &batch.messages)?;
-        store::set_folder_state(&db, account, &sent, batch.uidvalidity, batch.uid_next)?;
-    }
-
-    Ok(())
-}
-
-async fn append_to_drafts(
-    engine: &Arc<Engine>,
-    account: &str,
-    raw: &[u8],
-    message_id: &str,
-) -> anyhow::Result<()> {
-    // replace_draft APPENDs the new draft and expunges the prior copy; mutating,
-    // so it never auto-retries.
-    engine
-        .with_write_session(account, |session| {
-            let raw = raw.to_vec();
-            let message_id = message_id.to_string();
-            Box::pin(async move {
-                let drafts = imap::find_drafts_folder(session)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-                imap::replace_draft(session, &drafts, &raw, &message_id).await
-            })
-        })
-        .await?;
-    Ok(())
-}
-
-/// Fetch a thread's referenced-but-unsynced ancestor messages from the server
-/// and cache them, so the reader shows the whole conversation rather than the
-/// locally-synced tail. No-op when nothing is missing (the common case), so a
-/// normal thread open pays no network cost. Searches INBOX and Sent first —
-/// where the recent-sync assigns stable UIDs, so re-finding an already-cached
-/// message updates it in place rather than duplicating it — then the all-mail /
-/// archive folder for messages that live only there.
-/// Fetch any referenced-but-missing ancestor messages for a thread over IMAP and
-/// persist them. Returns `true` if at least one message was newly stored, so the
-/// caller can refresh the open thread. Opens a network connection — call it off
-/// the read path (see [`maybe_spawn_fill_thread_gaps`]).
-async fn fill_thread_gaps(
-    engine: &Arc<Engine>,
-    account: &str,
-    thread_key: &str,
-) -> anyhow::Result<bool> {
-    let remaining = {
-        let db = engine.db.lock().unwrap();
-        store::get_thread_reference_gaps(&db, account, thread_key)?
-    };
-    if remaining.is_empty() {
-        return Ok(false);
-    }
-
-    // IMAP-read-only (SEARCH + FETCH); upserts are idempotent, so the whole loop
-    // is safe to retry on a stale pooled connection. `remaining` is cloned per
-    // invocation so a retry starts from the full gap set.
-    engine
-        .with_read_session(account, |session| {
-            let engine = engine.clone();
-            let account = account.to_string();
-            let mut remaining = remaining.clone();
-            Box::pin(async move {
-                let mut persisted = false;
-                let mut folders = vec!["INBOX".to_string()];
-                if let Ok(Some(sent)) = imap::find_sent_folder(session).await {
-                    folders.push(sent);
-                }
-                if let Ok(Some(archive)) = imap::find_archive_folder(session).await {
-                    folders.push(archive);
-                }
-
-                let media_root = parse::media_root();
-                for folder in folders {
-                    if remaining.is_empty() {
-                        break;
-                    }
-                    let found = match imap::fetch_by_message_ids(
-                        session,
-                        &folder,
-                        &remaining,
-                        &media_root,
-                        &account,
-                    )
-                    .await
-                    {
-                        Ok(found) => found,
-                        Err(err) => {
-                            eprintln!("meron-core: fetch_by_message_ids folder={folder}: {err:#}");
-                            continue;
-                        }
-                    };
-                    if found.is_empty() {
-                        continue;
-                    }
-                    let mut found_ids: HashSet<String> = HashSet::new();
-                    {
-                        let db = engine.db.lock().unwrap();
-                        for fm in &found {
-                            // Header row first (writes thread_key etc.), then the
-                            // body row (writes body/json) — both keyed on
-                            // (account, folder, uid).
-                            let _ = store::upsert_messages(
-                                &db,
-                                &account,
-                                &folder,
-                                std::slice::from_ref(&fm.header),
-                            );
-                            let _ = store::save_cached_message(
-                                &db,
-                                &account,
-                                &folder,
-                                fm.header.uid,
-                                &fm.message,
-                            );
-                            persisted = true;
-                            let mid = fm.message.message_id.trim().to_ascii_lowercase();
-                            if !mid.is_empty() {
-                                found_ids.insert(mid);
-                            }
-                        }
-                    }
-                    remaining.retain(|id| !found_ids.contains(id));
-                }
-                anyhow::Ok(persisted)
-            })
-        })
-        .await
-}
-
-/// Decide whether a thread has *new* ancestor gaps worth fetching, and if so
-/// run [`fill_thread_gaps`] in the background so the read it was called from
-/// returns immediately. Two guards keep this cheap:
-///   - the gap set is computed from the local DB (no network) before spawning;
-///   - a per-thread negative cache ([`Engine::gap_attempts`]) drops ids we've
-///     already tried this session, so re-opening a thread whose ancestors will
-///     never arrive (the common case) does no network work at all.
-/// When the fill actually stores something, it emits `mail.synced` so the open
-/// thread re-reads; the re-read sees no new gaps and won't reconnect.
-fn maybe_spawn_fill_thread_gaps(
-    engine: &Arc<Engine>,
-    out: &Writer,
-    account: &str,
-    thread_key: &str,
-) {
-    // Synthetic `uid:` keys (drafts / headerless messages) have no References to
-    // chase.
-    if thread_key.starts_with("uid:") {
-        return;
-    }
-
-    let gaps = {
-        let db = engine.db.lock().unwrap();
-        match store::get_thread_reference_gaps(&db, account, thread_key) {
-            Ok(gaps) => gaps,
-            Err(err) => {
-                eprintln!("meron-core: thread reference gaps thread_key={thread_key}: {err:#}");
-                return;
-            }
-        }
-    };
-    if gaps.is_empty() {
-        return;
-    }
-
-    // Keep only ids not tried yet this session; record them as tried up front so
-    // a second open (or a concurrent one) before this finishes won't re-spawn.
-    let cache_key = format!("{account}|{thread_key}");
-    let has_new = {
-        let mut attempts = engine.gap_attempts.lock().unwrap();
-        let tried = attempts.entry(cache_key).or_default();
-        let mut has_new = false;
-        for id in &gaps {
-            if tried.insert(id.clone()) {
-                has_new = true;
-            }
-        }
-        has_new
-    };
-    if !has_new {
-        return;
-    }
-
-    let engine = engine.clone();
-    let out = out.clone();
-    let account = account.to_string();
-    let thread_key = thread_key.to_string();
-    tokio::spawn(async move {
-        match fill_thread_gaps(&engine, &account, &thread_key).await {
-            Ok(true) => {
-                emit(
-                    &out,
-                    "mail.synced",
-                    json!({ "account": account, "folder": "inbox", "synced": 0 }),
-                )
-                .await;
-            }
-            Ok(false) => {}
-            Err(err) => {
-                eprintln!("meron-core: fill thread gaps thread_key={thread_key}: {err:#}");
-            }
-        }
-    });
-}
-
-async fn read_cached_or_fetch(
-    engine: &Arc<Engine>,
-    account: &str,
-    folder: &str,
-    uid: u32,
-) -> anyhow::Result<parse::Message> {
-    let media_root = parse::media_root();
-    let (cached, load_remote_images) = {
-        let db = engine.db.lock().unwrap();
-        let cached = store::get_cached_message(&db, account, folder, uid);
-        let load_remote = store::load_remote_images(&db, account).unwrap_or(false);
-        (cached, load_remote)
-    };
-
-    if let Ok(Some(mut msg)) = cached {
-        // Rows cached before the threading-header extraction landed have an
-        // empty `message_id`; refetch them so reply_to/cc/references populate.
-        // Real-world mail almost always carries a Message-ID, so emptiness is a
-        // reliable "pre-extraction cache" signal.
-        let needs_header_refetch = msg.message_id.is_empty();
-        if !needs_header_refetch && parse::cached_media_available(&media_root, &msg) {
-            attach_html(&mut msg, load_remote_images);
-            return Ok(msg);
-        }
-    }
-
-    let mut message = engine
-        .with_read_session(account, |session| {
-            let account = account.to_string();
-            let folder = folder.to_string();
-            let media_root = media_root.clone();
-            Box::pin(async move {
-                let media = parse::MediaCtx {
-                    root: media_root,
-                    account,
-                    folder: folder.clone(),
-                    uid,
-                };
-                imap::read_message(session, &folder, uid, &media).await
-            })
-        })
-        .await?;
-
-    {
-        let db = engine.db.lock().unwrap();
-        let _ = store::save_cached_message(&db, account, folder, uid, &message);
-    }
-
-    attach_html(&mut message, load_remote_images);
-    Ok(message)
-}
-
-/// Turn the stored HTML source into the iframe-ready `body_html` the reader's HTML
-/// mode renders: inject the remote-image CSP gated on the account setting. Plain
-/// messages have no HTML source, so this is a no-op for them.
-fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
-    if let Some(html) = message.body_html.take() {
-        message.body_html = Some(parse::prepare_html(&html, load_remote_images));
-    }
-}
 
 async fn write_line(out: &Writer, value: Value) {
     let mut line = value.to_string();
@@ -3194,65 +2280,18 @@ async fn write_line(out: &Writer, value: Value) {
     let _ = guard.flush().await;
 }
 
+
 async fn emit(out: &Writer, name: &str, detail: Value) {
     write_line(out, json!({ "event": name, "detail": detail })).await;
 }
+
 
 async fn respond(out: &Writer, id: u64, result: Value) {
     write_line(out, json!({ "id": id, "result": result })).await;
 }
 
+
 async fn respond_error(out: &Writer, id: u64, message: &str) {
     write_line(out, json!({ "id": id, "error": { "message": message } })).await;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{Pooled, pool_return, pool_take};
-    use std::collections::HashMap;
-    use std::time::{Duration, Instant};
-
-    const MAX_IDLE: Duration = Duration::from_secs(120);
-    const MAX_POOLED: usize = 3;
-
-    #[test]
-    fn take_returns_none_for_unknown_account() {
-        let mut map: HashMap<String, Vec<Pooled<u32>>> = HashMap::new();
-        assert_eq!(pool_take(&mut map, "a", Instant::now(), MAX_IDLE), None);
-    }
-
-    #[test]
-    fn return_then_take_round_trips_lifo() {
-        let mut map: HashMap<String, Vec<Pooled<u32>>> = HashMap::new();
-        let now = Instant::now();
-        pool_return(&mut map, "a", 1, now, MAX_POOLED);
-        pool_return(&mut map, "a", 2, now, MAX_POOLED);
-        // LIFO: the hottest (last returned) comes back first.
-        assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), Some(2));
-        assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), Some(1));
-        assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), None);
-    }
-
-    #[test]
-    fn return_drops_session_when_at_capacity() {
-        let mut map: HashMap<String, Vec<Pooled<u32>>> = HashMap::new();
-        let now = Instant::now();
-        for s in 0..(MAX_POOLED as u32 + 2) {
-            pool_return(&mut map, "a", s, now, MAX_POOLED);
-        }
-        assert_eq!(map["a"].len(), MAX_POOLED);
-    }
-
-    #[test]
-    fn take_evicts_sessions_idle_past_max_idle() {
-        let mut map: HashMap<String, Vec<Pooled<u32>>> = HashMap::new();
-        let now = Instant::now();
-        let stale = now.checked_sub(MAX_IDLE + Duration::from_secs(1)).unwrap();
-        // One stale entry, then a fresh one on top.
-        pool_return(&mut map, "a", 1, stale, MAX_POOLED);
-        pool_return(&mut map, "a", 2, now, MAX_POOLED);
-        // Fresh one is taken; the stale one underneath is evicted on the next take.
-        assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), Some(2));
-        assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), None);
-    }
-}

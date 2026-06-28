@@ -54,6 +54,37 @@ pub(crate) fn load_mobile_secret(conn: &rusqlite::Connection, account_id: &str) 
         .unwrap_or_default()
 }
 
+/// [`EngineHost`](crate::engine::EngineHost) for the mobile FFI: opens the
+/// app-private (optionally SQLCipher-keyed) store and persists per-account
+/// secrets in that DB rather than an OS keychain.
+pub(crate) struct MobileHost {
+    pub data_dir: String,
+}
+
+impl crate::engine::EngineHost for MobileHost {
+    fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+        let db_path = Path::new(self.data_dir.trim()).join("meron.db");
+        match mobile_db_key() {
+            Some(key) => store::open_at_keyed(&db_path, &key),
+            None => store::open_at(&db_path),
+        }
+    }
+
+    fn apply_secret(&self, conn: &rusqlite::Connection, account: &str, creds: &mut Creds) {
+        load_mobile_secret(conn, account).apply_to(creds);
+    }
+
+    fn store_secret(
+        &self,
+        conn: &rusqlite::Connection,
+        account: &str,
+        secrets: &Secrets,
+    ) -> anyhow::Result<()> {
+        let blob = serde_json::to_string(secrets)?;
+        store::upsert_secret(conn, account, &blob).map_err(|err| anyhow::anyhow!(err))
+    }
+}
+
 pub(crate) fn load_mobile_account_creds(
     conn: &rusqlite::Connection,
     account_id: &str,
