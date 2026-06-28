@@ -373,21 +373,38 @@ private fun MeronMobileScreenContent(
                                         threadKey = event.detailJson.jsonStringValue("threadKey"),
                                     )
                                 }
+                                val eventAccount = event.detailJson.jsonStringValue("account")
                                 scope.launch {
                                     syncCoreThreads(
                                         accountOverride = selectedCoreAccountId,
                                         folderOverride = selectedCoreFolder,
                                         syncFirst = false,
                                     )
+                                    refreshOpenThreadFor(eventAccount)
                                 }
                             }
                             "mail.synced" -> {
+                                val eventAccount = event.detailJson.jsonStringValue("account")
                                 scope.launch {
                                     syncCoreThreads(
                                         accountOverride = selectedCoreAccountId,
                                         folderOverride = selectedCoreFolder,
                                         syncFirst = false,
                                     )
+                                    refreshOpenThreadFor(eventAccount)
+                                }
+                            }
+                            "log" -> {
+                                // Surface Rust core logs through the platform logger
+                                // (os_log / Logcat); they'd otherwise be invisible
+                                // on device.
+                                val tag = "core/" + event.detailJson.jsonStringValue("tag")
+                                val message = event.detailJson.jsonStringValue("message")
+                                when (event.detailJson.jsonStringValue("level")) {
+                                    "DEBUG" -> Log.d(tag, message)
+                                    "INFO" -> Log.i(tag, message)
+                                    "WARN" -> Log.w(tag, message)
+                                    else -> Log.e(tag, message)
                                 }
                             }
                         }

@@ -106,9 +106,15 @@ where
     rt.block_on(future).map_err(|err| format!("{err:#}"))
 }
 
-/// Build and host the Engine for the foreground session (idempotent). The Engine
-/// holds its own DB connection and warm session pool for the lifetime of the
-/// foreground state.
+/// INBOX IDLE watches started by `engine.foreground` (as opposed to the opt-in
+/// live-mail-push feature). Tracked separately so `engine.background` tears down
+/// only its own watches and leaves any background live-push watches running.
+static ENGINE_OWNED_WATCHES: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+
+/// Build and host the Engine for the foreground session (idempotent), then start
+/// foreground IMAP IDLE on each active account's INBOX so new mail lands in the
+/// open view live. The Engine holds its own DB connection and warm session pool
+/// for the lifetime of the foreground state.
 fn engine_foreground() -> Result<Value, String> {
     let data_dir = MOBILE_CONFIG
         .lock()
@@ -118,23 +124,63 @@ fn engine_foreground() -> Result<Value, String> {
         .ok_or_else(|| "mobile core is not initialized".to_string())?;
     // Make sure the runtime is ready so the first routed op doesn't pay for it.
     engine_runtime().ok_or_else(|| "engine runtime unavailable".to_string())?;
-    let mut slot = ENGINE.lock().unwrap();
-    if slot.is_none() {
-        let host = Box::new(MobileHost { data_dir });
-        let engine = Engine::new(host).map_err(|err| format!("{err:#}"))?;
-        *slot = Some(Arc::new(engine));
+    {
+        let mut slot = ENGINE.lock().unwrap();
+        if slot.is_none() {
+            let host = Box::new(MobileHost {
+                data_dir: data_dir.clone(),
+            });
+            let engine = Engine::new(host).map_err(|err| format!("{err:#}"))?;
+            *slot = Some(Arc::new(engine));
+        }
     }
+    start_foreground_idle(&data_dir);
     Ok(json!({ "ok": true }))
 }
 
-/// Park the Engine for the background state: drop warm pooled sockets (the OS
-/// will freeze/reclaim them anyway) but keep the Engine (DB + creds) so the next
-/// foreground transition resumes instantly. IDLE teardown is added in Phase 3.
+/// Park the Engine for the background state: stop the foreground IDLE watches and
+/// drop warm pooled sockets (the OS freezes/reclaims them anyway). The Engine
+/// itself (DB + creds) is kept so the next foreground transition resumes fast.
 fn engine_background() -> Result<Value, String> {
+    let owned: Vec<(String, String)> = ENGINE_OWNED_WATCHES.lock().unwrap().drain(..).collect();
+    for (account, folder) in owned {
+        let _ = stop_mobile_idle_watch(&account, &folder);
+    }
     if let Some(engine) = ENGINE.lock().unwrap().as_ref() {
         engine.clear_all_pools();
     }
     Ok(json!({ "ok": true }))
+}
+
+/// Start INBOX IDLE for each active (non-RSS, non-paused, connected) account,
+/// recording the ones we actually started so `engine_background` can stop exactly
+/// those. Deduped against any existing watch (e.g. opt-in live push), which we
+/// leave alone.
+fn start_foreground_idle(data_dir: &str) {
+    let accounts = match mobile_db(data_dir) {
+        Ok(conn) => crate::store::load_accounts(&conn).unwrap_or_default(),
+        Err(_) => return,
+    };
+    let folder = "INBOX".to_string();
+    for (id, _creds) in accounts {
+        let skip = match mobile_db(data_dir) {
+            Ok(conn) => {
+                is_rss_account(&conn, &id).unwrap_or(false)
+                    || crate::store::account_paused(&conn, &id).unwrap_or(false)
+            }
+            Err(_) => true,
+        };
+        if skip {
+            continue;
+        }
+        if let Ok(result) = start_mobile_idle_watch(data_dir, id.clone(), folder.clone())
+            && result.get("already").and_then(Value::as_bool) != Some(true)
+            && result.get("rss").is_none()
+            && result.get("paused").is_none()
+        {
+            ENGINE_OWNED_WATCHES.lock().unwrap().push((id, folder.clone()));
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

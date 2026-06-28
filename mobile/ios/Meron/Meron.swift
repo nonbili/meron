@@ -20,6 +20,16 @@ struct Meron: App {
         coreProtocolVersion = Int32(RustCoreBridge.protocolVersion())
         IosBackgroundRefresh.register()
         IosBackgroundRefresh.schedule()
+        // Host the shared Engine for this (foreground) launch: warm session pool
+        // + foreground IMAP IDLE. Paused on background, resumed on return.
+        Self.engineLifecycle("engine.foreground")
+    }
+
+    /// Drive the core's foreground Engine lifecycle (warm pool + IDLE) from the
+    /// app's foreground/background transitions.
+    private static func engineLifecycle(_ method: String) {
+        let request = #"{"id":92,"method":"\#(method)","params":{}}"#
+        _ = RustCoreBridge.invokeJson(request)
     }
 
     var body: some Scene {
@@ -49,6 +59,12 @@ struct Meron: App {
                 // Refresh the visible mailbox right away on return from the
                 // background, instead of waiting out the remaining poll tick.
                 AppForegroundSignal.shared.signal()
+                Self.engineLifecycle("engine.foreground")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                // Park the Engine: stop foreground IDLE and drop warm sockets the
+                // OS would freeze anyway.
+                Self.engineLifecycle("engine.background")
             }
         }
     }

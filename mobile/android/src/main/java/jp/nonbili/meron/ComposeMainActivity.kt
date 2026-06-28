@@ -333,6 +333,26 @@ class ComposeMainActivity : ComponentActivity() {
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
     }
 
+    // Host the shared Engine (warm session pool + foreground IMAP IDLE) only while
+    // the activity is visible; park it (stop IDLE, drop pooled sockets) when it
+    // isn't. Off the main thread since foreground opens the DB and spawns IDLE.
+    override fun onStart() {
+        super.onStart()
+        engineLifecycle("engine.foreground")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        engineLifecycle("engine.background")
+    }
+
+    private fun engineLifecycle(method: String) {
+        if (!MeronCoreNative.isLoaded()) return
+        Thread {
+            MeronCoreNative.invokeJson("{\"id\":92,\"method\":\"$method\",\"params\":{}}")
+        }.start()
+    }
+
     fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
 
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl

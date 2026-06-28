@@ -656,6 +656,19 @@ internal suspend fun MeronMobileState.reloadCurrentThreadMessages() {
     messageCursor = page.nextCursor
 }
 
+// Re-read the open thread on a push/sync event so live IDLE updates (new mail,
+// or our own sent copy) appear in the conversation, not just the thread list.
+// Mirrors desktop's refreshOpenThread: skip when the event is for a different
+// account than the open thread (it may differ from the selected mailbox account
+// in unified / kanban / starred views).
+internal suspend fun MeronMobileState.refreshOpenThreadFor(eventAccount: String) {
+    val open = selectedCoreThread ?: return
+    if (eventAccount.isNotBlank() && open.accountId.isNotBlank() && open.accountId != eventAccount) {
+        return
+    }
+    runCatching { reloadCurrentThreadMessages() }
+}
+
 internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
