@@ -16,65 +16,48 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
     let requested_from = opt_str(params, "from");
     let attachments = parse_mobile_attachments(params)?;
 
-    with_mobile_db(data_dir, |conn| {
-        let creds = load_mobile_account_creds(&conn, &account_id)?;
-        if account_needs_reconnect(&creds) {
-            return Err(format!("account needs reconnect: {account_id}"));
-        }
-        let (from_addr, sender_name) =
-            resolve_mobile_send_from(&conn, &account_id, &creds, &requested_from);
-        let raw = run_mobile_async(smtp::send(
-            &creds,
-            &from_addr,
-            &sender_name,
-            &to,
-            &cc,
-            &bcc,
-            &subject,
-            &body,
-            &html,
-            &attachments,
-            &in_reply_to,
-            &references,
-            &reply_to,
-            &message_id,
-        ))?;
-        let sent_bytes = raw.len();
-        match run_mobile_async(async move {
-            let mut session = imap::connect(&creds).await?;
-            let sent = imap::find_sent_folder(&mut session)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("no Sent folder found"))?;
-            imap::append_to_sent(&mut session, &sent, &raw).await?;
-            // Refresh local Sent envelopes so the just-sent message is queryable
-            // by the cross-folder thread view immediately (mirrors desktop
-            // append_to_sent). The server delivers our APPENDed copy at the
-            // highest UID, so a small recent window is enough.
-            let batch = imap::fetch_recent(&mut session, &sent, 20).await?;
-            let _ = session.logout().await;
-            anyhow::Ok((sent, batch))
-        }) {
-            Ok((sent, batch)) => {
-                if let Err(err) =
-                    store::upsert_messages(&conn, &account_id, &sent, &batch.messages)
-                {
-                    eprintln!("meron-core: mobile Sent upsert failed for {account_id}: {err}");
-                }
-                let _ = store::ensure_folder(&conn, &account_id, &sent);
-                let _ = store::set_folder_state(
-                    &conn,
-                    &account_id,
-                    &sent,
-                    batch.uidvalidity,
-                    batch.uid_next,
-                );
-            }
-            Err(err) => {
-                eprintln!("meron-core: mobile APPEND to Sent failed for {account_id}: {err}");
-            }
-        }
-        Ok(json!({ "ok": true, "sent_bytes": sent_bytes }))
-    })
+    // Route through the shared Engine: reuses the warm session pool while
+    // foreground (no per-send TLS+LOGIN) and runs the same `append_to_sent` op
+    // as desktop (APPEND + refresh the Sent folder into the store), so the
+    // just-sent message is immediately queryable by the cross-folder thread view.
+    let engine = crate::ffi::engine_for(data_dir)?;
+    let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
+    if account_needs_reconnect(&creds) {
+        return Err(format!("account needs reconnect: {account_id}"));
+    }
+    let (from_addr, sender_name) = {
+        let conn = engine.db.lock().unwrap();
+        resolve_mobile_send_from(&conn, &account_id, &creds, &requested_from)
+    };
+    let raw = crate::ffi::engine_block_on(smtp::send(
+        &creds,
+        &from_addr,
+        &sender_name,
+        &to,
+        &cc,
+        &bcc,
+        &subject,
+        &body,
+        &html,
+        &attachments,
+        &in_reply_to,
+        &references,
+        &reply_to,
+        &message_id,
+    ))?;
+    let sent_bytes = raw.len();
+    if let Err(err) = crate::ffi::engine_block_on(crate::engine::append_to_sent(
+        &engine,
+        &account_id,
+        &raw,
+    )) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.send",
+            "APPEND to Sent failed for {account_id}: {err}"
+        );
+    }
+    Ok(json!({ "ok": true, "sent_bytes": sent_bytes }))
 }
 
 pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value, String> {
@@ -175,117 +158,60 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         .and_then(Value::as_bool)
         .unwrap_or(true);
 
-    with_mobile_db(data_dir, |conn| {
-        if is_rss_account(&conn, &account_id)? {
-            return sync_mobile_rss_with_conn(conn, account_id);
-        }
-        let creds = load_mobile_account_creds(&conn, &account_id)?;
-        if account_needs_reconnect(&creds) {
-            return Err(format!("account needs reconnect: {account_id}"));
-        }
+    // RSS accounts sync through the feed pipeline, not the IMAP engine.
+    let is_rss = with_mobile_db(data_dir, |conn| Ok(json!(is_rss_account(&conn, &account_id)?)))?;
+    if is_rss.as_bool() == Some(true) {
+        return with_mobile_db(data_dir, |conn| sync_mobile_rss_with_conn(conn, account_id));
+    }
 
-        let synced = run_mobile_async(async {
-            let mut session = imap::connect(&creds).await?;
-            let folders = if sync_folders {
-                imap::list_folders(&mut session).await?
-            } else {
-                Vec::new()
-            };
-            let batch = imap::fetch_recent(&mut session, &folder, limit).await?;
-            let flag_sync = imap::sync_flags(&mut session, &folder, 0, false).await.ok();
-            let server_uids = imap::list_all_uids(&mut session, &folder).await.ok();
-            // Also pull the Sent folder so outgoing messages — including ones sent
-            // from another client — surface in the cross-folder conversation view.
-            // The per-folder recent sync and the IDLE watcher only ever cover the
-            // open folder (IMAP IDLE watches a single selected mailbox), so without
-            // this the Sent envelopes never reach the local store.
-            let sent_folder = match folders.iter().find(|f| imap::looks_like_sent(&f.name)) {
-                Some(f) => Some(f.name.clone()),
-                None => imap::find_sent_folder(&mut session).await.ok().flatten(),
-            };
-            let sent_batch = match &sent_folder {
-                Some(sent) if !sent.eq_ignore_ascii_case(&folder) => {
-                    Some(imap::fetch_recent(&mut session, sent, limit).await?)
-                }
-                _ => None,
-            };
-            let _ = session.logout().await;
-            anyhow::Ok((folders, batch, flag_sync, server_uids, sent_folder, sent_batch))
-        })?;
+    // Route IMAP sync through the shared Engine: reuses the warm session pool
+    // while foreground and runs the same ops as desktop (sync_folders +
+    // sync_messages do fetch/upsert/prune/flag-reconcile into the store), so the
+    // two platforms can't drift.
+    let engine = crate::ffi::engine_for(data_dir)?;
+    let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
+    if account_needs_reconnect(&creds) {
+        return Err(format!("account needs reconnect: {account_id}"));
+    }
 
-        let (folders, batch, flag_sync, server_uids, sent_folder, sent_batch) = synced;
-        if let (Some(sent), Some(sent_batch)) = (sent_folder.as_ref(), sent_batch.as_ref()) {
-            let prior = store::get_folder_state(&conn, &account_id, sent)
-                .map_err(|err| err.to_string())?
-                .map(|(validity, _)| validity)
-                .unwrap_or(0);
-            if prior != 0 && prior != sent_batch.uidvalidity {
-                store::clear_folder_messages(&conn, &account_id, sent)
-                    .map_err(|err| err.to_string())?;
-            }
-            store::upsert_messages(&conn, &account_id, sent, &sent_batch.messages)
-                .map_err(|err| err.to_string())?;
-            store::ensure_folder(&conn, &account_id, sent).map_err(|err| err.to_string())?;
-            store::set_folder_state(
-                &conn,
-                &account_id,
-                sent,
-                sent_batch.uidvalidity,
-                sent_batch.uid_next,
-            )
-            .map_err(|err| err.to_string())?;
-        }
-        if sync_folders {
-            store::upsert_folders(&conn, &account_id, &folders).map_err(|err| err.to_string())?;
-        }
-        let prior_validity = store::get_folder_state(&conn, &account_id, &folder)
-            .map_err(|err| err.to_string())?
-            .map(|(validity, _)| validity)
-            .unwrap_or(0);
-        if prior_validity != 0 && prior_validity != batch.uidvalidity {
-            store::clear_folder_messages(&conn, &account_id, &folder)
-                .map_err(|err| err.to_string())?;
-        }
-        let count = batch.messages.len();
-        store::upsert_messages(&conn, &account_id, &folder, &batch.messages)
-            .map_err(|err| err.to_string())?;
-        store::ensure_folder(&conn, &account_id, &folder).map_err(|err| err.to_string())?;
-        if let Some(uids) = server_uids.as_ref() {
-            let validity_ok = prior_validity == 0 || prior_validity == batch.uidvalidity;
-            if validity_ok {
-                store::prune_missing_messages(&conn, &account_id, &folder, uids)
-                    .map_err(|err| err.to_string())?;
-            }
-        }
-        if let Some(flags) = flag_sync {
-            for (uid, seen, starred) in flags.changes {
-                store::update_message_seen(&conn, &account_id, &folder, uid, seen)
-                    .map_err(|err| err.to_string())?;
-                store::update_message_starred(&conn, &account_id, &folder, uid, starred)
-                    .map_err(|err| err.to_string())?;
-            }
-            if flags.highest_modseq > 0 {
-                store::set_folder_modseq(&conn, &account_id, &folder, flags.highest_modseq)
-                    .map_err(|err| err.to_string())?;
-            }
-        }
-        store::set_folder_state(
-            &conn,
+    let folders_count = if sync_folders {
+        crate::ffi::engine_block_on(crate::engine::sync_folders(&engine, &account_id))?.len()
+    } else {
+        0
+    };
+    let count = crate::ffi::engine_block_on(crate::engine::sync_messages(
+        &engine,
+        &account_id,
+        &folder,
+        limit,
+    ))?;
+
+    // Also pull the Sent folder so outgoing messages — including ones sent from
+    // another client — surface in the cross-folder conversation view. The
+    // per-folder recent sync only ever covers the open folder.
+    if let Some(sent) = crate::engine::cached_sent_folder(&engine, &account_id, &folder)
+        && !sent.eq_ignore_ascii_case(&folder)
+        && let Err(err) = crate::ffi::engine_block_on(crate::engine::sync_messages(
+            &engine,
             &account_id,
-            &folder,
-            batch.uidvalidity,
-            batch.uid_next,
-        )
-        .map_err(|err| err.to_string())?;
+            &sent,
+            limit,
+        ))
+    {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.sync",
+            "Sent sync failed for {account_id}: {err}"
+        );
+    }
 
-        Ok(json!({
-            "ok": true,
-            "account": account_id,
-            "folder": folder,
-            "synced": count,
-            "folders": folders.len(),
-        }))
-    })
+    Ok(json!({
+        "ok": true,
+        "account": account_id,
+        "folder": folder,
+        "synced": count,
+        "folders": folders_count,
+    }))
 }
 
 pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Value, String> {
@@ -411,6 +337,7 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         return read_mobile_rss_thread(data_dir, params);
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let headers = if let Some(uid) = parsed.uid {
             let header = store::get_thread_headers(
@@ -466,30 +393,32 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 missing.entry(folder).or_default().push(header.uid);
             }
         }
-        if !missing.is_empty()
-            && let Ok(creds) = load_mobile_account_creds(&conn, &parsed.account)
-            && !account_needs_reconnect(&creds)
-        {
+        if !missing.is_empty() {
+            // Fetch missing bodies through the Engine's warm session pool (with
+            // in-core OAuth refresh + stale-retry). Best-effort: a fetch failure
+            // still renders whatever is cached.
             let media_root = std::path::PathBuf::from(data_dir).join("attachments");
-            let fetched = run_mobile_async(async {
-                let mut session = imap::connect(&creds).await?;
-                let mut all = Vec::new();
-                for (folder, uids) in &missing {
-                    let bodies = imap::fetch_bodies(
-                        &mut session,
-                        folder,
-                        uids,
-                        media_root.clone(),
-                        &parsed.account,
-                    )
-                    .await?;
-                    for (uid, message) in bodies {
-                        all.push((folder.clone(), uid, message));
-                    }
-                }
-                let _ = session.logout().await;
-                anyhow::Ok(all)
-            });
+            let account = parsed.account.clone();
+            let fetched = crate::ffi::engine_block_on(engine.with_read_session(
+                &parsed.account,
+                move |session| {
+                    let missing = missing.clone();
+                    let media_root = media_root.clone();
+                    let account = account.clone();
+                    Box::pin(async move {
+                        let mut all = Vec::new();
+                        for (folder, uids) in &missing {
+                            let bodies =
+                                imap::fetch_bodies(session, folder, uids, media_root.clone(), &account)
+                                    .await?;
+                            for (uid, message) in bodies {
+                                all.push((folder.clone(), uid, message));
+                            }
+                        }
+                        anyhow::Ok(all)
+                    })
+                },
+            ));
             if let Ok(fetched) = fetched {
                 for (folder, uid, message) in fetched {
                     let _ =

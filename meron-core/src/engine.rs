@@ -104,11 +104,12 @@ pub fn pool_take<S>(
 }
 
 
-/// Trace connection-pool decisions to stderr when `MERON_POOL_DEBUG` is set.
-/// Off by default so production runs stay quiet.
+/// Trace connection-pool decisions when `MERON_POOL_DEBUG` is set. Off by
+/// default so production runs stay quiet. Routes through the logger so the trace
+/// is visible on mobile (os_log / Logcat), not just desktop stderr.
 pub fn pool_debug(account: &str, what: &str) {
     if std::env::var_os("MERON_POOL_DEBUG").is_some() {
-        eprintln!("meron-core: pool {what} account={account}");
+        crate::mlog!(crate::log::Level::Debug, "engine.pool", "{what} account={account}");
     }
 }
 
@@ -192,6 +193,19 @@ impl Engine {
 
     pub async fn ensure_valid_creds(&self, account: &str) -> anyhow::Result<imap::Creds> {
         let mut accounts = self.accounts.lock().await;
+        // Lazily hydrate accounts added out-of-band (the mobile host adds/edits
+        // accounts through the stateless command path, not this Engine, so a
+        // long-lived foreground Engine can miss them). A no-op on desktop, where
+        // the dispatch loop keeps `accounts` authoritative.
+        if !accounts.contains_key(account) {
+            let loaded = store::load_accounts(&self.db.lock().unwrap())
+                .ok()
+                .and_then(|rows| rows.into_iter().find(|(id, _)| id == account));
+            if let Some((id, mut creds)) = loaded {
+                self.host.apply_secret(&self.db.lock().unwrap(), &id, &mut creds);
+                accounts.insert(id, creds);
+            }
+        }
         let creds = accounts
             .get_mut(account)
             .ok_or_else(|| anyhow::anyhow!("account needs reconnect: {account}"))?;

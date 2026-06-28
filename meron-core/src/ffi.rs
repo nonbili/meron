@@ -74,17 +74,30 @@ fn engine_runtime() -> Option<&'static tokio::runtime::Runtime> {
 }
 
 /// A clone of the live Engine handle, if one is hosted (app is foreground).
-// Consumed by the mobile command handlers in Phase 2 (op routing).
-#[allow(dead_code)]
 pub(crate) fn current_engine() -> Option<Arc<Engine>> {
     ENGINE.lock().unwrap().clone()
 }
 
+/// The Engine to run a mobile command against: the warm hosted one while
+/// foreground, or a transient one (own connection, no pooling) built on demand
+/// for background/one-off calls (e.g. a `BGAppRefreshTask` sync before any
+/// foreground transition). Either way the command path is identical, so there is
+/// only one implementation to maintain.
+pub(crate) fn engine_for(data_dir: &str) -> Result<Arc<Engine>, String> {
+    if let Some(engine) = current_engine() {
+        return Ok(engine);
+    }
+    let host = Box::new(MobileHost {
+        data_dir: data_dir.to_string(),
+    });
+    Engine::new(host)
+        .map(Arc::new)
+        .map_err(|err| format!("{err:#}"))
+}
+
 /// Run an async engine op on the shared runtime, blocking the calling FFI thread
-/// until it completes. Used by the mobile command handlers once routed through
-/// the Engine.
-// Consumed by the mobile command handlers in Phase 2 (op routing).
-#[allow(dead_code)]
+/// until it completes. Used by the mobile command handlers routed through the
+/// Engine.
 pub(crate) fn engine_block_on<F, T>(future: F) -> Result<T, String>
 where
     F: std::future::Future<Output = anyhow::Result<T>>,
@@ -364,6 +377,15 @@ fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
     } else {
         Some(db_key.to_string())
     });
+    // Route core logs to the platform over the event channel; the host forwards
+    // `log` events to os_log / Logcat. Without this the core's logs (which use
+    // `eprintln!` on desktop) are invisible on device.
+    crate::log::set_sink(Box::new(|level, tag, message| {
+        let _ = emit_event(
+            "log",
+            json!({ "level": level.as_str(), "tag": tag, "message": message }),
+        );
+    }));
     serde_json::json!({
         "ok": true,
         "protocol": PROTOCOL_VERSION,
