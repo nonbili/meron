@@ -634,6 +634,28 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
     }
 }
 
+// Re-read the currently open thread and replace its message list with the
+// canonical copy from the core. Used after sending a quick reply so the stored
+// sent message replaces the optimistic one. Runs on ioDispatcher; guards against
+// the user having switched threads while the read was in flight.
+internal suspend fun MeronMobileState.reloadCurrentThreadMessages() {
+    val thread = selectedCoreThread ?: return
+    if (!coreLoaded) return
+    val response =
+        withContext(ioDispatcher) {
+            val client = MobileMailCommandClient(core)
+            if (threadIdIsRss(thread.id)) {
+                client.readRssThread(RssThreadParams(threadId = thread.id))
+            } else {
+                client.readThread(ThreadReadParams(threadId = thread.id))
+            }
+        }
+    if (selectedCoreThread?.id != thread.id) return
+    val page = parseThreadReadPage(response)
+    messages = page.messages
+    messageCursor = page.nextCursor
+}
+
 internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
     if (!coreLoaded) {
         status = "Rust core not packaged."

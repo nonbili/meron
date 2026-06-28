@@ -88,6 +88,15 @@ data class StorageUsage(
     val dbBytes: Long = 0,
 )
 
+// Send lifecycle for an optimistically inserted message. None covers both a
+// freshly synced message and a successfully sent one (which is replaced by its
+// canonical copy on re-fetch). Mirrors desktop's 'sending' | 'sent' | 'failed'.
+enum class SendStatus {
+    None,
+    Sending,
+    Failed,
+}
+
 data class MessageBody(
     val id: String,
     val folderId: String = "",
@@ -107,6 +116,7 @@ data class MessageBody(
     val starred: Boolean = false,
     val hasAttachments: Boolean = false,
     val attachments: List<MessageAttachment> = emptyList(),
+    val sendStatus: SendStatus = SendStatus.None,
 )
 
 data class DraftAttachment(

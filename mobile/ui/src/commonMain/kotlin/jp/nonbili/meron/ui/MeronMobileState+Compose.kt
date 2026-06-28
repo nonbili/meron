@@ -177,6 +177,7 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
+import jp.nonbili.meron.shared.SendStatus
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -487,34 +488,64 @@ internal fun MeronMobileState.sendQuickReply() {
         return
     }
     quickReplyFailure = ""
+    val account = coreAccounts.firstOrNull { it.id == accountId }
+    val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
+    val params =
+        parent.toReplyMailParams(
+            accountId = accountId,
+            body = replyBody,
+            from = replyFrom,
+            ownAddresses = ownAddressList(coreAccounts),
+            attachments = quickReplyAttachments,
+        )
+    // Render the sent bubble optimistically — before the send round-trip — so
+    // replying feels instant. The bubble shows a "Sending…" status until the
+    // canonical stored message replaces it on re-fetch; on failure it flips to
+    // "Failed" and stays visible so the reply isn't lost.
+    val tempId = "local-send-${currentTimeMillis()}"
+    val optimistic =
+        MessageBody(
+            id = tempId,
+            folderId = parent.folderId,
+            from = "You",
+            fromAddr = replyFrom.ifBlank { account?.email.orEmpty() },
+            to = params.to,
+            cc = params.cc,
+            subject = params.subject,
+            body = replyBody,
+            messageId = "",
+            references = params.references,
+            dateEpochSeconds = currentTimeMillis() / 1000,
+            hasAttachments = quickReplyAttachments.isNotEmpty(),
+            attachments =
+                quickReplyAttachments.map {
+                    MessageAttachment(filename = it.displayName, mimeType = it.mimeType, sizeBytes = it.sizeBytes)
+                },
+            sendStatus = SendStatus.Sending,
+        )
+    messages = messages + optimistic
+    quickReplyBody = ""
+    quickReplyAttachments = emptyList()
     status = "Sending reply..."
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                val replyFrom =
-                    coreAccounts
-                        .firstOrNull { it.id == accountId }
-                        ?.let { detectReplyFromIdentity(parent, it) }
-                        .orEmpty()
-                MobileMailCommandClient(core).send(
-                    parent.toReplyMailParams(
-                        accountId = accountId,
-                        body = replyBody,
-                        from = replyFrom,
-                        ownAddresses = ownAddressList(coreAccounts),
-                        attachments = quickReplyAttachments,
-                    ),
-                )
+                MobileMailCommandClient(core).send(params)
             }
         }.onSuccess {
-            quickReplyBody = ""
-            quickReplyAttachments = emptyList()
             quickReplyFailure = ""
             status = "Reply sent"
+            runCatching { reloadCurrentThreadMessages() }
+                .onFailure {
+                    // Keep the optimistic bubble (drop its "Sending…" status) if the
+                    // refresh fails; the send itself succeeded.
+                    messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.None) else it }
+                }
         }.onFailure {
             val message = it.message ?: "Send failed"
             quickReplyFailure = message
             status = "Reply failed: $message"
+            messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.Failed) else it }
         }
     }
 }

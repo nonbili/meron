@@ -1183,7 +1183,8 @@ func starredItemReaderMessage(for item: StarredItemSummary) -> MessageBody {
         unread: item.unread,
         starred: true,
         hasAttachments: false,
-        attachments: []
+        attachments: [],
+        sendStatus: .none
     )
 }
 
@@ -1206,7 +1207,8 @@ func starredKanbanReaderMessage(for thread: ThreadSummary) -> MessageBody {
         unread: thread.unread,
         starred: thread.starred,
         hasAttachments: false,
-        attachments: []
+        attachments: [],
+        sendStatus: .none
     )
 }
 

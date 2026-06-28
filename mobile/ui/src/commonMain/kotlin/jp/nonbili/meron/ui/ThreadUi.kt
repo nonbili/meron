@@ -183,6 +183,7 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
+import jp.nonbili.meron.shared.SendStatus
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
@@ -1146,6 +1147,26 @@ internal fun MessageBubble(
                         )
                     }
                 }
+            }
+            // Send lifecycle for an optimistically inserted reply: shown until the
+            // canonical sent message replaces it on re-fetch (which clears the
+            // status). On failure the bubble stays visible so the reply isn't lost.
+            when (message.sendStatus) {
+                SendStatus.Sending ->
+                    Text(
+                        "Sending…",
+                        modifier = Modifier.align(Alignment.End),
+                        fontSize = 10.5.sp,
+                        color = textColor.copy(alpha = 0.55f),
+                    )
+                SendStatus.Failed ->
+                    Text(
+                        "Failed to send",
+                        modifier = Modifier.align(Alignment.End),
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                SendStatus.None -> Unit
             }
         }
     }
