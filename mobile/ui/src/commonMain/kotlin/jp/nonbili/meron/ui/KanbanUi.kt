@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -99,6 +100,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -953,28 +955,43 @@ internal fun KanbanColumnDialog(
     accounts: List<AccountSummary>,
     board: KanbanBoardSpec?,
     foldersByAccount: Map<String, List<FolderSummary>>,
-    onAddColumn: (KanbanColumnSpec) -> Unit,
+    onApply: (List<KanbanColumnSpec>) -> Unit,
     onCreateFolder: (AccountSummary) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val selected =
-        board
-            ?.columns
-            .orEmpty()
-            .map(::kanbanColumnKey)
-            .toSet()
+    // Local multi-select state: tapping a row toggles it; nothing is applied to
+    // the board until "Done". Keyed by kanbanColumnKey so order is preserved
+    // for re-application.
+    val selected = remember(board) {
+        mutableStateMapOf<String, KanbanColumnSpec>().apply {
+            board?.columns.orEmpty().forEach { put(kanbanColumnKey(it), it) }
+        }
+    }
+    fun toggle(column: KanbanColumnSpec) {
+        val key = kanbanColumnKey(column)
+        if (selected.remove(key) == null) selected[key] = column
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("kanban.actions.addColumn")) },
         text = {
             LazyColumn(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 item {
+                    Text(
+                        tr("kanban.addColumnsHint"),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                item {
                     val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
                     SidebarLikeDialogRow(
                         selected = selected.contains(kanbanColumnKey(unified)),
                         title = tr("kanban.columns.unifiedInbox"),
                         subtitle = tr("kanban.allAccounts"),
-                        onClick = { onAddColumn(unified) },
+                        onClick = { toggle(unified) },
+                        leadingIcon = Icons.Filled.Inbox,
                     )
                 }
                 accounts.forEach { account ->
@@ -997,26 +1014,50 @@ internal fun KanbanColumnDialog(
                             }
                         }
                     }
+                    // Always surface folders that are already board columns, even if
+                    // they haven't been fetched into foldersByAccount yet — otherwise
+                    // existing columns can't be shown as selected or removed.
+                    val boardFolders =
+                        board
+                            ?.columns
+                            .orEmpty()
+                            .filter { it.accountId == account.id }
+                            .map { it.folderId }
+                    // Board folders first so existing columns keep their stored folderId
+                    // (folder name casing may differ from the fetched list, and the
+                    // selection key is case-sensitive).
                     val visibleFolders =
-                        if (folders.isEmpty()) {
-                            listOf(FolderSummary(account.id, INBOX_FOLDER, 0))
-                        } else {
-                            folders
+                        buildList {
+                            val seen = mutableSetOf<String>()
+                            (boardFolders + folders.map { it.name }).forEach { name ->
+                                if (seen.add(name.lowercase())) add(FolderSummary(account.id, name, 0))
+                            }
+                            if (isEmpty()) add(FolderSummary(account.id, INBOX_FOLDER, 0))
                         }
                     items(visibleFolders, key = { "${account.id}\n${it.name}" }) { folder ->
                         val column = KanbanColumnSpec(account.id, folder.name)
+                        val isRss = accountSummaryIsRss(account)
                         SidebarLikeDialogRow(
                             selected = selected.contains(kanbanColumnKey(column)),
                             title = folder.name.replaceFirstChar { it.uppercase() },
-                            subtitle = if (accountSummaryIsRss(account)) tr("feeds.fallbackName") else account.email,
-                            onClick = { onAddColumn(column) },
+                            subtitle = null,
+                            onClick = { toggle(column) },
+                            leadingIcon =
+                                when {
+                                    isRss -> Icons.Filled.RssFeed
+                                    folder.name.equals(INBOX_FOLDER, ignoreCase = true) -> Icons.Filled.Inbox
+                                    else -> Icons.Outlined.FolderOpen
+                                },
                         )
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(tr("buttons.done")) }
+            TextButton(onClick = { onApply(selected.values.toList()) }) { Text(tr("buttons.done")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) }
         },
     )
 }
@@ -1102,6 +1143,7 @@ internal fun SidebarLikeDialogRow(
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
+    leadingIcon: ImageVector? = null,
 ) {
     Row(
         Modifier
@@ -1112,6 +1154,15 @@ internal fun SidebarLikeDialogRow(
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                leadingIcon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -1128,6 +1179,15 @@ internal fun SidebarLikeDialogRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+        if (selected) {
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

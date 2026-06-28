@@ -94,7 +94,10 @@ internal class MeronMobileState(
     var conversationHtmlOverrides by mutableStateOf(emptyMap<String, Boolean>())
     var previousTopScreen by mutableStateOf(Screen.Mail)
     var composeReturnScreen by mutableStateOf(Screen.Mail)
-    var kanbanBoards by mutableStateOf(loadKanbanBoards(kanbanPrefs, emptyList()))
+    // Parse saved boards as-is here; the default board (seeded with the user's
+    // accounts) is created later in applyAccounts once accounts are available, so a
+    // fresh install gets per-account columns without re-seeding on every restart.
+    var kanbanBoards by mutableStateOf(parseKanbanBoards(kanbanPrefs.getString(KANBAN_BOARDS_PREF, "")))
     var activeKanbanBoardId by mutableStateOf(loadActiveKanbanBoardId(kanbanPrefs))
     var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
     var kanbanFilter by mutableStateOf(loadKanbanFilter(kanbanPrefs))
@@ -142,7 +145,17 @@ internal class MeronMobileState(
     var bcc by mutableStateOf("")
     var recipientSuggestionField by mutableStateOf("")
     var recipientSuggestions by mutableStateOf(emptyList<ContactSuggestion>())
-    var screen by mutableStateOf(Screen.Mail)
+    // Restore the last top-level screen on cold start; persist whenever the user
+    // navigates to a top-level screen so a restart returns to the same place.
+    private var screenState by mutableStateOf(loadLastTopScreen(prefs))
+    var screen: Screen
+        get() = screenState
+        set(value) {
+            screenState = value
+            if (value == Screen.Mail || value == Screen.Starred || value == Screen.Kanban) {
+                saveLastTopScreen(prefs, value)
+            }
+        }
     var errorBanner by mutableStateOf<String?>(null)
     var addSection by mutableStateOf(0)
     var notificationPermissionGranted by mutableStateOf(mobileHost.notificationsEnabled())

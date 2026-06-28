@@ -91,34 +91,14 @@ internal fun ensureKanbanDefaults(
     boards: List<KanbanBoardSpec>,
     accounts: List<jp.nonbili.meron.shared.AccountSummary>,
 ): List<KanbanBoardSpec> {
-    val next =
-        if (boards.isEmpty()) {
-            listOf(defaultKanbanBoard(accounts))
-        } else {
-            boards.mapIndexed { index, board ->
-                if (index != 0) {
-                    board
-                } else {
-                    val existing = board.columns.map(::kanbanColumnKey).toMutableSet()
-                    val columns = board.columns.toMutableList()
-                    val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                    if (existing.add(kanbanColumnKey(unified))) columns.add(0, unified)
-                    accounts.forEach { account ->
-                        val column = KanbanColumnSpec(account.id, INBOX_FOLDER)
-                        if (existing.add(kanbanColumnKey(column))) columns.add(column)
-                    }
-                    board.copy(columns = columns)
-                }
-            }
-        }
-    if (next != boards) saveKanbanBoards(prefs, next)
+    // Only seed default columns for a brand-new board. Existing boards are left
+    // exactly as the user arranged them — re-adding the unified inbox (or a
+    // per-account inbox) here would undo deliberate removals on every restart.
+    if (boards.isNotEmpty()) return boards
+    val next = listOf(defaultKanbanBoard(accounts))
+    saveKanbanBoards(prefs, next)
     return next
 }
-
-internal fun loadKanbanBoards(
-    prefs: AppPreferences,
-    accounts: List<jp.nonbili.meron.shared.AccountSummary>,
-): List<KanbanBoardSpec> = ensureKanbanDefaults(prefs, parseKanbanBoards(prefs.getString(KANBAN_BOARDS_PREF, "")), accounts)
 
 internal fun saveKanbanBoards(
     prefs: AppPreferences,

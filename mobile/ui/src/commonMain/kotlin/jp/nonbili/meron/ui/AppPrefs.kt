@@ -39,6 +39,30 @@ internal fun saveAppStringSet(
     value: Set<String>,
 ) = prefs.putStringSet(key, value.filter { it.isNotBlank() }.toSet())
 
+/**
+ * Restore the last top-level screen the user was on (Mail/Starred/Kanban only).
+ * Transient screens (Thread/Compose/AddAccount/Settings) are never persisted, so a
+ * cold start always lands on a navigable top-level screen.
+ */
+internal fun loadLastTopScreen(prefs: AppPreferences): Screen =
+    when (prefs.getString(LAST_TOP_SCREEN_PREF, "mail")) {
+        "starred" -> Screen.Starred
+        "kanban" -> Screen.Kanban
+        else -> Screen.Mail
+    }
+
+internal fun saveLastTopScreen(
+    prefs: AppPreferences,
+    screen: Screen,
+) = prefs.putString(
+    LAST_TOP_SCREEN_PREF,
+    when (screen) {
+        Screen.Starred -> "starred"
+        Screen.Kanban -> "kanban"
+        else -> "mail"
+    },
+)
+
 internal fun loadAppearanceMode(prefs: AppPreferences): AppAppearanceMode {
     val stored = prefs.getString(APPEARANCE_MODE_PREF, AppAppearanceMode.Indigo.storageValue)
     return AppAppearanceMode.entries.firstOrNull { it.storageValue == stored && it != AppAppearanceMode.System }

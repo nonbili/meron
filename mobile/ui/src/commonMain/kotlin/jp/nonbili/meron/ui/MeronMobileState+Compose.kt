@@ -744,6 +744,29 @@ internal fun MeronMobileState.addKanbanColumn(column: KanbanColumnSpec) {
     loadKanbanColumn(column, refresh = true)
 }
 
+/**
+ * Replace the active board's columns with [columns] (the selection from the add-column
+ * dialog), preserving the relative order of existing columns and appending new ones.
+ * Loads any newly added column and drops cached data for removed ones.
+ */
+internal fun MeronMobileState.applyKanbanColumns(columns: List<KanbanColumnSpec>) {
+    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    val deduped = columns.distinctBy(::kanbanColumnKey)
+    val nextKeys = deduped.map(::kanbanColumnKey).toSet()
+    val existingKeys = board.columns.map(::kanbanColumnKey).toSet()
+    if (nextKeys == existingKeys) return
+    // Keep existing columns in their current order, then append newly selected ones.
+    val ordered =
+        board.columns.filter { kanbanColumnKey(it) in nextKeys } +
+            deduped.filter { kanbanColumnKey(it) !in existingKeys }
+    persistKanbanBoards(
+        kanbanBoards.map { if (it.id == board.id) it.copy(columns = ordered) else it },
+    )
+    (existingKeys - nextKeys).forEach { kanbanColumns = kanbanColumns - it }
+    ordered.filter { kanbanColumnKey(it) !in existingKeys }
+        .forEach { loadKanbanColumn(it, refresh = true) }
+}
+
 internal fun MeronMobileState.removeKanbanColumn(column: KanbanColumnSpec) {
     val key = kanbanColumnKey(column)
     persistKanbanBoards(

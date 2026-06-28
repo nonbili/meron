@@ -1991,8 +1991,8 @@ private fun MeronMobileScreenContent(
                 accounts = coreAccounts,
                 board = activeKanbanBoard,
                 foldersByAccount = foldersByAccount,
-                onAddColumn = {
-                    addKanbanColumn(it)
+                onApply = {
+                    applyKanbanColumns(it)
                     showKanbanColumnDialog = false
                 },
                 onCreateFolder = {
