@@ -115,6 +115,13 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
 }
 
+tasks.register("generateI18n", Exec) {
+    description = "Regenerates localization catalogs from locales/*.json."
+    group = "build"
+    workingDir rootProject.projectDir.parentFile
+    commandLine "bun", "scripts/i18n/catalog.ts", "generate"
+}
+
 tasks.register("packageRustCoreAndroid", Exec) {
     description = "Builds meron-core for Android and copies libmeron_core.so into jniLibs."
     group = "build"
@@ -131,6 +138,7 @@ tasks.register("copyUiComposeResources", Copy) {
 }
 
 tasks.named("preBuild").configure {
+    dependsOn tasks.named("generateI18n")
     dependsOn tasks.named("copyUiComposeResources")
     if (project.hasProperty("packageRustCore")) {
         dependsOn tasks.named("packageRustCoreAndroid")

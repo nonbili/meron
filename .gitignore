@@ -5,6 +5,13 @@
 /frontend/wailsjs/
 /frontend/package.json.md5
 
+# Generated localization artifacts (source of truth: locales/*.json, see scripts/i18n/catalog.ts).
+/frontend/src/generated/locales.ts
+/mobile/android/src/main/res/values/strings.xml
+/mobile/android/src/main/res/values-*/strings.xml
+/mobile/android/src/main/java/jp/nonbili/meron/GeneratedIcuStrings.kt
+/mobile/ios/Meron/Localizable.xcstrings
+
 # Local binaries produced by ad-hoc `go build`.
 /meron
 

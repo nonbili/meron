@@ -141,6 +141,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000070 /* Build configuration list for PBXNativeTarget "Meron" */;
 			buildPhases = (
+				A10000000000000000000062 /* Generate i18n */,
 				A10000000000000000000060 /* Build MeronUI */,
 				A10000000000000000000061 /* Build meron-core */,
 				A10000000000000000000050 /* Sources */,
@@ -282,6 +283,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  export TARGET=\"aarch64-apple-ios\"\nelse\n  export TARGET=\"aarch64-apple-ios-sim\"\nfi\n\"$SRCROOT/../scripts/package-rust-core-ios.sh\"\n";
+		};
+		A10000000000000000000062 /* Generate i18n */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate i18n";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Meron/Localizable.xcstrings",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\"\nbun \"$SRCROOT/../../scripts/i18n/catalog.ts\" generate\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

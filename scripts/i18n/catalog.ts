@@ -24,7 +24,6 @@ const iosOutput = path.join(root, 'mobile', 'ios', 'Meron', 'Localizable.xcstrin
 type Catalog = Record<string, string>
 type Catalogs = Record<SupportedLocale, Catalog>
 type LocaleTarget = { android: string; ios: string }
-type Snapshot = Record<string, string | null>
 
 const pluralCategories = ['zero', 'one', 'two', 'few', 'many', 'other'] as const
 type PluralCategory = (typeof pluralCategories)[number]
@@ -83,8 +82,8 @@ const localeMap: Partial<Record<SupportedLocale, LocaleTarget>> = {
 
 function main() {
   const command = process.argv[2]
-  if (!command || !['validate', 'generate', 'check-generated'].includes(command)) {
-    console.error('Usage: bun scripts/i18n/catalog.ts <validate|generate|check-generated>')
+  if (!command || !['validate', 'generate'].includes(command)) {
+    console.error('Usage: bun scripts/i18n/catalog.ts <validate|generate>')
     process.exit(2)
   }
 
@@ -95,9 +94,6 @@ function main() {
   if (command === 'generate') {
     generateAll(catalogs)
     return
-  }
-  if (command === 'check-generated') {
-    checkGenerated(catalogs)
   }
 }
 
@@ -147,18 +143,6 @@ function generateAll(catalogs: Catalogs) {
   generateDesktop(catalogs)
   generateAndroid(catalogs)
   generateIos(catalogs)
-}
-
-function checkGenerated(catalogs: Catalogs) {
-  const before = snapshotGenerated()
-  generateAll(catalogs)
-  const after = snapshotGenerated()
-  const changed = Object.keys(after).filter((file) => before[file] !== after[file])
-  if (changed.length) {
-    throw new Error(
-      `Generated localization files were stale: ${changed.map((file) => path.relative(root, file)).join(', ')}`,
-    )
-  }
 }
 
 function generateDesktop(catalogs: Catalogs) {
@@ -332,18 +316,6 @@ function generateIos(catalogs: Catalogs) {
       2,
     )}\n`,
   )
-}
-
-function snapshotGenerated(): Snapshot {
-  const files = [desktopOutput, androidHelperOutput, iosOutput]
-  for (const locale of supportedLocales) {
-    files.push(path.join(androidResDir, androidLocaleDir(locale), 'strings.xml'))
-  }
-  const out: Snapshot = {}
-  for (const file of files) {
-    out[file] = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null
-  }
-  return out
 }
 
 function flattenObject(value: Record<string, unknown>, prefix = ''): Catalog {

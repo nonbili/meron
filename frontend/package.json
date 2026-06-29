@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "bun ../scripts/i18n/catalog.ts generate",
     "dev": "vite",
+    "prebuild": "bun ../scripts/i18n/catalog.ts generate",
     "build": "vite build",
     "preview": "vite preview",
     "test": "bun test",

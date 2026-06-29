@@ -42,6 +42,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
         working-directory: frontend
+      - name: Generate localization catalogs
+        run: bun scripts/i18n/catalog.ts generate
       - run: bun test
         working-directory: frontend
 

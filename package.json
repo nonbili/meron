@@ -8,7 +8,6 @@
     "generate": "wails generate module",
     "i18n:validate": "bun scripts/i18n/catalog.ts validate",
     "i18n:generate": "bun scripts/i18n/catalog.ts generate",
-    "i18n:check": "bun scripts/i18n/catalog.ts check-generated",
     "test": "bun run test:go && bun run test:rust && bun run test:i18n && bun run test:frontend",
     "test:go": "go test ./...",
     "test:rust": "cargo test --manifest-path meron-core/Cargo.toml",
