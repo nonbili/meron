@@ -35,6 +35,10 @@ pub struct Engine {
     /// open would re-open an IMAP connection to re-search for them. Cleared on
     /// restart, which lets a genuinely-late ancestor be retried.
     pub gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
+    /// Account/thread pairs whose Drafts folder has already been checked this
+    /// session. This keeps thread-open Drafts refreshes from looping after their
+    /// own `mail.synced` event while allowing a retry after app restart.
+    pub draft_thread_syncs: std::sync::Mutex<HashSet<String>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -170,6 +174,7 @@ impl Engine {
             watched: std::sync::Mutex::new(HashSet::new()),
             syncing: std::sync::Mutex::new(HashSet::new()),
             gap_attempts: std::sync::Mutex::new(HashMap::new()),
+            draft_thread_syncs: std::sync::Mutex::new(HashSet::new()),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
@@ -306,6 +311,13 @@ impl Engine {
     /// dodges the `MAX_IDLE` eviction. Clearing forces the next op to reconnect.
     pub fn clear_all_pools(&self) {
         self.pool.lock().unwrap().clear();
+    }
+
+    pub fn mark_thread_drafts_attempted(&self, account: &str, thread_key: &str) -> bool {
+        self.draft_thread_syncs
+            .lock()
+            .unwrap()
+            .insert(format!("{account}|{thread_key}"))
     }
 
     /// Run `f` against a warm pooled session when one is available, otherwise a
@@ -482,6 +494,28 @@ pub fn cached_sent_folder(engine: &Arc<Engine>, account: &str, inbox: &str) -> O
         .into_iter()
         .map(|folder| folder.name)
         .find(|name| imap::looks_like_sent(name) && !name.eq_ignore_ascii_case(inbox))
+}
+
+fn push_unique_folder(folders: &mut Vec<String>, folder: Option<String>) {
+    if let Some(folder) = folder
+        && !folders
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&folder))
+    {
+        folders.push(folder);
+    }
+}
+
+fn thread_gap_search_folders(
+    sent: Option<String>,
+    drafts: Option<String>,
+    archive: Option<String>,
+) -> Vec<String> {
+    let mut folders = vec!["INBOX".to_string()];
+    push_unique_folder(&mut folders, sent);
+    push_unique_folder(&mut folders, drafts);
+    push_unique_folder(&mut folders, archive);
+    folders
 }
 
 /// Search `account` for `query` across each of `folders` (typically Inbox +
@@ -855,7 +889,7 @@ pub async fn append_to_drafts(
 ) -> anyhow::Result<()> {
     // replace_draft APPENDs the new draft and expunges the prior copy; mutating,
     // so it never auto-retries.
-    engine
+    let (drafts, batch) = engine
         .with_write_session(account, |session| {
             let raw = raw.to_vec();
             let message_id = message_id.to_string();
@@ -863,10 +897,19 @@ pub async fn append_to_drafts(
                 let drafts = imap::find_drafts_folder(session)
                     .await?
                     .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-                imap::replace_draft(session, &drafts, &raw, &message_id).await
+                imap::replace_draft(session, &drafts, &raw, &message_id).await?;
+                // Refresh local Drafts envelopes so an autosaved reply appears in
+                // the existing cross-folder thread view immediately.
+                let batch = imap::fetch_recent(session, &drafts, 20).await?;
+                anyhow::Ok((drafts, batch))
             })
         })
         .await?;
+    {
+        let db = engine.db.lock().unwrap();
+        store::upsert_messages(&db, account, &drafts, &batch.messages)?;
+        store::set_folder_state(&db, account, &drafts, batch.uidvalidity, batch.uid_next)?;
+    }
     Ok(())
 }
 
@@ -875,8 +918,9 @@ pub async fn append_to_drafts(
 /// locally-synced tail. No-op when nothing is missing (the common case), so a
 /// normal thread open pays no network cost. Searches INBOX and Sent first —
 /// where the recent-sync assigns stable UIDs, so re-finding an already-cached
-/// message updates it in place rather than duplicating it — then the all-mail /
-/// archive folder for messages that live only there.
+/// message updates it in place rather than duplicating it — then Drafts for
+/// remote saved replies, then the all-mail / archive folder for messages that
+/// live only there.
 /// Fetch any referenced-but-missing ancestor messages for a thread over IMAP and
 /// persist them. Returns `true` if at least one message was newly stored, so the
 /// caller can refresh the open thread. Opens a network connection — call it off
@@ -904,13 +948,10 @@ pub async fn fill_thread_gaps(
             let mut remaining = remaining.clone();
             Box::pin(async move {
                 let mut persisted = false;
-                let mut folders = vec!["INBOX".to_string()];
-                if let Ok(Some(sent)) = imap::find_sent_folder(session).await {
-                    folders.push(sent);
-                }
-                if let Ok(Some(archive)) = imap::find_archive_folder(session).await {
-                    folders.push(archive);
-                }
+                let sent = imap::find_sent_folder(session).await.ok().flatten();
+                let drafts = imap::find_drafts_folder(session).await.ok().flatten();
+                let archive = imap::find_archive_folder(session).await.ok().flatten();
+                let folders = thread_gap_search_folders(sent, drafts, archive);
 
                 let media_root = parse::media_root();
                 for folder in folders {
@@ -1033,7 +1074,7 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Pooled, pool_return, pool_take};
+    use super::{Pooled, pool_return, pool_take, thread_gap_search_folders};
     use std::collections::HashMap;
     use std::time::{Duration, Instant};
 
@@ -1079,5 +1120,25 @@ mod tests {
         // Fresh one is taken; the stale one underneath is evicted on the next take.
         assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), Some(2));
         assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), None);
+    }
+
+    #[test]
+    pub fn thread_gap_search_folders_include_drafts_once_before_archive() {
+        let folders = thread_gap_search_folders(
+            Some("Sent".to_string()),
+            Some("Drafts".to_string()),
+            Some("[Gmail]/All Mail".to_string()),
+        );
+        assert_eq!(folders, vec!["INBOX", "Sent", "Drafts", "[Gmail]/All Mail"]);
+    }
+
+    #[test]
+    pub fn thread_gap_search_folders_dedup_case_insensitively() {
+        let folders = thread_gap_search_folders(
+            Some("inbox".to_string()),
+            Some("Drafts".to_string()),
+            Some("drafts".to_string()),
+        );
+        assert_eq!(folders, vec!["INBOX", "Drafts"]);
     }
 }
