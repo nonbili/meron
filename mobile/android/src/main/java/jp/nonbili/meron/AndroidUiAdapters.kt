@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.FileProvider
 import jp.nonbili.meron.ui.GoogleDeviceAccount
 import jp.nonbili.meron.ui.ManagedTokenRefresh
@@ -31,6 +32,24 @@ class AndroidPlatformServices(
 
     override fun openUrl(url: String) {
         activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    override fun openOAuthUrl(
+        url: String,
+        callbackScheme: String,
+        onCallback: (String) -> Unit,
+        onFailure: (String) -> Unit,
+    ) {
+        runCatching {
+            CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .build()
+                .launchUrl(activity, Uri.parse(url))
+        }.recoverCatching {
+            openUrl(url)
+        }.onFailure {
+            onFailure(it.message ?: "OAuth browser launch failed")
+        }
     }
 
     override fun copyText(

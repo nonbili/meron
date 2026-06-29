@@ -263,7 +263,6 @@ internal fun MeronMobileState.listAccounts() {
         }.onSuccess {
             applyAccounts(it)
             mobileHost.syncLiveMailPush(liveMailPushEnabled)
-            status = "Loaded accounts"
         }.onFailure {
             status = "Account list failed: ${it.message}"
         }
