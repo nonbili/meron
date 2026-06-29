@@ -1818,6 +1818,24 @@ private fun MeronMobileScreenContent(
                                 !initialAccountsLoaded ||
                                     accountsLoading ||
                                     (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded))
+                            LaunchedEffect(
+                                screen,
+                                initialAccountsLoaded,
+                                accountsLoading,
+                                coreAccounts.size,
+                                coreThreads.size,
+                                syncing,
+                                initialThreadsLoaded,
+                                selectedCoreAccountId,
+                                selectedCoreFolder,
+                            ) {
+                                if (screen == Screen.Mail) {
+                                    Log.i(
+                                        "MailLoad",
+                                        "render mail blocking=$showingBlockingInboxLoad initialAccountsLoaded=$initialAccountsLoaded accountsLoading=$accountsLoading accounts=${coreAccounts.size} threads=${coreThreads.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
+                                    )
+                                }
+                            }
                             PullToRefreshBox(
                                 isRefreshing = syncing && !showingBlockingInboxLoad,
                                 onRefresh = { syncCoreThreads() },

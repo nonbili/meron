@@ -20,9 +20,12 @@ class JniMeronCore : MeronCore {
         // Log command names and errors only — never payloads/responses, which
         // carry passwords and OAuth tokens.
         android.util.Log.i("MeronCore", "-> $command")
+        val startedAt = System.currentTimeMillis()
         val response = MeronCoreNative.invokeJson(CoreRequest(1, command, payloadJson).toJson())
         if (response.contains("\"error\"")) {
-            android.util.Log.w("MeronCore", "<- $command error: ${response.take(300)}")
+            android.util.Log.w("MeronCore", "<- $command error after ${System.currentTimeMillis() - startedAt}ms")
+        } else {
+            android.util.Log.i("MeronCore", "<- $command ok after ${System.currentTimeMillis() - startedAt}ms")
         }
         return response
     }

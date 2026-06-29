@@ -240,6 +240,12 @@ internal fun MeronMobileState.applyAccounts(
     accountJson = json
     val parsed = parseAccountListResponse(json)
     coreAccounts = parsed
+    // Account data is now in state. Mark accounts as loaded so the blocking
+    // inbox loader clears even on paths that bypass listAccounts() — e.g. the
+    // OAuth exchange after the custom-tab round-trip recreates the state with
+    // initialAccountsLoaded=false.
+    initialAccountsLoaded = true
+    accountsLoading = false
     selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
         ?: selectedCoreAccountId.takeIf { sel -> sel == UNIFIED_ACCOUNT_ID || parsed.any { it.id == sel } }
         ?: UNIFIED_ACCOUNT_ID
@@ -884,12 +890,18 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     // When syncFirst is false we read whatever the local (encrypted) store
     // already has — used on startup so the inbox shows instantly without a
     // server round-trip. Pull-to-sync / "Sync now" still fetch from server.
+    Log.i(
+        "MailLoad",
+        "loadAccountInbox start account=${account.id} requestedFolder=$requestedFolder syncFirst=$syncFirst beforeCursor=${beforeCursor?.isNotBlank() == true} query=${query.isNotBlank()} filter=${filter.protocolValue()}",
+    )
     if (syncFirst) {
         if (accountSummaryIsRss(account)) {
+            Log.i("MailLoad", "loadAccountInbox sync rss account=${account.id}")
             client.syncRss(SyncRssParams(accountId = account.id))
         } else {
             ensureManagedGoogleToken(client, account.id)
-            client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 50, folders = true))
+            Log.i("MailLoad", "loadAccountInbox sync mail account=${account.id} folder=$requestedFolder")
+            client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 250, folders = true))
         }
     }
     val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
@@ -902,6 +914,7 @@ internal suspend fun MeronMobileState.loadAccountInbox(
             ?: folders.firstOrNull { it.name.equals(INBOX_FOLDER, ignoreCase = true) }?.name
             ?: folders.firstOrNull()?.name
             ?: requestedFolder
+    Log.i("MailLoad", "loadAccountInbox folders account=${account.id} count=${folders.size} resolvedFolder=$folder")
     val threadsJson =
         client.listThreads(
             ThreadListParams(
@@ -913,6 +926,10 @@ internal suspend fun MeronMobileState.loadAccountInbox(
             ),
         )
     val page = parseThreadListPage(threadsJson)
+    Log.i(
+        "MailLoad",
+        "loadAccountInbox threads account=${account.id} folder=$folder count=${page.threads.size} cursor=${page.nextCursor.isNotBlank()}",
+    )
     return MailboxLoadResult(
         folders = folders,
         folder = folder,

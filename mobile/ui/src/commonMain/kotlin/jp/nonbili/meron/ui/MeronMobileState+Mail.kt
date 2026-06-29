@@ -324,6 +324,7 @@ internal fun MeronMobileState.syncCoreThreads(
             coreAccounts.filter { it.id == accountId }
         }
     if (selectedAccounts.isEmpty()) {
+        Log.w("MailLoad", "syncCoreThreads no selected accounts account=$accountId folder=$requestedFolder")
         status = if (accountId == UNIFIED_ACCOUNT_ID) "No accounts are included in Unified inbox." else "No account selected."
         initialThreadsLoaded = true
         return
@@ -331,6 +332,10 @@ internal fun MeronMobileState.syncCoreThreads(
     val requestKey = mailboxCacheKey(accountId, requestedFolder, query, filter)
     activeMailboxLoadKey = requestKey
     syncing = true
+    Log.i(
+        "MailLoad",
+        "sync start account=$accountId folder=$requestedFolder accounts=${selectedAccounts.size} syncFirst=$syncFirst query=${query.isNotBlank()} filter=${filter.protocolValue()}",
+    )
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
@@ -380,7 +385,10 @@ internal fun MeronMobileState.syncCoreThreads(
                             nextCursor = result.nextCursor,
                             accountCursors = result.accountCursors,
                         ))
-            if (activeMailboxLoadKey != requestKey) return@onSuccess
+            if (activeMailboxLoadKey != requestKey) {
+                Log.w("MailLoad", "sync ignored stale result account=$accountId folder=${result.folder} threads=${result.threads.size}")
+                return@onSuccess
+            }
             val wasInitialLoad = !initialThreadsLoaded
             val existingIds = coreThreads.map { it.id }.toSet()
             coreFolders = result.folders
@@ -403,13 +411,21 @@ internal fun MeronMobileState.syncCoreThreads(
             errorBanner = null
             val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
             status = if (newCount > 0) "$newCount new message(s)" else ""
+            Log.i(
+                "MailLoad",
+                "sync success account=$accountId folder=$folder threads=${parsedThreads.size} cursor=${mailboxCursor.isNotBlank()} accountCursors=${mailboxAccountCursors.size} initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing",
+            )
         }.onFailure {
-            if (activeMailboxLoadKey != requestKey) return@onFailure
+            if (activeMailboxLoadKey != requestKey) {
+                Log.w("MailLoad", "sync ignored stale failure account=$accountId", it)
+                return@onFailure
+            }
             activeMailboxLoadKey = null
             syncing = false
             initialThreadsLoaded = true
             errorBanner = it.message ?: "Sync failed"
             status = "Sync failed: ${it.message}"
+            Log.w("MailLoad", "sync failed account=$accountId folder=$requestedFolder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", it)
         }
     }
 }

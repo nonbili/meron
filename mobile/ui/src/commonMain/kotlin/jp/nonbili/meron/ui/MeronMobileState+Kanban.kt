@@ -340,7 +340,7 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
                 client.syncRss(SyncRssParams(accountId = account.id))
             } else {
                 ensureManagedGoogleToken(client, account.id)
-                client.sync(SyncMailParams(accountId = account.id, folderId = column.folderId, limit = 50, folders = true))
+                client.sync(SyncMailParams(accountId = account.id, folderId = column.folderId, limit = 250, folders = true))
             }
         }
         val folders = loadAccountFolders(client, account)

@@ -21,7 +21,7 @@ func (a *App) mailSync(payload map[string]any) (any, error) {
 		folder = "inbox"
 	}
 	engine := "meron_mail"
-	params := map[string]any{"account": accountID, "folder": folder, "limit": 50}
+	params := map[string]any{"account": accountID, "folder": folder, "limit": 250}
 	if isRSSAccountID(accountID) {
 		engine = "rss"
 		delete(params, "folder")

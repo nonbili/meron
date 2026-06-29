@@ -812,4 +812,3 @@ internal fun extractEmail(value: String): String? {
     val match = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).find(value)
     return match?.value?.trim()
 }
-
