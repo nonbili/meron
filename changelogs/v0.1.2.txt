@@ -1,0 +1,3 @@
+- Improve mail sync and load more
+- UI and performance fixes
+- Support spellcheck
