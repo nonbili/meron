@@ -180,14 +180,10 @@ import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
-import jp.nonbili.meron.shared.SyncMailParams
-import jp.nonbili.meron.shared.SyncRssParams
 import jp.nonbili.meron.shared.ThreadActionParams
-import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSendIdentities
-import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
@@ -215,7 +211,6 @@ import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
-import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
@@ -335,32 +330,14 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
         val account =
             coreAccounts.firstOrNull { it.id == column.accountId }
                 ?: return MailboxLoadResult(emptyList(), column.folderId, emptyList())
-        if (refresh) {
-            if (accountSummaryIsRss(account)) {
-                client.syncRss(SyncRssParams(accountId = account.id))
-            } else {
-                ensureManagedGoogleToken(client, account.id)
-                client.sync(SyncMailParams(accountId = account.id, folderId = column.folderId, limit = 250, folders = true))
-            }
-        }
-        val folders = loadAccountFolders(client, account)
-        val folder = folders.firstOrNull { it.name.equals(column.folderId, ignoreCase = true) }?.name ?: column.folderId
-        val threadsJson =
-            client.listThreads(
-                ThreadListParams(
-                    accountId = account.id,
-                    folderId = folder,
-                    query = columnQuery,
-                    filter = kanbanFilter.protocolValue(),
-                    beforeCursor = beforeCursor,
-                ),
-            )
-        val page = parseThreadListPage(threadsJson)
-        MailboxLoadResult(
-            folders = folders,
-            folder = folder,
-            threads = page.threads,
-            nextCursor = page.nextCursor,
+        loadAccountInbox(
+            client,
+            account,
+            column.folderId,
+            query = columnQuery,
+            filter = kanbanFilter,
+            syncFirst = refresh,
+            beforeCursor = beforeCursor,
         )
     }
 }

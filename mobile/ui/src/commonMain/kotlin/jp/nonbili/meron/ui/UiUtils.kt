@@ -129,6 +129,7 @@ internal fun FilterMode.emptyNoun(): String =
 internal fun List<ThreadSummary>.filteredKanbanThreads(
     filter: FilterMode,
     search: String,
+    searchAlreadyApplied: Boolean = false,
 ): List<ThreadSummary> {
     val query = search.trim().lowercase()
     return filter { thread ->
@@ -139,6 +140,7 @@ internal fun List<ThreadSummary>.filteredKanbanThreads(
                 FilterMode.Starred -> thread.starred
             }
         val queryOk =
+            searchAlreadyApplied ||
             query.isBlank() ||
                 thread.subject.lowercase().contains(query) ||
                 thread.sender.lowercase().contains(query) ||

@@ -29,6 +29,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -131,6 +133,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -322,6 +325,12 @@ internal fun KanbanHeaderSearchField(
                     value = search,
                     onValueChange = onSearchChange,
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions =
+                        KeyboardActions(
+                            onSearch = { onSearchSubmit() },
+                            onDone = { onSearchSubmit() },
+                        ),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
                     modifier =
                         Modifier
@@ -576,7 +585,12 @@ internal fun KanbanColumn(
 ) {
     val columnKey = kanbanColumnKey(column)
     val columnSearch = if (searchScope.ifBlank { "all" } == "all" || searchScope == columnKey) search else ""
-    val visibleThreads = state.threads.filteredKanbanThreads(filter, columnSearch)
+    val visibleThreads =
+        state.threads.filteredKanbanThreads(
+            filter = filter,
+            search = columnSearch,
+            searchAlreadyApplied = columnSearch.isNotBlank(),
+        )
     val canLoadMore = columnSearch.isBlank() && (state.nextCursor.isNotBlank() || state.accountCursors.isNotEmpty())
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     val showAccountBadge = column.accountId == UNIFIED_ACCOUNT_ID
