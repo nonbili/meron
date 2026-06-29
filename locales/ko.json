@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "측면 탐색에서 각 계정의 읽지 않은 받은 편지함 메시지 수를 오버레이합니다.",
   "settings.chooseWallpaperImage": "배경화면 이미지 선택",
   "settings.composer.sendMessageWith": "메시지 전송 방식",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter 키로 전송하고 Shift+Enter 키로 새 줄을 추가합니다.",
   "settings.composer.sendShortcutHint": "하드웨어 키보드 동작",
   "settings.composer.sendShortcutModHint": "{shortcut} 키로 전송하고 Enter 키로 새 줄을 추가합니다.",

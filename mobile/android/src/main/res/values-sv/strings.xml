@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Överlagrar ett antal olästa inkorgsmeddelanden på varje konto i sidnavigeringen.</string>
     <string name="settings_choose_wallpaper_image">Välj bakgrundsbild</string>
     <string name="settings_composer_send_message_with">Skicka meddelande med</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter skickar, Shift+Enter lägger till en ny rad.</string>
     <string name="settings_composer_send_shortcut_hint">Hårdvarutangentbords beteende</string>
     <string name="settings_danger_zone">Riskzon</string>

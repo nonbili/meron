@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Katab külgmisel navigeerimisribal iga konto lugemata postkasti kirjade arvu.</string>
     <string name="settings_choose_wallpaper_image">Valige taustapilt</string>
     <string name="settings_composer_send_message_with">Sõnumi saatmine klahviga</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter saadab, Shift+Enter lisab uue rea.</string>
     <string name="settings_composer_send_shortcut_hint">Riistvara klaviatuuri käitumine</string>
     <string name="settings_danger_zone">Ohutsoon</string>

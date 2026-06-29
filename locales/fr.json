@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Superpose le nombre de messages non lus dans la boîte de réception sur chaque compte dans la navigation latérale.",
   "settings.chooseWallpaperImage": "Choisir l'image du fond d'écran",
   "settings.composer.sendMessageWith": "Envoyer le message avec",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Entrée envoie, Maj+Entrée ajoute une nouvelle ligne.",
   "settings.composer.sendShortcutHint": "Comportement du clavier matériel",
   "settings.composer.sendShortcutModHint": "{shortcut} envoie, Entrée ajoute une nouvelle ligne.",

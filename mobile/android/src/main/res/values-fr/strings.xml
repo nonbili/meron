@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Superpose le nombre de messages non lus dans la boîte de réception sur chaque compte dans la navigation latérale.</string>
     <string name="settings_choose_wallpaper_image">Choisir l\'image du fond d\'écran</string>
     <string name="settings_composer_send_message_with">Envoyer le message avec</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Entrée envoie, Maj+Entrée ajoute une nouvelle ligne.</string>
     <string name="settings_composer_send_shortcut_hint">Comportement du clavier matériel</string>
     <string name="settings_danger_zone">Zone dangereuse</string>

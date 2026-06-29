@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "サイド ナビゲーションの各アカウントの未読受信トレイ メッセージの数をオーバーレイします。",
   "settings.chooseWallpaperImage": "壁紙画像を選択してください",
   "settings.composer.sendMessageWith": "メッセージの送信方法",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enterで送信、Shift+Enterで改行。",
   "settings.composer.sendShortcutHint": "ハードウェアキーボードの動作",
   "settings.composer.sendShortcutModHint": "{shortcut}で送信、Enterで改行。",

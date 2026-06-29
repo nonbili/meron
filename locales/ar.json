@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "يعرض عدد رسائل البريد الوارد غير المقروءة في كل حساب في شريط التنقل الجانبي.",
   "settings.chooseWallpaperImage": "اختر صورة خلفية",
   "settings.composer.sendMessageWith": "إرسال الرسالة باستخدام",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "مفتاح Enter يرسل، ومفتاحا Shift+Enter يضيفان سطرًا جديدًا.",
   "settings.composer.sendShortcutHint": "سلوك لوحة مفاتيح الأجهزة",
   "settings.composer.sendShortcutModHint": "{shortcut} يرسل، ومفتاح Enter يضيف سطرًا جديدًا.",

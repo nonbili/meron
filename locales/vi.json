@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Xếp chồng số lượng tin nhắn hộp thư đến chưa đọc trên mỗi tài khoản trong điều hướng bên cạnh.",
   "settings.chooseWallpaperImage": "Chọn hình nền",
   "settings.composer.sendMessageWith": "Gửi tin nhắn bằng",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Phím Enter để gửi, Shift+Enter để xuống dòng.",
   "settings.composer.sendShortcutHint": "Hành vi bàn phím phần cứng",
   "settings.composer.sendShortcutModHint": "{shortcut} để gửi, Enter để xuống dòng.",

@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">يعرض عدد رسائل البريد الوارد غير المقروءة في كل حساب في شريط التنقل الجانبي.</string>
     <string name="settings_choose_wallpaper_image">اختر صورة خلفية</string>
     <string name="settings_composer_send_message_with">إرسال الرسالة باستخدام</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">مفتاح Enter يرسل، ومفتاحا Shift+Enter يضيفان سطرًا جديدًا.</string>
     <string name="settings_composer_send_shortcut_hint">سلوك لوحة مفاتيح الأجهزة</string>
     <string name="settings_danger_zone">منطقة الخطر</string>

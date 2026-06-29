@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test'
-import { sanitizeKanbanBoards } from './settings'
+import { afterEach, describe, expect, it } from 'bun:test'
+import { hydrateSettings, sanitizeKanbanBoards, settings$ } from './settings'
 
 const baseBoard = {
   id: 'kb-1',
@@ -44,5 +44,29 @@ describe('sanitizeKanbanBoards', () => {
       const boards = sanitizeKanbanBoards([{ ...baseBoard, wallpaper }])
       expect(boards?.[0].wallpaper).toBeUndefined()
     }
+  })
+})
+
+describe('spellCheck setting', () => {
+  afterEach(() => {
+    settings$.spellCheck.set(true)
+  })
+
+  it('defaults spell check on', () => {
+    expect(settings$.spellCheck.get()).toBe(true)
+  })
+
+  it('hydrates a persisted spell check preference', () => {
+    hydrateSettings({ spell_check: false })
+    expect(settings$.spellCheck.get()).toBe(false)
+
+    hydrateSettings({ spell_check: true })
+    expect(settings$.spellCheck.get()).toBe(true)
+  })
+
+  it('ignores invalid persisted spell check values', () => {
+    settings$.spellCheck.set(false)
+    hydrateSettings({ spell_check: 'true' })
+    expect(settings$.spellCheck.get()).toBe(false)
   })
 })

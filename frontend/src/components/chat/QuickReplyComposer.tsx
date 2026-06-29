@@ -1,12 +1,14 @@
 import { Loader2, Maximize2, Paperclip, Send } from 'lucide-react'
+import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { compose$, openReplyInFullEditor } from '../../states/compose'
-import { sendShortcutLabel } from '../../states/settings'
+import { sendShortcutLabel, settings$ } from '../../states/settings'
 import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 
 export function QuickReplyComposer() {
   const { t } = useTranslation()
+  const spellCheck = useValue(settings$.spellCheck)
   const {
     composer,
     composerAttachments,
@@ -48,6 +50,7 @@ export function QuickReplyComposer() {
             onChange={(event) => compose$.composer.set(event.target.value)}
             placeholder={t('composer.placeholders.quickMessage')}
             rows={1}
+            spellCheck={spellCheck}
             className="flex-1 py-[7px] px-1 max-h-[254px] min-h-8.5 bg-transparent text-[15px] text-primary resize-none placeholder-secondary border-none outline-none leading-5"
             onKeyDown={handleComposerKeyDown}
             onPaste={handleComposerPaste}

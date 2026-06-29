@@ -43,6 +43,8 @@ export type Settings = {
   /** Whether to overlay an inbox unread-count badge on side navigation account avatars. */
   showUnreadAccountBadge: boolean
   sendShortcut: SendShortcut
+  /** Whether native spell checking is requested in composer prose fields. */
+  spellCheck: boolean
   /** Ordered user-created kanban boards. */
   kanbanBoards: KanbanBoard[]
   threadListWidth: number
@@ -72,6 +74,7 @@ const DB_KEY = {
   showRealAvatars: 'show_real_avatars',
   showUnreadAccountBadge: 'show_unread_account_badge',
   sendShortcut: 'send_shortcut',
+  spellCheck: 'spell_check',
   kanbanBoards: 'kanban_boards',
   threadListWidth: 'thread_list_width',
   kanbanPaneWidth: 'kanban_pane_width',
@@ -166,6 +169,7 @@ export const settings$ = observable<Settings>({
   showRealAvatars: false,
   showUnreadAccountBadge: false,
   sendShortcut: 'mod_enter',
+  spellCheck: true,
   kanbanBoards: [],
   threadListWidth: 350,
   kanbanPaneWidth: 33,
@@ -361,6 +365,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const sendShortcut = prefs[DB_KEY.sendShortcut]
     if (sendShortcut === 'enter' || sendShortcut === 'mod_enter') {
       settings$.sendShortcut.set(sendShortcut)
+    }
+
+    if (typeof prefs[DB_KEY.spellCheck] === 'boolean') {
+      settings$.spellCheck.set(prefs[DB_KEY.spellCheck] as boolean)
     }
 
     const boards = sanitizeKanbanBoards(prefs[DB_KEY.kanbanBoards])

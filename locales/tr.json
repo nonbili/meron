@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Yan gezinme panelinde her hesaptaki okunmamış gelen kutusu mesajlarının sayısını gösterir.",
   "settings.chooseWallpaperImage": "Duvar kağıdı resmini seçin",
   "settings.composer.sendMessageWith": "Mesajı Şununla Gönder",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter gönderir, Shift+Enter yeni satır ekler.",
   "settings.composer.sendShortcutHint": "Donanım klavye davranışı",
   "settings.composer.sendShortcutModHint": "{shortcut} gönderir, Enter yeni satır ekler.",

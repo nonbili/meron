@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Överlagrar ett antal olästa inkorgsmeddelanden på varje konto i sidnavigeringen.",
   "settings.chooseWallpaperImage": "Välj bakgrundsbild",
   "settings.composer.sendMessageWith": "Skicka meddelande med",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter skickar, Shift+Enter lägger till en ny rad.",
   "settings.composer.sendShortcutHint": "Hårdvarutangentbords beteende",
   "settings.composer.sendShortcutModHint": "{shortcut} skickar, Enter lägger till en ny rad.",

@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">サイド ナビゲーションの各アカウントの未読受信トレイ メッセージの数をオーバーレイします。</string>
     <string name="settings_choose_wallpaper_image">壁紙画像を選択してください</string>
     <string name="settings_composer_send_message_with">メッセージの送信方法</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enterで送信、Shift+Enterで改行。</string>
     <string name="settings_composer_send_shortcut_hint">ハードウェアキーボードの動作</string>
     <string name="settings_danger_zone">危険地帯</string>

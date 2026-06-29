@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Overlays a count of unread inbox messages on each account in the side navigation.",
   "settings.chooseWallpaperImage": "Choose wallpaper image",
   "settings.composer.sendMessageWith": "Send message with",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter sends, Shift+Enter adds a new line.",
   "settings.composer.sendShortcutHint": "Hardware keyboard behavior",
   "settings.composer.sendShortcutModHint": "{shortcut} sends, Enter adds a new line.",

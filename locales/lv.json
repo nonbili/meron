@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Sānu navigācijas joslā katrā kontā tiek pārklāts nelasīto iesūtnes ziņojumu skaits.",
   "settings.chooseWallpaperImage": "Izvēlieties fona attēlu",
   "settings.composer.sendMessageWith": "Sūtīt ziņojumu ar",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter nosūta, Shift+Enter pievieno jaunu rindu.",
   "settings.composer.sendShortcutHint": "Aparatūras tastatūras darbība",
   "settings.composer.sendShortcutModHint": "{shortcut} nosūta, Enter pievieno jaunu rindu.",

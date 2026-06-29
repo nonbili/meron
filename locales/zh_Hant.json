@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "在側邊導航中覆蓋每個帳戶上未讀收件匣訊息的計數。",
   "settings.chooseWallpaperImage": "選擇壁紙圖片",
   "settings.composer.sendMessageWith": "以此傳送訊息",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "按 Enter 鍵傳送，Shift+Enter 換行。",
   "settings.composer.sendShortcutHint": "硬體鍵盤行為",
   "settings.composer.sendShortcutModHint": "按 {shortcut} 傳送，Enter 換行。",

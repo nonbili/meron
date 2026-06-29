@@ -3,6 +3,7 @@ import { useEditor } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { confirmAction, showToast } from '../../states/ui'
+import { settings$ } from '../../states/settings'
 import type { ComposerAttachment } from '../../types'
 import {
   compose$,
@@ -36,6 +37,7 @@ import {
 // left as mostly markup.
 export function useComposer(tabId: string) {
   const tabs = useValue(compose$.tabs)
+  const spellCheck = useValue(settings$.spellCheck)
   const tab = tabs.find((t) => t.id === tabId)
   const draft = tab?.compose
 
@@ -65,6 +67,7 @@ export function useComposer(tabId: string) {
     editorProps: {
       attributes: {
         class: 'tiptap-body focus:outline-none min-h-[240px] text-[14px] leading-relaxed',
+        spellcheck: String(spellCheck),
       },
       handlePaste: (_view, event) => {
         const imageFiles = extractClipboardImages(event.clipboardData)
@@ -94,6 +97,10 @@ export function useComposer(tabId: string) {
     autofocus: focusBody ? 'end' : false,
     onUpdate: ({ editor }) => updateComposeDraft(tabId, { html: editor.getHTML() }),
   })
+
+  useEffect(() => {
+    editor?.view.dom.setAttribute('spellcheck', String(spellCheck))
+  }, [editor, spellCheck])
 
   useEffect(() => {
     if (!draft || !draft.accountId || sending) return

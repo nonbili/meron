@@ -1,6 +1,7 @@
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { accounts$, isSendableAccount, accountIdentities } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import type { ComposeDraft } from '../../types'
 import { RecipientInput } from './RecipientInput'
 
@@ -20,6 +21,7 @@ export function ComposerHeaderFields({
 }) {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
+  const spellCheck = useValue(settings$.spellCheck)
   const sendable = accounts.filter(isSendableAccount)
   // Each account contributes its primary plus any aliases as pickable From
   // identities; show the selector whenever more than one exists.
@@ -98,6 +100,7 @@ export function ComposerHeaderFields({
           value={draft.subject}
           onChange={(e) => update({ subject: e.target.value })}
           placeholder={t('composer.fields.subject')}
+          spellCheck={spellCheck}
           className={fieldClass}
         />
       </div>

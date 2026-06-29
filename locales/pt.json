@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Sobrepõe uma contagem de mensagens não lidas da caixa de entrada em cada conta na navegação lateral.",
   "settings.chooseWallpaperImage": "Escolha a imagem do papel de parede",
   "settings.composer.sendMessageWith": "Enviar mensagem com",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter envia, Shift+Enter adiciona uma nova linha.",
   "settings.composer.sendShortcutHint": "Comportamento do teclado de hardware",
   "settings.composer.sendShortcutModHint": "{shortcut} envia, Enter adiciona uma nova linha.",

@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Yan gezinme panelinde her hesaptaki okunmamış gelen kutusu mesajlarının sayısını gösterir.</string>
     <string name="settings_choose_wallpaper_image">Duvar kağıdı resmini seçin</string>
     <string name="settings_composer_send_message_with">Mesajı Şununla Gönder</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter gönderir, Shift+Enter yeni satır ekler.</string>
     <string name="settings_composer_send_shortcut_hint">Donanım klavye davranışı</string>
     <string name="settings_danger_zone">Tehlike bölgesi</string>

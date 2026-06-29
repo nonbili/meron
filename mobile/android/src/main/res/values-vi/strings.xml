@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Xếp chồng số lượng tin nhắn hộp thư đến chưa đọc trên mỗi tài khoản trong điều hướng bên cạnh.</string>
     <string name="settings_choose_wallpaper_image">Chọn hình nền</string>
     <string name="settings_composer_send_message_with">Gửi tin nhắn bằng</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Phím Enter để gửi, Shift+Enter để xuống dòng.</string>
     <string name="settings_composer_send_shortcut_hint">Hành vi bàn phím phần cứng</string>
     <string name="settings_danger_zone">Vùng nguy hiểm</string>

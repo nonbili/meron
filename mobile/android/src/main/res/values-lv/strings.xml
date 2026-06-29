@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Sānu navigācijas joslā katrā kontā tiek pārklāts nelasīto iesūtnes ziņojumu skaits.</string>
     <string name="settings_choose_wallpaper_image">Izvēlieties fona attēlu</string>
     <string name="settings_composer_send_message_with">Sūtīt ziņojumu ar</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter nosūta, Shift+Enter pievieno jaunu rindu.</string>
     <string name="settings_composer_send_shortcut_hint">Aparatūras tastatūras darbība</string>
     <string name="settings_danger_zone">Bīstamības zona</string>

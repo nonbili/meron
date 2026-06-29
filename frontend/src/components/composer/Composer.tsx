@@ -1,6 +1,8 @@
 import { EditorContent } from '@tiptap/react'
+import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { closeMessageTab } from '../../states/compose'
+import { settings$ } from '../../states/settings'
 import { useComposer } from './useComposer'
 import { ComposerHeaderFields } from './ComposerHeaderFields'
 import { ComposerToolbar } from './ComposerToolbar'
@@ -9,6 +11,7 @@ import { ComposerFooter } from './ComposerFooter'
 
 export function Composer({ tabId }: { tabId: string }) {
   const { t } = useTranslation()
+  const spellCheck = useValue(settings$.spellCheck)
   const {
     draft,
     editor,
@@ -58,6 +61,7 @@ export function Composer({ tabId }: { tabId: string }) {
             onChange={(e) => update({ text: e.target.value })}
             onPaste={handlePaste}
             placeholder={t('composer.placeholders.message')}
+            spellCheck={spellCheck}
             className="h-full min-h-[240px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-primary placeholder-secondary outline-none"
           />
         )}

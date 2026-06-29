@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Katab külgmisel navigeerimisribal iga konto lugemata postkasti kirjade arvu.",
   "settings.chooseWallpaperImage": "Valige taustapilt",
   "settings.composer.sendMessageWith": "Sõnumi saatmine klahviga",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Enter saadab, Shift+Enter lisab uue rea.",
   "settings.composer.sendShortcutHint": "Riistvara klaviatuuri käitumine",
   "settings.composer.sendShortcutModHint": "{shortcut} saadab, Enter lisab uue rea.",

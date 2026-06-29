@@ -16,6 +16,7 @@ import {
   Star,
   Globe,
   KeyRound,
+  SpellCheck,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -310,6 +311,7 @@ function GeneralSection() {
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const sendShortcut = useValue(settings$.sendShortcut)
+  const spellCheck = useValue(settings$.spellCheck)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
   const showStarred = useValue(settings$.showStarredInSideNav)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
@@ -386,6 +388,13 @@ function GeneralSection() {
       </SettingsGroup>
 
       <SettingsGroup title={t('settings.sections.composer')}>
+        <ToggleRow
+          icon={<SpellCheck size={15} />}
+          title={t('settings.composer.spellCheck')}
+          hint={t('settings.composer.spellCheckHint')}
+          checked={spellCheck}
+          onChange={() => settings$.spellCheck.set(!spellCheck)}
+        />
         <SegmentedRow
           icon={<Send size={15} />}
           title={t('settings.composer.sendMessageWith')}

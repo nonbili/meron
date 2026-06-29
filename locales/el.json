@@ -691,6 +691,8 @@
   "settings.appearance.showUnreadAccountBadgeHint": "Επικαλύπτει έναν αριθμό μη αναγνωσμένων μηνυμάτων εισερχομένων σε κάθε λογαριασμό στην πλαϊνή πλοήγηση.",
   "settings.chooseWallpaperImage": "Επιλέξτε εικόνα ταπετσαρίας",
   "settings.composer.sendMessageWith": "Αποστολή μηνύματος με",
+  "settings.composer.spellCheck": "Spell check",
+  "settings.composer.spellCheckHint": "Use native spelling suggestions while writing messages.",
   "settings.composer.sendShortcutEnterHint": "Το Enter στέλνει, το Shift+Enter προσθέτει νέα γραμμή.",
   "settings.composer.sendShortcutHint": "Συμπεριφορά πληκτρολογίου υλικού",
   "settings.composer.sendShortcutModHint": "Το {shortcut} στέλνει, το Enter προσθέτει νέα γραμμή.",

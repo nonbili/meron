@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Nakłada liczbę nieprzeczytanych wiadomości w skrzynce odbiorczej na każdym koncie w bocznej nawigacji.</string>
     <string name="settings_choose_wallpaper_image">Wybierz obraz tapety</string>
     <string name="settings_composer_send_message_with">Wyślij wiadomość za pomocą</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter wysyła, Shift+Enter wstawia nową linię.</string>
     <string name="settings_composer_send_shortcut_hint">Zachowanie klawiatury sprzętowej</string>
     <string name="settings_danger_zone">Strefa niebezpieczeństwa</string>

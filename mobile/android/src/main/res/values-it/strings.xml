@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Sovrappone il conteggio dei messaggi di posta in arrivo non letti su ciascun account nella navigazione laterale.</string>
     <string name="settings_choose_wallpaper_image">Scegli l\'immagine dello sfondo</string>
     <string name="settings_composer_send_message_with">Invia messaggio con</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Invio invia, Maiusc+Invio aggiunge una nuova riga.</string>
     <string name="settings_composer_send_shortcut_hint">Comportamento della tastiera hardware</string>
     <string name="settings_danger_zone">Zona pericolosa</string>

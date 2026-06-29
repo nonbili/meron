@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Superpone un recuento de mensajes de la bandeja de entrada no leídos en cada cuenta en la navegación lateral.</string>
     <string name="settings_choose_wallpaper_image">Elige la imagen del fondo de pantalla</string>
     <string name="settings_composer_send_message_with">Enviar mensaje con</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Intro envía, Mayús+Intro añade una línea nueva.</string>
     <string name="settings_composer_send_shortcut_hint">Comportamiento del teclado de hardware</string>
     <string name="settings_danger_zone">Zona de peligro</string>

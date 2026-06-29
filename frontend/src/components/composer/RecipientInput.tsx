@@ -88,6 +88,7 @@ export function RecipientInput({ value, onChange, accountId, placeholder, autoFo
         autoFocus={autoFocus}
         value={value}
         placeholder={placeholder}
+        spellCheck={false}
         className={inputClass}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}

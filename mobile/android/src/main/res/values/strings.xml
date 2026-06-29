@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">Overlays a count of unread inbox messages on each account in the side navigation.</string>
     <string name="settings_choose_wallpaper_image">Choose wallpaper image</string>
     <string name="settings_composer_send_message_with">Send message with</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">Enter sends, Shift+Enter adds a new line.</string>
     <string name="settings_composer_send_shortcut_hint">Hardware keyboard behavior</string>
     <string name="settings_danger_zone">Danger zone</string>

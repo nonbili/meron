@@ -657,6 +657,8 @@
     <string name="settings_appearance_show_unread_account_badge_hint">在側邊導航中覆蓋每個帳戶上未讀收件匣訊息的計數。</string>
     <string name="settings_choose_wallpaper_image">選擇壁紙圖片</string>
     <string name="settings_composer_send_message_with">以此傳送訊息</string>
+    <string name="settings_composer_spell_check">Spell check</string>
+    <string name="settings_composer_spell_check_hint">Use native spelling suggestions while writing messages.</string>
     <string name="settings_composer_send_shortcut_enter_hint">按 Enter 鍵傳送，Shift+Enter 換行。</string>
     <string name="settings_composer_send_shortcut_hint">硬體鍵盤行為</string>
     <string name="settings_danger_zone">危險區域</string>

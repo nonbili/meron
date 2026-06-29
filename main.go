@@ -33,6 +33,8 @@ var trayIconUnreadICO []byte
 var globalApp *App
 
 func main() {
+	setupNativeSpellChecking()
+
 	app := NewApp()
 	globalApp = app
 
