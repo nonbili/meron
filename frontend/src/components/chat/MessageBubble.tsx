@@ -69,6 +69,11 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
   const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(message, account, revealed)
   const normalizedSearchQuery = search.trim()
   const useHtmlBody = conversationMode === 'html' && !!message.body_html && !normalizedSearchQuery
+  const htmlReferencesAttachment = (image: (typeof attachmentImages)[number]) =>
+    !!image.key && !!message.body_html?.includes(`/media/${image.key}`)
+  const showAttachmentImages =
+    attachmentImages.length > 0 &&
+    (!useHtmlBody || (outgoing && attachmentImages.some((image) => !htmlReferencesAttachment(image))))
   const activeSearchMatch = activeSearchId === message.id
 
   const replyToRaw = message.reply_to?.trim()
@@ -196,8 +201,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
         </div>
 
         {/* Image attachments */}
-        {!useHtmlBody &&
-          attachmentImages.length > 0 &&
+        {showAttachmentImages &&
           (() => {
             const count = attachmentImages.length
             let gridClass = 'grid-cols-2 max-w-[320px]'

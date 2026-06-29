@@ -70,6 +70,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         title={tab.subject}
         html={tab.bodyHtml}
         text={tab.body}
+        attachments={tab.attachments}
         viewMode={tab.viewMode}
       />
     </>

@@ -184,6 +184,7 @@ export type MessageTab = {
   date?: number
   body: string
   bodyHtml?: string
+  attachments?: Attachment[]
   viewMode: 'html' | 'plain'
   /** Present only when kind === "compose". */
   compose?: ComposeDraft

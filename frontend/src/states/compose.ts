@@ -340,6 +340,7 @@ export function openMessageTab(message: Message) {
     date: message.date,
     body: message.body,
     bodyHtml: message.body_html,
+    attachments: message.attachments,
     viewMode: message.body_html && preferHtml ? 'html' : 'plain',
   }
   compose$.tabs.push(tab)

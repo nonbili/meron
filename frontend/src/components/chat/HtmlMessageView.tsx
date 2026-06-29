@@ -1,6 +1,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
+import { isImage, mediaSrc } from './messageHelpers'
 import { applyReaderLayout, stripTrackingPixels } from './readerHtml'
 
 const readerScrollPositions = new Map<string, number>()
@@ -12,6 +14,8 @@ interface HtmlMessageViewProps {
   html?: string
   /** Plain-text body, shown in Plain mode or when no HTML is available. */
   text: string
+  /** Attachments snapshotted with the reader tab; used for plain/image-only messages. */
+  attachments?: Attachment[]
   viewMode: 'html' | 'plain'
 }
 
@@ -24,12 +28,33 @@ interface HtmlMessageViewProps {
 // nothing from the message executes. `allow-same-origin` lets us read the
 // document to route link clicks to the system browser and open images in the
 // shared gallery lightbox.
-export function HtmlMessageView({ scrollKey, title, html, text, viewMode }: HtmlMessageViewProps) {
+export function HtmlMessageView({ scrollKey, title, html, text, attachments, viewMode }: HtmlMessageViewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const textRef = useRef<HTMLDivElement | null>(null)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
   const positionKey = `${scrollKey}:${viewMode}`
+  const attachmentImages = useMemo(
+    () =>
+      (attachments ?? []).filter((attachment) => {
+        if (!isImage(attachment) || (!attachment.key && !attachment.url)) return false
+        return !attachment.key || !html?.includes(`/media/${attachment.key}`)
+      }),
+    [attachments, html],
+  )
+
+  const openAttachmentImage = useCallback(
+    (index: number) => {
+      setGalleryItems(
+        attachmentImages.map((attachment) => ({
+          src: mediaSrc(attachment),
+          filename: attachment.filename,
+        })),
+      )
+      setGalleryIndex(index)
+    },
+    [attachmentImages],
+  )
 
   const saveScrollPosition = useCallback(() => {
     if (viewMode === 'plain' || !html) {
@@ -115,9 +140,22 @@ export function HtmlMessageView({ scrollKey, title, html, text, viewMode }: Html
   if (viewMode === 'plain' || !html) {
     return (
       <div ref={textRef} onScroll={saveScrollPosition} className="flex-1 overflow-y-auto bg-chat px-6 py-6">
-        <div className="mx-auto max-w-[680px] whitespace-pre-wrap break-words text-[15px] leading-relaxed text-primary select-text tracking-[0.01em]">
-          {text || '(no content)'}
+        <div className="mx-auto max-w-[680px] space-y-5">
+          {attachmentImages.length > 0 && (
+            <AttachmentImageGrid images={attachmentImages} onOpen={openAttachmentImage} />
+          )}
+          <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-primary select-text tracking-[0.01em]">
+            {text || (attachmentImages.length > 0 ? '' : '(no content)')}
+          </div>
         </div>
+        {galleryIndex !== null && galleryItems[galleryIndex] && (
+          <Gallery
+            items={galleryItems}
+            index={galleryIndex}
+            onIndexChange={setGalleryIndex}
+            onClose={() => setGalleryIndex(null)}
+          />
+        )}
       </div>
     )
   }
@@ -133,6 +171,13 @@ export function HtmlMessageView({ scrollKey, title, html, text, viewMode }: Html
         onReady={handleFrameReady}
         onScroll={saveScrollPosition}
       />
+      {attachmentImages.length > 0 && (
+        <div className="shrink-0 border-t border-border bg-chat px-6 py-4">
+          <div className="mx-auto max-w-[680px]">
+            <AttachmentImageGrid images={attachmentImages} onOpen={openAttachmentImage} />
+          </div>
+        </div>
+      )}
       {galleryIndex !== null && galleryItems[galleryIndex] && (
         <Gallery
           items={galleryItems}
@@ -142,5 +187,27 @@ export function HtmlMessageView({ scrollKey, title, html, text, viewMode }: Html
         />
       )}
     </>
+  )
+}
+
+function AttachmentImageGrid({ images, onOpen }: { images: Attachment[]; onOpen: (index: number) => void }) {
+  const count = images.length
+  const gridClass = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-2' : 'grid-cols-3'
+  const imageClass = count === 1 ? 'max-h-[60vh]' : 'h-44'
+
+  return (
+    <div className={`grid ${gridClass} gap-2`}>
+      {images.map((image, index) => (
+        <button
+          key={`${image.filename}-${index}`}
+          type="button"
+          onClick={() => onOpen(index)}
+          title={image.filename}
+          className="overflow-hidden rounded-lg border border-border bg-black/[0.03] cursor-zoom-in"
+        >
+          <img src={mediaSrc(image)} alt={image.filename} className={`w-full object-contain ${imageClass}`} />
+        </button>
+      ))}
+    </div>
   )
 }

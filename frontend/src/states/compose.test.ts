@@ -260,6 +260,33 @@ describe('tab navigation', () => {
     expect(compose$.tabs.get().map((tab) => tab.id)).toEqual(['thread-t-2'])
   })
 
+  it('snapshots message attachments when opening a reader tab', () => {
+    openMessageTab(
+      message({
+        id: 'msg-image',
+        attachments: [
+          {
+            filename: 'photo.png',
+            mime: 'image/png',
+            size: 42,
+            key: null,
+            url: 'data:image/png;base64,aW1hZ2U=',
+          },
+        ],
+      }),
+    )
+
+    expect(compose$.tabs.get()[0].attachments).toEqual([
+      {
+        filename: 'photo.png',
+        mime: 'image/png',
+        size: 42,
+        key: null,
+        url: 'data:image/png;base64,aW1hZ2U=',
+      },
+    ])
+  })
+
   it('falls back to the Current conversation when the last tab is closed', () => {
     ui$.selectedThread.set('t-current')
     openThreadTab(message({ thread_id: 't-2', id: 'm2' }))
