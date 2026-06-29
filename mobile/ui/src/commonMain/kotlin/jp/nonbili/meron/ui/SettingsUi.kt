@@ -337,8 +337,6 @@ internal fun SettingsScreen(
     storageClearConfirming: Boolean,
     onRefreshStorage: () -> Unit,
     onClearStorageCache: () -> Unit,
-    appVersion: String,
-    onShowAbout: () -> Unit,
 ) {
     var showThemePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
@@ -428,8 +426,6 @@ internal fun SettingsScreen(
                     storageClearConfirming = storageClearConfirming,
                     onRefreshStorage = onRefreshStorage,
                     onClearStorageCache = onClearStorageCache,
-                    appVersion = appVersion,
-                    onShowAbout = onShowAbout,
                     modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
                 )
             }
@@ -605,7 +601,7 @@ private sealed class SettingsPage {
 }
 
 // Combines the desktop "General" section: Appearance, Sidebar, Kanban,
-// Composer, Sync & notifications, Storage, and About in one scrollable page.
+// Composer, Sync & notifications, and Storage in one scrollable page.
 @Composable
 internal fun SettingsGeneralPage(
     appearanceMode: AppAppearanceMode,
@@ -637,8 +633,6 @@ internal fun SettingsGeneralPage(
     storageClearConfirming: Boolean,
     onRefreshStorage: () -> Unit,
     onClearStorageCache: () -> Unit,
-    appVersion: String,
-    onShowAbout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier) {
@@ -812,16 +806,6 @@ internal fun SettingsGeneralPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("about.title")) }
-        item {
-            SettingsRow(
-                icon = Icons.Filled.Info,
-                title = tr("about.title"),
-                subtitle = tr("settings.aboutHint"),
-                onClick = onShowAbout,
-                trailing = { Text(appVersion, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            )
-        }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }

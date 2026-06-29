@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "About {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Core protocol %1$d · Shared protocol %2$d",
   "about.supportDevelopment": "Support development",
   "about.title": "About Meron",

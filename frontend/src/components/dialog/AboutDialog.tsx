@@ -15,6 +15,8 @@ const DONATE_LINKS = [
   { label: 'PayPal', url: 'https://paypal.me/nonbili' },
 ]
 
+const SOURCE_URL = 'https://github.com/nonbili/meron'
+
 export function AboutDialog() {
   const { t } = useTranslation()
   const open = useValue(ui$.aboutOpen)
@@ -62,6 +64,16 @@ export function AboutDialog() {
           <h3 className="mt-4 text-xl font-bold tracking-tight">{productName}</h3>
           <p className="mt-1 text-xs font-semibold text-secondary">{t('about.version', { version })}</p>
           <p className="mt-4 max-w-[18rem] text-sm leading-6 text-secondary">{comments}</p>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            rightIcon={ExternalLink}
+            className="mt-5"
+            onClick={() => openExternal(SOURCE_URL)}
+          >
+            {t('about.sourceCode')}
+          </Button>
 
           <div className="mt-6 w-full rounded-2xl border border-border/70 bg-raised/70 p-4">
             <div className="flex items-center justify-center gap-2 text-xs font-bold text-primary">

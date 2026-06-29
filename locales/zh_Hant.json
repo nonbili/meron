@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "關於 {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "核心協定%1$d ·共享協定%2$d",
   "about.supportDevelopment": "支持開發",
   "about.title": "關於 Meron",

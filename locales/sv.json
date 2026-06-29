@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "Om {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Kärnprotokoll %1$d · Delat protokoll %2$d",
   "about.supportDevelopment": "Stöd utvecklingen",
   "about.title": "Om Meron",

@@ -26,10 +26,12 @@ internal val generatedStrings: Map<String, Map<String, String>> = mapOf(
 private fun locale_ar(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "حول {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "البروتوكول الأساسي %1\$d · البروتوكول المشترك %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "دعم التطوير")
         put("about.title", "حول Meron")
         put("about.version", "الإصدار {version}")
@@ -846,10 +848,12 @@ private fun locale_ar(): Map<String, String> =
 private fun locale_de(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Über {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Kernprotokoll %1\$d · Gemeinsames Protokoll %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Entwicklung unterstützen")
         put("about.title", "Über Meron")
         put("about.version", "Version {version}")
@@ -1666,10 +1670,12 @@ private fun locale_de(): Map<String, String> =
 private fun locale_el(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Σχετικά με το {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Πρωτόκολλο πυρήνα %1\$d · Κοινόχρηστο πρωτόκολλο %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Υποστήριξη ανάπτυξης")
         put("about.title", "Σχετικά με το Meron")
         put("about.version", "Έκδοση {version}")
@@ -2486,10 +2492,12 @@ private fun locale_el(): Map<String, String> =
 private fun locale_en(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "About {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Core protocol %1\$d · Shared protocol %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Support development")
         put("about.title", "About Meron")
         put("about.version", "Version {version}")
@@ -3306,10 +3314,12 @@ private fun locale_en(): Map<String, String> =
 private fun locale_es(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Acerca de {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protocolo central %1\$d · Protocolo compartido %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Apoyar el desarrollo")
         put("about.title", "Acerca de Meron")
         put("about.version", "Versión {version}")
@@ -4126,10 +4136,12 @@ private fun locale_es(): Map<String, String> =
 private fun locale_et(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Teave {product} kohta")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Põhiprotokoll %1\$d · Jagatud protokoll %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Toeta arendust")
         put("about.title", "Teave Meroni kohta")
         put("about.version", "Versioon {version}")
@@ -4946,10 +4958,12 @@ private fun locale_et(): Map<String, String> =
 private fun locale_fr(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "À propos de {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protocole de base %1\$d · Protocole partagé %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Soutenir le développement")
         put("about.title", "À propos de Meron")
         put("about.version", "Version {version}")
@@ -5766,10 +5780,12 @@ private fun locale_fr(): Map<String, String> =
 private fun locale_it(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Informazioni su {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protocollo principale %1\$d · Protocollo condiviso %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Sostieni lo sviluppo")
         put("about.title", "Informazioni su Meron")
         put("about.version", "Versione {version}")
@@ -6586,10 +6602,12 @@ private fun locale_it(): Map<String, String> =
 private fun locale_ja(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "{product} について")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Coreプロトコル %1\$d · Sharedプロトコル %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "開発をサポート")
         put("about.title", "Meronについて")
         put("about.version", "バージョン {version}")
@@ -7406,10 +7424,12 @@ private fun locale_ja(): Map<String, String> =
 private fun locale_ko(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "{product} 정보")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "핵심 프로토콜 %1\$d · 공유 프로토콜 %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "개발 후원하기")
         put("about.title", "Meron 정보")
         put("about.version", "버전 {version}")
@@ -8226,10 +8246,12 @@ private fun locale_ko(): Map<String, String> =
 private fun locale_lv(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Par {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Pamatprotokols %1\$d · Koplietotais protokols %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Atbalstīt izstrādi")
         put("about.title", "Par Meron")
         put("about.version", "Versija {version}")
@@ -9046,10 +9068,12 @@ private fun locale_lv(): Map<String, String> =
 private fun locale_pl(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "O programie {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protokół podstawowy %1\$d · Protokół wspólny %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Wesprzyj rozwój")
         put("about.title", "O programie Meron")
         put("about.version", "Wersja {version}")
@@ -9866,10 +9890,12 @@ private fun locale_pl(): Map<String, String> =
 private fun locale_pt(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Sobre o {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protocolo principal %1\$d · Protocolo compartilhado %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Apoiar o desenvolvimento")
         put("about.title", "Sobre o Meron")
         put("about.version", "Versão {version}")
@@ -10686,10 +10712,12 @@ private fun locale_pt(): Map<String, String> =
 private fun locale_pt_BR(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Sobre o {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Protocolo principal %1\$d · Protocolo compartilhado %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Apoiar o desenvolvimento")
         put("about.title", "Sobre o Meron")
         put("about.version", "Versão {version}")
@@ -11506,10 +11534,12 @@ private fun locale_pt_BR(): Map<String, String> =
 private fun locale_sv(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Om {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Kärnprotokoll %1\$d · Delat protokoll %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Stöd utvecklingen")
         put("about.title", "Om Meron")
         put("about.version", "Version {version}")
@@ -12326,10 +12356,12 @@ private fun locale_sv(): Map<String, String> =
 private fun locale_tr(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "{product} Hakkında")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Çekirdek protokol %1\$d · Paylaşılan protokol %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Geliştirmeyi destekle")
         put("about.title", "Meron Hakkında")
         put("about.version", "Sürüm {version}")
@@ -13146,10 +13178,12 @@ private fun locale_tr(): Map<String, String> =
 private fun locale_vi(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "Về {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "Giao thức lõi %1\$d · Giao thức chia sẻ %2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "Hỗ trợ phát triển")
         put("about.title", "Về Meron")
         put("about.version", "Phiên bản {version}")
@@ -13966,10 +14000,12 @@ private fun locale_vi(): Map<String, String> =
 private fun locale_zh_Hans(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "关于 {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "核心协议%1\$d ·共享协议%2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "支持开发")
         put("about.title", "关于 Meron")
         put("about.version", "版本 {version}")
@@ -14786,10 +14822,12 @@ private fun locale_zh_Hans(): Map<String, String> =
 private fun locale_zh_Hant(): Map<String, String> =
     buildMap {
         put("about.aboutProduct", "關於 {product}")
+        put("about.donate", "Donate")
         put("about.githubSponsors", "GitHub Sponsors")
         put("about.liberapay", "Liberapay")
         put("about.paypal", "PayPal")
         put("about.protocolVersions", "核心協定%1\$d ·共享協定%2\$d")
+        put("about.sourceCode", "Source code")
         put("about.supportDevelopment", "支持開發")
         put("about.title", "關於 Meron")
         put("about.version", "版本 {version}")

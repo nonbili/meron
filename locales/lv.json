@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "Par {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Pamatprotokols %1$d · Koplietotais protokols %2$d",
   "about.supportDevelopment": "Atbalstīt izstrādi",
   "about.title": "Par Meron",

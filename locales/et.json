@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "Teave {product} kohta",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Põhiprotokoll %1$d · Jagatud protokoll %2$d",
   "about.supportDevelopment": "Toeta arendust",
   "about.title": "Teave Meroni kohta",

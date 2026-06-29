@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "Σχετικά με το {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Πρωτόκολλο πυρήνα %1$d · Κοινόχρηστο πρωτόκολλο %2$d",
   "about.supportDevelopment": "Υποστήριξη ανάπτυξης",
   "about.title": "Σχετικά με το Meron",

@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "Về {product}",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Giao thức lõi %1$d · Giao thức chia sẻ %2$d",
   "about.supportDevelopment": "Hỗ trợ phát triển",
   "about.title": "Về Meron",

@@ -1,8 +1,10 @@
 {
   "about.aboutProduct": "{product} Hakkında",
+  "about.donate": "Donate",
   "about.githubSponsors": "GitHub Sponsors",
   "about.liberapay": "Liberapay",
   "about.paypal": "PayPal",
+  "about.sourceCode": "Source code",
   "about.protocolVersions": "Çekirdek protokol %1$d · Paylaşılan protokol %2$d",
   "about.supportDevelopment": "Geliştirmeyi destekle",
   "about.title": "Meron Hakkında",

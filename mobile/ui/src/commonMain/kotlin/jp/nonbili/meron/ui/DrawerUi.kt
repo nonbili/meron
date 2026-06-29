@@ -36,10 +36,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
@@ -177,7 +180,6 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
-import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.SyncMailParams
@@ -248,6 +250,7 @@ internal fun MailDrawer(
     onSelectKanbanBoard: (KanbanBoardSpec) -> Unit,
     onAddAccount: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShowAbout: () -> Unit,
     googleReauthAccountId: String? = null,
     onReconnectGoogle: (AccountSummary) -> Unit = {},
 ) {
@@ -388,6 +391,16 @@ internal fun MailDrawer(
                     trailing = null,
                 )
             }
+            item {
+                SidebarRow(
+                    selected = false,
+                    chat = chat,
+                    onClick = onShowAbout,
+                    leading = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = tr("about.title"),
+                    trailing = null,
+                )
+            }
         }
     }
 }
@@ -395,9 +408,6 @@ internal fun MailDrawer(
 @Composable
 internal fun AboutDialog(
     appVersion: String,
-    packageName: String,
-    coreProtocolVersion: Int,
-    sharedProtocolVersion: Int,
     onOpenUrl: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -408,24 +418,38 @@ internal fun AboutDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Meron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    trf("about.versionPackage", appVersion, packageName),
+                    tr("about.version", mapOf("version" to appVersion)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    trf("about.protocolVersions", coreProtocolVersion, sharedProtocolVersion),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onOpenUrl("https://github.com/sponsors/nonbili") }) {
-                        Text(tr("about.githubSponsors"))
-                    }
-                    OutlinedButton(onClick = { onOpenUrl("https://liberapay.com/nonbili") }) {
-                        Text(tr("about.liberapay"))
-                    }
-                    OutlinedButton(onClick = { onOpenUrl("https://www.paypal.com/paypalme/nonbili") }) {
-                        Text(tr("about.paypal"))
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AboutLinkButton(
+                        icon = Icons.Filled.Code,
+                        label = tr("about.sourceCode"),
+                        onClick = { onOpenUrl("https://github.com/nonbili/meron") },
+                    )
+                    Text(
+                        tr("about.donate"),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AboutLinkButton(
+                            icon = Icons.Filled.Favorite,
+                            label = tr("about.githubSponsors"),
+                            onClick = { onOpenUrl("https://github.com/sponsors/nonbili") },
+                        )
+                        AboutLinkButton(
+                            icon = Icons.Filled.Favorite,
+                            label = tr("about.liberapay"),
+                            onClick = { onOpenUrl("https://liberapay.com/nonbili") },
+                        )
+                        AboutLinkButton(
+                            icon = Icons.Filled.CreditCard,
+                            label = tr("about.paypal"),
+                            onClick = { onOpenUrl("https://www.paypal.com/paypalme/nonbili") },
+                        )
                     }
                 }
             }
@@ -436,6 +460,27 @@ internal fun AboutDialog(
             }
         },
     )
+}
+
+@Composable
+private fun AboutLinkButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(label)
+        }
+    }
 }
 
 @Composable

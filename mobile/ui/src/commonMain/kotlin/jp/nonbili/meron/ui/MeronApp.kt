@@ -178,7 +178,6 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
-import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.SyncMailParams
@@ -1062,8 +1061,6 @@ private fun MeronMobileScreenContent(
                     storageClearConfirming = storageClearConfirming,
                     onRefreshStorage = { loadStorageUsage(showStatus = true) },
                     onClearStorageCache = ::clearStorageCache,
-                    appVersion = appVersion,
-                    onShowAbout = { showAboutDialog = true },
                 )
             }
 
@@ -1118,6 +1115,10 @@ private fun MeronMobileScreenContent(
                             onOpenSettings = {
                                 previousTopScreen = screen
                                 screen = Screen.Settings
+                                scope.launch { drawerState.close() }
+                            },
+                            onShowAbout = {
+                                showAboutDialog = true
                                 scope.launch { drawerState.close() }
                             },
                             googleReauthAccountId = googleReauthAccountId,
@@ -1237,6 +1238,10 @@ private fun MeronMobileScreenContent(
                             onOpenSettings = {
                                 previousTopScreen = screen
                                 screen = Screen.Settings
+                                scope.launch { drawerState.close() }
+                            },
+                            onShowAbout = {
+                                showAboutDialog = true
                                 scope.launch { drawerState.close() }
                             },
                             googleReauthAccountId = googleReauthAccountId,
@@ -1557,6 +1562,10 @@ private fun MeronMobileScreenContent(
                             onOpenSettings = {
                                 previousTopScreen = screen
                                 screen = Screen.Settings
+                                scope.launch { drawerState.close() }
+                            },
+                            onShowAbout = {
+                                showAboutDialog = true
                                 scope.launch { drawerState.close() }
                             },
                             googleReauthAccountId = googleReauthAccountId,
@@ -2008,9 +2017,6 @@ private fun MeronMobileScreenContent(
         if (showAboutDialog) {
             AboutDialog(
                 appVersion = appVersion,
-                packageName = packageName,
-                coreProtocolVersion = coreProtocolVersion,
-                sharedProtocolVersion = SharedMobileContract.protocolVersion,
                 onOpenUrl = services::openUrl,
                 onDismiss = { showAboutDialog = false },
             )
