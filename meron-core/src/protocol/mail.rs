@@ -313,29 +313,51 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         .and_then(Value::as_str)
         .and_then(parse_mail_cursor);
 
-    with_mobile_db(data_dir, |conn| {
-        if is_rss_account(&conn, &account_id)? {
+    let is_rss = with_mobile_db(data_dir, |conn| {
+        Ok(json!(is_rss_account(&conn, &account_id)?))
+    })?
+    .as_bool()
+    .unwrap_or(false);
+    if is_rss {
+        return with_mobile_db(data_dir, |conn| {
             let threads =
                 rss::recent(&conn, &account_id, &query, 50).map_err(|err| format!("{err:#}"))?;
-            return Ok(json!({ "threads": threads }));
+            Ok(json!({ "threads": threads }))
+        });
+    }
+
+    let (mut messages, next_cursor) = if query.is_empty() {
+        get_cached_mobile_mail_page(
+            data_dir,
+            &account_id,
+            &folder_id,
+            50,
+            before_cursor,
+            filter == "unread",
+        )?
+    } else {
+        match search_live_mobile_mail_messages(data_dir, &account_id, &folder_id, &query, 50) {
+            Ok(messages) => (messages, None),
+            Err(err) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.search",
+                    "live search failed for account={account_id} folder={folder_id}: {err}"
+                );
+                (
+                    search_cached_mobile_mail_messages(
+                        data_dir,
+                        &account_id,
+                        &folder_id,
+                        &query,
+                        50,
+                    )?,
+                    None,
+                )
+            }
         }
-        let (mut messages, next_cursor) = if query.is_empty() {
-            store::get_recent_page(
-                &conn,
-                &account_id,
-                &folder_id,
-                50,
-                before_cursor,
-                filter == "unread",
-            )
-            .map_err(|err| err.to_string())?
-        } else {
-            (
-                store::search_messages(&conn, &account_id, &folder_id, &query, 50)
-                    .map_err(|err| err.to_string())?,
-                None,
-            )
-        };
+    };
+    with_mobile_db(data_dir, |conn| {
         store::apply_card_identity(&conn, &account_id, &mut messages);
         let threads = thread_cards_json(&account_id, &folder_id, messages);
         let mut out = json!({ "threads": threads });
@@ -346,6 +368,76 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         }
         Ok(out)
     })
+}
+
+fn open_mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {
+    let data_dir = data_dir.trim();
+    if data_dir.is_empty() {
+        return Err("mobile core is not initialized".to_string());
+    }
+    let db_path = Path::new(data_dir).join("meron.db");
+    match mobile_db_key() {
+        Some(key) => store::open_at_keyed(&db_path, &key),
+        None => store::open_at(&db_path),
+    }
+    .map_err(|err| err.to_string())
+}
+
+fn get_cached_mobile_mail_page(
+    data_dir: &str,
+    account_id: &str,
+    folder_id: &str,
+    limit: u32,
+    before_cursor: Option<(i64, u32)>,
+    unread_only: bool,
+) -> Result<(Vec<MessageHeader>, Option<String>), String> {
+    let conn = open_mobile_db(data_dir)?;
+    store::get_recent_page(
+        &conn,
+        account_id,
+        folder_id,
+        limit,
+        before_cursor,
+        unread_only,
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn search_cached_mobile_mail_messages(
+    data_dir: &str,
+    account_id: &str,
+    folder_id: &str,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<MessageHeader>, String> {
+    let conn = open_mobile_db(data_dir)?;
+    store::search_messages(&conn, account_id, folder_id, query, limit)
+        .map_err(|err| err.to_string())
+}
+
+fn search_live_mobile_mail_messages(
+    data_dir: &str,
+    account_id: &str,
+    folder_id: &str,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<MessageHeader>, String> {
+    let engine = crate::ffi::engine_for(data_dir)?;
+    if engine.is_paused(account_id) {
+        return Err(format!("account is paused: {account_id}"));
+    }
+    let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(account_id))?;
+    if account_needs_reconnect(&creds) {
+        return Err(format!("account needs reconnect: {account_id}"));
+    }
+
+    let mut folders = vec![folder_id.to_string()];
+    if let Some(sent) = crate::engine::cached_sent_folder(&engine, account_id, folder_id) {
+        folders.push(sent);
+    }
+    crate::ffi::engine_block_on(crate::engine::search_mail_messages(
+        &engine, account_id, &folders, query, limit,
+    ))
 }
 
 fn sync_mobile_thread_drafts_once(

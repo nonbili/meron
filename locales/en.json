@@ -612,7 +612,7 @@
   "mobile.mail.openThreadHint": "Open a thread to read cached messages.",
   "mobile.mail.readTriageReply": "Read, triage, and reply from the selected mailbox.",
   "mobile.mail.reconnectHint": "Update the password or OAuth sign-in before syncing this account.",
-  "mobile.mail.searchCachedMail": "Search cached mail",
+  "mobile.mail.searchCachedMail": "Search mail",
   "mobile.mail.starredSubtitle": "All starred messages and feed items",
   "mobile.mail.syncMailbox": "Sync mailbox",
   "mobile.mail.syncSelectedMailbox": "Sync the selected mailbox to load cached threads.",
