@@ -44,6 +44,7 @@
     <string name="accounts_providers_gmail_name">Gmail</string>
     <string name="accounts_providers_google_name">Google</string>
     <string name="accounts_providers_outlook_description">Microsoft 365</string>
+    <string name="accounts_providers_oauth_description">Provider sign-in</string>
     <string name="accounts_providers_outlook_name">Outlook</string>
     <string name="accounts_providers_rss_description">Εγγραφή σε ροές</string>
     <string name="accounts_rss_atom_feeds">Ροές RSS / Atom</string>

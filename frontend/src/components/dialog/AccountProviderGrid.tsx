@@ -2,7 +2,7 @@ import { useTranslation } from '../../lib/i18n'
 import type { SetupMode } from '../../states/ui'
 import { PROVIDERS } from './providerIcons'
 
-// The provider picker: a 2×2 grid of branded cards replacing the old text-only
+// The provider picker: a branded card grid replacing the old text-only
 // segmented control. Each card carries the provider glyph, a name, and a short
 // descriptor; the active one is highlighted with the accent ring + check.
 export function AccountProviderGrid({
@@ -17,14 +17,14 @@ export function AccountProviderGrid({
   const { t } = useTranslation()
   const iconSize = isSetup ? 24 : 20
   return (
-    <div className={`grid grid-cols-2 ${isSetup ? 'gap-3' : 'gap-2'}`}>
+    <div className={`grid ${isSetup ? 'grid-cols-3 max-[640px]:grid-cols-1 gap-3' : 'grid-cols-3 gap-2'}`}>
       {PROVIDERS.map((p) => {
-        const active = mode === p.id
+        const active = p.isActive(mode)
         return (
           <button
             key={p.id}
             type="button"
-            onClick={() => setMode(p.id)}
+            onClick={() => setMode(p.mode)}
             className={`group relative flex items-center text-left transition-all cursor-pointer ${
               isSetup ? 'gap-3.5 rounded-2xl p-4' : 'gap-2.5 rounded-2xl p-2.5'
             } border ${
@@ -45,7 +45,7 @@ export function AccountProviderGrid({
                 {p.label}
               </span>
               <span className={`truncate font-medium text-secondary ${isSetup ? 'text-[12px]' : 'text-[10px]'}`}>
-                {t(p.descriptionKey)}
+                {t(p.descriptionKey, { defaultValue: p.defaultDescription })}
               </span>
             </span>
             {/* A radio-style dot — this is a single-choice picker, so the mark

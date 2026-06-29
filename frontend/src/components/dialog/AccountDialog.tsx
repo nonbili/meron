@@ -86,10 +86,10 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
 
   // The in-app add-account modal: a provider rail on the left, the form for the
   // selected provider on the right — same shape as the Settings dialog.
-  const active = PROVIDERS.find((p) => p.id === mode)
+  const active = PROVIDERS.find((p) => p.isActive(mode))
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-[3px] z-50 p-4 select-none animate-fade-in">
-      <div className="bg-chats border border-border text-primary max-w-xl w-full max-h-[90vh] rounded-3xl shadow-2xl animate-slide-up flex flex-col overflow-hidden">
+      <div className="bg-chats border border-border text-primary w-full max-w-[760px] max-h-[92vh] rounded-3xl shadow-2xl animate-slide-up flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border/70 shrink-0">
           <h2 className="text-[15px] font-bold tracking-tight leading-tight">
@@ -102,13 +102,13 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
 
         {/* Body: add-account shows provider selection; reconnect already knows
             the provider, so it uses the full width for the active form. */}
-        <div className="flex h-[360px]">
+        <div className="flex h-[500px] min-h-0">
           {!reconnecting && <AccountProviderRail mode={mode} setMode={setMode} />}
           <div className="flex-1 min-w-0 overflow-y-auto p-5 flex flex-col gap-4">
             <div>
               <h3 className="text-[13px] font-bold tracking-tight leading-tight">{active?.label}</h3>
               <p className="text-[10.5px] text-secondary mt-0.5 font-medium">
-                {active ? t(active.descriptionKey) : null}
+                {active ? t(active.descriptionKey, { defaultValue: active.defaultDescription }) : null}
               </p>
             </div>
             <div className="flex flex-col gap-3.5">

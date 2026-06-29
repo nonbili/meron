@@ -47,6 +47,7 @@
   "accounts.providers.gmailName": "Gmail",
   "accounts.providers.googleName": "Google",
   "accounts.providers.outlookDescription": "Microsoft 365",
+  "accounts.providers.oauthDescription": "Provider sign-in",
   "accounts.providers.outlookName": "Outlook",
   "accounts.providers.rssDescription": "Iscriviti ai feed",
   "accounts.rssAtomFeeds": "Feed RSS / Atom",

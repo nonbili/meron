@@ -1,9 +1,8 @@
-import { Mail, Rss } from 'lucide-react'
+import { KeyRound, Mail, Rss } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { SetupMode } from '../../states/ui'
 
-// Brand glyphs, sized by the caller. Shared between the provider picker cards and
-// the OAuth sign-in button so the marks stay identical everywhere.
+// Brand glyphs, sized by the caller. Shared by the OAuth sign-in rows.
 export function GoogleIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -39,37 +38,41 @@ export function MicrosoftIcon({ size = 20 }: { size?: number }) {
 }
 
 export type ProviderDef = {
-  id: SetupMode
+  id: 'oauth' | SetupMode
   label: string
   descriptionKey: string
+  defaultDescription?: string
+  mode: SetupMode
+  isActive: (mode: SetupMode) => boolean
   icon: (size: number) => ReactNode
 }
 
-// The four account kinds, in picker order. OAuth providers lead; manual setups
-// follow. `icon` is a render fn so each card controls its own glyph size.
+// The account setup tabs, in picker order. Gmail and Outlook share one visible
+// OAuth tab; the OAuth panel lists concrete provider sign-in buttons.
 export const PROVIDERS: ProviderDef[] = [
   {
-    id: 'gmail',
-    label: 'Gmail',
-    descriptionKey: 'accounts.providers.gmailDescription',
-    icon: (s) => <GoogleIcon size={s} />,
-  },
-  {
-    id: 'outlook',
-    label: 'Outlook',
-    descriptionKey: 'accounts.providers.outlookDescription',
-    icon: (s) => <MicrosoftIcon size={s} />,
+    id: 'oauth',
+    label: 'OAuth',
+    descriptionKey: 'accounts.providers.oauthDescription',
+    defaultDescription: 'Provider sign-in',
+    mode: 'gmail',
+    isActive: (mode) => mode === 'gmail' || mode === 'outlook',
+    icon: (s) => <KeyRound size={s} className="text-accent" />,
   },
   {
     id: 'custom',
     label: 'IMAP / SMTP',
     descriptionKey: 'accounts.providers.customDescription',
+    mode: 'custom',
+    isActive: (mode) => mode === 'custom',
     icon: (s) => <Mail size={s} className="text-accent" />,
   },
   {
     id: 'rss',
     label: 'RSS / Atom',
     descriptionKey: 'accounts.providers.rssDescription',
+    mode: 'rss',
+    isActive: (mode) => mode === 'rss',
     icon: (s) => <Rss size={s} className="text-orange-500" />,
   },
 ]

@@ -634,16 +634,18 @@ internal fun AddAccountScreen(
                 0 -> {
                     item {
                         SetupCard(title = "") {
-                            OAuthSignInButton(
-                                label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.googleName")),
-                                provider = "google",
-                                onClick = onConnectGoogleDeviceAccount,
-                            )
-                            OAuthSignInButton(
-                                label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.outlookName")),
-                                provider = "outlook",
-                                onClick = onLaunchOAuth,
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OAuthSignInButton(
+                                    label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.googleName")),
+                                    provider = "google",
+                                    onClick = onConnectGoogleDeviceAccount,
+                                )
+                                OAuthSignInButton(
+                                    label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.outlookName")),
+                                    provider = "outlook",
+                                    onClick = onLaunchOAuth,
+                                )
+                            }
                             if (oauthAuthorizationCode.isNotBlank()) {
                                 Text(
                                     tr("accounts.oauth.finishingSignIn"),

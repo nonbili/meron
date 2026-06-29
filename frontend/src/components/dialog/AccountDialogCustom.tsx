@@ -1,4 +1,5 @@
-import { ChevronRight, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronRight, Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { Trans, useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import { Field } from '../field/Field'
@@ -17,6 +18,7 @@ export function AccountDialogCustom({
   isSetup: boolean
 }) {
   const { t } = useTranslation()
+  const [showPassword, setShowPassword] = useState(false)
   const {
     form,
     setForm,
@@ -56,20 +58,38 @@ export function AccountDialogCustom({
         inputClassName={inputClass}
         labelClassName={fieldLabelClass}
       />
-      <Field
-        label={t('accounts.fields.password')}
-        type="password"
-        value={form.password}
-        onChange={(password) => setForm((f) => ({ ...f, password }))}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !saveDisabled) {
-            e.preventDefault()
-            void save()
-          }
-        }}
-        inputClassName={inputClass}
-        labelClassName={fieldLabelClass}
-      />
+      <label className="flex flex-col gap-1.5 w-full">
+        <span className={`pl-0.5 ${fieldLabelClass ?? 'text-[11px] font-semibold text-secondary'}`}>
+          {t('accounts.fields.password')}
+        </span>
+        <span className="relative flex items-center">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={form.password}
+            onChange={(event) => setForm((f) => ({ ...f, password: event.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !saveDisabled) {
+                e.preventDefault()
+                void save()
+              }
+            }}
+            className={`${inputClass ?? 'w-full text-xs py-2 px-3.5 rounded-xl border border-border bg-raised text-primary placeholder-secondary focus:ring-1 focus:ring-accent focus:border-transparent focus:bg-chats transition-all outline-none'} pr-11`}
+          />
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setShowPassword((value) => !value)}
+            className="absolute right-2.5 flex h-7 w-7 items-center justify-center rounded-lg text-secondary transition-colors hover:bg-hover hover:text-primary cursor-pointer"
+            aria-label={
+              showPassword
+                ? t('accounts.actions.hidePassword', { defaultValue: 'Hide password' })
+                : t('accounts.actions.showPassword', { defaultValue: 'Show password' })
+            }
+          >
+            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        </span>
+      </label>
 
       {appPasswordHint && (
         <p

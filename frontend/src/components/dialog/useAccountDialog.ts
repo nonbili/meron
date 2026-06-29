@@ -162,17 +162,19 @@ export function useAccountDialog() {
     }
   }
 
-  async function beginOAuth() {
+  async function beginOAuth(provider: 'gmail' | 'outlook' = oauthProvider) {
+    const providerLabel = provider === 'outlook' ? 'Microsoft' : 'Google'
     try {
       setError('')
+      ui$.setupMode.set(provider)
       setWaitingForGoogle(true)
-      const res = await invoke<{ url: string; needs_external_browser?: boolean }>(`oauth.${oauthProvider}Begin`)
+      const res = await invoke<{ url: string; needs_external_browser?: boolean }>(`oauth.${provider}Begin`)
       if (res.url && !res.needs_external_browser) {
         window.location.href = res.url
       }
       if (res.url) {
         const id = setInterval(() => {
-          void pollProfile(id, oauthProvider)
+          void pollProfile(id, provider)
         }, 1000)
         ;(window as any)._oauthPollInterval = id
       } else {
@@ -180,7 +182,7 @@ export function useAccountDialog() {
       }
     } catch (err) {
       setWaitingForGoogle(false)
-      setError(errorMessage(err, `Failed to begin ${oauthLabel} sign in`))
+      setError(errorMessage(err, `Failed to begin ${providerLabel} sign in`))
     }
   }
 
@@ -304,6 +306,8 @@ export function useAccountDialog() {
     setMode,
     oauthConfigured,
     oauthLabel,
+    gmailConfigured,
+    outlookConfigured,
     form,
     setForm,
     error,
