@@ -135,6 +135,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -358,6 +362,42 @@ private fun MeronMobileScreenContent(
     coreProtocolVersion: Int,
 ) {
     with(state) {
+        val navController = rememberNavController()
+        val currentBackStackEntry by navController.currentBackStackEntryAsState()
+        val startRoute = remember { screen.route() }
+        var pendingRoute by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(screen) {
+            val targetRoute = screen.route()
+            val currentRoute = currentBackStackEntry?.destination?.route
+            if (currentRoute == null) {
+                pendingRoute = targetRoute
+            } else if (currentRoute != targetRoute) {
+                navController.navigate(targetRoute) {
+                    launchSingleTop = true
+                }
+            }
+        }
+        LaunchedEffect(currentBackStackEntry?.destination?.route) {
+            val currentRoute = currentBackStackEntry?.destination?.route
+            val queuedRoute = pendingRoute
+            if (queuedRoute != null && currentRoute != null && currentRoute != queuedRoute) {
+                pendingRoute = null
+                navController.navigate(queuedRoute) {
+                    launchSingleTop = true
+                }
+                return@LaunchedEffect
+            }
+            pendingRoute = null
+            val destinationScreen = appRouteToScreen(currentRoute)
+            if (destinationScreen != null && screen != destinationScreen) {
+                screen = destinationScreen
+            }
+        }
+        val popAppBack: () -> Unit = {
+            if (!navController.popBackStack()) {
+                screen = previousTopScreen
+            }
+        }
         DisposableEffect(Unit) {
             val handle =
                 if (coreLoaded) {
@@ -711,8 +751,8 @@ private fun MeronMobileScreenContent(
             }
         }
 
-        when (screen) {
-            Screen.Thread -> {
+        NavHost(navController = navController, startDestination = startRoute) {
+            composable(AppRoutes.Thread) {
                 ThreadScreen(
                     thread = selectedCoreThread,
                     messages = messages,
@@ -729,17 +769,17 @@ private fun MeronMobileScreenContent(
                             conversationHtmlOverrides = conversationHtmlOverrides + (selectedThreadAccountId to preferHtml)
                         }
                     },
-                    onBack = { screen = previousTopScreen },
+                    onBack = popAppBack,
                     onArchive = {
                         selectedCoreThread?.let {
                             archiveOrRemove(it)
-                            screen = previousTopScreen
+                            popAppBack()
                         }
                     },
                     onDelete = {
                         selectedCoreThread?.let {
                             deleteThread(it)
-                            screen = previousTopScreen
+                            popAppBack()
                         }
                     },
                     onToggleStar = {
@@ -759,14 +799,14 @@ private fun MeronMobileScreenContent(
                     onMoveToFolder = { folder ->
                         selectedCoreThread?.let { thread ->
                             moveThreadToFolder(thread, folder.name) {
-                                screen = previousTopScreen
+                                popAppBack()
                             }
                         }
                     },
                     onCreateFolderAndMove = { name ->
                         selectedCoreThread?.let { thread ->
                             createFolderAndMoveThread(thread, name) {
-                                screen = previousTopScreen
+                                popAppBack()
                             }
                         }
                     },
@@ -826,7 +866,7 @@ private fun MeronMobileScreenContent(
                 )
             }
 
-            Screen.Compose -> {
+            composable(AppRoutes.Compose) {
                 ComposeScreen(
                     sendIdentities = composeIdentityCandidates(),
                     selectedFromKey = selectedComposeIdentity()?.let { identityKey(it) }.orEmpty(),
@@ -875,9 +915,9 @@ private fun MeronMobileScreenContent(
                 )
             }
 
-            Screen.AddAccount -> {
+            composable(AppRoutes.AddAccount) {
                 AddAccountScreen(
-                    onBack = { screen = previousTopScreen },
+                    onBack = popAppBack,
                     initialSection = addSection,
                     displayName = displayName,
                     onDisplayNameChange = { displayName = it },
@@ -919,10 +959,10 @@ private fun MeronMobileScreenContent(
                 )
             }
 
-            Screen.Settings -> {
+            composable(AppRoutes.Settings) {
                 LaunchedEffect(Unit) { loadStorageUsage() }
                 SettingsScreen(
-                    onBack = { screen = previousTopScreen },
+                    onBack = popAppBack,
                     initialAccountId = accountSettingsTargetId,
                     onConsumeInitialAccount = { accountSettingsTargetId = null },
                     initialKanbanBoardId = kanbanSettingsTargetId,
@@ -1068,7 +1108,7 @@ private fun MeronMobileScreenContent(
                 )
             }
 
-            Screen.Starred -> {
+            composable(AppRoutes.Starred) {
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     drawerContent = {
@@ -1187,7 +1227,7 @@ private fun MeronMobileScreenContent(
                 }
             }
 
-            Screen.Kanban -> {
+            composable(AppRoutes.Kanban) {
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     drawerContent = {
@@ -1507,7 +1547,7 @@ private fun MeronMobileScreenContent(
                 }
             }
 
-            Screen.Mail -> {
+            composable(AppRoutes.Mail) {
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     drawerContent = {

@@ -168,6 +168,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -341,16 +345,34 @@ internal fun SettingsScreen(
 ) {
     var showThemePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
-    var page by remember { mutableStateOf<SettingsPage>(SettingsPage.Root) }
+    val settingsNavController = rememberNavController()
+    val settingsBackStackEntry by settingsNavController.currentBackStackEntryAsState()
+    var selectedSettingsAccountId by remember { mutableStateOf<String?>(null) }
+    var selectedSettingsBoardId by remember { mutableStateOf<String?>(null) }
+    val page =
+        when (settingsBackStackEntry?.destination?.route ?: SettingsRoutes.Root) {
+            SettingsRoutes.General -> SettingsPage.General
+            SettingsRoutes.Account -> selectedSettingsAccountId?.let { SettingsPage.AccountDetail(it) } ?: SettingsPage.Root
+            SettingsRoutes.AccountWallpaper -> selectedSettingsAccountId?.let { SettingsPage.AccountWallpaper(it) } ?: SettingsPage.Root
+            SettingsRoutes.KanbanBoard -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardDetail(it) } ?: SettingsPage.Root
+            SettingsRoutes.KanbanBoardWallpaper -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardWallpaper(it) } ?: SettingsPage.Root
+            else -> SettingsPage.Root
+        }
     LaunchedEffect(initialAccountId) {
         if (!initialAccountId.isNullOrBlank()) {
-            page = SettingsPage.AccountDetail(initialAccountId)
+            selectedSettingsAccountId = initialAccountId
+            settingsNavController.navigate(SettingsRoutes.Account) {
+                launchSingleTop = true
+            }
             onConsumeInitialAccount()
         }
     }
     LaunchedEffect(initialKanbanBoardId) {
         if (!initialKanbanBoardId.isNullOrBlank()) {
-            page = SettingsPage.KanbanBoardDetail(initialKanbanBoardId)
+            selectedSettingsBoardId = initialKanbanBoardId
+            settingsNavController.navigate(SettingsRoutes.KanbanBoard) {
+                launchSingleTop = true
+            }
             onConsumeInitialKanbanBoard()
         }
     }
@@ -385,16 +407,9 @@ internal fun SettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        page =
-                            when (val currentPage = page) {
-                                SettingsPage.Root -> {
-                                    onBack()
-                                    SettingsPage.Root
-                                }
-                                is SettingsPage.AccountWallpaper -> SettingsPage.AccountDetail(currentPage.accountId)
-                                is SettingsPage.KanbanBoardWallpaper -> SettingsPage.KanbanBoardDetail(currentPage.boardId)
-                                else -> SettingsPage.Root
-                            }
+                        if (!settingsNavController.popBackStack()) {
+                            onBack()
+                        }
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
                     }
@@ -402,8 +417,12 @@ internal fun SettingsScreen(
             )
         },
     ) { innerPadding ->
-        when (page) {
-            SettingsPage.General -> {
+        NavHost(
+            navController = settingsNavController,
+            startDestination = SettingsRoutes.Root,
+            modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+        ) {
+            composable(SettingsRoutes.General) {
                 SettingsGeneralPage(
                     appearanceMode = appearanceMode,
                     onOpenTheme = { showThemePicker = true },
@@ -434,14 +453,14 @@ internal fun SettingsScreen(
                     storageClearConfirming = storageClearConfirming,
                     onRefreshStorage = onRefreshStorage,
                     onClearStorageCache = onClearStorageCache,
-                    modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
-            is SettingsPage.AccountDetail -> {
-                val account = accounts.firstOrNull { it.id == (page as SettingsPage.AccountDetail).accountId }
+            composable(SettingsRoutes.Account) {
+                val account = selectedSettingsAccountId?.let { id -> accounts.firstOrNull { it.id == id } }
                 if (account == null) {
-                    page = SettingsPage.Root
+                    LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
                 } else {
                     val accountIndex = accounts.indexOfFirst { it.id == account.id }
                     SettingsAccountDetailPage(
@@ -480,19 +499,19 @@ internal fun SettingsScreen(
                             )
                         },
                         onPickAvatar = { onPickAccountAvatar(account) },
-                        onOpenWallpaper = { page = SettingsPage.AccountWallpaper(account.id) },
+                        onOpenWallpaper = { settingsNavController.navigate(SettingsRoutes.AccountWallpaper) },
                         onMoveUp = { onMoveAccountUp(account) },
                         onMoveDown = { onMoveAccountDown(account) },
                         onRemove = { onRemoveAccount(account) },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
 
-            is SettingsPage.KanbanBoardDetail -> {
-                val board = kanbanBoards.firstOrNull { it.id == (page as SettingsPage.KanbanBoardDetail).boardId }
+            composable(SettingsRoutes.KanbanBoard) {
+                val board = selectedSettingsBoardId?.let { id -> kanbanBoards.firstOrNull { it.id == id } }
                 if (board == null) {
-                    page = SettingsPage.Root
+                    LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
                 } else {
                     SettingsKanbanBoardDetailPage(
                         board = board,
@@ -501,20 +520,20 @@ internal fun SettingsScreen(
                             onSaveKanbanBoard(board, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
                         },
                         onPickAvatar = { onPickKanbanBoardAvatar(board) },
-                        onOpenWallpaper = { page = SettingsPage.KanbanBoardWallpaper(board.id) },
+                        onOpenWallpaper = { settingsNavController.navigate(SettingsRoutes.KanbanBoardWallpaper) },
                         onDelete = {
                             onDeleteKanbanBoard(board)
-                            page = SettingsPage.Root
+                            settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false)
                         },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
 
-            is SettingsPage.AccountWallpaper -> {
-                val account = accounts.firstOrNull { it.id == (page as SettingsPage.AccountWallpaper).accountId }
+            composable(SettingsRoutes.AccountWallpaper) {
+                val account = selectedSettingsAccountId?.let { id -> accounts.firstOrNull { it.id == id } }
                 if (account == null) {
-                    page = SettingsPage.Root
+                    LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
                 } else {
                     WallpaperPickerPage(
                         selected = if (account.chatWallpaperKind == "custom") "__custom" else account.chatWallpaperPresetId,
@@ -540,15 +559,15 @@ internal fun SettingsScreen(
                             )
                         },
                         onUpload = { onPickAccountWallpaper(account) },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
 
-            is SettingsPage.KanbanBoardWallpaper -> {
-                val board = kanbanBoards.firstOrNull { it.id == (page as SettingsPage.KanbanBoardWallpaper).boardId }
+            composable(SettingsRoutes.KanbanBoardWallpaper) {
+                val board = selectedSettingsBoardId?.let { id -> kanbanBoards.firstOrNull { it.id == id } }
                 if (board == null) {
-                    page = SettingsPage.Root
+                    LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
                 } else {
                     WallpaperPickerPage(
                         selected = if (board.wallpaperUrl.isNotBlank()) "__custom" else board.wallpaperPresetId,
@@ -558,23 +577,23 @@ internal fun SettingsScreen(
                             onSaveKanbanBoard(board, board.name, board.avatarUrl, presetId, "")
                         },
                         onUpload = { onPickKanbanBoardWallpaper(board) },
-                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
 
-            SettingsPage.Root -> {
+            composable(SettingsRoutes.Root) {
                 // Mirrors the desktop Settings sidebar: a single "General" entry,
                 // then Kanban boards, Mail accounts, and Feed accounts sections.
                 val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
                 val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
-                LazyColumn(Modifier.fillMaxSize().padding(innerPadding).imePadding()) {
+                LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Settings,
                             title = tr("settings.sections.general"),
                             subtitle = tr("settings.rootGeneralSubtitle"),
-                            onClick = { page = SettingsPage.General },
+                            onClick = { settingsNavController.navigate(SettingsRoutes.General) },
                         )
                     }
                     item { SettingsSectionLabel(tr("settings.sections.kanbanBoards")) }
@@ -588,7 +607,10 @@ internal fun SettingsScreen(
                                 } else {
                                     trf("settings.kanban.boardColumns", board.columns.size)
                                 },
-                            onClick = { page = SettingsPage.KanbanBoardDetail(board.id) },
+                            onClick = {
+                                selectedSettingsBoardId = board.id
+                                settingsNavController.navigate(SettingsRoutes.KanbanBoard)
+                            },
                         )
                     }
                     item {
@@ -596,7 +618,10 @@ internal fun SettingsScreen(
                             icon = Icons.Filled.Add,
                             title = tr("settings.kanban.newBoard"),
                             subtitle = tr("settings.kanban.newBoardHint"),
-                            onClick = { page = SettingsPage.KanbanBoardDetail(onCreateKanbanBoard()) },
+                            onClick = {
+                                selectedSettingsBoardId = onCreateKanbanBoard()
+                                settingsNavController.navigate(SettingsRoutes.KanbanBoard)
+                            },
                         )
                     }
                     item { SettingsSectionLabel(tr("settings.sections.mailAccounts")) }
@@ -607,7 +632,10 @@ internal fun SettingsScreen(
                             SettingsAccountRow(
                                 account = account,
                                 hidden = account.id in hiddenNavigationAccountIds,
-                                onClick = { page = SettingsPage.AccountDetail(account.id) },
+                                onClick = {
+                                    selectedSettingsAccountId = account.id
+                                    settingsNavController.navigate(SettingsRoutes.Account)
+                                },
                             )
                         }
                     }
@@ -627,7 +655,10 @@ internal fun SettingsScreen(
                             SettingsAccountRow(
                                 account = account,
                                 hidden = account.id in hiddenNavigationAccountIds,
-                                onClick = { page = SettingsPage.AccountDetail(account.id) },
+                                onClick = {
+                                    selectedSettingsAccountId = account.id
+                                    settingsNavController.navigate(SettingsRoutes.Account)
+                                },
                             )
                         }
                     }
@@ -666,6 +697,15 @@ private sealed class SettingsPage {
     data class KanbanBoardWallpaper(
         val boardId: String,
     ) : SettingsPage()
+}
+
+private object SettingsRoutes {
+    const val Root = "settings/root"
+    const val General = "settings/general"
+    const val Account = "settings/account"
+    const val AccountWallpaper = "settings/account-wallpaper"
+    const val KanbanBoard = "settings/kanban-board"
+    const val KanbanBoardWallpaper = "settings/kanban-board-wallpaper"
 }
 
 // Combines the desktop "General" section: Appearance, Sidebar, Kanban,

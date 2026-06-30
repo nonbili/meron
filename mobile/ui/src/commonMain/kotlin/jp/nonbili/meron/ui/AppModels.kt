@@ -7,6 +7,39 @@ import jp.nonbili.meron.shared.ThreadSummary
 
 internal enum class Screen { Mail, Starred, Kanban, Thread, Compose, AddAccount, Settings }
 
+internal object AppRoutes {
+    const val Mail = "mail"
+    const val Starred = "starred"
+    const val Kanban = "kanban"
+    const val Thread = "thread"
+    const val Compose = "compose"
+    const val AddAccount = "add-account"
+    const val Settings = "settings"
+}
+
+internal fun Screen.route(): String =
+    when (this) {
+        Screen.Mail -> AppRoutes.Mail
+        Screen.Starred -> AppRoutes.Starred
+        Screen.Kanban -> AppRoutes.Kanban
+        Screen.Thread -> AppRoutes.Thread
+        Screen.Compose -> AppRoutes.Compose
+        Screen.AddAccount -> AppRoutes.AddAccount
+        Screen.Settings -> AppRoutes.Settings
+    }
+
+internal fun appRouteToScreen(route: String?): Screen? =
+    when (route?.substringBefore("?")) {
+        AppRoutes.Mail -> Screen.Mail
+        AppRoutes.Starred -> Screen.Starred
+        AppRoutes.Kanban -> Screen.Kanban
+        AppRoutes.Thread -> Screen.Thread
+        AppRoutes.Compose -> Screen.Compose
+        AppRoutes.AddAccount -> Screen.AddAccount
+        AppRoutes.Settings -> Screen.Settings
+        else -> null
+    }
+
 internal data class AccountMediaUploadTarget(
     val account: AccountSummary,
     val wallpaper: Boolean,
