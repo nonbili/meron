@@ -4,6 +4,10 @@ set -euo pipefail
 TARGET="${TARGET:-aarch64-linux-android}"
 ABI="${ABI:-arm64-v8a}"
 API_LEVEL="${API_LEVEL:-23}"
+# PROFILE selects the Cargo profile. The default `debug` keeps local dev builds
+# fast; release builds optimize and get stripped (the debug .so ships ~186MB of
+# unstripped debug_info, which is why release APKs must use PROFILE=release).
+PROFILE="${PROFILE:-debug}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
@@ -53,6 +57,7 @@ if [[ ! -x "$AR" ]]; then
 fi
 
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+STRIP="$TOOLCHAIN/bin/llvm-strip"
 
 # The vendored OpenSSL build (openssl-src) drives OpenSSL's own Makefile, which
 # otherwise picks up the host macOS `ar` and emits BSD-format archives. rustc,
@@ -75,8 +80,16 @@ if command -v rustup >/dev/null 2>&1; then
   rustup target add "$TARGET" >/dev/null
 fi
 
-echo "Building meron-core for $TARGET using $ANDROID_NDK_HOME"
-if ! cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET"; then
+CARGO_PROFILE_ARGS=()
+if [[ "$PROFILE" == "release" ]]; then
+  CARGO_PROFILE_ARGS=(--release)
+elif [[ "$PROFILE" != "debug" ]]; then
+  echo "Unsupported PROFILE='$PROFILE' (expected 'debug' or 'release')." >&2
+  exit 1
+fi
+
+echo "Building meron-core ($PROFILE) for $TARGET using $ANDROID_NDK_HOME"
+if ! cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"; then
   cat >&2 <<EOF
 
 Failed to build meron-core for $TARGET.
@@ -93,7 +106,7 @@ EOF
   exit 1
 fi
 
-SO_PATH="$CORE_DIR/target/$TARGET/debug/libmeron_core.so"
+SO_PATH="$CORE_DIR/target/$TARGET/$PROFILE/libmeron_core.so"
 if [[ ! -f "$SO_PATH" ]]; then
   echo "Build completed, but $SO_PATH was not produced." >&2
   exit 1
@@ -101,4 +114,10 @@ fi
 
 mkdir -p "$JNI_LIB_DIR"
 cp "$SO_PATH" "$JNI_LIB_DIR/libmeron_core.so"
+
+# Release builds carry full debug_info (~186MB). Strip it so the packaged .so —
+# and the APK that bundles it — stays small.
+if [[ "$PROFILE" == "release" ]]; then
+  "$STRIP" --strip-unneeded "$JNI_LIB_DIR/libmeron_core.so"
+fi
 echo "Packaged $JNI_LIB_DIR/libmeron_core.so"

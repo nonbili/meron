@@ -1,0 +1,14 @@
+<h2>Features</h2>
+<ul>
+  <li>Connect Gmail, Outlook, and standard IMAP/SMTP accounts</li>
+  <li>Sign in securely with OAuth through in-app browser tabs</li>
+  <li>Organize your inbox on a kanban-style board</li>
+  <li>Follow RSS feeds alongside your mail</li>
+  <li>Search across your mail, including in the kanban view</li>
+</ul>
+
+<h2>How it works</h2>
+<ul>
+  <li>Meron syncs your mail and feeds through a shared Rust core for speed and reliability.</li>
+  <li>Your accounts and messages are stored encrypted on your device.</li>
+</ul>

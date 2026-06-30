@@ -8,7 +8,7 @@ type PackageInfo = {
   buildNumber: string
 }
 
-// mobile/ holds the fastlane setup + mobile/changelogs/; the repo root holds wails.json.
+// mobile/ holds the fastlane setup (incl. the shared changelogs); the repo root holds wails.json.
 export const mobileDir = resolve(import.meta.dir, '..')
 export const repoRoot = resolve(mobileDir, '..')
 
@@ -47,9 +47,10 @@ export const packageInfo = async (): Promise<PackageInfo> => {
   }
 }
 
-// The single source changelog shared by both mobile stores: mobile/changelogs/v<version>.txt
-export const changelogSource = (version: string) => (
-  resolve(mobileDir, `changelogs/v${version}.txt`)
+// The single source changelog, shared by both mobile stores and F-Droid:
+// mobile/fastlane/metadata/android/en-US/changelogs/<versionCode>.txt
+export const changelogSource = (versionCode: string) => (
+  resolve(mobileDir, `fastlane/metadata/android/en-US/changelogs/${versionCode}.txt`)
 )
 
 export const fileExists = async (path: string) => (

@@ -4,7 +4,6 @@ import { resolve } from 'node:path'
 import {
   changelogSource,
   commandExists,
-  copyFile,
   ensureFile,
   envFlag,
   fail,
@@ -35,13 +34,11 @@ if (!(await commandExists('bundle'))) {
   fail("bundle not found. Run 'bundle install' in mobile/.")
 }
 
-// Derive the Play changelog (named by versionCode) from the shared source changelog.
+// The Play changelog (named by versionCode) is the shared source changelog.
 if (uploadChangelogs) {
-  const source = changelogSource(pkg.version)
-  await ensureFile(source, `Changelog not found: ${source}`)
-  const dest = resolve(mobileDir, `fastlane/metadata/android/en-US/changelogs/${pkg.versionCode}.txt`)
-  await copyFile(source, dest)
-  console.log(`Using changelog ${source} -> ${dest}`)
+  const changelog = changelogSource(pkg.versionCode)
+  await ensureFile(changelog, `Changelog not found: ${changelog}`)
+  console.log(`Using changelog ${changelog}`)
 }
 
 if (!envFlag('SKIP_BUILD', false)) {

@@ -13,8 +13,8 @@ def releaseProp = { String name, String envName = null, String fallback = "" ->
     return fallback
 }
 
-def releaseVersionCode = releaseProp("meronVersionCode", "MERON_VERSION_CODE", "2").toInteger()
-def releaseVersionName = releaseProp("meronVersionName", "MERON_VERSION_NAME", "0.1.1")
+def releaseVersionCode = releaseProp("meronVersionCode", "MERON_VERSION_CODE", "3").toInteger()
+def releaseVersionName = releaseProp("meronVersionName", "MERON_VERSION_NAME", "0.1.2")
 def oauthAppLinkHost = releaseProp("oauthAppLinkHost", "MERON_OAUTH_APP_LINK_HOST", "oauth.example.invalid")
 def oauthAppLinkPathPrefix = releaseProp("oauthAppLinkPathPrefix", "MERON_OAUTH_APP_LINK_PATH_PREFIX", "/meron/oauth")
 def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")

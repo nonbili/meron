@@ -42,8 +42,8 @@ if (!(await commandExists('bundle'))) {
   fail("bundle not found. Run 'bundle install' in mobile/.")
 }
 
-// Derive the iOS release notes from the shared source changelog.
-const source = changelogSource(pkg.version)
+// Derive the iOS release notes from the shared source changelog (keyed by versionCode).
+const source = changelogSource(pkg.versionCode)
 await ensureFile(source, `Changelog not found: ${source}`)
 await copyFile(source, releaseNotesPath)
 console.log(`Using release notes from ${source}`)

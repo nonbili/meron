@@ -1,0 +1,123 @@
+name: Build Android
+
+on:
+  push:
+    tags:
+      - 'android/v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Gradle's preBuild runs `bun scripts/i18n/catalog.ts generate`.
+      - uses: oven-sh/setup-bun@v2
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: meron-core
+
+      # Uses the checked-in wrapper (mobile/gradlew, pinned to 9.4.1); the action
+      # adds dependency caching.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: resolve version
+        run: |
+          set -euo pipefail
+          # The committed build.gradle defaults are the source of truth for the
+          # version; the release tag must match versionName.
+          GRADLE=mobile/android/build.gradle
+          VERSION_NAME=$(grep 'MERON_VERSION_NAME"' "$GRADLE" | sed -E 's/.*"([^"]+)"\).*/\1/')
+          VERSION_CODE=$(grep 'MERON_VERSION_CODE"' "$GRADLE" | sed -E 's/.*"([^"]+)"\)\.toInteger.*/\1/')
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#android/v}"
+            if [ "$TAG_VERSION" != "$VERSION_NAME" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match build.gradle versionName $VERSION_NAME."
+              exit 1
+            fi
+          fi
+          echo "MERON_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "MERON_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Building Meron Android $VERSION_NAME (code $VERSION_CODE)"
+
+      - name: decode signing keystore
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APK_SIGNING_KEY:-}" ]; then
+            echo "::error::APK_SIGNING_KEY secret is not set — cannot produce a signed release APK."
+            exit 1
+          fi
+          KEYSTORE_PATH="$RUNNER_TEMP/meron-release.jks"
+          printf '%s' "$APK_SIGNING_KEY" | base64 -d > "$KEYSTORE_PATH"
+          echo "MERON_ANDROID_RELEASE_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      # Only forward OAuth overrides that are actually set; empty values would
+      # clobber the non-empty defaults in android/build.gradle (releaseProp uses
+      # getenv() ?: fallback, and an empty string is not null).
+      - name: forward oauth config
+        env:
+          MERON_GOOGLE_CLIENT_ID: ${{ secrets.MERON_GOOGLE_CLIENT_ID }}
+          MERON_GOOGLE_REDIRECT_URI: ${{ secrets.MERON_GOOGLE_REDIRECT_URI }}
+          MERON_OUTLOOK_CLIENT_ID: ${{ secrets.MERON_OUTLOOK_CLIENT_ID }}
+          MERON_OAUTH_APP_LINK_HOST: ${{ vars.MERON_OAUTH_APP_LINK_HOST }}
+          MERON_OAUTH_APP_LINK_PATH_PREFIX: ${{ vars.MERON_OAUTH_APP_LINK_PATH_PREFIX }}
+        run: |
+          set -euo pipefail
+          for var in MERON_GOOGLE_CLIENT_ID MERON_GOOGLE_REDIRECT_URI \
+            MERON_OUTLOOK_CLIENT_ID MERON_OAUTH_APP_LINK_HOST \
+            MERON_OAUTH_APP_LINK_PATH_PREFIX; do
+            value="${!var:-}"
+            if [ -n "$value" ]; then
+              echo "$var=$value" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: build rust core (release, stripped)
+        env:
+          PROFILE: release
+        run: |
+          set -euo pipefail
+          # ubuntu runners expose the NDK via ANDROID_NDK_LATEST_HOME; the
+          # packaging script reads ANDROID_NDK_HOME.
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          mobile/scripts/package-rust-core-android.sh
+
+      - name: build release apk
+        env:
+          MERON_ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.APK_KEY_STORE_PASSWORD }}
+          MERON_ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          MERON_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: ./mobile/gradlew -p mobile :android:assembleRelease
+
+      - name: rename apk
+        run: |
+          set -euo pipefail
+          cd mobile/android/build/outputs/apk/release
+          mv android-release.apk "meron-${MERON_VERSION_NAME}.apk"
+
+      - uses: softprops/action-gh-release@v2
+        name: release
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: mobile/fastlane/metadata/android/en-US/changelogs/${{ env.MERON_VERSION_CODE }}.txt
+          generate_release_notes: true
+          files: mobile/android/build/outputs/apk/release/meron-*.apk

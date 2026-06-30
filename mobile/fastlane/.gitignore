@@ -8,11 +8,10 @@ README.md
 # under metadata/ are committed
 screenshots/
 
-# derived at upload from mobile/changelogs/v<version>.txt:
+# The shared changelog source is metadata/android/en-US/changelogs/<versionCode>.txt
+# and IS committed (Google Play and F-Droid read it directly). Only the derived
+# artifacts are ignored:
 #  - default.txt (placeholder fallback)
-#  - <versionCode>.txt (generated for supply)
-#  - iOS release_notes.txt
-# Hand-authored v*.txt changelogs are kept.
+#  - iOS release_notes.txt (copied from the versionCode changelog at upload)
 metadata/android/en-US/changelogs/default.txt
-metadata/android/en-US/changelogs/[0-9]*.txt
 metadata/ios/en-US/release_notes.txt

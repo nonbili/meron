@@ -11,20 +11,20 @@
 		A10000000000000000000003 /* RustCoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* RustCoreBridge.swift */; };
 		A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* IosBackgroundRefresh.swift */; };
 		A10000000000000000000005 /* IosAppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* IosAppPaths.swift */; };
-		A1000000000000000000000B /* IosDbKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* IosDbKey.swift */; };
 		A10000000000000000000006 /* RustCoreBridgeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* RustCoreBridgeContractTests.swift */; };
 		A10000000000000000000007 /* MailtoUrlContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* MailtoUrlContractTests.swift */; };
 		A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* IosNotificationContractTests.swift */; };
-			A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
-			A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
-			A1000000000000000000011B /* IosComposeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011C /* IosComposeHost.swift */; };
-			A1000000000000000000011D /* IosContractHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011E /* IosContractHelpers.swift */; };
-			A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
-			A10000000000000000000201 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000200 /* Assets.xcassets */; };
-			A10000000000000000000203 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* LaunchScreen.storyboard */; };
+		A10000000000000000000009 /* OAuthCallbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* OAuthCallbackContractTests.swift */; };
+		A1000000000000000000000A /* IosBackgroundRefreshContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */; };
+		A1000000000000000000000B /* IosDbKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* IosDbKey.swift */; };
+		A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
+		A10000000000000000000114 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000115 /* Localizable.xcstrings */; };
 		A10000000000000000000117 /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000118 /* LocalizationContractTests.swift */; };
-			A10000000000000000000092 /* IosMailModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000103 /* IosMailModels.swift */; };
-			A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
+		A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
+		A1000000000000000000011B /* IosComposeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011C /* IosComposeHost.swift */; };
+		A1000000000000000000011D /* IosContractHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011E /* IosContractHelpers.swift */; };
+		A10000000000000000000201 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000200 /* Assets.xcassets */; };
+		A10000000000000000000203 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,6 +38,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		44684984D13B3D27A9CE1F39 /* Version.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
+		A1000000000000000000000C /* IosDbKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosDbKey.swift; sourceTree = "<group>"; };
 		A10000000000000000000010 /* Meron.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Meron.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000011 /* Meron.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meron.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -45,22 +47,21 @@
 		A10000000000000000000015 /* Meron-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Meron-Bridging-Header.h"; sourceTree = "<group>"; };
 		A10000000000000000000016 /* IosBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefresh.swift; sourceTree = "<group>"; };
 		A10000000000000000000017 /* IosAppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosAppPaths.swift; sourceTree = "<group>"; };
-		A1000000000000000000000C /* IosDbKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosDbKey.swift; sourceTree = "<group>"; };
-		A1000000000000000000001E /* Meron.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Meron.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000018 /* RustCoreBridgeContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RustCoreBridgeContractTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000019 /* MeronTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeronTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000001A /* MailtoUrlContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailtoUrlContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000001B /* IosNotificationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosNotificationContractTests.swift; sourceTree = "<group>"; };
-			A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
-			A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
-			A1000000000000000000011C /* IosComposeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosComposeHost.swift; sourceTree = "<group>"; };
-			A1000000000000000000011E /* IosContractHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosContractHelpers.swift; sourceTree = "<group>"; };
-			A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
-			A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IosMailModels.swift"; sourceTree = "<group>"; };
-			A10000000000000000000115 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = "Localizable.xcstrings"; sourceTree = "<group>"; };
-			A10000000000000000000200 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-			A10000000000000000000202 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-			A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalizedCatalog.swift"; sourceTree = "<group>"; };
+		A1000000000000000000001C /* OAuthCallbackContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthCallbackContractTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000001D /* IosBackgroundRefreshContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefreshContractTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000001E /* Meron.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Meron.entitlements; sourceTree = "<group>"; };
+		A10000000000000000000103 /* IosMailModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosMailModels.swift; sourceTree = "<group>"; };
+		A10000000000000000000115 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedCatalog.swift; sourceTree = "<group>"; };
+		A1000000000000000000011C /* IosComposeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosComposeHost.swift; sourceTree = "<group>"; };
+		A1000000000000000000011E /* IosContractHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosContractHelpers.swift; sourceTree = "<group>"; };
+		A10000000000000000000200 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000000000000000000202 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +88,7 @@
 				A10000000000000000000031 /* Meron */,
 				A10000000000000000000033 /* MeronTests */,
 				A10000000000000000000032 /* Products */,
+				44684984D13B3D27A9CE1F39 /* Version.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -112,6 +114,15 @@
 			path = Meron;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000032 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000010 /* Meron.app */,
+				A10000000000000000000019 /* MeronTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000033 /* MeronTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -123,15 +134,6 @@
 				A10000000000000000000118 /* LocalizationContractTests.swift */,
 			);
 			path = MeronTests;
-			sourceTree = "<group>";
-		};
-		A10000000000000000000032 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				A10000000000000000000010 /* Meron.app */,
-				A10000000000000000000019 /* MeronTests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -310,11 +312,11 @@
 		A10000000000000000000050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-				files = (
-					A10000000000000000000001 /* Meron.swift in Sources */,
-					A1000000000000000000011B /* IosComposeHost.swift in Sources */,
-					A1000000000000000000011D /* IosContractHelpers.swift in Sources */,
-					A10000000000000000000092 /* IosMailModels.swift in Sources */,
+			files = (
+				A10000000000000000000001 /* Meron.swift in Sources */,
+				A1000000000000000000011B /* IosComposeHost.swift in Sources */,
+				A1000000000000000000011D /* IosContractHelpers.swift in Sources */,
+				A10000000000000000000092 /* IosMailModels.swift in Sources */,
 				A10000000000000000000119 /* LocalizedCatalog.swift in Sources */,
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
 				A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */,
@@ -463,11 +465,11 @@
 		};
 		A10000000000000000000082 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
@@ -488,7 +490,6 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustCore",
 				);
-				MARKETING_VERSION = 0.1.1;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
 				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
@@ -514,11 +515,11 @@
 		};
 		A10000000000000000000083 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
@@ -539,7 +540,6 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustCore",
 				);
-				MARKETING_VERSION = 0.1.1;
 				MERON_ASSOCIATED_DOMAIN = oauth.example.invalid;
 				MERON_GOOGLE_CLIENT_ID = "247266375404-5cdrkea888lsttjh65fjtp3504h45r2k.apps.googleusercontent.com";
 				MERON_GOOGLE_CLIENT_SECRET = "";
@@ -565,10 +565,10 @@
 		};
 		A10000000000000000000084 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -585,7 +585,6 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Meron/Meron-Bridging-Header.h";
@@ -596,10 +595,10 @@
 		};
 		A10000000000000000000085 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NXW8RMPV8L;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
@@ -616,7 +615,6 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = jp.nonbili.meron.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Meron/Meron-Bridging-Header.h";

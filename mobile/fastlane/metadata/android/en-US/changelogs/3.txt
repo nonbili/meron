@@ -1,0 +1,4 @@
+- Add about dialog
+- Sign in with OAuth via custom tabs
+- Fix mail search, including in kanban view
+- Fix initial loading and load more
