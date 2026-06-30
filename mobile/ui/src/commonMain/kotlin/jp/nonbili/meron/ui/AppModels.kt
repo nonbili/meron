@@ -57,6 +57,7 @@ internal enum class SendShortcutMode { Enter, ModEnter }
 
 internal const val UNIFIED_ACCOUNT_ID = "unified"
 internal const val INBOX_FOLDER = "inbox"
+internal const val STARRED_FOLDER = "starred"
 internal const val KANBAN_PREFS = "kanban"
 internal const val KANBAN_BOARDS_PREF = "kanban_boards_v1"
 internal const val ACTIVE_KANBAN_BOARD_PREF = "active_kanban_board_id_v1"

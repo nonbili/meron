@@ -256,6 +256,41 @@ internal fun MeronMobileState.kanbanColumnSearchQuery(column: KanbanColumnSpec):
     return if (scope == "all" || scope == kanbanColumnKey(column)) query else ""
 }
 
+internal fun isUnifiedStarredColumn(column: KanbanColumnSpec): Boolean {
+    return column.accountId == UNIFIED_ACCOUNT_ID && column.folderId.equals(STARRED_FOLDER, ignoreCase = true)
+}
+
+internal fun StarredItemSummary.toKanbanThreadSummary(): ThreadSummary =
+    ThreadSummary(
+        id = id,
+        threadId = threadId,
+        accountId = accountId,
+        folder = folder,
+        subject = subject,
+        sender = sender,
+        preview = preview,
+        unread = unread,
+        starred = true,
+        dateEpochSeconds = dateEpochSeconds,
+    )
+
+internal fun starredItemsMatching(
+    items: List<StarredItemSummary>,
+    query: String,
+): List<StarredItemSummary> {
+    val needle = query.trim().lowercase()
+    val filtered =
+        if (needle.isBlank()) {
+            items
+        } else {
+            items.filter { item ->
+                listOf(item.subject, item.sender, item.preview, item.accountId, item.folder)
+                    .any { it.lowercase().contains(needle) }
+            }
+        }
+    return filtered.sortedByDescending { it.dateEpochSeconds }
+}
+
 internal fun MeronMobileState.updateKanbanColumn(
     key: String,
     update: (KanbanColumnState) -> KanbanColumnState,
@@ -296,6 +331,14 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
     accountCursors: Map<String, String> = emptyMap(),
 ): MailboxLoadResult {
     val columnQuery = kanbanColumnSearchQuery(column)
+    if (isUnifiedStarredColumn(column)) {
+        val starred = parseStarredItemsResponse(client.listStarredItems())
+        return MailboxLoadResult(
+            folders = emptyList(),
+            folder = STARRED_FOLDER,
+            threads = starredItemsMatching(starred, columnQuery).map { it.toKanbanThreadSummary() },
+        )
+    }
     return if (column.accountId == UNIFIED_ACCOUNT_ID) {
         val unifiedAccounts = coreAccounts.filter { it.includedInUnified }
         val accounts =

@@ -605,6 +605,7 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
         status = "Rust core not packaged."
         return
     }
+    val backendThreadId = thread.backendThreadId()
     selectedCoreThread = thread
     messages = emptyList()
     messageCursor = ""
@@ -619,17 +620,17 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 val response =
-                    if (threadIdIsRss(thread.id)) {
-                        client.readRssThread(RssThreadParams(threadId = thread.id))
+                    if (threadIdIsRss(backendThreadId)) {
+                        client.readRssThread(RssThreadParams(threadId = backendThreadId))
                     } else {
-                        client.readThread(ThreadReadParams(threadId = thread.id))
+                        client.readThread(ThreadReadParams(threadId = backendThreadId))
                     }
                 if (thread.unread) {
                     runCatching {
-                        if (threadIdIsRss(thread.id)) {
-                            client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true))
+                        if (threadIdIsRss(backendThreadId)) {
+                            client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true))
                         } else {
-                            client.markRead(MarkReadParams(threadId = thread.id, seen = true))
+                            client.markRead(MarkReadParams(threadId = backendThreadId, seen = true))
                         }
                     }
                 }
@@ -650,6 +651,8 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
         }
     }
 }
+
+private fun ThreadSummary.backendThreadId(): String = threadId.ifBlank { id }
 
 // Re-read the currently open thread and replace its message list with the
 // canonical copy from the core. Used after sending a quick reply so the stored
@@ -977,15 +980,17 @@ internal fun MeronMobileState.restoreThread(
 }
 
 internal fun MeronMobileState.toggleStar(thread: ThreadSummary) {
-    val isRssThread = threadIdIsRss(thread.id)
+    val backendThreadId = thread.backendThreadId()
+    val isRssThread = threadIdIsRss(backendThreadId)
+    val messageIds = listOf(thread.id).takeIf { backendThreadId != thread.id }
     runCoreThreadAction(
         thread = thread,
         label = if (thread.starred) "Unstar" else "Star",
         action = {
             if (isRssThread) {
-                markRssStarred(RssMarkStarredParams(threadId = thread.id, starred = !thread.starred))
+                markRssStarred(RssMarkStarredParams(threadId = backendThreadId, starred = !thread.starred))
             } else {
-                markStarred(MarkStarredParams(threadId = thread.id, starred = !thread.starred))
+                markStarred(MarkStarredParams(threadId = backendThreadId, starred = !thread.starred, messageIds = messageIds.orEmpty()))
             }
         },
         update = { threads -> threads.map { if (it.id == thread.id) it.copy(starred = !thread.starred) else it } },
@@ -1169,15 +1174,19 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
     }
     val accountsById = coreAccounts.associateBy { it.id }
     val mailTargets =
-        if (column.accountId == UNIFIED_ACCOUNT_ID) {
+        if (isUnifiedStarredColumn(column)) {
+            unread
+                .filterNot { threadIdIsRss(it.id) }
+                .map { thread -> thread.backendThreadId() to listOf(thread.id) }
+        } else if (column.accountId == UNIFIED_ACCOUNT_ID) {
             unread
                 .map { it.accountId }
                 .distinct()
                 .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
-                .map { accountId -> accountId to INBOX_FOLDER }
+                .map { accountId -> accountId to emptyList() }
         } else {
             val account = accountsById[column.accountId]
-            if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to column.folderId) else emptyList()
+            if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to emptyList()) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
     val threadsBefore = coreThreads
@@ -1193,8 +1202,13 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                mailTargets.forEach { (accountId, folderId) ->
-                    requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId)))
+                mailTargets.forEach { (target, messageIds) ->
+                    if (isUnifiedStarredColumn(column)) {
+                        requireCoreOk(client.markRead(MarkReadParams(threadId = target, messageIds = messageIds)))
+                    } else {
+                        val folderId = if (column.accountId == UNIFIED_ACCOUNT_ID) INBOX_FOLDER else column.folderId
+                        requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = target, folderId = folderId)))
+                    }
                 }
                 rssTargets.forEach { thread ->
                     requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))

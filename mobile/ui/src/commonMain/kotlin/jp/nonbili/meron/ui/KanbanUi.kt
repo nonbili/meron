@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -985,11 +986,14 @@ internal fun KanbanColumnDialog(
     // Local multi-select state: tapping a row toggles it; nothing is applied to
     // the board until "Done". Keyed by kanbanColumnKey so order is preserved
     // for re-application.
-    val selected = remember(board) {
-        mutableStateMapOf<String, KanbanColumnSpec>().apply {
-            board?.columns.orEmpty().forEach { put(kanbanColumnKey(it), it) }
+    val selected =
+        remember(board) {
+            mutableStateMapOf<String, KanbanColumnSpec>().apply {
+                board?.columns.orEmpty().forEach { put(kanbanColumnKey(it), it) }
+            }
         }
-    }
+    val collapsedAccounts = remember(accounts) { mutableStateMapOf<String, Boolean>() }
+
     fun toggle(column: KanbanColumnSpec) {
         val key = kanbanColumnKey(column)
         if (selected.remove(key) == null) selected[key] = column
@@ -1012,31 +1016,23 @@ internal fun KanbanColumnDialog(
                     SidebarLikeDialogRow(
                         selected = selected.contains(kanbanColumnKey(unified)),
                         title = tr("kanban.columns.unifiedInbox"),
-                        subtitle = tr("kanban.allAccounts"),
+                        subtitle = null,
                         onClick = { toggle(unified) },
                         leadingIcon = Icons.Filled.Inbox,
                     )
                 }
+                item {
+                    val starred = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, STARRED_FOLDER)
+                    SidebarLikeDialogRow(
+                        selected = selected.contains(kanbanColumnKey(starred)),
+                        title = tr("kanban.columns.unifiedStarred"),
+                        subtitle = null,
+                        onClick = { toggle(starred) },
+                        leadingIcon = Icons.Filled.Star,
+                    )
+                }
                 accounts.forEach { account ->
-                    item {
-                        Text(
-                            account.displayName.ifBlank { account.email.ifBlank { account.id } },
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
                     val folders = foldersByAccount[account.id].orEmpty()
-                    if (!accountSummaryIsRss(account)) {
-                        item {
-                            TextButton(onClick = { onCreateFolder(account) }) {
-                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(tr("folders.create"))
-                            }
-                        }
-                    }
                     // Always surface folders that are already board columns, even if
                     // they haven't been fetched into foldersByAccount yet — otherwise
                     // existing columns can't be shown as selected or removed.
@@ -1057,21 +1053,41 @@ internal fun KanbanColumnDialog(
                             }
                             if (isEmpty()) add(FolderSummary(account.id, INBOX_FOLDER, 0))
                         }
-                    items(visibleFolders, key = { "${account.id}\n${it.name}" }) { folder ->
-                        val column = KanbanColumnSpec(account.id, folder.name)
-                        val isRss = accountSummaryIsRss(account)
-                        SidebarLikeDialogRow(
-                            selected = selected.contains(kanbanColumnKey(column)),
-                            title = folder.name.replaceFirstChar { it.uppercase() },
-                            subtitle = null,
-                            onClick = { toggle(column) },
-                            leadingIcon =
-                                when {
-                                    isRss -> Icons.Filled.RssFeed
-                                    folder.name.equals(INBOX_FOLDER, ignoreCase = true) -> Icons.Filled.Inbox
-                                    else -> Icons.Outlined.FolderOpen
-                                },
+                    item {
+                        val collapsed = collapsedAccounts[account.id] == true
+                        AccountHeaderDialogRow(
+                            account = account,
+                            collapsed = collapsed,
+                            onClick = { collapsedAccounts[account.id] = !collapsed },
                         )
+                    }
+                    if (!accountSummaryIsRss(account) && collapsedAccounts[account.id] != true) {
+                        item {
+                            TextButton(onClick = { onCreateFolder(account) }) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(tr("folders.create"))
+                            }
+                        }
+                    }
+                    if (collapsedAccounts[account.id] != true) {
+                        items(visibleFolders, key = { "${account.id}\n${it.name}" }) { folder ->
+                            val column = KanbanColumnSpec(account.id, folder.name)
+                            val isRss = accountSummaryIsRss(account)
+                            SidebarLikeDialogRow(
+                                selected = selected.contains(kanbanColumnKey(column)),
+                                title = folder.name.replaceFirstChar { it.uppercase() },
+                                subtitle = null,
+                                onClick = { toggle(column) },
+                                indent = 24.dp,
+                                leadingIcon =
+                                    when {
+                                        isRss -> Icons.Filled.RssFeed
+                                        folder.name.equals(INBOX_FOLDER, ignoreCase = true) -> Icons.Filled.Inbox
+                                        else -> Icons.Outlined.FolderOpen
+                                    },
+                            )
+                        }
                     }
                 }
             }
@@ -1083,6 +1099,40 @@ internal fun KanbanColumnDialog(
             TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) }
         },
     )
+}
+
+@Composable
+internal fun AccountHeaderDialogRow(
+    account: AccountSummary,
+    collapsed: Boolean,
+    onClick: () -> Unit,
+) {
+    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(6.dp))
+        AccountBadgeAvatar(label = label, avatarUrl = account.avatarUrl, size = 22.dp)
+        Spacer(Modifier.width(9.dp))
+        Text(
+            label,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 @Composable
@@ -1167,6 +1217,7 @@ internal fun SidebarLikeDialogRow(
     subtitle: String?,
     onClick: () -> Unit,
     leadingIcon: ImageVector? = null,
+    indent: Dp = 0.dp,
 ) {
     Row(
         Modifier
@@ -1174,7 +1225,7 @@ internal fun SidebarLikeDialogRow(
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
+            .padding(start = 10.dp + indent, end = 10.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leadingIcon != null) {

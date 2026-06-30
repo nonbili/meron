@@ -155,7 +155,9 @@ internal fun columnTitle(
     accounts: List<AccountSummary>,
     foldersByAccount: Map<String, List<FolderSummary>>,
 ): String {
-    if (column.accountId == UNIFIED_ACCOUNT_ID) return "Unified inbox"
+    if (column.accountId == UNIFIED_ACCOUNT_ID) {
+        return if (column.folderId.equals(STARRED_FOLDER, ignoreCase = true)) "Unified starred" else "Unified inbox"
+    }
     val account = accounts.firstOrNull { it.id == column.accountId }
     val folder =
         foldersByAccount[column.accountId]

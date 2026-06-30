@@ -61,6 +61,7 @@ data class ThreadSummary(
     val starred: Boolean = false,
     val dateEpochSeconds: Long = 0,
     val feedUrl: String = "",
+    val threadId: String = "",
 )
 
 data class StarredItemSummary(

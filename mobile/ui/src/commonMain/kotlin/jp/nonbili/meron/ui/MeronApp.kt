@@ -676,6 +676,7 @@ private fun MeronMobileScreenContent(
         val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
         val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
         val selectedThreadAccountId = selectedThreadAccount?.id.orEmpty()
+        val drawerFolders = foldersByAccount.values.flatten().ifEmpty { coreFolders }
         val selectedThreadPreferHtml =
             selectedThreadAccount?.let { account ->
                 conversationHtmlOverrides[account.id] ?: account.conversationHtml
@@ -1071,7 +1072,7 @@ private fun MeronMobileScreenContent(
                         MailDrawer(
                             accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
                             selectedAccountId = selectedCoreAccountId,
-                            folders = coreFolders,
+                            folders = drawerFolders,
                             currentScreen = screen,
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
@@ -1190,7 +1191,7 @@ private fun MeronMobileScreenContent(
                         MailDrawer(
                             accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
                             selectedAccountId = selectedCoreAccountId,
-                            folders = coreFolders,
+                            folders = drawerFolders,
                             currentScreen = screen,
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
@@ -1509,7 +1510,7 @@ private fun MeronMobileScreenContent(
                         MailDrawer(
                             accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
                             selectedAccountId = selectedCoreAccountId,
-                            folders = coreFolders,
+                            folders = drawerFolders,
                             currentScreen = screen,
                             showUnreadBadges = showUnreadBadges,
                             showUnifiedInboxNav = showUnifiedInboxNav,
