@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Enkel (Standard)",
   "wallpaper.uploadCustom": "Ladda upp anpassad",
   "wallpaper.uploadFailed": "Kunde inte ladda upp bakgrund",
-  "wallpaper.uploading": "Laddar upp..."
+  "wallpaper.uploading": "Laddar upp...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

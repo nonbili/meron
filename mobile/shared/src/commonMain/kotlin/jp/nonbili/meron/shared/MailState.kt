@@ -89,6 +89,15 @@ data class StorageUsage(
     val dbBytes: Long = 0,
 )
 
+// One release in the in-app changelog (the GitHub releases atom feed, filtered
+// by the core to the mobile `android/v*` tags).
+data class ChangelogRelease(
+    val version: String,
+    val tag: String,
+    val date: String,
+    val notes: List<String>,
+)
+
 // Send lifecycle for an optimistically inserted message. None covers both a
 // freshly synced message and a successfully sent one (which is replaced by its
 // canonical copy on re-fetch). Mirrors desktop's 'sending' | 'sent' | 'failed'.

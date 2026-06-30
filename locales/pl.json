@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Jednolite (domyślne)",
   "wallpaper.uploadCustom": "Prześlij własne",
   "wallpaper.uploadFailed": "Nie udało się przesłać tła",
-  "wallpaper.uploading": "Przesyłanie..."
+  "wallpaper.uploading": "Przesyłanie...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

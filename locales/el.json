@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Απλό (Προεπιλογή)",
   "wallpaper.uploadCustom": "Μεταφόρτωση προσαρμοσμένου",
   "wallpaper.uploadFailed": "Αποτυχία μεταφόρτωσης φόντου",
-  "wallpaper.uploading": "Μεταφόρτωση..."
+  "wallpaper.uploading": "Μεταφόρτωση...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

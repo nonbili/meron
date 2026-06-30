@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Simples (Padrão)",
   "wallpaper.uploadCustom": "Enviar personalizado",
   "wallpaper.uploadFailed": "Falha ao enviar plano de fundo",
-  "wallpaper.uploading": "Enviando..."
+  "wallpaper.uploading": "Enviando...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

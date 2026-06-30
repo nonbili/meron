@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Simples (Predefinido)",
   "wallpaper.uploadCustom": "Carregar personalizado",
   "wallpaper.uploadFailed": "Falha ao carregar fundo",
-  "wallpaper.uploading": "A carregar..."
+  "wallpaper.uploading": "A carregar...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

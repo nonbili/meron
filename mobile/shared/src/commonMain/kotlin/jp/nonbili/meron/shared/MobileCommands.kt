@@ -35,6 +35,7 @@ object MobileCommand {
     const val StarredItems = "mail.starredItems"
     const val ThreadRead = "mail.threadRead"
     const val AttachmentRead = "mail.attachmentRead"
+    const val ChangelogFetch = "changelog.fetch"
     const val StorageUsage = "storage.usage"
     const val StorageClearCache = "storage.clearCache"
     const val Sync = "mail.sync"
@@ -798,6 +799,8 @@ class MobileMailCommandClient(
     suspend fun readThread(params: ThreadReadParams): String = core.invoke(MobileCommand.ThreadRead, params.toJson())
 
     suspend fun readAttachment(params: AttachmentReadParams): String = core.invoke(MobileCommand.AttachmentRead, params.toJson())
+
+    suspend fun fetchChangelog(): String = core.invoke(MobileCommand.ChangelogFetch)
 
     suspend fun storageUsage(): String = core.invoke(MobileCommand.StorageUsage)
 

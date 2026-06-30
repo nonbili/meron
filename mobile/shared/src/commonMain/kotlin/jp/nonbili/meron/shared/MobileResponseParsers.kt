@@ -241,6 +241,28 @@ fun parseMediaFileUrlResponse(responseJson: String): String = responseJson.findJ
 
 fun parseAttachmentDataResponse(responseJson: String): String = responseJson.findJsonStringProperty("data").orEmpty()
 
+fun parseChangelogResponse(responseJson: String): List<ChangelogRelease> {
+    val releasesJson = responseJson.findJsonArrayProperty("releases") ?: return emptyList()
+    return releasesJson.jsonArrayElements().mapNotNull { item ->
+        val tag = item.findJsonStringProperty("tag").orEmpty()
+        val version = item.findJsonStringProperty("version").orEmpty()
+        if (tag.isBlank() && version.isBlank()) return@mapNotNull null
+        val notes =
+            item
+                .findJsonArrayProperty("notes")
+                ?.jsonArrayElements()
+                ?.map { note -> if (note.startsWith('"')) note.readJsonString(0).value else note }
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+        ChangelogRelease(
+            version = version,
+            tag = tag,
+            date = item.findJsonStringProperty("date").orEmpty(),
+            notes = notes,
+        )
+    }
+}
+
 fun parseStorageUsageResponse(responseJson: String): StorageUsage =
     StorageUsage(
         cacheBytes = responseJson.findJsonLongProperty("cacheBytes") ?: 0,

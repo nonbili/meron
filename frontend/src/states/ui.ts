@@ -44,6 +44,7 @@ export const ui$ = observable({
   reconnectAccountId: '',
   settingsOpen: false,
   aboutOpen: false,
+  changelogOpen: false,
   // Account id whose per-account settings panel is open ("" = closed).
   accountSettingsId: '',
   addFeedAccount: '',

@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Tavaline (vaikimisi)",
   "wallpaper.uploadCustom": "Laadi üles kohandatud",
   "wallpaper.uploadFailed": "Tausta üleslaadimine ebaõnnestus",
-  "wallpaper.uploading": "Üleslaadimine..."
+  "wallpaper.uploading": "Üleslaadimine...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

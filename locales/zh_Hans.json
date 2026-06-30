@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "纯色 (默认)",
   "wallpaper.uploadCustom": "上传自定义壁纸",
   "wallpaper.uploadFailed": "上传背景失败",
-  "wallpaper.uploading": "正在上传..."
+  "wallpaper.uploading": "正在上传...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

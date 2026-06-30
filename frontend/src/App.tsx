@@ -14,6 +14,7 @@ import { ThreadList } from './components/threads/ThreadList'
 import { KanbanView } from './components/kanban/KanbanView'
 import { MessagePane } from './components/chat/MessagePane'
 import { AboutDialog } from './components/dialog/AboutDialog'
+import { ChangelogDialog } from './components/dialog/ChangelogDialog'
 import { CommandPalette } from './components/palette/CommandPalette'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AppHotkeys } from './components/dialog/AppHotkeys'
@@ -100,6 +101,7 @@ export default function App() {
         <CommandPalette />
         <ShortcutsDialog />
         <AboutDialog />
+        <ChangelogDialog />
 
         {/* Settings first so the add-account dialog (setupOpen), opened from within
           Settings, layers on top and returns here when closed. */}

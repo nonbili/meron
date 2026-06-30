@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "Plain (Default)",
   "wallpaper.uploadCustom": "Upload Custom",
   "wallpaper.uploadFailed": "Failed to upload background",
-  "wallpaper.uploading": "Uploading..."
+  "wallpaper.uploading": "Uploading...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

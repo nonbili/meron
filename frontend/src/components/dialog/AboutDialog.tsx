@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ExternalLink, Heart, X } from 'lucide-react'
+import { ExternalLink, Heart, ScrollText, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
@@ -65,15 +65,27 @@ export function AboutDialog() {
           <p className="mt-1 text-xs font-semibold text-secondary">{t('about.version', { version })}</p>
           <p className="mt-4 max-w-[18rem] text-sm leading-6 text-secondary">{comments}</p>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            rightIcon={ExternalLink}
-            className="mt-5"
-            onClick={() => openExternal(SOURCE_URL)}
-          >
-            {t('about.sourceCode')}
-          </Button>
+          <div className="mt-5 flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              rightIcon={ExternalLink}
+              onClick={() => openExternal(SOURCE_URL)}
+            >
+              {t('about.sourceCode')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={ScrollText}
+              onClick={() => {
+                ui$.aboutOpen.set(false)
+                ui$.changelogOpen.set(true)
+              }}
+            >
+              {t('changelog.title')}
+            </Button>
+          </div>
 
           <div className="mt-6 w-full rounded-2xl border border-border/70 bg-raised/70 p-4">
             <div className="flex items-center justify-center gap-2 text-xs font-bold text-primary">

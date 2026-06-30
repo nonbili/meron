@@ -5,6 +5,7 @@
 //! and wire types live here so desktop, Android, and future FFI bindings share
 //! one source of truth.
 
+pub mod changelog;
 pub mod engine;
 pub mod ffi;
 pub mod imap;

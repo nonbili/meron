@@ -26,7 +26,7 @@ use tokio::sync::Mutex;
 use meron_core::engine::*;
 use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
-use meron_core::{imap, rss, secrets, smtp, store};
+use meron_core::{changelog, imap, rss, secrets, smtp, store};
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -804,6 +804,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
     let p = &req.params;
     match req.method.as_str() {
         "ping" => Ok(ping_response()),
+
+        // Fetch the in-app changelog from the GitHub releases atom feed. The
+        // network call runs on the blocking pool.
+        "changelog.fetch" => {
+            let variant = changelog::Variant::parse(
+                p.get("variant").and_then(Value::as_str).unwrap_or("desktop"),
+            );
+            let releases = tokio::task::spawn_blocking(move || changelog::fetch(variant)).await??;
+            Ok(releases)
+        }
 
         "app.prefsGet" => {
             let keys = p

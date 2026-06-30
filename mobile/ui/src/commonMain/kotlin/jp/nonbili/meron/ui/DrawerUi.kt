@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
@@ -411,6 +412,7 @@ internal fun MailDrawer(
 internal fun AboutDialog(
     appVersion: String,
     onOpenUrl: (String) -> Unit,
+    onShowChangelog: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -429,6 +431,11 @@ internal fun AboutDialog(
                         icon = Icons.Filled.Code,
                         label = tr("about.sourceCode"),
                         onClick = { onOpenUrl("https://github.com/nonbili/meron") },
+                    )
+                    AboutLinkButton(
+                        icon = Icons.Filled.History,
+                        label = tr("changelog.title"),
+                        onClick = onShowChangelog,
                     )
                     Text(
                         tr("about.donate"),

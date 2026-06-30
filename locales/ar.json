@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "عادي (افتراضي)",
   "wallpaper.uploadCustom": "رفع خلفية مخصصة",
   "wallpaper.uploadFailed": "فشل رفع الخلفية",
-  "wallpaper.uploading": "جاري الرفع..."
+  "wallpaper.uploading": "جاري الرفع...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

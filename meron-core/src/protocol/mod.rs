@@ -108,6 +108,15 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
 
 pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result<Value, String> {
     match req.method.as_str() {
+        "changelog.fetch" => {
+            let variant = crate::changelog::Variant::parse(
+                req.params
+                    .get("variant")
+                    .and_then(Value::as_str)
+                    .unwrap_or("android"),
+            );
+            crate::changelog::fetch(variant).map_err(|err| format!("{err:#}"))
+        }
         "account.list" => list_mobile_accounts(data_dir),
         "account.addPassword" => add_mobile_password_account(data_dir, &req.params),
         "account.autodiscover" => autodiscover_mobile_account(&req.params),

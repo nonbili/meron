@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "單色 (預設)",
   "wallpaper.uploadCustom": "上傳自訂圖片",
   "wallpaper.uploadFailed": "上傳背景失敗",
-  "wallpaper.uploading": "正在上傳..."
+  "wallpaper.uploading": "正在上傳...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "단색 (기본값)",
   "wallpaper.uploadCustom": "사용자 지정 업로드",
   "wallpaper.uploadFailed": "배경 업로드 실패",
-  "wallpaper.uploading": "업로드 중..."
+  "wallpaper.uploading": "업로드 중...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

@@ -821,5 +821,9 @@
   "wallpaper.plainDefault": "単色 (デフォルト)",
   "wallpaper.uploadCustom": "カスタムアップロード",
   "wallpaper.uploadFailed": "背景のアップロードに失敗しました",
-  "wallpaper.uploading": "アップロード中..."
+  "wallpaper.uploading": "アップロード中...",
+  "changelog.title": "Changelog",
+  "changelog.loading": "Loading changelog…",
+  "changelog.error": "Couldn't load the changelog.",
+  "changelog.empty": "No releases yet."
 }

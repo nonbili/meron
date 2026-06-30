@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.ChangelogRelease
 import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.DraftAttachment
 import jp.nonbili.meron.shared.FolderSummary
@@ -168,11 +169,16 @@ internal class MeronMobileState(
     var showAddFeedDialog by mutableStateOf(false)
     var addFeedUrl by mutableStateOf("")
     var showAboutDialog by mutableStateOf(false)
+    var showChangelogDialog by mutableStateOf(false)
     var pendingOpmlExport by mutableStateOf("")
     var accountMediaUploadTarget by mutableStateOf<AccountMediaUploadTarget?>(null)
     var kanbanBoardMediaTarget by mutableStateOf<KanbanBoardMediaTarget?>(null)
     var storageUsage by mutableStateOf<StorageUsage?>(null)
     var storageBusy by mutableStateOf(false)
+    // In-app changelog: null while loading/unloaded, populated on success.
+    var changelog by mutableStateOf<List<ChangelogRelease>?>(null)
+    var changelogLoading by mutableStateOf(false)
+    var changelogError by mutableStateOf(false)
     var storageClearConfirming by mutableStateOf(false)
     var imagePreview by mutableStateOf<ImagePreview?>(null)
     var pendingAttachmentSave by mutableStateOf<MessageAttachment?>(null)

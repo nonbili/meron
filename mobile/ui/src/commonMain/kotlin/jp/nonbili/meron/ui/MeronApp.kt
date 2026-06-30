@@ -2117,7 +2117,21 @@ private fun MeronMobileScreenContent(
             AboutDialog(
                 appVersion = appVersion,
                 onOpenUrl = services::openUrl,
+                onShowChangelog = {
+                    showAboutDialog = false
+                    showChangelogDialog = true
+                    loadChangelog()
+                },
                 onDismiss = { showAboutDialog = false },
+            )
+        }
+
+        if (showChangelogDialog) {
+            ChangelogDialog(
+                releases = changelog,
+                loading = changelogLoading,
+                error = changelogError,
+                onDismiss = { showChangelogDialog = false },
             )
         }
 
