@@ -100,7 +100,7 @@ class AndroidMailPushService : Service(), MeronCoreNative.CoreEventListener {
     }
 
     companion object {
-        private const val CHANNEL_ID = "meron_live_mail"
+        private const val CHANNEL_ID = "meron_live_mail_status"
         private const val NOTIFICATION_ID = 2001
 
         fun start(context: Context) {
@@ -129,6 +129,7 @@ class AndroidMailPushService : Service(), MeronCoreNative.CoreEventListener {
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
                     description = "Keeps IMAP IDLE connected for new mail alerts"
+                    setShowBadge(false)
                 },
             )
         }

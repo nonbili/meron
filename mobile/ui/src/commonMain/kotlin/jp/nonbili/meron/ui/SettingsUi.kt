@@ -118,6 +118,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -1798,10 +1799,36 @@ internal fun SettingsToggleRow(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
         leadingContent = { Icon(icon, contentDescription = null) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = { onToggle() }) },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = { onToggle() },
+                colors = settingsSwitchColors(),
+            )
+        },
         modifier = Modifier.clickable(onClick = onToggle),
     )
 }
+
+@Composable
+private fun settingsSwitchColors() =
+    with(MaterialTheme.colorScheme) {
+        val isDark = background.luminance() < 0.5f
+        val uncheckedTrack = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
+        val uncheckedThumb = if (isDark) Color(0xFFE2E8F0) else Color.White
+        SwitchDefaults.colors(
+            checkedThumbColor = onPrimary,
+            checkedTrackColor = primary,
+            uncheckedThumbColor = uncheckedThumb,
+            uncheckedTrackColor = uncheckedTrack,
+            uncheckedBorderColor = outline,
+            disabledCheckedThumbColor = onPrimary.copy(alpha = 0.38f),
+            disabledCheckedTrackColor = primary.copy(alpha = 0.38f),
+            disabledUncheckedThumbColor = uncheckedThumb.copy(alpha = 0.55f),
+            disabledUncheckedTrackColor = uncheckedTrack.copy(alpha = 0.38f),
+            disabledUncheckedBorderColor = outline.copy(alpha = 0.38f),
+        )
+    }
 
 @Composable
 internal fun ThemePickerDialog(

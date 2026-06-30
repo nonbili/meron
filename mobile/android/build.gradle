@@ -97,6 +97,12 @@ android {
     }
 }
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
 dependencies {
     implementation project(":shared")
     implementation project(":ui")
