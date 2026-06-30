@@ -75,6 +75,10 @@ interface MobileHost {
     /** Whether the platform offers system Google account sign-in (Android only). */
     val supportsGoogleDeviceAuth: Boolean
 
+    /** Last system Google sign-in failure, if the host returned no account. */
+    val lastGoogleDeviceAuthError: String
+        get() = ""
+
     /** Run the full system Google sign-in (pick account, mint token, fetch name).
      *  [onResult] gets the connected account, or null on cancel/failure. No-op
      *  where unsupported. */

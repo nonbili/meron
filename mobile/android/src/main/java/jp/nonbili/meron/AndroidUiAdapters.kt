@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.accounts.AccountManager
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -132,6 +133,10 @@ class AndroidPlatformServices(
 class AndroidMobileHost(
     private val activity: ComponentActivity,
 ) : MobileHost {
+    private companion object {
+        const val GOOGLE_AUTH_LOG_TAG = "Meron.GoogleAuth"
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var pendingGoogleAccountResult: ((GoogleDeviceAccount?) -> Unit)? = null
     private val googleAccountPicker =
@@ -140,12 +145,20 @@ class AndroidMobileHost(
             pendingGoogleAccountResult = null
             val accountName = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
             if (result.resultCode != Activity.RESULT_OK || accountName.isNullOrBlank()) {
+                lastGoogleDeviceAuthError = "Google account picker did not return an account."
+                Log.i(
+                    GOOGLE_AUTH_LOG_TAG,
+                    "Google account picker returned no account; resultCode=${result.resultCode} accountPresent=${!accountName.isNullOrBlank()}",
+                )
                 callback?.invoke(null)
                 return@registerForActivityResult
             }
+            Log.i(GOOGLE_AUTH_LOG_TAG, "Google account picker selected account; requesting token")
+            lastGoogleDeviceAuthError = ""
             scope.launch {
                 runCatching {
                     val token = GoogleAccountManagerAuth.interactiveToken(activity, accountName)
+                    Log.i(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request succeeded")
                     val profileName = GoogleAccountManagerAuth.fetchUserName(token).orEmpty()
                     val expiresAt = System.currentTimeMillis() / 1000L + GoogleAccountManagerAuth.TOKEN_LIFETIME_SECONDS
                     GoogleAccountManagerAuth.register(activity, accountName.trim().lowercase(), accountName)
@@ -158,6 +171,11 @@ class AndroidMobileHost(
                 }.onSuccess {
                     callback?.invoke(it)
                 }.onFailure {
+                    lastGoogleDeviceAuthError =
+                        it.message?.takeIf { message -> message.isNotBlank() }
+                            ?: it::class.simpleName
+                            ?: "Google AccountManager token request failed."
+                    Log.w(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request failed; falling back to browser", it)
                     callback?.invoke(null)
                 }
             }
@@ -169,6 +187,8 @@ class AndroidMobileHost(
     override val googleRedirectUri: String = BuildConfig.MERON_GOOGLE_REDIRECT_URI
     override val googleTokenUrl: String = BuildConfig.MERON_GOOGLE_TOKEN_URL
     override val supportsGoogleDeviceAuth: Boolean = true
+    override var lastGoogleDeviceAuthError: String = ""
+        private set
     override val packageName: String = activity.packageName
     override val appVersionName: String = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName.orEmpty()
     override val coreProtocolVersion: Int = MeronCoreNative.protocolVersion()
@@ -204,6 +224,8 @@ class AndroidMobileHost(
     }
 
     override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) {
+        lastGoogleDeviceAuthError = ""
+        Log.i(GOOGLE_AUTH_LOG_TAG, "Launching Google account picker")
         pendingGoogleAccountResult = onResult
         googleAccountPicker.launch(GoogleAccountManagerAuth.chooseAccountIntent())
     }
