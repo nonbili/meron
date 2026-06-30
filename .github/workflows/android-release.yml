@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # Gradle's preBuild runs `bun scripts/i18n/catalog.ts generate`.
       - uses: oven-sh/setup-bun@v2
