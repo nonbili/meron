@@ -25,6 +25,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -42,7 +43,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +56,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -97,7 +98,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -377,17 +377,24 @@ internal fun SettingsScreen(
                             SettingsPage.Root -> tr("settings.label")
                             SettingsPage.General -> tr("settings.sections.general")
                             is SettingsPage.AccountDetail -> tr("settings.account.account")
+                            is SettingsPage.AccountWallpaper -> tr("settings.account.chatBackground")
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
+                            is SettingsPage.KanbanBoardWallpaper -> tr("settings.account.chatBackground")
                         },
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (page == SettingsPage.Root) {
-                            onBack()
-                        } else {
-                            page = SettingsPage.Root
-                        }
+                        page =
+                            when (val currentPage = page) {
+                                SettingsPage.Root -> {
+                                    onBack()
+                                    SettingsPage.Root
+                                }
+                                is SettingsPage.AccountWallpaper -> SettingsPage.AccountDetail(currentPage.accountId)
+                                is SettingsPage.KanbanBoardWallpaper -> SettingsPage.KanbanBoardDetail(currentPage.boardId)
+                                else -> SettingsPage.Root
+                            }
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
                     }
@@ -473,7 +480,7 @@ internal fun SettingsScreen(
                             )
                         },
                         onPickAvatar = { onPickAccountAvatar(account) },
-                        onPickWallpaper = { onPickAccountWallpaper(account) },
+                        onOpenWallpaper = { page = SettingsPage.AccountWallpaper(account.id) },
                         onMoveUp = { onMoveAccountUp(account) },
                         onMoveDown = { onMoveAccountDown(account) },
                         onRemove = { onRemoveAccount(account) },
@@ -494,11 +501,63 @@ internal fun SettingsScreen(
                             onSaveKanbanBoard(board, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
                         },
                         onPickAvatar = { onPickKanbanBoardAvatar(board) },
-                        onPickWallpaper = { onPickKanbanBoardWallpaper(board) },
+                        onOpenWallpaper = { page = SettingsPage.KanbanBoardWallpaper(board.id) },
                         onDelete = {
                             onDeleteKanbanBoard(board)
                             page = SettingsPage.Root
                         },
+                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                    )
+                }
+            }
+
+            is SettingsPage.AccountWallpaper -> {
+                val account = accounts.firstOrNull { it.id == (page as SettingsPage.AccountWallpaper).accountId }
+                if (account == null) {
+                    page = SettingsPage.Root
+                } else {
+                    WallpaperPickerPage(
+                        selected = if (account.chatWallpaperKind == "custom") "__custom" else account.chatWallpaperPresetId,
+                        previewPresetId = account.chatWallpaperPresetId,
+                        previewCustomUrl = if (account.chatWallpaperKind == "custom") account.chatWallpaperUrl else "",
+                        onSelect = { presetId ->
+                            onSaveAccountSettings(
+                                account,
+                                account.displayName,
+                                account.senderName,
+                                account.avatarUrl,
+                                presetId,
+                                account.loadRemoteImages,
+                                account.conversationHtml,
+                                account.includedInUnified,
+                                account.id !in hiddenNavigationAccountIds,
+                                account.muted,
+                                account.paused,
+                                account.rssSyncIntervalMinutes,
+                                account.aliases.joinToString("\n") { alias ->
+                                    if (alias.name.isBlank()) alias.email else "${alias.email}, ${alias.name}"
+                                },
+                            )
+                        },
+                        onUpload = { onPickAccountWallpaper(account) },
+                        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+                    )
+                }
+            }
+
+            is SettingsPage.KanbanBoardWallpaper -> {
+                val board = kanbanBoards.firstOrNull { it.id == (page as SettingsPage.KanbanBoardWallpaper).boardId }
+                if (board == null) {
+                    page = SettingsPage.Root
+                } else {
+                    WallpaperPickerPage(
+                        selected = if (board.wallpaperUrl.isNotBlank()) "__custom" else board.wallpaperPresetId,
+                        previewPresetId = board.wallpaperPresetId,
+                        previewCustomUrl = board.wallpaperUrl,
+                        onSelect = { presetId ->
+                            onSaveKanbanBoard(board, board.name, board.avatarUrl, presetId, "")
+                        },
+                        onUpload = { onPickKanbanBoardWallpaper(board) },
                         modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
                     )
                 }
@@ -596,7 +655,15 @@ private sealed class SettingsPage {
         val accountId: String,
     ) : SettingsPage()
 
+    data class AccountWallpaper(
+        val accountId: String,
+    ) : SettingsPage()
+
     data class KanbanBoardDetail(
+        val boardId: String,
+    ) : SettingsPage()
+
+    data class KanbanBoardWallpaper(
         val boardId: String,
     ) : SettingsPage()
 }
@@ -832,7 +899,7 @@ internal fun SettingsAccountDetailPage(
         aliasesText: String,
     ) -> Unit,
     onPickAvatar: () -> Unit,
-    onPickWallpaper: () -> Unit,
+    onOpenWallpaper: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onRemove: () -> Unit,
@@ -843,6 +910,9 @@ internal fun SettingsAccountDetailPage(
     var senderName by remember(account.id) { mutableStateOf(account.senderName) }
     var avatarUrl by remember(account.id) { mutableStateOf(account.avatarUrl) }
     var wallpaperPresetId by remember(account.id) { mutableStateOf(account.chatWallpaperPresetId) }
+    var wallpaperCustomUrl by remember(account.id, account.chatWallpaperKind, account.chatWallpaperUrl) {
+        mutableStateOf(if (account.chatWallpaperKind == "custom") account.chatWallpaperUrl else "")
+    }
     var loadRemoteImages by remember(account.id) { mutableStateOf(account.loadRemoteImages || isRss) }
     var conversationHtml by remember(account.id) { mutableStateOf(account.conversationHtml) }
     var includedInUnified by remember(account.id) { mutableStateOf(account.includedInUnified) }
@@ -854,25 +924,6 @@ internal fun SettingsAccountDetailPage(
         mutableStateOf(account.aliases.map { it.email to it.name })
     }
     var confirmRemove by remember(account.id) { mutableStateOf(false) }
-
-    if (confirmRemove) {
-        AlertDialog(
-            onDismissRequest = { confirmRemove = false },
-            title = { Text(tr("settings.account.removeAccountTitle")) },
-            text = { Text(trf("settings.account.removeAccountText", account.email.ifBlank { account.id })) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmRemove = false
-                    onRemove()
-                }) {
-                    Text(tr("settings.account.removeAccount"), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmRemove = false }) { Text(tr("buttons.cancel")) }
-            },
-        )
-    }
 
     // Autosave: every control persists immediately, matching the desktop panel.
     // The lambda reads the live state values at call time, so flipping a toggle
@@ -898,6 +949,24 @@ internal fun SettingsAccountDetailPage(
         )
     }
 
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(tr("settings.account.removeAccountTitle")) },
+            text = { Text(trf("settings.account.removeAccountText", account.email.ifBlank { account.id })) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    onRemove()
+                }) {
+                    Text(tr("settings.account.removeAccount"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text(tr("buttons.cancel")) }
+            },
+        )
+    }
     LazyColumn(modifier) {
         item {
             Row(
@@ -954,26 +1023,22 @@ internal fun SettingsAccountDetailPage(
         }
         item { SettingsSectionLabel(tr("settings.account.chatBackground")) }
         item {
-            ChatWallpaperPreview(
-                presetId = wallpaperPresetId,
-                customUrl = if (account.chatWallpaperKind == "custom") account.chatWallpaperUrl else "",
-            )
-        }
-        item {
-            WallpaperPresetChips(
-                selected = wallpaperPresetId,
-                onSelect = {
-                    wallpaperPresetId = it
-                    persist()
-                },
-            )
-        }
-        item {
             SettingsRow(
                 icon = Icons.Filled.Image,
-                title = tr("settings.chooseWallpaperImage"),
-                subtitle = tr("settings.account.chatBackgroundHint"),
-                onClick = onPickWallpaper,
+                title = tr("settings.account.chatBackground"),
+                subtitle =
+                    if (wallpaperCustomUrl.isNotBlank()) {
+                        tr("wallpaper.customBackground")
+                    } else {
+                        wallpaperPresetDisplayName(wallpaperPresetId)
+                    },
+                onClick = onOpenWallpaper,
+                trailing = {
+                    WallpaperRowPreview(
+                        presetId = wallpaperPresetId,
+                        customUrl = wallpaperCustomUrl,
+                    )
+                },
             )
         }
 
@@ -1131,12 +1196,11 @@ internal fun SettingsAccountDetailPage(
     }
 }
 
-// Mirrors frontend/src/lib/wallpapers.ts WALLPAPER_PRESETS, plus a leading
-// "Default" that clears the wallpaper. Photographic presets resolve to bundled
-// drawables (see wallpaperImageRes); the rest are drawn as approximations.
+// Mirrors frontend/src/lib/wallpapers.ts WALLPAPER_PRESETS. Photographic
+// presets resolve to bundled drawables (see wallpaperImageRes); the rest are
+// drawn as approximations.
 private val wallpaperPresets =
     listOf(
-        "" to "Default",
         "plain" to "Plain",
         "doodle" to "Doodle",
         "dots" to "Linear Dots",
@@ -1188,21 +1252,194 @@ private fun wallpaperImageRes(presetId: String): DrawableResource? =
         else -> null
     }
 
+private fun normalizedWallpaperPresetId(presetId: String): String = presetId.ifBlank { "plain" }
+
+private fun wallpaperPresetDisplayName(presetId: String): String =
+    wallpaperPresets.firstOrNull { it.first == normalizedWallpaperPresetId(presetId) }?.second ?: "Plain"
+
 @Composable
-internal fun WallpaperPresetChips(
+internal fun WallpaperPickerPage(
+    selected: String,
+    previewPresetId: String,
+    previewCustomUrl: String,
+    onSelect: (String) -> Unit,
+    onUpload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val normalizedSelected = if (selected == "__custom") selected else normalizedWallpaperPresetId(selected)
+    val normalizedPreviewPresetId = normalizedWallpaperPresetId(previewPresetId)
+    var localSelected by remember(selected, previewPresetId, previewCustomUrl) { mutableStateOf(normalizedSelected) }
+    var localPresetId by remember(selected, previewPresetId, previewCustomUrl) { mutableStateOf(normalizedPreviewPresetId) }
+    var localCustomUrl by remember(selected, previewPresetId, previewCustomUrl) { mutableStateOf(previewCustomUrl) }
+    LazyColumn(modifier) {
+        item {
+            ChatWallpaperPreview(
+                presetId = localPresetId,
+                customUrl = localCustomUrl,
+            )
+        }
+        item {
+            WallpaperPresetGrid(
+                selected = localSelected,
+                onSelect = {
+                    localSelected = it
+                    localPresetId = it
+                    localCustomUrl = ""
+                    onSelect(it)
+                },
+                onUpload = onUpload,
+                uploadLabel = tr("wallpaper.uploadCustom"),
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun WallpaperRowPreview(
+    presetId: String,
+    customUrl: String,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(width = 56.dp, height = 40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
+    ) {
+        ChatWallpaperBackground(
+            presetId = presetId,
+            customUrl = customUrl,
+            modifier = Modifier.matchParentSize(),
+            fallback = MaterialTheme.colorScheme.surface,
+        )
+    }
+}
+
+@Composable
+internal fun WallpaperPresetGrid(
     selected: String,
     onSelect: (String) -> Unit,
+    onUpload: () -> Unit,
+    uploadLabel: String,
 ) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(wallpaperPresets, key = { it.first }) { (id, label) ->
-            FilterChip(
-                selected = selected == id,
-                onClick = { onSelect(id) },
-                label = { Text(label) },
+        val tiles = listOf<Pair<String, String>?>(null) + wallpaperPresets.map { it.first to it.second }
+        tiles.chunked(3).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { preset ->
+                    if (preset == null) {
+                        WallpaperUploadTile(
+                            label = uploadLabel,
+                            onClick = onUpload,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        val (id, label) = preset
+                        WallpaperPresetTile(
+                            presetId = id,
+                            label = label,
+                            selected = selected == id,
+                            onClick = { onSelect(id) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                repeat(3 - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WallpaperUploadTile(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier =
+            modifier
+                .aspectRatio(1.58f)
+                .clip(shape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                Icons.Filled.Image,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WallpaperPresetTile(
+    presetId: String,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Box(
+        modifier =
+            modifier
+                .aspectRatio(1.58f)
+                .clip(shape)
+                .border(if (selected) 2.dp else 1.dp, borderColor, shape)
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = label },
+    ) {
+        ChatWallpaperBackground(
+            presetId = presetId,
+            customUrl = "",
+            modifier = Modifier.matchParentSize(),
+            fallback = MaterialTheme.colorScheme.surface,
+        )
+        if (selected) {
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
         }
     }
 }
@@ -1573,7 +1810,7 @@ internal fun SettingsKanbanBoardDetailPage(
         wallpaperUrl: String,
     ) -> Unit,
     onPickAvatar: () -> Unit,
-    onPickWallpaper: () -> Unit,
+    onOpenWallpaper: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1611,7 +1848,6 @@ internal fun SettingsKanbanBoardDetailPage(
             },
         )
     }
-
     LazyColumn(modifier) {
         item {
             Row(
@@ -1659,27 +1895,22 @@ internal fun SettingsKanbanBoardDetailPage(
 
         item { SettingsSectionLabel(tr("settings.account.chatBackground")) }
         item {
-            ChatWallpaperPreview(
-                presetId = wallpaperPresetId,
-                customUrl = wallpaperUrl,
-            )
-        }
-        item {
-            WallpaperPresetChips(
-                selected = wallpaperPresetId,
-                onSelect = {
-                    wallpaperPresetId = it
-                    wallpaperUrl = ""
-                    persist(name, avatarUrl, it, "")
-                },
-            )
-        }
-        item {
             SettingsRow(
                 icon = Icons.Filled.Image,
-                title = tr("settings.chooseWallpaperImage"),
-                subtitle = tr("settings.kanban.boardBackgroundHint"),
-                onClick = onPickWallpaper,
+                title = tr("settings.account.chatBackground"),
+                subtitle =
+                    if (wallpaperUrl.isNotBlank()) {
+                        tr("wallpaper.customBackground")
+                    } else {
+                        wallpaperPresetDisplayName(wallpaperPresetId)
+                    },
+                onClick = onOpenWallpaper,
+                trailing = {
+                    WallpaperRowPreview(
+                        presetId = wallpaperPresetId,
+                        customUrl = wallpaperUrl,
+                    )
+                },
             )
         }
 
