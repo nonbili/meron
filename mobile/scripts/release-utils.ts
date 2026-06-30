@@ -30,20 +30,44 @@ export const requireEnv = (name: string) => {
   return value
 }
 
-// Marketing version comes from wails.json; the Android versionCode and iOS build
-// number are release inputs supplied via the environment.
-export const packageInfo = async (): Promise<PackageInfo> => {
-  const wails = await Bun.file(resolve(repoRoot, 'wails.json')).json()
-  const version = wails?.info?.productVersion
-  if (!version) {
-    fail('Could not read info.productVersion from wails.json')
+// The Android versionCode fallback lives in build.gradle; reuse it so the
+// upload script and the build agree when MERON_VERSION_CODE isn't set.
+const gradleVersionCode = async (): Promise<string> => {
+  const gradle = await Bun.file(resolve(mobileDir, 'android/build.gradle')).text()
+  const match = gradle.match(/releaseProp\("meronVersionCode",\s*"MERON_VERSION_CODE",\s*"(\d+)"\)/)
+  if (!match) {
+    fail('Could not read meronVersionCode fallback from android/build.gradle')
   }
 
-  const versionCode = process.env.MERON_VERSION_CODE ?? '1'
+  return match[1]
+}
+
+// The iOS marketing version and build number live in Version.xcconfig
+// (MARKETING_VERSION / CURRENT_PROJECT_VERSION).
+const iosVersion = async (): Promise<{ marketingVersion: string, buildNumber: string }> => {
+  const xcconfig = await Bun.file(resolve(mobileDir, 'ios/Version.xcconfig')).text()
+  const marketing = xcconfig.match(/MARKETING_VERSION\s*=\s*(\S+)/)
+  const build = xcconfig.match(/CURRENT_PROJECT_VERSION\s*=\s*(\d+)/)
+  if (!marketing) {
+    fail('Could not read MARKETING_VERSION from ios/Version.xcconfig')
+  }
+  if (!build) {
+    fail('Could not read CURRENT_PROJECT_VERSION from ios/Version.xcconfig')
+  }
+
+  return { marketingVersion: marketing[1], buildNumber: build[1] }
+}
+
+// The Android versionCode and the iOS marketing version / build number each have
+// their own source of truth (build.gradle / Version.xcconfig), overridable via
+// the environment. The marketing version drives the iOS App Store upload.
+export const packageInfo = async (): Promise<PackageInfo> => {
+  const ios = await iosVersion()
+  const versionCode = process.env.MERON_VERSION_CODE ?? await gradleVersionCode()
   return {
-    version,
+    version: ios.marketingVersion,
     versionCode,
-    buildNumber: process.env.IOS_BUILD_NUMBER ?? versionCode,
+    buildNumber: process.env.IOS_BUILD_NUMBER ?? ios.buildNumber,
   }
 }
 

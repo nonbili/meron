@@ -1,0 +1,2 @@
+- Improve add column dialog
+- Fix Google OAuth sign-in
