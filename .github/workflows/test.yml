@@ -47,6 +47,19 @@ jobs:
       - run: bun test
         working-directory: frontend
 
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      # Gradle preBuild/generate tasks run the localization scripts through Bun.
+      - uses: oven-sh/setup-bun@v2
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./mobile/gradlew -p mobile :shared:allTests :ui:allTests
+
   # Full-stack suite: Rust sidecar against a real maddy mail server in Docker.
   integration:
     runs-on: ubuntu-latest

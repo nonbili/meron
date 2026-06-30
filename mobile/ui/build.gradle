@@ -11,6 +11,7 @@ kotlin {
         namespace = "jp.nonbili.meron.ui"
         compileSdk = 36
         minSdk = 23
+        withHostTest {}
     }
 
     iosArm64()
