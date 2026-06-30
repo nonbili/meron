@@ -3,7 +3,9 @@ package jp.nonbili.meron
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -76,5 +78,12 @@ class AndroidBackgroundRefreshContractTest {
             ),
         )
         assertNull(androidRefreshSyncRequest(JSONObject(mapOf("id" to "")), id = 11))
+    }
+
+    @Test
+    fun refreshCompleteNotificationIsManualOrFailureOnly() {
+        assertTrue(shouldNotifyRefreshComplete(manualRun = true, failed = 0))
+        assertTrue(shouldNotifyRefreshComplete(manualRun = false, failed = 1))
+        assertFalse(shouldNotifyRefreshComplete(manualRun = false, failed = 0))
     }
 }

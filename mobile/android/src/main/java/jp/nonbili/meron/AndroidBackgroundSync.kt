@@ -10,11 +10,14 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import jp.nonbili.meron.shared.backgroundRefreshSummary
 import jp.nonbili.meron.shared.backgroundRefreshUsesRssProtocol
 import jp.nonbili.meron.shared.shouldBackgroundRefreshAccount
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+
+private const val KEY_MANUAL_RUN = "jp.nonbili.meron.background_sync.MANUAL_RUN"
 
 class AndroidBackgroundSyncWorker(
     appContext: Context,
@@ -54,7 +57,14 @@ class AndroidBackgroundSyncWorker(
         }
 
         val body = backgroundRefreshSummary(refreshed = refreshed, skipped = skipped, failed = failed)
-        AndroidNotificationService.notifyRefreshComplete(applicationContext, body)
+        if (
+            shouldNotifyRefreshComplete(
+                manualRun = inputData.getBoolean(KEY_MANUAL_RUN, false),
+                failed = failed,
+            )
+        ) {
+            AndroidNotificationService.notifyRefreshComplete(applicationContext, body)
+        }
         return Result.success()
     }
 
@@ -65,13 +75,19 @@ class AndroidBackgroundSyncWorker(
      * could not be minted (user must reconnect); true otherwise, including for
      * browser-flow / non-managed accounts, which meron-core refreshes itself.
      */
-    private suspend fun refreshManagedGoogleToken(account: JSONObject, id: Long): Boolean {
+    private suspend fun refreshManagedGoogleToken(
+        account: JSONObject,
+        id: Long,
+    ): Boolean {
         val accountId = account.optString("id")
         if (accountId.isBlank()) return true
         return when (
             val refresh = GoogleAccountManagerAuth.mintIfNeeded(applicationContext, accountId)
         ) {
-            is GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> true
+            is GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> {
+                true
+            }
+
             is GoogleAccountManagerAuth.TokenRefresh.Refreshed -> {
                 val params =
                     JSONObject()
@@ -89,10 +105,18 @@ class AndroidBackgroundSyncWorker(
                 }
                 true
             }
-            is GoogleAccountManagerAuth.TokenRefresh.Failed -> false
+
+            is GoogleAccountManagerAuth.TokenRefresh.Failed -> {
+                false
+            }
         }
     }
 }
+
+internal fun shouldNotifyRefreshComplete(
+    manualRun: Boolean,
+    failed: Int,
+): Boolean = manualRun || failed > 0
 
 internal data class AndroidRefreshSyncRequest(
     val method: String,
@@ -158,6 +182,7 @@ object AndroidBackgroundSyncScheduler {
         val request =
             OneTimeWorkRequestBuilder<AndroidBackgroundSyncWorker>()
                 .setConstraints(networkConstraints())
+                .setInputData(workDataOf(KEY_MANUAL_RUN to true))
                 .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             ONCE_WORK_NAME,
