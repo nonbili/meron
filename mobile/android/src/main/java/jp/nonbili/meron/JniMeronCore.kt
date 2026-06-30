@@ -5,7 +5,9 @@ import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.CoreRequest
 import jp.nonbili.meron.shared.MeronCore
+import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.parseCoreEventEnvelope
+import jp.nonbili.meron.shared.requireCoreOk
 import jp.nonbili.meron.shared.requireProtocolVersion
 import jp.nonbili.meron.shared.toJson
 
@@ -22,12 +24,13 @@ class JniMeronCore : MeronCore {
         android.util.Log.i("MeronCore", "-> $command")
         val startedAt = System.currentTimeMillis()
         val response = MeronCoreNative.invokeJson(CoreRequest(1, command, payloadJson).toJson())
-        if (response.contains("\"error\"")) {
-            android.util.Log.w("MeronCore", "<- $command error after ${System.currentTimeMillis() - startedAt}ms")
+        val error = coreErrorMessage(response)
+        if (error != null) {
+            android.util.Log.w("MeronCore", "<- $command error after ${System.currentTimeMillis() - startedAt}ms: $error")
         } else {
             android.util.Log.i("MeronCore", "<- $command ok after ${System.currentTimeMillis() - startedAt}ms")
         }
-        return response
+        return requireCoreOk(response)
     }
 
     override fun events(): CoreEventStream = eventStream

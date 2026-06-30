@@ -256,6 +256,25 @@ internal fun MeronMobileState.applyAccounts(
     }
 }
 
+private fun findOAuthResultAccount(
+    accounts: List<AccountSummary>,
+    previousAccountIds: Set<String>,
+    provider: String,
+    preferredEmail: String,
+): AccountSummary? {
+    val normalizedProvider = provider.trim().lowercase()
+    val preferred = preferredEmail.trim()
+    val providerMatches = accounts.filter {
+        it.provider.equals(normalizedProvider, ignoreCase = true) ||
+            it.authType.equals("${normalizedProvider}_oauth", ignoreCase = true)
+    }
+    return providerMatches.firstOrNull { it.id !in previousAccountIds }
+        ?: preferred.takeIf { it.isNotBlank() }?.let { email ->
+            accounts.firstOrNull { it.email.equals(email, ignoreCase = true) }
+        }
+        ?: providerMatches.firstOrNull()
+}
+
 internal fun MeronMobileState.listAccounts() {
     if (!coreLoaded) {
         status = "Rust core not packaged."
@@ -666,7 +685,16 @@ internal fun MeronMobileState.connectGoogleDeviceAccount() {
         return
     }
     mobileHost.connectGoogleDeviceAccount { account ->
-        if (account != null) addGoogleDeviceAccount(account)
+        if (account != null) {
+            addGoogleDeviceAccount(account)
+        } else {
+            if (mobileHost.googleRedirectUri.isBlank()) {
+                status = "Google browser sign-in requires a configured HTTPS redirect URI."
+                return@connectGoogleDeviceAccount
+            }
+            status = "Opening Google sign-in in browser..."
+            launchOAuthFlow()
+        }
     }
 }
 
@@ -768,8 +796,17 @@ internal fun MeronMobileState.exchangeOAuthCode() {
             clientSecret = oauthClientSecret.trim(),
             redirectUri = oauthRedirectUri.trim(),
             codeVerifier = oauthVerifier,
+            tokenUrl = if (oauthProvider == "gmail") mobileHost.googleTokenUrl else "",
         )
+    Log.i(
+        "Meron.OAuth",
+        "exchange start provider=${params.provider} emailPresent=${params.email.isNotBlank()} " +
+            "clientIdPresent=${params.clientId.isNotBlank()} redirectUri=${params.redirectUri} " +
+            "tokenUrlPresent=${params.tokenUrl.isNotBlank()} codeLength=${params.code.length} " +
+            "verifierPresent=${params.codeVerifier.isNotBlank()}",
+    )
     status = "Exchanging OAuth code..."
+    val previousAccountIds = coreAccounts.map { it.id }.toSet()
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
@@ -777,13 +814,30 @@ internal fun MeronMobileState.exchangeOAuthCode() {
                 client.exchangeOAuthCode(params)
                 client.listAccounts()
             }
-        }.onSuccess {
-            applyAccounts(it, preferEmail = params.email)
+        }.onSuccess { accountsJson ->
+            val parsedAccounts = parseAccountListResponse(accountsJson)
+            val connectedAccount = findOAuthResultAccount(
+                accounts = parsedAccounts,
+                previousAccountIds = previousAccountIds,
+                provider = params.provider,
+                preferredEmail = params.email,
+            )
+            applyAccounts(accountsJson, preferEmail = connectedAccount?.email ?: params.email.ifBlank { null })
+            connectedAccount?.let { selectedCoreAccountId = it.id }
             screen = Screen.Mail
             errorBanner = null
-            status = if (params.email.isBlank()) "Connected account" else "Connected ${params.email}"
-            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
+            status = connectedAccount?.email?.takeIf { it.isNotBlank() }?.let { "Connected $it" }
+                ?: if (params.email.isBlank()) "Connected account" else "Connected ${params.email}"
+            val syncAccountId = connectedAccount?.id ?: selectedCoreAccountId
+            Log.i(
+                "Meron.OAuth",
+                "exchange success provider=${params.provider} selectedAccount=$syncAccountId " +
+                    "connectedEmailPresent=${connectedAccount?.email?.isNotBlank() == true}",
+            )
+            syncCoreThreads(accountOverride = syncAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
         }.onFailure {
+            Log.w("Meron.OAuth", "exchange failed provider=${params.provider}: ${it.message}", it)
+            oauthAuthorizationCode = ""
             errorBanner = it.message ?: "OAuth exchange failed"
             status = "OAuth exchange failed: ${it.message}"
         }
@@ -832,7 +886,12 @@ internal fun MeronMobileState.launchOAuthFlow() {
 }
 
 internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
+    Log.i("Meron.OAuth", "callback received length=${rawUrl.length}")
     loadPendingOAuthFlow(prefs)?.let { pending ->
+        Log.i(
+            "Meron.OAuth",
+            "pending flow provider=${pending.provider} redirectUri=${pending.redirectUri} emailPresent=${pending.email.isNotBlank()}",
+        )
         oauthProvider = pending.provider
         oauthState = pending.state
         oauthVerifier = pending.verifier
@@ -847,6 +906,7 @@ internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
         )
     }.onSuccess { result ->
         if (result != null) {
+            Log.i("Meron.OAuth", "callback parsed provider=$oauthProvider codeLength=${result.code.length}")
             oauthAuthorizationCode = result.code
             addSection = 0
             passwordServerSettingsOpen = false
@@ -855,9 +915,11 @@ internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
             clearPendingOAuthFlow(prefs)
             exchangeOAuthCode()
         } else {
+            Log.w("Meron.OAuth", "callback did not match redirectUri=$oauthRedirectUri")
             status = "OAuth callback did not match expected redirect URI."
         }
     }.onFailure {
+        Log.w("Meron.OAuth", "callback parse failed: ${it.message}", it)
         status = "OAuth callback failed: ${it.message}"
     }
 }

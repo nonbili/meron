@@ -156,6 +156,7 @@ data class ExchangeOAuthCodeParams(
     val clientSecret: String = "",
     val redirectUri: String,
     val codeVerifier: String,
+    val tokenUrl: String = "",
 ) {
     fun toJson(): String =
         jsonObject(
@@ -168,6 +169,7 @@ data class ExchangeOAuthCodeParams(
             "client_secret" to clientSecret.takeIf { it.isNotBlank() }?.jsonString(),
             "redirect_uri" to redirectUri.takeIf { it.isNotBlank() }?.jsonString(),
             "code_verifier" to codeVerifier.takeIf { it.isNotBlank() }?.jsonString(),
+            "token_url" to tokenUrl.takeIf { it.isNotBlank() }?.jsonString(),
         )
 }
 

@@ -63,6 +63,9 @@ interface MobileHost {
     /** Google OAuth redirect URI baked into the build (empty when unset). */
     val googleRedirectUri: String
 
+    /** Server-side Google OAuth token exchange endpoint (empty to call Google directly). */
+    val googleTokenUrl: String
+
     val packageName: String
 
     val appVersionName: String
@@ -93,6 +96,7 @@ open class DefaultMobileHost(
     override val outlookRedirectUri: String = "",
     override val googleClientId: String = "",
     override val googleRedirectUri: String = "",
+    override val googleTokenUrl: String = "",
 ) : MobileHost {
     override val supportsBackgroundPush: Boolean = false
 

@@ -5,7 +5,7 @@
 
 use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
 
@@ -16,6 +16,30 @@ pub const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 pub const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 
 pub const OUTLOOK_SCOPES: &str = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile";
+
+#[derive(Clone, Default)]
+pub struct OAuthDefaults {
+    pub google_client_id: String,
+    pub google_client_secret: String,
+    pub google_token_url: String,
+    pub outlook_client_id: String,
+}
+
+static OAUTH_DEFAULTS: LazyLock<RwLock<OAuthDefaults>> =
+    LazyLock::new(|| RwLock::new(OAuthDefaults::default()));
+
+pub fn set_oauth_defaults(defaults: OAuthDefaults) {
+    if let Ok(mut current) = OAUTH_DEFAULTS.write() {
+        *current = defaults;
+    }
+}
+
+fn oauth_defaults() -> OAuthDefaults {
+    OAUTH_DEFAULTS
+        .read()
+        .map(|defaults| defaults.clone())
+        .unwrap_or_default()
+}
 
 /// Engine state: per-account credentials plus the on-disk store.
 /// Reads serve from SQLite; syncs reconnect to IMAP and refresh stored rows.
@@ -223,35 +247,83 @@ impl Engine {
                 // Provider-specific endpoint / credentials. Google needs a client
                 // secret; Microsoft is a public client (PKCE) with no secret but
                 // must request the resource scopes on refresh.
-                let (token_url, client_id, client_secret, scope): (
-                    &str,
-                    String,
-                    String,
-                    Option<&str>,
-                ) = match creds.auth_type.as_str() {
+                let (
+                    default_token_url,
+                    default_client_id_env,
+                    default_client_secret_env,
+                    default_scope,
+                ): (&str, &str, Option<&str>, Option<&str>) = match creds.auth_type.as_str() {
                     "outlook_oauth" => (
                         OUTLOOK_TOKEN_URL,
-                        std::env::var("MERON_OUTLOOK_CLIENT_ID").context(
-                            "MERON_OUTLOOK_CLIENT_ID is required for Outlook OAuth refresh",
-                        )?,
-                        String::new(),
+                        "MERON_OUTLOOK_CLIENT_ID",
+                        None,
                         Some(OUTLOOK_SCOPES),
                     ),
                     _ => (
                         GOOGLE_TOKEN_URL,
-                        std::env::var("MERON_GOOGLE_CLIENT_ID").context(
-                            "MERON_GOOGLE_CLIENT_ID is required for Gmail OAuth refresh",
-                        )?,
-                        std::env::var("MERON_GOOGLE_CLIENT_SECRET").context(
-                            "MERON_GOOGLE_CLIENT_SECRET is required for Gmail OAuth refresh",
-                        )?,
+                        "MERON_GOOGLE_CLIENT_ID",
+                        Some("MERON_GOOGLE_CLIENT_SECRET"),
                         None,
                     ),
+                };
+                let oauth_defaults = oauth_defaults();
+                let default_google_token_url = oauth_defaults.google_token_url.trim();
+                let token_url = if !creds.oauth_token_url.trim().is_empty() {
+                    creds.oauth_token_url.trim().to_string()
+                } else if creds.auth_type != "outlook_oauth" && !default_google_token_url.is_empty()
+                {
+                    default_google_token_url.to_string()
+                } else {
+                    default_token_url.to_string()
+                };
+                let client_id = if creds.oauth_client_id.trim().is_empty() {
+                    let configured = match creds.auth_type.as_str() {
+                        "outlook_oauth" => oauth_defaults.outlook_client_id.trim(),
+                        _ => oauth_defaults.google_client_id.trim(),
+                    };
+                    if configured.is_empty() {
+                        std::env::var(default_client_id_env).with_context(|| {
+                            match creds.auth_type.as_str() {
+                                "outlook_oauth" => {
+                                    "MERON_OUTLOOK_CLIENT_ID is required for Outlook OAuth refresh"
+                                }
+                                _ => "MERON_GOOGLE_CLIENT_ID is required for Gmail OAuth refresh",
+                            }
+                        })?
+                    } else {
+                        configured.to_string()
+                    }
+                } else {
+                    creds.oauth_client_id.trim().to_string()
+                };
+                let client_secret = if creds.oauth_client_secret.trim().is_empty() {
+                    let configured = oauth_defaults.google_client_secret.trim();
+                    if !configured.is_empty() {
+                        configured.to_string()
+                    } else {
+                        match default_client_secret_env {
+                            Some(env_name) if token_url == GOOGLE_TOKEN_URL => std::env::var(
+                                env_name,
+                            )
+                            .with_context(
+                                || "MERON_GOOGLE_CLIENT_SECRET is required for Gmail OAuth refresh",
+                            )?,
+                            _ => String::new(),
+                        }
+                    }
+                } else {
+                    creds.oauth_client_secret.trim().to_string()
+                };
+                let owned_scope = creds.oauth_scope.trim().to_string();
+                let scope = if owned_scope.is_empty() {
+                    default_scope
+                } else {
+                    Some(owned_scope.as_str())
                 };
                 let refresh_token = creds.refresh_token.as_deref().unwrap_or("");
 
                 let (new_access, expires_in) = imap::refresh_oauth_token(
-                    token_url,
+                    &token_url,
                     &client_id,
                     &client_secret,
                     refresh_token,

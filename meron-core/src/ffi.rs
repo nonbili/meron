@@ -20,7 +20,7 @@ use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
 use jni::sys::{jboolean, jstring};
 use serde_json::{Value, json};
 
-use crate::engine::Engine;
+use crate::engine::{Engine, OAuthDefaults, set_oauth_defaults};
 use crate::protocol::{
     MobileHost, PROTOCOL_VERSION, Request, account_needs_reconnect, canon_folder,
     invoke_mobile_protocol_json, is_rss_account, load_mobile_account_creds, mobile_db_key,
@@ -230,6 +230,34 @@ pub extern "C" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreProtocolVersion
     _class: *mut c_void,
 ) -> c_int {
     PROTOCOL_VERSION as c_int
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreConfigureOAuthDefaults(
+    mut env: JNIEnv,
+    _class: JClass,
+    google_client_id: JString,
+    google_token_url: JString,
+    outlook_client_id: JString,
+) {
+    let google_client_id = env
+        .get_string(&google_client_id)
+        .map(|value| value.to_string_lossy().trim().to_string())
+        .unwrap_or_default();
+    let google_token_url = env
+        .get_string(&google_token_url)
+        .map(|value| value.to_string_lossy().trim().to_string())
+        .unwrap_or_default();
+    let outlook_client_id = env
+        .get_string(&outlook_client_id)
+        .map(|value| value.to_string_lossy().trim().to_string())
+        .unwrap_or_default();
+    set_oauth_defaults(OAuthDefaults {
+        google_client_id,
+        google_token_url,
+        outlook_client_id,
+        ..OAuthDefaults::default()
+    });
 }
 
 #[unsafe(no_mangle)]

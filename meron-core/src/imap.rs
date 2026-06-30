@@ -90,6 +90,10 @@ pub struct Creds {
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub token_expires_at: i64,
+    pub oauth_client_id: String,
+    pub oauth_client_secret: String,
+    pub oauth_token_url: String,
+    pub oauth_scope: String,
 }
 
 impl Creds {

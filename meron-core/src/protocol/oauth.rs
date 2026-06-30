@@ -28,6 +28,10 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
     // Gmail via AccountManager) have no refresh token because the OS re-mints
     // short-lived access tokens and pushes them in via `account.updateOAuthToken`.
     let refresh_token = opt_str(params, "refresh_token");
+    let oauth_client_id = opt_str(params, "client_id");
+    let oauth_client_secret = opt_str(params, "client_secret");
+    let oauth_token_url = opt_str(params, "token_url");
+    let oauth_scope = opt_str(params, "scope");
     let imap_host = params
         .get("imap_host")
         .and_then(Value::as_str)
@@ -75,6 +79,10 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
             Some(refresh_token)
         },
         token_expires_at,
+        oauth_client_id,
+        oauth_client_secret,
+        oauth_token_url,
+        oauth_scope,
     };
     let id = account_id(&email);
     let meta = AccountMeta {

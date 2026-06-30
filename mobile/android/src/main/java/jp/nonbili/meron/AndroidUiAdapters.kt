@@ -167,6 +167,7 @@ class AndroidMobileHost(
     override val outlookRedirectUri: String = BuildConfig.MERON_OUTLOOK_REDIRECT_URI
     override val googleClientId: String = BuildConfig.MERON_GOOGLE_CLIENT_ID
     override val googleRedirectUri: String = BuildConfig.MERON_GOOGLE_REDIRECT_URI
+    override val googleTokenUrl: String = BuildConfig.MERON_GOOGLE_TOKEN_URL
     override val supportsGoogleDeviceAuth: Boolean = true
     override val packageName: String = activity.packageName
     override val appVersionName: String = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName.orEmpty()

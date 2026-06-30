@@ -1027,6 +1027,34 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     .get("token_expires_at")
                     .and_then(Value::as_i64)
                     .unwrap_or(0),
+                oauth_client_id: p
+                    .get("oauth_client_id")
+                    .or_else(|| p.get("client_id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+                oauth_client_secret: p
+                    .get("oauth_client_secret")
+                    .or_else(|| p.get("client_secret"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+                oauth_token_url: p
+                    .get("oauth_token_url")
+                    .or_else(|| p.get("token_url"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+                oauth_scope: p
+                    .get("oauth_scope")
+                    .or_else(|| p.get("scope"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
             };
             let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
             // Password accounts validate before storage. OAuth accounts may be

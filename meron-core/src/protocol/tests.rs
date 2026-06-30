@@ -626,6 +626,18 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         listed["result"]["accounts"][0]["needs_reconnect"], false,
         "{listed}"
     );
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let config: String = conn
+        .query_row(
+            "SELECT config FROM accounts WHERE id = ?1",
+            [&email],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+    assert_eq!(config["oauth_client_id"], "client", "{config}");
+    assert_eq!(config["oauth_client_secret"], "secret", "{config}");
+    assert_eq!(config["oauth_token_url"], token_url.as_str(), "{config}");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -646,6 +658,17 @@ fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
     assert_eq!(account["provider"], "outlook", "{exchanged}");
     assert_eq!(account["display_name"], "Outlook User", "{exchanged}");
     assert_eq!(account["sender_name"], "Outlook User", "{exchanged}");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let config: String = conn
+        .query_row(
+            "SELECT config FROM accounts WHERE id = ?1",
+            ["outlook.user@example.com"],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+    assert_eq!(config["oauth_client_id"], "client", "{config}");
+    assert_eq!(config["oauth_token_url"], token_url.as_str(), "{config}");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2110,6 +2133,10 @@ fn seed_mobile_account(data_dir: &std::path::Path, email: &str) {
         access_token: None,
         refresh_token: None,
         token_expires_at: 0,
+        oauth_client_id: String::new(),
+        oauth_client_secret: String::new(),
+        oauth_token_url: String::new(),
+        oauth_scope: String::new(),
     };
     let meta = AccountMeta {
         engine: "mail".to_string(),

@@ -47,16 +47,19 @@ final class MeronCoreNative {
 
     static String invokeJson(String requestJson) {
         if (!LOADED) return "";
+        configureOAuthDefaults();
         return meronCoreInvokeJson(requestJson);
     }
 
     static String initJson(String dataDir) {
         if (!LOADED) return "";
+        configureOAuthDefaults();
         return meronCoreInitJson(dataDir);
     }
 
     static String initJson(String dataDir, String dbKey) {
         if (!LOADED) return "";
+        configureOAuthDefaults();
         return meronCoreInitJsonKeyed(dataDir, dbKey);
     }
 
@@ -87,6 +90,13 @@ final class MeronCoreNative {
         }
     }
 
+    private static void configureOAuthDefaults() {
+        meronCoreConfigureOAuthDefaults(
+                BuildConfig.MERON_GOOGLE_CLIENT_ID,
+                BuildConfig.MERON_GOOGLE_TOKEN_URL,
+                BuildConfig.MERON_OUTLOOK_CLIENT_ID);
+    }
+
     @SuppressWarnings("unused")
     private static void dispatchCoreEventFromNative(String eventJson) {
         for (CoreEventListener listener : EVENT_LISTENERS) {
@@ -98,6 +108,8 @@ final class MeronCoreNative {
     private static native String meronCoreInitJson(String dataDir);
     private static native String meronCoreInitJsonKeyed(String dataDir, String dbKey);
     private static native String meronCoreInvokeJson(String requestJson);
+    private static native void meronCoreConfigureOAuthDefaults(
+            String googleClientId, String googleTokenUrl, String outlookClientId);
     private static native void meronCoreRegisterEventCallback();
     private static native void meronCoreUnregisterEventCallback();
     private static native boolean meronCoreEmitReadyEvent();

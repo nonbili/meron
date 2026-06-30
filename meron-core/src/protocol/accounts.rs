@@ -683,6 +683,10 @@ pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Res
         access_token: None,
         refresh_token: None,
         token_expires_at: 0,
+        oauth_client_id: String::new(),
+        oauth_client_secret: String::new(),
+        oauth_token_url: String::new(),
+        oauth_scope: String::new(),
     };
     let meta = AccountMeta {
         engine: "mail".to_string(),

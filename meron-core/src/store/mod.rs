@@ -200,6 +200,10 @@ fn creds_to_config(creds: &Creds) -> String {
         "smtp_starttls": creds.smtp_starttls,
         "auth_type": creds.auth_type,
         "token_expires_at": creds.token_expires_at,
+        "oauth_client_id": creds.oauth_client_id,
+        "oauth_client_secret": creds.oauth_client_secret,
+        "oauth_token_url": creds.oauth_token_url,
+        "oauth_scope": creds.oauth_scope,
     })
     .to_string()
 }
@@ -221,6 +225,10 @@ fn config_to_creds(json: &str) -> Creds {
         access_token: None,
         refresh_token: None,
         token_expires_at: v["token_expires_at"].as_i64().unwrap_or(0),
+        oauth_client_id: v["oauth_client_id"].as_str().unwrap_or("").to_string(),
+        oauth_client_secret: v["oauth_client_secret"].as_str().unwrap_or("").to_string(),
+        oauth_token_url: v["oauth_token_url"].as_str().unwrap_or("").to_string(),
+        oauth_scope: v["oauth_scope"].as_str().unwrap_or("").to_string(),
     }
 }
 
