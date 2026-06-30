@@ -16,6 +16,11 @@ export function setSyncError(account: string | null, message: string) {
   connectivity$.error.set(message)
 }
 
+export function dismissSyncError() {
+  connectivity$.error.set(null)
+  connectivity$.account.set(null)
+}
+
 // Clear the banner when a mail sync succeeds. Scoped to the failing account: a
 // success for some other account (notably RSS) must not dismiss a real outage on
 // the account that errored. When either side is unknown, clear conservatively.
