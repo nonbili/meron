@@ -1,5 +1,6 @@
 package jp.nonbili.meron
 
+import android.app.Activity
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -7,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.accounts.AccountManager
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
@@ -17,6 +19,10 @@ import jp.nonbili.meron.ui.MobileHost
 import jp.nonbili.meron.ui.PickedFile
 import jp.nonbili.meron.ui.PlatformServices
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class AndroidPlatformServices(
     private val activity: ComponentActivity,
@@ -126,6 +132,37 @@ class AndroidPlatformServices(
 class AndroidMobileHost(
     private val activity: ComponentActivity,
 ) : MobileHost {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var pendingGoogleAccountResult: ((GoogleDeviceAccount?) -> Unit)? = null
+    private val googleAccountPicker =
+        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val callback = pendingGoogleAccountResult
+            pendingGoogleAccountResult = null
+            val accountName = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            if (result.resultCode != Activity.RESULT_OK || accountName.isNullOrBlank()) {
+                callback?.invoke(null)
+                return@registerForActivityResult
+            }
+            scope.launch {
+                runCatching {
+                    val token = GoogleAccountManagerAuth.interactiveToken(activity, accountName)
+                    val profileName = GoogleAccountManagerAuth.fetchUserName(token).orEmpty()
+                    val expiresAt = System.currentTimeMillis() / 1000L + GoogleAccountManagerAuth.TOKEN_LIFETIME_SECONDS
+                    GoogleAccountManagerAuth.register(activity, accountName.trim().lowercase(), accountName)
+                    GoogleDeviceAccount(
+                        email = accountName,
+                        displayName = profileName,
+                        accessToken = token,
+                        expiresAtEpochSeconds = expiresAt,
+                    )
+                }.onSuccess {
+                    callback?.invoke(it)
+                }.onFailure {
+                    callback?.invoke(null)
+                }
+            }
+        }
+
     override val outlookClientId: String = BuildConfig.MERON_OUTLOOK_CLIENT_ID
     override val outlookRedirectUri: String = BuildConfig.MERON_OUTLOOK_REDIRECT_URI
     override val googleClientId: String = BuildConfig.MERON_GOOGLE_CLIENT_ID
@@ -165,12 +202,26 @@ class AndroidMobileHost(
         AndroidNotificationService.notifyNewMail(activity, accountName, from, subject, count, accountId, folder, threadKey)
     }
 
-    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) = onResult(null)
+    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) {
+        pendingGoogleAccountResult = onResult
+        googleAccountPicker.launch(GoogleAccountManagerAuth.chooseAccountIntent())
+    }
 
-    override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh = ManagedTokenRefresh.NotNeeded
+    override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh =
+        when (val refresh = GoogleAccountManagerAuth.mintIfNeeded(activity, accountId)) {
+            GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> ManagedTokenRefresh.NotNeeded
+            is GoogleAccountManagerAuth.TokenRefresh.Refreshed ->
+                ManagedTokenRefresh.Refreshed(
+                    accessToken = refresh.token,
+                    expiresAtEpochSeconds = refresh.expiresAt,
+                )
+            GoogleAccountManagerAuth.TokenRefresh.Failed -> ManagedTokenRefresh.Failed
+        }
 
     override fun recordManagedGoogleExpiry(
         accountId: String,
         expiresAtEpochSeconds: Long,
-    ) {}
+    ) {
+        GoogleAccountManagerAuth.recordExpiry(activity, accountId, expiresAtEpochSeconds)
+    }
 }
