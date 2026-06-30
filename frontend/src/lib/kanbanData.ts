@@ -1,7 +1,7 @@
 import { invoke } from './bridge'
 import { unifiedAccounts } from '../states/accounts'
 import { getAllKanbanColumns, kanbanColumnKey, kanban$, type KanbanColumn } from '../states/kanban'
-import { mail$ } from '../states/mail'
+import { folderUnread, mail$ } from '../states/mail'
 import { showToast } from '../states/ui'
 import { mergeStarredItems } from './starredItems'
 import type { FilterMode } from '../states/ui'
@@ -111,6 +111,28 @@ export function folderMatches(folderId: string, synced: string | undefined): boo
 export function isRSSAccount(accountId: string, accounts: { id: string; provider: string; auth_type: string }[]) {
   const account = accounts.find((item) => item.id === accountId)
   return accountId.startsWith('rss-') || account?.provider === 'rss' || account?.auth_type === 'rss'
+}
+
+export function loadedUnreadCount(threads: Message[]): number {
+  return threads.reduce((count, thread) => count + (thread.unread ? (thread.unread_count ?? 1) : 0), 0)
+}
+
+export function kanbanColumnUnreadCount(
+  column: KanbanColumn,
+  foldersByAccount: Record<string, Folder[]>,
+  accounts: Account[],
+  loadedThreads: Message[] = [],
+): number {
+  if (isUnifiedStarredColumn(column)) return loadedUnreadCount(loadedThreads)
+  if (column.accountId === 'unified') {
+    return accounts.reduce(
+      (sum, account) =>
+        account.included_in_unified !== false ? sum + folderUnread(foldersByAccount[account.id], column.folderId) : sum,
+      0,
+    )
+  }
+  const fromFolders = folderUnread(foldersByAccount[column.accountId], column.folderId)
+  return fromFolders || loadedUnreadCount(loadedThreads)
 }
 
 type ColumnPage = {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
+import { accounts$ } from './accounts'
 import { kanban$ } from './kanban'
 import {
   archiveThread,
@@ -7,6 +8,7 @@ import {
   deleteThread,
   discardSavedDraftCopy,
   mail$,
+  markAllRead,
   moveThreadToFolder,
 } from './mail'
 import { runToastUndo, settleConfirm, ui$ } from './ui'
@@ -30,6 +32,59 @@ const thread = (overrides: Partial<Message> = {}): Message => ({
 })
 
 const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+describe('markAllRead', () => {
+  const calls: { command: string; payload: unknown }[] = []
+
+  beforeEach(() => {
+    calls.length = 0
+    accounts$.set([
+      {
+        id: 'acc',
+        email: 'me@example.com',
+        display_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: '',
+        imap_port: 993,
+        smtp_host: '',
+        smtp_port: 465,
+        tls: true,
+        signature: '',
+      },
+    ])
+    mail$.threads.set([])
+    mail$.messages.set([])
+    mail$.folders.set([{ id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 12 }])
+    mail$.foldersByAccount.set({})
+    ui$.selectedAccount.set('acc')
+    ui$.selectedFolder.set('inbox')
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            if (command === 'mail.folderList') {
+              return { folders: [{ id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 0 }] }
+            }
+            return { ok: true }
+          },
+        },
+      },
+    }
+  })
+
+  it('marks the selected mail folder read even when no unread thread is loaded', async () => {
+    await markAllRead()
+
+    expect(calls.filter((call) => call.command === 'mail.markAllRead').map((call) => call.payload)).toEqual([
+      { account_id: 'acc', folder_id: 'inbox' },
+    ])
+    expect(calls.filter((call) => call.command === 'mail.folderList').map((call) => call.payload)).toEqual([
+      { account_id: 'acc', refresh: false },
+    ])
+  })
+})
 
 describe('deleteThread', () => {
   const calls: { command: string; payload: unknown }[] = []

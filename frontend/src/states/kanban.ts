@@ -3,7 +3,7 @@ import type { ChatWallpaper, Message } from '../types'
 import { isFilterMode, ui$, type FilterMode } from './ui'
 import { mail$, refreshAccountFoldersCache } from './mail'
 import { accounts$ } from './accounts'
-import { filterThreads, markThreadsReadRemote } from '../lib/threadActions'
+import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { persistedField } from '../lib/sessionPref'
 import { settings$, type KanbanBoard } from './settings'
 import { invoke } from '../lib/bridge'
@@ -255,20 +255,19 @@ export function removeKanbanColumn(boardId: string, column: KanbanColumn) {
   kanban$.accountCursors.set(nextAccountCursors)
 }
 
-// Mark every unread thread in a single column as read. Optimistically clears the
-// column's cached threads, then marks them read on the backend. A unified column
-// spans every account's inbox, which markThreadsReadRemote handles by grouping.
+// Mark a column as read. Mail columns are marked folder-wide, so unread messages
+// outside the loaded page are cleared too; RSS/starred aggregates fall back to
+// per loaded item/thread operations because they have no folder-wide unread flag.
 export async function markColumnAllRead(column: KanbanColumn) {
   const key = kanbanColumnKey(column)
   const threads = kanban$.threads[key].get() ?? []
   const unread = threads.filter((thread) => thread.unread)
-  if (unread.length === 0) return
-
-  kanban$.threads[key].set(
-    threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
-  )
 
   if (column.accountId === 'unified' && column.folderId.toLowerCase() === 'starred') {
+    if (unread.length === 0) return
+    kanban$.threads[key].set(
+      threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
+    )
     await Promise.all(
       unread.map((thread) =>
         invoke('mail.markRead', { thread_id: thread.thread_id, message_ids: [thread.id] }).catch((err) =>
@@ -279,9 +278,42 @@ export async function markColumnAllRead(column: KanbanColumn) {
     return
   }
 
-  await markThreadsReadRemote(unread, accounts$.get(), column.folderId)
+  const accounts = accounts$.get()
+  const columnAccount = accounts.find((account) => account.id === column.accountId)
+  const mailAccountIds =
+    column.accountId === 'unified'
+      ? accounts
+          .filter((account) => account.included_in_unified !== false && !isRssAccount(account, account.id))
+          .map((account) => account.id)
+      : !isRssAccount(columnAccount, column.accountId)
+        ? [column.accountId]
+        : []
+  const rssUnread = unread.filter((thread) =>
+    isRssAccount(
+      accounts.find((account) => account.id === thread.account_id),
+      thread.account_id,
+    ),
+  )
+  if (mailAccountIds.length === 0 && rssUnread.length === 0) return
+
+  kanban$.threads[key].set(
+    threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
+  )
+
+  await Promise.all([
+    ...mailAccountIds.map((accountId) =>
+      invoke('mail.markAllRead', { account_id: accountId, folder_id: column.folderId }).catch((err) =>
+        console.error('markAllRead failed:', err),
+      ),
+    ),
+    ...rssUnread.map((thread) =>
+      invoke('mail.markRead', { thread_id: thread.thread_id }).catch((err) =>
+        console.error('markAllRead (rss) failed:', err),
+      ),
+    ),
+  ])
   await Promise.all(
-    Array.from(new Set(unread.map((thread) => thread.account_id)))
+    Array.from(new Set([...mailAccountIds, ...rssUnread.map((thread) => thread.account_id)]))
       .filter(Boolean)
       .map((accountId) => refreshAccountFoldersCache(accountId, false)),
   )

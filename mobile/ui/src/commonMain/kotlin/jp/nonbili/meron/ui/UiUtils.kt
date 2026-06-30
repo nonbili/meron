@@ -150,6 +150,38 @@ internal fun List<ThreadSummary>.filteredKanbanThreads(
     }.sortedByDescending { it.dateEpochSeconds }
 }
 
+internal fun folderUnread(
+    folders: List<FolderSummary>?,
+    folderId: String,
+): Int {
+    if (folders.isNullOrEmpty()) return 0
+    return folders
+        .firstOrNull { folder ->
+            if (folderId.equals(INBOX_FOLDER, ignoreCase = true)) {
+                folder.name.equals(INBOX_FOLDER, ignoreCase = true)
+            } else {
+                folder.name == folderId
+            }
+        }?.unread ?: 0
+}
+
+internal fun loadedUnreadCount(threads: List<ThreadSummary>): Int = threads.count { it.unread }
+
+internal fun kanbanColumnUnreadCount(
+    column: KanbanColumnSpec,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    accounts: List<AccountSummary>,
+    loadedThreads: List<ThreadSummary> = emptyList(),
+): Int {
+    if (isUnifiedStarredColumn(column)) return loadedUnreadCount(loadedThreads)
+    if (column.accountId == UNIFIED_ACCOUNT_ID) {
+        return accounts
+            .filter { it.includedInUnified }
+            .sumOf { account -> folderUnread(foldersByAccount[account.id], column.folderId) }
+    }
+    return folderUnread(foldersByAccount[column.accountId], column.folderId).takeIf { it > 0 } ?: loadedUnreadCount(loadedThreads)
+}
+
 internal fun columnTitle(
     column: KanbanColumnSpec,
     accounts: List<AccountSummary>,

@@ -31,6 +31,7 @@ import {
   mergeLabelFolders,
   refreshKanbanContextAction,
   isUnifiedStarredColumn,
+  kanbanColumnUnreadCount,
 } from '../../lib/kanbanData'
 import { openThreadTab } from '../../states/compose'
 import { ThreadActionsMenu, ThreadActionsMenuItems } from '../threads/ThreadActionsMenu'
@@ -96,8 +97,8 @@ function KanbanColumnContent({
   // merely because it's the open thread. So switching to Unread/Starred yields a
   // clean filtered list instead of pinning the currently-open conversation.
   const threads = filterThreads(rawThreads, filterMode, undefined, readThreads)
-  const hasUnread = rawThreads.some((thread) => thread.unread)
-  const unreadCount = rawThreads.reduce((count, thread) => count + (thread.unread ? 1 : 0), 0)
+  const unreadCount = kanbanColumnUnreadCount(column, foldersByAccount, accounts, rawThreads)
+  const hasUnread = unreadCount > 0
   const loading = allLoading[key] ?? false
   const loadingMore = allLoadingMore[key] ?? false
   const searchActive = columnSearchActive(key, searchQuery, searchScope)

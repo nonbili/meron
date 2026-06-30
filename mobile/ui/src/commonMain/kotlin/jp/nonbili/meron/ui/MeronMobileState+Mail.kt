@@ -1110,10 +1110,6 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
 
 internal fun MeronMobileState.markVisibleMailboxAllRead() {
     val unread = coreThreads.filter { it.unread }
-    if (unread.isEmpty()) {
-        status = "No unread messages."
-        return
-    }
     if (!coreLoaded) {
         status = "Rust core not packaged."
         return
@@ -1121,16 +1117,18 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
     val accountsById = coreAccounts.associateBy { it.id }
     val mailTargets =
         if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-            unread
-                .map { it.accountId }
-                .distinct()
-                .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
-                .map { accountId -> accountId to INBOX_FOLDER }
+            coreAccounts
+                .filter { it.includedInUnified && !accountSummaryIsRss(it) }
+                .map { account -> account.id to INBOX_FOLDER }
         } else {
             val account = accountsById[selectedCoreAccountId]
             if (account != null && !accountSummaryIsRss(account)) listOf(selectedCoreAccountId to selectedCoreFolder) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
+    if (mailTargets.isEmpty() && rssTargets.isEmpty()) {
+        status = "No unread messages."
+        return
+    }
     val threadsBefore = coreThreads
     val kanbanBefore = kanbanColumns
     coreThreads = coreThreads.map { if (it.unread) it.copy(unread = false) else it }
@@ -1164,10 +1162,6 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
 internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) {
     val key = kanbanColumnKey(column)
     val unread = kanbanColumns[key]?.threads.orEmpty().filter { it.unread }
-    if (unread.isEmpty()) {
-        status = "No unread cards."
-        return
-    }
     if (!coreLoaded) {
         status = "Rust core not packaged."
         return
@@ -1179,16 +1173,18 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
                 .filterNot { threadIdIsRss(it.id) }
                 .map { thread -> thread.backendThreadId() to listOf(thread.id) }
         } else if (column.accountId == UNIFIED_ACCOUNT_ID) {
-            unread
-                .map { it.accountId }
-                .distinct()
-                .filter { accountId -> accountsById[accountId]?.let { !accountSummaryIsRss(it) } ?: true }
-                .map { accountId -> accountId to emptyList() }
+            coreAccounts
+                .filter { it.includedInUnified && !accountSummaryIsRss(it) }
+                .map { account -> account.id to emptyList<String>() }
         } else {
             val account = accountsById[column.accountId]
             if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to emptyList()) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.id) }
+    if (mailTargets.isEmpty() && rssTargets.isEmpty()) {
+        status = "No unread cards."
+        return
+    }
     val threadsBefore = coreThreads
     val kanbanBefore = kanbanColumns
     updateKanbanColumn(key) { state ->

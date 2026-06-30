@@ -93,4 +93,17 @@ describe('markColumnAllRead', () => {
     expect(mail$.foldersByAccount.acc1.get()?.[0]?.unread).toBe(0)
     expect(mail$.foldersByAccount.acc2.get()?.[0]?.unread).toBe(0)
   })
+
+  it('marks a mail column read even when no unread thread is loaded', async () => {
+    kanban$.threads['acc1\ninbox'].set([])
+
+    await markColumnAllRead({ accountId: 'acc1', folderId: 'inbox' })
+
+    expect(calls.filter((call) => call.command === 'mail.markAllRead').map((call) => call.payload)).toEqual([
+      { account_id: 'acc1', folder_id: 'inbox' },
+    ])
+    expect(calls.filter((call) => call.command === 'mail.folderList').map((call) => call.payload)).toEqual([
+      { account_id: 'acc1', refresh: false },
+    ])
+  })
 })

@@ -4,7 +4,7 @@ import { invoke } from '../lib/bridge'
 import { confirmAction, ui$, showToast, showUndoToast } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
 import { kanban$ } from './kanban'
-import { filterThreads, markThreadsReadRemote } from '../lib/threadActions'
+import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { mergeStarredItems } from '../lib/starredItems'
 import { isLocalSendId, discardPendingSend } from './pendingSends'
 
@@ -299,9 +299,18 @@ export async function refreshAccountFoldersCache(accountId: string, refresh = fa
 
 /** Unread count of the INBOX folder in a folder list, or 0 if absent. */
 export function inboxUnread(folders: Folder[] | undefined): number {
+  return folderUnread(folders, 'inbox')
+}
+
+/** Unread count of a folder in a folder list, treating INBOX case-insensitively. */
+export function folderUnread(folders: Folder[] | undefined, folderId: string): number {
   if (!folders) return 0
-  const inbox = folders.find((f) => f.role === 'inbox' || f.id.toLowerCase() === 'inbox')
-  return inbox?.unread ?? 0
+  const wanted = folderId.toLowerCase()
+  const folder = folders.find((f) => {
+    if (wanted === 'inbox') return f.role === 'inbox' || f.id.toLowerCase() === 'inbox'
+    return f.id === folderId
+  })
+  return folder?.unread ?? 0
 }
 
 function hasOnlyBootstrapInbox(folders: Folder[]) {
@@ -1040,28 +1049,58 @@ export async function deleteMessage(message: Message) {
   }
 }
 
-// Mark every visible thread as read. Mail accounts are marked folder-wide in one
-// call each; RSS feeds (no folder-wide flag) are marked per-thread.
+// Mark the current folder/view as read. Mail accounts are marked folder-wide, so
+// unread messages outside the loaded page are cleared too; RSS feeds are marked
+// per visible thread because they do not have an IMAP-style folder flag.
 export async function markAllRead() {
   const threads = mail$.threads.get()
   const unread = threads.filter((thread) => thread.unread)
-  if (unread.length === 0) return
 
   const accounts = accounts$.get()
   const selectedAcc = ui$.selectedAccount.get()
   const folder = selectedAcc === 'unified' ? 'inbox' : ui$.selectedFolder.get()
+  const activeAccount = accounts.find((account) => account.id === selectedAcc)
+  const mailAccountIds =
+    selectedAcc === 'unified'
+      ? unifiedAccounts()
+          .filter((account) => !isRssAccount(account, account.id))
+          .map((account) => account.id)
+      : selectedAcc && !isRssAccount(activeAccount, selectedAcc)
+        ? [selectedAcc]
+        : []
 
-  // Optimistic clear.
+  if (mailAccountIds.length === 0 && unread.length === 0) return
+
+  // Optimistic clear for currently loaded rows. Folder cache refresh below brings
+  // aggregate unread badges in line after the folder-wide backend update.
   mail$.threads.set(threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)))
   mail$.messages.set(mail$.messages.get().map((message) => (message.unread ? { ...message, unread: false } : message)))
 
-  await markThreadsReadRemote(unread, accounts, folder)
+  await Promise.all([
+    ...mailAccountIds.map((accountId) =>
+      invoke('mail.markAllRead', { account_id: accountId, folder_id: folder }).catch((err) =>
+        console.error('markAllRead failed:', err),
+      ),
+    ),
+    ...unread
+      .filter((thread) =>
+        isRssAccount(
+          accounts.find((account) => account.id === thread.account_id),
+          thread.account_id,
+        ),
+      )
+      .map((thread) =>
+        invoke('mail.markRead', { thread_id: thread.thread_id }).catch((err) =>
+          console.error('markAllRead (rss) failed:', err),
+        ),
+      ),
+  ])
 
   if (selectedAcc) void loadFolders(selectedAcc, false)
   // The visible list can span multiple accounts (unified inbox, Starred, a
   // Kanban board), so refresh each affected account's folder cache — not just
   // the selected view — to keep every side navigation badge in sync.
-  for (const accountId of new Set(unread.map((thread) => thread.account_id))) {
+  for (const accountId of new Set([...mailAccountIds, ...unread.map((thread) => thread.account_id)])) {
     if (accountId && accountId !== selectedAcc) void refreshAccountFoldersCache(accountId, false)
   }
 }

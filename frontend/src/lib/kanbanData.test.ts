@@ -12,6 +12,7 @@ import {
   folderMatches,
   isUnifiedStarredColumn,
   isRSSAccount,
+  kanbanColumnUnreadCount,
   loadKanbanColumn,
   loadMoreKanbanColumn,
   mergeLabelFolders,
@@ -320,6 +321,54 @@ describe('folderMatches', () => {
 
   it('is false when nothing synced', () => {
     expect(folderMatches('inbox', undefined)).toBe(false)
+  })
+})
+
+describe('kanbanColumnUnreadCount', () => {
+  it('uses folder unread totals instead of loaded thread count for a mail column', () => {
+    const foldersByAccount = {
+      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 137 } as Folder],
+    }
+
+    expect(
+      kanbanColumnUnreadCount(
+        { accountId: 'acc1', folderId: 'inbox' },
+        foldersByAccount,
+        [account('acc1')],
+        [
+          message({ unread: true, unread_count: 1 }),
+          message({ id: 'm2', thread_id: 't2', unread: true, unread_count: 1 }),
+        ],
+      ),
+    ).toBe(137)
+  })
+
+  it('sums included accounts for the unified inbox', () => {
+    const foldersByAccount = {
+      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 70 } as Folder],
+      acc2: [{ id: 'INBOX', account_id: 'acc2', name: 'Inbox', role: 'inbox', unread: 50 } as Folder],
+    }
+
+    expect(
+      kanbanColumnUnreadCount({ accountId: 'unified', folderId: 'inbox' }, foldersByAccount, [
+        account('acc1'),
+        { ...account('acc2'), included_in_unified: false },
+      ]),
+    ).toBe(70)
+  })
+
+  it('falls back to loaded unread message totals when no folder total exists', () => {
+    expect(
+      kanbanColumnUnreadCount(
+        { accountId: 'unified', folderId: 'starred' },
+        {},
+        [],
+        [
+          message({ unread: true, unread_count: 3 }),
+          message({ id: 'm2', thread_id: 't2', unread: false, unread_count: 0 }),
+        ],
+      ),
+    ).toBe(3)
   })
 })
 

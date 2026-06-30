@@ -14,6 +14,7 @@ import {
   columnSearchActive,
   columnSearchHighlightClass,
   folderLabel,
+  kanbanColumnUnreadCount,
   mergeLabelFolders,
 } from '../../lib/kanbanData'
 import { Avatar } from '../avatar/Avatar'
@@ -44,7 +45,7 @@ export function KanbanColumnMinimized({
   const labelFolders = useMemo(() => mergeLabelFolders(folders, foldersByAccount), [folders, foldersByAccount])
   const searchActive = columnSearchActive(key, searchQuery, searchScope)
   const overWallpaper = !!useValue(settings$.kanbanBoards).find((board) => board.id === boardId)?.wallpaper
-  const unreadCount = rawThreads.reduce((count, thread) => count + (thread.unread ? 1 : 0), 0)
+  const unreadCount = kanbanColumnUnreadCount(column, foldersByAccount, accounts, rawThreads)
   const columnAccount = column.accountId !== 'unified' ? accounts.find((a) => a.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
   const isPaused = !!columnAccount?.paused

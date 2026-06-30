@@ -494,11 +494,12 @@ internal fun KanbanScreen(
                 items(boardColumns, key = { kanbanColumnKey(it) }) { column ->
                     val key = kanbanColumnKey(column)
                     if (key in minimizedColumns) {
+                        val state = columns[key] ?: KanbanColumnState()
                         KanbanMinimizedColumn(
                             column = column,
                             accounts = accounts,
                             foldersByAccount = foldersByAccount,
-                            unread = (columns[key] ?: KanbanColumnState()).threads.count { it.unread },
+                            unread = kanbanColumnUnreadCount(column, foldersByAccount, accounts, state.threads),
                             onRestore = { minimizedColumns = minimizedColumns - key },
                         )
                     } else {
@@ -609,7 +610,7 @@ internal fun KanbanColumn(
                 column = column,
                 accounts = accounts,
                 foldersByAccount = foldersByAccount,
-                unread = visibleThreads.count { it.unread },
+                unread = kanbanColumnUnreadCount(column, foldersByAccount, accounts, state.threads),
                 onRefresh = onRefresh,
                 onMarkAllRead = onMarkAllRead,
                 onRemove = onRemove,

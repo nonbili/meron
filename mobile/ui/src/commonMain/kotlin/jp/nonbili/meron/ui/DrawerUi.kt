@@ -274,7 +274,12 @@ internal fun MailDrawer(
                 if (showUnifiedInboxNav) {
                     item {
                         val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
-                        val unread = folders.filter { it.accountId in includedAccountIds }.sumOf { it.unread }
+                        val unread =
+                            folders
+                                .filter { it.accountId in includedAccountIds }
+                                .groupBy { it.accountId }
+                                .values
+                                .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
                         SidebarRow(
                             selected = currentScreen == Screen.Mail && selectedAccountId == UNIFIED_ACCOUNT_ID,
                             chat = chat,
@@ -287,10 +292,7 @@ internal fun MailDrawer(
                 }
                 items(accounts, key = { it.id }) { account ->
                     val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
-                    val unread =
-                        folders
-                            .filter { it.accountId == account.id && it.name.equals(INBOX_FOLDER, ignoreCase = true) }
-                            .sumOf { it.unread }
+                    val unread = folderUnread(folders.filter { it.accountId == account.id }, INBOX_FOLDER)
                     val needsGoogleReauth = account.id == googleReauthAccountId
                     SidebarRow(
                         selected = currentScreen == Screen.Mail && account.id == selectedAccountId,

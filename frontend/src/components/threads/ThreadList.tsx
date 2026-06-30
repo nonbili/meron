@@ -8,7 +8,15 @@ import { openComposeTab, openThreadTab, openMessageTab, openDraftCompose, compos
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { ui$ } from '../../states/ui'
 import { thread$ } from '../../states/thread'
-import { mail$, getFilteredThreads, syncMail, markAllRead, loadMoreThreads, isDraftFolder } from '../../states/mail'
+import {
+  mail$,
+  getFilteredThreads,
+  syncMail,
+  markAllRead,
+  loadMoreThreads,
+  isDraftFolder,
+  folderUnread,
+} from '../../states/mail'
 import { isRssAccount } from '../../lib/threadActions'
 import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
@@ -80,7 +88,9 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const activeAccount = accounts.find((acc) => acc.id === selectedAccount)
   const isRSSAccount = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
   const hasSendableAccount = accounts.some(isSendableAccount)
-  const hasUnread = filteredThreads.some((thread) => thread.unread)
+  const hasUnread = isRSSAccount
+    ? filteredThreads.some((thread) => thread.unread)
+    : folderUnread(folders, selectedFolder) > 0 || filteredThreads.some((thread) => thread.unread)
   const canLoadMore = !!threadsCursor && !query.trim() && filterMode === 'all'
   const feedRowsDraggable = !isStarredView && isRSSAccount
 

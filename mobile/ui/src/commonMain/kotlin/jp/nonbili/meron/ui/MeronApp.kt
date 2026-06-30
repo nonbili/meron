@@ -1700,7 +1700,23 @@ private fun MeronMobileScreenContent(
                                                 Icon(Icons.Filled.MoreVert, contentDescription = tr("threads.actions.title"))
                                             }
                                             DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
-                                                val showMarkAllRead = coreThreads.any { it.unread }
+                                                val loadedUnread = coreThreads.any { it.unread }
+                                                val folderUnreadTotal =
+                                                    if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+                                                        val includedAccountIds =
+                                                            coreAccounts.filter { it.includedInUnified }.map { it.id }.toSet()
+                                                        coreFolders
+                                                            .filter { it.accountId in includedAccountIds }
+                                                            .groupBy { it.accountId }
+                                                            .values
+                                                            .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
+                                                    } else {
+                                                        folderUnread(
+                                                            coreFolders.filter { it.accountId == selectedCoreAccountId },
+                                                            selectedCoreFolder,
+                                                        )
+                                                    }
+                                                val showMarkAllRead = folderUnreadTotal > 0 || loadedUnread
                                                 val showAccountActions = selectedAccount != null
                                                 FilterMode.values().forEach { mode ->
                                                     DropdownMenuItem(
