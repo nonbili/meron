@@ -330,7 +330,13 @@ internal fun MeronMobileState.syncCoreThreads(
         return
     }
     val requestKey = mailboxCacheKey(accountId, requestedFolder, query, filter)
+    if (syncing && activeMailboxLoadKey == requestKey) {
+        Log.i("MailLoad", "sync skipped duplicate account=$accountId folder=$requestedFolder")
+        return
+    }
     activeMailboxLoadKey = requestKey
+    activeMailboxLoadStartedAtMillis = currentTimeMillis()
+    blockingMailboxLoadWarned = false
     syncing = true
     Log.i(
         "MailLoad",
@@ -406,6 +412,8 @@ internal fun MeronMobileState.syncCoreThreads(
                 messages = emptyList()
             }
             activeMailboxLoadKey = null
+            activeMailboxLoadStartedAtMillis = 0L
+            blockingMailboxLoadWarned = false
             syncing = false
             initialThreadsLoaded = true
             errorBanner = null
@@ -421,6 +429,8 @@ internal fun MeronMobileState.syncCoreThreads(
                 return@onFailure
             }
             activeMailboxLoadKey = null
+            activeMailboxLoadStartedAtMillis = 0L
+            blockingMailboxLoadWarned = false
             syncing = false
             initialThreadsLoaded = true
             errorBanner = it.message ?: "Sync failed"

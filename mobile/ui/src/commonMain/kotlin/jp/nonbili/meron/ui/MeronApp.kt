@@ -232,6 +232,9 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
+private const val MAILBOX_BLOCKING_WARN_AFTER_MS = 10_000L
+private const val MAILBOX_BLOCKING_TIMEOUT_MS = 15_000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeronApp(
@@ -1457,6 +1460,7 @@ private fun MeronMobileScreenContent(
                         KanbanScreen(
                             modifier = Modifier.fillMaxSize().padding(innerPadding),
                             accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
+                            accountsLoading = !initialAccountsLoaded || accountsLoading,
                             board = activeKanbanBoard,
                             columns = kanbanColumns,
                             foldersByAccount = foldersByAccount,
@@ -1860,6 +1864,44 @@ private fun MeronMobileScreenContent(
                                         "MailLoad",
                                         "render mail blocking=$showingBlockingInboxLoad initialAccountsLoaded=$initialAccountsLoaded accountsLoading=$accountsLoading accounts=${coreAccounts.size} threads=${coreThreads.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
                                     )
+                                }
+                            }
+                            LaunchedEffect(
+                                screen,
+                                showingBlockingInboxLoad,
+                                activeMailboxLoadKey,
+                                activeMailboxLoadStartedAtMillis,
+                            ) {
+                                if (screen != Screen.Mail || !showingBlockingInboxLoad) return@LaunchedEffect
+                                delay(MAILBOX_BLOCKING_WARN_AFTER_MS)
+                                val stillBlocking =
+                                    screen == Screen.Mail &&
+                                        (!initialAccountsLoaded ||
+                                            accountsLoading ||
+                                            (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded)))
+                                if (stillBlocking && !blockingMailboxLoadWarned) {
+                                    blockingMailboxLoadWarned = true
+                                    Log.w(
+                                        "MailLoad",
+                                        "mail UI still blocking after ${MAILBOX_BLOCKING_WARN_AFTER_MS}ms accountsLoaded=$initialAccountsLoaded accountsLoading=$accountsLoading accounts=${coreAccounts.size} threads=${coreThreads.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
+                                    )
+                                }
+                                delay(MAILBOX_BLOCKING_TIMEOUT_MS - MAILBOX_BLOCKING_WARN_AFTER_MS)
+                                val timedOut =
+                                    screen == Screen.Mail &&
+                                        coreAccounts.isNotEmpty() &&
+                                        coreThreads.isEmpty() &&
+                                        (syncing || !initialThreadsLoaded)
+                                if (timedOut) {
+                                    Log.w(
+                                        "MailLoad",
+                                        "clearing stuck mail loader after ${MAILBOX_BLOCKING_TIMEOUT_MS}ms accounts=${coreAccounts.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
+                                    )
+                                    activeMailboxLoadKey = null
+                                    activeMailboxLoadStartedAtMillis = 0L
+                                    syncing = false
+                                    initialThreadsLoaded = true
+                                    errorBanner = "Inbox load timed out. Pull to refresh or tap Retry."
                                 }
                             }
                             PullToRefreshBox(

@@ -78,6 +78,8 @@ internal class MeronMobileState(
     var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
     var mailboxCache by mutableStateOf(emptyMap<MailboxCacheKey, MailboxLoadResult>())
     var activeMailboxLoadKey by mutableStateOf<MailboxCacheKey?>(null)
+    var activeMailboxLoadStartedAtMillis by mutableStateOf(0L)
+    var blockingMailboxLoadWarned by mutableStateOf(false)
     var selectedMailThreadIds by mutableStateOf(emptySet<String>())
     var selectedMailMoveThread by mutableStateOf<ThreadSummary?>(null)
     var selectedMailCopyThread by mutableStateOf<ThreadSummary?>(null)

@@ -433,6 +433,7 @@ internal fun KanbanHeaderSearchField(
 internal fun KanbanScreen(
     modifier: Modifier,
     accounts: List<AccountSummary>,
+    accountsLoading: Boolean,
     board: KanbanBoardSpec?,
     columns: Map<String, KanbanColumnState>,
     foldersByAccount: Map<String, List<FolderSummary>>,
@@ -455,6 +456,10 @@ internal fun KanbanScreen(
     showSenderImages: Boolean,
     kanbanColumnWidth: Dp,
 ) {
+    if (accountsLoading) {
+        LoadingState("Loading your accounts...")
+        return
+    }
     if (accounts.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.PersonAdd,

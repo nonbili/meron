@@ -63,13 +63,13 @@ internal fun saveLastTopScreen(
     },
 )
 
-internal fun loadAppearanceMode(prefs: AppPreferences): AppAppearanceMode {
+fun loadAppearanceMode(prefs: AppPreferences): AppAppearanceMode {
     val stored = prefs.getString(APPEARANCE_MODE_PREF, AppAppearanceMode.Indigo.storageValue)
     return AppAppearanceMode.entries.firstOrNull { it.storageValue == stored && it != AppAppearanceMode.System }
         ?: AppAppearanceMode.Indigo
 }
 
-internal fun saveAppearanceMode(
+fun saveAppearanceMode(
     prefs: AppPreferences,
     mode: AppAppearanceMode,
 ) = prefs.putString(APPEARANCE_MODE_PREF, mode.storageValue)

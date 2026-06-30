@@ -299,10 +299,11 @@ class ComposeMainActivity : ComponentActivity() {
         val platformServices = AndroidPlatformServices(this)
         val mobileHost = AndroidMobileHost(this)
         setContent {
-            var appearanceMode by remember { mutableStateOf(jp.nonbili.meron.ui.AppAppearanceMode.Indigo) }
+            val appCore = remember { JniMeronCore() }
+            var appearanceMode by remember { mutableStateOf(jp.nonbili.meron.ui.loadAppearanceMode(appPrefs)) }
             var appLanguageTag by remember { mutableStateOf(localeController.currentLanguageTag()) }
             jp.nonbili.meron.ui.MeronApp(
-                core = JniMeronCore(),
+                core = appCore,
                 coreLoaded = MeronCoreNative.isLoaded(),
                 prefs = appPrefs,
                 kanbanPrefs = kanbanPrefs,
@@ -314,7 +315,10 @@ class ComposeMainActivity : ComponentActivity() {
                 incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
                 incomingNotificationThreadTarget = incomingNotificationThreadTarget,
                 appearanceMode = appearanceMode,
-                onAppearanceModeChange = { mode -> appearanceMode = mode },
+                onAppearanceModeChange = { mode ->
+                    appearanceMode = mode
+                    jp.nonbili.meron.ui.saveAppearanceMode(appPrefs, mode)
+                },
                 appLanguageTag = appLanguageTag,
                 onAppLanguageChange = { tag ->
                     appLanguageTag = tag
