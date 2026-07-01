@@ -84,6 +84,17 @@ export function setAccountPaused(accountId: string, enabled: boolean) {
   return setAccountFlag(accountId, 'paused', 'account.setPaused', enabled)
 }
 
+export async function setAccountSaveSentCopy(accountId: string, value: boolean | null) {
+  const previous = accounts$.get()
+  accounts$.set(previous.map((acc) => (acc.id === accountId ? { ...acc, save_sent_copy: value } : acc)))
+  try {
+    await invoke('account.setSaveSentCopy', { id: accountId, value })
+  } catch (error) {
+    accounts$.set(previous)
+    showToast(error instanceof Error ? error.message : 'Failed to update sent-copy setting', 'error')
+  }
+}
+
 export async function setRSSSyncInterval(accountId: string, minutes: number) {
   const nextMinutes = Math.min(1440, Math.max(5, Math.round(minutes)))
   const previous = accounts$.get()

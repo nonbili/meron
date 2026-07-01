@@ -1325,10 +1325,10 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 &message_id,
             )
             .await?;
-            // Append the sent message to the account's Sent folder so it shows
-            // up alongside incoming replies on next sync. Best-effort: a missing
-            // Sent folder, a failed APPEND, or a flaky IMAP server should not
-            // surface as a "send failed" — the mail already left via SMTP.
+            // Finalize the Sent view. For Gmail/Outlook defaults this only
+            // refreshes the provider-created copy; other accounts get Meron's
+            // best-effort APPEND plus refresh. The mail already left via SMTP,
+            // so Sent-folder issues should not surface as "send failed".
             if let Err(err) = append_to_sent(engine, &account, &raw).await {
                 eprintln!("meron-core: APPEND to Sent failed for {account}: {err:#}");
             }
@@ -2162,6 +2162,19 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     spawn_body_prefetch(engine.clone(), id.clone(), "INBOX".to_string());
                 }
             }
+            Ok(json!({ "ok": true }))
+        }
+
+        // Override Sent-copy behavior. Null removes the override so provider
+        // defaults apply; true/false force or suppress IMAP APPEND after SMTP.
+        "account.setSaveSentCopy" => {
+            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
+            let value = match p.get("value") {
+                Some(Value::Bool(enabled)) => Some(json!(enabled)),
+                Some(Value::Null) | None => None,
+                _ => return Err(anyhow::anyhow!("value must be true, false, or null")),
+            };
+            store::set_account_pref_json(&engine.db.lock().unwrap(), &id, "save_sent_copy", value)?;
             Ok(json!({ "ok": true }))
         }
 

@@ -530,6 +530,38 @@ fn chat_wallpaper_round_trips_and_can_be_cleared() {
 }
 
 #[test]
+fn save_sent_copy_pref_round_trips_and_can_be_cleared() {
+    let conn = Connection::open_in_memory().unwrap();
+    db::run_migrations(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO accounts(id, engine, provider, prefs) VALUES('acct', 'mail', 'custom', '{}')",
+        [],
+    )
+    .unwrap();
+
+    assert_eq!(save_sent_copy_pref(&conn, "acct").unwrap(), None);
+    set_account_pref_json(&conn, "acct", "save_sent_copy", Some(json!(false))).unwrap();
+    assert_eq!(save_sent_copy_pref(&conn, "acct").unwrap(), Some(false));
+    assert_eq!(list_accounts(&conn).unwrap()[0]["save_sent_copy"], false);
+
+    conn.execute(
+        "UPDATE accounts SET prefs = json_set(prefs, '$.other', 7) WHERE id = 'acct'",
+        [],
+    )
+    .unwrap();
+    set_account_pref_json(&conn, "acct", "save_sent_copy", None).unwrap();
+    assert_eq!(save_sent_copy_pref(&conn, "acct").unwrap(), None);
+    let prefs: String = conn
+        .query_row("SELECT prefs FROM accounts WHERE id = 'acct'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let value: Value = serde_json::from_str(&prefs).unwrap();
+    assert_eq!(value["save_sent_copy"], Value::Null);
+    assert_eq!(value["other"], 7);
+}
+
+#[test]
 fn rss_sync_interval_defaults_and_persists_without_clobbering() {
     let conn = Connection::open_in_memory().unwrap();
     db::run_migrations(&conn).unwrap();

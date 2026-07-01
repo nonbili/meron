@@ -72,6 +72,7 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "account.setUnified" => Ok(json!({ "ok": true })),
         "account.setMuted" => Ok(json!({ "ok": true })),
         "account.setPaused" => Ok(json!({ "ok": true })),
+        "account.setSaveSentCopy" => Ok(json!({ "ok": true })),
         "account.setRSSSyncInterval" => Ok(json!({ "ok": true })),
         "account.setAliases" => Ok(json!({ "ok": true })),
         "account.reorder" => Ok(json!({ "ok": true })),
@@ -144,6 +145,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         }
         "account.setMuted" => set_mobile_account_bool_pref(data_dir, &req.params, "muted"),
         "account.setPaused" => set_mobile_account_bool_pref(data_dir, &req.params, "paused"),
+        "account.setSaveSentCopy" => set_mobile_account_save_sent_copy(data_dir, &req.params),
         "account.setRSSSyncInterval" => set_mobile_account_rss_sync_interval(data_dir, &req.params),
         "account.setAliases" => set_mobile_account_aliases(data_dir, &req.params),
         "account.reorder" => reorder_mobile_accounts(data_dir, &req.params),

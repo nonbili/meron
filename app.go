@@ -177,6 +177,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.accountSetPref(payload, "account.setMuted")
 	case "account.setPaused":
 		return a.accountSetPref(payload, "account.setPaused")
+	case "account.setSaveSentCopy":
+		return a.accountSetSaveSentCopy(payload)
 	case "account.setRSSSyncInterval":
 		return a.accountSetRSSSyncInterval(payload)
 	case "account.reorder":

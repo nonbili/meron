@@ -21,6 +21,7 @@ data class AccountSummary(
     val muted: Boolean = false,
     val paused: Boolean = false,
     val conversationHtml: Boolean = true,
+    val saveSentCopy: Boolean? = null,
     val rssSyncIntervalMinutes: Int = 60,
     val aliases: List<AccountAlias> = emptyList(),
     val chatWallpaperKind: String = "",

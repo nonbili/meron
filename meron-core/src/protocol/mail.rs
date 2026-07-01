@@ -17,9 +17,9 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
     let attachments = parse_mobile_attachments(params)?;
 
     // Route through the shared Engine: reuses the warm session pool while
-    // foreground (no per-send TLS+LOGIN) and runs the same `append_to_sent` op
-    // as desktop (APPEND + refresh the Sent folder into the store), so the
-    // just-sent message is immediately queryable by the cross-folder thread view.
+    // foreground (no per-send TLS+LOGIN) and runs the same Sent finalization as
+    // desktop. Provider defaults decide whether this APPENDs or only refreshes
+    // the server-created Sent copy.
     let engine = crate::ffi::engine_for(data_dir)?;
     let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
     if account_needs_reconnect(&creds) {

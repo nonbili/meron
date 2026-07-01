@@ -218,6 +218,33 @@ func (a *App) accountSetPref(payload map[string]any, method string) (any, error)
 	return map[string]any{"ok": true}, nil
 }
 
+func (a *App) accountSetSaveSentCopy(payload map[string]any) (any, error) {
+	id, _ := payload["id"].(string)
+	if id == "" {
+		id, _ = payload["account_id"].(string)
+	}
+	if id == "" {
+		return nil, errors.New("account id required")
+	}
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, errors.New("mail engine unavailable")
+	}
+	value, ok := payload["value"]
+	if !ok {
+		value = nil
+	}
+	switch value.(type) {
+	case nil, bool:
+	default:
+		return nil, errors.New("value must be true, false, or null")
+	}
+	if _, err := a.sidecar.Call("account.setSaveSentCopy", map[string]any{"account": id, "value": value}); err != nil {
+		return nil, err
+	}
+	a.logf("account.setSaveSentCopy: account=%s value=%v", id, value)
+	return map[string]any{"ok": true}, nil
+}
+
 func (a *App) accountSetChatWallpaper(payload map[string]any) (any, error) {
 	id, _ := payload["id"].(string)
 	if id == "" {

@@ -46,6 +46,7 @@ fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
             muted = item.findJsonBooleanProperty("muted") ?: false,
             paused = item.findJsonBooleanProperty("paused") ?: false,
             conversationHtml = item.findJsonBooleanProperty("conversation_html") ?: true,
+            saveSentCopy = item.findJsonBooleanProperty("save_sent_copy"),
             rssSyncIntervalMinutes = item.findJsonLongProperty("rss_sync_interval_minutes")?.toInt() ?: 60,
             aliases =
                 item

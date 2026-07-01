@@ -15,6 +15,7 @@ type Account struct {
 	TLS               bool    `json:"tls"`
 	LoadRemoteImages  bool    `json:"load_remote_images"`
 	ConversationHTML  bool    `json:"conversation_html"`
+	SaveSentCopy      *bool   `json:"save_sent_copy"`
 	ChatWallpaper     any     `json:"chat_wallpaper,omitempty"`
 	IncludedInUnified bool    `json:"included_in_unified"`
 	Muted             bool    `json:"muted"`

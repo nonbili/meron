@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BellOff, Clock, Code, Eye, Image as ImageIcon, Inbox, Pause } from 'lucide-react'
+import { BellOff, Clock, Code, Eye, Image as ImageIcon, Inbox, Pause, Send } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import {
@@ -8,11 +8,28 @@ import {
   setAccountUnified,
   setAccountMuted,
   setAccountPaused,
+  setAccountSaveSentCopy,
   setRSSSyncInterval,
 } from '../../states/accounts'
 import { settings$, setAccountSideNavHidden } from '../../states/settings'
 import type { Account } from '../../types'
 import { NumberRow, SegmentedRow, SettingsGroup, ToggleRow } from './AccountSettingsRows'
+
+function sentCopyDefault(account: Account): boolean {
+  const host = account.smtp_host.trim().replace(/\.$/, '').toLowerCase()
+  const providerSavesSent =
+    account.auth_type === 'gmail_oauth' ||
+    account.auth_type === 'outlook_oauth' ||
+    [
+      'smtp.gmail.com',
+      'smtp.googlemail.com',
+      'smtp-mail.outlook.com',
+      'smtp.office365.com',
+      'smtp.live.com',
+      'smtp.hotmail.com',
+    ].includes(host)
+  return !providerSavesSent
+}
 
 // The grouped toggle sections of the account panel: visibility,
 // notifications/sync (incl. the RSS interval), and content rendering.
@@ -31,6 +48,7 @@ export function AccountTogglesSection({ account, isRSS }: { account: Account; is
   const paused = account.paused ?? false
   const loadImages = account.load_remote_images ?? isRSS
   const conversationHtml = account.conversation_html ?? true
+  const saveSentCopy = account.save_sent_copy ?? sentCopyDefault(account)
 
   const updateRSSInterval = (value: string) => {
     setRssIntervalVal(value)
@@ -106,6 +124,15 @@ export function AccountTogglesSection({ account, isRSS }: { account: Account; is
           ]}
           onChange={(mode) => setAccountConversationHtml(account.id, mode === 'html')}
         />
+        {!isRSS && (
+          <ToggleRow
+            icon={<Send size={15} />}
+            title={t('settings.account.saveSentCopies')}
+            hint={t('settings.account.saveSentCopiesHint')}
+            checked={saveSentCopy}
+            onChange={() => setAccountSaveSentCopy(account.id, !saveSentCopy)}
+          />
+        )}
       </SettingsGroup>
     </>
   )

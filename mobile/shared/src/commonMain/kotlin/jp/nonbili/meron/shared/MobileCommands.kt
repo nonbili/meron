@@ -20,6 +20,7 @@ object MobileCommand {
     const val AccountSetUnified = "account.setUnified"
     const val AccountSetMuted = "account.setMuted"
     const val AccountSetPaused = "account.setPaused"
+    const val AccountSetSaveSentCopy = "account.setSaveSentCopy"
     const val AccountSetRssSyncInterval = "account.setRSSSyncInterval"
     const val AccountSetAliases = "account.setAliases"
     const val AccountReorder = "account.reorder"
@@ -303,6 +304,17 @@ data class AccountFlagParams(
         jsonObject(
             "id" to accountId.jsonString(),
             "enabled" to enabled.toString(),
+        )
+}
+
+data class AccountSaveSentCopyParams(
+    val accountId: String,
+    val value: Boolean?,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "id" to accountId.jsonString(),
+            "value" to (value?.toString() ?: "null"),
         )
 }
 
@@ -769,6 +781,8 @@ class MobileMailCommandClient(
     suspend fun setAccountMuted(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetMuted, params.toJson())
 
     suspend fun setAccountPaused(params: AccountFlagParams): String = core.invoke(MobileCommand.AccountSetPaused, params.toJson())
+
+    suspend fun setAccountSaveSentCopy(params: AccountSaveSentCopyParams): String = core.invoke(MobileCommand.AccountSetSaveSentCopy, params.toJson())
 
     suspend fun setAccountRssSyncInterval(params: AccountRssSyncIntervalParams): String = core.invoke(MobileCommand.AccountSetRssSyncInterval, params.toJson())
 

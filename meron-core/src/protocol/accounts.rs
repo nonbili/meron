@@ -608,6 +608,23 @@ pub(crate) fn set_mobile_account_bool_pref(
     })
 }
 
+pub(crate) fn set_mobile_account_save_sent_copy(
+    data_dir: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let value = match params.get("value") {
+        Some(Value::Bool(enabled)) => Some(json!(enabled)),
+        Some(Value::Null) | None => None,
+        _ => return Err("value must be true, false, or null".to_string()),
+    };
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_pref_json(&conn, &id, "save_sent_copy", value)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
 pub(crate) fn set_mobile_account_rss_sync_interval(
     data_dir: &str,
     params: &Value,

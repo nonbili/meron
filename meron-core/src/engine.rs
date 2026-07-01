@@ -930,7 +930,41 @@ pub fn canon_folder(folder: &str) -> String {
     }
 }
 
+pub fn should_append_sent_copy(
+    auth_type: &str,
+    smtp_host: &str,
+    override_pref: Option<bool>,
+) -> bool {
+    override_pref.unwrap_or_else(|| {
+        let host = smtp_host.trim_end_matches('.').to_ascii_lowercase();
+        let provider_saves_sent = matches!(auth_type, "gmail_oauth" | "outlook_oauth")
+            || matches!(
+                host.as_str(),
+                "smtp.gmail.com"
+                    | "smtp.googlemail.com"
+                    | "smtp-mail.outlook.com"
+                    | "smtp.office365.com"
+                    | "smtp.live.com"
+                    | "smtp.hotmail.com"
+            );
+        !provider_saves_sent
+    })
+}
+
 pub async fn append_to_sent(engine: &Arc<Engine>, account: &str, raw: &[u8]) -> anyhow::Result<()> {
+    let (auth_type, smtp_host, override_pref) = {
+        let (auth_type, smtp_host) = engine
+            .accounts
+            .lock()
+            .await
+            .get(account)
+            .map(|creds| (creds.auth_type.clone(), creds.smtp_host.clone()))
+            .unwrap_or_else(|| ("password".to_string(), String::new()));
+        let override_pref = store::save_sent_copy_pref(&engine.db.lock().unwrap(), account)?;
+        (auth_type, smtp_host, override_pref)
+    };
+    let should_append = should_append_sent_copy(&auth_type, &smtp_host, override_pref);
+
     // APPEND is mutating, so this never auto-retries (a drop after the server
     // accepted the message must not re-APPEND a duplicate copy).
     let (sent, batch) = engine
@@ -940,11 +974,13 @@ pub async fn append_to_sent(engine: &Arc<Engine>, account: &str, raw: &[u8]) -> 
                 let sent = imap::find_sent_folder(session)
                     .await?
                     .ok_or_else(|| anyhow::anyhow!("no Sent folder found"))?;
-                imap::append_to_sent(session, &sent, &raw).await?;
+                if should_append {
+                    imap::append_to_sent(session, &sent, &raw).await?;
+                }
                 // Refresh local Sent-folder envelopes so the new row is queryable
-                // by the cross-folder thread view immediately. A small limit is
-                // enough — the server delivers our just-APPENDed message at the
-                // highest UID.
+                // by the cross-folder thread view immediately. For Gmail/Outlook
+                // defaults, this picks up the provider-created Sent copy instead
+                // of uploading a duplicate.
                 let batch = imap::fetch_recent(session, &sent, 20).await?;
                 anyhow::Ok((sent, batch))
             })
@@ -1152,7 +1188,9 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Pooled, pool_return, pool_take, thread_gap_search_folders};
+    use super::{
+        Pooled, pool_return, pool_take, should_append_sent_copy, thread_gap_search_folders,
+    };
     use std::collections::HashMap;
     use std::time::{Duration, Instant};
 
@@ -1218,5 +1256,35 @@ mod tests {
             Some("drafts".to_string()),
         );
         assert_eq!(folders, vec!["INBOX", "Drafts"]);
+    }
+
+    #[test]
+    pub fn sent_copy_policy_uses_provider_defaults_and_overrides() {
+        assert!(!should_append_sent_copy("gmail_oauth", "", None));
+        assert!(!should_append_sent_copy("outlook_oauth", "", None));
+        assert!(!should_append_sent_copy("password", "smtp.gmail.com", None));
+        assert!(!should_append_sent_copy(
+            "custom",
+            "smtp.office365.com",
+            None
+        ));
+        assert!(should_append_sent_copy(
+            "password",
+            "smtp.example.com",
+            None
+        ));
+        assert!(should_append_sent_copy("custom", "", None));
+
+        assert!(should_append_sent_copy("gmail_oauth", "", Some(true)));
+        assert!(should_append_sent_copy(
+            "password",
+            "smtp.gmail.com",
+            Some(true)
+        ));
+        assert!(!should_append_sent_copy(
+            "password",
+            "smtp.example.com",
+            Some(false)
+        ));
     }
 }

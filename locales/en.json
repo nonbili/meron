@@ -821,5 +821,7 @@
   "changelog.error": "Couldn't load the changelog.",
   "changelog.empty": "No releases yet.",
   "settings.backgroundSync": "Background sync",
-  "settings.backgroundSyncHint": "Refresh mail and feeds when the app is closed"
+  "settings.backgroundSyncHint": "Refresh mail and feeds when the app is closed",
+  "settings.account.saveSentCopies": "Upload sent copy to server",
+  "settings.account.saveSentCopiesHint": "Turn off for Gmail or Outlook if sent messages are duplicated."
 }

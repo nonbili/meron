@@ -46,6 +46,8 @@ struct AccountPrefs {
     paused: Option<bool>,
     /// Whether conversation bubbles render original HTML when available; default on.
     conversation_html: Option<bool>,
+    /// Whether Meron uploads its own Sent copy after SMTP send. None = provider default.
+    save_sent_copy: Option<bool>,
     /// RSS automatic sync interval in minutes; default 60.
     rss_sync_interval_minutes: Option<u64>,
     /// Send-as identities (besides the primary address); default none.
@@ -82,6 +84,10 @@ impl AccountPrefs {
     /// Whether conversation bubbles use HTML mode for messages with HTML.
     fn conversation_html(&self) -> bool {
         self.conversation_html.unwrap_or(true)
+    }
+
+    fn save_sent_copy(&self) -> Option<bool> {
+        self.save_sent_copy
     }
 
     /// RSS automatic sync interval in minutes.
@@ -510,6 +516,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
         let muted = p.is_muted();
         let paused = p.is_paused();
         let conversation_html = p.conversation_html();
+        let save_sent_copy = p.save_sent_copy();
         let rss_sync_interval_minutes = p.rss_sync_interval_minutes();
         let chat_wallpaper = p.chat_wallpaper_json();
         if engine == "rss" {
@@ -531,6 +538,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "muted": muted,
                 "paused": paused,
                 "conversation_html": conversation_html,
+                "save_sent_copy": save_sent_copy,
                 "chat_wallpaper": chat_wallpaper,
                 "rss_sync_interval_minutes": rss_sync_interval_minutes,
                 "sort_order": sort_order,
@@ -556,6 +564,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "muted": muted,
                 "paused": paused,
                 "conversation_html": conversation_html,
+                "save_sent_copy": save_sent_copy,
                 "chat_wallpaper": chat_wallpaper,
                 "sort_order": sort_order,
                 "aliases": p.aliases_json(),
@@ -604,6 +613,11 @@ pub fn account_paused(conn: &Connection, id: &str) -> Result<bool> {
     Ok(account_prefs(conn, id)?
         .map(|p| p.is_paused())
         .unwrap_or(false))
+}
+
+/// Explicit Sent-copy override for an account. None means use provider default.
+pub fn save_sent_copy_pref(conn: &Connection, id: &str) -> Result<Option<bool>> {
+    Ok(account_prefs(conn, id)?.and_then(|p| p.save_sent_copy()))
 }
 
 /// The parsed `prefs` for an account, or None if the account row is missing.
