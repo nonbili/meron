@@ -26,7 +26,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: install rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.1
         with:
           targets: aarch64-linux-android
 
@@ -37,6 +37,9 @@ jobs:
       # Uses the checked-in wrapper (mobile/gradlew, pinned to 9.4.1); the action
       # adds dependency caching.
       - uses: gradle/actions/setup-gradle@v4
+
+      - name: install android ndk
+        run: sdkmanager "ndk;27.3.13750724"
 
       - name: resolve version
         run: |
@@ -79,9 +82,7 @@ jobs:
           PROFILE: release
         run: |
           set -euo pipefail
-          # ubuntu runners expose the NDK via ANDROID_NDK_LATEST_HOME; the
-          # packaging script reads ANDROID_NDK_HOME.
-          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/27.3.13750724"
           cargo clean --manifest-path meron-core/Cargo.toml --target aarch64-linux-android --release
           mobile/scripts/package-rust-core-android.sh
 
