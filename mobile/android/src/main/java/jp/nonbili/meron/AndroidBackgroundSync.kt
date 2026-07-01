@@ -50,6 +50,7 @@ class AndroidBackgroundSyncWorker(
         var refreshed = 0
         var skipped = 0
         var failed = 0
+        var hasTransientNetworkError = false
         for (index in 0 until accounts.length()) {
             val account = accounts.optJSONObject(index) ?: continue
             val syncRequest = androidRefreshSyncRequest(account, id = index + 2L)
@@ -66,21 +67,25 @@ class AndroidBackgroundSyncWorker(
             }
             val syncResponse = JSONObject(MeronCoreNative.invokeJson(syncRequest.requestJson))
             if (syncResponse.has("error")) {
+                val errorMessage = syncResponse.optJSONObject("error")?.optString("message") ?: ""
                 // Log the error message (never the payload) so background failures
                 // are diagnosable via Logcat; the app is closed during periodic runs
                 // so core's own log events don't reach the platform logger.
                 Log.w(
                     TAG,
-                    "${syncRequest.method} failed for account ${accountLabel(account)}: " +
-                        syncResponse.optJSONObject("error")?.optString("message"),
+                    "${syncRequest.method} failed for account ${accountLabel(account)}: $errorMessage",
                 )
-                failed += 1
+                if (isTransientNetworkError(errorMessage)) {
+                    hasTransientNetworkError = true
+                } else {
+                    failed += 1
+                }
             } else {
                 refreshed += 1
             }
         }
 
-        Log.i(TAG, "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed")
+        Log.i(TAG, "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed hasTransient=$hasTransientNetworkError")
         val body = backgroundRefreshSummary(refreshed = refreshed, skipped = skipped, failed = failed)
         if (
             shouldNotifyRefreshComplete(
@@ -90,7 +95,12 @@ class AndroidBackgroundSyncWorker(
         ) {
             AndroidNotificationService.notifyRefreshComplete(applicationContext, body)
         }
-        return Result.success()
+        return if (hasTransientNetworkError) {
+            Log.i(TAG, "retrying background refresh due to transient network error")
+            Result.retry()
+        } else {
+            Result.success()
+        }
     }
 
     /**
@@ -136,6 +146,19 @@ class AndroidBackgroundSyncWorker(
             }
         }
     }
+}
+
+internal fun isTransientNetworkError(message: String): Boolean {
+    val lower = message.lowercase()
+    return lower.contains("tcp connect") ||
+            lower.contains("dial tcp") ||
+            lower.contains("timeout") ||
+            lower.contains("timed out") ||
+            lower.contains("network is unreachable") ||
+            lower.contains("connection refused") ||
+            lower.contains("connection reset") ||
+            lower.contains("failed to lookup address") ||
+            lower.contains("no address associated with hostname")
 }
 
 internal fun shouldNotifyRefreshComplete(
