@@ -147,6 +147,7 @@ pub fn creds_have_required_secret(creds: &imap::Creds) -> bool {
             .refresh_token
             .as_deref()
             .is_some_and(|s| !s.is_empty())
+            || creds.access_token.as_deref().is_some_and(|s| !s.is_empty())
     } else {
         !creds.password.is_empty()
     }
@@ -244,6 +245,13 @@ impl Engine {
 
             // If token is expired or expires in less than 5 minutes (300s)
             if creds.token_expires_at <= now + 300 {
+                let refresh_token = creds.refresh_token.as_deref().unwrap_or("");
+                if refresh_token.is_empty() {
+                    if creds.access_token.as_deref().is_some_and(|s| !s.is_empty()) {
+                        return Ok(creds.clone());
+                    }
+                    anyhow::bail!("account needs reconnect: {account}");
+                }
                 // Provider-specific endpoint / credentials. Google needs a client
                 // secret; Microsoft is a public client (PKCE) with no secret but
                 // must request the resource scopes on refresh.
@@ -320,8 +328,6 @@ impl Engine {
                 } else {
                     Some(owned_scope.as_str())
                 };
-                let refresh_token = creds.refresh_token.as_deref().unwrap_or("");
-
                 let (new_access, expires_in) = imap::refresh_oauth_token(
                     &token_url,
                     &client_id,

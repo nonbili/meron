@@ -2334,3 +2334,31 @@ fn engine_hydrates_account_added_after_construction() {
         .expect("account hydrated from store on next use");
     assert_eq!(creds.password, "secret");
 }
+
+#[test]
+fn engine_does_not_refresh_platform_managed_oauth_without_refresh_token() {
+    let data_dir = unique_data_dir("engine-managed-oauth");
+    let data_dir_str = data_dir.to_str().unwrap();
+    let email = format!("managed+{}@gmail.com", unique_test_suffix());
+    let add = format!(
+        r#"{{"id":1,"method":"account.addOAuth","params":{{"email":"{email}","provider":"gmail","display_name":"Gmail","sender_name":"Sender","access_token":"access-only","token_expires_at":1}}}}"#
+    );
+    let added = invoke_mobile_protocol_json(&add, Some(data_dir_str));
+    assert_eq!(
+        added["result"]["account"]["needs_reconnect"], false,
+        "{added}"
+    );
+
+    let engine = crate::engine::Engine::new(Box::new(MobileHost {
+        data_dir: data_dir_str.to_string(),
+    }))
+    .expect("engine builds");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let creds = rt
+        .block_on(engine.ensure_valid_creds(&email))
+        .expect("access-token-only OAuth account remains usable for platform refresh");
+    assert_eq!(creds.access_token.as_deref(), Some("access-only"));
+    assert_eq!(creds.refresh_token.as_deref(), None);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
