@@ -1,0 +1,5 @@
+- Add background sync setting to customize sync behaviors
+- Fix background sync for managed Gmail accounts and automatically retry on transient network errors
+- Fix OAuth sync issues when a refresh token is missing
+- Align thread row selection styling for better visual feedback
+- Avoid duplicate sent copies for provider SMTP servers (e.g. Gmail and Outlook)

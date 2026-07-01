@@ -1,6 +1,7 @@
 default_platform(:ios)
 
 require "shellwords"
+require "fileutils"
 
 platform :ios do
   private_lane :asc_api_key do
@@ -39,6 +40,8 @@ platform :ios do
     if build_before_upload
       team_id = ENV["APP_STORE_DEVELOPMENT_TEAM"].to_s
       allow_provisioning_updates = ENV["IOS_ALLOW_PROVISIONING_UPDATES"] != "0"
+      derived_data_path = ENV["IOS_DERIVED_DATA_PATH"] || File.expand_path("../../ios/build/DerivedData/AppStoreArchive", __dir__)
+      clean_derived_data = ENV["IOS_CLEAN_DERIVED_DATA"] != "0"
       xcodebuild_auth_args = []
 
       if allow_provisioning_updates
@@ -54,6 +57,10 @@ platform :ios do
       build_xcargs << "DEVELOPMENT_TEAM=#{team_id}" if !team_id.empty?
       build_xcargs.concat(xcodebuild_auth_args)
 
+      if clean_derived_data
+        FileUtils.rm_rf(derived_data_path)
+      end
+
       build_app(
         project: project_path,
         scheme: ENV["IOS_SCHEME"] || "Meron",
@@ -62,6 +69,7 @@ platform :ios do
         export_team_id: team_id.empty? ? nil : team_id,
         output_directory: File.dirname(ipa_path),
         output_name: File.basename(ipa_path),
+        derived_data_path: derived_data_path,
         clean: true,
         xcargs: build_xcargs.empty? ? nil : build_xcargs.join(" ")
       )

@@ -260,7 +260,10 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework/MeronUI.framework/MeronUI",
+				"$(SRCROOT)/../ui/build/bin/iosArm64/releaseFramework/MeronUI.framework/MeronUI",
 				"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework/MeronUI.framework/MeronUI",
+				"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/releaseFramework/MeronUI.framework/MeronUI",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -474,11 +477,11 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/releaseFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/releaseFramework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Meron/Info.plist;
@@ -524,11 +527,11 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../ui/build/bin/iosArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosArm64/releaseFramework",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/debugFramework",
+					"$(SRCROOT)/../ui/build/bin/iosSimulatorArm64/releaseFramework",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Meron/Info.plist;
