@@ -229,6 +229,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.readClipboardImageAttachment(payload)
 	case "composer.writeMediaFile":
 		return a.writeMediaFile(payload)
+	case "composer.openAttachment":
+		return a.openComposerAttachment(payload)
 	case "account.writeAvatarFile":
 		return a.writeAvatarFile(payload)
 	case "account.writeChatWallpaperFile":

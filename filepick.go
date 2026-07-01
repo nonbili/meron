@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -107,6 +109,65 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly bool) (any, error) {
 	a.filePickerMu.Unlock()
 
 	return map[string]any{"files": files}, nil
+}
+
+// openComposerAttachment writes an in-memory composer attachment to the app
+// cache and asks the OS to open it with the user's default handler.
+func (a *App) openComposerAttachment(payload map[string]any) (any, error) {
+	filename, _ := payload["filename"].(string)
+	data, _ := payload["data"].(string)
+	if data == "" {
+		return nil, errors.New("missing attachment data")
+	}
+	if filename == "" {
+		filename = "attachment"
+	}
+	if i := strings.Index(data, ","); strings.HasPrefix(data, "data:") && i >= 0 {
+		data = data[i+1:]
+	}
+	bytes, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil, fmt.Errorf("decode attachment: %w", err)
+	}
+
+	dir := filepath.Join(appCacheDir(), "composer-open")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, randomBase64URL(8)+"-"+safeFilename(filename))
+	if err := os.WriteFile(path, bytes, 0o600); err != nil {
+		return nil, fmt.Errorf("write attachment: %w", err)
+	}
+	if err := openSystemFile(path); err != nil {
+		return nil, err
+	}
+	return map[string]any{"opened": true, "path": path}, nil
+}
+
+func safeFilename(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == string(os.PathSeparator) || name == "" {
+		return "attachment"
+	}
+	replacer := strings.NewReplacer("/", "_", "\\", "_", "\x00", "_", ":", "_")
+	return replacer.Replace(name)
+}
+
+func openSystemFile(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("open attachment: %w", err)
+	}
+	_ = cmd.Process.Release()
+	return nil
 }
 
 func lastImageDirPath() string {
