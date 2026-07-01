@@ -809,7 +809,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
         // network call runs on the blocking pool.
         "changelog.fetch" => {
             let variant = changelog::Variant::parse(
-                p.get("variant").and_then(Value::as_str).unwrap_or("desktop"),
+                p.get("variant")
+                    .and_then(Value::as_str)
+                    .unwrap_or("desktop"),
             );
             let releases = tokio::task::spawn_blocking(move || changelog::fetch(variant)).await??;
             Ok(releases)

@@ -98,10 +98,8 @@ func sidecarEnv() []string {
 		"MERON_CORE_DB="+filepath.Join(appConfigDir(), "meron.db"),
 		"MERON_MEDIA_DIR="+mediaDir(),
 	)
-	// Pass the resolved Google credentials down so the sidecar's OAuth refresh
-	// path can read them from the environment without its own deobfuscation.
-	// In release builds these come from the baked-in obfuscated defaults; in
-	// dev they come from the MERON_GOOGLE_* env vars (which take priority).
+	// Pass the baked OAuth credentials down so the sidecar's refresh path can
+	// read them from the environment without its own deobfuscation.
 	if id := googleClientID(); id != "" {
 		env = append(env, "MERON_GOOGLE_CLIENT_ID="+id)
 	}

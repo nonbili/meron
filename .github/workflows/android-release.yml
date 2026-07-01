@@ -74,27 +74,6 @@ jobs:
           printf '%s' "$APK_SIGNING_KEY" | base64 -d > "$KEYSTORE_PATH"
           echo "MERON_ANDROID_RELEASE_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
-      # Only forward OAuth overrides that are actually set; empty values would
-      # clobber the non-empty defaults in android/build.gradle (releaseProp uses
-      # getenv() ?: fallback, and an empty string is not null).
-      - name: forward oauth config
-        env:
-          MERON_GOOGLE_CLIENT_ID: ${{ secrets.MERON_GOOGLE_CLIENT_ID }}
-          MERON_GOOGLE_REDIRECT_URI: ${{ secrets.MERON_GOOGLE_REDIRECT_URI }}
-          MERON_OUTLOOK_CLIENT_ID: ${{ secrets.MERON_OUTLOOK_CLIENT_ID }}
-          MERON_OAUTH_APP_LINK_HOST: ${{ vars.MERON_OAUTH_APP_LINK_HOST }}
-          MERON_OAUTH_APP_LINK_PATH_PREFIX: ${{ vars.MERON_OAUTH_APP_LINK_PATH_PREFIX }}
-        run: |
-          set -euo pipefail
-          for var in MERON_GOOGLE_CLIENT_ID MERON_GOOGLE_REDIRECT_URI \
-            MERON_OUTLOOK_CLIENT_ID MERON_OAUTH_APP_LINK_HOST \
-            MERON_OAUTH_APP_LINK_PATH_PREFIX; do
-            value="${!var:-}"
-            if [ -n "$value" ]; then
-              echo "$var=$value" >> "$GITHUB_ENV"
-            fi
-          done
-
       - name: build rust core (release, stripped)
         env:
           PROFILE: release

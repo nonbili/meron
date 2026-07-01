@@ -86,25 +86,25 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
-func TestOAuthConfigUsesEnvironmentOverrides(t *testing.T) {
+func TestOAuthConfigIgnoresEnvironmentOverrides(t *testing.T) {
 	t.Setenv("MERON_GOOGLE_CLIENT_ID", "google-id")
 	t.Setenv("MERON_GOOGLE_CLIENT_SECRET", "google-secret")
 	t.Setenv("MERON_OUTLOOK_CLIENT_ID", "outlook-id")
 
-	if got := googleClientID(); got != "google-id" {
-		t.Fatalf("googleClientID = %q", got)
+	if got := googleClientID(); got == "" || got == "google-id" {
+		t.Fatalf("googleClientID = %q, want baked id", got)
 	}
-	if got := googleClientSecret(); got != "google-secret" {
-		t.Fatalf("googleClientSecret = %q", got)
+	if got := googleClientSecret(); got == "" || got == "google-secret" {
+		t.Fatalf("googleClientSecret = %q, want baked secret", got)
 	}
 	if !gmailOAuthConfigured() {
-		t.Fatal("gmailOAuthConfigured = false with env credentials")
+		t.Fatal("gmailOAuthConfigured = false with baked credentials")
 	}
-	if got := outlookClientID(); got != "outlook-id" {
-		t.Fatalf("outlookClientID = %q", got)
+	if got := outlookClientID(); got == "" || got == "outlook-id" {
+		t.Fatalf("outlookClientID = %q, want baked id", got)
 	}
 	if !outlookOAuthConfigured() {
-		t.Fatal("outlookOAuthConfigured = false with env client id")
+		t.Fatal("outlookOAuthConfigured = false with baked client id")
 	}
 }
 

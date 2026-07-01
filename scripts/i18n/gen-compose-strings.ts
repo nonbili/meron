@@ -32,6 +32,12 @@ const files = readdirSync(localesDir)
 // limit (a single combined map initializer overflows it).
 const fnName = (tag: string): string => "locale_" + tag.replace(/[^A-Za-z0-9]/g, "_");
 
+const mobileExcludedKeys = new Set([
+  "mobile.accounts.oauthClientHint",
+  "mobile.accounts.oauthClientId",
+  "mobile.accounts.oauthClientSecretOptional",
+]);
+
 let topEntries = "";
 let fns = "";
 for (const file of files) {
@@ -44,6 +50,7 @@ for (const file of files) {
   topEntries += `    "${tag}" to ${fnName(tag)}(),\n`;
   fns += `private fun ${fnName(tag)}(): Map<String, String> =\n    buildMap {\n`;
   for (const key of Object.keys(data).sort()) {
+    if (mobileExcludedKeys.has(key)) continue;
     fns += `        put("${esc(key)}", "${esc(data[key])}")\n`;
   }
   fns += `    }\n\n`;

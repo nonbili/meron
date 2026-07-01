@@ -63,20 +63,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data
-                    android:host="jp.nonbili.meron"
-                    android:scheme="msauth" />
+                <!-- Google native-app OAuth callback (reversed client id scheme). -->
+                <data android:scheme="${googleOauthScheme}" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:host="${oauthAppLinkHost}"
-                    android:pathPrefix="${oauthAppLinkPathPrefix}"
-                    android:scheme="https" />
+                    android:host="jp.nonbili.meron"
+                    android:scheme="msauth" />
             </intent-filter>
         </activity>
     </application>

@@ -15,12 +15,40 @@ def releaseProp = { String name, String envName = null, String fallback = "" ->
 
 def releaseVersionCode = 6
 def releaseVersionName = "0.1.5"
-def oauthAppLinkHost = releaseProp("oauthAppLinkHost", "MERON_OAUTH_APP_LINK_HOST", "meron.im")
-def oauthAppLinkPathPrefix = releaseProp("oauthAppLinkPathPrefix", "MERON_OAUTH_APP_LINK_PATH_PREFIX", "/callback/google")
 def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")
-def googleClientId = releaseProp("googleClientId", "MERON_GOOGLE_CLIENT_ID", "247266375404-3686dlghpov6s9dbp56q5kvfm0lt5j1o.apps.googleusercontent.com")
-def googleRedirectUri = releaseProp("googleRedirectUri", "MERON_GOOGLE_REDIRECT_URI", "https://${oauthAppLinkHost}${oauthAppLinkPathPrefix}")
-def googleTokenUrl = releaseProp("googleTokenUrl", "MERON_GOOGLE_TOKEN_URL", "https://${oauthAppLinkHost}/api/oauth/google/token")
+// Gmail uses native Android OAuth clients. An Android OAuth client is bound to
+// package + signing-cert SHA-1, so each signing key is a *separate* client with
+// its own id — and each client's redirect is the
+// reversed-client-id custom scheme derived below (never hand-write the redirect).
+//   debug   -> ~/.android/debug.keystore SHA-1
+//   release -> upload/release keystore SHA-1 (the GitHub-distributed APK)
+//   play    -> Google Play app-signing key SHA-1 (Play re-signs the AAB)
+def googleOauthScheme = { String id -> "com.googleusercontent.apps." + id.replace(".apps.googleusercontent.com", "") }
+def googleRedirectUri = { String id -> "${googleOauthScheme(id)}:/oauth2redirect" }
+def googleClientIdDebug = "247266375404-cs69nj8g7ocmhgp9nvk5hgrivlc4rq2m.apps.googleusercontent.com"
+// Play (bundleRelease) is re-signed by Google, so it must use the Play client id
+// supplied via env (.env.local -> MERON_GOOGLE_CLIENT_ID); it must NOT fall back
+// to the in-code debug/release ids, or the SHA-1 won't match. The GitHub APK
+// (assembleRelease) always uses the in-code release id.
+def playBundleRequested = gradle.startParameter.taskNames.any {
+    def t = it.toLowerCase()
+    t.contains("bundle") && !t.contains("debug")
+}
+def googleClientIdRelease
+if (playBundleRequested) {
+    def playClientId = releaseProp("googleClientId", "MERON_GOOGLE_CLIENT_ID", "")
+    if (playClientId.isEmpty()) {
+        throw new GradleException(
+            "Play (bundleRelease) requires the Play OAuth client id via " +
+            "MERON_GOOGLE_CLIENT_ID (add it to .env.local); refusing to fall " +
+            "back to the in-code debug/release client id.")
+    }
+    googleClientIdRelease = playClientId
+} else {
+    googleClientIdRelease = "247266375404-4pjc8ngqm18cmrdb1gsoumpcs3tq4fdj.apps.googleusercontent.com"
+}
+// Empty token URL => meron-core posts straight to https://oauth2.googleapis.com/token.
+def googleTokenUrl = releaseProp("googleTokenUrl", "MERON_GOOGLE_TOKEN_URL", "")
 def outlookRedirectUriDebug = releaseProp("outlookRedirectUriDebug", "MERON_OUTLOOK_REDIRECT_URI_DEBUG", "msauth://jp.nonbili.meron/lvGC0B4SWYU8tNPHg%2FbdMjQinZQ%3D")
 def outlookRedirectUriRelease = releaseProp("outlookRedirectUriRelease", "MERON_OUTLOOK_REDIRECT_URI_RELEASE", "msauth://jp.nonbili.meron/aJtUZr4euDojxsYjMaCe3sjZhwo%3D")
 // Falls back to the shared NB_UPLOAD_* keystore configured in ~/.gradle/gradle.properties.
@@ -51,12 +79,9 @@ android {
         versionCode releaseVersionCode
         versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders = [
-            oauthAppLinkHost: oauthAppLinkHost,
-            oauthAppLinkPathPrefix: oauthAppLinkPathPrefix,
-        ]
+        // googleOauthScheme / MERON_GOOGLE_REDIRECT_URI are set per buildType
+        // below, since each build type embeds a different Google client id.
         buildConfigField "String", "MERON_OUTLOOK_CLIENT_ID", javaString(outlookClientId)
-        buildConfigField "String", "MERON_GOOGLE_REDIRECT_URI", javaString(googleRedirectUri)
         buildConfigField "String", "MERON_GOOGLE_TOKEN_URL", javaString(googleTokenUrl)
     }
 
@@ -73,11 +98,15 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField "String", "MERON_GOOGLE_CLIENT_ID", javaString(googleClientId)
+            buildConfigField "String", "MERON_GOOGLE_CLIENT_ID", javaString(googleClientIdDebug)
+            buildConfigField "String", "MERON_GOOGLE_REDIRECT_URI", javaString(googleRedirectUri(googleClientIdDebug))
+            manifestPlaceholders = [googleOauthScheme: googleOauthScheme(googleClientIdDebug)]
             buildConfigField "String", "MERON_OUTLOOK_REDIRECT_URI", javaString(outlookRedirectUriDebug)
         }
         release {
-            buildConfigField "String", "MERON_GOOGLE_CLIENT_ID", javaString(googleClientId)
+            buildConfigField "String", "MERON_GOOGLE_CLIENT_ID", javaString(googleClientIdRelease)
+            buildConfigField "String", "MERON_GOOGLE_REDIRECT_URI", javaString(googleRedirectUri(googleClientIdRelease))
+            manifestPlaceholders = [googleOauthScheme: googleOauthScheme(googleClientIdRelease)]
             buildConfigField "String", "MERON_OUTLOOK_REDIRECT_URI", javaString(outlookRedirectUriRelease)
             signingConfig hasReleaseSigning ? signingConfigs.release : null
         }

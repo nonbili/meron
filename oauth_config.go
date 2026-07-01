@@ -1,10 +1,6 @@
 package main
 
-import (
-	"os"
-
-	"meron/internal/obf"
-)
+import "meron/internal/obf"
 
 const (
 	// Loopback host for the OAuth redirect. Per RFC 8252 (OAuth for Native Apps)
@@ -42,21 +38,11 @@ var (
 	outlookClientIDObf = "egQUWl8cWVZYQg1JFxyuWntTX1dbHFtMEEFZG0VUrgx7XBcN"
 )
 
-// googleClientID returns the OAuth client id. A non-empty MERON_GOOGLE_CLIENT_ID
-// env var wins, so local development can point straight at its own credentials
-// without touching the baked-in defaults.
 func googleClientID() string {
-	if v := os.Getenv("MERON_GOOGLE_CLIENT_ID"); v != "" {
-		return v
-	}
 	return obf.Decode(googleClientIDObf)
 }
 
-// googleClientSecret mirrors googleClientID for the client secret.
 func googleClientSecret() string {
-	if v := os.Getenv("MERON_GOOGLE_CLIENT_SECRET"); v != "" {
-		return v
-	}
 	return obf.Decode(googleClientSecretObf)
 }
 
@@ -64,13 +50,7 @@ func gmailOAuthConfigured() bool {
 	return googleClientID() != "" && googleClientSecret() != ""
 }
 
-// outlookClientID returns the Microsoft OAuth client id. A non-empty
-// MERON_OUTLOOK_CLIENT_ID env var wins, so local development can point at its
-// own Azure app registration without touching the baked-in default.
 func outlookClientID() string {
-	if v := os.Getenv("MERON_OUTLOOK_CLIENT_ID"); v != "" {
-		return v
-	}
 	if outlookClientIDObf == "" {
 		return ""
 	}

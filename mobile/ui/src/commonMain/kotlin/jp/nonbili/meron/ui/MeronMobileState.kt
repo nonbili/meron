@@ -62,8 +62,6 @@ internal class MeronMobileState(
     var oauthAccessToken by mutableStateOf("")
     var oauthRefreshToken by mutableStateOf("")
     var oauthExpiresAt by mutableStateOf("0")
-    var oauthClientId by mutableStateOf("")
-    var oauthClientSecret by mutableStateOf("")
     var oauthRedirectUri by mutableStateOf(defaultOAuthRedirectUri())
     var oauthState by mutableStateOf(Uuid.random().toString())
     var oauthVerifier by mutableStateOf(Uuid.random().toString() + Uuid.random().toString())

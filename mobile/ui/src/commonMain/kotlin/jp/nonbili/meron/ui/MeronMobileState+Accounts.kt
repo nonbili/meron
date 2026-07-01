@@ -794,7 +794,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
         status = "OAuth authorization code is required."
         return
     }
-    val clientId = resolvedOAuthClientId()
+    val clientId = bakedOAuthClientId()
     if (clientId.isBlank()) {
         status = "OAuth client ID is required."
         return
@@ -807,7 +807,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
             senderName = senderName.trim(),
             code = code,
             clientId = clientId,
-            clientSecret = oauthClientSecret.trim(),
+            clientSecret = "",
             redirectUri = oauthRedirectUri.trim(),
             codeVerifier = oauthVerifier,
             tokenUrl = if (oauthProvider == "gmail") mobileHost.googleTokenUrl else "",
@@ -861,7 +861,7 @@ internal fun MeronMobileState.exchangeOAuthCode() {
 
 @OptIn(ExperimentalUuidApi::class)
 internal fun MeronMobileState.launchOAuthFlow() {
-    val clientId = resolvedOAuthClientId()
+    val clientId = bakedOAuthClientId()
     if (clientId.isBlank()) {
         status = "OAuth client ID is required."
         return
@@ -939,16 +939,12 @@ internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
     }
 }
 
-private fun MeronMobileState.resolvedOAuthClientId(): String =
-    oauthClientId
-        .trim()
-        .ifBlank {
-            when (oauthProvider) {
-                "outlook" -> mobileHost.outlookClientId
-                "gmail" -> mobileHost.googleClientId
-                else -> ""
-            }
-        }.trim()
+private fun MeronMobileState.bakedOAuthClientId(): String =
+    when (oauthProvider) {
+        "outlook" -> mobileHost.outlookClientId
+        "gmail" -> mobileHost.googleClientId
+        else -> ""
+    }.trim()
 
 private fun MeronMobileState.resolvedOAuthRedirectUri(): String =
     when (oauthProvider) {

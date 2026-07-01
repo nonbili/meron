@@ -13,14 +13,12 @@ export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogControl
       mode: 'gmail' as const,
       label: t('accounts.oauth.signInWith', { provider: 'Google' }),
       configured: gmailConfigured,
-      configureMessage: t('accounts.oauth.configureGmail'),
       icon: <GoogleIcon size={isSetup ? 20 : 16} />,
     },
     {
       mode: 'outlook' as const,
       label: t('accounts.oauth.signInWith', { provider: 'Outlook' }),
       configured: outlookConfigured,
-      configureMessage: t('accounts.oauth.configureOutlook'),
       icon: <MicrosoftIcon size={isSetup ? 20 : 16} />,
     },
   ]
@@ -47,13 +45,6 @@ export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogControl
                 {provider.icon}
                 {provider.label}
               </button>
-              {!provider.configured && (
-                <p
-                  className={`${isSetup ? 'rounded-2xl p-4 text-sm' : 'rounded-xl p-3 text-[10px]'} bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 leading-relaxed text-amber-600 dark:text-amber-400 font-medium`}
-                >
-                  {provider.configureMessage}
-                </p>
-              )}
             </div>
           )
         })}
