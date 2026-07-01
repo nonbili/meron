@@ -59,6 +59,10 @@ fi
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 
+if [[ -z "${SOURCE_DATE_EPOCH:-}" ]] && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  export SOURCE_DATE_EPOCH="$(git -C "$REPO_DIR" log -1 --format=%ct)"
+fi
+
 # The vendored OpenSSL build (openssl-src) drives OpenSSL's own Makefile, which
 # otherwise picks up the host macOS `ar` and emits BSD-format archives. rustc,
 # bundling these Android (ELF) static libs, expects GNU-format archives and

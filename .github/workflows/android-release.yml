@@ -103,6 +103,7 @@ jobs:
           # ubuntu runners expose the NDK via ANDROID_NDK_LATEST_HOME; the
           # packaging script reads ANDROID_NDK_HOME.
           export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          cargo clean --manifest-path meron-core/Cargo.toml --target aarch64-linux-android --release
           mobile/scripts/package-rust-core-android.sh
 
       - name: build release apk
