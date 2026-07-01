@@ -2,6 +2,9 @@
 set -euo pipefail
 
 TARGET="${TARGET:-aarch64-apple-ios-sim}"
+# PROFILE selects the Cargo profile. Xcode Release/archive builds pass
+# PROFILE=release; local simulator builds default to debug for faster iteration.
+PROFILE="${PROFILE:-debug}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
@@ -39,10 +42,18 @@ if command -v rustup >/dev/null 2>&1; then
   rustup target add "$TARGET" >/dev/null
 fi
 
-echo "Building meron-core for $TARGET"
-cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET"
+CARGO_PROFILE_ARGS=()
+if [[ "$PROFILE" == "release" ]]; then
+  CARGO_PROFILE_ARGS=(--release)
+elif [[ "$PROFILE" != "debug" ]]; then
+  echo "Unsupported PROFILE='$PROFILE' (expected 'debug' or 'release')." >&2
+  exit 1
+fi
 
-LIB_PATH="$CORE_DIR/target/$TARGET/debug/libmeron_core.a"
+echo "Building meron-core ($PROFILE) for $TARGET"
+cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"
+
+LIB_PATH="$CORE_DIR/target/$TARGET/$PROFILE/libmeron_core.a"
 if [[ ! -f "$LIB_PATH" ]]; then
   echo "Build completed, but $LIB_PATH was not produced." >&2
   exit 1
@@ -50,4 +61,7 @@ fi
 
 mkdir -p "$OUT_DIR"
 cp "$LIB_PATH" "$OUT_DIR/libmeron_core.a"
+if [[ "$PROFILE" == "release" ]]; then
+  strip -S "$OUT_DIR/libmeron_core.a" 2>/dev/null || true
+fi
 echo "Packaged $OUT_DIR/libmeron_core.a"

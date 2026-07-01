@@ -44,8 +44,12 @@ jobs:
           # The committed build.gradle defaults are the source of truth for the
           # version; the release tag must match versionName.
           GRADLE=mobile/android/build.gradle
-          VERSION_NAME=$(grep 'MERON_VERSION_NAME"' "$GRADLE" | sed -E 's/.*"([^"]+)"\).*/\1/')
-          VERSION_CODE=$(grep 'MERON_VERSION_CODE"' "$GRADLE" | sed -E 's/.*"([^"]+)"\)\.toInteger.*/\1/')
+          VERSION_NAME=$(sed -nE 's/^[[:space:]]*def[[:space:]]+releaseVersionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$GRADLE")
+          VERSION_CODE=$(sed -nE 's/^[[:space:]]*def[[:space:]]+releaseVersionCode[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "$GRADLE")
+          if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo "::error::Could not read releaseVersionName/releaseVersionCode from $GRADLE."
+            exit 1
+          fi
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG_VERSION="${GITHUB_REF_NAME#android/v}"
             if [ "$TAG_VERSION" != "$VERSION_NAME" ]; then

@@ -45,8 +45,6 @@ if (!envFlag('SKIP_BUILD', false)) {
   const gradleArgs = ['gradle', '-p', mobileDir, ':android:bundleRelease', '-PpackageRustCore']
 
   const props: Record<string, string> = {
-    meronVersionCode: 'MERON_VERSION_CODE',
-    meronVersionName: 'MERON_VERSION_NAME',
     meronReleaseStoreFile: 'MERON_ANDROID_RELEASE_STORE_FILE',
     meronReleaseStorePassword: 'MERON_ANDROID_RELEASE_STORE_PASSWORD',
     meronReleaseKeyAlias: 'MERON_ANDROID_RELEASE_KEY_ALIAS',

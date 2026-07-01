@@ -30,13 +30,13 @@ export const requireEnv = (name: string) => {
   return value
 }
 
-// The Android versionCode fallback lives in build.gradle; reuse it so the
-// upload script and the build agree when MERON_VERSION_CODE isn't set.
+// The Android versionCode lives in build.gradle; reuse it so the upload script
+// and the build agree.
 const gradleVersionCode = async (): Promise<string> => {
   const gradle = await Bun.file(resolve(mobileDir, 'android/build.gradle')).text()
-  const match = gradle.match(/releaseProp\("meronVersionCode",\s*"MERON_VERSION_CODE",\s*"(\d+)"\)/)
+  const match = gradle.match(/def\s+releaseVersionCode\s*=\s*(\d+)/)
   if (!match) {
-    fail('Could not read meronVersionCode fallback from android/build.gradle')
+    fail('Could not read releaseVersionCode from android/build.gradle')
   }
 
   return match[1]
@@ -59,14 +59,13 @@ const iosVersion = async (): Promise<{ marketingVersion: string, buildNumber: st
 }
 
 // The Android versionCode and the iOS marketing version / build number each have
-// their own source of truth (build.gradle / Version.xcconfig), overridable via
-// the environment. The marketing version drives the iOS App Store upload.
+// their own source of truth (build.gradle / Version.xcconfig). The marketing
+// version drives the iOS App Store upload.
 export const packageInfo = async (): Promise<PackageInfo> => {
   const ios = await iosVersion()
-  const versionCode = process.env.MERON_VERSION_CODE ?? await gradleVersionCode()
   return {
     version: ios.marketingVersion,
-    versionCode,
+    versionCode: await gradleVersionCode(),
     buildNumber: process.env.IOS_BUILD_NUMBER ?? ios.buildNumber,
   }
 }

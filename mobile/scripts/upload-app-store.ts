@@ -22,9 +22,9 @@ const releaseNotesPath = process.env.IOS_RELEASE_NOTES_PATH
   ?? resolve(mobileDir, 'fastlane/metadata/ios/en-US/release_notes.txt')
 const skipBinaryUpload = envFlag('IOS_SKIP_BINARY_UPLOAD', false)
 const skipBuild = envFlag('SKIP_BUILD', skipBinaryUpload)
-const submitForReview = envFlag('IOS_SUBMIT_FOR_REVIEW', false)
+const submitForReview = envFlag('IOS_SUBMIT_FOR_REVIEW', true)
 const rejectIfPossible = envFlag('IOS_REJECT_IF_POSSIBLE', submitForReview)
-const automaticRelease = envFlag('IOS_AUTOMATIC_RELEASE', false)
+const automaticRelease = envFlag('IOS_AUTOMATIC_RELEASE', true)
 
 requireEnv('APP_STORE_KEY_ID')
 requireEnv('APP_STORE_ISSUER_ID')

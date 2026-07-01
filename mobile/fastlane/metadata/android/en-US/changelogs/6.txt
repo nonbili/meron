@@ -1,0 +1,6 @@
+- Add in-app changelog dialog
+- Upgrade navigation to Navigation Compose
+- Add chat wallpaper preset grid and custom upload screen
+- Show background sync notifications on manual runs or failures only
+- Fix UI styling for settings toggle switches and theme settings
+- Add timeout safety to stuck mailbox sync tasks

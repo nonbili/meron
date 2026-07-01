@@ -284,7 +284,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  export TARGET=\"aarch64-apple-ios\"\nelse\n  export TARGET=\"aarch64-apple-ios-sim\"\nfi\n\"$SRCROOT/../scripts/package-rust-core-ios.sh\"\n";
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  export TARGET=\"aarch64-apple-ios\"\nelse\n  export TARGET=\"aarch64-apple-ios-sim\"\nfi\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  export PROFILE=\"release\"\nelse\n  export PROFILE=\"debug\"\nfi\n\"$SRCROOT/../scripts/package-rust-core-ios.sh\"\n";
 		};
 		A10000000000000000000062 /* Generate i18n */ = {
 			isa = PBXShellScriptBuildPhase;

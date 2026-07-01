@@ -80,7 +80,6 @@ mobile/scripts/upload-screenshots.ts ios     # uploads iPhone + iPad sizes
 # Android: builds a signed AAB then uploads to a track (default: production).
 # Signing falls back to the shared NB_UPLOAD_* keystore in ~/.gradle/gradle.properties.
 GOOGLE_PLAY_JSON_KEY=~/.gradle/nonbili-sa.json \
-MERON_VERSION_CODE=2 \
   mobile/scripts/upload-google-play.ts production
 
 # iOS: builds the IPA (xcodebuild via fastlane) then uploads to App Store Connect
