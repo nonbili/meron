@@ -1,0 +1,4 @@
+- Click attachment to preview in quick reply and composer
+- Add in-app changelog
+- Improve mail sync error banner
+- Fix unread badge

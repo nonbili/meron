@@ -17,6 +17,8 @@ import {
   Globe,
   KeyRound,
   SpellCheck,
+  Pause,
+  BellOff,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -254,13 +256,34 @@ function AccountGroup({
               onClick={() => onSelect(account.id)}
               title={subtitle}
             >
-              <Avatar name={displayName} src={account.avatar_url} size={20} className="!rounded-md shrink-0" />
+              <AccountNavAvatar account={account} displayName={displayName} />
               <span className="truncate">{displayName}</span>
             </NavItem>
           )
         })
       )}
     </>
+  )
+}
+
+function AccountNavAvatar({ account, displayName }: { account: Account; displayName: string }) {
+  const isPaused = account.paused ?? false
+  const isMuted = account.muted ?? false
+
+  return (
+    <span className="relative shrink-0">
+      <Avatar
+        name={displayName}
+        src={account.avatar_url}
+        size={20}
+        className={`!rounded-md transition-all ${isPaused ? 'grayscale opacity-40' : ''}`}
+      />
+      {(isPaused || isMuted) && (
+        <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-raised">
+          {isPaused ? <Pause size={7} className="fill-current" /> : <BellOff size={7} />}
+        </span>
+      )}
+    </span>
   )
 }
 
