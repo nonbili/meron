@@ -82,6 +82,7 @@ jobs:
       - name: build rust core (release, stripped)
         env:
           PROFILE: release
+          CARGO_TARGET_DIR: /tmp/meron-cargo-target
         run: |
           set -euo pipefail
           export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/27.3.13750724"

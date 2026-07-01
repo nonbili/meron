@@ -13,6 +13,7 @@ MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
 CORE_DIR="$REPO_DIR/meron-core"
 JNI_LIB_DIR="$MOBILE_DIR/android/src/main/jniLibs/$ABI"
+TARGET_DIR="${CARGO_TARGET_DIR:-$CORE_DIR/target}"
 
 if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && command -v nix-shell >/dev/null 2>&1; then
   exec nix-shell "$REPO_DIR/shell.nix" --run "$SCRIPT_DIR/$(basename "$0")"
@@ -63,6 +64,21 @@ if [[ -z "${SOURCE_DATE_EPOCH:-}" ]] && git -C "$REPO_DIR" rev-parse --is-inside
   export SOURCE_DATE_EPOCH="$(git -C "$REPO_DIR" log -1 --format=%ct)"
 fi
 
+append_rustflag() {
+  case " ${RUSTFLAGS:-} " in
+    *" $1 "*) ;;
+    *) export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }$1" ;;
+  esac
+}
+
+CARGO_HOME_PATH="${CARGO_HOME:-${HOME:-}/.cargo}"
+if [[ -n "$CARGO_HOME_PATH" ]]; then
+  mkdir -p "$CARGO_HOME_PATH"
+  CARGO_HOME_PATH="$(cd "$CARGO_HOME_PATH" && pwd)"
+  append_rustflag "--remap-path-prefix=$CARGO_HOME_PATH=/cargo"
+fi
+append_rustflag "--remap-path-prefix=$REPO_DIR=/build/meron"
+
 # The vendored OpenSSL build (openssl-src) drives OpenSSL's own Makefile, which
 # otherwise picks up the host macOS `ar` and emits BSD-format archives. rustc,
 # bundling these Android (ELF) static libs, expects GNU-format archives and
@@ -110,7 +126,7 @@ EOF
   exit 1
 fi
 
-SO_PATH="$CORE_DIR/target/$TARGET/$PROFILE/libmeron_core.so"
+SO_PATH="$TARGET_DIR/$TARGET/$PROFILE/libmeron_core.so"
 if [[ ! -f "$SO_PATH" ]]; then
   echo "Build completed, but $SO_PATH was not produced." >&2
   exit 1
