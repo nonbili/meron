@@ -285,7 +285,7 @@ class ComposeMainActivity : ComponentActivity() {
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
         AndroidNotificationService.ensureChannels(this)
-        AndroidBackgroundSyncScheduler.schedule(this)
+        AndroidBackgroundSyncScheduler.sync(this, loadAppBoolean(this, BACKGROUND_SYNC_ENABLED_PREF, true))
         jp.nonbili.meron.ui.androidImageContext = this
         val coreInitJson =
             if (MeronCoreNative.isLoaded()) {

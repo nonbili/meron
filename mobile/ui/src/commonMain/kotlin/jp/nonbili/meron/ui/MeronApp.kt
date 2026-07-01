@@ -474,6 +474,9 @@ private fun MeronMobileScreenContent(
         LaunchedEffect(liveMailPushEnabled) {
             mobileHost.syncLiveMailPush(liveMailPushEnabled)
         }
+        LaunchedEffect(backgroundSyncEnabled) {
+            mobileHost.syncBackgroundRefresh(backgroundSyncEnabled)
+        }
         // Foreground refresh for platforms without a real background channel
         // (iOS): re-sync the visible mailbox on the chosen interval while the app
         // is open, and immediately when it returns to the foreground. Both honor
@@ -1103,6 +1106,14 @@ private fun MeronMobileScreenContent(
                         saveAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, next)
                         mobileHost.syncLiveMailPush(next)
                         status = if (next) "Live mail push enabled" else "Live mail push disabled"
+                    },
+                    backgroundSyncEnabled = backgroundSyncEnabled,
+                    onToggleBackgroundSync = {
+                        val next = !backgroundSyncEnabled
+                        backgroundSyncEnabled = next
+                        saveAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, next)
+                        mobileHost.syncBackgroundRefresh(next)
+                        status = if (next) "Background sync enabled" else "Background sync disabled"
                     },
                     onRefreshBackground = {
                         mobileHost.runBackgroundRefreshOnce()

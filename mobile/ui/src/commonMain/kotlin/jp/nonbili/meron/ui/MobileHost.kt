@@ -39,6 +39,8 @@ interface MobileHost {
 
     fun syncLiveMailPush(enabled: Boolean)
 
+    fun syncBackgroundRefresh(enabled: Boolean)
+
     fun runBackgroundRefreshOnce()
 
     fun notifyNewMail(
@@ -109,6 +111,8 @@ open class DefaultMobileHost(
     override fun requestNotificationPermission() {}
 
     override fun syncLiveMailPush(enabled: Boolean) {}
+
+    override fun syncBackgroundRefresh(enabled: Boolean) {}
 
     override fun runBackgroundRefreshOnce() {}
 

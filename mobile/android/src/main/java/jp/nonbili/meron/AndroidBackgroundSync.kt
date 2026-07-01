@@ -32,6 +32,13 @@ class AndroidBackgroundSyncWorker(
     workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
+        if (
+            !inputData.getBoolean(KEY_MANUAL_RUN, false) &&
+            !loadAppBoolean(applicationContext, BACKGROUND_SYNC_ENABLED_PREF, true)
+        ) {
+            Log.i(TAG, "background refresh skipped because background sync is disabled")
+            return Result.success()
+        }
         if (!MeronCoreNative.isLoaded()) return Result.success()
         MeronCoreNative.initJson(applicationContext.filesDir.absolutePath, MeronDbKey.get(applicationContext))
 
@@ -184,6 +191,17 @@ object AndroidBackgroundSyncScheduler {
     private const val PERIODIC_WORK_NAME = "meron-background-sync"
     private const val ONCE_WORK_NAME = "meron-background-sync-once"
 
+    fun sync(
+        context: Context,
+        enabled: Boolean,
+    ) {
+        if (enabled) {
+            schedule(context)
+        } else {
+            cancel(context)
+        }
+    }
+
     fun schedule(context: Context) {
         val request =
             PeriodicWorkRequestBuilder<AndroidBackgroundSyncWorker>(15, TimeUnit.MINUTES)
@@ -194,6 +212,10 @@ object AndroidBackgroundSyncScheduler {
             ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
+    }
+
+    fun cancel(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK_NAME)
     }
 
     fun runOnce(context: Context) {

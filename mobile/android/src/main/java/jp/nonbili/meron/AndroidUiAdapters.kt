@@ -212,6 +212,10 @@ class AndroidMobileHost(
         AndroidMailPushService.sync(activity)
     }
 
+    override fun syncBackgroundRefresh(enabled: Boolean) {
+        AndroidBackgroundSyncScheduler.sync(activity, enabled)
+    }
+
     override fun runBackgroundRefreshOnce() {
         AndroidBackgroundSyncScheduler.runOnce(activity)
     }

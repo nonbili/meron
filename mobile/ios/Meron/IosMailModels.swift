@@ -353,7 +353,8 @@ extension ThreadSummary {
             unread: unread,
             starred: starred,
             dateEpochSeconds: dateEpochSeconds,
-            feedUrl: feedUrl
+            feedUrl: feedUrl,
+            threadId: threadId
         )
     }
 
@@ -368,7 +369,8 @@ extension ThreadSummary {
             unread: nextUnread ?? unread,
             starred: nextStarred ?? starred,
             dateEpochSeconds: dateEpochSeconds,
-            feedUrl: feedUrl
+            feedUrl: feedUrl,
+            threadId: threadId
         )
     }
 }

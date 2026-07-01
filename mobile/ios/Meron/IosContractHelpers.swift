@@ -1160,7 +1160,8 @@ func kanbanThreadSummary(for item: StarredItemSummary) -> ThreadSummary {
         unread: item.unread,
         starred: true,
         dateEpochSeconds: item.dateEpochSeconds,
-        feedUrl: ""
+        feedUrl: "",
+        threadId: item.threadId
     )
 }
 

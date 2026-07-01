@@ -333,6 +333,8 @@ internal fun SettingsScreen(
     supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
+    backgroundSyncEnabled: Boolean,
+    onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
@@ -444,6 +446,8 @@ internal fun SettingsScreen(
                     supportsBackgroundPush = supportsBackgroundPush,
                     liveMailPushEnabled = liveMailPushEnabled,
                     onToggleLiveMailPush = onToggleLiveMailPush,
+                    backgroundSyncEnabled = backgroundSyncEnabled,
+                    onToggleBackgroundSync = onToggleBackgroundSync,
                     onRefreshBackground = onRefreshBackground,
                     pollIntervalMinutes = pollIntervalMinutes,
                     onCyclePollInterval = onCyclePollInterval,
@@ -732,6 +736,8 @@ internal fun SettingsGeneralPage(
     supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
+    backgroundSyncEnabled: Boolean,
+    onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
@@ -835,6 +841,15 @@ internal fun SettingsGeneralPage(
         }
 
         item { SettingsSectionLabel(tr("settings.syncNotifications")) }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Refresh,
+                title = tr("settings.backgroundSync"),
+                subtitle = tr("settings.backgroundSyncHint"),
+                checked = backgroundSyncEnabled,
+                onToggle = onToggleBackgroundSync,
+            )
+        }
         if (supportsBackgroundPush) {
             // Android: a real background channel keeps mail fresh while suspended.
             item {
