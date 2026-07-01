@@ -91,10 +91,7 @@ export function ThreadListItem({
               )}
             </span>
             <time
-              className={clsx(
-                'ml-auto shrink-0 text-[11px] font-semibold',
-                unread ? 'text-accent' : 'text-secondary/65',
-              )}
+              className={clsx('ml-auto shrink-0 text-[11px] font-normal', unread ? 'text-accent' : 'text-secondary/65')}
             >
               {formatThreadDate(thread.date)}
             </time>

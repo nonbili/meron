@@ -40,6 +40,7 @@ fun backgroundRefreshSummary(
     when {
         refreshed > 0 && failed > 0 -> "$refreshed account(s) refreshed, $failed failed"
         refreshed > 0 -> "$refreshed account(s) refreshed"
+        failed > 0 -> "$failed account(s) failed to refresh"
         skipped > 0 -> "No accounts refreshed; $skipped skipped"
         else -> "No accounts configured"
     }

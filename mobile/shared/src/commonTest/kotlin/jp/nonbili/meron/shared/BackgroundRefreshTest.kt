@@ -50,6 +50,7 @@ class BackgroundRefreshTest {
     fun summaryMatchesMobileNotificationText() {
         assertEquals("2 account(s) refreshed, 1 failed", backgroundRefreshSummary(refreshed = 2, skipped = 0, failed = 1))
         assertEquals("2 account(s) refreshed", backgroundRefreshSummary(refreshed = 2, skipped = 0, failed = 0))
+        assertEquals("2 account(s) failed to refresh", backgroundRefreshSummary(refreshed = 0, skipped = 0, failed = 2))
         assertEquals("No accounts refreshed; 3 skipped", backgroundRefreshSummary(refreshed = 0, skipped = 3, failed = 0))
         assertEquals("No accounts configured", backgroundRefreshSummary(refreshed = 0, skipped = 0, failed = 0))
     }

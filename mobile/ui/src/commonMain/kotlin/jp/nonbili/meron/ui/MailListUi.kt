@@ -594,7 +594,7 @@ internal fun MailRow(
     val rowBackground =
         when {
             selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-            unread -> MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+            unread -> MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
             else -> MaterialTheme.colorScheme.surface
         }
     Row(
@@ -641,7 +641,7 @@ internal fun MailRow(
                     Text(
                         formatRelativeTime(thread.dateEpochSeconds),
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Normal,
                         color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (unread) {

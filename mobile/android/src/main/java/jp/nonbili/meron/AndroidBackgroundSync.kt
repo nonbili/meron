@@ -1,6 +1,7 @@
 package jp.nonbili.meron
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -18,6 +19,13 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 private const val KEY_MANUAL_RUN = "jp.nonbili.meron.background_sync.MANUAL_RUN"
+private const val TAG = "MeronBgSync"
+
+/** Email (or id) of an account for logs — never secrets. */
+private fun accountLabel(account: JSONObject): String {
+    val email = account.optString("email")
+    return if (email.isNotBlank()) email else account.optString("id")
+}
 
 class AndroidBackgroundSyncWorker(
     appContext: Context,
@@ -45,17 +53,27 @@ class AndroidBackgroundSyncWorker(
             if (!refreshManagedGoogleToken(account, id = index + 2L)) {
                 // Managed Gmail account whose token can no longer be minted; skip
                 // the doomed sync and report it so the user can reconnect.
+                Log.w(TAG, "${syncRequest.method} token refresh failed for account ${accountLabel(account)}")
                 failed += 1
                 continue
             }
             val syncResponse = JSONObject(MeronCoreNative.invokeJson(syncRequest.requestJson))
             if (syncResponse.has("error")) {
+                // Log the error message (never the payload) so background failures
+                // are diagnosable via Logcat; the app is closed during periodic runs
+                // so core's own log events don't reach the platform logger.
+                Log.w(
+                    TAG,
+                    "${syncRequest.method} failed for account ${accountLabel(account)}: " +
+                        syncResponse.optJSONObject("error")?.optString("message"),
+                )
                 failed += 1
             } else {
                 refreshed += 1
             }
         }
 
+        Log.i(TAG, "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed")
         val body = backgroundRefreshSummary(refreshed = refreshed, skipped = skipped, failed = failed)
         if (
             shouldNotifyRefreshComplete(
