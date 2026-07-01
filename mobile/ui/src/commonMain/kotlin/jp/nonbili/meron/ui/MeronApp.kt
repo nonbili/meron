@@ -297,6 +297,24 @@ fun MeronApp(
     }
 }
 
+@Composable
+private fun MailSelectionTitle(
+    selectedCount: Int,
+    height: Dp,
+) {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(height),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            "$selectedCount selected",
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @OptIn(ExperimentalEncodingApi::class)
 private fun PickedFile.toDraftAttachment(): DraftAttachment =
     DraftAttachment(
@@ -1326,10 +1344,7 @@ private fun MeronMobileScreenContent(
                             TopAppBar(
                                 title = {
                                     if (mailSelectionActive) {
-                                        Text(
-                                            "${selectedMailThreads.size} selected",
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
+                                        MailSelectionTitle(selectedMailThreads.size, height = 52.dp)
                                     } else {
                                         KanbanHeaderSearchField(
                                             search = kanbanSearch,
@@ -1651,10 +1666,7 @@ private fun MeronMobileScreenContent(
                             TopAppBar(
                                 title = {
                                     if (mailSelectionActive) {
-                                        Text(
-                                            "${selectedMailThreads.size} selected",
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
+                                        MailSelectionTitle(selectedMailThreads.size, height = 44.dp)
                                     } else {
                                         MailHeaderSearchField(
                                             search = mailSearch,

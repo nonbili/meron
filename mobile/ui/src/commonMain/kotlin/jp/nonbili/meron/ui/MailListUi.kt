@@ -115,6 +115,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -591,11 +592,24 @@ internal fun MailRow(
     val unread = thread.unread
     val chat = LocalChatColors.current
     val senderLabel = thread.sender.ifBlank { thread.accountId }
+    val rowSurface = MaterialTheme.colorScheme.surface
     val rowBackground =
         when {
-            selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-            unread -> MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
-            else -> MaterialTheme.colorScheme.surface
+            selected -> {
+                MaterialTheme.colorScheme.primaryContainer
+                    .copy(alpha = 0.65f)
+                    .compositeOver(rowSurface)
+            }
+
+            unread -> {
+                MaterialTheme.colorScheme.primary
+                    .copy(alpha = 0.07f)
+                    .compositeOver(rowSurface)
+            }
+
+            else -> {
+                rowSurface
+            }
         }
     Row(
         Modifier
@@ -607,7 +621,7 @@ internal fun MailRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (selectionActive) {
-            Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.Filled.CheckCircle,
                     contentDescription = if (selected) "Selected" else "Not selected",
@@ -677,7 +691,9 @@ internal fun MailRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (!selectionActive) {
+                if (selectionActive) {
+                    Spacer(Modifier.size(30.dp))
+                } else {
                     IconButton(onClick = onToggleStar, modifier = Modifier.size(30.dp)) {
                         Icon(
                             if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,

@@ -694,7 +694,7 @@ internal fun KanbanColumn(
                             onToggleStar = { onToggleStar(thread) },
                             onCopyFeedUrl = null,
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
                     if (canLoadMore || state.loadingMore) {
                         item {
@@ -896,89 +896,6 @@ internal fun columnAvatarLabel(
     if (column.accountId == UNIFIED_ACCOUNT_ID) return "Unified inbox"
     val account = accounts.firstOrNull { it.id == column.accountId }
     return account?.displayName?.ifBlank { account.email } ?: column.accountId
-}
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-@Composable
-internal fun KanbanThreadCard(
-    thread: ThreadSummary,
-    showSenderImages: Boolean,
-    onOpen: () -> Unit,
-    onLongPress: () -> Unit,
-    onToggleStar: () -> Unit,
-) {
-    val chat = LocalChatColors.current
-    Card(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
-        shape = RoundedCornerShape(8.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (thread.unread) {
-                        MaterialTheme.colorScheme.primary.copy(
-                            alpha = 0.08f,
-                        )
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-            ),
-    ) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SenderAvatar(
-                    label = thread.sender.ifBlank { thread.accountId },
-                    enabled = showSenderImages,
-                    size = 26.dp,
-                )
-                Text(
-                    thread.sender.ifBlank { thread.accountId }.substringBefore('@'),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    formatRelativeTime(thread.dateEpochSeconds),
-                    fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                thread.subject.ifBlank { "(no subject)" },
-                fontSize = 12.sp,
-                fontWeight = if (thread.unread) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (thread.preview.isNotBlank()) {
-                Text(
-                    thread.preview,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (thread.unread) {
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onToggleStar, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        if (thread.starred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                        contentDescription = if (thread.starred) "Unstar" else "Star",
-                        tint = if (thread.starred) chat.star else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
