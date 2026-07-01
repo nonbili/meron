@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "إعادة ربط الحساب",
   "accounts.actions.saveAccount": "حفظ الحساب",
   "accounts.advancedServerSettings": "إعدادات الخادم المتقدمة",
-  "accounts.appPasswordHint": "{provider} يتطلب كلمة مرور خاصة بالتطبيق - لن تعمل كلمة مرور حسابك العادية هنا. <action>قم بإنشاء واحدة لـ {provider}</action>، ثم الصقها أعلاه.",
+  "accounts.appPasswordHint": "{provider} يتطلب استخدام كلمة مرور خاصة بالتطبيق بدلاً من كلمة مرورك العادية.",
   "accounts.discovery.lookingUp": "جاري البحث عن إعدادات الخادم...",
   "accounts.fields.accountName": "اسم الحساب",
   "accounts.fields.displayNameMeronOnly": "الاسم المعروض (في Meron فقط)",

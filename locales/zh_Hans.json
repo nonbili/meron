@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "重新连接帐户",
   "accounts.actions.saveAccount": "保存账户",
   "accounts.advancedServerSettings": "高级服务器设置",
-  "accounts.appPasswordHint": "{provider} 需要应用专用密码 - 您普通的账户密码在此处无法使用。<action>为 {provider} 生成一个应用密码</action>，然后将其粘贴在上方。",
+  "accounts.appPasswordHint": "{provider} 需要使用应用专用密码，而不是您的普通密码。",
   "accounts.discovery.lookingUp": "正在查询服务器设置...",
   "accounts.fields.accountName": "账户名称",
   "accounts.fields.displayNameMeronOnly": "显示名称 (仅在 Meron 中显示)",

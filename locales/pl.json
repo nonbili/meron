@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Połącz ponownie konto",
   "accounts.actions.saveAccount": "Zapisz konto",
   "accounts.advancedServerSettings": "Zaawansowane ustawienia serwera",
-  "accounts.appPasswordHint": "{provider} wymaga hasła dedykowanego do aplikacji - Twoje standardowe hasło do konta tutaj nie zadziała. <action>Wygeneruj je dla {provider}</action>, a następnie wklej powyżej.",
+  "accounts.appPasswordHint": "{provider} wymaga użycia hasła dedykowanego do aplikacji zamiast zwykłego hasła.",
   "accounts.discovery.lookingUp": "Wyszukiwanie ustawień serwera...",
   "accounts.fields.accountName": "Nazwa konta",
   "accounts.fields.displayNameMeronOnly": "Nazwa wyświetlana (tylko Meron)",

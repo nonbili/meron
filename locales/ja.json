@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "アカウントを再接続する",
   "accounts.actions.saveAccount": "アカウントを保存",
   "accounts.advancedServerSettings": "詳細なサーバー設定",
-  "accounts.appPasswordHint": "{provider} はアプリ固有のパスワードを必要とします - 通常のアカウントパスワードはここでは使用できません。<action>{provider} のパスワードを生成</action>し、上に貼り付けてください。",
+  "accounts.appPasswordHint": "{provider} では、通常のパスワードの代わりにアプリ固有のパスワードを使用する必要があります。",
   "accounts.discovery.lookingUp": "サーバー設定を検索中...",
   "accounts.fields.accountName": "アカウント名",
   "accounts.fields.displayNameMeronOnly": "表示名 (Meron内のみ)",

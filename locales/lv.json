@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Atkārtoti pievienojiet kontu",
   "accounts.actions.saveAccount": "Saglabāt kontu",
   "accounts.advancedServerSettings": "Papildu servera iestatījumi",
-  "accounts.appPasswordHint": "{provider} nepieciešama lietotnei specifiska parole — jūsu parastā konta parole šeit nedarbosies. <action>Ģenerējiet to {provider}</action>, pēc tam ielīmējiet to augstāk.",
+  "accounts.appPasswordHint": "{provider} pieprasa izmantot lietotnei specifisku paroli parastās paroles vietā.",
   "accounts.discovery.lookingUp": "Meklē servera iestatījumus...",
   "accounts.fields.accountName": "Konta nosaukums",
   "accounts.fields.displayNameMeronOnly": "Displeja nosaukums (tikai Meron)",

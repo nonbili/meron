@@ -6,6 +6,21 @@ plugins {
     id "org.jetbrains.kotlin.plugin.serialization"
 }
 
+def generatedComposeStringsDir = layout.buildDirectory.dir("generated/i18n/commonMain/kotlin")
+def generatedComposeStringsFile = generatedComposeStringsDir.map {
+    it.file("jp/nonbili/meron/ui/GeneratedStrings.kt")
+}
+
+tasks.register("generateComposeStrings", Exec) {
+    description = "Generates Compose Multiplatform localization strings from locales/*.json."
+    group = "build"
+    workingDir rootProject.projectDir.parentFile
+    inputs.dir("${rootProject.projectDir.parentFile}/locales")
+    inputs.file("${rootProject.projectDir.parentFile}/scripts/i18n/gen-compose-strings.ts")
+    outputs.file(generatedComposeStringsFile)
+    commandLine "bun", "scripts/i18n/gen-compose-strings.ts", generatedComposeStringsFile.get().asFile.absolutePath
+}
+
 kotlin {
     android {
         namespace = "jp.nonbili.meron.ui"
@@ -29,6 +44,8 @@ kotlin {
 
     sourceSets {
         commonMain {
+            kotlin.srcDir(generatedComposeStringsDir)
+
             dependencies {
                 api project(":shared")
                 implementation compose.runtime
@@ -58,4 +75,10 @@ kotlin {
 compose.resources {
     packageOfResClass = "jp.nonbili.meron.ui.resources"
     generateResClass = "always"
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith("compile")) {
+        task.dependsOn tasks.named("generateComposeStrings")
+    }
 }

@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Konto erneut verbinden",
   "accounts.actions.saveAccount": "Konto speichern",
   "accounts.advancedServerSettings": "Erweiterte Servereinstellungen",
-  "accounts.appPasswordHint": "{provider} erfordert ein App-spezifisches Passwort – Ihr normales Kontopasswort funktioniert hier nicht. <action>Generieren Sie eines für {provider}</action> und fügen Sie es oben ein.",
+  "accounts.appPasswordHint": "{provider} erfordert die Verwendung eines App-spezifischen Passworts anstelle Ihres normalen Passworts.",
   "accounts.discovery.lookingUp": "Servereinstellungen werden gesucht...",
   "accounts.fields.accountName": "Kontoname",
   "accounts.fields.displayNameMeronOnly": "Anzeigename (nur in Meron)",

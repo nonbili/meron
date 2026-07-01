@@ -11,6 +11,7 @@
 /mobile/android/src/main/res/values-*/strings.xml
 /mobile/android/src/main/java/jp/nonbili/meron/GeneratedIcuStrings.kt
 /mobile/ios/Meron/Localizable.xcstrings
+/mobile/ui/src/commonMain/kotlin/jp/nonbili/meron/ui/GeneratedStrings.kt
 
 # Local binaries produced by ad-hoc `go build`.
 /meron
@@ -36,4 +37,3 @@
 # AI assistant workspace files.
 /.antigravitycli/
 /.claude/
-

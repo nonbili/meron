@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Ühendage konto uuesti",
   "accounts.actions.saveAccount": "Salvesta konto",
   "accounts.advancedServerSettings": "Serveri täpsemad seaded",
-  "accounts.appPasswordHint": "{provider} nõuab rakendusepõhist parooli – sinu tavaline konto parool siin ei toimi. <action>Loo parool teenuse {provider} jaoks</action> ja kopeeri see ülalolevale väljale.",
+  "accounts.appPasswordHint": "{provider} nõuab tavalise parooli asemel rakendusepõhise parooli kasutamist.",
   "accounts.discovery.lookingUp": "Serveri seadete otsimine...",
   "accounts.fields.accountName": "Konto nimi",
   "accounts.fields.displayNameMeronOnly": "Kuvatav nimi (ainult Meronis)",

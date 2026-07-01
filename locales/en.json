@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Reconnect account",
   "accounts.actions.saveAccount": "Save Account",
   "accounts.advancedServerSettings": "Advanced server settings",
-  "accounts.appPasswordHint": "{provider} requires an app-specific password; your standard account password will not work here. <action>Generate one for {provider}</action>, then paste it above.",
+  "accounts.appPasswordHint": "{provider} requires using an app-specific password instead of your normal password.",
   "accounts.discovery.lookingUp": "Looking up server settings...",
   "accounts.fields.accountName": "Account Name",
   "accounts.fields.displayNameMeronOnly": "Display Name (Meron only)",

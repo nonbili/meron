@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Επανασυνδέστε τον λογαριασμό",
   "accounts.actions.saveAccount": "Αποθήκευση λογαριασμού",
   "accounts.advancedServerSettings": "Προχωρημένες ρυθμίσεις διακομιστή",
-  "accounts.appPasswordHint": "Το {provider} απαιτεί έναν κωδικό πρόσβασης ειδικό για την εφαρμογή - ο κανονικός κωδικός πρόσβασης του λογαριασμού σας δεν θα λειτουργήσει εδώ. <action>Δημιουργήστε έναν για το {provider}</action> και, στη συνέχεια, επικολλήστε τον παραπάνω.",
+  "accounts.appPasswordHint": "Το {provider} απαιτεί τη χρήση κωδικού πρόσβασης ειδικού για την εφαρμογή αντί για τον κανονικό σας κωδικό πρόσβασης.",
   "accounts.discovery.lookingUp": "Αναζήτηση ρυθμίσεων διακομιστή...",
   "accounts.fields.accountName": "Όνομα λογαριασμού",
   "accounts.fields.displayNameMeronOnly": "Όνομα εμφάνισης (μόνο στο Meron)",

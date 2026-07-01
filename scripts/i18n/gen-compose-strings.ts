@@ -1,15 +1,17 @@
-// Generates mobile/ui/src/commonMain/.../GeneratedStrings.kt from locales/*.json.
+// Generates mobile/ui/build/generated/.../GeneratedStrings.kt from locales/*.json.
 // One all-keys map (locale -> key -> ICU message) backing the Compose
 // Multiplatform Localizer. Run: bun scripts/i18n/gen-compose-strings.ts
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const root = join(import.meta.dir, "..", "..");
 const localesDir = join(root, "locales");
-const out = join(
-  root,
-  "mobile/ui/src/commonMain/kotlin/jp/nonbili/meron/ui/GeneratedStrings.kt",
-);
+const out =
+  process.argv[2] ??
+  join(
+    root,
+    "mobile/ui/build/generated/i18n/commonMain/kotlin/jp/nonbili/meron/ui/GeneratedStrings.kt",
+  );
 
 // Canonical file code -> app BCP-47 tag (underscore -> hyphen for script/region).
 const tagFor = (code: string): string =>
@@ -64,5 +66,6 @@ ${topEntries})
 
 ${fns}`;
 
+mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, kt);
 console.log(`Wrote ${out} (${files.length} locales)`);

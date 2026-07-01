@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "重新連結帳戶",
   "accounts.actions.saveAccount": "儲存帳戶",
   "accounts.advancedServerSettings": "進階伺服器設定",
-  "accounts.appPasswordHint": "{provider} 需要應用程式專用密碼 - 您的常用帳戶密碼在此處無法使用。<action>為 {provider} 產生一個應用程式專用密碼</action>，然後貼在上方。",
+  "accounts.appPasswordHint": "{provider} 需要使用應用程式專用密碼，而不是您的常用密碼。",
   "accounts.discovery.lookingUp": "正在查詢伺服器設定...",
   "accounts.fields.accountName": "帳戶名稱",
   "accounts.fields.displayNameMeronOnly": "顯示名稱 (僅限 Meron)",

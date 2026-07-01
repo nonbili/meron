@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Återanslut konto",
   "accounts.actions.saveAccount": "Spara konto",
   "accounts.advancedServerSettings": "Avancerade serverinställningar",
-  "accounts.appPasswordHint": "{provider} kräver ett appspecifikt lösenord - ditt vanliga kontolösenord fungerar inte här. <action>Skapa ett för {provider}</action> och klistra sedan in det ovan.",
+  "accounts.appPasswordHint": "{provider} kräver ett appspecifikt lösenord istället för ditt vanliga lösenord.",
   "accounts.discovery.lookingUp": "Söker efter serverinställningar...",
   "accounts.fields.accountName": "Kontonamn",
   "accounts.fields.displayNameMeronOnly": "Visningsnamn (endast Meron)",

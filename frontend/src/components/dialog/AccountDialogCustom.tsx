@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { ChevronRight, Eye, EyeOff, RefreshCw } from 'lucide-react'
-import { Trans, useTranslation } from '../../lib/i18n'
-import { openExternal } from '../../lib/native'
+import { ChevronRight, Eye, EyeOff, Info, RefreshCw } from 'lucide-react'
+import { useTranslation } from '../../lib/i18n'
 import { Field } from '../field/Field'
 import type { AccountDialogController } from './useAccountDialog'
 import type { DialogClasses } from './accountDialogStyles'
@@ -92,23 +91,14 @@ export function AccountDialogCustom({
       </label>
 
       {appPasswordHint && (
-        <p
-          className={`${isSetup ? 'rounded-2xl p-4 text-sm' : 'rounded-xl p-3 text-[11px]'} bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 leading-relaxed text-amber-700 dark:text-amber-300 font-medium -mt-1`}
+        <div
+          className={`${isSetup ? 'rounded-2xl p-4 text-sm gap-3' : 'rounded-xl p-3 text-[11px] gap-2'} flex items-start bg-accent/[0.06] border border-accent/15 leading-relaxed text-secondary -mt-1`}
         >
-          <Trans
-            i18nKey="accounts.appPasswordHint"
-            values={{ provider: appPasswordHint.provider }}
-            components={{
-              action: (
-                <button
-                  type="button"
-                  onClick={() => openExternal(appPasswordHint.url)}
-                  className="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer font-semibold"
-                />
-              ),
-            }}
-          />
-        </p>
+          <Info size={isSetup ? 16 : 14} className="shrink-0 mt-0.5 text-accent" />
+          <p className="flex-1 font-medium">
+            {t('accounts.appPasswordHint', { provider: appPasswordHint.provider })}
+          </p>
+        </div>
       )}
 
       <button

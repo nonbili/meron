@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Reconnecter le compte",
   "accounts.actions.saveAccount": "Enregistrer le compte",
   "accounts.advancedServerSettings": "Paramètres avancés du serveur",
-  "accounts.appPasswordHint": "{provider} requiert un mot de passe d'application spécifique - votre mot de passe de compte habituel ne fonctionnera pas ici. <action>Générez-en un pour {provider}</action>, puis collez-le ci-dessus.",
+  "accounts.appPasswordHint": "{provider} requiert l'utilisation d'un mot de passe d'application spécifique au lieu de votre mot de passe habituel.",
   "accounts.discovery.lookingUp": "Recherche des paramètres du serveur...",
   "accounts.fields.accountName": "Nom du compte",
   "accounts.fields.displayNameMeronOnly": "Nom d'affichage (Meron uniquement)",

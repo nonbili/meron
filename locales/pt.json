@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Reconectar conta",
   "accounts.actions.saveAccount": "Gravar conta",
   "accounts.advancedServerSettings": "Definições avançadas do servidor",
-  "accounts.appPasswordHint": "O {provider} requer uma palavra-passe específica da aplicação - a palavra-passe normal da sua conta não funcionará aqui. <action>Gere uma para o {provider}</action> e cole-a acima.",
+  "accounts.appPasswordHint": "O {provider} requer a utilização de uma palavra-passe específica da aplicação em vez da sua palavra-passe normal.",
   "accounts.discovery.lookingUp": "A procurar definições do servidor...",
   "accounts.fields.accountName": "Nome da conta",
   "accounts.fields.displayNameMeronOnly": "Nome de exibição (apenas no Meron)",

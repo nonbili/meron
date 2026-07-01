@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "계정 다시 연결",
   "accounts.actions.saveAccount": "계정 저장",
   "accounts.advancedServerSettings": "고급 서버 설정",
-  "accounts.appPasswordHint": "{provider}은(는) 앱 전용 비밀번호가 필요합니다. 일반 계정 비밀번호는 여기에 작동하지 않습니다. <action>{provider}용 앱 비밀번호 생성</action> 후 위에 붙여넣으세요.",
+  "accounts.appPasswordHint": "{provider}은(는) 일반 비밀번호 대신 앱 전용 비밀번호를 사용해야 합니다.",
   "accounts.discovery.lookingUp": "서버 설정 검색 중...",
   "accounts.fields.accountName": "계정 이름",
   "accounts.fields.displayNameMeronOnly": "표시 이름 (Meron 전용)",

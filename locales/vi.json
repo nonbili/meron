@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Kết nối lại tài khoản",
   "accounts.actions.saveAccount": "Lưu Tài khoản",
   "accounts.advancedServerSettings": "Cài đặt máy chủ nâng cao",
-  "accounts.appPasswordHint": "{provider} yêu cầu mật khẩu ứng dụng chuyên biệt - mật khẩu tài khoản thông thường của bạn sẽ không hoạt động ở đây. <action>Tạo một mật khẩu ứng dụng cho {provider}</action>, sau đó dán vào phía trên.",
+  "accounts.appPasswordHint": "{provider} yêu cầu sử dụng mật khẩu ứng dụng thay vì mật khẩu thông thường.",
   "accounts.discovery.lookingUp": "Đang tìm cài đặt máy chủ...",
   "accounts.fields.accountName": "Tên tài khoản",
   "accounts.fields.displayNameMeronOnly": "Tên hiển thị (chỉ trên Meron)",

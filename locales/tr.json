@@ -18,7 +18,7 @@
   "accounts.actions.reconnectAccountTitle": "Hesabı yeniden bağlayın",
   "accounts.actions.saveAccount": "Hesabı Kaydet",
   "accounts.advancedServerSettings": "Gelişmiş sunucu ayarları",
-  "accounts.appPasswordHint": "{provider} uygulama şifresi gerektirir - normal hesap şifreniz burada çalışmaz. <action>{provider} için bir tane oluşturun</action> ve ardından yukarıya yapıştırın.",
+  "accounts.appPasswordHint": "{provider}, normal şifreniz yerine uygulamaya özel şifre kullanmanızı gerektirir.",
   "accounts.discovery.lookingUp": "Sunucu ayarları aranıyor...",
   "accounts.fields.accountName": "Hesap Adı",
   "accounts.fields.displayNameMeronOnly": "Görünen Ad (yalnızca Meron)",
