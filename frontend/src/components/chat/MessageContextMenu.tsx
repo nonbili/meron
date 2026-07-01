@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, Forward, Link2, Mail, MailOpen, SquarePen, Star, Trash2 } from 'lucide-react'
+import { CheckSquare, Copy, ExternalLink, Forward, Link2, Mail, MailOpen, SquarePen, Star, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { openMessageTab, editAsNewMessage, forwardMessage, openDraftCompose } from '../../states/compose'
 import { deleteMessage, isDraftFolder, markMessageReadState, starMessage } from '../../states/mail'
@@ -22,6 +22,7 @@ export function MessageContextMenu({
   isRSS,
   headerOnly = false,
   onClose,
+  onSelectMessage,
 }: {
   state: MessageContextMenuState
   isRSS: boolean
@@ -29,6 +30,7 @@ export function MessageContextMenu({
    * that need its body (forward / edit as new). */
   headerOnly?: boolean
   onClose: () => void
+  onSelectMessage?: (message: Message) => void
 }) {
   const { t } = useTranslation()
   const isDraft = isDraftFolder(state.message.folder_id)
@@ -81,6 +83,17 @@ export function MessageContextMenu({
                 } else {
                   openMessageTab(state.message)
                 }
+                onClose()
+              }}
+            />
+          )}
+          {onSelectMessage && (
+            <MenuItem
+              icon={<CheckSquare size={13} className="text-accent" />}
+              label={t('buttons.select', { defaultValue: 'Select' })}
+              className="whitespace-nowrap"
+              onClick={() => {
+                onSelectMessage(state.message)
                 onClose()
               }}
             />

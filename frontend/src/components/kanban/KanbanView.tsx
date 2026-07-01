@@ -6,7 +6,7 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { invoke } from '../../lib/bridge'
 import { accounts$, isSendableAccount } from '../../states/accounts'
-import { ui$ } from '../../states/ui'
+import { clearBulkSelection, ui$ } from '../../states/ui'
 import { mail$, ensureAccountFolders } from '../../states/mail'
 import { openComposeTab } from '../../states/compose'
 import type { Folder } from '../../types'
@@ -63,6 +63,14 @@ export function KanbanView({ boardId }: { boardId: string }) {
   // One controller for the whole board so a right-click in one column closes any
   // menu open in another (only one thread menu can be open at a time).
   const threadMenu = useThreadContextMenu(accounts)
+
+  useEffect(() => {
+    clearBulkSelection()
+  }, [boardId])
+
+  useEffect(() => {
+    clearBulkSelection()
+  }, [globalFilter, searchQuery, searchScope])
 
   useEffect(() => {
     if (!dialogOpen) return

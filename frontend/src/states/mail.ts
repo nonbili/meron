@@ -1,7 +1,7 @@
 import { observable } from '@legendapp/state'
 import type { Folder, Message } from '../types'
 import { invoke } from '../lib/bridge'
-import { confirmAction, ui$, showToast, showUndoToast } from './ui'
+import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
 import { kanban$ } from './kanban'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
@@ -842,6 +842,146 @@ export async function copyThreadToFolder(threadId: string, targetAccountId: stri
     showToast('Thread copied')
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Copy failed', 'error')
+  }
+}
+
+function uniqueThreadItems(items: BulkSelectionItem[]) {
+  const byThread = new Map<string, BulkSelectionItem>()
+  for (const item of items) {
+    if (!item.threadId || item.kind !== 'mail') continue
+    if (!byThread.has(item.threadId)) byThread.set(item.threadId, item)
+  }
+  return [...byThread.values()]
+}
+
+export async function bulkMarkSelectedRead(items: BulkSelectionItem[]) {
+  const targets = uniqueThreadItems(items)
+  await Promise.all(targets.map((item) => markThreadRead(item.threadId)))
+  clearBulkSelection()
+  showToast(targets.length === 1 ? 'Marked read' : `${targets.length} threads marked read`)
+}
+
+export async function bulkMarkSelectedUnread(items: BulkSelectionItem[]) {
+  const targets = uniqueThreadItems(items)
+  await Promise.all(targets.map((item) => markThreadUnread(item.threadId)))
+  clearBulkSelection()
+  showToast(targets.length === 1 ? 'Marked unread' : `${targets.length} threads marked unread`)
+}
+
+export async function bulkStarSelected(items: BulkSelectionItem[], starred: boolean) {
+  const messageItems = items.filter((item) => item.kind === 'mail' && item.messageId)
+  const threadItems = uniqueThreadItems(items.filter((item) => !item.messageId))
+  await Promise.all([
+    ...messageItems.map((item) => {
+      const message = mail$.threads.get().find((row) => row.id === item.messageId)
+      return message ? starMessage(message, starred) : starThread(item.threadId, starred)
+    }),
+    ...threadItems.map((item) => starThread(item.threadId, starred)),
+  ])
+  clearBulkSelection()
+  showToast(starred ? 'Starred selected threads' : 'Unstarred selected threads')
+}
+
+export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
+  const targets = uniqueThreadItems(items).filter((item) => !item.draft && !item.trash)
+  if (targets.length === 0) return
+  const rollbacks: Array<() => void> = []
+  try {
+    for (const item of targets) {
+      const sourceThread = findLocalThread(item.threadId)
+      rollbacks.push(removeThreadLocally(item.threadId).rollback)
+      const res = await invoke('mail.archive', { thread_id: item.threadId })
+      assertMoveAffected(res, 'Archive')
+      if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
+    }
+    await refreshThreadLocation(undefined, true)
+    clearBulkSelection()
+    showToast(targets.length === 1 ? 'Thread archived' : `${targets.length} threads archived`)
+  } catch (error) {
+    for (const rollback of rollbacks.reverse()) rollback()
+    showToast(error instanceof Error ? error.message : 'Archive failed', 'error')
+  }
+}
+
+export async function bulkMoveSelectedToFolder(items: BulkSelectionItem[], targetFolderId: string) {
+  const targets = uniqueThreadItems(items).filter((item) => item.folderId !== targetFolderId)
+  if (targets.length === 0) return
+  const rollbacks: Array<() => void> = []
+  try {
+    for (const item of targets) {
+      rollbacks.push(removeThreadLocally(item.threadId).rollback)
+      const res = await invoke('mail.move', { thread_id: item.threadId, target_folder_id: targetFolderId })
+      assertMoveAffected(res)
+    }
+    await refreshThreadLocation(targets[0]?.accountId, true)
+    clearBulkSelection()
+    showToast(targets.length === 1 ? 'Thread moved' : `${targets.length} threads moved`)
+  } catch (error) {
+    for (const rollback of rollbacks.reverse()) rollback()
+    showToast(error instanceof Error ? error.message : 'Move failed', 'error')
+  }
+}
+
+export async function bulkCopySelectedToFolder(
+  items: BulkSelectionItem[],
+  targetAccountId: string,
+  targetFolderId: string,
+) {
+  const targets = uniqueThreadItems(items)
+  if (targets.length === 0) return
+  try {
+    for (const item of targets) {
+      const res = await invoke('mail.copy', {
+        thread_id: item.threadId,
+        target_account_id: targetAccountId,
+        target_folder_id: targetFolderId,
+      })
+      assertCopyAffected(res)
+    }
+    await refreshThreadLocation(targets[0]?.accountId, true)
+    if (targetAccountId !== targets[0]?.accountId) void loadFolders(targetAccountId, false)
+    clearBulkSelection()
+    showToast(targets.length === 1 ? 'Thread copied' : `${targets.length} threads copied`)
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Copy failed', 'error')
+  }
+}
+
+export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
+  const targets = uniqueThreadItems(items)
+  if (targets.length === 0) return
+  const permanentTargets = targets.filter(
+    (item) => item.draft || item.trash || isTrashFolderId(item.accountId, item.folderId),
+  )
+  if (permanentTargets.length > 0) {
+    const confirmed = await confirmAction({
+      title: permanentTargets.length === targets.length ? 'Delete selected forever?' : 'Delete selected threads?',
+      message:
+        permanentTargets.length === targets.length
+          ? `${permanentTargets.length} selected thread(s) will be permanently deleted. This can't be undone.`
+          : `${permanentTargets.length} selected thread(s) will be permanently deleted; the rest will move to Trash.`,
+      confirmLabel: 'Delete selected',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+  }
+
+  const rollbacks: Array<() => void> = []
+  try {
+    for (const item of targets) {
+      rollbacks.push(removeThreadLocally(item.threadId).rollback)
+      const res = await invoke('mail.delete', {
+        thread_id: item.threadId,
+        ...(item.folderId ? { folder: item.folderId } : {}),
+      })
+      assertDeleteAffected(res)
+    }
+    await refreshThreadLocation(undefined, true)
+    clearBulkSelection()
+    showToast(targets.length === 1 ? 'Thread deleted' : `${targets.length} threads deleted`)
+  } catch (error) {
+    for (const rollback of rollbacks.reverse()) rollback()
+    showToast(error instanceof Error ? error.message : 'Delete failed', 'error')
   }
 }
 

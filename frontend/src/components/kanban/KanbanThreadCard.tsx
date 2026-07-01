@@ -3,7 +3,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'
-import { ui$ } from '../../states/ui'
+import { toggleBulkSelection, ui$, type BulkSelectionItem } from '../../states/ui'
 import { compose$, openMessageTab, openDraftCompose } from '../../states/compose'
 import { isDraftFolder } from '../../states/mail'
 import { thread$ } from '../../states/thread'
@@ -20,6 +20,13 @@ export function KanbanThreadCard({
   column,
   threadMenu,
   ownerKey,
+  bulkSelectable = false,
+  bulkEnabled = false,
+  bulkSelected = false,
+  onBulkRangeSelect,
+  onBulkModeSelect,
+  onBulkPlainSelect,
+  bulkItem,
 }: {
   boardId: string
   thread: Message
@@ -27,6 +34,13 @@ export function KanbanThreadCard({
   threadMenu: ThreadContextMenuController
   // Identifies this card's column so the shared menu only renders here.
   ownerKey: string
+  bulkSelectable?: boolean
+  bulkEnabled?: boolean
+  bulkSelected?: boolean
+  onBulkRangeSelect?: () => void
+  onBulkModeSelect?: () => void
+  onBulkPlainSelect?: () => void
+  bulkItem?: BulkSelectionItem
 }) {
   const accounts = useValue(accounts$)
   const selectedStarredItem = useValue(ui$.selectedStarredItem)
@@ -65,7 +79,22 @@ export function KanbanThreadCard({
         rootRef={active ? selectedItemRef : undefined}
         showAccountBadge={column.accountId === 'unified'}
         className="rounded-lg border border-border bg-chats shadow-sm overflow-hidden"
-        onSelect={() => {
+        bulkSelectable={bulkSelectable}
+        bulkSelected={bulkSelected}
+        onSelect={(event) => {
+          if (bulkEnabled && bulkItem && (event.metaKey || event.ctrlKey)) {
+            toggleBulkSelection(bulkItem)
+            return
+          }
+          if (bulkEnabled && event.shiftKey) {
+            onBulkRangeSelect?.()
+            return
+          }
+          if (bulkSelectable) {
+            onBulkModeSelect?.()
+            return
+          }
+          onBulkPlainSelect?.()
           // A draft card opens the full composer rather than a read-only pane.
           if (!starredColumn && isDraftFolder(thread.folder_id)) {
             void openDraftCompose(thread)
@@ -96,7 +125,14 @@ export function KanbanThreadCard({
           kanban$.paneColumnKey.set(kanbanBoardColumnKey(boardId, column))
           ui$.mobilePane.set('conversation')
         }}
-        onContextMenu={(event) => threadMenu.open(event, thread, ownerKey)}
+        onContextMenu={(event) => {
+          if (bulkSelectable) {
+            event.preventDefault()
+            event.stopPropagation()
+            return
+          }
+          threadMenu.open(event, thread, ownerKey)
+        }}
       />
     </div>
   )

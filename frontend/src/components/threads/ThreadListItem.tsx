@@ -1,5 +1,5 @@
 import type { DragEvent, MouseEvent, Ref } from 'react'
-import { Star } from 'lucide-react'
+import { Check, Star } from 'lucide-react'
 import type { Account, Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { formatThreadDate } from '../../lib/date'
@@ -19,13 +19,15 @@ export function ThreadListItem({
   className = '',
   rootRef,
   showAccountBadge,
+  bulkSelectable = false,
+  bulkSelected = false,
 }: {
   thread: Message
   accounts: Account[]
   selectedAccount: string
   selectedThread: string
   active?: boolean
-  onSelect: () => void
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void
   onContextMenu?: (event: MouseEvent) => void
   draggable?: boolean
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void
@@ -33,6 +35,8 @@ export function ThreadListItem({
   className?: string
   rootRef?: Ref<HTMLDivElement>
   showAccountBadge?: boolean
+  bulkSelectable?: boolean
+  bulkSelected?: boolean
 }) {
   const isActive = active ?? thread.thread_id === selectedThread
   const threadAccount = accounts.find((acc) => acc.id === thread.account_id)
@@ -51,36 +55,55 @@ export function ThreadListItem({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={clsx(
-        'relative border-b border-border/50 last:border-b-0',
+        'group relative border-b border-border/50 last:border-b-0',
         draggable && 'cursor-grab active:cursor-grabbing',
         className,
       )}
     >
       <button
         className={clsx(
-          'w-full px-2 py-3 transition-all duration-150 flex items-center gap-2 cursor-pointer select-none text-left',
-          isActive
-            ? 'bg-accent/10 dark:bg-accent/15 text-primary'
-            : unread
-              ? 'bg-accent/[0.07] hover:bg-accent/[0.12] text-primary'
-              : 'bg-chats hover:bg-hover text-primary',
+          'relative w-full px-2 py-3 transition-all duration-150 flex items-center gap-2 cursor-pointer select-none text-left',
+          bulkSelectable
+            ? bulkSelected
+              ? 'bg-accent/[0.13] text-primary'
+              : 'bg-chats hover:bg-hover text-primary'
+            : isActive
+              ? 'bg-accent/10 dark:bg-accent/15 text-primary'
+              : unread
+                ? 'bg-accent/[0.07] hover:bg-accent/[0.12] text-primary'
+                : 'bg-chats hover:bg-hover text-primary',
         )}
         onClick={onSelect}
         onContextMenu={onContextMenu}
         title={threadTitle}
       >
-        <div className="relative shrink-0">
-          <Avatar
-            name={thread.from_name || thread.from_addr}
-            email={isRSS ? undefined : thread.from_addr}
-            src={isRSS && thread.feed_icon ? `/media/${thread.feed_icon}` : undefined}
-          />
-          {accountBadgeVisible && threadAccount && (
-            <div className="absolute -bottom-1 -left-1 rounded-full ring-2 ring-chats overflow-hidden">
-              <Avatar name={badgeLabel} src={threadAccount.avatar_url} size={16} />
-            </div>
-          )}
-        </div>
+        {bulkSelectable ? (
+          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center">
+            <span
+              className={clsx(
+                'flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+                bulkSelected
+                  ? 'bg-accent text-white shadow-sm shadow-accent/20'
+                  : 'border border-secondary/30 text-secondary/35',
+              )}
+            >
+              <Check size={17} strokeWidth={2.6} />
+            </span>
+          </span>
+        ) : (
+          <div className="relative shrink-0">
+            <Avatar
+              name={thread.from_name || thread.from_addr}
+              email={isRSS ? undefined : thread.from_addr}
+              src={isRSS && thread.feed_icon ? `/media/${thread.feed_icon}` : undefined}
+            />
+            {accountBadgeVisible && threadAccount && (
+              <div className="absolute -bottom-1 -left-1 rounded-full ring-2 ring-chats overflow-hidden">
+                <Avatar name={badgeLabel} src={threadAccount.avatar_url} size={16} />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
           <div className="flex items-center gap-2 min-w-0">
@@ -98,7 +121,7 @@ export function ThreadListItem({
           </div>
 
           <div className="flex items-center gap-1.5 min-w-0">
-            {thread.starred && <Star size={11} className="fill-amber-500 text-amber-500 shrink-0" />}
+            {!bulkSelectable && thread.starred && <Star size={11} className="fill-amber-500 text-amber-500 shrink-0" />}
             <p className={clsx('flex-1 truncate text-[12px] leading-snug', unread ? 'font-semibold' : 'font-normal')}>
               <span className={clsx(unread ? 'text-primary' : 'text-primary/85')}>{threadTitle}</span>
               {thread.preview && (
@@ -108,11 +131,13 @@ export function ThreadListItem({
                 </span>
               )}
             </p>
-            {unread && (
+            {unread && bulkSelectable ? (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+            ) : unread ? (
               <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
                 {thread.unread_count ?? 1}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </button>

@@ -1,5 +1,13 @@
 import { useEffect } from 'react'
-import { ui$, openCommandPalette, closeCommandPalette, focusGlobalSearch, focusQuickReply } from '../../states/ui'
+import {
+  clearBulkSelection,
+  selectedBulkItems,
+  ui$,
+  openCommandPalette,
+  closeCommandPalette,
+  focusGlobalSearch,
+  focusQuickReply,
+} from '../../states/ui'
 import { settings$, visibleSideNavAccounts } from '../../states/settings'
 import { accounts$ } from '../../states/accounts'
 import {
@@ -17,6 +25,10 @@ import {
   deleteThread,
   toggleStarWithUndo,
   markUnreadWithUndo,
+  bulkArchiveSelected,
+  bulkDeleteSelected,
+  bulkMarkSelectedUnread,
+  bulkStarSelected,
 } from '../../states/mail'
 import { compose$, openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
 import {
@@ -107,6 +119,11 @@ function deleteKeyFocusAllowed(): boolean {
 function handleDeleteKey(key: string, target: EventTarget | null): boolean {
   if (key !== 'Delete' || isTyping(target) || modalOpen() || !deleteKeyFocusAllowed()) return false
   const threadId = ui$.selectedThread.peek()
+  const bulkItems = selectedBulkItems()
+  if (bulkItems.length > 0) {
+    void bulkDeleteSelected(bulkItems)
+    return true
+  }
   if (!threadId) return false
   void deleteThread(threadId)
   return true
@@ -161,6 +178,12 @@ function handleRailShortcut(action: ShortcutId): boolean {
 export function AppHotkeys() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isTyping(event.target) && !modalOpen() && selectedBulkItems().length > 0) {
+        event.preventDefault()
+        clearBulkSelection()
+        return
+      }
+
       // Esc closes the open kanban conversation pane (it has no thread list to
       // fall back to). Skip while typing or when a modal owns the keystroke;
       // in-thread search handles its own Esc via the input's onKeyDown.
@@ -208,6 +231,7 @@ export function AppHotkeys() {
       }
 
       const selected = () => ui$.selectedThread.peek()
+      const bulkSelected = () => selectedBulkItems()
 
       switch (action) {
         case 'palette.open':
@@ -279,21 +303,41 @@ export function AppHotkeys() {
           selectAdjacentThread(-1)
           break
         case 'thread.archive':
+          if (bulkSelected().length > 0) {
+            event.preventDefault()
+            void bulkArchiveSelected(bulkSelected())
+            break
+          }
           if (!selected()) return
           event.preventDefault()
           void archiveThread(selected())
           break
         case 'thread.star':
+          if (bulkSelected().length > 0) {
+            event.preventDefault()
+            void bulkStarSelected(bulkSelected(), true)
+            break
+          }
           if (!selected()) return
           event.preventDefault()
           toggleStarWithUndo(selected())
           break
         case 'thread.unread':
+          if (bulkSelected().length > 0) {
+            event.preventDefault()
+            void bulkMarkSelectedUnread(bulkSelected())
+            break
+          }
           if (!selected()) return
           event.preventDefault()
           markUnreadWithUndo(selected())
           break
         case 'thread.delete':
+          if (bulkSelected().length > 0) {
+            event.preventDefault()
+            void bulkDeleteSelected(bulkSelected())
+            break
+          }
           if (!selected()) return
           event.preventDefault()
           void deleteThread(selected())

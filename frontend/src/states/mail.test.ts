@@ -4,6 +4,9 @@ import { accounts$ } from './accounts'
 import { kanban$ } from './kanban'
 import {
   archiveThread,
+  bulkArchiveSelected,
+  bulkDeleteSelected,
+  bulkMarkSelectedUnread,
   copyThreadToFolder,
   deleteThread,
   discardSavedDraftCopy,
@@ -11,7 +14,7 @@ import {
   markAllRead,
   moveThreadToFolder,
 } from './mail'
-import { runToastUndo, settleConfirm, ui$ } from './ui'
+import { runToastUndo, settleConfirm, toggleBulkSelection, ui$, type BulkSelectionItem } from './ui'
 
 const thread = (overrides: Partial<Message> = {}): Message => ({
   id: 'acc:inbox:thread:1#101',
@@ -32,6 +35,21 @@ const thread = (overrides: Partial<Message> = {}): Message => ({
 })
 
 const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const bulkItem = (message: Message, overrides: Partial<BulkSelectionItem> = {}): BulkSelectionItem => ({
+  key: `test:${message.id}`,
+  groupKey: 'test:column',
+  threadId: message.thread_id,
+  accountId: message.account_id,
+  folderId: message.folder_id,
+  surface: 'thread-list',
+  kind: 'mail',
+  unread: message.unread,
+  starred: message.starred,
+  draft: false,
+  trash: false,
+  ...overrides,
+})
 
 describe('markAllRead', () => {
   const calls: { command: string; payload: unknown }[] = []
@@ -592,5 +610,111 @@ describe('archiveThread undo', () => {
     expect(ui$.selectedThread.get()).toBe('acc#inbox#t.MQ')
     expect(ui$.toastTone.get()).toBe('error')
     expect(ui$.toast.get()).toBe('Archive failed: no matching messages found')
+  })
+})
+
+describe('bulk thread actions', () => {
+  const calls: { command: string; payload: unknown }[] = []
+  let responses: Record<string, unknown[]> = {}
+
+  beforeEach(() => {
+    calls.length = 0
+    responses = {
+      'mail.markRead': [{ ok: true }],
+      'mail.archive': [{ ok: true, moved: 1 }],
+      'mail.delete': [{ ok: true, deleted: 1 }],
+      'mail.threadList': [{ threads: [] }],
+      'mail.folderList': [{ folders: [] }],
+    }
+    mail$.threads.set([thread({ thread_id: 'acc#inbox#t.MQ' })])
+    mail$.messages.set([])
+    mail$.folders.set([
+      { id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 0 },
+      { id: 'Trash', account_id: 'acc', name: 'Trash', role: 'trash', unread: 0 },
+    ])
+    mail$.foldersByAccount.set({
+      acc: [
+        { id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 0 },
+        { id: 'Trash', account_id: 'acc', name: 'Trash', role: 'trash', unread: 0 },
+      ],
+    })
+    kanban$.threads.set({})
+    ui$.selectedThread.set('acc#inbox#t.MQ')
+    ui$.selectedAccount.set('acc')
+    ui$.selectedFolder.set('inbox')
+    ui$.bulkSelection.set({})
+    ui$.bulkAnchorKey.set('')
+    ui$.toast.set('')
+    ui$.toastTone.set('success')
+    ui$.toastUndo.set(null)
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            return responses[command]?.shift() ?? {}
+          },
+        },
+      },
+    }
+  })
+
+  it('dedupes bulk unread by thread id', async () => {
+    const first = thread({ id: 'm1', thread_id: 'acc#inbox#t.MQ', unread: false })
+    const second = thread({ id: 'm2', thread_id: 'acc#inbox#t.MQ', unread: false })
+    mail$.threads.set([first, second])
+
+    await bulkMarkSelectedUnread([bulkItem(first, { messageId: 'm1' }), bulkItem(second, { messageId: 'm2' })])
+
+    expect(calls.filter((call) => call.command === 'mail.markRead').map((call) => call.payload)).toEqual([
+      { thread_id: 'acc#inbox#t.MQ', seen: false },
+    ])
+    expect(ui$.toast.get()).toBe('Marked unread')
+  })
+
+  it('rolls back all local removals when a bulk archive fails', async () => {
+    const second = thread({ id: 'm2', thread_id: 'acc#inbox#t.NQ' })
+    mail$.threads.set([thread({ thread_id: 'acc#inbox#t.MQ' }), second])
+    responses['mail.archive'] = [
+      { ok: true, moved: 1 },
+      { ok: true, moved: 0 },
+    ]
+    responses['mail.threadList'] = []
+
+    await bulkArchiveSelected(mail$.threads.get().map((item) => bulkItem(item)))
+
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['acc#inbox#t.MQ', 'acc#inbox#t.NQ'])
+    expect(ui$.toastTone.get()).toBe('error')
+    expect(ui$.toast.get()).toBe('Archive failed: no matching messages found')
+  })
+
+  it('uses one confirmation for permanent bulk delete', async () => {
+    const trash = thread({ id: 'trash', folder_id: 'Trash', thread_id: 'acc#Trash#t.MQ' })
+    mail$.threads.set([trash])
+    ui$.selectedFolder.set('Trash')
+    responses['mail.delete'] = [{ ok: true, deleted: 1, permanent: true }]
+    responses['mail.threadList'] = [{ threads: [] }]
+
+    const pending = bulkDeleteSelected([bulkItem(trash, { trash: true })])
+    settleConfirm(true)
+    await pending
+
+    expect(calls.filter((call) => call.command === 'mail.delete')).toHaveLength(1)
+    expect(calls.find((call) => call.command === 'mail.delete')?.payload).toMatchObject({
+      thread_id: 'acc#Trash#t.MQ',
+      folder: 'Trash',
+    })
+    expect(ui$.toast.get()).toBe('Thread deleted')
+  })
+
+  it('replaces bulk selection when selecting a different group', () => {
+    const first = thread({ id: 'm1', thread_id: 'acc#inbox#t.MQ' })
+    const second = thread({ id: 'm2', thread_id: 'acc#work#t.NQ', folder_id: 'Work' })
+
+    toggleBulkSelection(bulkItem(first, { groupKey: 'kanban:inbox' }))
+    toggleBulkSelection(bulkItem(second, { groupKey: 'kanban:work' }))
+
+    expect(Object.keys(ui$.bulkSelection.get())).toEqual(['test:m2'])
+    expect(ui$.bulkSelection['test:m2'].get()?.groupKey).toBe('kanban:work')
   })
 })

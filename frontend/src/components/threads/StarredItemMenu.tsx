@@ -1,4 +1,4 @@
-import type { Account } from '../../types'
+import type { Account, Message } from '../../types'
 import { isRssAccount } from '../../lib/threadActions'
 import { MessageContextMenu, type MessageContextMenuState } from '../chat/MessageContextMenu'
 
@@ -9,10 +9,12 @@ export function StarredItemMenu({
   state,
   accounts,
   onClose,
+  onSelect,
 }: {
   state: MessageContextMenuState
   accounts: Account[]
   onClose: () => void
+  onSelect?: (message: Message) => void
 }) {
   const account = accounts.find((acc) => acc.id === state.message.account_id)
   const isRSS = isRssAccount(account, state.message.account_id)
@@ -22,6 +24,7 @@ export function StarredItemMenu({
       isRSS={isRSS}
       headerOnly={!isRSS}
       onClose={onClose}
+      onSelectMessage={isRSS ? undefined : onSelect}
     />
   )
 }

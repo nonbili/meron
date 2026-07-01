@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import {
   Archive,
+  CheckSquare,
   ChevronRight,
   Copy,
   FolderInput,
@@ -146,6 +147,7 @@ export function ThreadContextMenu({
   onAfterAction,
   onMove,
   onOpenThread,
+  onSelectThread,
 }: {
   controller: ThreadContextMenuController
   onAfterAction?: (
@@ -160,6 +162,7 @@ export function ThreadContextMenu({
   // Required so every view that mounts the menu wires up "Open in new tab" — the
   // item always renders, so a missing handler would be a dead button.
   onOpenThread: (threadId: string) => void
+  onSelectThread?: (threadId: string) => void
 }) {
   const { t } = useTranslation()
   const { menu, close } = controller
@@ -363,16 +366,6 @@ export function ThreadContextMenu({
       onContextMenu={(event) => event.preventDefault()}
     >
       <MenuItem
-        icon={<MessageSquare size={13} className="text-secondary" />}
-        label={t('threads.actions.openInNewTab')}
-        onClick={() => {
-          const threadId = menu.threadId
-          close()
-          onOpenThread(threadId)
-          void after('open-tab', threadId)
-        }}
-      />
-      <MenuItem
         icon={
           menu.unread ? (
             <MailOpen size={13} className="text-secondary" />
@@ -400,6 +393,28 @@ export function ThreadContextMenu({
           void starThread(threadId, starred).then(() => after(action, threadId))
         }}
       />
+      <MenuItem
+        icon={<MessageSquare size={13} className="text-secondary" />}
+        label={t('threads.actions.openInNewTab')}
+        onClick={() => {
+          const threadId = menu.threadId
+          close()
+          onOpenThread(threadId)
+          void after('open-tab', threadId)
+        }}
+      />
+      {onSelectThread && (
+        <MenuItem
+          icon={<CheckSquare size={13} className="text-secondary" />}
+          label={t('buttons.select', { defaultValue: 'Select' })}
+          onClick={() => {
+            const threadId = menu.threadId
+            close()
+            onSelectThread(threadId)
+          }}
+        />
+      )}
+      <div className="my-1 border-t border-border" />
       <MenuItem
         icon={<Archive size={13} className="text-secondary" />}
         label={t('threads.actions.archiveThread')}

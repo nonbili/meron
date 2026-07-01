@@ -27,6 +27,23 @@ export type ConfirmState = {
   tone: ConfirmTone
 }
 
+export type BulkSelectionSurface = 'thread-list' | 'starred' | 'kanban'
+export type BulkSelectionKind = 'mail' | 'feed'
+export type BulkSelectionItem = {
+  key: string
+  groupKey: string
+  threadId: string
+  messageId?: string
+  accountId: string
+  folderId: string
+  surface: BulkSelectionSurface
+  kind: BulkSelectionKind
+  unread: boolean
+  starred: boolean
+  draft: boolean
+  trash: boolean
+}
+
 export const ui$ = observable({
   // Backend/system check, loaded once at boot.
   system: null as SystemCheck | null,
@@ -36,6 +53,8 @@ export const ui$ = observable({
   selectedThread: '',
   // Starred is a flat item list, so multiple rows can share selectedThread.
   selectedStarredItem: '',
+  bulkSelection: {} as Record<string, BulkSelectionItem>,
+  bulkAnchorKey: '',
   query: '',
   filterMode: 'all' as FilterMode,
   // Modals / panels.
@@ -167,6 +186,39 @@ export function settleConfirm(confirmed: boolean) {
   resolve?.(confirmed)
 }
 
+export function isWailsDesktopRuntime() {
+  return Boolean((window as any).go?.main?.App?.Invoke)
+}
+
+export function selectedBulkItems(): BulkSelectionItem[] {
+  return Object.values(ui$.bulkSelection.peek())
+}
+
+export function clearBulkSelection() {
+  ui$.bulkSelection.set({})
+  ui$.bulkAnchorKey.set('')
+}
+
+export function setBulkSelection(items: BulkSelectionItem[], anchorKey = items.at(-1)?.key ?? '') {
+  const groupKey = items.find((item) => item.key === anchorKey)?.groupKey ?? items.at(-1)?.groupKey ?? ''
+  const scopedItems = groupKey ? items.filter((item) => item.groupKey === groupKey) : items
+  ui$.bulkSelection.set(Object.fromEntries(scopedItems.map((item) => [item.key, item])))
+  ui$.bulkAnchorKey.set(anchorKey)
+}
+
+export function toggleBulkSelection(item: BulkSelectionItem) {
+  const existing = selectedBulkItems()
+  const sameGroup = existing.length === 0 || existing.every((selected) => selected.groupKey === item.groupKey)
+  const current = sameGroup ? { ...ui$.bulkSelection.peek() } : {}
+  if (current[item.key]) {
+    delete current[item.key]
+  } else {
+    current[item.key] = item
+  }
+  ui$.bulkSelection.set(current)
+  ui$.bulkAnchorKey.set(item.key)
+}
+
 // Focus the open conversation's quick-reply box (the "r" shortcut).
 export function focusQuickReply() {
   ui$.replyFocus.set(ui$.replyFocus.peek() + 1)
@@ -189,6 +241,10 @@ function persistNav(key: string, value: string) {
 }
 ui$.selectedAccount.onChange(({ value }) => persistNav('session_account', value))
 ui$.selectedFolder.onChange(({ value }) => persistNav('session_folder', value))
+ui$.selectedAccount.onChange(() => clearBulkSelection())
+ui$.selectedFolder.onChange(() => clearBulkSelection())
+ui$.query.onChange(() => clearBulkSelection())
+ui$.filterMode.onChange(() => clearBulkSelection())
 
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
 export const UI_SESSION_KEYS = ['session_account', 'session_folder', filterSession.key]

@@ -7,7 +7,15 @@ import { Loader2, Minus, Pause } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { clsx } from '../../lib/utils'
 import { accounts$ } from '../../states/accounts'
-import { mail$ } from '../../states/mail'
+import { isDraftFolder, mail$ } from '../../states/mail'
+import {
+  clearBulkSelection,
+  isWailsDesktopRuntime,
+  setBulkSelection,
+  toggleBulkSelection,
+  ui$,
+  type BulkSelectionItem,
+} from '../../states/ui'
 import {
   kanbanBoardColumnKey,
   kanbanColumnKey,
@@ -41,6 +49,7 @@ import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { KanbanThreadCard } from './KanbanThreadCard'
 import { KanbanColumnMinimized } from './KanbanColumnMinimized'
+import { BulkActionBar } from '../threads/BulkActionBar'
 
 // A board column is both a dnd-kit sortable item and a drop target; this bundles
 // the wiring the column renderers need from those hooks.
@@ -83,6 +92,8 @@ function KanbanColumnContent({
   const globalFilter = useValue(kanban$.globalFilter)
   const searchQuery = useValue(kanban$.searchQuery)
   const searchScope = useValue(kanban$.searchScope)
+  const system = useValue(ui$.system)
+  const bulkSelection = useValue(ui$.bulkSelection)
   const width = useValue(settings$.kanbanColumnWidth)
   const minimizedColumns = useValue(settings$.kanbanMinimizedColumns)
   const overWallpaper = !!useValue(settings$.kanbanBoards).find((board) => board.id === boardId)?.wallpaper
@@ -117,6 +128,50 @@ function KanbanColumnContent({
   const emptyText = columnEmptyText(filterMode, searchActive, rawThreads.length > 0, isRss)
   const [syncing, setSyncing] = useState(false)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null)
+  const desktopBulk = isWailsDesktopRuntime() || !!system
+  const bulkItems = Object.values(bulkSelection)
+  const bulkInColumn =
+    desktopBulk && bulkItems.length > 0 && bulkItems.every((item) => item.groupKey === `kanban:${boardKey}`)
+
+  const bulkItemFor = (thread: (typeof threads)[number]): BulkSelectionItem => {
+    const starredFeed =
+      starredColumn &&
+      isRssAccount(
+        accounts.find((acc) => acc.id === thread.account_id),
+        thread.account_id,
+      )
+    const rowId = starredColumn ? thread.id : thread.thread_id
+    return {
+      key: `kanban:${boardKey}:${rowId}`,
+      groupKey: `kanban:${boardKey}`,
+      threadId: thread.thread_id,
+      messageId: starredColumn && !starredFeed ? thread.id : undefined,
+      accountId: thread.account_id,
+      folderId: thread.folder_id,
+      surface: 'kanban',
+      kind: isRss || starredFeed ? 'feed' : 'mail',
+      unread: thread.unread,
+      starred: thread.starred,
+      draft: !starredColumn && isDraftFolder(thread.folder_id),
+      trash: labelFolders.some(
+        (folder) =>
+          folder.account_id === thread.account_id && folder.id === thread.folder_id && folder.role === 'trash',
+      ),
+    }
+  }
+
+  const selectRangeTo = (target: BulkSelectionItem) => {
+    const anchor = ui$.bulkAnchorKey.peek()
+    const rows = threads.map(bulkItemFor)
+    const targetIndex = rows.findIndex((item) => item.key === target.key)
+    const anchorIndex = rows.findIndex((item) => item.key === anchor)
+    if (targetIndex === -1 || anchorIndex === -1) {
+      toggleBulkSelection(target)
+      return
+    }
+    const [from, to] = targetIndex < anchorIndex ? [targetIndex, anchorIndex] : [anchorIndex, targetIndex]
+    setBulkSelection(rows.slice(from, to + 1), target.key)
+  }
 
   useEffect(() => {
     void loadKanbanColumn(column, true)
@@ -142,87 +197,91 @@ function KanbanColumnContent({
         columnDropTargetClass(wrapper.isOver),
       )}
     >
-      <div
-        className={`flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 ${
-          wrapper.dragHandle ? 'cursor-grab touch-none active:cursor-grabbing' : ''
-        }`}
-        title={wrapper.dragHandle ? t('kanban.actions.dragToReorderColumn') : undefined}
-        onClick={wrapper.scrollIntoView}
-        onContextMenu={openHeaderMenu}
-        {...wrapper.dragHandle}
-      >
-        <div className="relative shrink-0">
-          <Avatar
-            name={columnAccountLabel || accountLabel(column.accountId, accounts)}
-            email={columnAccount?.email}
-            src={columnAccount?.avatar_url}
-            size={26}
-            className={isPaused ? 'grayscale opacity-40' : undefined}
-          />
-          {isPaused && (
-            <span
-              className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-chats"
-              title={t('settings.account.paused', { defaultValue: 'Paused' })}
-            >
-              <Pause size={7} className="fill-current" />
-            </span>
-          )}
-        </div>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h3 className={clsx('truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}>
-            {folderLabel(column, labelFolders, accounts)}
-          </h3>
-          {searchActive && loading && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
-          {unreadCount > 0 && (
-            <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
-              {unreadCount}
-            </span>
-          )}
-        </div>
+      {bulkInColumn ? (
+        <BulkActionBar items={bulkItems} className="min-h-12 rounded-t-lg border-b border-border bg-transparent" />
+      ) : (
         <div
-          className="flex shrink-0 items-center gap-1"
-          // Blank title stops the header's "Drag to reorder column" tooltip from
-          // leaking onto the action buttons and the open dropdown menu.
-          title=""
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.stopPropagation()}
+          className={`flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 ${
+            wrapper.dragHandle ? 'cursor-grab touch-none active:cursor-grabbing' : ''
+          }`}
+          title={wrapper.dragHandle ? t('kanban.actions.dragToReorderColumn') : undefined}
+          onClick={wrapper.scrollIntoView}
+          onContextMenu={openHeaderMenu}
+          {...wrapper.dragHandle}
         >
-          <IconButton
-            icon={Minus}
-            iconSize={15}
-            label={t('kanban.actions.minimize')}
-            size="sm"
-            radius="lg"
-            onClick={() => settings$.kanbanMinimizedColumns[boardKey].set(true)}
-          />
-          <ThreadActionsMenu
-            filterMode={filterMode}
-            onFilterChange={(mode) => {
-              mail$.readThreads.set({})
-              kanban$.filters[key].set(mode)
-            }}
-            hasUnread={hasUnread}
-            onMarkAllRead={() => void markColumnAllRead(column)}
-            onSync={async () => {
-              setSyncing(true)
-              try {
-                await syncKanbanColumn(column)
-              } finally {
-                setSyncing(false)
-              }
-            }}
-            syncing={syncing}
-            syncLabel={isRss ? t('feeds.actions.syncFeeds') : undefined}
-            syncingLabel={isRss ? t('feeds.actions.syncingFeeds') : undefined}
-            onRemove={() => removeKanbanColumn(boardId, column)}
-            onSearch={() => onSearchColumn(column)}
-            searchLabel={t('kanban.actions.search', { defaultValue: 'Search' })}
-            size={14}
-            triggerClassName="h-7 w-7"
-          />
+          <div className="relative shrink-0">
+            <Avatar
+              name={columnAccountLabel || accountLabel(column.accountId, accounts)}
+              email={columnAccount?.email}
+              src={columnAccount?.avatar_url}
+              size={26}
+              className={isPaused ? 'grayscale opacity-40' : undefined}
+            />
+            {isPaused && (
+              <span
+                className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-chats"
+                title={t('settings.account.paused', { defaultValue: 'Paused' })}
+              >
+                <Pause size={7} className="fill-current" />
+              </span>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h3 className={clsx('truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}>
+              {folderLabel(column, labelFolders, accounts)}
+            </h3>
+            {searchActive && loading && <Loader2 size={13} className="shrink-0 animate-spin text-accent" />}
+            {unreadCount > 0 && (
+              <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
+                {unreadCount}
+              </span>
+            )}
+          </div>
+          <div
+            className="flex shrink-0 items-center gap-1"
+            // Blank title stops the header's "Drag to reorder column" tooltip from
+            // leaking onto the action buttons and the open dropdown menu.
+            title=""
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.stopPropagation()}
+          >
+            <IconButton
+              icon={Minus}
+              iconSize={15}
+              label={t('kanban.actions.minimize')}
+              size="sm"
+              radius="lg"
+              onClick={() => settings$.kanbanMinimizedColumns[boardKey].set(true)}
+            />
+            <ThreadActionsMenu
+              filterMode={filterMode}
+              onFilterChange={(mode) => {
+                mail$.readThreads.set({})
+                kanban$.filters[key].set(mode)
+              }}
+              hasUnread={hasUnread}
+              onMarkAllRead={() => void markColumnAllRead(column)}
+              onSync={async () => {
+                setSyncing(true)
+                try {
+                  await syncKanbanColumn(column)
+                } finally {
+                  setSyncing(false)
+                }
+              }}
+              syncing={syncing}
+              syncLabel={isRss ? t('feeds.actions.syncFeeds') : undefined}
+              syncingLabel={isRss ? t('feeds.actions.syncingFeeds') : undefined}
+              onRemove={() => removeKanbanColumn(boardId, column)}
+              onSearch={() => onSearchColumn(column)}
+              searchLabel={t('kanban.actions.search', { defaultValue: 'Search' })}
+              size={14}
+              triggerClassName="h-7 w-7"
+            />
+          </div>
         </div>
-      </div>
+      )}
       {headerMenu && (
         <FloatingContextMenu
           x={headerMenu.x}
@@ -279,16 +338,26 @@ function KanbanColumnContent({
           </div>
         ) : (
           <>
-            {threads.map((thread) => (
-              <KanbanThreadCard
-                key={starredColumn ? thread.id : thread.thread_id}
-                boardId={boardId}
-                thread={thread}
-                column={column}
-                threadMenu={threadMenu}
-                ownerKey={boardKey}
-              />
-            ))}
+            {threads.map((thread) => {
+              const bulkItem = bulkItemFor(thread)
+              return (
+                <KanbanThreadCard
+                  key={starredColumn ? thread.id : thread.thread_id}
+                  boardId={boardId}
+                  thread={thread}
+                  column={column}
+                  threadMenu={threadMenu}
+                  ownerKey={boardKey}
+                  bulkSelectable={desktopBulk && bulkInColumn}
+                  bulkEnabled={desktopBulk}
+                  bulkSelected={!!bulkSelection[bulkItem.key]}
+                  onBulkRangeSelect={() => selectRangeTo(bulkItem)}
+                  onBulkModeSelect={() => toggleBulkSelection(bulkItem)}
+                  onBulkPlainSelect={() => clearBulkSelection()}
+                  bulkItem={bulkItem}
+                />
+              )
+            })}
             {loadingMore && (
               <div className="py-3 text-center text-xs font-medium text-secondary">{t('common.loading')}</div>
             )}
@@ -300,6 +369,10 @@ function KanbanColumnContent({
       {threadMenu.menu?.ownerKey === boardKey && (
         <ThreadContextMenu
           controller={threadMenu}
+          onSelectThread={(threadId) => {
+            const thread = threads.find((item) => item.thread_id === threadId)
+            if (thread) toggleBulkSelection(bulkItemFor(thread))
+          }}
           onOpenThread={(threadId) => {
             const thread = threads.find((item) => item.thread_id === threadId)
             if (!thread) return
