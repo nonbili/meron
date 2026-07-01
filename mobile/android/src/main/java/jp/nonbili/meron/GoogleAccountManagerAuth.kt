@@ -61,6 +61,11 @@ object GoogleAccountManagerAuth {
         data object Failed : TokenRefresh()
     }
 
+    data class GoogleUserProfile(
+        val name: String = "",
+        val pictureUrl: String = "",
+    )
+
     /** Intent that lets the user pick a `com.google` account on the device. */
     fun chooseAccountIntent() =
         AccountManager.newChooseAccountIntent(
@@ -173,11 +178,11 @@ object GoogleAccountManagerAuth {
         }
 
     /**
-     * Read the account holder's display name from Google's userinfo endpoint
-     * using a profile-scoped access token. Returns null on any failure — the
-     * caller falls back to the account email.
+     * Read the account holder's display name and avatar from Google's userinfo
+     * endpoint using a profile-scoped access token. Returns empty fields on any
+     * failure — the caller falls back to generated account UI.
      */
-    suspend fun fetchUserName(accessToken: String): String? =
+    suspend fun fetchUserProfile(accessToken: String): GoogleUserProfile =
         withContext(Dispatchers.IO) {
             runCatching {
                 val connection =
@@ -190,8 +195,12 @@ object GoogleAccountManagerAuth {
                         readTimeout = 15_000
                     }
                 val body = connection.inputStream.bufferedReader().use { it.readText() }
-                JSONObject(body).optString("name").takeIf { it.isNotBlank() }
-            }.getOrNull()
+                val json = JSONObject(body)
+                GoogleUserProfile(
+                    name = json.optString("name").trim(),
+                    pictureUrl = json.optString("picture").trim(),
+                )
+            }.getOrDefault(GoogleUserProfile())
         }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

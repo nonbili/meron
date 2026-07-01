@@ -719,6 +719,7 @@ private fun MeronMobileState.addGoogleDeviceAccount(account: GoogleDeviceAccount
                     displayName = account.displayName,
                     senderName = account.displayName,
                     username = account.email,
+                    avatarUrl = account.avatarUrl,
                     // No refresh token: the host re-mints access tokens.
                     accessToken = account.accessToken,
                     refreshToken = "",

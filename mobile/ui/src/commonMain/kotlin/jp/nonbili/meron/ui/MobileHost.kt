@@ -5,6 +5,7 @@ package jp.nonbili.meron.ui
 data class GoogleDeviceAccount(
     val email: String,
     val displayName: String,
+    val avatarUrl: String = "",
     val accessToken: String,
     val expiresAtEpochSeconds: Long,
 )

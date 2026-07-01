@@ -160,12 +160,13 @@ class AndroidMobileHost(
                 runCatching {
                     val token = GoogleAccountManagerAuth.interactiveToken(activity, accountName)
                     Log.i(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request succeeded")
-                    val profileName = GoogleAccountManagerAuth.fetchUserName(token).orEmpty()
+                    val profile = GoogleAccountManagerAuth.fetchUserProfile(token)
                     val expiresAt = System.currentTimeMillis() / 1000L + GoogleAccountManagerAuth.TOKEN_LIFETIME_SECONDS
                     GoogleAccountManagerAuth.register(activity, accountName.trim().lowercase(), accountName)
                     GoogleDeviceAccount(
                         email = accountName,
-                        displayName = profileName,
+                        displayName = profile.name,
+                        avatarUrl = profile.pictureUrl,
                         accessToken = token,
                         expiresAtEpochSeconds = expiresAt,
                     )
