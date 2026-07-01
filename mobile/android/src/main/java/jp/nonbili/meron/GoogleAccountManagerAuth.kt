@@ -42,16 +42,13 @@ object GoogleAccountManagerAuth {
     /** Assumed access-token lifetime (Google access tokens last ~1h). */
     const val TOKEN_LIFETIME_SECONDS = 3600L
 
-    /** Re-mint this many seconds before the assumed expiry. */
-    const val EXPIRY_MARGIN_SECONDS = 300L
-
     private fun key(accountId: String) = "managed.$accountId"
 
     private fun expiryKey(accountId: String) = "expiry.$accountId"
 
     /** Outcome of [mintIfNeeded]. */
     sealed class TokenRefresh {
-        /** Not a managed account, or its token is still fresh — nothing to do. */
+        /** Not a managed account, so nothing to do. */
         data object NotNeeded : TokenRefresh()
 
         /** A fresh token was minted; push it into meron-core, then [recordExpiry]. */
@@ -107,27 +104,22 @@ object GoogleAccountManagerAuth {
         prefs(context).edit().putLong(expiryKey(accountId), expiresAt).apply()
     }
 
-    private fun storedExpiry(
-        context: Context,
-        accountId: String,
-    ): Long = prefs(context).getLong(expiryKey(accountId), 0L)
-
     /**
-     * Mint a fresh access token only when the stored one is missing or within
-     * [EXPIRY_MARGIN_SECONDS] of expiry. Returns [TokenRefresh.NotNeeded] for
-     * non-managed accounts or still-fresh tokens, so callers can apply it
-     * uniformly to every account.
+     * Mint a fresh access token for managed accounts before sync. Returns
+     * [TokenRefresh.NotNeeded] only for non-managed accounts.
+     *
+     * The local expiry is advisory UI state; meron-core has the authoritative
+     * token and can drift from this preference after reconnects or restores.
+     * Re-minting here keeps platform-managed Gmail from falling back to core's
+     * browser OAuth refresh path.
      */
     suspend fun mintIfNeeded(
         context: Context,
         accountId: String,
     ): TokenRefresh {
         val deviceAccount = managedAccountName(context, accountId) ?: return TokenRefresh.NotNeeded
-        val now = System.currentTimeMillis() / 1000L
-        if (now < storedExpiry(context, accountId) - EXPIRY_MARGIN_SECONDS) {
-            return TokenRefresh.NotNeeded
-        }
         val token = silentToken(context, deviceAccount) ?: return TokenRefresh.Failed
+        val now = System.currentTimeMillis() / 1000L
         return TokenRefresh.Refreshed(token, now + TOKEN_LIFETIME_SECONDS)
     }
 

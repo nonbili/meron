@@ -134,6 +134,10 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
             return Err(format!("account is not oauth: {id}"));
         }
         creds.access_token = Some(access_token.clone());
+        // This command is used by platform-managed OAuth hosts such as Android
+        // AccountManager. Once the host owns refresh, any old browser-flow
+        // refresh token must not be reused by core.
+        creds.refresh_token = None;
         creds.token_expires_at = token_expires_at;
         store::save_account_config(&conn, &id, &creds).map_err(|err| err.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;

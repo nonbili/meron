@@ -527,6 +527,41 @@ fn mobile_protocol_persists_platform_managed_oauth_account_without_refresh_token
 }
 
 #[test]
+fn mobile_protocol_platform_oauth_update_clears_old_refresh_token() {
+    let data_dir = unique_data_dir("oauth-managed-clears-refresh");
+    let data_dir_str = data_dir.to_str().unwrap();
+    let unique = unique_test_suffix();
+    let email = format!("managed-reconnect+{unique}@gmail.com");
+    let expired = now_epoch_seconds() - 3600;
+    let add_browser = format!(
+        r#"{{"id":74,"method":"account.addOAuth","params":{{"email":"{email}","provider":"gmail","display_name":"Gmail","access_token":"browser-access","refresh_token":"browser-refresh","token_expires_at":{expired}}}}}"#
+    );
+    let added = invoke_mobile_protocol_json(&add_browser, Some(data_dir_str));
+    assert_eq!(added["id"], 74, "{added}");
+
+    let managed_expires = now_epoch_seconds() + 3600;
+    let update_managed = format!(
+        r#"{{"id":75,"method":"account.updateOAuthToken","params":{{"account_id":"{email}","access_token":"managed-access","token_expires_at":{managed_expires}}}}}"#
+    );
+    let updated = invoke_mobile_protocol_json(&update_managed, Some(data_dir_str));
+    assert_eq!(updated["id"], 75, "{updated}");
+    assert_eq!(updated["result"]["ok"], true, "{updated}");
+
+    let engine = crate::engine::Engine::new(Box::new(MobileHost {
+        data_dir: data_dir_str.to_string(),
+    }))
+    .expect("engine builds");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let creds = rt
+        .block_on(engine.ensure_valid_creds(&email))
+        .expect("platform-managed token should not use browser refresh");
+    assert_eq!(creds.access_token.as_deref(), Some("managed-access"));
+    assert_eq!(creds.refresh_token.as_deref(), None);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_update_oauth_token_rejects_unknown_account() {
     let data_dir = unique_data_dir("oauth-managed-missing");
     let update = r#"{"id":73,"method":"account.updateOAuthToken","params":{"account_id":"nobody@gmail.com","access_token":"x"}}"#;

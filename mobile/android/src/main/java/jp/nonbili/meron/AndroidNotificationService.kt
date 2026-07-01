@@ -50,7 +50,7 @@ object AndroidNotificationService {
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setContentTitle("Meron refresh complete")
+                .setContentTitle("Refresh complete")
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)

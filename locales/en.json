@@ -503,7 +503,7 @@
   "mobile.ios.quickReplyFailed": "Quick reply failed.",
   "mobile.ios.quickReplySent": "Quick reply sent.",
   "mobile.ios.reconnectAccountFromPrefilledForm": "Reconnect {account} from the prefilled account form.",
-  "mobile.ios.refreshCompleteTitle": "Meron refresh complete",
+  "mobile.ios.refreshCompleteTitle": "Refresh complete",
   "mobile.ios.refreshing": "Refreshing...",
   "mobile.ios.refreshStarred": "Refresh starred",
   "mobile.ios.removeAccountFailed": "Remove account failed.",
