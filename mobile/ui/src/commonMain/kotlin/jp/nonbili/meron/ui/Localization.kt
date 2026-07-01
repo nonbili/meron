@@ -14,11 +14,12 @@ internal fun localizedString(
     key: String,
     args: Map<String, Any?> = emptyMap(),
 ): String {
-    val messages = generatedStrings[locale]
-        ?: generatedStrings[locale.substringBefore('-')]
-        ?: generatedStrings[locale.substringBefore('_')]
-        ?: generatedStrings["en"]
-        ?: emptyMap()
+    val messages =
+        generatedStrings[locale]
+            ?: generatedStrings[locale.substringBefore('-')]
+            ?: generatedStrings[locale.substringBefore('_')]
+            ?: generatedStrings["en"]
+            ?: emptyMap()
     val template = messages[key] ?: generatedStrings["en"]?.get(key) ?: key
     return formatIcu(template, args)
 }
@@ -104,7 +105,10 @@ private fun readBraceBranch(
     var index = start
     while (index < template.length) {
         when (template[index]) {
-            '{' -> depth += 1
+            '{' -> {
+                depth += 1
+            }
+
             '}' -> {
                 depth -= 1
                 if (depth == 0) {

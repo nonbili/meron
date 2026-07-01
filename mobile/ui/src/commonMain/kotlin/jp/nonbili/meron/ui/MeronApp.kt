@@ -171,6 +171,7 @@ import jp.nonbili.meron.shared.ImportOpmlParams
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
 import jp.nonbili.meron.shared.MarkStarredParams
+import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.MobileMailCommandClient
@@ -231,7 +232,6 @@ import jp.nonbili.meron.shared.toSendMailParams
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import jp.nonbili.meron.shared.MeronCore
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
@@ -309,7 +309,12 @@ private fun PickedFile.toDraftAttachment(): DraftAttachment =
 
 private fun String.jsonStringValue(key: String): String {
     val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*"((?:\\.|[^"\\])*)"""")
-    return pattern.find(this)?.groupValues?.get(1)?.decodeJsonString().orEmpty()
+    return pattern
+        .find(this)
+        ?.groupValues
+        ?.get(1)
+        ?.decodeJsonString()
+        .orEmpty()
 }
 
 private fun String.jsonIntValue(
@@ -317,7 +322,11 @@ private fun String.jsonIntValue(
     defaultValue: Int,
 ): Int {
     val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*(-?\d+)""")
-    return pattern.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: defaultValue
+    return pattern
+        .find(this)
+        ?.groupValues
+        ?.get(1)
+        ?.toIntOrNull() ?: defaultValue
 }
 
 private fun String.decodeJsonString(): String {
@@ -427,6 +436,7 @@ private fun MeronMobileScreenContent(
                                     refreshOpenThreadFor(eventAccount)
                                 }
                             }
+
                             "mail.synced" -> {
                                 val eventAccount = event.detailJson.jsonStringValue("account")
                                 val eventFolder = event.detailJson.jsonStringValue("folder")
@@ -440,6 +450,7 @@ private fun MeronMobileScreenContent(
                                     refreshOpenThreadFor(eventAccount)
                                 }
                             }
+
                             "log" -> {
                                 // Surface Rust core logs through the platform logger
                                 // (os_log / Logcat); they'd otherwise be invisible
@@ -741,7 +752,10 @@ private fun MeronMobileScreenContent(
         LaunchedEffect(screen, coreThreads, kanbanColumns) {
             val visibleThreadIds =
                 if (screen == Screen.Kanban) {
-                    kanbanColumns.values.flatMap { it.threads }.map { it.id }.toSet()
+                    kanbanColumns.values
+                        .flatMap { it.threads }
+                        .map { it.id }
+                        .toSet()
                 } else {
                     coreThreads.map { it.id }.toSet()
                 }
@@ -1916,9 +1930,11 @@ private fun MeronMobileScreenContent(
                                 delay(MAILBOX_BLOCKING_WARN_AFTER_MS)
                                 val stillBlocking =
                                     screen == Screen.Mail &&
-                                        (!initialAccountsLoaded ||
-                                            accountsLoading ||
-                                            (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded)))
+                                        (
+                                            !initialAccountsLoaded ||
+                                                accountsLoading ||
+                                                (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded))
+                                        )
                                 if (stillBlocking && !blockingMailboxLoadWarned) {
                                     blockingMailboxLoadWarned = true
                                     Log.w(

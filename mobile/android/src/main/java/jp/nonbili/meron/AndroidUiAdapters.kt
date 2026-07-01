@@ -1,7 +1,8 @@
 package jp.nonbili.meron
 
-import android.app.Activity
 import android.Manifest
+import android.accounts.AccountManager
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -9,7 +10,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
-import android.accounts.AccountManager
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
@@ -19,11 +19,11 @@ import jp.nonbili.meron.ui.ManagedTokenRefresh
 import jp.nonbili.meron.ui.MobileHost
 import jp.nonbili.meron.ui.PickedFile
 import jp.nonbili.meron.ui.PlatformServices
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 
 class AndroidPlatformServices(
     private val activity: ComponentActivity,
@@ -48,7 +48,8 @@ class AndroidPlatformServices(
         onFailure: (String) -> Unit,
     ) {
         runCatching {
-            CustomTabsIntent.Builder()
+            CustomTabsIntent
+                .Builder()
                 .setShowTitle(true)
                 .build()
                 .launchUrl(activity, Uri.parse(url))
@@ -190,7 +191,11 @@ class AndroidMobileHost(
     override var lastGoogleDeviceAuthError: String = ""
         private set
     override val packageName: String = activity.packageName
-    override val appVersionName: String = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName.orEmpty()
+    override val appVersionName: String =
+        activity.packageManager
+            .getPackageInfo(activity.packageName, 0)
+            .versionName
+            .orEmpty()
     override val coreProtocolVersion: Int = MeronCoreNative.protocolVersion()
 
     override fun notificationsEnabled(): Boolean =
@@ -232,13 +237,20 @@ class AndroidMobileHost(
 
     override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh =
         when (val refresh = GoogleAccountManagerAuth.mintIfNeeded(activity, accountId)) {
-            GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> ManagedTokenRefresh.NotNeeded
-            is GoogleAccountManagerAuth.TokenRefresh.Refreshed ->
+            GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> {
+                ManagedTokenRefresh.NotNeeded
+            }
+
+            is GoogleAccountManagerAuth.TokenRefresh.Refreshed -> {
                 ManagedTokenRefresh.Refreshed(
                     accessToken = refresh.token,
                     expiresAtEpochSeconds = refresh.expiresAt,
                 )
-            GoogleAccountManagerAuth.TokenRefresh.Failed -> ManagedTokenRefresh.Failed
+            }
+
+            GoogleAccountManagerAuth.TokenRefresh.Failed -> {
+                ManagedTokenRefresh.Failed
+            }
         }
 
     override fun recordManagedGoogleExpiry(

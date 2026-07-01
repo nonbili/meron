@@ -32,7 +32,9 @@ actual suspend fun loadImageBytes(ref: String): ByteArray? {
                 NSData.dataWithContentsOfURL(url)
             }
 
-            else -> NSData.dataWithContentsOfFile(ref)
+            else -> {
+                NSData.dataWithContentsOfFile(ref)
+            }
         }
     return data?.toByteArray()
 }

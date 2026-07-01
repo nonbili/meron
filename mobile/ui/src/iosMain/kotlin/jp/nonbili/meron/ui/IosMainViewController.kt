@@ -1,7 +1,7 @@
 package jp.nonbili.meron.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.window.ComposeUIViewController
 import jp.nonbili.meron.shared.MeronCore
 import platform.AuthenticationServices.ASPresentationAnchor
@@ -10,10 +10,10 @@ import platform.AuthenticationServices.ASWebAuthenticationSession
 import platform.Foundation.NSBundle
 import platform.Foundation.NSError
 import platform.Foundation.NSURL
-import platform.darwin.NSObject
 import platform.UIKit.UIApplication
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
+import platform.darwin.NSObject
 
 @OptIn(ExperimentalFoundationApi::class)
 fun MainViewController(

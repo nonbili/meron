@@ -17,8 +17,26 @@ subprojects {
         version.set("1.8.0")
         android.set(true)
         ignoreFailures.set(false)
+        additionalEditorconfig.set([
+            "ktlint_standard_class-naming": "disabled",
+        ])
         filter {
             exclude("**/build/**")
+            exclude { element ->
+                element.file.path.replace(File.separator, "/").contains("/build/generated/")
+            }
         }
+    }
+
+    def excludeGeneratedKtlintSources = { task ->
+        if (task.name.contains("SourceSet")) {
+            task.setSource(fileTree(project.projectDir) {
+                include("src/**/*.kt")
+            })
+        }
+    }
+    afterEvaluate {
+        tasks.withType(org.jlleitschuh.gradle.ktlint.tasks.KtLintCheckTask).configureEach(excludeGeneratedKtlintSources)
+        tasks.withType(org.jlleitschuh.gradle.ktlint.tasks.KtLintFormatTask).configureEach(excludeGeneratedKtlintSources)
     }
 }

@@ -4,8 +4,7 @@ enum class LogLevel { DEBUG, INFO, WARN, ERROR }
 
 internal expect val isDebugLogBuild: Boolean
 
-private fun shouldWriteLog(level: LogLevel): Boolean =
-    isDebugLogBuild || level == LogLevel.WARN || level == LogLevel.ERROR
+private fun shouldWriteLog(level: LogLevel): Boolean = isDebugLogBuild || level == LogLevel.WARN || level == LogLevel.ERROR
 
 /**
  * Platform log sink: Android Logcat, iOS NSLog. Prefer the [Log] helpers over

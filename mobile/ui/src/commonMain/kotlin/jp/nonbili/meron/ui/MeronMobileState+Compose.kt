@@ -492,13 +492,14 @@ internal fun MeronMobileState.sendQuickReply() {
     val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
     val outboundMessageId = newDraftMessageId(accountId).replace("meron-draft-", "meron-")
     val params =
-        parent.toReplyMailParams(
-            accountId = accountId,
-            body = replyBody,
-            from = replyFrom,
-            ownAddresses = ownAddressList(coreAccounts),
-            attachments = quickReplyAttachments,
-        ).copy(messageId = outboundMessageId)
+        parent
+            .toReplyMailParams(
+                accountId = accountId,
+                body = replyBody,
+                from = replyFrom,
+                ownAddresses = ownAddressList(coreAccounts),
+                attachments = quickReplyAttachments,
+            ).copy(messageId = outboundMessageId)
     // Render the sent bubble optimistically — before the send round-trip — so
     // replying feels instant. The bubble shows a "Sending…" status until the
     // canonical stored message replaces it on re-fetch; on failure it flips to
@@ -792,7 +793,8 @@ internal fun MeronMobileState.applyKanbanColumns(columns: List<KanbanColumnSpec>
         kanbanBoards.map { if (it.id == board.id) it.copy(columns = ordered) else it },
     )
     (existingKeys - nextKeys).forEach { kanbanColumns = kanbanColumns - it }
-    ordered.filter { kanbanColumnKey(it) !in existingKeys }
+    ordered
+        .filter { kanbanColumnKey(it) !in existingKeys }
         .forEach { loadKanbanColumn(it, refresh = true) }
 }
 

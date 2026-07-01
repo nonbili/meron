@@ -27,9 +27,12 @@ actual suspend fun loadImageBytes(ref: String): ByteArray? =
                 ctx.contentResolver.openInputStream(Uri.parse(ref))?.use { it.readBytes() }
             }
 
-            ref.startsWith("http://") || ref.startsWith("https://") ->
+            ref.startsWith("http://") || ref.startsWith("https://") -> {
                 URL(ref).openStream().use { it.readBytes() }
+            }
 
-            else -> File(ref).readBytes()
+            else -> {
+                File(ref).readBytes()
+            }
         }
     }.getOrNull()

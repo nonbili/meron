@@ -42,8 +42,7 @@ internal fun parseKanbanBoards(raw: String): List<KanbanBoardSpec> {
     }.getOrDefault(emptyList())
 }
 
-private fun kotlinx.serialization.json.JsonElement.asStringOrEmpty(): String =
-    runCatching { (this as kotlinx.serialization.json.JsonPrimitive).content }.getOrDefault("")
+private fun kotlinx.serialization.json.JsonElement.asStringOrEmpty(): String = runCatching { (this as kotlinx.serialization.json.JsonPrimitive).content }.getOrDefault("")
 
 internal fun serializeKanbanBoards(boards: List<KanbanBoardSpec>): String =
     buildJsonArray {
@@ -64,7 +63,7 @@ internal fun serializeKanbanBoards(boards: List<KanbanBoardSpec>): String =
                 )
                 if (board.avatarUrl.isNotBlank()) put("avatarUrl", board.avatarUrl)
                 when {
-                    board.wallpaperUrl.isNotBlank() ->
+                    board.wallpaperUrl.isNotBlank() -> {
                         put(
                             "wallpaper",
                             buildJsonObject {
@@ -72,8 +71,9 @@ internal fun serializeKanbanBoards(boards: List<KanbanBoardSpec>): String =
                                 put("url", board.wallpaperUrl)
                             },
                         )
+                    }
 
-                    board.wallpaperPresetId.isNotBlank() ->
+                    board.wallpaperPresetId.isNotBlank() -> {
                         put(
                             "wallpaper",
                             buildJsonObject {
@@ -81,6 +81,7 @@ internal fun serializeKanbanBoards(boards: List<KanbanBoardSpec>): String =
                                 put("presetId", board.wallpaperPresetId)
                             },
                         )
+                    }
                 }
             }
         }

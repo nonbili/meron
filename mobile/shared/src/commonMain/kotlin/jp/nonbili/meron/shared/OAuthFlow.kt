@@ -109,7 +109,8 @@ private fun parseOAuthCallbackFields(
 ): OAuthCallbackResult {
     val trimmed = rawUrl.trim()
     val query =
-        trimmed.substringAfter('?', missingDelimiterValue = "")
+        trimmed
+            .substringAfter('?', missingDelimiterValue = "")
             .ifBlank { trimmed.substringAfter('#', missingDelimiterValue = "") }
     val fields = parseUrlQuery(query)
     val error = fields["error"]

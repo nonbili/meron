@@ -49,9 +49,11 @@ internal class MeronMobileState(
     var smtpHost by mutableStateOf("")
     var smtpPort by mutableStateOf("465")
     var passwordServerSettingsOpen by mutableStateOf(false)
+
     // Last email we ran autodiscovery for, so the automatic (on-blur) lookup
     // doesn't repeat for an unchanged address.
     var lastAutodiscoverEmail by mutableStateOf("")
+
     // Set to a managed account id when its on-device Google token can no longer
     // be silently refreshed, signalling the user must reconnect it.
     var googleReauthAccountId by mutableStateOf<String?>(null)
@@ -97,6 +99,7 @@ internal class MeronMobileState(
     var conversationHtmlOverrides by mutableStateOf(emptyMap<String, Boolean>())
     var previousTopScreen by mutableStateOf(Screen.Mail)
     var composeReturnScreen by mutableStateOf(Screen.Mail)
+
     // Parse saved boards as-is here; the default board (seeded with the user's
     // accounts) is created later in applyAccounts once accounts are available, so a
     // fresh install gets per-account columns without re-seeding on every restart.
@@ -148,6 +151,7 @@ internal class MeronMobileState(
     var bcc by mutableStateOf("")
     var recipientSuggestionField by mutableStateOf("")
     var recipientSuggestions by mutableStateOf(emptyList<ContactSuggestion>())
+
     // Restore the last top-level screen on cold start; persist whenever the user
     // navigates to a top-level screen so a restart returns to the same place.
     private var screenState by mutableStateOf(loadLastTopScreen(prefs))
@@ -175,6 +179,7 @@ internal class MeronMobileState(
     var kanbanBoardMediaTarget by mutableStateOf<KanbanBoardMediaTarget?>(null)
     var storageUsage by mutableStateOf<StorageUsage?>(null)
     var storageBusy by mutableStateOf(false)
+
     // In-app changelog: null while loading/unloaded, populated on success.
     var changelog by mutableStateOf<List<ChangelogRelease>?>(null)
     var changelogLoading by mutableStateOf(false)

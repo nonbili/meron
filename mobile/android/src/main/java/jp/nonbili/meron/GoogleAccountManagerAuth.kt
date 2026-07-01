@@ -55,7 +55,10 @@ object GoogleAccountManagerAuth {
         data object NotNeeded : TokenRefresh()
 
         /** A fresh token was minted; push it into meron-core, then [recordExpiry]. */
-        data class Refreshed(val token: String, val expiresAt: Long) : TokenRefresh()
+        data class Refreshed(
+            val token: String,
+            val expiresAt: Long,
+        ) : TokenRefresh()
 
         /** Managed, but the OS could not mint a token — user must reconnect. */
         data object Failed : TokenRefresh()
@@ -74,25 +77,40 @@ object GoogleAccountManagerAuth {
         )
 
     /** Record that [accountId] is refreshed via the device account [accountName]. */
-    fun register(context: Context, accountId: String, accountName: String) {
+    fun register(
+        context: Context,
+        accountId: String,
+        accountName: String,
+    ) {
         prefs(context).edit().putString(key(accountId), accountName).apply()
     }
 
-    fun unregister(context: Context, accountId: String) {
+    fun unregister(
+        context: Context,
+        accountId: String,
+    ) {
         prefs(context).edit().remove(key(accountId)).apply()
     }
 
     /** Device account name for a managed account, or null if not managed here. */
-    fun managedAccountName(context: Context, accountId: String): String? =
-        prefs(context).getString(key(accountId), null)
+    fun managedAccountName(
+        context: Context,
+        accountId: String,
+    ): String? = prefs(context).getString(key(accountId), null)
 
     /** Record the assumed expiry of the token currently stored in meron-core. */
-    fun recordExpiry(context: Context, accountId: String, expiresAt: Long) {
+    fun recordExpiry(
+        context: Context,
+        accountId: String,
+        expiresAt: Long,
+    ) {
         prefs(context).edit().putLong(expiryKey(accountId), expiresAt).apply()
     }
 
-    private fun storedExpiry(context: Context, accountId: String): Long =
-        prefs(context).getLong(expiryKey(accountId), 0L)
+    private fun storedExpiry(
+        context: Context,
+        accountId: String,
+    ): Long = prefs(context).getLong(expiryKey(accountId), 0L)
 
     /**
      * Mint a fresh access token only when the stored one is missing or within
@@ -100,7 +118,10 @@ object GoogleAccountManagerAuth {
      * non-managed accounts or still-fresh tokens, so callers can apply it
      * uniformly to every account.
      */
-    suspend fun mintIfNeeded(context: Context, accountId: String): TokenRefresh {
+    suspend fun mintIfNeeded(
+        context: Context,
+        accountId: String,
+    ): TokenRefresh {
         val deviceAccount = managedAccountName(context, accountId) ?: return TokenRefresh.NotNeeded
         val now = System.currentTimeMillis() / 1000L
         if (now < storedExpiry(context, accountId) - EXPIRY_MARGIN_SECONDS) {
@@ -114,7 +135,10 @@ object GoogleAccountManagerAuth {
      * Interactive token request, used at setup. Shows the consent dialog the
      * first time the user grants this app Gmail access. Throws on failure.
      */
-    suspend fun interactiveToken(activity: Activity, accountName: String): String {
+    suspend fun interactiveToken(
+        activity: Activity,
+        accountName: String,
+    ): String {
         val account = Account(accountName, ACCOUNT_TYPE)
         return suspendCancellableCoroutine { cont ->
             AccountManager.get(activity).getAuthToken(
@@ -142,7 +166,10 @@ object GoogleAccountManagerAuth {
      * mints a fresh one. Returns null when user interaction is required (e.g.
      * consent revoked) — the caller should then surface "needs reconnect".
      */
-    suspend fun silentToken(context: Context, accountName: String): String? =
+    suspend fun silentToken(
+        context: Context,
+        accountName: String,
+    ): String? =
         withContext(Dispatchers.IO) {
             val am = AccountManager.get(context)
             val account = Account(accountName, ACCOUNT_TYPE)
@@ -162,8 +189,10 @@ object GoogleAccountManagerAuth {
         withContext(Dispatchers.IO) {
             runCatching {
                 val connection =
-                    (URL("https://www.googleapis.com/oauth2/v3/userinfo").openConnection()
-                        as HttpURLConnection).apply {
+                    (
+                        URL("https://www.googleapis.com/oauth2/v3/userinfo").openConnection()
+                            as HttpURLConnection
+                    ).apply {
                         setRequestProperty("Authorization", "Bearer $accessToken")
                         connectTimeout = 15_000
                         readTimeout = 15_000
@@ -173,6 +202,5 @@ object GoogleAccountManagerAuth {
             }.getOrNull()
         }
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

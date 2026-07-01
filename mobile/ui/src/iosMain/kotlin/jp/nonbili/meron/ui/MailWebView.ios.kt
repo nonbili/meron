@@ -49,7 +49,8 @@ actual fun MailWebView(
 
 private class HeightMessageHandler(
     private val onHeight: (Int) -> Unit,
-) : NSObject(), WKScriptMessageHandlerProtocol {
+) : NSObject(),
+    WKScriptMessageHandlerProtocol {
     override fun userContentController(
         userContentController: WKUserContentController,
         didReceiveScriptMessage: WKScriptMessage,

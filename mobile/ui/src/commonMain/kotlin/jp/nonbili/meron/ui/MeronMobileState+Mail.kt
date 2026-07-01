@@ -254,14 +254,16 @@ private fun MeronMobileState.cacheVisibleMailbox() {
     val key = mailboxCacheKey(accountId, folderId, mailSearch, mailFilter)
     mailboxCache =
         mailboxCache +
-            (key to
+        (
+            key to
                 MailboxLoadResult(
                     folders = coreFolders,
                     folder = folderId,
                     threads = coreThreads,
                     nextCursor = mailboxCursor,
                     accountCursors = mailboxAccountCursors,
-                ))
+                )
+        )
 }
 
 private fun MeronMobileState.restoreCachedMailbox(
@@ -383,14 +385,16 @@ internal fun MeronMobileState.syncCoreThreads(
             val resultKey = mailboxCacheKey(accountId, result.folder, query, filter)
             mailboxCache =
                 mailboxCache +
-                    (resultKey to
+                (
+                    resultKey to
                         result.copy(
                             folders = result.folders,
                             folder = result.folder,
                             threads = result.threads,
                             nextCursor = result.nextCursor,
                             accountCursors = result.accountCursors,
-                        ))
+                        )
+                )
             if (activeMailboxLoadKey != requestKey) {
                 Log.w("MailLoad", "sync ignored stale result account=$accountId folder=${result.folder} threads=${result.threads.size}")
                 return@onSuccess
@@ -739,8 +743,9 @@ internal fun MeronMobileState.openNotificationThread(target: NotificationThreadT
                 val accounts =
                     coreAccounts.takeIf { accounts -> accounts.any { it.id == target.accountId } }
                         ?: parseAccountListResponse(client.listAccounts())
-                val account = accounts.firstOrNull { it.id == target.accountId }
-                    ?: error("Account not found: ${target.accountId}")
+                val account =
+                    accounts.firstOrNull { it.id == target.accountId }
+                        ?: error("Account not found: ${target.accountId}")
                 val expectedThreadId = notificationThreadId(target)
                 var result =
                     loadAccountInbox(

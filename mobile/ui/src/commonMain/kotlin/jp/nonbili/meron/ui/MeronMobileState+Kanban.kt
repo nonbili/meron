@@ -256,9 +256,7 @@ internal fun MeronMobileState.kanbanColumnSearchQuery(column: KanbanColumnSpec):
     return if (scope == "all" || scope == kanbanColumnKey(column)) query else ""
 }
 
-internal fun isUnifiedStarredColumn(column: KanbanColumnSpec): Boolean {
-    return column.accountId == UNIFIED_ACCOUNT_ID && column.folderId.equals(STARRED_FOLDER, ignoreCase = true)
-}
+internal fun isUnifiedStarredColumn(column: KanbanColumnSpec): Boolean = column.accountId == UNIFIED_ACCOUNT_ID && column.folderId.equals(STARRED_FOLDER, ignoreCase = true)
 
 internal fun StarredItemSummary.toKanbanThreadSummary(): ThreadSummary =
     ThreadSummary(
@@ -482,8 +480,7 @@ internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
                     folder.equals(INBOX_FOLDER, ignoreCase = true) &&
                     accountIncludedInUnified
             directFolderMatch || unifiedInboxMatch
-        }
-        .distinctBy(::kanbanColumnKey)
+        }.distinctBy(::kanbanColumnKey)
         .forEach { column ->
             // The IDLE/event path has already synced the core DB. Re-read the
             // affected active Kanban columns from cache without another IMAP pass.

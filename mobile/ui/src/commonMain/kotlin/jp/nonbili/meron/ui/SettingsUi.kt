@@ -1,23 +1,5 @@
 package jp.nonbili.meron.ui
 
-import jp.nonbili.meron.ui.resources.Res
-import jp.nonbili.meron.ui.resources.wp_aurora
-import jp.nonbili.meron.ui.resources.wp_breeze
-import jp.nonbili.meron.ui.resources.wp_desert
-import jp.nonbili.meron.ui.resources.wp_forest
-import jp.nonbili.meron.ui.resources.wp_galaxy
-import jp.nonbili.meron.ui.resources.wp_marble
-import jp.nonbili.meron.ui.resources.wp_mountain
-import jp.nonbili.meron.ui.resources.wp_nebula
-import jp.nonbili.meron.ui.resources.wp_ocean
-import jp.nonbili.meron.ui.resources.wp_raindrops
-import jp.nonbili.meron.ui.resources.wp_sakura
-import jp.nonbili.meron.ui.resources.wp_shapes
-import jp.nonbili.meron.ui.resources.wp_sunset
-import jp.nonbili.meron.ui.resources.wp_vintage
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.painterResource
-
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,11 +14,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,6 +42,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -84,8 +67,6 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.AlertDialog
@@ -140,8 +121,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -154,6 +135,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -262,10 +244,27 @@ import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
+import jp.nonbili.meron.ui.resources.Res
+import jp.nonbili.meron.ui.resources.wp_aurora
+import jp.nonbili.meron.ui.resources.wp_breeze
+import jp.nonbili.meron.ui.resources.wp_desert
+import jp.nonbili.meron.ui.resources.wp_forest
+import jp.nonbili.meron.ui.resources.wp_galaxy
+import jp.nonbili.meron.ui.resources.wp_marble
+import jp.nonbili.meron.ui.resources.wp_mountain
+import jp.nonbili.meron.ui.resources.wp_nebula
+import jp.nonbili.meron.ui.resources.wp_ocean
+import jp.nonbili.meron.ui.resources.wp_raindrops
+import jp.nonbili.meron.ui.resources.wp_sakura
+import jp.nonbili.meron.ui.resources.wp_shapes
+import jp.nonbili.meron.ui.resources.wp_sunset
+import jp.nonbili.meron.ui.resources.wp_vintage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1294,8 +1293,7 @@ private fun wallpaperImageRes(presetId: String): DrawableResource? =
 
 private fun normalizedWallpaperPresetId(presetId: String): String = presetId.ifBlank { "plain" }
 
-private fun wallpaperPresetDisplayName(presetId: String): String =
-    wallpaperPresets.firstOrNull { it.first == normalizedWallpaperPresetId(presetId) }?.second ?: "Plain"
+private fun wallpaperPresetDisplayName(presetId: String): String = wallpaperPresets.firstOrNull { it.first == normalizedWallpaperPresetId(presetId) }?.second ?: "Plain"
 
 @Composable
 internal fun WallpaperPickerPage(
@@ -1837,7 +1835,6 @@ internal fun AccountAvatarEditor(
         }
     }
 }
-
 
 @Composable
 internal fun SettingsKanbanBoardDetailPage(

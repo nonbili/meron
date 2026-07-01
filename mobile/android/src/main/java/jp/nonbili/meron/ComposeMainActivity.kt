@@ -20,8 +20,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -292,15 +292,26 @@ class ComposeMainActivity : ComponentActivity() {
                 MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
             } else {
                 ""
-        }
-        val appPrefs = jp.nonbili.meron.ui.AndroidAppPreferences(this, "meron_app")
-        val kanbanPrefs = jp.nonbili.meron.ui.AndroidAppPreferences(this, "meron_kanban")
-        val localeController = jp.nonbili.meron.ui.AndroidLocaleController(this, appPrefs)
+            }
+        val appPrefs =
+            jp.nonbili.meron.ui
+                .AndroidAppPreferences(this, "meron_app")
+        val kanbanPrefs =
+            jp.nonbili.meron.ui
+                .AndroidAppPreferences(this, "meron_kanban")
+        val localeController =
+            jp.nonbili.meron.ui
+                .AndroidLocaleController(this, appPrefs)
         val platformServices = AndroidPlatformServices(this)
         val mobileHost = AndroidMobileHost(this)
         setContent {
             val appCore = remember { JniMeronCore() }
-            var appearanceMode by remember { mutableStateOf(jp.nonbili.meron.ui.loadAppearanceMode(appPrefs)) }
+            var appearanceMode by remember {
+                mutableStateOf(
+                    jp.nonbili.meron.ui
+                        .loadAppearanceMode(appPrefs),
+                )
+            }
             var appLanguageTag by remember { mutableStateOf(localeController.currentLanguageTag()) }
             jp.nonbili.meron.ui.MeronApp(
                 core = appCore,
@@ -317,7 +328,8 @@ class ComposeMainActivity : ComponentActivity() {
                 appearanceMode = appearanceMode,
                 onAppearanceModeChange = { mode ->
                     appearanceMode = mode
-                    jp.nonbili.meron.ui.saveAppearanceMode(appPrefs, mode)
+                    jp.nonbili.meron.ui
+                        .saveAppearanceMode(appPrefs, mode)
                 },
                 appLanguageTag = appLanguageTag,
                 onAppLanguageChange = { tag ->
@@ -367,5 +379,6 @@ private fun Intent.toNotificationThreadTarget(): jp.nonbili.meron.ui.Notificatio
     val folder = getStringExtra(AndroidNotificationService.EXTRA_FOLDER).orEmpty()
     val threadKey = getStringExtra(AndroidNotificationService.EXTRA_THREAD_KEY).orEmpty()
     if (account.isBlank() || folder.isBlank() || threadKey.isBlank()) return null
-    return jp.nonbili.meron.ui.NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
+    return jp.nonbili.meron.ui
+        .NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
 }

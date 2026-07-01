@@ -146,7 +146,6 @@ import jp.nonbili.meron.shared.AccountReorderParams
 import jp.nonbili.meron.shared.AccountRssSyncIntervalParams
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.AddOAuthAccountParams
-import jp.nonbili.meron.shared.UpdateOAuthTokenParams
 import jp.nonbili.meron.shared.AddPasswordAccountParams
 import jp.nonbili.meron.shared.AddRssAccountParams
 import jp.nonbili.meron.shared.AddRssFeedParams
@@ -187,6 +186,7 @@ import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadListParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
+import jp.nonbili.meron.shared.UpdateOAuthTokenParams
 import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
@@ -264,10 +264,11 @@ private fun findOAuthResultAccount(
 ): AccountSummary? {
     val normalizedProvider = provider.trim().lowercase()
     val preferred = preferredEmail.trim()
-    val providerMatches = accounts.filter {
-        it.provider.equals(normalizedProvider, ignoreCase = true) ||
-            it.authType.equals("${normalizedProvider}_oauth", ignoreCase = true)
-    }
+    val providerMatches =
+        accounts.filter {
+            it.provider.equals(normalizedProvider, ignoreCase = true) ||
+                it.authType.equals("${normalizedProvider}_oauth", ignoreCase = true)
+        }
     return providerMatches.firstOrNull { it.id !in previousAccountIds }
         ?: preferred.takeIf { it.isNotBlank() }?.let { email ->
             accounts.firstOrNull { it.email.equals(email, ignoreCase = true) }
@@ -410,16 +411,20 @@ internal fun MeronMobileState.autodiscoverPasswordAccount(auto: Boolean = false)
             if (discovered.username.isNotBlank()) username = discovered.username
             status =
                 when {
-                    discovered.appPasswordProvider.isNotBlank() -> "${discovered.providerName.ifBlank {
-                        discovered.appPasswordProvider
-                    }} settings found. Use an app password."
+                    discovered.appPasswordProvider.isNotBlank() -> {
+                        "${discovered.providerName.ifBlank {
+                            discovered.appPasswordProvider
+                        }} settings found. Use an app password."
+                    }
 
                     discovered.source == "guess" -> {
                         passwordServerSettingsOpen = true
                         "Settings guessed. Verify the servers before adding."
                     }
 
-                    else -> "Settings found${discovered.providerName.takeIf { it.isNotBlank() }?.let { " for $it" }.orEmpty()}."
+                    else -> {
+                        "Settings found${discovered.providerName.takeIf { it.isNotBlank() }?.let { " for $it" }.orEmpty()}."
+                    }
                 }
         }.onFailure {
             passwordServerSettingsOpen = true
@@ -668,10 +673,6 @@ internal fun MeronMobileState.addOAuthAccount() {
 }
 
 /**
- * Gmail via the on-device Google account (AccountManager). Launches the system
- * account picker; [onGoogleDeviceAccountPicked] finishes once a name comes back.
- */
-/**
  * Gmail via the platform's system Google account. The host runs the full system
  * flow (pick account, mint token, read profile name) and returns the result.
  */
@@ -756,7 +757,10 @@ internal suspend fun MeronMobileState.ensureManagedGoogleToken(
     accountId: String,
 ) {
     when (val refresh = mobileHost.refreshManagedGoogleToken(accountId)) {
-        ManagedTokenRefresh.NotNeeded -> Unit
+        ManagedTokenRefresh.NotNeeded -> {
+            Unit
+        }
+
         is ManagedTokenRefresh.Refreshed -> {
             runCatching {
                 client.updateOAuthToken(
@@ -771,6 +775,7 @@ internal suspend fun MeronMobileState.ensureManagedGoogleToken(
                 if (googleReauthAccountId == accountId) googleReauthAccountId = null
             }
         }
+
         ManagedTokenRefresh.Failed -> {
             // OS could not silently mint a token (e.g. consent revoked).
             googleReauthAccountId = accountId
@@ -825,12 +830,13 @@ internal fun MeronMobileState.exchangeOAuthCode() {
             }
         }.onSuccess { accountsJson ->
             val parsedAccounts = parseAccountListResponse(accountsJson)
-            val connectedAccount = findOAuthResultAccount(
-                accounts = parsedAccounts,
-                previousAccountIds = previousAccountIds,
-                provider = params.provider,
-                preferredEmail = params.email,
-            )
+            val connectedAccount =
+                findOAuthResultAccount(
+                    accounts = parsedAccounts,
+                    previousAccountIds = previousAccountIds,
+                    provider = params.provider,
+                    preferredEmail = params.email,
+                )
             applyAccounts(accountsJson, preferEmail = connectedAccount?.email ?: params.email.ifBlank { null })
             connectedAccount?.let { selectedCoreAccountId = it.id }
             screen = Screen.Mail
@@ -934,13 +940,15 @@ internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
 }
 
 private fun MeronMobileState.resolvedOAuthClientId(): String =
-    oauthClientId.trim().ifBlank {
-        when (oauthProvider) {
-            "outlook" -> mobileHost.outlookClientId
-            "gmail" -> mobileHost.googleClientId
-            else -> ""
-        }
-    }.trim()
+    oauthClientId
+        .trim()
+        .ifBlank {
+            when (oauthProvider) {
+                "outlook" -> mobileHost.outlookClientId
+                "gmail" -> mobileHost.googleClientId
+                else -> ""
+            }
+        }.trim()
 
 private fun MeronMobileState.resolvedOAuthRedirectUri(): String =
     when (oauthProvider) {

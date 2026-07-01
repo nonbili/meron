@@ -1,7 +1,7 @@
 package jp.nonbili.meron.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.input.PlatformImeOptions
@@ -13,11 +13,13 @@ actual fun currentTimeMillis(): Long = (NSDate().timeIntervalSince1970 * 1000.0)
 actual val maskPasswordsByDefault: Boolean = false
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
-actual val nativeTextKeyboardOptions: KeyboardOptions = run {
-    ComposeFoundationFlags.isNewContextMenuEnabled = true
-    KeyboardOptions(
-        platformImeOptions = PlatformImeOptions {
-            usingNativeTextInput(true)
-        },
-    )
-}
+actual val nativeTextKeyboardOptions: KeyboardOptions =
+    run {
+        ComposeFoundationFlags.isNewContextMenuEnabled = true
+        KeyboardOptions(
+            platformImeOptions =
+                PlatformImeOptions {
+                    usingNativeTextInput(true)
+                },
+        )
+    }

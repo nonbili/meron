@@ -6,8 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +26,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -1152,21 +1152,27 @@ internal fun MessageBubble(
             // canonical sent message replaces it on re-fetch (which clears the
             // status). On failure the bubble stays visible so the reply isn't lost.
             when (message.sendStatus) {
-                SendStatus.Sending ->
+                SendStatus.Sending -> {
                     Text(
                         "Sending…",
                         modifier = Modifier.align(Alignment.End),
                         fontSize = 10.5.sp,
                         color = textColor.copy(alpha = 0.55f),
                     )
-                SendStatus.Failed ->
+                }
+
+                SendStatus.Failed -> {
                     Text(
                         "Failed to send",
                         modifier = Modifier.align(Alignment.End),
                         fontSize = 10.5.sp,
                         color = MaterialTheme.colorScheme.error,
                     )
-                SendStatus.None -> Unit
+                }
+
+                SendStatus.None -> {
+                    Unit
+                }
             }
         }
     }
@@ -1388,7 +1394,6 @@ internal fun parseAddressList(value: String): List<Pair<String, String>> {
         entry to entry
     }
 }
-
 
 internal fun highlightedMessageText(
     text: String,

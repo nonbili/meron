@@ -141,7 +141,7 @@ internal fun List<ThreadSummary>.filteredKanbanThreads(
             }
         val queryOk =
             searchAlreadyApplied ||
-            query.isBlank() ||
+                query.isBlank() ||
                 thread.subject.lowercase().contains(query) ||
                 thread.sender.lowercase().contains(query) ||
                 thread.preview.lowercase().contains(query) ||
@@ -294,17 +294,48 @@ internal fun nextKanbanColumnWidth(current: Int): Int {
 
 internal val supportedAppLanguageTags =
     listOf(
-        "en", "ar", "zh-Hans", "zh-Hant", "de", "el", "es", "et", "fr", "it",
-        "ja", "ko", "lv", "pl", "pt", "pt-BR", "sv", "tr", "vi",
+        "en",
+        "ar",
+        "zh-Hans",
+        "zh-Hant",
+        "de",
+        "el",
+        "es",
+        "et",
+        "fr",
+        "it",
+        "ja",
+        "ko",
+        "lv",
+        "pl",
+        "pt",
+        "pt-BR",
+        "sv",
+        "tr",
+        "vi",
     )
 
 private val languageEndonyms =
     mapOf(
-        "en" to "English", "ar" to "العربية", "zh-Hans" to "简体中文", "zh-Hant" to "繁體中文",
-        "de" to "Deutsch", "el" to "Ελληνικά", "es" to "Español", "et" to "Eesti",
-        "fr" to "Français", "it" to "Italiano", "ja" to "日本語", "ko" to "한국어",
-        "lv" to "Latviešu", "pl" to "Polski", "pt" to "Português", "pt-BR" to "Português (Brasil)",
-        "sv" to "Svenska", "tr" to "Türkçe", "vi" to "Tiếng Việt",
+        "en" to "English",
+        "ar" to "العربية",
+        "zh-Hans" to "简体中文",
+        "zh-Hant" to "繁體中文",
+        "de" to "Deutsch",
+        "el" to "Ελληνικά",
+        "es" to "Español",
+        "et" to "Eesti",
+        "fr" to "Français",
+        "it" to "Italiano",
+        "ja" to "日本語",
+        "ko" to "한국어",
+        "lv" to "Latviešu",
+        "pl" to "Polski",
+        "pt" to "Português",
+        "pt-BR" to "Português (Brasil)",
+        "sv" to "Svenska",
+        "tr" to "Türkçe",
+        "vi" to "Tiếng Việt",
     )
 
 internal fun appLanguageDisplayName(tag: String): String = languageEndonyms[tag] ?: tag

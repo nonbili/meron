@@ -14,7 +14,9 @@ import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.parseAccountListResponse
 import org.json.JSONObject
 
-class AndroidMailPushService : Service(), MeronCoreNative.CoreEventListener {
+class AndroidMailPushService :
+    Service(),
+    MeronCoreNative.CoreEventListener {
     private val watched = mutableSetOf<String>()
 
     override fun onCreate() {
@@ -145,13 +147,22 @@ class AndroidMailPushService : Service(), MeronCoreNative.CoreEventListener {
                 .setOngoing(true)
                 .build()
 
-        private fun watchKey(account: String, folder: String): String = "$account\n$folder"
+        private fun watchKey(
+            account: String,
+            folder: String,
+        ): String = "$account\n$folder"
 
-        private fun startWatch(account: String, folder: String) {
+        private fun startWatch(
+            account: String,
+            folder: String,
+        ) {
             MeronCoreNative.invokeJson(watchJson("watch.start", account, folder))
         }
 
-        private fun stopWatch(account: String, folder: String) {
+        private fun stopWatch(
+            account: String,
+            folder: String,
+        ) {
             MeronCoreNative.invokeJson(watchJson("watch.stop", account, folder))
         }
 
