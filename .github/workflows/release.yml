@@ -97,6 +97,9 @@ jobs:
           mkdir -p build/sidecar
           SRC="meron-core/target/${{ matrix.target }}/release/meron-core"
           if [ -f "$SRC.exe" ]; then SRC="$SRC.exe"; fi
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
+            strip --strip-unneeded "$SRC"
+          fi
           # The go:embed directive expects build/sidecar/meron-core (no extension)
           # on every platform; extension handling is the app's concern at runtime.
           cp "$SRC" build/sidecar/meron-core
@@ -384,6 +387,16 @@ jobs:
           VER=$(jq -r '.info.productVersion' wails.json)
           sed -i "s/{VER}/$VER/g" changelogs/template.txt
           cat changelogs/template.txt changelogs/v$VER.txt > note.txt
+
+      - name: publish snap
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: dist/meron-linux-amd64.snap
+          release: stable
 
       - name: release
         uses: softprops/action-gh-release@v2

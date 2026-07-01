@@ -9,7 +9,7 @@ description: |
 
 grade: stable
 confinement: strict
-compression: lzo
+compression: xz
 
 # The wails app (build/bin/meron) and the desktop/icon assets are produced by
 # the GitHub Actions workflow before snapcraft runs. The `dump` part just stages

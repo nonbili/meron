@@ -1,0 +1,2 @@
+- Add desktop multi-select
+- Avoid duplicate sent copies for provider SMTP
