@@ -448,7 +448,7 @@
   "mobile.ios.loadOlderFailed": "Load older failed.",
   "mobile.ios.loadOlderMessagesFailed": "Load older messages failed.",
   "mobile.ios.mailbox": "Mailbox",
-  "mobile.ios.mailThreadsCannotMoveIntoRss": "Mail threads can't move into RSS feeds.",
+  "mobile.ios.mailThreadsCannotMoveIntoRss": "Mail threads cannot be moved into RSS feeds.",
   "mobile.ios.mailtoDraftLoaded": "Loaded mailto draft for %1$@",
   "mobile.ios.markAllReadFailed": "Mark all read failed.",
   "mobile.ios.markedKanbanCardsRead": "Marked %1$d Kanban card(s) read.",
@@ -516,7 +516,7 @@
   "mobile.ios.rssAccountAdded": "RSS account added.",
   "mobile.ios.rssAccountFailed": "RSS account failed.",
   "mobile.ios.rssAccountsDoNotNeedReconnect": "RSS accounts do not need reconnect.",
-  "mobile.ios.rssFeedsCannotCopyToMail": "RSS feeds can't be copied to mail folders.",
+  "mobile.ios.rssFeedsCannotCopyToMail": "RSS feeds cannot be copied to mail folders.",
   "mobile.ios.rssFeedsCanOnlyMoveToRss": "RSS feeds can only move to RSS accounts.",
   "mobile.ios.rssFeedsMoveFromKanban": "RSS feeds move between RSS accounts from Kanban.",
   "mobile.ios.rssItemsCannotBeDeleted": "RSS items cannot be deleted.",
@@ -818,10 +818,10 @@
   "wallpaper.uploading": "正在上傳...",
   "changelog.title": "Changelog",
   "changelog.loading": "Loading changelog…",
-  "changelog.error": "Couldn't load the changelog.",
+  "changelog.error": "Could not load the changelog.",
   "changelog.empty": "No releases yet.",
   "settings.backgroundSync": "Background sync",
   "settings.backgroundSyncHint": "Refresh mail and feeds when the app is closed",
   "settings.account.saveSentCopies": "Upload sent copy to server",
-  "settings.account.saveSentCopiesHint": "Turn off for Gmail or Outlook if sent messages are duplicated."
+  "settings.account.saveSentCopiesHint": "Disable if sent messages are duplicated in your Sent folder."
 }
