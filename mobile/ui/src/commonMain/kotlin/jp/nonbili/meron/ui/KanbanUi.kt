@@ -129,6 +129,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -846,28 +847,39 @@ internal fun KanbanMinimizedColumn(
     }
 }
 
+private fun Modifier.rotate90(): Modifier = this.then(
+    layout { measurable, constraints ->
+        val childConstraints = constraints.copy(
+            minWidth = constraints.minHeight,
+            maxWidth = constraints.maxHeight,
+            minHeight = constraints.minWidth,
+            maxHeight = constraints.maxWidth
+        )
+        val placeable = measurable.measure(childConstraints)
+        layout(placeable.height, placeable.width) {
+            placeable.placeWithLayer(
+                x = (placeable.height - placeable.width) / 2,
+                y = (placeable.width - placeable.height) / 2
+            ) {
+                rotationZ = 90f
+            }
+        }
+    }
+)
+
 @Composable
 internal fun CollapsedColumnTitle(title: String) {
-    Column(
-        Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        title
-            .split(' ')
-            .filter { it.isNotBlank() }
-            .take(3)
-            .forEach { word ->
-                Text(
-                    word,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontSize = 10.5.sp,
-                    lineHeight = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-    }
+    Text(
+        text = title,
+        modifier = Modifier
+            .rotate90()
+            .heightIn(max = 180.dp),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        fontSize = 11.sp,
+        lineHeight = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
 }
 
 @Composable

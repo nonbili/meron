@@ -449,6 +449,7 @@ extension MessageBody {
             unread: nextUnread ?? unread,
             starred: nextStarred ?? starred,
             hasAttachments: hasAttachments,
+            bodyMissing: bodyMissing,
             attachments: attachments,
             sendStatus: sendStatus
         )

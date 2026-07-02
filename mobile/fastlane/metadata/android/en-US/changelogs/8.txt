@@ -1,8 +1,4 @@
 - Offer notification permission banner after first sync
-- Open thread at first unread and mark messages read as they are scrolled past
-- Implement two-phase first sync with still-syncing state indicators and quiet auto-pagination
-- Prefetch recent message bodies and offer a retry option when loading fails
-- Save Google account profile avatars and keep managed Gmail tokens fresh in live push
-- Improve pull-down transition to conversation and message bubble webview behavior
-- Optimize sync tail execution, serialize store migrations, and add SQLite busy timeouts
-- Fix unreliable thread list load-more pagination and preserve Message-ID casing
+- Optimize mail syncing
+- Add pull-down gesture to return to conversation from message view
+- Fix infinite loading

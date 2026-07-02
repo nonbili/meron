@@ -1184,6 +1184,7 @@ func starredItemReaderMessage(for item: StarredItemSummary) -> MessageBody {
         unread: item.unread,
         starred: true,
         hasAttachments: false,
+        bodyMissing: false,
         attachments: [],
         sendStatus: .none
     )
@@ -1208,6 +1209,7 @@ func starredKanbanReaderMessage(for thread: ThreadSummary) -> MessageBody {
         unread: thread.unread,
         starred: thread.starred,
         hasAttachments: false,
+        bodyMissing: false,
         attachments: [],
         sendStatus: .none
     )
