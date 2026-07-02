@@ -534,6 +534,27 @@ internal fun MeronMobileState.addFeedToSelectedRssAccount() {
     }
 }
 
+// Accounts that still have a pagination cursor for the visible mailbox. Shared
+// between loadMoreCoreThreads and the UI's canLoadMore flag so the load-more
+// affordance never shows when a load would silently no-op (e.g. the only
+// remaining cursors belong to accounts excluded from the Unified inbox).
+internal fun pageableMailAccounts(
+    selectedAccountId: String,
+    accounts: List<AccountSummary>,
+    mailboxCursor: String,
+    accountCursors: Map<String, String>,
+): List<AccountSummary> {
+    val accountId = selectedAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
+    return if (accountId == UNIFIED_ACCOUNT_ID) {
+        accounts.filter { it.includedInUnified && accountCursors[it.id].orEmpty().isNotBlank() }
+    } else {
+        accounts.filter { it.id == accountId && mailboxCursor.isNotBlank() }
+    }
+}
+
+internal fun MeronMobileState.pageableCoreAccounts(): List<AccountSummary> =
+    pageableMailAccounts(selectedCoreAccountId, coreAccounts, mailboxCursor, mailboxAccountCursors)
+
 // `quiet` suppresses the "Loaded N older message(s)" status for auto-fired
 // pagination — store reloads (e.g. after a background sync event) shrink the
 // list back to its first page, and the resulting refetch chain would otherwise
@@ -544,12 +565,7 @@ internal fun MeronMobileState.loadMoreCoreThreads(quiet: Boolean = false) {
     val requestedFolder = selectedCoreFolder.ifBlank { INBOX_FOLDER }
     val query = mailSearch
     val filter = mailFilter
-    val selectedAccounts =
-        if (accountId == UNIFIED_ACCOUNT_ID) {
-            coreAccounts.filter { it.includedInUnified && mailboxAccountCursors[it.id].orEmpty().isNotBlank() }
-        } else {
-            coreAccounts.filter { it.id == accountId && mailboxCursor.isNotBlank() }
-        }
+    val selectedAccounts = pageableCoreAccounts()
     if (selectedAccounts.isEmpty()) return
     loadingMoreThreads = true
     scope.launch {

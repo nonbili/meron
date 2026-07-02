@@ -107,6 +107,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -372,13 +373,17 @@ internal fun MailList(
 ) {
     val listState = rememberLazyListState()
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
+    // Read the list through rememberUpdatedState so the derivation tracks the
+    // current page count; a keyless remember would freeze the first list's size
+    // into the closure and near-bottom detection would drift after reloads.
+    val currentThreads by rememberUpdatedState(threads)
     val nearBottom by remember {
         derivedStateOf {
             val lastVisible =
                 listState.layoutInfo.visibleItemsInfo
                     .lastOrNull()
                     ?.index ?: 0
-            lastVisible >= threads.size - 3
+            lastVisible >= currentThreads.size - 3
         }
     }
     LaunchedEffect(nearBottom, canLoadMore, loadingMore) {

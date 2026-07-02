@@ -2071,12 +2071,7 @@ private fun MeronMobileScreenContent(
                                         MailList(
                                             threads = coreThreads,
                                             accounts = coreAccounts,
-                                            canLoadMore =
-                                                if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-                                                    mailboxAccountCursors.isNotEmpty()
-                                                } else {
-                                                    mailboxCursor.isNotBlank()
-                                                },
+                                            canLoadMore = pageableCoreAccounts().isNotEmpty(),
                                             loadingMore = loadingMoreThreads,
                                             onOpen = ::readCoreThread,
                                             onToggleStar = ::toggleStar,
