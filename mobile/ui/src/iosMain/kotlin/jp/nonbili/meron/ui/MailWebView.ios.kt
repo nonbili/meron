@@ -22,8 +22,10 @@ actual fun MailWebView(
     html: String,
     modifier: Modifier,
     onContentHeight: (Dp) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val latestOnHeight = rememberUpdatedState(onContentHeight)
+    val latestOnOpenUrl = rememberUpdatedState(onOpenUrl)
     UIKitView(
         modifier = modifier,
         factory = {
@@ -35,9 +37,15 @@ actual fun MailWebView(
                 scriptMessageHandler = HeightMessageHandler { cssPx -> latestOnHeight.value(cssPx.dp) },
                 name = "meronHeight",
             )
+            config.userContentController.addScriptMessageHandler(
+                scriptMessageHandler = LinkMessageHandler { url -> latestOnOpenUrl.value(url) },
+                name = "meronLink",
+            )
             WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config).apply {
-                // Scrolling stays on so a body taller than the bubble's cap can
-                // scroll inside it; unclamped (reader) bodies fit and won't scroll.
+                // Compose owns capped bubble scrolling; the web view is measured
+                // to its full content height so its native scroll view would fight
+                // the parent LazyColumn for vertical drags.
+                scrollView.scrollEnabled = false
                 setOpaque(false)
             }
         },
@@ -56,5 +64,17 @@ private class HeightMessageHandler(
         didReceiveScriptMessage: WKScriptMessage,
     ) {
         (didReceiveScriptMessage.body as? NSNumber)?.let { onHeight(it.intValue) }
+    }
+}
+
+private class LinkMessageHandler(
+    private val onOpenUrl: (String) -> Unit,
+) : NSObject(),
+    WKScriptMessageHandlerProtocol {
+    override fun userContentController(
+        userContentController: WKUserContentController,
+        didReceiveScriptMessage: WKScriptMessage,
+    ) {
+        (didReceiveScriptMessage.body as? String)?.takeIf { it.isNotBlank() }?.let(onOpenUrl)
     }
 }

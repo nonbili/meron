@@ -2,6 +2,7 @@ package jp.nonbili.meron.ui
 
 import android.annotation.SuppressLint
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -17,13 +18,36 @@ actual fun MailWebView(
     html: String,
     modifier: Modifier,
     onContentHeight: (Dp) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val latestOnHeight = rememberUpdatedState(onContentHeight)
+    val latestOnOpenUrl = rememberUpdatedState(onOpenUrl)
     AndroidView(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
-                webViewClient = WebViewClient()
+                webViewClient =
+                    object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): Boolean {
+                            val url = request?.url?.toString().orEmpty()
+                            if (url.isBlank()) return false
+                            latestOnOpenUrl.value(url)
+                            return true
+                        }
+
+                        @Deprecated("Deprecated in Android SDK")
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            url: String?,
+                        ): Boolean {
+                            if (url.isNullOrBlank()) return false
+                            latestOnOpenUrl.value(url)
+                            return true
+                        }
+                    }
                 // JS is enabled to run the height-reporting script; matches the
                 // desktop reader, whose iframe also runs email scripts.
                 settings.javaScriptEnabled = true
@@ -44,6 +68,15 @@ actual fun MailWebView(
                         }
                     },
                     "MeronHeight",
+                )
+                addJavascriptInterface(
+                    object {
+                        @JavascriptInterface
+                        fun open(url: String) {
+                            if (url.isNotBlank()) post { latestOnOpenUrl.value(url) }
+                        }
+                    },
+                    "MeronLink",
                 )
             }
         },

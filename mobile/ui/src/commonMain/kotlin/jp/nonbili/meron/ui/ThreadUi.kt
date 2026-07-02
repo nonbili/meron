@@ -355,6 +355,7 @@ internal fun ThreadScreen(
             onCopy = { label, value -> services.copyText(label, value) },
             onOpenAttachment = onOpenAttachment,
             onSaveAttachment = onSaveAttachment,
+            onOpenUrl = services::openUrl,
         )
         return
     }
@@ -577,6 +578,7 @@ internal fun ThreadScreen(
                                 onSaveAttachment = onSaveAttachment,
                                 onCopyMessageText = onCopyMessageText,
                                 onOpenMessage = { readerMessage = it },
+                                onOpenUrl = services::openUrl,
                                 onRetryLoad = onRetryLoadMessages,
                             )
                         }
@@ -984,6 +986,7 @@ internal fun MessageBubble(
     onSaveAttachment: (MessageAttachment) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onOpenMessage: (MessageBody) -> Unit,
+    onOpenUrl: (String) -> Unit,
     onRetryLoad: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -995,6 +998,7 @@ internal fun MessageBubble(
         }
     val bubbleColor = if (outgoing) chat.bubbleOut else chat.bubbleIn
     val textColor = if (outgoing) chat.bubbleOutText else chat.bubbleInText
+    val bodyMaxHeight = 360.dp
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
@@ -1128,7 +1132,7 @@ internal fun MessageBubble(
                 }
             }
             if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
-                HtmlMessageBody(html = message.bodyHtml, maxHeight = 360.dp)
+                HtmlMessageBody(html = message.bodyHtml, maxHeight = bodyMaxHeight, onOpenUrl = onOpenUrl)
             } else if (message.bodyMissing) {
                 // The core has no cached body (the on-demand fetch failed) — a
                 // different state from a genuinely empty message, so offer a retry
@@ -1147,12 +1151,19 @@ internal fun MessageBubble(
             } else {
                 // Subject is the conversation title (top bar); the bubble shows the
                 // message body, matching the desktop chat reader.
-                Text(
-                    highlightedMessageText(message.body.ifBlank { "(no content)" }, searchQuery, activeSearchMatch),
-                    color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
-                    fontSize = 15.5.sp,
-                    lineHeight = 21.sp,
-                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = bodyMaxHeight)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        highlightedMessageText(message.body.ifBlank { "(no content)" }, searchQuery, activeSearchMatch),
+                        color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
+                        fontSize = 15.5.sp,
+                        lineHeight = 21.sp,
+                    )
+                }
             }
             if (message.attachments.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1207,6 +1218,7 @@ internal fun MessageReaderScreen(
     onCopy: (String, String) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val messageTextLabel = tr("chat.messageText")
     Scaffold(
@@ -1259,7 +1271,7 @@ internal fun MessageReaderScreen(
             }
             HorizontalDivider()
             if (preferHtml && message.bodyHtml.isNotBlank()) {
-                HtmlMessageBody(html = message.bodyHtml)
+                HtmlMessageBody(html = message.bodyHtml, onOpenUrl = onOpenUrl)
             } else {
                 Text(
                     message.body.ifBlank {
@@ -1450,6 +1462,7 @@ internal fun highlightedMessageText(
 internal fun HtmlMessageBody(
     html: String,
     maxHeight: Dp = Dp.Unspecified,
+    onOpenUrl: (String) -> Unit,
 ) {
     // The WebView can't tell Compose how tall its content is, so a tiny script
     // reports document height through a platform bridge and we size the view to
@@ -1507,6 +1520,24 @@ internal fun HtmlMessageBody(
                       window.webkit.messageHandlers.meronHeight.postMessage(h);
                     }
                   }
+                  document.addEventListener('click', function (event) {
+                    var target = event.target;
+                    var anchor = target && target.closest ? target.closest('a[href]') : null;
+                    if (!anchor) return;
+                    var href = anchor.getAttribute('href');
+                    if (!href || href.charAt(0) === '#') return;
+                    event.preventDefault();
+                    var url = anchor.href || href;
+                    if (window.MeronLink && window.MeronLink.open) {
+                      window.MeronLink.open(url);
+                    } else if (
+                      window.webkit &&
+                      window.webkit.messageHandlers &&
+                      window.webkit.messageHandlers.meronLink
+                    ) {
+                      window.webkit.messageHandlers.meronLink.postMessage(url);
+                    }
+                  });
                   window.addEventListener('load', report);
                   document.addEventListener('DOMContentLoaded', report);
                   if (window.ResizeObserver) {
@@ -1542,6 +1573,7 @@ internal fun HtmlMessageBody(
             MailWebView(
                 html = mobileHtml,
                 onContentHeight = { contentHeight = it },
+                onOpenUrl = onOpenUrl,
                 modifier = webViewModifier,
             )
         }
@@ -1549,6 +1581,7 @@ internal fun HtmlMessageBody(
         MailWebView(
             html = mobileHtml,
             onContentHeight = { contentHeight = it },
+            onOpenUrl = onOpenUrl,
             modifier = webViewModifier,
         )
     }
