@@ -914,6 +914,8 @@ private fun MeronMobileScreenContent(
                         status = "Copied ${label.lowercase()}"
                     },
                     onRetryLoadMessages = { retryOpenThreadLoad() },
+                    onMessagesScrolledPast = ::markMessagesReadOnScroll,
+                    onViewedToBottom = ::markThreadReadOnScroll,
                 )
             }
 

@@ -704,35 +704,23 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
     loadingMoreMessages = false
     previousTopScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
     screen = Screen.Thread
-    if (thread.unread) {
-        coreThreads = coreThreads.map { if (it.id == thread.id) it.copy(unread = false) else it }
-    }
+    // Nothing is marked read on open: messages are marked incrementally as the
+    // user scrolls past them (see the scroll-driven marking in ThreadUi),
+    // mirroring desktop.
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                val response =
-                    if (threadIdIsRss(backendThreadId)) {
-                        client.readRssThread(RssThreadParams(threadId = backendThreadId))
-                    } else {
-                        client.readThread(ThreadReadParams(threadId = backendThreadId))
-                    }
-                if (thread.unread) {
-                    runCatching {
-                        if (threadIdIsRss(backendThreadId)) {
-                            client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true))
-                        } else {
-                            client.markRead(MarkReadParams(threadId = backendThreadId, seen = true))
-                        }
-                    }
+                if (threadIdIsRss(backendThreadId)) {
+                    client.readRssThread(RssThreadParams(threadId = backendThreadId))
+                } else {
+                    client.readThread(ThreadReadParams(threadId = backendThreadId))
                 }
-                response
             }
         }.onSuccess {
             val page = parseThreadReadPage(it)
             messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
-            updateThreadEverywhere(thread) { current -> current.copy(unread = false) }
             if (!threadIdIsRss(thread.id) && folderIsDrafts(thread.folder)) {
                 page.messages.lastOrNull()?.let { message ->
                     openDraftCompose(message, thread)
@@ -1152,6 +1140,65 @@ internal fun MeronMobileState.toggleMessageRead(message: MessageBody) {
             kanbanColumns = kanbanBefore
             Log.w("Mail", "toggle message read failed", it)
             status = "Message update failed: ${it.message}"
+        }
+    }
+}
+
+// Scroll-driven read marking. Best-effort like desktop: local state flips
+// optimistically and failures are only logged — the messages stay unread in
+// the core and get re-sent by a later scroll or thread-level mark. For RSS
+// the message ids ("<thread>#<item key>") pass through as item keys; the core
+// strips the thread prefix.
+internal fun MeronMobileState.markMessagesReadOnScroll(messageIds: List<String>) {
+    val thread = selectedCoreThread ?: return
+    val backendThreadId = thread.backendThreadId()
+    val ids = messageIds.filter { id -> messages.any { it.id == id && it.unread } }
+    if (ids.isEmpty()) return
+    messages = messages.map { if (it.id in ids) it.copy(unread = false) else it }
+    val updatedUnread = messages.any { it.unread }
+    if (thread.unread && !updatedUnread) {
+        updateThreadEverywhere(thread) { it.copy(unread = false) }
+    }
+    scope.launch {
+        runCatching {
+            requireCoreOk(
+                withContext(ioDispatcher) {
+                    val client = MobileMailCommandClient(core)
+                    if (threadIdIsRss(backendThreadId)) {
+                        client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true, itemKeys = ids))
+                    } else {
+                        client.markRead(MarkReadParams(threadId = backendThreadId, seen = true, messageIds = ids))
+                    }
+                },
+            )
+        }.onFailure {
+            Log.w("Mail", "scroll mark read failed", it)
+        }
+    }
+}
+
+// The conversation was viewed to the bottom: mark the whole thread read, which
+// also covers unread messages on older pages that were never loaded.
+internal fun MeronMobileState.markThreadReadOnScroll() {
+    val thread = selectedCoreThread ?: return
+    val backendThreadId = thread.backendThreadId()
+    if (!thread.unread && messages.none { it.unread }) return
+    messages = messages.map { if (it.unread) it.copy(unread = false) else it }
+    updateThreadEverywhere(thread) { it.copy(unread = false) }
+    scope.launch {
+        runCatching {
+            requireCoreOk(
+                withContext(ioDispatcher) {
+                    val client = MobileMailCommandClient(core)
+                    if (threadIdIsRss(backendThreadId)) {
+                        client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true))
+                    } else {
+                        client.markRead(MarkReadParams(threadId = backendThreadId, seen = true))
+                    }
+                },
+            )
+        }.onFailure {
+            Log.w("Mail", "thread mark read failed", it)
         }
     }
 }

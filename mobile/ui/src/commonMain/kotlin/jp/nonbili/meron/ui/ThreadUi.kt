@@ -110,6 +110,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -117,7 +118,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -246,9 +249,13 @@ import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -292,6 +299,8 @@ internal fun ThreadScreen(
     onComposeTo: (String) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onRetryLoadMessages: () -> Unit,
+    onMessagesScrolledPast: (List<String>) -> Unit,
+    onViewedToBottom: () -> Unit,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
     val deleteLabel = thread?.let { threadDeleteActionLabel(it.folder) } ?: "Move to Trash"
@@ -333,6 +342,85 @@ internal fun ThreadScreen(
         }
     val activeSearchId = searchMatches.getOrNull(activeSearchIndex).orEmpty()
     val listState = rememberLazyListState()
+    // One-shot positioning when the thread's messages first arrive, mirroring
+    // desktop: jump to the first unread message, or the newest when all read.
+    var openScrollPositioned by remember(thread?.id) { mutableStateOf(false) }
+    LaunchedEffect(thread?.id, messages.isEmpty()) {
+        if (openScrollPositioned || messages.isEmpty()) return@LaunchedEffect
+        openScrollPositioned = true
+        val headerItemCount = if (canLoadOlder || loadingOlder) 1 else 0
+        val target = threadOpenScrollIndex(messages, headerItemCount) ?: return@LaunchedEffect
+        listState.scrollToItem(target)
+        // HTML bubbles measure their bodies asynchronously in a WebView, so at
+        // this point the list may still fit the viewport and the scroll above
+        // silently clamps to the top. Keep re-anchoring to the target while
+        // item sizes settle (desktop does the same with a ResizeObserver);
+        // stop as soon as the user drags, or after the settle window.
+        withTimeoutOrNull(THREAD_OPEN_ANCHOR_WINDOW_MS) {
+            coroutineScope {
+                val anchor =
+                    launch {
+                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index to it.size } }
+                            .distinctUntilChanged()
+                            .collect { listState.scrollToItem(target) }
+                    }
+                listState.interactionSource.interactions.first { it is DragInteraction.Start }
+                anchor.cancel()
+            }
+        }
+    }
+    // Mark messages read as their bubbles scroll past the top of the viewport,
+    // and the whole thread once the view reaches the bottom — desktop's
+    // scroll-driven read marking (useConversationScroll.ts) on mobile. Marked
+    // ids are remembered per open so each is sent at most once.
+    val currentMessages by rememberUpdatedState(messages)
+    val currentHeaderItemCount by rememberUpdatedState(if (canLoadOlder || loadingOlder) 1 else 0)
+    val currentOnMessagesScrolledPast by rememberUpdatedState(onMessagesScrolledPast)
+    val currentOnViewedToBottom by rememberUpdatedState(onViewedToBottom)
+    if (thread != null) {
+        val density = LocalDensity.current
+        val markedReadIds = remember(thread.id) { mutableSetOf<String>() }
+        var viewedToBottomSent by remember(thread.id) { mutableStateOf(false) }
+        LaunchedEffect(thread.id) {
+            val topSlackPx = with(density) { 24.dp.roundToPx() }
+            val bottomSlackPx = with(density) { 160.dp.roundToPx() }
+            snapshotFlow {
+                val info = listState.layoutInfo
+                ThreadScrollSnapshot(
+                    firstVisibleIndex = listState.firstVisibleItemIndex,
+                    visible = info.visibleItemsInfo.map { ListItemGeometry(it.index, it.offset, it.size) },
+                    totalItemCount = info.totalItemsCount,
+                    viewportEndOffset = info.viewportEndOffset,
+                )
+            }.collect { snapshot ->
+                val msgs = currentMessages
+                if (msgs.isEmpty()) return@collect
+                val passedIds =
+                    scrolledPastMessageIndices(
+                        visible = snapshot.visible,
+                        firstVisibleIndex = snapshot.firstVisibleIndex,
+                        headerItemCount = currentHeaderItemCount,
+                        messageCount = msgs.size,
+                        topSlackPx = topSlackPx,
+                    ).mapNotNull { msgs.getOrNull(it) }
+                        .filter { it.unread }
+                        .map { it.id }
+                        .filter { markedReadIds.add(it) }
+                if (passedIds.isNotEmpty()) currentOnMessagesScrolledPast(passedIds)
+                val atBottom =
+                    listViewedToBottom(
+                        visible = snapshot.visible,
+                        totalItemCount = snapshot.totalItemCount,
+                        viewportEndOffset = snapshot.viewportEndOffset,
+                        bottomSlackPx = bottomSlackPx,
+                    )
+                if (atBottom && (!viewedToBottomSent || msgs.any { it.unread })) {
+                    viewedToBottomSent = true
+                    currentOnViewedToBottom()
+                }
+            }
+        }
+    }
     LaunchedEffect(normalizedSearch) {
         activeSearchIndex = 0
     }
@@ -1463,6 +1551,81 @@ internal fun threadHeaderSubtitle(
         count == 1 -> people
         else -> "$people · $countLabel"
     }
+}
+
+// How long after open the list keeps re-anchoring to the target message while
+// asynchronously measured bubbles (HTML bodies in WebViews) settle.
+internal const val THREAD_OPEN_ANCHOR_WINDOW_MS = 2_000L
+
+// List index to land on when a thread opens: the first unread message, or the
+// newest message when everything is read. `headerItemCount` counts the list
+// items rendered above the messages (the load-older row). Returns null when
+// the default top position is already correct.
+internal fun threadOpenScrollIndex(
+    messages: List<MessageBody>,
+    headerItemCount: Int,
+): Int? {
+    if (messages.isEmpty()) return null
+    val firstUnread = messages.indexOfFirst { it.unread }
+    val target = if (firstUnread >= 0) firstUnread else messages.lastIndex
+    return (target + headerItemCount).takeIf { it > 0 }
+}
+
+// Geometry of one visible LazyColumn item, decoupled from compose types so the
+// scroll-driven read marking below is unit-testable.
+internal data class ListItemGeometry(
+    val index: Int,
+    val offset: Int,
+    val size: Int,
+)
+
+internal data class ThreadScrollSnapshot(
+    val firstVisibleIndex: Int,
+    val visible: List<ListItemGeometry>,
+    val totalItemCount: Int,
+    val viewportEndOffset: Int,
+)
+
+// Indices (into the message list) of the messages whose bubbles have fully
+// scrolled past the top of the viewport. `headerItemCount` counts the list
+// items above the messages (the load-older row); `topSlackPx` mirrors
+// desktop's 24px grace so a bubble only counts once it is clearly out of view.
+internal fun scrolledPastMessageIndices(
+    visible: List<ListItemGeometry>,
+    firstVisibleIndex: Int,
+    headerItemCount: Int,
+    messageCount: Int,
+    topSlackPx: Int,
+): List<Int> {
+    val passed = mutableListOf<Int>()
+    for (messageIndex in 0 until messageCount) {
+        val itemIndex = messageIndex + headerItemCount
+        val geometry = visible.firstOrNull { it.index == itemIndex }
+        val isPast =
+            if (geometry != null) {
+                geometry.offset + geometry.size < topSlackPx
+            } else {
+                itemIndex < firstVisibleIndex
+            }
+        if (!isPast) break
+        passed += messageIndex
+    }
+    return passed
+}
+
+// True when the last list item is visible with its bottom within
+// `bottomSlackPx` of the viewport end — desktop's "remaining <= 160" rule for
+// marking the whole thread read.
+internal fun listViewedToBottom(
+    visible: List<ListItemGeometry>,
+    totalItemCount: Int,
+    viewportEndOffset: Int,
+    bottomSlackPx: Int,
+): Boolean {
+    if (totalItemCount <= 0) return false
+    val last = visible.lastOrNull() ?: return false
+    if (last.index != totalItemCount - 1) return false
+    return last.offset + last.size <= viewportEndOffset + bottomSlackPx
 }
 
 internal fun threadMessageSearchText(message: MessageBody): String =
