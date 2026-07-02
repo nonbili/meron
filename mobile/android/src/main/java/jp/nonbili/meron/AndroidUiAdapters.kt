@@ -131,6 +131,8 @@ class AndroidPlatformServices(
     }
 }
 
+internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001
+
 class AndroidMobileHost(
     private val activity: ComponentActivity,
 ) : MobileHost {
@@ -205,7 +207,7 @@ class AndroidMobileHost(
 
     override fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4001)
+            activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST_CODE)
         }
     }
 

@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} يحتاج إلى بيانات الاعتماد",
   "mobile.mail.noAccountsConfigured": "لم يتم تكوين أي حسابات",
   "mobile.mail.noSearchMatches": "لا توجد رسائل تطابق البحث والتصفية الحالية.",
+  "mobile.mail.notificationsBannerEnable": "تمكين",
+  "mobile.mail.notificationsBannerText": "احصل على إشعار عند وصول بريد جديد.",
   "mobile.mail.openThreadHint": "افتح سلسلة رسائل لقراءة الرسائل المخزنة مؤقتًا.",
   "mobile.mail.readTriageReply": "القراءة والفرز والرد من صندوق البريد المحدد.",
   "mobile.mail.reconnectHint": "قم بتحديث كلمة المرور أو تسجيل الدخول عبر OAuth قبل مزامنة هذا الحساب.",

@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} a besoin d'informations d'identification",
   "mobile.mail.noAccountsConfigured": "Aucun compte configuré",
   "mobile.mail.noSearchMatches": "Aucun message ne correspond à la recherche et au filtre actuels.",
+  "mobile.mail.notificationsBannerEnable": "Activer",
+  "mobile.mail.notificationsBannerText": "Soyez averti à l'arrivée de nouveaux messages.",
   "mobile.mail.openThreadHint": "Ouvrez un fil de discussion pour lire les messages mis en cache.",
   "mobile.mail.readTriageReply": "Lisez, triez et répondez à partir de la boîte aux lettres sélectionnée.",
   "mobile.mail.reconnectHint": "Mettez à jour le mot de passe ou la connexion OAuth avant de synchroniser ce compte.",

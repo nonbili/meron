@@ -100,7 +100,9 @@ interface MobileHost {
     )
 }
 
-/** iOS default: no system Google sign-in; notifications/config wired by the host app. */
+/** Fallback host: no system Google sign-in; reports notifications as enabled so
+ *  permission-gated UI stays hidden unless the platform host overrides it (the
+ *  iOS host layers real UNUserNotificationCenter wiring on top of this). */
 open class DefaultMobileHost(
     override val outlookClientId: String = "",
     override val outlookRedirectUri: String = "",

@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} 需要凭据",
   "mobile.mail.noAccountsConfigured": "没有配置账户",
   "mobile.mail.noSearchMatches": "没有消息与当前搜索和过滤器匹配。",
+  "mobile.mail.notificationsBannerEnable": "启用",
+  "mobile.mail.notificationsBannerText": "新邮件到达时接收通知。",
   "mobile.mail.openThreadHint": "打开一个线程来读取缓存的消息。",
   "mobile.mail.readTriageReply": "从选定的邮箱中阅读、分类和回复。",
   "mobile.mail.reconnectHint": "在同步此帐户之前更新密码或 OAuth 登录。",

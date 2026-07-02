@@ -171,6 +171,7 @@ internal class MeronMobileState(
     var errorBanner by mutableStateOf<String?>(null)
     var addSection by mutableStateOf(0)
     var notificationPermissionGranted by mutableStateOf(mobileHost.notificationsEnabled())
+    var notificationBannerDismissed by mutableStateOf(loadAppBoolean(prefs, NOTIFICATION_BANNER_DISMISSED_PREF, false))
     var accountsLoading by mutableStateOf(false)
     var mailboxMenuOpen by mutableStateOf(false)
     var mailSelectionMenuOpen by mutableStateOf(false)

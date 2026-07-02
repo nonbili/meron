@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} benötigt Anmeldeinformationen",
   "mobile.mail.noAccountsConfigured": "Keine Konten konfiguriert",
   "mobile.mail.noSearchMatches": "Keine Nachrichten entsprechen der aktuellen Suche und dem aktuellen Filter.",
+  "mobile.mail.notificationsBannerEnable": "Aktivieren",
+  "mobile.mail.notificationsBannerText": "Lassen Sie sich benachrichtigen, wenn neue E-Mails eintreffen.",
   "mobile.mail.openThreadHint": "Öffnen Sie einen Thread, um zwischengespeicherte Nachrichten zu lesen.",
   "mobile.mail.readTriageReply": "Lesen, selektieren und antworten Sie aus dem ausgewählten Postfach.",
   "mobile.mail.reconnectHint": "Aktualisieren Sie das Passwort oder die OAuth-Anmeldung, bevor Sie dieses Konto synchronisieren.",

@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -537,6 +538,11 @@ private fun MeronMobileScreenContent(
                         folderOverride = selectedCoreFolder,
                         syncFirst = true,
                     )
+                }
+            }
+            LaunchedEffect(Unit) {
+                NotificationPermissionSignal.events.collect {
+                    notificationPermissionGranted = mobileHost.notificationsEnabled()
                 }
             }
         }
@@ -1936,6 +1942,27 @@ private fun MeronMobileScreenContent(
                                             }
                                         },
                                         onDismiss = { errorBanner = null },
+                                    )
+                                }
+
+                                !notificationPermissionGranted &&
+                                    !notificationBannerDismissed &&
+                                    coreAccounts.isNotEmpty() &&
+                                    initialThreadsLoaded &&
+                                    !syncing -> {
+                                    StatusBanner(
+                                        message = tr("mobile.mail.notificationsBannerText"),
+                                        isError = false,
+                                        icon = Icons.Outlined.NotificationsNone,
+                                        actionLabel = tr("mobile.mail.notificationsBannerEnable"),
+                                        onAction = {
+                                            mobileHost.requestNotificationPermission()
+                                            notificationPermissionGranted = mobileHost.notificationsEnabled()
+                                        },
+                                        onDismiss = {
+                                            notificationBannerDismissed = true
+                                            saveAppBoolean(prefs, NOTIFICATION_BANNER_DISMISSED_PREF, true)
+                                        },
                                     )
                                 }
                             }

@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} needs credentials",
   "mobile.mail.noAccountsConfigured": "No accounts configured",
   "mobile.mail.noSearchMatches": "No messages match the current search and filter.",
+  "mobile.mail.notificationsBannerEnable": "Enable",
+  "mobile.mail.notificationsBannerText": "Get notified when new mail arrives.",
   "mobile.mail.openThreadHint": "Open a thread to read cached messages.",
   "mobile.mail.readTriageReply": "Read, triage, and reply from the selected mailbox.",
   "mobile.mail.reconnectHint": "Update the password or OAuth sign-in before syncing this account.",

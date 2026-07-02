@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "Το {account} χρειάζεται διαπιστευτήρια",
   "mobile.mail.noAccountsConfigured": "Δεν έχουν διαμορφωθεί λογαριασμοί",
   "mobile.mail.noSearchMatches": "Κανένα μήνυμα δεν αντιστοιχεί στην τρέχουσα αναζήτηση και φίλτρο.",
+  "mobile.mail.notificationsBannerEnable": "Ενεργοποίηση",
+  "mobile.mail.notificationsBannerText": "Λάβετε ειδοποίηση όταν φτάνει νέα αλληλογραφία.",
   "mobile.mail.openThreadHint": "Ανοίξτε ένα νήμα για να διαβάσετε προσωρινά αποθηκευμένα μηνύματα.",
   "mobile.mail.readTriageReply": "Ανάγνωση, διαλογή και απάντηση από το επιλεγμένο γραμματοκιβώτιο.",
   "mobile.mail.reconnectHint": "Ενημερώστε τον κωδικό πρόσβασης ή τη σύνδεση στο OAuth πριν συγχρονίσετε αυτόν τον λογαριασμό.",

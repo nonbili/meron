@@ -9,10 +9,22 @@ import platform.AuthenticationServices.ASWebAuthenticationPresentationContextPro
 import platform.AuthenticationServices.ASWebAuthenticationSession
 import platform.Foundation.NSBundle
 import platform.Foundation.NSError
+import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
+import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
+import platform.UserNotifications.UNAuthorizationOptionAlert
+import platform.UserNotifications.UNAuthorizationOptionBadge
+import platform.UserNotifications.UNAuthorizationOptionSound
+import platform.UserNotifications.UNAuthorizationStatusAuthorized
+import platform.UserNotifications.UNAuthorizationStatusEphemeral
+import platform.UserNotifications.UNAuthorizationStatusNotDetermined
+import platform.UserNotifications.UNAuthorizationStatusProvisional
+import platform.UserNotifications.UNUserNotificationCenter
 import platform.darwin.NSObject
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -72,7 +84,57 @@ private class IosMobileHost(
     override val packageName: String,
     override val appVersionName: String,
     override val coreProtocolVersion: Int,
-) : MobileHost by delegate
+) : MobileHost by delegate {
+    // UNUserNotificationCenter reports authorization asynchronously, but the
+    // shared UI reads it synchronously — cache the last known status and nudge
+    // the composition through NotificationPermissionSignal when it changes.
+    private var notificationsGranted = false
+    private var authorizationDetermined = false
+
+    init {
+        refreshNotificationAuthorization()
+        // Re-check when the app returns to the foreground: the user may have
+        // toggled notifications in the Settings app.
+        NSNotificationCenter.defaultCenter.addObserverForName(
+            UIApplicationWillEnterForegroundNotification,
+            null,
+            NSOperationQueue.mainQueue,
+        ) { _ -> refreshNotificationAuthorization() }
+    }
+
+    override fun notificationsEnabled(): Boolean = notificationsGranted
+
+    override fun requestNotificationPermission() {
+        if (authorizationDetermined && !notificationsGranted) {
+            // The system dialog only shows once; after a denial the user has to
+            // flip the switch in the Settings app.
+            val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
+            UIApplication.sharedApplication.openURL(url)
+            return
+        }
+        UNUserNotificationCenter.currentNotificationCenter().requestAuthorizationWithOptions(
+            UNAuthorizationOptionAlert or UNAuthorizationOptionBadge or UNAuthorizationOptionSound,
+        ) { granted, _ ->
+            notificationsGranted = granted
+            authorizationDetermined = true
+            NotificationPermissionSignal.signal()
+        }
+    }
+
+    private fun refreshNotificationAuthorization() {
+        UNUserNotificationCenter.currentNotificationCenter().getNotificationSettingsWithCompletionHandler { settings ->
+            val status = settings?.authorizationStatus ?: return@getNotificationSettingsWithCompletionHandler
+            val granted =
+                status == UNAuthorizationStatusAuthorized ||
+                    status == UNAuthorizationStatusProvisional ||
+                    status == UNAuthorizationStatusEphemeral
+            val changed = granted != notificationsGranted
+            notificationsGranted = granted
+            authorizationDetermined = status != UNAuthorizationStatusNotDetermined
+            if (changed) NotificationPermissionSignal.signal()
+        }
+    }
+}
 
 private class IosPlatformServices : PlatformServices {
     private val authPresentationContext = IosAuthPresentationContext()

@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} precisa de credenciais",
   "mobile.mail.noAccountsConfigured": "Nenhuma conta configurada",
   "mobile.mail.noSearchMatches": "Nenhuma mensagem corresponde à pesquisa e ao filtro atuais.",
+  "mobile.mail.notificationsBannerEnable": "Habilitar",
+  "mobile.mail.notificationsBannerText": "Receba notificações quando chegar um novo e-mail.",
   "mobile.mail.openThreadHint": "Abra um tópico para ler mensagens em cache.",
   "mobile.mail.readTriageReply": "Leia, faça triagem e responda na caixa de correio selecionada.",
   "mobile.mail.reconnectHint": "Atualize a senha ou o login do OAuth antes de sincronizar esta conta.",

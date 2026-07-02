@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} には資格情報が必要です",
   "mobile.mail.noAccountsConfigured": "アカウントが設定されていません",
   "mobile.mail.noSearchMatches": "現在の検索とフィルターに一致するメッセージはありません。",
+  "mobile.mail.notificationsBannerEnable": "有効にする",
+  "mobile.mail.notificationsBannerText": "新着メールが届いたら通知を受け取ります。",
   "mobile.mail.openThreadHint": "スレッドを開いてキャッシュされたメッセージを読み取ります。",
   "mobile.mail.readTriageReply": "選択したメールボックスを読み取り、優先順位を付け、返信します。",
   "mobile.mail.reconnectHint": "このアカウントを同期する前に、パスワードまたは OAuth サインインを更新してください。",

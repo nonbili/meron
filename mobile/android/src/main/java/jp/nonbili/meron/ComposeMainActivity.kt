@@ -349,6 +349,18 @@ class ComposeMainActivity : ComponentActivity() {
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
     }
 
+    @Deprecated("Deprecated in ComponentActivity; fine for a single fire-and-forget permission request")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            jp.nonbili.meron.ui.NotificationPermissionSignal.signal()
+        }
+    }
+
     // Host the shared Engine (warm session pool + foreground IMAP IDLE) only while
     // the activity is visible; park it (stop IDLE, drop pooled sockets) when it
     // isn't. Off the main thread since foreground opens the DB and spawns IDLE.

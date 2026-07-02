@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} kimlik bilgilerine ihtiyaç duyuyor",
   "mobile.mail.noAccountsConfigured": "Hiçbir hesap yapılandırılmadı",
   "mobile.mail.noSearchMatches": "Mevcut arama ve filtreyle eşleşen mesaj yok.",
+  "mobile.mail.notificationsBannerEnable": "Etkinleştir",
+  "mobile.mail.notificationsBannerText": "Yeni posta geldiğinde bildirim alın.",
   "mobile.mail.openThreadHint": "Önbelleğe alınmış mesajları okumak için bir konu açın.",
   "mobile.mail.readTriageReply": "Seçilen posta kutusundan okuyun, önceliklendirin ve yanıtlayın.",
   "mobile.mail.reconnectHint": "Bu hesabı senkronize etmeden önce şifreyi veya OAuth oturum açma bilgilerini güncelleyin.",

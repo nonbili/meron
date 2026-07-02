@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} vajab mandaati",
   "mobile.mail.noAccountsConfigured": "Ühtegi kontot pole konfigureeritud",
   "mobile.mail.noSearchMatches": "Praegusele otsingule ja filtrile ei vasta ükski sõnum.",
+  "mobile.mail.notificationsBannerEnable": "Luba",
+  "mobile.mail.notificationsBannerText": "Saa märguanne, kui saabub uus kiri.",
   "mobile.mail.openThreadHint": "Vahemällu salvestatud sõnumite lugemiseks avage lõim.",
   "mobile.mail.readTriageReply": "Lugege, määrake ja vastake valitud postkastist.",
   "mobile.mail.reconnectHint": "Enne selle konto sünkroonimist värskendage parooli või OAuthi sisselogimist.",

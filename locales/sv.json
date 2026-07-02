@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} behöver autentiseringsuppgifter",
   "mobile.mail.noAccountsConfigured": "Inga konton har konfigurerats",
   "mobile.mail.noSearchMatches": "Inga meddelanden matchar den aktuella sökningen och filtret.",
+  "mobile.mail.notificationsBannerEnable": "Aktivera",
+  "mobile.mail.notificationsBannerText": "Få aviseringar när ny e-post kommer.",
   "mobile.mail.openThreadHint": "Öppna en tråd för att läsa cachade meddelanden.",
   "mobile.mail.readTriageReply": "Läs, triage och svara från den valda brevlådan.",
   "mobile.mail.reconnectHint": "Uppdatera lösenordet eller OAuth-inloggningen innan du synkroniserar det här kontot.",

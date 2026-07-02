@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} ir nepieciešami akreditācijas dati",
   "mobile.mail.noAccountsConfigured": "Nav konfigurēts neviens konts",
   "mobile.mail.noSearchMatches": "Neviens ziņojums neatbilst pašreizējai meklēšanai un filtram.",
+  "mobile.mail.notificationsBannerEnable": "Iespējot",
+  "mobile.mail.notificationsBannerText": "Saņemiet paziņojumu, kad pienāk jauns pasts.",
   "mobile.mail.openThreadHint": "Atveriet pavedienu, lai lasītu kešatmiņā saglabātos ziņojumus.",
   "mobile.mail.readTriageReply": "Lasiet, šķirojiet un atbildiet no atlasītās pastkastes.",
   "mobile.mail.reconnectHint": "Pirms šī konta sinhronizēšanas atjauniniet paroli vai OAuth pierakstīšanos.",

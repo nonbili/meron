@@ -23,3 +23,21 @@ object AppForegroundSignal {
         _events.tryEmit(Unit)
     }
 }
+
+/** Bridges the platform "notification permission dialog answered" event into the
+ *  shared composition so permission-gated UI (Settings row, mail-screen banner)
+ *  updates as soon as the user responds instead of on the next app restart. */
+object NotificationPermissionSignal {
+    private val _events =
+        MutableSharedFlow<Unit>(
+            replay = 0,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+
+    val events: SharedFlow<Unit> = _events
+
+    fun signal() {
+        _events.tryEmit(Unit)
+    }
+}

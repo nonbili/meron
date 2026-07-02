@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} cần thông tin đăng nhập",
   "mobile.mail.noAccountsConfigured": "Không có tài khoản nào được định cấu hình",
   "mobile.mail.noSearchMatches": "Không có tin nhắn nào phù hợp với tìm kiếm và bộ lọc hiện tại.",
+  "mobile.mail.notificationsBannerEnable": "Bật",
+  "mobile.mail.notificationsBannerText": "Nhận thông báo khi có thư mới.",
   "mobile.mail.openThreadHint": "Mở một chủ đề để đọc tin nhắn được lưu trong bộ nhớ cache.",
   "mobile.mail.readTriageReply": "Đọc, phân loại và trả lời từ hộp thư đã chọn.",
   "mobile.mail.reconnectHint": "Cập nhật mật khẩu hoặc thông tin đăng nhập OAuth trước khi đồng bộ hóa tài khoản này.",

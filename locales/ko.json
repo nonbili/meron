@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account}에는 자격 증명이 필요합니다",
   "mobile.mail.noAccountsConfigured": "구성된 계정이 없습니다.",
   "mobile.mail.noSearchMatches": "현재 검색 및 필터와 일치하는 메시지가 없습니다.",
+  "mobile.mail.notificationsBannerEnable": "활성화",
+  "mobile.mail.notificationsBannerText": "새 메일이 도착하면 알림을 받습니다.",
   "mobile.mail.openThreadHint": "캐시된 메시지를 읽으려면 스레드를 엽니다.",
   "mobile.mail.readTriageReply": "선택한 사서함에서 읽고, 분류하고, 회신합니다.",
   "mobile.mail.reconnectHint": "이 계정을 동기화하기 전에 비밀번호나 OAuth 로그인을 업데이트하세요.",

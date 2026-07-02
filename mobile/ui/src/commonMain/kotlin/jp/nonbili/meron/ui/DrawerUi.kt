@@ -571,6 +571,7 @@ internal fun StatusBanner(
     actionLabel: String?,
     onAction: (() -> Unit)?,
     onDismiss: (() -> Unit)?,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.ErrorOutline,
 ) {
     val container = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
     val content = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
@@ -580,7 +581,7 @@ internal fun StatusBanner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(message, fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
             if (actionLabel != null && onAction != null) {
                 TextButton(onClick = onAction) {

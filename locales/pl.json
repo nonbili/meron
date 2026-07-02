@@ -612,6 +612,8 @@
   "mobile.mail.needsReconnect": "{account} potrzebuje poświadczeń",
   "mobile.mail.noAccountsConfigured": "Nie skonfigurowano żadnych kont",
   "mobile.mail.noSearchMatches": "Żadne wiadomości nie pasują do bieżącego wyszukiwania i filtra.",
+  "mobile.mail.notificationsBannerEnable": "Włącz",
+  "mobile.mail.notificationsBannerText": "Otrzymuj powiadomienia o nowej poczcie.",
   "mobile.mail.openThreadHint": "Otwórz wątek, aby przeczytać wiadomości zapisane w pamięci podręcznej.",
   "mobile.mail.readTriageReply": "Czytaj, segreguj i odpowiadaj z wybranej skrzynki pocztowej.",
   "mobile.mail.reconnectHint": "Przed synchronizacją tego konta zaktualizuj hasło lub dane logowania OAuth.",
