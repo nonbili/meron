@@ -8,16 +8,30 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.parseAccountListResponse
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 class AndroidMailPushService :
     Service(),
     MeronCoreNative.CoreEventListener {
     private val watched = mutableSetOf<String>()
+
+    // Main-thread scope so `watched` is only touched from one thread; the
+    // AccountManager calls inside mintAndPushToken hop to IO themselves.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var tokenRemintJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -40,11 +54,13 @@ class AndroidMailPushService :
             stopSelf()
             return START_NOT_STICKY
         }
-        refreshWatches()
+        scope.launch { refreshWatches() }
+        ensureTokenRemintLoop()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        scope.cancel()
         stopWatches()
         MeronCoreNative.removeCoreEventListener(this)
         super.onDestroy()
@@ -73,7 +89,7 @@ class AndroidMailPushService :
         }
     }
 
-    private fun refreshWatches() {
+    private suspend fun refreshWatches() {
         val response = MeronCoreNative.invokeJson("""{"id":1,"method":"account.list"}""")
         val accounts = parseAccountListResponse(response)
         val active = accounts.filterNot { accountSummaryIsRss(it) || it.paused || it.needsReconnect }
@@ -87,10 +103,35 @@ class AndroidMailPushService :
             }
         active.forEach { account ->
             val key = watchKey(account.id, INBOX_FOLDER)
-            if (watched.add(key)) {
-                startWatch(account.id, INBOX_FOLDER)
+            if (key in watched) return@forEach
+            // Push a fresh AccountManager token into core first: the stored one
+            // may be expired, and core has no refresh token for managed accounts.
+            val refresh = GoogleAccountManagerAuth.mintAndPushToken(this, account.id)
+            if (refresh == GoogleAccountManagerAuth.TokenRefresh.Failed) {
+                Log.w(TAG, "not watching ${account.id}: silent token mint failed, reconnect needed")
+                return@forEach
             }
+            watched.add(key)
+            startWatch(account.id, INBOX_FOLDER)
         }
+    }
+
+    /**
+     * While watches run, periodically re-mint managed accounts' access tokens
+     * so an IDLE reconnect after the ~1h token lifetime still authenticates.
+     */
+    private fun ensureTokenRemintLoop() {
+        if (tokenRemintJob?.isActive == true) return
+        tokenRemintJob =
+            scope.launch {
+                while (true) {
+                    delay(TOKEN_REMINT_INTERVAL_MS)
+                    watched.toList().forEach { key ->
+                        val accountId = key.substringBefore('\n')
+                        GoogleAccountManagerAuth.mintAndPushToken(this@AndroidMailPushService, accountId)
+                    }
+                }
+            }
     }
 
     private fun stopWatches() {
@@ -102,8 +143,13 @@ class AndroidMailPushService :
     }
 
     companion object {
+        private const val TAG = "MeronMailPush"
         private const val CHANNEL_ID = "meron_live_mail_status"
         private const val NOTIFICATION_ID = 2001
+
+        /** Re-mint well inside the ~1h token lifetime. */
+        private val TOKEN_REMINT_INTERVAL_MS =
+            TimeUnit.SECONDS.toMillis(GoogleAccountManagerAuth.TOKEN_LIFETIME_SECONDS) * 3 / 4
 
         fun start(context: Context) {
             if (!isEnabled(context)) return

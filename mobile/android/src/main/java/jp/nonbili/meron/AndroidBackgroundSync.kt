@@ -58,12 +58,32 @@ class AndroidBackgroundSyncWorker(
                 skipped += 1
                 continue
             }
-            if (!refreshManagedGoogleToken(account, id = index + 2L)) {
-                // Managed Gmail account whose token can no longer be minted; skip
-                // the doomed sync and report it so the user can reconnect.
-                Log.w(TAG, "${syncRequest.method} token refresh failed for account ${accountLabel(account)}")
-                failed += 1
-                continue
+            when (
+                GoogleAccountManagerAuth.mintAndPushToken(
+                    applicationContext,
+                    account.optString("id"),
+                    requestId = index + 2L,
+                )
+            ) {
+                GoogleAccountManagerAuth.TokenRefresh.Failed -> {
+                    // Managed Gmail account whose token can no longer be minted;
+                    // skip the doomed sync and report it so the user can reconnect.
+                    Log.w(TAG, "${syncRequest.method} token refresh failed for account ${accountLabel(account)}")
+                    failed += 1
+                    continue
+                }
+
+                GoogleAccountManagerAuth.TokenRefresh.TransientError -> {
+                    // Network hiccup while minting; the sync would hit the same
+                    // network, so retry the whole run instead.
+                    Log.w(TAG, "${syncRequest.method} token refresh hit a network error for account ${accountLabel(account)}")
+                    hasTransientNetworkError = true
+                    continue
+                }
+
+                GoogleAccountManagerAuth.TokenRefresh.NotNeeded,
+                is GoogleAccountManagerAuth.TokenRefresh.Refreshed,
+                -> Unit
             }
             val syncResponse = JSONObject(MeronCoreNative.invokeJson(syncRequest.requestJson))
             if (syncResponse.has("error")) {
@@ -103,49 +123,6 @@ class AndroidBackgroundSyncWorker(
         }
     }
 
-    /**
-     * For Gmail accounts backed by the on-device Google account, mint a fresh
-     * access token via AccountManager (only when near expiry) and push it into
-     * meron-core before sync. Returns false only when a managed account's token
-     * could not be minted (user must reconnect); true otherwise, including for
-     * browser-flow / non-managed accounts, which meron-core refreshes itself.
-     */
-    private suspend fun refreshManagedGoogleToken(
-        account: JSONObject,
-        id: Long,
-    ): Boolean {
-        val accountId = account.optString("id")
-        if (accountId.isBlank()) return true
-        return when (
-            val refresh = GoogleAccountManagerAuth.mintIfNeeded(applicationContext, accountId)
-        ) {
-            is GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> {
-                true
-            }
-
-            is GoogleAccountManagerAuth.TokenRefresh.Refreshed -> {
-                val params =
-                    JSONObject()
-                        .put("account_id", accountId)
-                        .put("access_token", refresh.token)
-                        .put("token_expires_at", refresh.expiresAt)
-                val response =
-                    JSONObject(
-                        MeronCoreNative.invokeJson(
-                            requestJson(id, "account.updateOAuthToken", params),
-                        ),
-                    )
-                if (!response.has("error")) {
-                    GoogleAccountManagerAuth.recordExpiry(applicationContext, accountId, refresh.expiresAt)
-                }
-                true
-            }
-
-            is GoogleAccountManagerAuth.TokenRefresh.Failed -> {
-                false
-            }
-        }
-    }
 }
 
 internal fun isTransientNetworkError(message: String): Boolean {

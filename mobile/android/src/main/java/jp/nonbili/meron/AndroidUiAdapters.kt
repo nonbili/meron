@@ -256,6 +256,10 @@ class AndroidMobileHost(
             GoogleAccountManagerAuth.TokenRefresh.Failed -> {
                 ManagedTokenRefresh.Failed
             }
+
+            GoogleAccountManagerAuth.TokenRefresh.TransientError -> {
+                ManagedTokenRefresh.TransientError
+            }
         }
 
     override fun recordManagedGoogleExpiry(

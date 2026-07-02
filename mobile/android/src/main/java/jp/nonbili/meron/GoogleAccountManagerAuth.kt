@@ -2,6 +2,8 @@ package jp.nonbili.meron
 
 import android.accounts.Account
 import android.accounts.AccountManager
+import android.accounts.AuthenticatorException
+import android.accounts.OperationCanceledException
 import android.app.Activity
 import android.content.Context
 import android.os.Bundle
@@ -9,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
@@ -59,6 +62,12 @@ object GoogleAccountManagerAuth {
 
         /** Managed, but the OS could not mint a token — user must reconnect. */
         data object Failed : TokenRefresh()
+
+        /**
+         * Managed, but minting hit a transient network error. The stored token
+         * may still be valid; retry later instead of asking for a reconnect.
+         */
+        data object TransientError : TokenRefresh()
     }
 
     data class GoogleUserProfile(
@@ -123,9 +132,45 @@ object GoogleAccountManagerAuth {
         accountId: String,
     ): TokenRefresh {
         val deviceAccount = managedAccountName(context, accountId) ?: return TokenRefresh.NotNeeded
-        val token = silentToken(context, deviceAccount) ?: return TokenRefresh.Failed
+        val token =
+            try {
+                silentToken(context, deviceAccount)
+            } catch (ex: IOException) {
+                return TokenRefresh.TransientError
+            } ?: return TokenRefresh.Failed
         val now = System.currentTimeMillis() / 1000L
         return TokenRefresh.Refreshed(token, now + TOKEN_LIFETIME_SECONDS)
+    }
+
+    /**
+     * Mint a fresh token for a managed account and push it into meron-core via
+     * `account.updateOAuthToken`, so the next IMAP/SMTP login uses it. Shared by
+     * the background sync worker and the live-push service.
+     */
+    suspend fun mintAndPushToken(
+        context: Context,
+        accountId: String,
+        requestId: Long = 1,
+    ): TokenRefresh {
+        val refresh = mintIfNeeded(context, accountId)
+        if (refresh is TokenRefresh.Refreshed) {
+            val request =
+                JSONObject()
+                    .put("id", requestId)
+                    .put("method", "account.updateOAuthToken")
+                    .put(
+                        "params",
+                        JSONObject()
+                            .put("account_id", accountId)
+                            .put("access_token", refresh.token)
+                            .put("token_expires_at", refresh.expiresAt),
+                    )
+            val response = JSONObject(MeronCoreNative.invokeJson(request.toString()))
+            if (!response.has("error")) {
+                recordExpiry(context, accountId, refresh.expiresAt)
+            }
+        }
+        return refresh
     }
 
     /**
@@ -162,6 +207,8 @@ object GoogleAccountManagerAuth {
      * Silent token request, used before sync. Invalidates the cached token and
      * mints a fresh one. Returns null when user interaction is required (e.g.
      * consent revoked) — the caller should then surface "needs reconnect".
+     * Throws [IOException] on transient network failure, which is not a
+     * reconnect case.
      */
     suspend fun silentToken(
         context: Context,
@@ -170,11 +217,17 @@ object GoogleAccountManagerAuth {
         withContext(Dispatchers.IO) {
             val am = AccountManager.get(context)
             val account = Account(accountName, ACCOUNT_TYPE)
-            val cached = am.blockingGetAuthToken(account, TOKEN_TYPE, true)
-            if (cached != null) {
-                am.invalidateAuthToken(ACCOUNT_TYPE, cached)
+            try {
+                val cached = am.blockingGetAuthToken(account, TOKEN_TYPE, true)
+                if (cached != null) {
+                    am.invalidateAuthToken(ACCOUNT_TYPE, cached)
+                }
+                am.blockingGetAuthToken(account, TOKEN_TYPE, true)
+            } catch (ex: AuthenticatorException) {
+                null
+            } catch (ex: OperationCanceledException) {
+                null
             }
-            am.blockingGetAuthToken(account, TOKEN_TYPE, true)
         }
 
     /**

@@ -782,6 +782,12 @@ internal suspend fun MeronMobileState.ensureManagedGoogleToken(
             googleReauthAccountId = accountId
             errorBanner = "Google sign-in expired. Reconnect the account on this device."
         }
+
+        ManagedTokenRefresh.TransientError -> {
+            // Network hiccup while minting — not a reconnect case. Attempt the
+            // sync with the stored token; it may still be valid.
+            Unit
+        }
     }
 }
 

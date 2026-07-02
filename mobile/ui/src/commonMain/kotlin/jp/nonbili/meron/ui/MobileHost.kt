@@ -20,6 +20,9 @@ sealed interface ManagedTokenRefresh {
     ) : ManagedTokenRefresh
 
     data object Failed : ManagedTokenRefresh
+
+    /** Minting hit a transient network error; the stored token may still work. */
+    data object TransientError : ManagedTokenRefresh
 }
 
 /** Host-provided platform capabilities the shared UI/state needs beyond
