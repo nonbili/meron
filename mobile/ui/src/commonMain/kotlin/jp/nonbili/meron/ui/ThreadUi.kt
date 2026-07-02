@@ -277,6 +277,7 @@ internal fun ThreadScreen(
     onSaveAttachment: (MessageAttachment) -> Unit,
     onComposeTo: (String) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
+    onRetryLoadMessages: () -> Unit,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
     val deleteLabel = thread?.let { threadDeleteActionLabel(it.folder) } ?: "Move to Trash"
@@ -576,6 +577,7 @@ internal fun ThreadScreen(
                                 onSaveAttachment = onSaveAttachment,
                                 onCopyMessageText = onCopyMessageText,
                                 onOpenMessage = { readerMessage = it },
+                                onRetryLoad = onRetryLoadMessages,
                             )
                         }
                     }
@@ -982,6 +984,7 @@ internal fun MessageBubble(
     onSaveAttachment: (MessageAttachment) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onOpenMessage: (MessageBody) -> Unit,
+    onRetryLoad: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val bubbleShape =
@@ -1126,6 +1129,21 @@ internal fun MessageBubble(
             }
             if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
                 HtmlMessageBody(html = message.bodyHtml, maxHeight = 360.dp)
+            } else if (message.bodyMissing) {
+                // The core has no cached body (the on-demand fetch failed) — a
+                // different state from a genuinely empty message, so offer a retry
+                // instead of "(no content)".
+                Column {
+                    Text(
+                        tr("chat.messageLoadFailed"),
+                        color = textColor.copy(alpha = 0.6f),
+                        fontSize = 15.5.sp,
+                        lineHeight = 21.sp,
+                    )
+                    TextButton(onClick = onRetryLoad, modifier = Modifier.align(Alignment.End)) {
+                        Text(tr("chat.retry"))
+                    }
+                }
             } else {
                 // Subject is the conversation title (top bar); the bubble shows the
                 // message body, matching the desktop chat reader.
@@ -1244,7 +1262,9 @@ internal fun MessageReaderScreen(
                 HtmlMessageBody(html = message.bodyHtml)
             } else {
                 Text(
-                    message.body.ifBlank { "(no content)" },
+                    message.body.ifBlank {
+                        if (message.bodyMissing) tr("chat.messageLoadFailed") else "(no content)"
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
@@ -1499,26 +1519,39 @@ internal fun HtmlMessageBody(
             </html>
             """.trimIndent()
         }
-    val resolvedHeight =
-        when {
-            contentHeight <= 0.dp -> Dp.Unspecified
-            maxHeight != Dp.Unspecified -> contentHeight.coerceAtMost(maxHeight)
-            else -> contentHeight
-        }
-    MailWebView(
-        html = mobileHtml,
-        onContentHeight = { contentHeight = it },
-        modifier =
+    val measured = contentHeight > 0.dp
+    val capped = maxHeight != Dp.Unspecified && measured && contentHeight > maxHeight
+    val webViewModifier =
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (measured) {
+                    Modifier.height(contentHeight)
+                } else {
+                    Modifier.heightIn(min = 80.dp)
+                },
+            )
+
+    if (capped) {
+        Box(
             Modifier
                 .fillMaxWidth()
-                .then(
-                    if (resolvedHeight != Dp.Unspecified) {
-                        Modifier.height(resolvedHeight)
-                    } else {
-                        Modifier.heightIn(min = 80.dp)
-                    },
-                ),
-    )
+                .height(maxHeight)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            MailWebView(
+                html = mobileHtml,
+                onContentHeight = { contentHeight = it },
+                modifier = webViewModifier,
+            )
+        }
+    } else {
+        MailWebView(
+            html = mobileHtml,
+            onContentHeight = { contentHeight = it },
+            modifier = webViewModifier,
+        )
+    }
 }
 
 @Composable

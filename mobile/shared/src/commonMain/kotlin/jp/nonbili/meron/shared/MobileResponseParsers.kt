@@ -209,6 +209,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 unread = item.findJsonBooleanProperty("unread") ?: false,
                 starred = item.findJsonBooleanProperty("starred") ?: false,
                 hasAttachments = item.findJsonBooleanProperty("has_attachments") ?: false,
+                bodyMissing = item.findJsonBooleanProperty("body_missing") ?: false,
                 attachments =
                     item
                         .findJsonArrayProperty("attachments")

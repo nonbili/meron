@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} mediju vienums} other {{count} mediju vienumi}}",
   "chat.messageHtml": "Ziņojuma HTML",
   "chat.messageId": "Ziņojuma ID",
+  "chat.messageLoadFailed": "Neizdevās ielādēt šo ziņojumu.",
   "chat.messageText": "Ziņas teksts",
   "chat.moreActions": "Vairāk darbību",
   "chat.moreMessageActions": "Vairāk ziņojumu darbību",

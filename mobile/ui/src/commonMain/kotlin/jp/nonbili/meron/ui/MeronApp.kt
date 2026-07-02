@@ -898,6 +898,7 @@ private fun MeronMobileScreenContent(
                         services.copyText(label, value)
                         status = "Copied ${label.lowercase()}"
                     },
+                    onRetryLoadMessages = { retryOpenThreadLoad() },
                 )
             }
 

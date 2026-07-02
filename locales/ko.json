@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {미디어 항목 {count}개} other {미디어 항목 {count}개}}",
   "chat.messageHtml": "메시지 HTML",
   "chat.messageId": "메시지 ID",
+  "chat.messageLoadFailed": "이 메시지를 불러오지 못했습니다.",
   "chat.messageText": "메시지 텍스트",
   "chat.moreActions": "기타 작업",
   "chat.moreMessageActions": "기타 메시지 작업",

@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} عنصر وسائط} other {{count} عناصر وسائط}}",
   "chat.messageHtml": "محتوى الرسالة بتنسيق HTML",
   "chat.messageId": "معرف الرسالة",
+  "chat.messageLoadFailed": "تعذّر تحميل هذه الرسالة.",
   "chat.messageText": "نص الرسالة",
   "chat.moreActions": "المزيد من الإجراءات",
   "chat.moreMessageActions": "المزيد من إجراءات الرسالة",

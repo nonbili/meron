@@ -690,6 +690,15 @@ internal suspend fun MeronMobileState.reloadCurrentThreadMessages() {
     messageCursor = page.nextCursor
 }
 
+// Retry loading bodies for the open thread. Re-reading is enough: the core
+// re-attempts the on-demand IMAP fetch for any message without a cached body.
+internal fun MeronMobileState.retryOpenThreadLoad() {
+    scope.launch {
+        runCatching { reloadCurrentThreadMessages() }
+            .onFailure { status = "Could not open message: ${it.message}" }
+    }
+}
+
 private fun mergeLocalSendMessages(
     current: List<MessageBody>,
     refreshed: List<MessageBody>,

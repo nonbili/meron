@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} meediaüksus} other {{count} meediaüksust}}",
   "chat.messageHtml": "Sõnumi HTML",
   "chat.messageId": "Sõnumi ID",
+  "chat.messageLoadFailed": "Selle sõnumi laadimine ebaõnnestus.",
   "chat.messageText": "Sõnumi tekst",
   "chat.moreActions": "Veel toiminguid",
   "chat.moreMessageActions": "Veel sõnumi toiminguid",

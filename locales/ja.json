@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count}件のメディア} other {{count}件のメディア}}",
   "chat.messageHtml": "メッセージのHTML",
   "chat.messageId": "メッセージID",
+  "chat.messageLoadFailed": "このメッセージを読み込めませんでした。",
   "chat.messageText": "メッセージ本文",
   "chat.moreActions": "その他のアクション",
   "chat.moreMessageActions": "その他のメッセージアクション",

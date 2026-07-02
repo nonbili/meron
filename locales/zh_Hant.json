@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} 個媒體項目} other {{count} 個媒體項目}}",
   "chat.messageHtml": "訊息 HTML",
   "chat.messageId": "訊息ID",
+  "chat.messageLoadFailed": "無法載入此留言。",
   "chat.messageText": "留言內容",
   "chat.moreActions": "更多動作",
   "chat.moreMessageActions": "更多訊息動作",

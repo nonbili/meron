@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} mục phương tiện} other {{count} mục phương tiện}}",
   "chat.messageHtml": "HTML tin nhắn",
   "chat.messageId": "ID tin nhắn",
+  "chat.messageLoadFailed": "Không thể tải tin nhắn này.",
   "chat.messageText": "Nội dung tin nhắn",
   "chat.moreActions": "Hành động khác",
   "chat.moreMessageActions": "Hành động tin nhắn khác",

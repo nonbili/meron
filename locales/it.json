@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} elemento multimediale} other {{count} elementi multimediali}}",
   "chat.messageHtml": "HTML del messaggio",
   "chat.messageId": "ID del messaggio",
+  "chat.messageLoadFailed": "Impossibile caricare questo messaggio.",
   "chat.messageText": "Testo del messaggio",
   "chat.moreActions": "Altre azioni",
   "chat.moreMessageActions": "Altre azioni sul messaggio",

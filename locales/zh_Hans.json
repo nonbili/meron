@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} 个媒体项目} other {{count} 个媒体项目}}",
   "chat.messageHtml": "邮件 HTML",
   "chat.messageId": "消息ID",
+  "chat.messageLoadFailed": "无法加载此留言。",
   "chat.messageText": "留言内容",
   "chat.moreActions": "更多操作",
   "chat.moreMessageActions": "更多消息操作",

@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} medya ögesi} other {{count} medya ögesi}}",
   "chat.messageHtml": "Mesaj HTML'i",
   "chat.messageId": "Mesaj Kimliği",
+  "chat.messageLoadFailed": "Bu mesaj yüklenemedi.",
   "chat.messageText": "Mesaj metni",
   "chat.moreActions": "Daha fazla eylem",
   "chat.moreMessageActions": "Daha fazla mesaj eylemi",

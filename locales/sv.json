@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} medieobjekt} other {{count} medieobjekt}}",
   "chat.messageHtml": "Meddelande-HTML",
   "chat.messageId": "Meddelande-ID",
+  "chat.messageLoadFailed": "Det gick inte att läsa in det här meddelandet.",
   "chat.messageText": "Meddelandetext",
   "chat.moreActions": "Fler åtgärder",
   "chat.moreMessageActions": "Fler meddelandeåtgärder",

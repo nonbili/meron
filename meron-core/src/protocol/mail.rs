@@ -1321,6 +1321,9 @@ pub(crate) fn message_json(
         "preview": cached.map(|message| message.preview.as_str()).unwrap_or(""),
         "body": cached.map(|message| message.body.as_str()).unwrap_or(""),
         "body_html": cached.and_then(|message| message.body_html.as_deref()).unwrap_or(""),
+        // No cached body means the on-demand IMAP fetch failed (auth/network),
+        // not that the message is empty — the client offers a retry for these.
+        "body_missing": cached.is_none(),
         "date": cached.map(|message| message.date).unwrap_or(header.date),
         "unread": !header.seen,
         "starred": header.starred,

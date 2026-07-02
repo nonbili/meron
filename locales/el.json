@@ -119,6 +119,7 @@
   "chat.mediaItems": "{count, plural, one {{count} στοιχείο πολυμέσων} other {{count} στοιχεία πολυμέσων}}",
   "chat.messageHtml": "HTML μηνύματος",
   "chat.messageId": "Αναγνωριστικό μηνύματος",
+  "chat.messageLoadFailed": "Δεν ήταν δυνατή η φόρτωση αυτού του μηνύματος.",
   "chat.messageText": "Κείμενο μηνύματος",
   "chat.moreActions": "Περισσότερες ενέργειες",
   "chat.moreMessageActions": "Περισσότερες ενέργειες μηνύματος",
