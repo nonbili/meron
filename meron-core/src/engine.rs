@@ -430,7 +430,16 @@ impl Engine {
 
         pool_debug(account, "fresh-connect");
         let creds = self.ensure_valid_creds(account).await?;
+        let connect_started = std::time::Instant::now();
         let mut session = imap::connect(&creds).await?;
+        let connect_ms = connect_started.elapsed().as_millis();
+        if connect_ms > 2_000 {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "net",
+                "slow IMAP connect for {account}: {connect_ms}ms"
+            );
+        }
         match f(&mut session).await {
             Ok(val) => {
                 self.return_pooled(account, session);

@@ -38,6 +38,119 @@ fn prefetch_mobile_bodies(
     }
 }
 
+/// Inbox syncs whose non-gating tail (`finish_mobile_sync`) is still running on
+/// a detached thread, keyed by `account/folder`, so overlapping pull-to-refresh
+/// calls don't stack a second prefetch behind the first.
+static DEFERRED_SYNC_TAILS: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Claim the deferred-tail slot for `account/folder`. Returns false when a
+/// tail for that mailbox is already running, in which case the caller skips.
+fn claim_sync_tail(key: &str) -> bool {
+    DEFERRED_SYNC_TAILS.lock().unwrap().insert(key.to_string())
+}
+
+fn release_sync_tail(key: &str) {
+    DEFERRED_SYNC_TAILS.lock().unwrap().remove(key);
+}
+
+/// Post-sync work that doesn't gate the inbox list: body prefetch plus Sent and
+/// Drafts header syncs (so cross-folder conversation views read from the local
+/// store).
+fn finish_mobile_sync(
+    data_dir: &str,
+    engine: &std::sync::Arc<crate::engine::Engine>,
+    account_id: &str,
+    folder: &str,
+    resolved_sent: Option<String>,
+    limit: u32,
+) {
+    prefetch_mobile_bodies(data_dir, engine, account_id, folder);
+
+    // Also pull the Sent folder so outgoing messages — including ones sent from
+    // another client — surface in the cross-folder conversation view. The
+    // per-folder recent sync only ever covers the open folder.
+    if let Some(sent) = resolved_sent
+        && !sent.eq_ignore_ascii_case(folder)
+    {
+        match crate::ffi::engine_block_on(crate::engine::sync_messages(
+            engine, account_id, &sent, limit,
+        )) {
+            Ok(sent_count) => crate::mlog!(
+                crate::log::Level::Info,
+                "mail.sync",
+                "Sent sync account={account_id} sent={sent} synced={sent_count}"
+            ),
+            Err(err) => crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "Sent sync failed for {account_id}: {err}"
+            ),
+        }
+    }
+
+    // Same for Drafts: keeping its headers cached means opening a thread can
+    // surface a reply drafted on another client from the local store alone,
+    // with no per-thread network check on the read path.
+    if let Some(drafts) = crate::engine::cached_drafts_folder(engine, account_id, folder) {
+        match crate::ffi::engine_block_on(crate::engine::sync_messages(
+            engine, account_id, &drafts, limit,
+        )) {
+            Ok(drafts_count) => crate::mlog!(
+                crate::log::Level::Info,
+                "mail.sync",
+                "Drafts sync account={account_id} drafts={drafts} synced={drafts_count}"
+            ),
+            Err(err) => crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "Drafts sync failed for {account_id}: {err}"
+            ),
+        }
+    }
+}
+
+/// Run the non-gating sync tail. When the caller opted in via `defer_tail`
+/// (the foreground UI, whose process outlives the call) it runs on a detached
+/// thread so `mail.sync` returns as soon as the inbox headers are stored — the
+/// tail costs body prefetch alone up to 20s — and emits `mail.synced` when done
+/// so the UI re-reads the store. Everything else (background workers, the IDLE
+/// watcher) keeps it inline: an OS-granted execution window ends when the
+/// worker returns, so a detached thread could be frozen mid-fetch.
+fn run_mobile_sync_tail(
+    data_dir: &str,
+    engine: &std::sync::Arc<crate::engine::Engine>,
+    account_id: &str,
+    folder: &str,
+    resolved_sent: Option<String>,
+    limit: u32,
+    defer_tail: bool,
+) {
+    if !defer_tail {
+        finish_mobile_sync(data_dir, engine, account_id, folder, resolved_sent, limit);
+        return;
+    }
+    let key = format!("{account_id}/{folder}");
+    if !claim_sync_tail(&key) {
+        return;
+    }
+    let data_dir = data_dir.to_string();
+    let engine = engine.clone();
+    let account_id = account_id.to_string();
+    let folder = folder.to_string();
+    std::thread::spawn(move || {
+        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, resolved_sent, limit);
+        release_sync_tail(&key);
+        // Not `mail.synced`: that handler reloads the thread list (resetting
+        // pagination), and the tail never changes the open folder's headers —
+        // only bodies and Sent/Drafts, which affect the open thread at most.
+        crate::ffi::emit_event(
+            "mail.tailSynced",
+            json!({ "account": account_id, "folder": folder }),
+        );
+    });
+}
+
 pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let to = req_str(params, "to")?;
@@ -198,6 +311,10 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         .get("folders")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let defer_tail = params
+        .get("defer_tail")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
     // RSS accounts sync through the feed pipeline, not the IMAP engine.
     let is_rss = with_mobile_db(data_dir, |conn| {
@@ -212,77 +329,43 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     // sync_messages do fetch/upsert/prune/flag-reconcile into the store), so the
     // two platforms can't drift.
     let engine = crate::ffi::engine_for(data_dir)?;
+    let started = std::time::Instant::now();
     let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
     if account_needs_reconnect(&creds) {
         return Err(format!("account needs reconnect: {account_id}"));
     }
+    let creds_ms = started.elapsed().as_millis();
 
+    let folders_started = std::time::Instant::now();
     let folders_count = if sync_folders {
         crate::ffi::engine_block_on(crate::engine::sync_folders(&engine, &account_id))?.len()
     } else {
         0
     };
+    let folders_ms = folders_started.elapsed().as_millis();
+    let messages_started = std::time::Instant::now();
     let count = crate::ffi::engine_block_on(crate::engine::sync_messages(
         &engine,
         &account_id,
         &folder,
         limit,
     ))?;
+    let messages_ms = messages_started.elapsed().as_millis();
     let resolved_sent = crate::engine::cached_sent_folder(&engine, &account_id, &folder);
     crate::mlog!(
         crate::log::Level::Info,
         "mail.sync",
-        "account={account_id} folder={folder} synced={count} folders={folders_count} sent={resolved_sent:?}"
+        "account={account_id} folder={folder} synced={count} folders={folders_count} sent={resolved_sent:?} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}"
     );
-    prefetch_mobile_bodies(data_dir, &engine, &account_id, &folder);
-
-    // Also pull the Sent folder so outgoing messages — including ones sent from
-    // another client — surface in the cross-folder conversation view. The
-    // per-folder recent sync only ever covers the open folder.
-    if let Some(sent) = resolved_sent
-        && !sent.eq_ignore_ascii_case(&folder)
-    {
-        match crate::ffi::engine_block_on(crate::engine::sync_messages(
-            &engine,
-            &account_id,
-            &sent,
-            limit,
-        )) {
-            Ok(sent_count) => crate::mlog!(
-                crate::log::Level::Info,
-                "mail.sync",
-                "Sent sync account={account_id} sent={sent} synced={sent_count}"
-            ),
-            Err(err) => crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "Sent sync failed for {account_id}: {err}"
-            ),
-        }
-    }
-
-    // Same for Drafts: keeping its headers cached means opening a thread can
-    // surface a reply drafted on another client from the local store alone,
-    // with no per-thread network check on the read path.
-    if let Some(drafts) = crate::engine::cached_drafts_folder(&engine, &account_id, &folder) {
-        match crate::ffi::engine_block_on(crate::engine::sync_messages(
-            &engine,
-            &account_id,
-            &drafts,
-            limit,
-        )) {
-            Ok(drafts_count) => crate::mlog!(
-                crate::log::Level::Info,
-                "mail.sync",
-                "Drafts sync account={account_id} drafts={drafts} synced={drafts_count}"
-            ),
-            Err(err) => crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "Drafts sync failed for {account_id}: {err}"
-            ),
-        }
-    }
+    run_mobile_sync_tail(
+        data_dir,
+        &engine,
+        &account_id,
+        &folder,
+        resolved_sent,
+        limit,
+        defer_tail,
+    );
     Ok(json!({
         "ok": true,
         "account": account_id,
@@ -1350,4 +1433,22 @@ pub(crate) fn starred_item_json(account_id: &str, header: &MessageHeader) -> Val
         "has_attachments": false,
         "attachments": [],
     })
+}
+
+#[cfg(test)]
+mod sync_tail_tests {
+    use super::{claim_sync_tail, release_sync_tail};
+
+    #[test]
+    fn sync_tail_claim_is_exclusive_per_mailbox() {
+        assert!(claim_sync_tail("tail-test@example.com/INBOX"));
+        // A second sync for the same mailbox must not stack another tail.
+        assert!(!claim_sync_tail("tail-test@example.com/INBOX"));
+        // A different mailbox is independent.
+        assert!(claim_sync_tail("tail-test@example.com/Archive"));
+        release_sync_tail("tail-test@example.com/INBOX");
+        assert!(claim_sync_tail("tail-test@example.com/INBOX"));
+        release_sync_tail("tail-test@example.com/INBOX");
+        release_sync_tail("tail-test@example.com/Archive");
+    }
 }

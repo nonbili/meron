@@ -186,12 +186,60 @@ fn tls_connector() -> Result<tokio_rustls::TlsConnector> {
     Ok(tokio_rustls::TlsConnector::from(Arc::new(config)))
 }
 
+/// Cap on the DNS lookup and on the TLS handshake, each. Without it a sick
+/// resolver (getaddrinfo retrying across nameservers) can hold a sync for the
+/// better part of a minute before erroring; failing fast surfaces the error
+/// banner while a retry is still worth offering.
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Cap per resolved address: one black-hole address (typically an unroutable
+/// IPv6 route ahead of a fine IPv4 one) must not eat the whole connect budget.
+const CONNECT_ATTEMPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Resolve `host` and connect to each address in resolver order with a short
+/// per-attempt cap. Logs slow stages so a stalling first sync can be traced to
+/// DNS vs TCP from device logs alone.
+async fn connect_tcp(host: &str, port: u16) -> Result<TcpStream> {
+    let dns_started = std::time::Instant::now();
+    let addrs: Vec<std::net::SocketAddr> =
+        tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::lookup_host((host, port)))
+            .await
+            .map_err(|_| anyhow!("timed out"))
+            .context("dns lookup")?
+            .context("dns lookup")?
+            .collect();
+    let dns_ms = dns_started.elapsed().as_millis();
+    if dns_ms > 1_000 {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "net",
+            "slow DNS for {host}: {dns_ms}ms"
+        );
+    }
+    let mut last_err = anyhow!("dns lookup: no addresses for {host}");
+    for addr in addrs {
+        let attempt_started = std::time::Instant::now();
+        match tokio::time::timeout(CONNECT_ATTEMPT_TIMEOUT, TcpStream::connect(addr)).await {
+            Ok(Ok(tcp)) => return Ok(tcp),
+            Ok(Err(err)) => last_err = anyhow::Error::new(err).context(format!("connect {addr}")),
+            Err(_) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "net",
+                    "connect to {addr} timed out after {}ms",
+                    attempt_started.elapsed().as_millis()
+                );
+                last_err = anyhow!("connect {addr}: timed out");
+            }
+        }
+    }
+    Err(last_err.context("tcp connect"))
+}
+
 /// Open a TCP connection, optionally wrapped in implicit TLS. Shared by the
 /// IMAP and SMTP paths.
 pub async fn connect_stream(host: &str, port: u16, tls: bool) -> Result<Stream> {
-    let tcp = TcpStream::connect((host, port))
-        .await
-        .context("tcp connect")?;
+    let tcp = connect_tcp(host, port).await?;
 
     // Enable TCP keepalives to prevent silent drops by NAT/firewalls and detect network loss quickly.
     let sock_ref = socket2::SockRef::from(&tcp);
@@ -213,9 +261,10 @@ pub async fn upgrade_to_tls(host: &str, tcp: TcpStream) -> Result<TlsStream<TcpS
     let connector = tls_connector()?;
     let server_name =
         rustls::pki_types::ServerName::try_from(host.to_string()).context("invalid server name")?;
-    connector
-        .connect(server_name, tcp)
+    tokio::time::timeout(CONNECT_TIMEOUT, connector.connect(server_name, tcp))
         .await
+        .map_err(|_| anyhow::anyhow!("timed out"))
+        .context("tls handshake")?
         .context("tls handshake")
 }
 

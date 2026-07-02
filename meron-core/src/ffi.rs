@@ -533,7 +533,7 @@ fn event_envelope(name: &str, detail: serde_json::Value) -> serde_json::Value {
     serde_json::json!({ "event": name, "detail": detail })
 }
 
-fn emit_event(name: &str, detail: serde_json::Value) -> bool {
+pub(crate) fn emit_event(name: &str, detail: serde_json::Value) -> bool {
     let sink = *EVENT_SINK.lock().unwrap();
     let Some(sink) = sink else {
         return false;
