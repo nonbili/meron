@@ -23,6 +23,38 @@ fn insert_message(
 }
 
 #[test]
+fn folders_round_trip_special_use_and_ensure_folder_keeps_it() {
+    let conn = test_conn();
+    upsert_folders(
+        &conn,
+        "acct",
+        &[
+            Folder {
+                name: "INBOX".to_string(),
+                delimiter: Some("/".to_string()),
+                ..Default::default()
+            },
+            Folder {
+                name: "Mail/Entwürfe".to_string(),
+                delimiter: Some("/".to_string()),
+                special_use: Some("drafts".to_string()),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    // Message syncs call ensure_folder on every pass; it must not clobber the
+    // role recorded by the folder LIST sync.
+    ensure_folder(&conn, "acct", "Mail/Entwürfe").unwrap();
+
+    let folders = get_folders(&conn, "acct").unwrap();
+    let drafts = folders.iter().find(|f| f.name == "Mail/Entwürfe").unwrap();
+    assert_eq!(drafts.special_use.as_deref(), Some("drafts"));
+    let inbox = folders.iter().find(|f| f.name == "INBOX").unwrap();
+    assert_eq!(inbox.special_use, None);
+}
+
+#[test]
 fn search_messages_matches_subject_sender_and_body_case_insensitively() {
     let conn = test_conn();
     insert_message(&conn, 1, "Quarterly Plan", "Aki", "aki@example.com", None);
@@ -397,7 +429,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 
     for table in [
         "accounts",
@@ -426,7 +458,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }
 
 #[test]

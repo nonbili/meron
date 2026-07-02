@@ -60,10 +60,6 @@ pub struct Engine {
     /// open would re-open an IMAP connection to re-search for them. Cleared on
     /// restart, which lets a genuinely-late ancestor be retried.
     pub gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
-    /// Account/thread pairs whose Drafts folder has already been checked this
-    /// session. This keeps thread-open Drafts refreshes from looping after their
-    /// own `mail.synced` event while allowing a retry after app restart.
-    pub draft_thread_syncs: std::sync::Mutex<HashSet<String>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -200,7 +196,6 @@ impl Engine {
             watched: std::sync::Mutex::new(HashSet::new()),
             syncing: std::sync::Mutex::new(HashSet::new()),
             gap_attempts: std::sync::Mutex::new(HashMap::new()),
-            draft_thread_syncs: std::sync::Mutex::new(HashSet::new()),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
@@ -393,13 +388,6 @@ impl Engine {
         self.pool.lock().unwrap().clear();
     }
 
-    pub fn mark_thread_drafts_attempted(&self, account: &str, thread_key: &str) -> bool {
-        self.draft_thread_syncs
-            .lock()
-            .unwrap()
-            .insert(format!("{account}|{thread_key}"))
-    }
-
     /// Run `f` against a warm pooled session when one is available, otherwise a
     /// freshly connected one. On success the session is returned to the pool.
     ///
@@ -564,16 +552,48 @@ pub async fn sync_messages(
     Ok(count)
 }
 
+/// Pick the folder filling a special-use role from a cached folder list. The
+/// server-advertised RFC 6154 attribute (recorded by the folder LIST sync)
+/// wins when present; folders synced before the attribute was recorded — or
+/// servers without the extension — fall back to the name heuristic. `exclude`
+/// (the folder currently being synced/viewed) never matches, so callers don't
+/// handle the same folder twice.
+fn find_role_folder(
+    folders: Vec<imap::Folder>,
+    special_use: &str,
+    looks_like: impl Fn(&str) -> bool,
+    exclude: &str,
+) -> Option<String> {
+    folders
+        .iter()
+        .find(|folder| {
+            folder.special_use.as_deref() == Some(special_use)
+                && !folder.name.eq_ignore_ascii_case(exclude)
+        })
+        .map(|folder| folder.name.clone())
+        .or_else(|| {
+            folders
+                .into_iter()
+                .map(|folder| folder.name)
+                .find(|name| looks_like(name) && !name.eq_ignore_ascii_case(exclude))
+        })
+}
+
 /// The cached Sent mailbox name for `account`, if any — used so a chat-view
 /// search reaches the user's own replies (and old mail filed under Sent), not
-/// just the inbox. Resolved from cached folder names via the same heuristic the
-/// session-based resolver uses; `inbox` is excluded so we never list it twice.
+/// just the inbox. `inbox` is excluded so we never list it twice.
 pub fn cached_sent_folder(engine: &Arc<Engine>, account: &str, inbox: &str) -> Option<String> {
     let folders = store::get_folders(&engine.db.lock().unwrap(), account).ok()?;
-    folders
-        .into_iter()
-        .map(|folder| folder.name)
-        .find(|name| imap::looks_like_sent(name) && !name.eq_ignore_ascii_case(inbox))
+    find_role_folder(folders, "sent", imap::looks_like_sent, inbox)
+}
+
+/// The cached Drafts mailbox name for `account`, if any — used so the regular
+/// mailbox sync also pulls drafts and replies saved from another client thread
+/// into the conversation view straight from the local store. `current` is
+/// excluded so we never sync the same folder twice in one pass.
+pub fn cached_drafts_folder(engine: &Arc<Engine>, account: &str, current: &str) -> Option<String> {
+    let folders = store::get_folders(&engine.db.lock().unwrap(), account).ok()?;
+    find_role_folder(folders, "drafts", imap::looks_like_drafts, current)
 }
 
 fn push_unique_folder(folders: &mut Vec<String>, folder: Option<String>) {
@@ -1230,8 +1250,8 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Pooled, limit_prefetch_uids, pool_return, pool_take, should_append_sent_copy,
-        thread_gap_search_folders,
+        Pooled, find_role_folder, limit_prefetch_uids, pool_return, pool_take,
+        should_append_sent_copy, thread_gap_search_folders,
     };
     use std::collections::HashMap;
     use std::time::{Duration, Instant};
@@ -1278,6 +1298,48 @@ mod tests {
         // Fresh one is taken; the stale one underneath is evicted on the next take.
         assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), Some(2));
         assert_eq!(pool_take(&mut map, "a", now, MAX_IDLE), None);
+    }
+
+    fn role_folder(name: &str, special_use: Option<&str>) -> crate::imap::Folder {
+        crate::imap::Folder {
+            name: name.to_string(),
+            special_use: special_use.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    pub fn find_role_folder_prefers_server_attribute_over_name() {
+        // A localized drafts folder carries the \Drafts attribute; a folder
+        // that merely *looks* like drafts by name must lose to it.
+        let folders = vec![
+            role_folder("Drafts", None),
+            role_folder("Mail/Entwürfe", Some("drafts")),
+        ];
+        assert_eq!(
+            find_role_folder(folders, "drafts", crate::imap::looks_like_drafts, "INBOX"),
+            Some("Mail/Entwürfe".to_string())
+        );
+    }
+
+    #[test]
+    pub fn find_role_folder_falls_back_to_name_heuristic() {
+        // No special-use attributes recorded (server without RFC 6154, or rows
+        // synced before the column existed): the name heuristic still works.
+        let folders = vec![role_folder("INBOX", None), role_folder("Drafts", None)];
+        assert_eq!(
+            find_role_folder(folders, "drafts", crate::imap::looks_like_drafts, "INBOX"),
+            Some("Drafts".to_string())
+        );
+    }
+
+    #[test]
+    pub fn find_role_folder_never_returns_the_excluded_folder() {
+        let folders = vec![role_folder("Drafts", Some("drafts"))];
+        assert_eq!(
+            find_role_folder(folders, "drafts", crate::imap::looks_like_drafts, "drafts"),
+            None
+        );
     }
 
     #[test]

@@ -149,65 +149,6 @@ fn maybe_spawn_fill_thread_gaps(
     });
 }
 
-/// On thread open, check Drafts once per account/thread for replies saved from
-/// another client. This is separate from gap fill: drafts are usually children
-/// that reference the current thread root, not missing ancestors discoverable by
-/// Message-ID search.
-fn maybe_spawn_sync_thread_drafts(
-    engine: &Arc<Engine>,
-    out: &Writer,
-    account: &str,
-    thread_key: &str,
-) {
-    if thread_key.starts_with("uid:") || engine.is_paused(account) {
-        return;
-    }
-    if !engine.mark_thread_drafts_attempted(account, thread_key) {
-        return;
-    }
-
-    let engine = engine.clone();
-    let out = out.clone();
-    let account = account.to_string();
-    tokio::spawn(async move {
-        let drafts = match engine
-            .with_read_session(&account, |session| {
-                Box::pin(async move { imap::find_drafts_folder(session).await })
-            })
-            .await
-        {
-            Ok(Some(folder)) => folder,
-            Ok(None) => return,
-            Err(err) => {
-                eprintln!("meron-core: find Drafts for thread sync: {err:#}");
-                return;
-            }
-        };
-
-        let result = tokio::time::timeout(
-            Duration::from_secs(30),
-            sync_messages(&engine, &account, &drafts, 50),
-        )
-        .await;
-        match result {
-            Ok(Ok(synced)) => {
-                emit(
-                    &out,
-                    "mail.synced",
-                    json!({ "account": account, "folder": drafts, "synced": synced }),
-                )
-                .await;
-            }
-            Ok(Err(err)) => {
-                eprintln!("meron-core: sync Drafts for thread: {err:#}");
-            }
-            Err(_) => {
-                eprintln!("meron-core: sync Drafts for thread timed out");
-            }
-        }
-    });
-}
-
 /// Refresh a folder's messages from IMAP in the background (deduped), then emit
 /// `mail.synced` so the UI re-reads the now-fresh store. Keeps network I/O off
 /// the bridge's synchronous request path (which runs on the app's UI thread).
@@ -242,6 +183,22 @@ fn spawn_message_sync(
                 // Warm full bodies for the unread/recent set now that envelopes
                 // are fresh. Deduped, and a no-op once everything is cached.
                 spawn_body_prefetch(engine.clone(), account.clone(), folder.clone());
+                // Piggyback a Drafts sync so replies drafted on another client
+                // thread into conversations straight from the local store (no
+                // per-thread network check on read). Runs before the emit so
+                // the re-read it triggers already sees them.
+                if let Some(drafts) = cached_drafts_folder(&engine, &account, &folder) {
+                    match tokio::time::timeout(
+                        Duration::from_secs(30),
+                        sync_messages(&engine, &account, &drafts, limit),
+                    )
+                    .await
+                    {
+                        Ok(Ok(_)) => {}
+                        Ok(Err(err)) => eprintln!("meron-core: sync Drafts {account}: {err:#}"),
+                        Err(_) => eprintln!("meron-core: sync Drafts {account}: timed out"),
+                    }
+                }
                 let uid_next_after = if folder.eq_ignore_ascii_case("INBOX") {
                     inbox_uid_next(&engine, &account)
                 } else {
@@ -1155,7 +1112,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let folder = imap::Folder {
                 name,
                 delimiter: None,
-                unread: 0,
+                ..Default::default()
             };
             {
                 let db = engine.db.lock().unwrap();
@@ -1454,7 +1411,6 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 // and the reader re-reads. The markRead full-scan path (no limit)
                 // skips this entirely.
                 if limit.is_some() {
-                    maybe_spawn_sync_thread_drafts(engine, out, &account, &thread_key);
                     maybe_spawn_fill_thread_gaps(engine, out, &account, &thread_key);
                 }
                 let db = engine.db.lock().unwrap();

@@ -260,6 +260,29 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
             ),
         }
     }
+
+    // Same for Drafts: keeping its headers cached means opening a thread can
+    // surface a reply drafted on another client from the local store alone,
+    // with no per-thread network check on the read path.
+    if let Some(drafts) = crate::engine::cached_drafts_folder(&engine, &account_id, &folder) {
+        match crate::ffi::engine_block_on(crate::engine::sync_messages(
+            &engine,
+            &account_id,
+            &drafts,
+            limit,
+        )) {
+            Ok(drafts_count) => crate::mlog!(
+                crate::log::Level::Info,
+                "mail.sync",
+                "Drafts sync account={account_id} drafts={drafts} synced={drafts_count}"
+            ),
+            Err(err) => crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "Drafts sync failed for {account_id}: {err}"
+            ),
+        }
+    }
     Ok(json!({
         "ok": true,
         "account": account_id,
@@ -478,47 +501,6 @@ fn search_live_mobile_mail_messages(
     ))
 }
 
-fn sync_mobile_thread_drafts_once(
-    engine: &std::sync::Arc<crate::engine::Engine>,
-    parsed: &ParsedThreadId,
-) {
-    if parsed.uid.is_some()
-        || parsed.thread_key.starts_with("uid:")
-        || !engine.mark_thread_drafts_attempted(&parsed.account, &parsed.thread_key)
-    {
-        return;
-    }
-    let drafts =
-        match crate::ffi::engine_block_on(engine.with_read_session(&parsed.account, |session| {
-            Box::pin(async move { imap::find_drafts_folder(session).await })
-        })) {
-            Ok(Some(folder)) => folder,
-            Ok(None) => return,
-            Err(err) => {
-                crate::mlog!(
-                    crate::log::Level::Warn,
-                    "mail.threadRead",
-                    "Drafts lookup failed for {}: {err}",
-                    parsed.account
-                );
-                return;
-            }
-        };
-    if let Err(err) = crate::ffi::engine_block_on(crate::engine::sync_messages(
-        engine,
-        &parsed.account,
-        &drafts,
-        50,
-    )) {
-        crate::mlog!(
-            crate::log::Level::Warn,
-            "mail.threadRead",
-            "Drafts sync failed for {}: {err}",
-            parsed.account
-        );
-    }
-}
-
 pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     if is_rss_thread_id(&thread_id) {
@@ -526,7 +508,6 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_dir)?;
-    sync_mobile_thread_drafts_once(&engine, &parsed);
     with_mobile_db(data_dir, |conn| {
         let headers = if let Some(uid) = parsed.uid {
             let header = store::get_thread_headers(

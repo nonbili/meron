@@ -105,7 +105,7 @@ impl Creds {
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Default)]
 pub struct Folder {
     pub name: String,
     pub delimiter: Option<String>,
@@ -113,6 +113,12 @@ pub struct Folder {
     /// `store::get_folders`; the IMAP LIST path leaves it at 0.
     #[serde(default)]
     pub unread: u32,
+    /// RFC 6154 special-use role ("drafts", "sent", "trash", "junk",
+    /// "archive", "all") as advertised by LIST, when the server supports the
+    /// extension. Cached in the store so role lookups (e.g. which folder holds
+    /// drafts) don't depend on name heuristics alone.
+    #[serde(default)]
+    pub special_use: Option<String>,
 }
 
 /// One addressee parsed from an envelope `To`/`Cc` list.
@@ -361,10 +367,24 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
     let mut stream = session.list(Some(""), Some("*")).await.context("LIST")?;
     while let Some(item) = stream.next().await {
         let name = item.context("LIST item")?;
+        let special_use = name.attributes().iter().find_map(|attr| {
+            use async_imap::imap_proto::NameAttribute;
+            match attr {
+                NameAttribute::Drafts => Some("drafts"),
+                NameAttribute::Sent => Some("sent"),
+                NameAttribute::Trash => Some("trash"),
+                NameAttribute::Junk => Some("junk"),
+                NameAttribute::Archive => Some("archive"),
+                NameAttribute::All => Some("all"),
+                _ => None,
+            }
+            .map(str::to_string)
+        });
         out.push(Folder {
             name: name.name().to_string(),
             delimiter: name.delimiter().map(|d| d.to_string()),
             unread: 0,
+            special_use,
         });
     }
     Ok(out)
@@ -1179,7 +1199,7 @@ fn looks_like_trash(name: &str) -> bool {
     )
 }
 
-fn looks_like_drafts(name: &str) -> bool {
+pub fn looks_like_drafts(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
     matches!(
         n.as_str(),
@@ -1492,9 +1512,19 @@ fn address_fields(addr: &async_imap::imap_proto::Address) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::{
-        civil_from_days, first_message_id, header_subject, imap_quote, message_id_search_criteria,
-        normalize_message_id, references_root, thread_key,
+        civil_from_days, first_message_id, header_subject, imap_quote, looks_like_drafts,
+        message_id_search_criteria, normalize_message_id, references_root, thread_key,
     };
+
+    #[test]
+    fn looks_like_drafts_matches_common_names_case_insensitively() {
+        for name in ["Drafts", "draft", "INBOX.Drafts", "[Gmail]/Drafts"] {
+            assert!(looks_like_drafts(name), "{name}");
+        }
+        for name in ["INBOX", "Sent", "Draft Specs", ""] {
+            assert!(!looks_like_drafts(name), "{name}");
+        }
+    }
 
     #[test]
     fn references_root_uses_first_id_of_folded_header() {

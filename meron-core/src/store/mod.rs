@@ -55,9 +55,11 @@ pub fn upsert_folders(conn: &Connection, account: &str, folders: &[Folder]) -> R
     let tx = conn.unchecked_transaction()?;
     for folder in folders {
         tx.execute(
-            "INSERT INTO folders(account, name, delimiter) VALUES(?1, ?2, ?3)
-             ON CONFLICT(account, name) DO UPDATE SET delimiter = excluded.delimiter",
-            params![account, folder.name, folder.delimiter],
+            "INSERT INTO folders(account, name, delimiter, special_use) VALUES(?1, ?2, ?3, ?4)
+             ON CONFLICT(account, name) DO UPDATE SET
+               delimiter = excluded.delimiter,
+               special_use = excluded.special_use",
+            params![account, folder.name, folder.delimiter, folder.special_use],
         )?;
     }
     tx.commit()?;
@@ -81,7 +83,7 @@ pub fn ensure_folder(conn: &Connection, account: &str, name: &str) -> Result<()>
 
 pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT f.name, f.delimiter,
+        "SELECT f.name, f.delimiter, f.special_use,
                 (SELECT COUNT(*) FROM messages m
                   WHERE m.account = f.account AND m.folder = f.name AND m.seen = 0) AS unread
            FROM folders f WHERE f.account = ?1 ORDER BY f.name",
@@ -90,7 +92,8 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
         Ok(Folder {
             name: row.get(0)?,
             delimiter: row.get(1)?,
-            unread: row.get::<_, i64>(2)? as u32,
+            special_use: row.get(2)?,
+            unread: row.get::<_, i64>(3)? as u32,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

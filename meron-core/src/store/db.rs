@@ -297,6 +297,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 3 {
         migrate_v3(conn)?;
     }
+    if version < 4 {
+        migrate_v4(conn)?;
+    }
 
     Ok(())
 }
@@ -334,6 +337,17 @@ fn migrate_v3(conn: &Connection) -> Result<()> {
          );",
     )?;
     tx.execute_batch("PRAGMA user_version = 3;")?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// RFC 6154 special-use role reported by LIST for a folder ("drafts", "sent",
+/// …), NULL when the server doesn't advertise one. Lets role lookups (which
+/// folder holds drafts?) trust the server over name heuristics.
+fn migrate_v4(conn: &Connection) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch("ALTER TABLE folders ADD COLUMN special_use TEXT;")?;
+    tx.execute_batch("PRAGMA user_version = 4;")?;
     tx.commit()?;
     Ok(())
 }

@@ -897,12 +897,12 @@ fn mobile_protocol_lists_folders_from_store() {
             Folder {
                 name: "INBOX".to_string(),
                 delimiter: Some("/".to_string()),
-                unread: 0,
+                ..Default::default()
             },
             Folder {
                 name: "Archive".to_string(),
                 delimiter: Some("/".to_string()),
-                unread: 0,
+                ..Default::default()
             },
         ],
     )
@@ -1385,6 +1385,104 @@ fn mobile_protocol_reads_uid_thread_message_from_store() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+// A reply drafted on another client lands in the local store via the regular
+// Drafts folder sync; opening the thread must surface it from the store alone
+// (thread read spans folders), with no per-thread network check.
+#[test]
+fn mobile_protocol_thread_read_includes_cached_draft_reply() {
+    let data_dir = unique_data_dir("thread-read-draft-reply");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    store::ensure_folder(&conn, "me@example.com", "Drafts").unwrap();
+
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 7,
+            subject: "test mailo2".to_string(),
+            from_name: "Gmail".to_string(),
+            from_addr: "sender@gmail.com".to_string(),
+            date: 100,
+            seen: true,
+            thread_key: "root@mail.gmail.com".to_string(),
+            message_id: "root@mail.gmail.com".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::save_cached_message(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        7,
+        &Message {
+            subject: "test mailo2".to_string(),
+            from_name: "Gmail".to_string(),
+            from_addr: "sender@gmail.com".to_string(),
+            to: "Me <me@example.com>".to_string(),
+            message_id: "root@mail.gmail.com".to_string(),
+            date: 100,
+            body: "root".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "Drafts",
+        &[MessageHeader {
+            uid: 3,
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            date: 200,
+            seen: true,
+            thread_key: "root@mail.gmail.com".to_string(),
+            message_id: "draft-reply@mailo.com".to_string(),
+            in_reply_to: "root@mail.gmail.com".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::save_cached_message(
+        &conn,
+        "me@example.com",
+        "Drafts",
+        3,
+        &Message {
+            subject: "Re: test mailo2".to_string(),
+            from_name: "Me".to_string(),
+            from_addr: "me@example.com".to_string(),
+            to: "sender@gmail.com".to_string(),
+            message_id: "draft-reply@mailo.com".to_string(),
+            references: "root@mail.gmail.com".to_string(),
+            date: 200,
+            body: "draft reply".to_string(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    drop(conn);
+
+    let read = invoke_mobile_protocol_json(
+        r#"{"id":69,"method":"mail.threadRead","params":{"thread_id":"me@example.com#INBOX#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let messages = read["result"]["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 2, "{read}");
+    assert_eq!(messages[0]["message_id"], "root@mail.gmail.com");
+    assert_eq!(messages[1]["message_id"], "draft-reply@mailo.com");
+    assert_eq!(messages[1]["folder_id"], "Drafts");
+    assert_eq!(messages[1]["body"], "draft reply");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 #[test]
 fn mobile_protocol_mark_read_persists_locally_before_server_sync() {
     let data_dir = unique_data_dir("thread-actions");
@@ -1854,12 +1952,12 @@ fn mobile_protocol_archive_requires_server_credentials() {
             Folder {
                 name: "INBOX".to_string(),
                 delimiter: Some("/".to_string()),
-                unread: 0,
+                ..Default::default()
             },
             Folder {
                 name: "Archive".to_string(),
                 delimiter: Some("/".to_string()),
-                unread: 0,
+                ..Default::default()
             },
         ],
     )
