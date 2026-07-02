@@ -310,13 +310,14 @@ impl Engine {
                     if !configured.is_empty() {
                         configured.to_string()
                     } else {
+                        // No secret anywhere is a valid configuration: mobile's
+                        // native Google clients are public (installed-app)
+                        // clients that refresh with client_id only, and
+                        // `refresh_oauth_token` omits the empty field.
                         match default_client_secret_env {
-                            Some(env_name) if token_url == GOOGLE_TOKEN_URL => std::env::var(
-                                env_name,
-                            )
-                            .with_context(
-                                || "MERON_GOOGLE_CLIENT_SECRET is required for Gmail OAuth refresh",
-                            )?,
+                            Some(env_name) if token_url == GOOGLE_TOKEN_URL => {
+                                std::env::var(env_name).unwrap_or_default()
+                            }
                             _ => String::new(),
                         }
                     }
