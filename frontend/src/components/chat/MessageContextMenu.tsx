@@ -48,7 +48,6 @@ export function MessageContextMenu({
           <MenuItem
             icon={<ExternalLink size={13} className="text-accent" />}
             label={t('chat.actions.openLink')}
-            className="whitespace-nowrap"
             onClick={() => {
               openExternal(state.linkUrl!)
               onClose()
@@ -57,7 +56,6 @@ export function MessageContextMenu({
           <MenuItem
             icon={<Link2 size={13} className="text-accent" />}
             label={t('chat.actions.copyLinkAddress')}
-            className="whitespace-nowrap"
             onClick={() => {
               navigator.clipboard?.writeText(state.linkUrl!).catch(() => undefined)
               onClose()
@@ -76,7 +74,6 @@ export function MessageContextMenu({
                 )
               }
               label={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
-              className="whitespace-nowrap"
               onClick={() => {
                 if (isDraft) {
                   void openDraftCompose(state.message)
@@ -91,7 +88,6 @@ export function MessageContextMenu({
             <MenuItem
               icon={<CheckSquare size={13} className="text-accent" />}
               label={t('buttons.select', { defaultValue: 'Select' })}
-              className="whitespace-nowrap"
               onClick={() => {
                 onSelectMessage(state.message)
                 onClose()
@@ -107,7 +103,6 @@ export function MessageContextMenu({
               )
             }
             label={state.message.unread ? t('threads.actions.markAsRead') : t('threads.actions.markAsUnread')}
-            className="whitespace-nowrap"
             onClick={() => {
               const message = state.message
               onClose()
@@ -119,7 +114,6 @@ export function MessageContextMenu({
               <Star size={13} className={state.message.starred ? 'fill-amber-500 text-amber-500' : 'text-accent'} />
             }
             label={state.message.starred ? t('chat.unstar') : t('chat.star')}
-            className="whitespace-nowrap"
             onClick={() => {
               const message = state.message
               onClose()
@@ -130,7 +124,6 @@ export function MessageContextMenu({
             <MenuItem
               icon={<Forward size={13} className="text-accent" />}
               label={t('chat.actions.forward')}
-              className="whitespace-nowrap"
               onClick={() => {
                 const message = state.message
                 onClose()
@@ -142,7 +135,6 @@ export function MessageContextMenu({
             <MenuItem
               icon={<Copy size={13} className="text-accent" />}
               label={t('chat.actions.editAsNewMessage')}
-              className="whitespace-nowrap"
               onClick={() => {
                 const message = state.message
                 onClose()
@@ -155,7 +147,6 @@ export function MessageContextMenu({
               danger
               icon={<Trash2 size={13} />}
               label={isDraft ? t('chat.actions.discardDraft') : t('chat.actions.deleteMessage')}
-              className="whitespace-nowrap"
               onClick={() => {
                 const message = state.message
                 onClose()

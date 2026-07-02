@@ -4,7 +4,7 @@
  * menus compose these and append their own extras (disabled states, etc.).
  */
 const menuItemBase =
-  'flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-normal leading-none cursor-pointer transition-colors'
+  'flex h-8 w-full items-center gap-2 whitespace-nowrap rounded-lg px-2 text-left text-[13px] font-normal leading-none cursor-pointer transition-colors'
 
 /** Standard menu item. */
 export const menuItemClass = `${menuItemBase} text-primary hover:bg-hover`

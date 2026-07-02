@@ -228,7 +228,6 @@ export function ConversationDetailsPanel({
           <MenuItem
             icon={<Copy size={13} className="text-accent" />}
             label={t('chat.copyEmailAddress')}
-            className="whitespace-nowrap"
             onClick={() => {
               navigator.clipboard?.writeText(personMenu.person.email).catch(() => undefined)
               setPersonMenu(null)
