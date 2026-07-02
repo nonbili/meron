@@ -462,6 +462,36 @@ fn run_migrations_creates_schema_and_bumps_version() {
 }
 
 #[test]
+fn concurrent_first_open_runs_migrations_once() {
+    let dir = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("meron.db");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(6));
+    let handles = (0..6)
+        .map(|_| {
+            let path = path.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                db::open_at(&path).map(|_| ())
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for handle in handles {
+        handle.join().unwrap().unwrap();
+    }
+
+    let conn = Connection::open(&path).unwrap();
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 4);
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn prefs_resolve_engine_default_and_persist_without_clobbering() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(db::ACCOUNTS_DDL).unwrap();

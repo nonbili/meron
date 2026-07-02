@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 pub(super) const ACCOUNTS_DDL: &str = "
 CREATE TABLE IF NOT EXISTS accounts (
@@ -155,6 +156,8 @@ fn open_inner(path: &Path, key: Option<&str>) -> Result<Connection> {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = open_keyed_connection(path, key)?;
+    conn.busy_timeout(Duration::from_millis(5000))
+        .context("set busy timeout")?;
     // WAL + synchronous=NORMAL is the durable-but-fast desktop combo; busy_timeout
     // avoids spurious SQLITE_BUSY now that a reader can overlap a writer under WAL.
     conn.execute_batch(
@@ -279,38 +282,39 @@ fn config_dir() -> PathBuf {
 
 /// Apply schema migrations in order, tracked by SQLite's `PRAGMA user_version`.
 ///
-/// Each step runs only when the DB is below its target version, inside its own
-/// transaction that also bumps `user_version` — so a crash mid-migration rolls
-/// back cleanly and the step re-runs next launch. Append-only: to evolve the
-/// schema, add a new `if version < N` block; never edit or reorder a shipped
-/// one. (Cache-only invalidation lives in `invalidate_body_cache_if_needed`,
-/// kept off this counter so a render change doesn't look like a schema change.)
+/// Pending steps run inside one IMMEDIATE transaction that also bumps
+/// `user_version`, so concurrent first-open callers serialize before reading
+/// the version. A crash mid-migration rolls back cleanly and the step re-runs
+/// next launch. Append-only: to evolve the schema, add a new `if version < N`
+/// block; never edit or reorder a shipped one. (Cache-only invalidation lives in
+/// `invalidate_body_cache_if_needed`, kept off this counter so a render change
+/// doesn't look like a schema change.)
 pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
 
     if version < 1 {
-        migrate_v1(conn)?;
+        migrate_v1(&tx)?;
     }
     if version < 2 {
-        migrate_v2(conn)?;
+        migrate_v2(&tx)?;
     }
     if version < 3 {
-        migrate_v3(conn)?;
+        migrate_v3(&tx)?;
     }
     if version < 4 {
-        migrate_v4(conn)?;
+        migrate_v4(&tx)?;
     }
 
+    tx.commit()?;
     Ok(())
 }
 
 fn migrate_v1(conn: &Connection) -> Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute_batch(ACCOUNTS_DDL)?;
-    tx.execute_batch(MESSAGES_DDL)?;
-    tx.execute_batch(SCHEMA)?;
-    tx.execute_batch("PRAGMA user_version = 1;")?;
-    tx.commit()?;
+    conn.execute_batch(ACCOUNTS_DDL)?;
+    conn.execute_batch(MESSAGES_DDL)?;
+    conn.execute_batch(SCHEMA)?;
+    conn.execute_batch("PRAGMA user_version = 1;")?;
     Ok(())
 }
 
@@ -318,10 +322,8 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
 /// (feed icon/logo, …), stored as a JSON object. Mirrors the `messages.json`
 /// approach; defaults to an empty object so existing rows stay valid.
 fn migrate_v2(conn: &Connection) -> Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute_batch("ALTER TABLE subscriptions ADD COLUMN json TEXT NOT NULL DEFAULT '{}';")?;
-    tx.execute_batch("PRAGMA user_version = 2;")?;
-    tx.commit()?;
+    conn.execute_batch("ALTER TABLE subscriptions ADD COLUMN json TEXT NOT NULL DEFAULT '{}';")?;
+    conn.execute_batch("PRAGMA user_version = 2;")?;
     Ok(())
 }
 
@@ -329,15 +331,13 @@ fn migrate_v2(conn: &Connection) -> Result<()> {
 /// an OS keychain (Android, iOS sandbox). Desktop continues to use the keychain
 /// via the `secrets` module; only the mobile FFI path reads/writes this table.
 fn migrate_v3(conn: &Connection) -> Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute_batch(
+    conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS account_secrets (
            account_id TEXT PRIMARY KEY,
            blob       TEXT NOT NULL
          );",
     )?;
-    tx.execute_batch("PRAGMA user_version = 3;")?;
-    tx.commit()?;
+    conn.execute_batch("PRAGMA user_version = 3;")?;
     Ok(())
 }
 
@@ -345,10 +345,8 @@ fn migrate_v3(conn: &Connection) -> Result<()> {
 /// …), NULL when the server doesn't advertise one. Lets role lookups (which
 /// folder holds drafts?) trust the server over name heuristics.
 fn migrate_v4(conn: &Connection) -> Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute_batch("ALTER TABLE folders ADD COLUMN special_use TEXT;")?;
-    tx.execute_batch("PRAGMA user_version = 4;")?;
-    tx.commit()?;
+    conn.execute_batch("ALTER TABLE folders ADD COLUMN special_use TEXT;")?;
+    conn.execute_batch("PRAGMA user_version = 4;")?;
     Ok(())
 }
 

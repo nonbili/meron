@@ -568,7 +568,7 @@ fn mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {
         Some(key) => crate::store::open_at_keyed(&db_path, &key),
         None => crate::store::open_at(&db_path),
     }
-    .map_err(|err| err.to_string())
+    .map_err(|err| format!("{err:#}"))
 }
 
 fn start_mobile_idle_watch(
@@ -581,7 +581,7 @@ fn start_mobile_idle_watch(
         if is_rss_account(&conn, &account)? {
             return Ok(json!({ "ok": true, "rss": true }));
         }
-        if crate::store::account_paused(&conn, &account).map_err(|err| err.to_string())? {
+        if crate::store::account_paused(&conn, &account).map_err(|err| format!("{err:#}"))? {
             return Ok(json!({ "ok": true, "paused": true }));
         }
         let creds = load_mobile_account_creds(&conn, &account)?;
