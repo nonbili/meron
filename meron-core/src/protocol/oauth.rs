@@ -94,7 +94,7 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         sender_name: opt_str(params, "sender_name"),
     };
 
-    with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_dir, |conn| {
         store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
@@ -109,7 +109,9 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
             );
         }
         Ok(json!({ "account": account }))
-    })
+    })?;
+    crate::ffi::evict_engine_account(&id);
+    Ok(result)
 }
 
 /// Refresh the stored access token for a platform-managed OAuth account.
@@ -128,7 +130,7 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
         .and_then(Value::as_i64)
         .unwrap_or_else(|| now_epoch_seconds() + 3600);
 
-    with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_dir, |conn| {
         let mut creds = load_mobile_account_creds(&conn, &id)?;
         if !creds.is_oauth() {
             return Err(format!("account is not oauth: {id}"));
@@ -153,7 +155,9 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
             );
         }
         Ok(json!({ "ok": true, "account": account }))
-    })
+    })?;
+    crate::ffi::evict_engine_account(&id);
+    Ok(result)
 }
 
 #[derive(Debug, Deserialize)]

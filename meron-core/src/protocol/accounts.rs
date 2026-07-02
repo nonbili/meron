@@ -66,10 +66,12 @@ pub(crate) fn req_account_pref_id(params: &Value) -> Result<String, String> {
 
 pub(crate) fn remove_mobile_account(data_dir: &str, params: &Value) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
-    with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_dir, |conn| {
         store::delete_account(&conn, &id).map_err(|err| err.to_string())?;
         Ok(json!({ "ok": true }))
-    })
+    })?;
+    crate::ffi::evict_engine_account(&id);
+    Ok(result)
 }
 
 pub(crate) fn autodiscover_mobile_account(params: &Value) -> Result<Value, String> {
@@ -714,7 +716,7 @@ pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Res
         sender_name: opt_str(params, "sender_name"),
     };
 
-    with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_dir, |conn| {
         store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
@@ -729,5 +731,7 @@ pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Res
             );
         }
         Ok(json!({ "account": account }))
-    })
+    })?;
+    crate::ffi::evict_engine_account(&id);
+    Ok(result)
 }

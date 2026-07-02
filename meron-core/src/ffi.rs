@@ -78,6 +78,18 @@ pub(crate) fn current_engine() -> Option<Arc<Engine>> {
     ENGINE.lock().unwrap().clone()
 }
 
+/// Evict `account_id` from the hosted Engine's in-memory creds cache, if an
+/// Engine is live. Account mutations (add/reconnect, removal, platform token
+/// push via `account.updateOAuthToken`) go through the stateless DB path, and
+/// `ensure_valid_creds` only hydrates accounts *missing* from its cache — so
+/// without eviction a warm foreground Engine keeps authenticating with the
+/// stale creds it loaded before the mutation.
+pub(crate) fn evict_engine_account(account_id: &str) {
+    if let Some(engine) = current_engine() {
+        engine.accounts.blocking_lock().remove(account_id);
+    }
+}
+
 /// The Engine to run a mobile command against: the warm hosted one while
 /// foreground, or a transient one (own connection, no pooling) built on demand
 /// for background/one-off calls (e.g. a `BGAppRefreshTask` sync before any
