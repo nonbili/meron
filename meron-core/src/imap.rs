@@ -1419,19 +1419,25 @@ fn thread_key(
     format!("uid:{uid}")
 }
 
+/// Strip angle brackets and whitespace from an RFC Message-ID, preserving the
+/// original casing. Message-IDs are case-sensitive opaque tokens (RFC 5322) and
+/// this value is echoed back on the wire in reply `In-Reply-To`/`References`
+/// headers, where a case change breaks the recipient's threading (e.g. Gmail
+/// matches ids byte-for-byte). Store lookups that compare ids wrap both sides
+/// in `lower()` instead.
 fn normalize_message_id(value: &str) -> String {
     if let Some(start) = value.find('<')
         && let Some(end) = value[start..].find('>')
     {
         let id = &value[start + 1..start + end];
-        return id.trim().to_ascii_lowercase();
+        return id.trim().to_string();
     }
     value
         .trim()
         .trim_start_matches('<')
         .trim_end_matches('>')
         .trim()
-        .to_ascii_lowercase()
+        .to_string()
 }
 
 fn references_root(header: &[u8]) -> Option<String> {
@@ -1496,7 +1502,7 @@ mod tests {
         let header = b"Subject: Re: test mailo 1\r\nReferences: <CAJ7M84+root@mail.gmail.com>\r\n\t<meron-second@mailo.com>\r\nIn-Reply-To: <meron-second@mailo.com>\r\n\r\n";
         assert_eq!(
             references_root(header).as_deref(),
-            Some("caj7m84+root@mail.gmail.com")
+            Some("CAJ7M84+root@mail.gmail.com")
         );
     }
 
@@ -1515,9 +1521,15 @@ mod tests {
     }
 
     #[test]
-    fn normalize_message_id_extracts_bare_lowercase_id() {
-        assert_eq!(normalize_message_id("<ID@Host>"), "id@host");
-        assert_eq!(normalize_message_id("prefix <Id@Host> suffix"), "id@host");
+    fn normalize_message_id_extracts_bare_id_preserving_case() {
+        // Case must survive: the stored id is echoed into reply In-Reply-To/
+        // References headers, and receivers (Gmail) match ids case-sensitively.
+        assert_eq!(
+            normalize_message_id("<nonbili/NouTube/issues/253@github.com>"),
+            "nonbili/NouTube/issues/253@github.com"
+        );
+        assert_eq!(normalize_message_id("<ID@Host>"), "ID@Host");
+        assert_eq!(normalize_message_id("prefix <Id@Host> suffix"), "Id@Host");
         assert_eq!(normalize_message_id("  bare@host  "), "bare@host");
         // Unterminated bracket falls back to trimming both bracket chars.
         assert_eq!(normalize_message_id("<broken@host"), "broken@host");
@@ -1528,7 +1540,7 @@ mod tests {
     fn first_message_id_takes_the_references_root() {
         assert_eq!(
             first_message_id("<Root@h> <mid@h> <leaf@h>").as_deref(),
-            Some("root@h")
+            Some("Root@h")
         );
         assert_eq!(first_message_id("   ").as_deref(), None);
     }

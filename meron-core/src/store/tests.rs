@@ -767,3 +767,82 @@ fn body_cache_invalidation_works() {
     let hits = search_messages(&conn, "acct", "INBOX", "rendered", 10).unwrap();
     assert!(hits.iter().any(|m| m.subject == "HTML only"));
 }
+
+#[test]
+fn upsert_messages_preserves_message_id_casing_in_json() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    // The stored ids feed reply In-Reply-To/References headers verbatim, and
+    // receivers (Gmail, GitHub) match Message-IDs case-sensitively — a synced
+    // row must never lowercase them.
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[MessageHeader {
+            uid: 1,
+            subject: "Wont download videos".into(),
+            date: 100,
+            thread_key: "nonbili/NouTube/issues/253@github.com".into(),
+            message_id: "nonbili/NouTube/issues/253@github.com".into(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+
+    let (message_id, thread_key): (String, String) = conn
+        .query_row(
+            "SELECT json_extract(json, '$.message_id'), thread_key FROM messages WHERE uid = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(message_id, "nonbili/NouTube/issues/253@github.com");
+    assert_eq!(thread_key, "nonbili/NouTube/issues/253@github.com");
+}
+
+#[test]
+fn thread_key_inheritance_matches_parent_message_id_case_insensitively() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    // Parent cached with its original mixed-case Message-ID.
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[MessageHeader {
+            uid: 1,
+            subject: "test".into(),
+            date: 100,
+            thread_key: "Root@Mail.example".into(),
+            message_id: "Root@Mail.example".into(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    // A reply whose computed key fell back to In-Reply-To, with different
+    // casing than the cached parent (e.g. a row synced before ids preserved
+    // case): the parent lookup must still match and hand down the root key.
+    upsert_messages(
+        &conn,
+        "acct",
+        "Sent",
+        &[MessageHeader {
+            uid: 2,
+            subject: "Re: test".into(),
+            date: 200,
+            thread_key: "root@mail.example".into(),
+            message_id: "reply@mailo.com".into(),
+            in_reply_to: "root@mail.example".into(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+
+    let child_key: String = conn
+        .query_row("SELECT thread_key FROM messages WHERE uid = 2", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(child_key, "Root@Mail.example");
+}

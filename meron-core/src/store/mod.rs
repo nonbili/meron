@@ -555,9 +555,9 @@ pub fn get_thread_headers(
 /// reference (each row's `References` chain) plus the root id (`thread_key`
 /// itself), then subtract the ids already present as cached messages. The
 /// remainder is the ancestry the thread links to but that lies outside the
-/// synced window — the on-demand fetch target. All ids are lowercased so the
-/// comparison is case-insensitive (the typed `thread_key` column is lowercased
-/// by the sync path while `json.references` preserves header casing).
+/// synced window — the on-demand fetch target. All ids are lowercased here so
+/// the set comparison is case-insensitive; stored ids preserve the original
+/// header casing.
 pub fn get_thread_reference_gaps(
     conn: &Connection,
     account: &str,
