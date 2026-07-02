@@ -1,6 +1,43 @@
 use super::*;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
+const MOBILE_BODY_PREFETCH_DAYS: u32 = 7;
+const MOBILE_BODY_PREFETCH_MAX: usize = 20;
+const MOBILE_BODY_PREFETCH_TIMEOUT_SECS: u64 = 20;
+
+fn prefetch_mobile_bodies(
+    data_dir: &str,
+    engine: &std::sync::Arc<crate::engine::Engine>,
+    account_id: &str,
+    folder: &str,
+) {
+    let options = crate::engine::BodyPrefetchOptions {
+        days: MOBILE_BODY_PREFETCH_DAYS,
+        max_count: Some(MOBILE_BODY_PREFETCH_MAX),
+        media_root: std::path::PathBuf::from(data_dir).join("attachments"),
+    };
+    let result = crate::ffi::engine_block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(MOBILE_BODY_PREFETCH_TIMEOUT_SECS),
+            crate::engine::prefetch_bodies_with_options(engine, account_id, folder, options),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out"))?
+    });
+    match result {
+        Ok(fetched) => crate::mlog!(
+            crate::log::Level::Info,
+            "mail.sync",
+            "Prefetched {fetched} message bodies for {account_id}/{folder}"
+        ),
+        Err(err) => crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.sync",
+            "Body prefetch failed for {account_id}/{folder}: {err}"
+        ),
+    }
+}
+
 pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let to = req_str(params, "to")?;
@@ -197,6 +234,7 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         "mail.sync",
         "account={account_id} folder={folder} synced={count} folders={folders_count} sent={resolved_sent:?}"
     );
+    prefetch_mobile_bodies(data_dir, &engine, &account_id, &folder);
 
     // Also pull the Sent folder so outgoing messages — including ones sent from
     // another client — surface in the cross-folder conversation view. The

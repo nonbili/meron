@@ -5,6 +5,7 @@
 
 use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
@@ -833,6 +834,34 @@ pub async fn search_starred_mail_messages(
 /// everything received within this many days.
 pub const PREFETCH_DAYS: u32 = 14;
 
+#[derive(Clone, Debug)]
+pub struct BodyPrefetchOptions {
+    pub days: u32,
+    pub max_count: Option<usize>,
+    pub media_root: PathBuf,
+}
+
+impl Default for BodyPrefetchOptions {
+    fn default() -> Self {
+        Self {
+            days: PREFETCH_DAYS,
+            max_count: None,
+            media_root: parse::media_root(),
+        }
+    }
+}
+
+fn limit_prefetch_uids(mut pending: Vec<u32>, max_count: Option<usize>) -> Vec<u32> {
+    if let Some(max_count) = max_count {
+        // SEARCH returns ascending UIDs. When mobile has a cap, spend the budget
+        // on the newest messages first; older unread mail remains available via
+        // the on-demand reader.
+        pending.reverse();
+        pending.truncate(max_count);
+    }
+    pending
+}
+
 /// Download full message bodies (RFC822, attachments included) for a folder's
 /// unread + recent messages into the store, so opening them is instant and they
 /// read offline. Reuses one connection: SELECT + SEARCH once, then UID FETCH
@@ -845,13 +874,23 @@ pub async fn prefetch_bodies(
     account: &str,
     folder: &str,
 ) -> anyhow::Result<usize> {
+    prefetch_bodies_with_options(engine, account, folder, BodyPrefetchOptions::default()).await
+}
+
+pub async fn prefetch_bodies_with_options(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    options: BodyPrefetchOptions,
+) -> anyhow::Result<usize> {
     engine
         .with_read_session(account, |session| {
             let engine = engine.clone();
             let account = account.to_string();
             let folder = folder.to_string();
+            let options = options.clone();
             Box::pin(async move {
-                let uids = imap::search_prefetch_uids(session, &folder, PREFETCH_DAYS).await?;
+                let uids = imap::search_prefetch_uids(session, &folder, options.days).await?;
 
                 let pending: Vec<u32> = {
                     let db = engine.db.lock().unwrap();
@@ -863,11 +902,12 @@ pub async fn prefetch_bodies(
                         })
                         .collect()
                 };
+                let pending = limit_prefetch_uids(pending, options.max_count);
 
                 let mut fetched = 0usize;
                 for uid in pending {
                     let media = parse::MediaCtx {
-                        root: parse::media_root(),
+                        root: options.media_root.clone(),
                         account: account.to_string(),
                         folder: folder.to_string(),
                         uid,
@@ -1189,7 +1229,8 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Pooled, pool_return, pool_take, should_append_sent_copy, thread_gap_search_folders,
+        Pooled, limit_prefetch_uids, pool_return, pool_take, should_append_sent_copy,
+        thread_gap_search_folders,
     };
     use std::collections::HashMap;
     use std::time::{Duration, Instant};
@@ -1256,6 +1297,27 @@ mod tests {
             Some("drafts".to_string()),
         );
         assert_eq!(folders, vec!["INBOX", "Drafts"]);
+    }
+
+    #[test]
+    pub fn prefetch_limit_keeps_all_uids_when_uncapped() {
+        assert_eq!(
+            limit_prefetch_uids(vec![1, 2, 3, 4], None),
+            vec![1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    pub fn prefetch_limit_spends_mobile_budget_on_newest_uids() {
+        assert_eq!(limit_prefetch_uids(vec![1, 2, 3, 4], Some(2)), vec![4, 3]);
+    }
+
+    #[test]
+    pub fn prefetch_limit_zero_fetches_nothing() {
+        assert_eq!(
+            limit_prefetch_uids(vec![1, 2, 3, 4], Some(0)),
+            Vec::<u32>::new()
+        );
     }
 
     #[test]
