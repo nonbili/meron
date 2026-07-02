@@ -135,7 +135,7 @@ internal class MeronMobileState(
     var syncing by mutableStateOf(false)
     var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))
     var showUnifiedInboxNav by mutableStateOf(loadAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, true))
-    var showStarredNav by mutableStateOf(loadAppBoolean(prefs, SHOW_STARRED_NAV_PREF, true))
+    var showStarredNav by mutableStateOf(loadAppBoolean(prefs, SHOW_STARRED_NAV_PREF, false))
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))

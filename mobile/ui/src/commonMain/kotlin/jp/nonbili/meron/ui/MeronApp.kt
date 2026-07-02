@@ -540,10 +540,10 @@ private fun MeronMobileScreenContent(
                     )
                 }
             }
-            LaunchedEffect(Unit) {
-                NotificationPermissionSignal.events.collect {
-                    notificationPermissionGranted = mobileHost.notificationsEnabled()
-                }
+        }
+        LaunchedEffect(Unit) {
+            NotificationPermissionSignal.events.collect {
+                notificationPermissionGranted = mobileHost.notificationsEnabled()
             }
         }
         val importOpml: (PickedFile?) -> Unit = { picked ->
