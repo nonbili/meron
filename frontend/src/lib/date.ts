@@ -8,7 +8,7 @@ function fromEpochSeconds(epochSeconds: number): Date | null {
   return new Date(epochSeconds * 1000)
 }
 
-/** Compact thread-list timestamp: time today, "Yesterday", weekday this week, else "MMM D". */
+/** Gmail-style thread-list timestamp: time today, month/day this year, else month/day/year. */
 export function formatThreadDate(epochSeconds: number): string {
   const date = fromEpochSeconds(epochSeconds)
   if (!date) return ''
@@ -16,15 +16,9 @@ export function formatThreadDate(epochSeconds: number): string {
   if (date.toDateString() === now.toDateString()) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   }
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-  if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday'
-  }
-  const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
-  if (diffDays < 7 && diffDays > 0) {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return days[date.getDay()]
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === now.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' }
+  return date.toLocaleDateString([], options)
 }

@@ -294,7 +294,7 @@ internal fun StarredItemRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(formatRelativeTime(item.dateEpochSeconds), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatInboxTimestamp(item.dateEpochSeconds), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
                 item.subject.ifBlank { "(no subject)" },
@@ -655,7 +655,7 @@ internal fun MailRow(
                 ) {
                     val unreadContentDescription = tr("filters.unread")
                     Text(
-                        formatRelativeTime(thread.dateEpochSeconds),
+                        formatInboxTimestamp(thread.dateEpochSeconds),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Normal,
                         color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,

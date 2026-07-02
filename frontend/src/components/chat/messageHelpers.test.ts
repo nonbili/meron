@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test'
 import {
   escapeRegExp,
   extractAddr,
   formatFileSize,
+  formatMessageStamp,
   getShortenedLinkText,
   getVisibleMedia,
   isImage,
@@ -15,6 +16,17 @@ import {
   parseInlineMessageContent,
   splitFencedCodeBlocks,
 } from './messageHelpers'
+
+const NOW = new Date(2026, 5, 10, 15, 30, 0)
+const sec = (d: Date) => Math.floor(d.getTime() / 1000)
+
+beforeEach(() => {
+  setSystemTime(NOW)
+})
+
+afterEach(() => {
+  setSystemTime()
+})
 
 describe('messageHelpers file and media helpers', () => {
   it('formats byte sizes across units', () => {
@@ -120,5 +132,14 @@ describe('messageHelpers text and link helpers', () => {
     expect(
       messageSearchText({ subject: 'Hello', from_name: 'Ada', from_addr: 'ada@example.com', body: 'World' } as any),
     ).toBe('hello\nada\nada@example.com\nworld')
+  })
+})
+
+describe('messageHelpers timestamp helpers', () => {
+  it('formats bubble stamps with Gmail-style dates', () => {
+    expect(formatMessageStamp(0, false)).toBe('')
+    expect(formatMessageStamp(sec(new Date(2026, 5, 10, 9, 5)), false)).toBe('09:05')
+    expect(formatMessageStamp(sec(new Date(2026, 5, 9, 9, 0)), false)).toMatch(/Jun 9/)
+    expect(formatMessageStamp(sec(new Date(2025, 11, 31, 9, 0)), false)).toMatch(/2025/)
   })
 })

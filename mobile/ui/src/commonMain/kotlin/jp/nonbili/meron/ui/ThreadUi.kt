@@ -1056,7 +1056,7 @@ internal fun MessageBubble(
                     Spacer(Modifier.weight(1f))
                 }
                 Text(
-                    formatRelativeTime(message.dateEpochSeconds),
+                    formatInboxTimestamp(message.dateEpochSeconds),
                     fontSize = 10.5.sp,
                     color = textColor.copy(alpha = 0.55f),
                 )
@@ -1395,7 +1395,7 @@ internal fun MessageReaderScreen(
                     MessageReaderHeaderRow(tr("composer.fields.to"), message.to)
                     MessageReaderHeaderRow(tr("composer.fields.cc"), message.cc)
                     Text(
-                        formatRelativeTime(message.dateEpochSeconds),
+                        formatMessageFullTimestamp(message.dateEpochSeconds),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

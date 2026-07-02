@@ -161,9 +161,16 @@ export function formatFullTimestamp(epochSeconds: number): string {
   })
 }
 
-export function formatMessageStamp(epochSeconds: number, showDate: boolean): string {
-  if (!showDate) return formatMessageTime(epochSeconds)
-  return formatDateDivider(epochSeconds)
+export function formatMessageStamp(epochSeconds: number, _showDate: boolean): string {
+  if (!epochSeconds) return ''
+  const date = new Date(epochSeconds * 1000)
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) return formatMessageTime(epochSeconds)
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === now.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' }
+  return date.toLocaleDateString([], options)
 }
 
 export function normalizeUrl(urlStr: string): string {
