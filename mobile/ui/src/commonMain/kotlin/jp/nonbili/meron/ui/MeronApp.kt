@@ -239,6 +239,11 @@ import kotlin.math.abs
 private const val MAILBOX_BLOCKING_WARN_AFTER_MS = 10_000L
 private const val MAILBOX_BLOCKING_TIMEOUT_MS = 15_000L
 
+// Hard cap for a blocking load whose sync is still in flight: past the soft
+// timeout the loader shows "still syncing" copy, past this one we give up and
+// surface the timeout error.
+private const val MAILBOX_BLOCKING_HARD_TIMEOUT_MS = 60_000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeronApp(
@@ -465,6 +470,17 @@ private fun MeronMobileScreenContent(
                                         syncFirst = false,
                                     )
                                     refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
+                                    refreshOpenThreadFor(eventAccount)
+                                }
+                            }
+
+                            // The deferred sync tail (body prefetch, Sent/Drafts
+                            // headers) never changes the open folder's thread
+                            // list, so only the open thread needs a refresh —
+                            // reloading the list here would reset pagination.
+                            "mail.tailSynced" -> {
+                                val eventAccount = event.detailJson.jsonStringValue("account")
+                                scope.launch {
                                     refreshOpenThreadFor(eventAccount)
                                 }
                             }
@@ -727,7 +743,6 @@ private fun MeronMobileScreenContent(
         LaunchedEffect(Unit) {
             if (coreLoaded && coreAccounts.isEmpty()) {
                 listAccounts()
-                loadStorageUsage()
             } else if (!coreLoaded) {
                 initialAccountsLoaded = true
             }
@@ -1967,20 +1982,32 @@ private fun MeronMobileScreenContent(
                                     )
                                 }
                                 delay(MAILBOX_BLOCKING_TIMEOUT_MS - MAILBOX_BLOCKING_WARN_AFTER_MS)
-                                val timedOut =
+                                val stillBlocked = {
                                     screen == Screen.Mail &&
                                         coreAccounts.isNotEmpty() &&
                                         coreThreads.isEmpty() &&
                                         (syncing || !initialThreadsLoaded)
-                                if (timedOut) {
+                                }
+                                if (stillBlocked() && syncing) {
+                                    // The sync request is still in flight — a slow
+                                    // first sync, not a failure. Switch the loader
+                                    // copy and give it until the hard cap before
+                                    // treating it as an error.
                                     Log.w(
                                         "MailLoad",
-                                        "clearing stuck mail loader after ${MAILBOX_BLOCKING_TIMEOUT_MS}ms accounts=${coreAccounts.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
+                                        "mail sync still running after ${MAILBOX_BLOCKING_TIMEOUT_MS}ms accounts=${coreAccounts.size} activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
                                     )
-                                    activeMailboxLoadKey = null
-                                    activeMailboxLoadStartedAtMillis = 0L
+                                    blockingMailboxLoadSlow = true
+                                    delay(MAILBOX_BLOCKING_HARD_TIMEOUT_MS - MAILBOX_BLOCKING_TIMEOUT_MS)
+                                }
+                                if (stillBlocked()) {
+                                    Log.w(
+                                        "MailLoad",
+                                        "mail UI unblocked accounts=${coreAccounts.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
+                                    )
                                     syncing = false
                                     initialThreadsLoaded = true
+                                    blockingMailboxLoadSlow = false
                                     errorBanner = "Inbox load timed out. Pull to refresh or tap Retry."
                                 }
                             }
@@ -2009,7 +2036,13 @@ private fun MeronMobileScreenContent(
                                     }
 
                                     coreThreads.isEmpty() && (syncing || !initialThreadsLoaded) -> {
-                                        LoadingState("Loading your inbox…")
+                                        LoadingState(
+                                            if (blockingMailboxLoadSlow) {
+                                                "Still syncing your inbox… The first sync can take a while."
+                                            } else {
+                                                "Loading your inbox…"
+                                            },
+                                        )
                                     }
 
                                     coreThreads.isEmpty() -> {
@@ -2074,7 +2107,9 @@ private fun MeronMobileScreenContent(
                                                         selectedMailThreadIds + thread.id
                                                     }
                                             },
-                                            onLoadMore = ::loadMoreCoreThreads,
+                                            onLoadMore = { userInitiated ->
+                                                loadMoreCoreThreads(quiet = !userInitiated)
+                                            },
                                             showSenderImages = showSenderImages,
                                             showAccountBadge = selectedCoreAccountId == UNIFIED_ACCOUNT_ID,
                                         )

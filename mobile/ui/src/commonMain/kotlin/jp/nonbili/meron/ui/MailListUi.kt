@@ -364,7 +364,9 @@ internal fun MailList(
     selectionActive: Boolean,
     onToggleSelected: (ThreadSummary) -> Unit,
     onLongPress: (ThreadSummary) -> Unit,
-    onLoadMore: () -> Unit,
+    // Invoked with true when the user tapped the load-more button, false when
+    // pagination auto-fired from scrolling near the bottom.
+    onLoadMore: (userInitiated: Boolean) -> Unit,
     showSenderImages: Boolean,
     showAccountBadge: Boolean,
 ) {
@@ -380,7 +382,7 @@ internal fun MailList(
         }
     }
     LaunchedEffect(nearBottom, canLoadMore, loadingMore) {
-        if (nearBottom && canLoadMore && !loadingMore) onLoadMore()
+        if (nearBottom && canLoadMore && !loadingMore) onLoadMore(false)
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         items(threads, key = { it.id }) { thread ->
@@ -489,7 +491,7 @@ internal fun MailList(
                     if (loadingMore) {
                         CircularProgressIndicator(Modifier.size(24.dp))
                     } else {
-                        OutlinedButton(onClick = onLoadMore) {
+                        OutlinedButton(onClick = { onLoadMore(true) }) {
                             Text(tr("threads.actions.loadMore"))
                         }
                     }

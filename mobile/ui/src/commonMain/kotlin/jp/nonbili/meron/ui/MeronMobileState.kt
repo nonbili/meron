@@ -79,8 +79,14 @@ internal class MeronMobileState(
     var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
     var mailboxCache by mutableStateOf(emptyMap<MailboxCacheKey, MailboxLoadResult>())
     var activeMailboxLoadKey by mutableStateOf<MailboxCacheKey?>(null)
+    var activeMailboxLoadToken by mutableStateOf(0L)
     var activeMailboxLoadStartedAtMillis by mutableStateOf(0L)
     var blockingMailboxLoadWarned by mutableStateOf(false)
+
+    // True once a blocking inbox load has outlived the soft timeout with the
+    // sync still in flight — switches the loader to "still syncing" copy
+    // instead of surfacing a timeout error for a slow-but-healthy first sync.
+    var blockingMailboxLoadSlow by mutableStateOf(false)
     var selectedMailThreadIds by mutableStateOf(emptySet<String>())
     var selectedMailMoveThread by mutableStateOf<ThreadSummary?>(null)
     var selectedMailCopyThread by mutableStateOf<ThreadSummary?>(null)

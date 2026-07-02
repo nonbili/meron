@@ -968,6 +968,7 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     filter: FilterMode = mailFilter,
     syncFirst: Boolean = true,
     beforeCursor: String? = null,
+    syncLimit: Int = MAILBOX_SYNC_LIMIT,
 ): MailboxLoadResult {
     // When syncFirst is false we read whatever the local (encrypted) store
     // already has — used on startup so the inbox shows instantly without a
@@ -983,7 +984,15 @@ internal suspend fun MeronMobileState.loadAccountInbox(
         } else {
             ensureManagedGoogleToken(client, account.id)
             Log.i("MailLoad", "loadAccountInbox sync mail account=${account.id} folder=$requestedFolder")
-            client.sync(SyncMailParams(accountId = account.id, folderId = requestedFolder, limit = 250, folders = true))
+            client.sync(
+                SyncMailParams(
+                    accountId = account.id,
+                    folderId = requestedFolder,
+                    limit = syncLimit,
+                    folders = true,
+                    deferTail = true,
+                ),
+            )
         }
     }
     val foldersJson = client.listFolders(FolderListParams(accountId = account.id))

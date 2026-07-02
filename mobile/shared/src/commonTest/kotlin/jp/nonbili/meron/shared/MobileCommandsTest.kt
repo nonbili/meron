@@ -488,7 +488,11 @@ class MobileCommandsTest {
 
         runSuspend { client.sync(SyncMailParams(accountId = "acc1")) }
         assertEquals(MobileCommand.Sync, core.lastCommand)
-        assertEquals("""{"account_id":"acc1","folder_id":"inbox","limit":50,"folders":true}""", core.lastPayloadJson)
+        assertEquals("""{"account_id":"acc1","folder_id":"inbox","limit":50,"folders":true,"defer_tail":false}""", core.lastPayloadJson)
+
+        runSuspend { client.sync(SyncMailParams(accountId = "acc1", deferTail = true)) }
+        assertEquals(MobileCommand.Sync, core.lastCommand)
+        assertEquals("""{"account_id":"acc1","folder_id":"inbox","limit":50,"folders":true,"defer_tail":true}""", core.lastPayloadJson)
 
         runSuspend {
             client.send(
@@ -615,7 +619,7 @@ class MobileCommandsTest {
             )
 
         assertEquals(
-            """{"id":8,"method":"mail.sync","params":{"account_id":"acc1","folder_id":"INBOX","limit":25,"folders":false}}""",
+            """{"id":8,"method":"mail.sync","params":{"account_id":"acc1","folder_id":"INBOX","limit":25,"folders":false,"defer_tail":false}}""",
             request.toJson(),
         )
     }

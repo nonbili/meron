@@ -234,6 +234,12 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
+// Header pages fetched from the server per folder sync. A mailbox with no local
+// threads yet blocks first paint on this fetch, so it starts with the smaller
+// page and deepens to the full one in the background once the list is showing.
+internal const val MAILBOX_SYNC_LIMIT = 250
+internal const val MAILBOX_FIRST_SYNC_LIMIT = 50
+
 private fun mailboxCacheKey(
     accountId: String,
     folderId: String,
@@ -336,13 +342,20 @@ internal fun MeronMobileState.syncCoreThreads(
         Log.i("MailLoad", "sync skipped duplicate account=$accountId folder=$requestedFolder")
         return
     }
+    val requestToken = activeMailboxLoadToken + 1
+    activeMailboxLoadToken = requestToken
     activeMailboxLoadKey = requestKey
     activeMailboxLoadStartedAtMillis = currentTimeMillis()
     blockingMailboxLoadWarned = false
+    blockingMailboxLoadSlow = false
     syncing = true
+    // A mailbox with no local threads yet blocks first paint on the server
+    // fetch: sync a small first page now and deepen in the background below.
+    val firstLoad = !initialThreadsLoaded
+    val syncLimit = if (firstLoad) MAILBOX_FIRST_SYNC_LIMIT else MAILBOX_SYNC_LIMIT
     Log.i(
         "MailLoad",
-        "sync start account=$accountId folder=$requestedFolder accounts=${selectedAccounts.size} syncFirst=$syncFirst query=${query.isNotBlank()} filter=${filter.protocolValue()}",
+        "sync start account=$accountId folder=$requestedFolder accounts=${selectedAccounts.size} syncFirst=$syncFirst limit=$syncLimit query=${query.isNotBlank()} filter=${filter.protocolValue()}",
     )
     scope.launch {
         runCatching {
@@ -359,6 +372,7 @@ internal fun MeronMobileState.syncCoreThreads(
                                     query = query,
                                     filter = filter,
                                     syncFirst = syncFirst,
+                                    syncLimit = syncLimit,
                                 )
                         }
                     MailboxLoadResult(
@@ -378,6 +392,7 @@ internal fun MeronMobileState.syncCoreThreads(
                         query = query,
                         filter = filter,
                         syncFirst = syncFirst,
+                        syncLimit = syncLimit,
                     )
                 }
             }
@@ -395,7 +410,7 @@ internal fun MeronMobileState.syncCoreThreads(
                             accountCursors = result.accountCursors,
                         )
                 )
-            if (activeMailboxLoadKey != requestKey) {
+            if (activeMailboxLoadToken != requestToken) {
                 Log.w("MailLoad", "sync ignored stale result account=$accountId folder=${result.folder} threads=${result.threads.size}")
                 return@onSuccess
             }
@@ -418,6 +433,7 @@ internal fun MeronMobileState.syncCoreThreads(
             activeMailboxLoadKey = null
             activeMailboxLoadStartedAtMillis = 0L
             blockingMailboxLoadWarned = false
+            blockingMailboxLoadSlow = false
             syncing = false
             initialThreadsLoaded = true
             errorBanner = null
@@ -427,19 +443,59 @@ internal fun MeronMobileState.syncCoreThreads(
                 "MailLoad",
                 "sync success account=$accountId folder=$folder threads=${parsedThreads.size} cursor=${mailboxCursor.isNotBlank()} accountCursors=${mailboxAccountCursors.size} initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing",
             )
+            if (firstLoad && syncFirst) {
+                deepenMailboxSync(accountId, folder, selectedAccounts)
+            }
         }.onFailure {
-            if (activeMailboxLoadKey != requestKey) {
+            if (activeMailboxLoadToken != requestToken) {
                 Log.w("MailLoad", "sync ignored stale failure account=$accountId", it)
                 return@onFailure
             }
             activeMailboxLoadKey = null
             activeMailboxLoadStartedAtMillis = 0L
             blockingMailboxLoadWarned = false
+            blockingMailboxLoadSlow = false
             syncing = false
             initialThreadsLoaded = true
             errorBanner = it.message ?: "Sync failed"
             status = "Sync failed: ${it.message}"
             Log.w("MailLoad", "sync failed account=$accountId folder=$requestedFolder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", it)
+        }
+    }
+}
+
+// Second phase of a first-load sync: fetch the full header page for each mail
+// account, then re-read the store so the visible list picks up the older
+// threads. Best-effort — the small first page is already on screen, so a
+// failure here only costs depth, not the inbox.
+private fun MeronMobileState.deepenMailboxSync(
+    accountId: String,
+    folder: String,
+    accounts: List<AccountSummary>,
+) {
+    val mailAccounts = accounts.filterNot { accountSummaryIsRss(it) }
+    if (mailAccounts.isEmpty()) return
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                mailAccounts.forEach { account ->
+                    client.sync(
+                        SyncMailParams(
+                            accountId = account.id,
+                            folderId = folder,
+                            limit = MAILBOX_SYNC_LIMIT,
+                            folders = false,
+                            deferTail = true,
+                        ),
+                    )
+                }
+            }
+        }.onSuccess {
+            Log.i("MailLoad", "deep sync done account=$accountId folder=$folder accounts=${mailAccounts.size}")
+            syncCoreThreads(accountOverride = accountId, folderOverride = folder, syncFirst = false)
+        }.onFailure {
+            Log.w("MailLoad", "deep sync failed account=$accountId folder=$folder", it)
         }
     }
 }
@@ -478,7 +534,11 @@ internal fun MeronMobileState.addFeedToSelectedRssAccount() {
     }
 }
 
-internal fun MeronMobileState.loadMoreCoreThreads() {
+// `quiet` suppresses the "Loaded N older message(s)" status for auto-fired
+// pagination — store reloads (e.g. after a background sync event) shrink the
+// list back to its first page, and the resulting refetch chain would otherwise
+// toast once per page.
+internal fun MeronMobileState.loadMoreCoreThreads(quiet: Boolean = false) {
     if (!coreLoaded || loadingMoreThreads) return
     val accountId = selectedCoreAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
     val requestedFolder = selectedCoreFolder.ifBlank { INBOX_FOLDER }
@@ -544,7 +604,9 @@ internal fun MeronMobileState.loadMoreCoreThreads() {
             cacheVisibleMailbox()
             loadingMoreThreads = false
             errorBanner = null
-            status = if (appended.isEmpty()) "No older messages." else "Loaded ${appended.size} older message(s)."
+            if (!quiet) {
+                status = if (appended.isEmpty()) "No older messages." else "Loaded ${appended.size} older message(s)."
+            }
         }.onFailure {
             loadingMoreThreads = false
             errorBanner = it.message ?: "Load more failed"
@@ -1320,6 +1382,7 @@ internal fun MeronMobileState.ensureThreadActionFolders(
                                 folderId = INBOX_FOLDER,
                                 limit = 1,
                                 folders = true,
+                                deferTail = true,
                             ),
                         )
                         folders = loadAccountFolders(client, account)

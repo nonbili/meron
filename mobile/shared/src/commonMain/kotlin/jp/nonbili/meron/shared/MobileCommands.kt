@@ -433,6 +433,11 @@ data class SyncMailParams(
     val folderId: String = "inbox",
     val limit: Int = 50,
     val folders: Boolean = true,
+    // Foreground-only: lets the core run the non-gating sync tail (body
+    // prefetch, Sent/Drafts headers) after returning, so the inbox list isn't
+    // blocked on it. Background workers must leave this false — their
+    // execution window ends when the call returns.
+    val deferTail: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -440,6 +445,7 @@ data class SyncMailParams(
             "folder_id" to folderId.jsonString(),
             "limit" to limit.toString(),
             "folders" to folders.toString(),
+            "defer_tail" to deferTail.toString(),
         )
 }
 
