@@ -183,20 +183,13 @@ fn spawn_message_sync(
                 // Warm full bodies for the unread/recent set now that envelopes
                 // are fresh. Deduped, and a no-op once everything is cached.
                 spawn_body_prefetch(engine.clone(), account.clone(), folder.clone());
-                // Piggyback a Drafts sync so replies drafted on another client
-                // thread into conversations straight from the local store (no
-                // per-thread network check on read). Runs before the emit so
-                // the re-read it triggers already sees them.
-                if let Some(drafts) = cached_drafts_folder(&engine, &account, &folder) {
-                    match tokio::time::timeout(
-                        Duration::from_secs(30),
-                        sync_messages(&engine, &account, &drafts, limit),
-                    )
-                    .await
-                    {
-                        Ok(Ok(_)) => {}
-                        Ok(Err(err)) => eprintln!("meron-core: sync Drafts {account}: {err:#}"),
-                        Err(_) => eprintln!("meron-core: sync Drafts {account}: timed out"),
+                // Piggyback Sent and Drafts syncs so replies sent or drafted
+                // from another client thread into conversations straight from
+                // the local store (no per-thread network check on read). Runs
+                // before the emit so the re-read it triggers already sees them.
+                for sync in sync_companion_folders(&engine, &account, &folder, limit).await {
+                    if let Err(err) = sync.result {
+                        eprintln!("meron-core: sync {} {account}: {err:#}", sync.role);
                     }
                 }
                 let uid_next_after = if folder.eq_ignore_ascii_case("INBOX") {

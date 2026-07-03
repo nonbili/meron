@@ -62,49 +62,30 @@ fn finish_mobile_sync(
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
-    resolved_sent: Option<String>,
     limit: u32,
 ) {
     prefetch_mobile_bodies(data_dir, engine, account_id, folder);
 
-    // Also pull the Sent folder so outgoing messages — including ones sent from
-    // another client — surface in the cross-folder conversation view. The
-    // per-folder recent sync only ever covers the open folder.
-    if let Some(sent) = resolved_sent
-        && !sent.eq_ignore_ascii_case(folder)
-    {
-        match crate::ffi::engine_block_on(crate::engine::sync_messages(
-            engine, account_id, &sent, limit,
-        )) {
-            Ok(sent_count) => crate::mlog!(
+    // Also pull Sent and Drafts so messages sent or drafted from another
+    // client surface in the cross-folder conversation view (shared with the
+    // desktop sync path; the per-folder recent sync only covers the open
+    // folder).
+    let outcomes = crate::ffi::engine_block_on(async {
+        anyhow::Ok(crate::engine::sync_companion_folders(engine, account_id, folder, limit).await)
+    })
+    .unwrap_or_default();
+    for sync in outcomes {
+        let (role, companion) = (sync.role, &sync.folder);
+        match sync.result {
+            Ok(count) => crate::mlog!(
                 crate::log::Level::Info,
                 "mail.sync",
-                "Sent sync account={account_id} sent={sent} synced={sent_count}"
+                "{role} sync account={account_id} folder={companion} synced={count}"
             ),
             Err(err) => crate::mlog!(
                 crate::log::Level::Warn,
                 "mail.sync",
-                "Sent sync failed for {account_id}: {err}"
-            ),
-        }
-    }
-
-    // Same for Drafts: keeping its headers cached means opening a thread can
-    // surface a reply drafted on another client from the local store alone,
-    // with no per-thread network check on the read path.
-    if let Some(drafts) = crate::engine::cached_drafts_folder(engine, account_id, folder) {
-        match crate::ffi::engine_block_on(crate::engine::sync_messages(
-            engine, account_id, &drafts, limit,
-        )) {
-            Ok(drafts_count) => crate::mlog!(
-                crate::log::Level::Info,
-                "mail.sync",
-                "Drafts sync account={account_id} drafts={drafts} synced={drafts_count}"
-            ),
-            Err(err) => crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "Drafts sync failed for {account_id}: {err}"
+                "{role} sync failed for {account_id}: {err:#}"
             ),
         }
     }
@@ -122,12 +103,11 @@ fn run_mobile_sync_tail(
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
-    resolved_sent: Option<String>,
     limit: u32,
     defer_tail: bool,
 ) {
     if !defer_tail {
-        finish_mobile_sync(data_dir, engine, account_id, folder, resolved_sent, limit);
+        finish_mobile_sync(data_dir, engine, account_id, folder, limit);
         return;
     }
     let key = format!("{account_id}/{folder}");
@@ -139,7 +119,7 @@ fn run_mobile_sync_tail(
     let account_id = account_id.to_string();
     let folder = folder.to_string();
     std::thread::spawn(move || {
-        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, resolved_sent, limit);
+        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, limit);
         release_sync_tail(&key);
         // Not `mail.synced`: that handler reloads the thread list (resetting
         // pagination), and the tail never changes the open folder's headers —
@@ -363,21 +343,12 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     } else {
         None
     };
-    let resolved_sent = crate::engine::cached_sent_folder(&engine, &account_id, &folder);
     crate::mlog!(
         crate::log::Level::Info,
         "mail.sync",
-        "account={account_id} folder={folder} synced={count} folders={folders_count} sent={resolved_sent:?} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}"
+        "account={account_id} folder={folder} synced={count} folders={folders_count} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}"
     );
-    run_mobile_sync_tail(
-        data_dir,
-        &engine,
-        &account_id,
-        &folder,
-        resolved_sent,
-        limit,
-        defer_tail,
-    );
+    run_mobile_sync_tail(data_dir, &engine, &account_id, &folder, limit, defer_tail);
     let mut response = json!({
         "ok": true,
         "account": account_id,

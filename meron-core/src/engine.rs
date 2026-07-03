@@ -605,6 +605,77 @@ pub fn cached_drafts_folder(engine: &Arc<Engine>, account: &str, current: &str) 
     find_role_folder(folders, "drafts", imap::looks_like_drafts, current)
 }
 
+/// Per-folder cap for each piggybacked companion sync, so one slow mailbox
+/// can't hold the post-sync tail (and the emit that follows it) indefinitely.
+const COMPANION_SYNC_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The companion mailboxes (Sent, then Drafts) to piggyback onto a sync of
+/// another folder, each paired with its role label for the caller's logs.
+/// Callers resolve the names via `cached_sent_folder`/`cached_drafts_folder`,
+/// which already exclude the folder being synced; this only guards against the
+/// two roles resolving to the same mailbox.
+fn companion_folders(
+    sent: Option<String>,
+    drafts: Option<String>,
+) -> Vec<(&'static str, String)> {
+    let mut companions = Vec::new();
+    if let Some(sent) = sent {
+        companions.push(("Sent", sent));
+    }
+    if let Some(drafts) = drafts
+        && !companions
+            .iter()
+            .any(|(_, existing)| existing.eq_ignore_ascii_case(&drafts))
+    {
+        companions.push(("Drafts", drafts));
+    }
+    companions
+}
+
+/// Outcome of one companion-folder sync from [`sync_companion_folders`]:
+/// `role` is "Sent" or "Drafts", `folder` the resolved mailbox name.
+pub struct CompanionSync {
+    pub role: &'static str,
+    pub folder: String,
+    pub result: anyhow::Result<usize>,
+}
+
+/// Piggyback Sent and Drafts envelope syncs onto a completed sync of `folder`,
+/// so messages sent or drafted from another client surface in the cross-folder
+/// conversation view straight from the local store — the per-folder recent
+/// sync only ever covers the open folder, and thread-gap filling only fetches
+/// referenced *ancestors*, so nothing else ever pulls in a reply another
+/// client added to Sent. Shared by desktop and mobile so the two can't drift.
+/// Failures are returned per folder, never propagated: a companion hiccup must
+/// not fail the primary sync that already succeeded.
+pub async fn sync_companion_folders(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    limit: u32,
+) -> Vec<CompanionSync> {
+    let sent = cached_sent_folder(engine, account, folder);
+    let drafts = cached_drafts_folder(engine, account, folder);
+    let mut outcomes = Vec::new();
+    for (role, companion) in companion_folders(sent, drafts) {
+        let result = match tokio::time::timeout(
+            COMPANION_SYNC_TIMEOUT,
+            sync_messages(engine, account, &companion, limit),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(anyhow::anyhow!("timed out")),
+        };
+        outcomes.push(CompanionSync {
+            role,
+            folder: companion,
+            result,
+        });
+    }
+    outcomes
+}
+
 fn push_unique_folder(folders: &mut Vec<String>, folder: Option<String>) {
     if let Some(folder) = folder
         && !folders
@@ -1259,7 +1330,7 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Pooled, find_role_folder, limit_prefetch_uids, pool_return, pool_take,
+        Pooled, companion_folders, find_role_folder, limit_prefetch_uids, pool_return, pool_take,
         should_append_sent_copy, thread_gap_search_folders,
     };
     use std::collections::HashMap;
@@ -1349,6 +1420,35 @@ mod tests {
             find_role_folder(folders, "drafts", crate::imap::looks_like_drafts, "drafts"),
             None
         );
+    }
+
+    #[test]
+    pub fn companion_folders_lists_sent_before_drafts() {
+        assert_eq!(
+            companion_folders(
+                Some("[Gmail]/Sent Mail".to_string()),
+                Some("[Gmail]/Drafts".to_string())
+            ),
+            vec![
+                ("Sent", "[Gmail]/Sent Mail".to_string()),
+                ("Drafts", "[Gmail]/Drafts".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    pub fn companion_folders_skips_drafts_matching_sent_case_insensitively() {
+        // A misconfigured server can advertise both roles on one mailbox;
+        // syncing it twice in the same tail would be wasted I/O.
+        assert_eq!(
+            companion_folders(Some("Sent".to_string()), Some("sent".to_string())),
+            vec![("Sent", "Sent".to_string())]
+        );
+    }
+
+    #[test]
+    pub fn companion_folders_empty_when_neither_resolves() {
+        assert_eq!(companion_folders(None, None), Vec::new());
     }
 
     #[test]

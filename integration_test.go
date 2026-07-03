@@ -6,8 +6,10 @@ package main
 // IMAP fetch → SQLite store. See maddy_harness_test.go for the setup.
 
 import (
+	"bufio"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -536,6 +538,82 @@ func TestIntegrationMailFlow(t *testing.T) {
 			t.Fatalf("folders.archive returned no folder: %v", result)
 		}
 	})
+
+	// Last on purpose: no later subtest sends from alice, so nothing but the
+	// piggyback under test can refresh her Sent folder.
+	t.Run("sent from another client surfaces via inbox sync", func(t *testing.T) {
+		externalSubject := "Meron integration external sent " + nonce
+		raw := fmt.Sprintf(
+			"From: alice@maddy.test\r\nTo: bob@maddy.test\r\nSubject: %s\r\n"+
+				"Message-ID: <itest-external-%s@maddy.test>\r\nDate: %s\r\n\r\n"+
+				"sent from another client\r\n",
+			externalSubject, nonce, time.Now().Format(time.RFC1123Z))
+		imapAppend(t, server.imapPort, "alice@maddy.test", testPassword, "Sent", []byte(raw))
+
+		// The copy must reach the local store without Sent ever being opened:
+		// an INBOX refresh piggybacks a Sent envelope sync (messages.recent
+		// with refresh=false serves the store cache only).
+		deadline := time.Now().Add(60 * time.Second)
+		for {
+			callMap(t, sidecar, "messages.recent", map[string]any{
+				"account": "alice",
+				"folder":  "INBOX",
+				"refresh": true,
+				"limit":   50,
+			})
+			cached := callMap(t, sidecar, "messages.recent", map[string]any{
+				"account": "alice",
+				"folder":  "Sent",
+				"refresh": false,
+				"limit":   50,
+			})
+			if messagesContainSubject(cached, externalSubject) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("externally appended Sent message never surfaced via inbox piggyback: %v", cached)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	})
+}
+
+// imapAppend adds a message to a folder over raw IMAP, standing in for another
+// mail client (e.g. webmail) writing to the mailbox behind meron's back.
+func imapAppend(t *testing.T, port int, user, password, folder string, message []byte) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial imap: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(15 * time.Second))
+	reader := bufio.NewReader(conn)
+	// Reads past untagged/unsolicited lines until one starts with prefix.
+	expect := func(prefix string) string {
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				t.Fatalf("imap read waiting for %q: %v", prefix, err)
+			}
+			if strings.HasPrefix(line, prefix) {
+				return line
+			}
+		}
+	}
+	expect("* OK")
+	fmt.Fprintf(conn, "a1 LOGIN %q %q\r\n", user, password)
+	if line := expect("a1 "); !strings.HasPrefix(line, "a1 OK") {
+		t.Fatalf("imap login failed: %s", line)
+	}
+	fmt.Fprintf(conn, "a2 APPEND %q {%d}\r\n", folder, len(message))
+	expect("+")
+	conn.Write(message)
+	conn.Write([]byte("\r\n"))
+	if line := expect("a2 "); !strings.HasPrefix(line, "a2 OK") {
+		t.Fatalf("imap append failed: %s", line)
+	}
+	fmt.Fprintf(conn, "a3 LOGOUT\r\n")
 }
 
 func foldersContain(result map[string]any, name string) bool {
