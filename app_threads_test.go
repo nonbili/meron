@@ -22,20 +22,29 @@ func threadsByID(t *testing.T, out any) map[string]Message {
 	return byID
 }
 
-func msg(uid int, fields map[string]any) map[string]any {
-	m := map[string]any{"uid": float64(uid)}
-	for k, v := range fields {
-		m[k] = v
-	}
-	return m
-}
-
-func TestThreadsJSONGroupsByThreadKeyAndSubject(t *testing.T) {
+// Grouping semantics (subject branching, root titles, unread aggregation) live
+// in the core (store::group_thread_cards, covered by the Rust tests); the
+// bridge only maps ready cards into Messages and mints thread ids.
+func TestThreadsJSONMapsCardsAndMintsIDs(t *testing.T) {
 	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"thread_key": "k1", "subject": "Launch plan", "from_name": "Ann", "date": float64(100)}),
-			msg(11, map[string]any{"thread_key": "k1", "subject": "Re: Launch plan", "date": float64(200)}),
-			msg(20, map[string]any{"thread_key": "k2", "subject": "Lunch?", "date": float64(150)}),
+		"cards": []any{
+			map[string]any{
+				"thread_key":          "k1#Budget split",
+				"original_thread_key": "k1#Quarterly report",
+				"folder":              "INBOX",
+				"from_name":           "Ann",
+				"from_addr":           "ann@example.com",
+				"subject":             "Quarterly report",
+				"date":                float64(200),
+				"unread":              true,
+				"unread_count":        float64(2),
+				"starred":             true,
+				"recipient_overflow":  float64(1),
+			},
+			map[string]any{
+				"thread_key": "gmthrid:123",
+				"subject":    "Atomic",
+			},
 		},
 	}
 
@@ -44,147 +53,45 @@ func TestThreadsJSONGroupsByThreadKeyAndSubject(t *testing.T) {
 		t.Fatalf("got %d threads, want 2: %#v", len(byID), byID)
 	}
 
-	// Two messages with the same thread_key + grouping subject collapse to one
-	// thread; its title is the oldest (lowest uid) message's normalized subject.
-	id1 := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Launch plan"))
-	t1, ok := byID[id1]
-	if !ok {
-		t.Fatalf("missing thread %q in %#v", id1, byID)
-	}
-	if t1.Subject != "Launch plan" {
-		t.Errorf("title = %q, want %q (oldest message's normalized subject)", t1.Subject, "Launch plan")
-	}
-	if t1.FromName != "Ann" {
-		t.Errorf("from_name = %q, want Ann (root message)", t1.FromName)
-	}
-}
-
-func TestThreadsJSONUnreadAggregation(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"thread_key": "k1", "subject": "Topic", "seen": false}),
-			msg(11, map[string]any{"thread_key": "k1", "subject": "Re: Topic", "seen": false}),
-			msg(12, map[string]any{"thread_key": "k1", "subject": "Re: Topic", "seen": true, "starred": true}),
-		},
-	}
-
-	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
-	if len(byID) != 1 {
-		t.Fatalf("got %d threads, want 1", len(byID))
-	}
-	var only Message
-	for _, m := range byID {
-		only = m
-	}
-	if !only.Unread {
-		t.Error("thread should be Unread when any message is unseen")
-	}
-	if only.UnreadCount != 2 {
-		t.Errorf("UnreadCount = %d, want 2", only.UnreadCount)
-	}
-	if !only.Starred {
-		t.Error("thread should be Starred when any message is starred")
-	}
-}
-
-func TestThreadsJSONBranchedThreadGetsOriginalThreadID(t *testing.T) {
-	// A reply whose subject diverges from the root (different grouping subject
-	// but same thread_key) forms its own card that back-points at the original.
-	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"thread_key": "k1", "subject": "Quarterly report", "date": float64(100)}),
-			msg(11, map[string]any{"thread_key": "k1", "subject": "Re: Budget split", "date": float64(200)}),
-		},
-	}
-
-	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
-	if len(byID) != 2 {
-		t.Fatalf("got %d threads, want 2 (branch splits into its own card): %#v", len(byID), byID)
-	}
-
-	rootSub := threadGroupingSubject("Quarterly report")
-	branchSub := threadGroupingSubject("Re: Budget split")
-	rootID := formatImapThreadID("acc", "INBOX", "k1#"+rootSub)
-	branchID := formatImapThreadID("acc", "INBOX", "k1#"+branchSub)
-
-	root := byID[rootID]
-	if root.OriginalThreadID != "" {
-		t.Errorf("root thread should have empty OriginalThreadID, got %q", root.OriginalThreadID)
-	}
+	branchID := formatImapThreadID("acc", "INBOX", "k1#Budget split")
 	branch, ok := byID[branchID]
 	if !ok {
-		t.Fatalf("missing branch thread %q in %#v", branchID, byID)
+		t.Fatalf("missing thread %q in %#v", branchID, byID)
 	}
-	if branch.OriginalThreadID != rootID {
-		t.Errorf("branch OriginalThreadID = %q, want %q (points at root)", branch.OriginalThreadID, rootID)
+	if branch.OriginalThreadID != formatImapThreadID("acc", "INBOX", "k1#Quarterly report") {
+		t.Errorf("OriginalThreadID = %q, want the root card's id", branch.OriginalThreadID)
+	}
+	if branch.Subject != "Quarterly report" || branch.FromName != "Ann" {
+		t.Errorf("card fields not mapped: %#v", branch)
+	}
+	if !branch.Unread || branch.UnreadCount != 2 || !branch.Starred {
+		t.Errorf("flag fields not mapped: %#v", branch)
+	}
+
+	atomic := byID[formatImapThreadID("acc", "INBOX", "gmthrid:123")]
+	if atomic.OriginalThreadID != "" {
+		t.Errorf("unbranched card should have empty OriginalThreadID, got %q", atomic.OriginalThreadID)
 	}
 }
 
-func TestThreadsJSONDoesNotBranchGmailThreadIDBySubject(t *testing.T) {
+func TestThreadsJSONFallsBackToRequestFolder(t *testing.T) {
 	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"thread_key": "gmthrid:123", "subject": "[nonbili/Nora] Profiles bug (Issue #295)", "seen": true}),
-			msg(11, map[string]any{"thread_key": "gmthrid:123", "subject": "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)", "seen": false}),
+		"cards": []any{
+			map[string]any{"thread_key": "k1", "subject": "Hi"},
 		},
 	}
-
-	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
-	if len(byID) != 1 {
-		t.Fatalf("got %d threads, want 1 Gmail thread despite subject drift: %#v", len(byID), byID)
-	}
-	wantID := formatImapThreadID("acc", "INBOX", "gmthrid:123")
-	thread, ok := byID[wantID]
-	if !ok {
-		t.Fatalf("missing Gmail thread id %q in %#v", wantID, byID)
-	}
-	if thread.OriginalThreadID != "" {
-		t.Errorf("Gmail thread should not get a branch OriginalThreadID, got %q", thread.OriginalThreadID)
-	}
-	if !thread.Unread || thread.UnreadCount != 1 {
-		t.Errorf("unread aggregation = (%v, %d), want (true, 1)", thread.Unread, thread.UnreadCount)
+	byID := threadsByID(t, threadsJSON("acc", "Sent", raw))
+	want := formatImapThreadID("acc", "Sent", "k1")
+	if _, ok := byID[want]; !ok {
+		t.Fatalf("missing thread %q (request-folder fallback) in %#v", want, byID)
 	}
 }
 
-func TestThreadsJSONFoldsGatewayTagsIntoSameThread(t *testing.T) {
-	// A gateway-tagged inbound copy must thread with its untagged counterpart.
+func TestThreadsJSONSkipsKeylessCardsAndPassesCursor(t *testing.T) {
 	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"thread_key": "k1", "subject": "Invoice 42"}),
-			msg(11, map[string]any{"thread_key": "k1", "subject": "[EXTERNAL] Re: Invoice 42"}),
-		},
-	}
-
-	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
-	if len(byID) != 1 {
-		t.Fatalf("got %d threads, want 1 (gateway tag must not split the thread): %#v", len(byID), byID)
-	}
-}
-
-func TestThreadsJSONFallsBackToUIDKeyWithoutThreadKey(t *testing.T) {
-	// Messages with no thread_key each get their own uid: key and never branch.
-	raw := map[string]any{
-		"messages": []any{
-			msg(10, map[string]any{"subject": "One"}),
-			msg(11, map[string]any{"subject": "Two"}),
-		},
-	}
-
-	byID := threadsByID(t, threadsJSON("acc", "INBOX", raw))
-	if len(byID) != 2 {
-		t.Fatalf("got %d threads, want 2", len(byID))
-	}
-	for id, m := range byID {
-		if m.OriginalThreadID != "" {
-			t.Errorf("uid-keyed thread %q should not have OriginalThreadID, got %q", id, m.OriginalThreadID)
-		}
-	}
-}
-
-func TestThreadsJSONSkipsInvalidUIDsAndPassesCursor(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			msg(0, map[string]any{"thread_key": "k1", "subject": "Dropped"}), // uid<=0 skipped
-			msg(10, map[string]any{"thread_key": "k2", "subject": "Kept"}),
+		"cards": []any{
+			map[string]any{"subject": "Dropped"}, // no thread_key
+			map[string]any{"thread_key": "k2", "subject": "Kept"},
 		},
 		"next_cursor": "cursor-token",
 	}
@@ -192,7 +99,7 @@ func TestThreadsJSONSkipsInvalidUIDsAndPassesCursor(t *testing.T) {
 	out := threadsJSON("acc", "INBOX", raw)
 	byID := threadsByID(t, out)
 	if len(byID) != 1 {
-		t.Fatalf("got %d threads, want 1 (uid<=0 dropped)", len(byID))
+		t.Fatalf("got %d threads, want 1 (keyless card dropped)", len(byID))
 	}
 	if got := out.(map[string]any)["next_cursor"]; got != "cursor-token" {
 		t.Errorf("next_cursor = %v, want cursor-token", got)
@@ -201,7 +108,7 @@ func TestThreadsJSONSkipsInvalidUIDsAndPassesCursor(t *testing.T) {
 
 func TestThreadsJSONOmitsCursorWhenEmpty(t *testing.T) {
 	raw := map[string]any{
-		"messages":    []any{msg(10, map[string]any{"subject": "Hi"})},
+		"cards":       []any{map[string]any{"thread_key": "k1", "subject": "Hi"}},
 		"next_cursor": "",
 	}
 	out := threadsJSON("acc", "INBOX", raw).(map[string]any)

@@ -1112,25 +1112,13 @@ pub(crate) fn cached_thread_uids(
     if let Some(uid) = parsed.uid {
         return Ok(vec![uid]);
     }
-    if let Some(subject_filter) = parsed.subject_filter.as_deref() {
-        return Ok(store::get_thread_headers(
-            conn,
-            &parsed.account,
-            &parsed.folder,
-            &parsed.thread_key,
-        )
-        .map_err(|err| err.to_string())?
-        .into_iter()
-        .filter(|header| store::thread_grouping_subject(&header.subject) == subject_filter)
-        .map(|header| header.uid)
-        .collect());
-    }
     store::resolve_message_uids(
         conn,
         &parsed.account,
         &parsed.folder,
         &parsed.thread_key,
-        parsed.uid,
+        parsed.subject_filter.as_deref(),
+        None,
         &[],
     )
     .map_err(|err| err.to_string())
@@ -1299,12 +1287,7 @@ pub(crate) fn parse_thread_id(thread_id: &str) -> Option<ParsedThreadId> {
     if let Some(encoded) = key.strip_prefix("t.") {
         let decoded = URL_SAFE_NO_PAD.decode(encoded.as_bytes()).ok()?;
         let thread_key = String::from_utf8(decoded).ok()?;
-        let (root_thread_key, subject_filter) =
-            if store::should_branch_thread_by_subject(&thread_key) {
-                store::split_branch_compound_key(&thread_key)
-            } else {
-                (thread_key, None)
-            };
+        let (root_thread_key, subject_filter) = store::split_thread_key(&thread_key);
         return Some(ParsedThreadId {
             account,
             folder,

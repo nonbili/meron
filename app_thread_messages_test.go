@@ -27,38 +27,18 @@ func entry(uid int, folder string, message map[string]any) map[string]any {
 	return e
 }
 
-func TestThreadMessagesJSONSubjectFilterDropsOtherBranches(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			entry(10, "", map[string]any{"subject": "Budget"}),
-			entry(11, "", map[string]any{"subject": "Re: Budget"}),       // same grouping subject, kept
-			entry(12, "", map[string]any{"subject": "[EXT] Re: Budget"}), // gateway tag stripped, kept
-			entry(13, "", map[string]any{"subject": "Re: Lunch"}),        // different branch, dropped
-		},
-	}
-
-	filter := threadGroupingSubject("Budget")
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw, filter))
-	if len(got) != 3 {
-		t.Fatalf("got %d messages, want 3 (only the matching branch): %#v", len(got), got)
-	}
-	for _, m := range got {
-		if threadGroupingSubject(m.Subject) != filter {
-			t.Errorf("kept message with subject %q not matching filter %q", m.Subject, filter)
-		}
-	}
-}
-
-func TestThreadMessagesJSONEmptyFilterKeepsAll(t *testing.T) {
+// Branch filtering happens in the sidecar (messages.thread scopes to the
+// subject branch itself); the bridge maps every returned message.
+func TestThreadMessagesJSONKeepsAllReturnedMessages(t *testing.T) {
 	raw := map[string]any{
 		"messages": []any{
 			entry(10, "", map[string]any{"subject": "A"}),
 			entry(11, "", map[string]any{"subject": "B"}),
 		},
 	}
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw, ""))
+	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
 	if len(got) != 2 {
-		t.Fatalf("got %d messages, want 2 (empty filter keeps all)", len(got))
+		t.Fatalf("got %d messages, want 2", len(got))
 	}
 }
 
@@ -74,7 +54,7 @@ func TestThreadMessagesJSONPerMessageFolderAndFields(t *testing.T) {
 		},
 	}
 
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw, ""))
+	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
 	if got[0].FolderID != "Sent" {
 		t.Errorf("message 0 folder = %q, want Sent (per-message source folder)", got[0].FolderID)
 	}
@@ -99,7 +79,7 @@ func TestThreadMessagesJSONUnreadFromSeenFlag(t *testing.T) {
 			func() map[string]any { e := entry(11, "", map[string]any{"subject": "x"}); e["seen"] = true; return e }(),
 		},
 	}
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw, ""))
+	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
 	if !got[0].Unread {
 		t.Error("message with seen=false should be Unread")
 	}

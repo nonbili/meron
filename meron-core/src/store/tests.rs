@@ -363,19 +363,19 @@ fn resolve_message_uids_prefers_explicit_then_single_then_thread() {
     .unwrap();
 
     assert_eq!(
-        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", Some(10), &[42, 43]).unwrap(),
+        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", None, Some(10), &[42, 43]).unwrap(),
         vec![42, 43]
     );
     assert_eq!(
-        resolve_message_uids(&conn, "acct", "INBOX", "", Some(10), &[]).unwrap(),
+        resolve_message_uids(&conn, "acct", "INBOX", "", None, Some(10), &[]).unwrap(),
         vec![10]
     );
     assert_eq!(
-        resolve_message_uids(&conn, "acct", "INBOX", "", None, &[]).unwrap(),
+        resolve_message_uids(&conn, "acct", "INBOX", "", None, None, &[]).unwrap(),
         Vec::<u32>::new()
     );
     assert_eq!(
-        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", None, &[]).unwrap(),
+        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", None, None, &[]).unwrap(),
         vec![10, 11]
     );
 }

@@ -745,7 +745,9 @@ pub(crate) fn mobile_new_messages_detail(
         "muted": mobile_account_muted(data_dir, account),
         "from": display_from(&latest),
         "subject": latest.subject,
-        "threadKey": latest.thread_key,
+        // Branch-aware card key so a notification tap opens the exact list
+        // card the grouping produced.
+        "threadKey": crate::store::card_thread_key(&latest),
     }))
 }
 

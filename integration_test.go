@@ -539,6 +539,29 @@ func TestIntegrationMailFlow(t *testing.T) {
 		}
 	})
 
+	t.Run("grouped thread cards", func(t *testing.T) {
+		// group:true opts into core-side thread grouping: the response carries
+		// ready cards (thread_key, unread counts) instead of raw message rows.
+		res := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"refresh": false,
+			"limit":   50,
+			"group":   true,
+		})
+		cards, _ := res["cards"].([]any)
+		if len(cards) == 0 {
+			t.Fatalf("grouped messages.recent returned no cards: %v", res)
+		}
+		card, ok := cards[0].(map[string]any)
+		if !ok || str(card, "thread_key") == "" {
+			t.Fatalf("card missing thread_key: %v", cards[0])
+		}
+		if _, hasMessages := res["messages"]; hasMessages {
+			t.Fatalf("grouped response should not also carry raw messages: %v", res)
+		}
+	})
+
 	// Last on purpose: no later subtest sends from alice, so nothing but the
 	// piggyback under test can refresh her Sent folder.
 	t.Run("sent from another client surfaces via inbox sync", func(t *testing.T) {

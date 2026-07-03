@@ -10,48 +10,28 @@ import (
 	"testing"
 )
 
-// notificationThreadID must build an id whose subject component matches what
-// threadRead/threadMessagesJSON later filters on, i.e. threadGroupingSubject —
-// not the display variant. Otherwise clicking a notification for a tagged
-// subject ([github], [EXTERNAL], …) resolves to an empty thread.
-func TestNotificationThreadIDUsesGroupingSubject(t *testing.T) {
+// The sidecar emits the branch-aware card key (subject branching lives in the
+// core); notificationThreadID only canonicalizes the folder and formats the id
+// so it matches the list card the user clicks.
+func TestNotificationThreadIDPassesCardKeyThrough(t *testing.T) {
 	const (
 		account   = "acc-1"
-		threadKey = "<abc@example.com>"
-		subject   = "[github] build failed"
+		threadKey = "<abc@example.com>#build failed"
 	)
 
 	// The mail.newMessages event sends folder:"inbox"; the id must canonicalize to
 	// "INBOX" to match the list builder.
-	got := notificationThreadID(account, "inbox", threadKey, subject)
-
-	// Must equal the id the canonical list builder produces for the same message.
-	wantCompound := threadKey + "#" + threadGroupingSubject(subject)
-	want := formatImapThreadID(account, "INBOX", wantCompound)
+	got := notificationThreadID(account, "inbox", threadKey)
+	want := formatImapThreadID(account, "INBOX", threadKey)
 	if got != want {
 		t.Fatalf("notificationThreadID() = %q, want %q", got, want)
-	}
-
-	// And it must parse back into a subject filter equal to threadGroupingSubject,
-	// which is exactly the comparison threadMessagesJSON performs.
-	ids, ok := parseImapThreadID(got)
-	if !ok {
-		t.Fatalf("parseImapThreadID(%q) failed", got)
-	}
-	_, subjectFilter, found := strings.Cut(ids.ThreadKey, "#")
-	if !found {
-		t.Fatalf("thread key %q has no subject filter", ids.ThreadKey)
-	}
-	if subjectFilter != threadGroupingSubject(subject) {
-		t.Errorf("subject filter = %q, want %q (a real message's subject would never match)",
-			subjectFilter, threadGroupingSubject(subject))
 	}
 }
 
 func TestNotificationThreadIDUIDKeyHasNoSubject(t *testing.T) {
 	// uid: keys are already unique; appending a subject would break the match
 	// (the list builder skips the subject for uid: keys too).
-	got := notificationThreadID("acc-1", "inbox", "uid:42", "anything")
+	got := notificationThreadID("acc-1", "inbox", "uid:42")
 	want := formatImapThreadID("acc-1", "INBOX", "uid:42")
 	if got != want {
 		t.Fatalf("notificationThreadID() = %q, want %q", got, want)
@@ -59,7 +39,7 @@ func TestNotificationThreadIDUIDKeyHasNoSubject(t *testing.T) {
 }
 
 func TestNotificationThreadIDGmailThreadIDHasNoSubject(t *testing.T) {
-	got := notificationThreadID("acc-1", "inbox", "gmthrid:123", "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)")
+	got := notificationThreadID("acc-1", "inbox", "gmthrid:123")
 	want := formatImapThreadID("acc-1", "INBOX", "gmthrid:123")
 	if got != want {
 		t.Fatalf("notificationThreadID() = %q, want %q", got, want)
@@ -67,10 +47,10 @@ func TestNotificationThreadIDGmailThreadIDHasNoSubject(t *testing.T) {
 }
 
 func TestNotificationThreadIDEmptyWithoutKey(t *testing.T) {
-	if got := notificationThreadID("", "INBOX", "k", "s"); got != "" {
+	if got := notificationThreadID("", "INBOX", "k"); got != "" {
 		t.Errorf("missing account: got %q, want empty", got)
 	}
-	if got := notificationThreadID("acc-1", "INBOX", "", "s"); got != "" {
+	if got := notificationThreadID("acc-1", "INBOX", ""); got != "" {
 		t.Errorf("missing threadKey: got %q, want empty", got)
 	}
 }
@@ -93,7 +73,7 @@ func TestFormatImapThreadIDFoldsInboxCasing(t *testing.T) {
 	}
 	// A notification (folder "inbox" from the newMessages event) and the list
 	// card (folder "inbox" from threadList's default) must resolve identically.
-	notif := notificationThreadID(account, "inbox", "<abc@example.com>", "a subject")
+	notif := notificationThreadID(account, "inbox", compoundKey)
 	card := formatImapThreadID(account, "inbox", compoundKey)
 	if notif != card {
 		t.Fatalf("notification id %q != list card id %q", notif, card)
@@ -105,7 +85,7 @@ func TestFormatImapThreadIDFoldsInboxCasing(t *testing.T) {
 }
 
 func TestNotificationThreadIDRSS(t *testing.T) {
-	got := notificationThreadID("rss-feed1", "", "item-key", "title")
+	got := notificationThreadID("rss-feed1", "", "item-key")
 	want := "rss-feed1#rss#item-key"
 	if got != want {
 		t.Fatalf("notificationThreadID() = %q, want %q", got, want)

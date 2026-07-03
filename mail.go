@@ -114,6 +114,9 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 		"before_cursor": req.BeforeCursor,
 		"limit":         50,
 		"refresh":       req.Refresh,
+		// Thread grouping (subject branching, root titles, unread counts)
+		// runs in the core, shared with mobile; the bridge only mints ids.
+		"group": true,
 	})
 	if err != nil {
 		return nil, err
@@ -126,7 +129,7 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 	if req.Filter == "starred" {
 		rawCount := 0
 		if obj, ok := res.(map[string]any); ok {
-			if list, ok := obj["messages"].([]any); ok {
+			if list, ok := obj["cards"].([]any); ok {
 				rawCount = len(list)
 			}
 		}
@@ -166,16 +169,12 @@ func (a *App) starredItems(payload map[string]any) (any, error) {
 		}
 		accountID := jsonString(msg["account"])
 		folder := jsonString(msg["folder"])
-		threadKey := jsonString(msg["thread_key"])
-		if threadKey == "" {
-			threadKey = fmt.Sprintf("uid:%d", uid)
+		// The core precomputes the branch-aware card key so this id matches
+		// the thread-list card exactly (grouping semantics live in the core).
+		compoundKey := jsonString(msg["card_thread_key"])
+		if compoundKey == "" {
+			compoundKey = fmt.Sprintf("uid:%d", uid)
 		}
-		compoundKey := threadKey
-		if shouldBranchThreadBySubject(threadKey) {
-			compoundKey = threadKey + "#" + threadGroupingSubject(jsonString(msg["subject"]))
-		}
-		// IDs must match threadsJSON/threadMessagesJSON exactly so opening the
-		// thread and scrolling to the message line up with the conversation view.
 		threadID := formatImapThreadID(accountID, folder, compoundKey)
 		items = append(items, Message{
 			ID:        fmt.Sprintf("%s#%d", threadID, uid),
@@ -220,15 +219,10 @@ func (a *App) threadRead(payload map[string]any) (any, error) {
 	}
 	if ids, ok := parseImapThreadID(threadID); ok {
 		method := "messages.thread"
-		realThreadKey := ids.ThreadKey
-		subjectFilter := ""
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey = parts[0]
-			subjectFilter = parts[1]
-		}
-		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "thread_key": realThreadKey}
-		if realThreadKey == "" && ids.UID > 0 {
+		// The sidecar splits branch-compound keys and scopes the thread to the
+		// subject branch itself; the bridge passes the key through untouched.
+		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "thread_key": ids.ThreadKey}
+		if ids.ThreadKey == "" && ids.UID > 0 {
 			method = "messages.read"
 			params = map[string]any{"account": ids.Account, "folder": ids.Folder, "uid": ids.UID}
 		}
@@ -245,7 +239,7 @@ func (a *App) threadRead(payload map[string]any) (any, error) {
 			return nil, err
 		}
 		if method == "messages.thread" {
-			return threadMessagesJSON(ids.Account, threadID, ids.Folder, res, subjectFilter), nil
+			return threadMessagesJSON(ids.Account, threadID, ids.Folder, res), nil
 		}
 		return messageJSON(ids.Account, threadID, ids.Folder, res), nil
 	}
@@ -265,57 +259,8 @@ func (a *App) mailDelete(payload map[string]any) (any, error) {
 	}
 	if ids, ok := parseImapThreadID(threadID); ok {
 		sourceFolder := deleteFolder(payload, ids.Folder)
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey := parts[0]
-			subjectFilter := parts[1]
-			if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
-				res, err := a.sidecar.Call("messages.delete", map[string]any{"account": ids.Account, "folder": sourceFolder, "uids": uids})
-				if err != nil {
-					return nil, err
-				}
-				return withMovedThreadLocation(res, ids, "trash"), nil
-			}
-			res, err := a.sidecar.Call("messages.threadHeaders", map[string]any{
-				"account":    ids.Account,
-				"folder":     sourceFolder,
-				"thread_key": realThreadKey,
-			})
-			if err != nil {
-				return nil, err
-			}
-			uidsByFolder := uidsByFolderForSubjectThread(res, sourceFolder, subjectFilter)
-			if len(uidsByFolder) == 0 {
-				return map[string]any{"ok": true, "deleted": 0}, nil
-			}
-			deleted := 0
-			trashFolder := ""
-			permanent := false
-			for msgFolder, uids := range uidsByFolder {
-				res, err := a.sidecar.Call("messages.delete", map[string]any{"account": ids.Account, "folder": msgFolder, "uids": uids})
-				if err != nil {
-					return nil, err
-				}
-				if obj, ok := res.(map[string]any); ok {
-					deleted += int(jsonNumber(obj["deleted"]))
-					if trash := jsonString(obj["trash"]); trash != "" {
-						trashFolder = trash
-					}
-					if jsonBool(obj["permanent"]) {
-						permanent = true
-					}
-				}
-			}
-			out := map[string]any{"ok": true, "deleted": deleted}
-			if trashFolder != "" {
-				out["trash"] = trashFolder
-				out["thread_id"] = formatParsedImapThreadIDInFolder(ids, trashFolder)
-			}
-			if permanent {
-				out["permanent"] = true
-			}
-			return out, nil
-		}
+		// Branch-compound thread keys pass through untouched; the sidecar
+		// splits them and scopes the delete to the subject branch.
 		params := map[string]any{"account": ids.Account, "folder": sourceFolder, "thread_key": ids.ThreadKey}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids
@@ -354,37 +299,8 @@ func (a *App) mailMove(payload map[string]any) (any, error) {
 		if canonThreadFolder(ids.Folder) == canonThreadFolder(targetFolder) {
 			return map[string]any{"ok": true, "moved": 0}, nil
 		}
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey := parts[0]
-			subjectFilter := parts[1]
-			if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
-				return a.sidecar.Call("messages.move", map[string]any{"account": ids.Account, "folder": ids.Folder, "target_folder": targetFolder, "uids": uids})
-			}
-			res, err := a.sidecar.Call("messages.threadHeaders", map[string]any{
-				"account":    ids.Account,
-				"folder":     ids.Folder,
-				"thread_key": realThreadKey,
-			})
-			if err != nil {
-				return nil, err
-			}
-			uidsByFolder := uidsByFolderForSubjectThread(res, ids.Folder, subjectFilter)
-			moved := 0
-			for msgFolder, uids := range uidsByFolder {
-				if msgFolder == targetFolder || len(uids) == 0 {
-					continue
-				}
-				res, err := a.sidecar.Call("messages.move", map[string]any{"account": ids.Account, "folder": msgFolder, "target_folder": targetFolder, "uids": uids})
-				if err != nil {
-					return nil, err
-				}
-				if obj, ok := res.(map[string]any); ok {
-					moved += int(jsonNumber(obj["moved"]))
-				}
-			}
-			return map[string]any{"ok": true, "moved": moved}, nil
-		}
+		// Branch-compound thread keys pass through untouched; the sidecar
+		// splits them and scopes the move to the subject branch.
 		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "target_folder": targetFolder, "thread_key": ids.ThreadKey}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids
@@ -413,55 +329,8 @@ func (a *App) mailCopy(payload map[string]any) (any, error) {
 		return nil, errors.New("feed items cannot be copied between folders")
 	}
 	if ids, ok := parseImapThreadID(threadID); ok {
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey := parts[0]
-			subjectFilter := parts[1]
-			if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
-				return a.sidecar.Call("messages.copy", map[string]any{
-					"account":        ids.Account,
-					"folder":         ids.Folder,
-					"target_account": targetAccount,
-					"target_folder":  targetFolder,
-					"uids":           uids,
-				})
-			}
-			res, err := a.sidecar.Call("messages.threadHeaders", map[string]any{
-				"account":    ids.Account,
-				"folder":     ids.Folder,
-				"thread_key": realThreadKey,
-			})
-			if err != nil {
-				return nil, err
-			}
-			uidsByFolder := uidsByFolderForSubjectThread(res, ids.Folder, subjectFilter)
-			copied := 0
-			for msgFolder, uids := range uidsByFolder {
-				if len(uids) == 0 {
-					continue
-				}
-				res, err := a.sidecar.Call("messages.copy", map[string]any{
-					"account":        ids.Account,
-					"folder":         msgFolder,
-					"target_account": targetAccount,
-					"target_folder":  targetFolder,
-					"uids":           uids,
-				})
-				if err != nil {
-					return nil, err
-				}
-				if obj, ok := res.(map[string]any); ok {
-					copied += int(jsonNumber(obj["copied"]))
-				}
-			}
-			return map[string]any{
-				"ok":               true,
-				"copied":           copied,
-				"target_account":   targetAccount,
-				"target_folder":    targetFolder,
-				"target_thread_id": formatImapThreadID(targetAccount, targetFolder, ids.ThreadKey),
-			}, nil
-		}
+		// Branch-compound thread keys pass through untouched; the sidecar
+		// splits them and scopes the copy to the subject branch.
 		params := map[string]any{
 			"account":        ids.Account,
 			"folder":         ids.Folder,
@@ -497,46 +366,6 @@ func (a *App) mailCopy(payload map[string]any) (any, error) {
 		return out, nil
 	}
 	return map[string]any{"ok": true}, nil
-}
-
-func uidsByFolderForSubjectThread(res any, fallbackFolder, subjectFilter string) map[string][]uint32 {
-	uidsByFolder := make(map[string][]uint32)
-	if obj, ok := res.(map[string]any); ok {
-		if list, ok := obj["headers"].([]any); ok {
-			for _, item := range list {
-				entry, _ := item.(map[string]any)
-				normSub := threadGroupingSubject(jsonString(entry["subject"]))
-				if normSub == subjectFilter {
-					uid := uint32(jsonNumber(entry["uid"]))
-					if uid > 0 {
-						msgFolder := jsonString(entry["folder"])
-						if msgFolder == "" {
-							msgFolder = fallbackFolder
-						}
-						uidsByFolder[msgFolder] = append(uidsByFolder[msgFolder], uid)
-					}
-				}
-			}
-		}
-		if list, ok := obj["messages"].([]any); ok {
-			for _, item := range list {
-				entry, _ := item.(map[string]any)
-				msg, _ := entry["message"].(map[string]any)
-				normSub := threadGroupingSubject(jsonString(msg["subject"]))
-				if normSub == subjectFilter {
-					uid := uint32(jsonNumber(entry["uid"]))
-					if uid > 0 {
-						msgFolder := jsonString(entry["folder"])
-						if msgFolder == "" {
-							msgFolder = fallbackFolder
-						}
-						uidsByFolder[msgFolder] = append(uidsByFolder[msgFolder], uid)
-					}
-				}
-			}
-		}
-	}
-	return uidsByFolder
 }
 
 func (a *App) mailArchive(payload map[string]any) (any, error) {
@@ -597,53 +426,9 @@ func (a *App) markRead(payload map[string]any) (any, error) {
 		return a.sidecar.Call("rss.markRead", map[string]any{"thread_id": threadID, "seen": seen})
 	}
 	if ids, ok := parseImapThreadID(threadID); ok {
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey := parts[0]
-			subjectFilter := parts[1]
-			if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
-				params := map[string]any{"account": ids.Account, "folder": ids.Folder, "uids": uids, "seen": seen}
-				return a.sidecar.Call("messages.markRead", params)
-			}
-			res, err := a.sidecar.Call("messages.thread", map[string]any{
-				"account":    ids.Account,
-				"folder":     ids.Folder,
-				"thread_key": realThreadKey,
-			})
-			if err != nil {
-				return nil, err
-			}
-			var uids []uint32
-			if obj, ok := res.(map[string]any); ok {
-				if list, ok := obj["messages"].([]any); ok {
-					for _, item := range list {
-						entry, _ := item.(map[string]any)
-						// Only touch messages whose flag differs from the target.
-						if jsonBool(entry["seen"]) == seen {
-							continue
-						}
-						msg, _ := entry["message"].(map[string]any)
-						normSub := threadGroupingSubject(jsonString(msg["subject"]))
-						if normSub == subjectFilter {
-							uid := uint32(jsonNumber(entry["uid"]))
-							if uid > 0 {
-								uids = append(uids, uid)
-							}
-						}
-					}
-				}
-			}
-			if len(uids) == 0 {
-				return map[string]any{"ok": true}, nil
-			}
-			params := map[string]any{
-				"account": ids.Account,
-				"folder":  ids.Folder,
-				"uids":    uids,
-				"seen":    seen,
-			}
-			return a.sidecar.Call("messages.markRead", params)
-		}
+		// Branch-compound thread keys pass through untouched; the sidecar
+		// splits them and marks only the subject branch (both on the server
+		// and in the local store).
 		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "thread_key": ids.ThreadKey, "seen": seen}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids
@@ -677,61 +462,9 @@ func (a *App) markStarred(payload map[string]any) (any, error) {
 		return a.sidecar.Call("rss.markStarred", map[string]any{"thread_id": threadID, "starred": starred})
 	}
 	if ids, ok := parseImapThreadID(threadID); ok {
-		if strings.Contains(ids.ThreadKey, "#") {
-			parts := strings.SplitN(ids.ThreadKey, "#", 2)
-			realThreadKey := parts[0]
-			subjectFilter := parts[1]
-			if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
-				params := map[string]any{"account": ids.Account, "folder": ids.Folder, "uids": uids, "starred": starred}
-				return a.sidecar.Call("messages.markStarred", params)
-			}
-			res, err := a.sidecar.Call("messages.thread", map[string]any{
-				"account":    ids.Account,
-				"folder":     ids.Folder,
-				"thread_key": realThreadKey,
-			})
-			if err != nil {
-				return nil, err
-			}
-			uidsByFolder := make(map[string][]uint32)
-			if obj, ok := res.(map[string]any); ok {
-				if list, ok := obj["messages"].([]any); ok {
-					for _, item := range list {
-						entry, _ := item.(map[string]any)
-						if jsonBool(entry["starred"]) == starred {
-							continue
-						}
-						msg, _ := entry["message"].(map[string]any)
-						normSub := threadGroupingSubject(jsonString(msg["subject"]))
-						if normSub == subjectFilter {
-							uid := uint32(jsonNumber(entry["uid"]))
-							if uid > 0 {
-								msgFolder := jsonString(entry["folder"])
-								if msgFolder == "" {
-									msgFolder = ids.Folder
-								}
-								uidsByFolder[msgFolder] = append(uidsByFolder[msgFolder], uid)
-							}
-						}
-					}
-				}
-			}
-			if len(uidsByFolder) == 0 {
-				return map[string]any{"ok": true}, nil
-			}
-			for msgFolder, uids := range uidsByFolder {
-				params := map[string]any{
-					"account": ids.Account,
-					"folder":  msgFolder,
-					"uids":    uids,
-					"starred": starred,
-				}
-				if _, err := a.sidecar.Call("messages.markStarred", params); err != nil {
-					return nil, err
-				}
-			}
-			return map[string]any{"ok": true}, nil
-		}
+		// Branch-compound thread keys pass through untouched; the sidecar
+		// splits them and stars only the subject branch (both on the server
+		// and in the local store).
 		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "thread_key": ids.ThreadKey, "starred": starred}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids

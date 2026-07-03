@@ -95,8 +95,11 @@ func uint32sFromRPCParam(t *testing.T, value any) []uint32 {
 	}
 }
 
-func TestThreadReadBranchedThreadRequestsRealThreadAndFiltersMessages(t *testing.T) {
-	threadID := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Todo"))
+// The sidecar splits branch-compound keys and filters the thread to the
+// subject branch itself; the bridge passes the key through and maps every
+// returned message.
+func TestThreadReadPassesBranchKeyThrough(t *testing.T) {
+	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{
 		"messages": []any{
 			map[string]any{
@@ -104,12 +107,6 @@ func TestThreadReadBranchedThreadRequestsRealThreadAndFiltersMessages(t *testing
 				"message": map[string]any{
 					"subject":   "Re: Todo",
 					"from_name": "Ann",
-				},
-			},
-			map[string]any{
-				"uid": float64(12),
-				"message": map[string]any{
-					"subject": "Other",
 				},
 			},
 		},
@@ -125,69 +122,46 @@ func TestThreadReadBranchedThreadRequestsRealThreadAndFiltersMessages(t *testing
 	assertCall(t, writer.calls[0], "messages.thread", map[string]any{
 		"account":       "acc",
 		"folder":        "INBOX",
-		"thread_key":    "k1",
+		"thread_key":    "k1#Todo",
 		"limit":         float64(20),
 		"before_cursor": "c1",
 	})
 
 	messages := out.(map[string]any)["messages"].([]Message)
 	if len(messages) != 1 {
-		t.Fatalf("messages = %#v, want only matching subject branch", messages)
+		t.Fatalf("messages = %#v, want the sidecar's rows unmodified", messages)
 	}
 	if messages[0].ID != threadID+"#11" || messages[0].FromName != "Ann" {
-		t.Fatalf("filtered message = %#v", messages[0])
+		t.Fatalf("mapped message = %#v", messages[0])
 	}
 }
 
-func TestMailMoveBranchedThreadMovesOnlyMatchingSubjectUIDsByFolder(t *testing.T) {
-	threadID := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Todo"))
+func TestMailMovePassesBranchKeyThrough(t *testing.T) {
+	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t,
-		sidecarResponsePlan{Result: map[string]any{
-			"headers": []any{
-				map[string]any{"uid": float64(11), "folder": "INBOX", "subject": "Todo"},
-				map[string]any{"uid": float64(12), "folder": "Sent", "subject": "Re: Todo"},
-				map[string]any{"uid": float64(13), "folder": "Archive", "subject": "Todo"},
-				map[string]any{"uid": float64(14), "folder": "INBOX", "subject": "Other"},
-			},
-		}},
-		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(1)}},
-		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(1)}},
+		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(2)}},
 	)
 
 	out, err := app.mailMove(map[string]any{"thread_id": threadID, "target_folder_id": "Archive"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.(map[string]any)["moved"]; got != 2 {
-		t.Fatalf("moved = %d, want 2", got)
+	if got := out.(map[string]any)["moved"]; got != float64(2) {
+		t.Fatalf("moved = %v, want 2", got)
 	}
-	if len(writer.calls) != 3 {
-		t.Fatalf("sidecar calls = %#v, want threadHeaders plus two moves", writer.calls)
+	if len(writer.calls) != 1 {
+		t.Fatalf("sidecar calls = %#v, want one move", writer.calls)
 	}
-	assertCall(t, writer.calls[0], "messages.threadHeaders", map[string]any{
-		"account":    "acc",
-		"folder":     "INBOX",
-		"thread_key": "k1",
+	assertCall(t, writer.calls[0], "messages.move", map[string]any{
+		"account":       "acc",
+		"folder":        "INBOX",
+		"target_folder": "Archive",
+		"thread_key":    "k1#Todo",
 	})
-
-	moveCalls := map[string][]uint32{}
-	for _, call := range writer.calls[1:] {
-		if call.Method != "messages.move" {
-			t.Fatalf("method = %q, want messages.move", call.Method)
-		}
-		if call.Params["account"] != "acc" || call.Params["target_folder"] != "Archive" {
-			t.Fatalf("move params = %#v", call.Params)
-		}
-		moveCalls[call.Params["folder"].(string)] = uint32sFromRPCParam(t, call.Params["uids"])
-	}
-	want := map[string][]uint32{"INBOX": {11}, "Sent": {12}}
-	if !reflect.DeepEqual(moveCalls, want) {
-		t.Fatalf("move calls = %#v, want %#v", moveCalls, want)
-	}
 }
 
 func TestMailDeleteWithExplicitMessageIDsUsesUIDsAndMovedLocation(t *testing.T) {
-	threadID := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Todo"))
+	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{
 		"ok":      true,
 		"deleted": float64(2),
@@ -215,124 +189,49 @@ func TestMailDeleteWithExplicitMessageIDsUsesUIDsAndMovedLocation(t *testing.T) 
 	}
 
 	obj := out.(map[string]any)
-	if obj["thread_id"] != formatImapThreadID("acc", "Trash", "k1#"+threadGroupingSubject("Todo")) {
+	if obj["thread_id"] != formatImapThreadID("acc", "Trash", "k1#Todo") {
 		t.Fatalf("thread_id = %v, want trash thread location", obj["thread_id"])
 	}
 }
 
-func TestMarkReadBranchedThreadOnlyMarksUnreadMatchingSubject(t *testing.T) {
-	threadID := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Todo"))
+func TestMarkReadPassesBranchKeyThrough(t *testing.T) {
+	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t,
-		sidecarResponsePlan{Result: map[string]any{
-			"messages": []any{
-				map[string]any{
-					"uid":  float64(11),
-					"seen": false,
-					"message": map[string]any{
-						"subject": "Todo",
-					},
-				},
-				map[string]any{
-					"uid":  float64(12),
-					"seen": true,
-					"message": map[string]any{
-						"subject": "Todo",
-					},
-				},
-				map[string]any{
-					"uid":  float64(13),
-					"seen": false,
-					"message": map[string]any{
-						"subject": "Other",
-					},
-				},
-			},
-		}},
 		sidecarResponsePlan{Result: map[string]any{"ok": true}},
 	)
 
 	if _, err := app.markRead(map[string]any{"thread_id": threadID}); err != nil {
 		t.Fatal(err)
 	}
-	if len(writer.calls) != 2 {
-		t.Fatalf("sidecar calls = %#v, want read then markRead", writer.calls)
+	if len(writer.calls) != 1 {
+		t.Fatalf("sidecar calls = %#v, want one markRead", writer.calls)
 	}
-	assertCall(t, writer.calls[0], "messages.thread", map[string]any{
+	assertCall(t, writer.calls[0], "messages.markRead", map[string]any{
 		"account":    "acc",
 		"folder":     "INBOX",
-		"thread_key": "k1",
+		"thread_key": "k1#Todo",
+		"seen":       true,
 	})
-	if writer.calls[1].Method != "messages.markRead" {
-		t.Fatalf("method = %q, want messages.markRead", writer.calls[1].Method)
-	}
-	if writer.calls[1].Params["account"] != "acc" || writer.calls[1].Params["folder"] != "INBOX" || writer.calls[1].Params["seen"] != true {
-		t.Fatalf("markRead params = %#v", writer.calls[1].Params)
-	}
-	if got, want := uint32sFromRPCParam(t, writer.calls[1].Params["uids"]), []uint32{11}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("markRead uids = %#v, want %#v", got, want)
-	}
 }
 
-func TestMarkStarredBranchedThreadGroupsUnstarredMatchingMessagesByFolder(t *testing.T) {
-	threadID := formatImapThreadID("acc", "INBOX", "k1#"+threadGroupingSubject("Todo"))
+func TestMarkStarredPassesBranchKeyThrough(t *testing.T) {
+	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t,
-		sidecarResponsePlan{Result: map[string]any{
-			"messages": []any{
-				map[string]any{
-					"uid":     float64(11),
-					"folder":  "INBOX",
-					"starred": false,
-					"message": map[string]any{"subject": "Todo"},
-				},
-				map[string]any{
-					"uid":     float64(12),
-					"folder":  "Sent",
-					"starred": false,
-					"message": map[string]any{"subject": "Re: Todo"},
-				},
-				map[string]any{
-					"uid":     float64(13),
-					"folder":  "Sent",
-					"starred": true,
-					"message": map[string]any{"subject": "Todo"},
-				},
-				map[string]any{
-					"uid":     float64(14),
-					"folder":  "INBOX",
-					"starred": false,
-					"message": map[string]any{"subject": "Other"},
-				},
-			},
-		}},
-		sidecarResponsePlan{Result: map[string]any{"ok": true}},
 		sidecarResponsePlan{Result: map[string]any{"ok": true}},
 	)
 
 	if _, err := app.markStarred(map[string]any{"thread_id": threadID}); err != nil {
 		t.Fatal(err)
 	}
-	if len(writer.calls) != 3 {
-		t.Fatalf("sidecar calls = %#v, want read then two markStarred calls", writer.calls)
+	if len(writer.calls) != 1 {
+		t.Fatalf("sidecar calls = %#v, want one markStarred", writer.calls)
 	}
-	assertCall(t, writer.calls[0], "messages.thread", map[string]any{
+	assertCall(t, writer.calls[0], "messages.markStarred", map[string]any{
 		"account":    "acc",
 		"folder":     "INBOX",
-		"thread_key": "k1",
+		"thread_key": "k1#Todo",
+		"starred":    true,
 	})
-	markCalls := map[string][]uint32{}
-	for _, call := range writer.calls[1:] {
-		if call.Method != "messages.markStarred" {
-			t.Fatalf("method = %q, want messages.markStarred", call.Method)
-		}
-		if call.Params["account"] != "acc" || call.Params["starred"] != true {
-			t.Fatalf("markStarred params = %#v", call.Params)
-		}
-		markCalls[call.Params["folder"].(string)] = uint32sFromRPCParam(t, call.Params["uids"])
-	}
-	want := map[string][]uint32{"INBOX": {11}, "Sent": {12}}
-	if !reflect.DeepEqual(markCalls, want) {
-		t.Fatalf("markStarred calls = %#v, want %#v", markCalls, want)
-	}
 }
 
 func TestMailSendMapsPayloadToSidecarSend(t *testing.T) {

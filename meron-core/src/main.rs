@@ -200,8 +200,10 @@ fn spawn_message_sync(
                 if let Some((count, latest)) =
                     new_unread_inbox_summary(&engine, &account, uid_next_before, uid_next_after)
                 {
-                    let (from, subject, thread_key) =
-                        (display_from(&latest), latest.subject, latest.thread_key);
+                    // Branch-aware card key so the notification click opens the
+                    // exact list card the grouping produced.
+                    let thread_key = store::card_thread_key(&latest);
+                    let (from, subject) = (display_from(&latest), latest.subject);
                     emit(
                         &out,
                         "mail.newMessages",
@@ -1136,9 +1138,34 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             // same person/avatar in every folder (outbound copies show the recipient).
             store::apply_card_identity(&engine.db.lock().unwrap(), &account, &folder, &mut messages);
             if before_cursor.is_none() && filter != "starred" && query.is_empty() && refresh {
-                spawn_message_sync(engine.clone(), out.clone(), account, folder, limit);
+                spawn_message_sync(engine.clone(), out.clone(), account, folder.clone(), limit);
             }
-            let mut out = json!({ "messages": serde_json::to_value(messages)? });
+            // Thread-list callers opt into core grouping (subject branching,
+            // root titles, accumulated unread counts — shared with mobile) and
+            // get ready cards; other consumers keep the raw rows.
+            let mut out = if p.get("group").and_then(Value::as_bool).unwrap_or(false) {
+                let cards = store::group_thread_cards(messages, &folder)
+                    .into_iter()
+                    .map(|card| {
+                        json!({
+                            "thread_key": card.thread_key,
+                            "original_thread_key": card.original_thread_key,
+                            "folder": card.header.folder,
+                            "from_name": card.header.from_name,
+                            "from_addr": card.header.from_addr,
+                            "subject": card.header.subject,
+                            "date": card.header.date,
+                            "unread": card.unread_count > 0,
+                            "unread_count": card.unread_count,
+                            "starred": card.header.starred,
+                            "recipient_overflow": card.header.recipient_overflow,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                json!({ "cards": cards })
+            } else {
+                json!({ "messages": serde_json::to_value(messages)? })
+            };
             if let Some(cursor) = next_cursor {
                 out.as_object_mut()
                     .unwrap()
@@ -1157,8 +1184,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let mail = store::get_starred_all_accounts(&db, limit)?
                 .into_iter()
                 .map(|(account, header)| {
+                    // The branch-aware key the item's thread card carries, so
+                    // clicking a starred item opens the matching card.
+                    let card_thread_key = store::card_thread_key(&header);
                     let mut row = serde_json::to_value(header).unwrap_or_else(|_| json!({}));
                     row["account"] = Value::String(account);
+                    row["card_thread_key"] = Value::String(card_thread_key);
                     row
                 })
                 .collect::<Vec<_>>();
@@ -1338,7 +1369,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let account = req_str(p, "account")?;
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let thread_key = req_str(p, "thread_key")?;
+            // Card ids carry a branch subject suffix; the store queries use the
+            // root key and the branch filter narrows the rows afterwards.
+            let (thread_key, subject_filter) = store::split_thread_key(&req_str(p, "thread_key")?);
             // Pagination is opt-in: callers that don't pass `limit` get the
             // full thread (preserves the markRead full-scan path in app.go).
             let limit = p.get("limit").and_then(Value::as_u64).map(|n| n as u32);
@@ -1375,6 +1408,13 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 }
                 let db = engine.db.lock().unwrap();
                 store::get_thread_headers_all_folders(&db, &account, &thread_key)?
+            };
+            let headers = match subject_filter.as_deref() {
+                Some(filter) => headers
+                    .into_iter()
+                    .filter(|header| store::thread_grouping_subject(&header.subject) == filter)
+                    .collect(),
+                None => headers,
             };
 
             // `before_cursor` / `limit` are honored as a date-ordered slice so
@@ -1450,13 +1490,17 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let account = req_str(p, "account")?;
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let thread_key = req_str(p, "thread_key")?;
+            let (thread_key, subject_filter) = store::split_thread_key(&req_str(p, "thread_key")?);
             let headers = {
                 let db = engine.db.lock().unwrap();
                 store::get_thread_headers(&db, &account, &folder, &thread_key)?
             };
             let headers = headers
                 .into_iter()
+                .filter(|header| match subject_filter.as_deref() {
+                    Some(filter) => store::thread_grouping_subject(&header.subject) == filter,
+                    None => true,
+                })
                 .map(|header| {
                     json!({
                         "uid": header.uid,
@@ -1474,7 +1518,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let account = req_str(p, "account")?;
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let thread_key = req_str(p, "thread_key").unwrap_or_default();
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
             let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
             // Defaults to true (mark read); pass seen:false to mark unread.
             let seen = p.get("seen").and_then(Value::as_bool).unwrap_or(true);
@@ -1501,6 +1546,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 store::get_thread_headers(&db, &account, &folder, &thread_key)?
                     .into_iter()
                     .filter(|header| header.seen != seen)
+                    .filter(|header| match subject_filter.as_deref() {
+                        Some(filter) => {
+                            store::thread_grouping_subject(&header.subject) == filter
+                        }
+                        None => true,
+                    })
                     .map(|header| header.uid)
                     .collect::<Vec<_>>()
             };
@@ -1517,7 +1568,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
             {
                 let db = engine.db.lock().unwrap();
-                if thread_key.is_empty() {
+                if thread_key.is_empty() || subject_filter.is_some() {
+                    // Branch-scoped: a whole-thread update would flip sibling
+                    // subject branches sharing the root thread_key.
                     for marked_uid in &uids {
                         store::update_message_seen(&db, &account, &folder, *marked_uid, seen)?;
                     }
@@ -1532,7 +1585,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let account = req_str(p, "account")?;
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let thread_key = req_str(p, "thread_key").unwrap_or_default();
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
             let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
             // Defaults to true (mark starred); pass starred:false to unstar.
             let starred = p.get("starred").and_then(Value::as_bool).unwrap_or(true);
@@ -1559,6 +1613,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 store::get_thread_headers(&db, &account, &folder, &thread_key)?
                     .into_iter()
                     .filter(|header| header.starred != starred)
+                    .filter(|header| match subject_filter.as_deref() {
+                        Some(filter) => {
+                            store::thread_grouping_subject(&header.subject) == filter
+                        }
+                        None => true,
+                    })
                     .map(|header| header.uid)
                     .collect::<Vec<_>>()
             };
@@ -1577,7 +1637,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
             {
                 let db = engine.db.lock().unwrap();
-                if thread_key.is_empty() {
+                if thread_key.is_empty() || subject_filter.is_some() {
+                    // Branch-scoped: a whole-thread update would star sibling
+                    // subject branches sharing the root thread_key.
                     for marked_uid in &uids {
                         store::update_message_starred(
                             &db,
@@ -1598,7 +1660,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let account = req_str(p, "account")?;
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let thread_key = req_str(p, "thread_key").unwrap_or_default();
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
             let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
             let explicit_uids = p
                 .get("uids")
@@ -1619,6 +1682,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     &account,
                     &folder,
                     &thread_key,
+                    subject_filter.as_deref(),
                     uid,
                     &explicit_uids,
                 )?
@@ -1646,7 +1710,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
             let target_folder = canon_folder(&req_str(p, "target_folder")?);
-            let thread_key = req_str(p, "thread_key").unwrap_or_default();
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
             let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
             let explicit_uids = p
                 .get("uids")
@@ -1666,16 +1731,17 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 );
             }
 
-            let uids = if !explicit_uids.is_empty() {
-                explicit_uids
-            } else if thread_key.is_empty() {
-                uid.into_iter().collect::<Vec<_>>()
-            } else {
+            let uids = {
                 let db = engine.db.lock().unwrap();
-                store::get_thread_headers(&db, &account, &folder, &thread_key)?
-                    .into_iter()
-                    .map(|header| header.uid)
-                    .collect::<Vec<_>>()
+                store::resolve_message_uids(
+                    &db,
+                    &account,
+                    &folder,
+                    &thread_key,
+                    subject_filter.as_deref(),
+                    uid,
+                    &explicit_uids,
+                )?
             };
 
             if uids.is_empty() {
@@ -1722,7 +1788,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
             let target_account = req_str(p, "target_account")?;
             let target_folder = canon_folder(&req_str(p, "target_folder")?);
-            let thread_key = req_str(p, "thread_key").unwrap_or_default();
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
             let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
             let explicit_uids = p
                 .get("uids")
@@ -1736,16 +1803,17 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 })
                 .unwrap_or_default();
 
-            let uids = if !explicit_uids.is_empty() {
-                explicit_uids
-            } else if thread_key.is_empty() {
-                uid.into_iter().collect::<Vec<_>>()
-            } else {
+            let uids = {
                 let db = engine.db.lock().unwrap();
-                store::get_thread_headers(&db, &account, &folder, &thread_key)?
-                    .into_iter()
-                    .map(|header| header.uid)
-                    .collect::<Vec<_>>()
+                store::resolve_message_uids(
+                    &db,
+                    &account,
+                    &folder,
+                    &thread_key,
+                    subject_filter.as_deref(),
+                    uid,
+                    &explicit_uids,
+                )?
             };
 
             if uids.is_empty() {

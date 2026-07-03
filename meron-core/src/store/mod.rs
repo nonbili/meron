@@ -608,6 +608,7 @@ pub fn resolve_message_uids(
     account: &str,
     folder: &str,
     thread_key: &str,
+    subject_filter: Option<&str>,
     uid: Option<u32>,
     explicit_uids: &[u32],
 ) -> Result<Vec<u32>> {
@@ -617,10 +618,11 @@ pub fn resolve_message_uids(
     if thread_key.is_empty() {
         return Ok(uid.into_iter().collect());
     }
-    Ok(get_thread_headers(conn, account, folder, thread_key)?
-        .into_iter()
-        .map(|header| header.uid)
-        .collect())
+    let mut headers = get_thread_headers(conn, account, folder, thread_key)?;
+    if let Some(filter) = subject_filter {
+        headers.retain(|header| thread_grouping_subject(&header.subject) == filter);
+    }
+    Ok(headers.into_iter().map(|header| header.uid).collect())
 }
 
 #[derive(Clone)]
@@ -668,11 +670,7 @@ pub fn group_thread_cards(messages: Vec<MessageHeader>, default_folder: &str) ->
         } else {
             String::new()
         };
-        let compound_key = if branch {
-            branch_compound_key(&base_key, &group_subject)
-        } else {
-            base_key.clone()
-        };
+        let compound_key = card_thread_key(&message);
         let card = groups.entry(compound_key.clone()).or_insert_with(|| {
             order.push(compound_key.clone());
             let root = roots.get(&base_key);
@@ -721,6 +719,31 @@ fn effective_thread_key(message: &MessageHeader) -> String {
         format!("uid:{}", message.uid)
     } else {
         message.thread_key.clone()
+    }
+}
+
+/// The branch-aware thread key a list card for `message` carries: the root
+/// thread key joined with the message's grouping subject for branchable
+/// threads, or the bare root for uid:/gmthrid: keys. Every path that mints a
+/// clickable thread id (thread lists, starred items, new-mail notifications)
+/// must use this so the id matches the card the grouping produced.
+pub fn card_thread_key(message: &MessageHeader) -> String {
+    let base = effective_thread_key(message);
+    if should_branch_thread_by_subject(&base) {
+        branch_compound_key(&base, &thread_grouping_subject(&message.subject))
+    } else {
+        base
+    }
+}
+
+/// Split a `thread_key` request parameter into (root key, branch subject
+/// filter). Card-minted keys for branchable threads always carry the
+/// `#subject` suffix (see [`card_thread_key`]); uid:/gmthrid: keys never do.
+pub fn split_thread_key(thread_key: &str) -> (String, Option<String>) {
+    if should_branch_thread_by_subject(thread_key) {
+        split_branch_compound_key(thread_key)
+    } else {
+        (thread_key.to_string(), None)
     }
 }
 

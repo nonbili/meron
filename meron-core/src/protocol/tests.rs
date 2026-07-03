@@ -919,7 +919,9 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
     assert_eq!(detail["muted"], false);
     assert_eq!(detail["from"], "Aki");
     assert_eq!(detail["subject"], "Fresh");
-    assert_eq!(detail["threadKey"], "fresh");
+    // The branch-aware card key (root#grouping-subject), so a notification tap
+    // opens the exact card the thread-list grouping mints.
+    assert_eq!(detail["threadKey"], "fresh#Fresh");
 
     // First sync of a mailbox (no prior uid_next) must not summarize the backlog.
     assert!(crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 0, 4).is_none());

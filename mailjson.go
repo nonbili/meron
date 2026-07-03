@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -43,111 +42,43 @@ func looksLikeArchiveFolder(name string) bool {
 	}
 }
 
+// threadsJSON maps the core's ready thread cards (grouping, subject branching,
+// root titles, and unread counts all live in the sidecar, shared with mobile)
+// into bridge Messages; only thread-id minting happens here.
 func threadsJSON(accountID, folder string, raw any) any {
 	object, _ := raw.(map[string]any)
-	list, _ := object["messages"].([]any)
-	type threadGroup struct {
-		message Message
-	}
-	groups := make(map[string]*threadGroup)
-	order := make([]string, 0, len(list))
-
-	// Determine the original root message's subject for each threadKey. The
-	// display variant preserves real tags (used for the card title); the grouping
-	// variant strips gateway tags (used to match compound keys / branch back-pointers).
-	oldestDisplaySubject := make(map[string]string)
-	oldestGroupSubject := make(map[string]string)
-	oldestUID := make(map[string]int64)
+	list, _ := object["cards"].([]any)
+	messages := make([]Message, 0, len(list))
 	for _, item := range list {
-		msg, _ := item.(map[string]any)
-		uid := jsonNumber(msg["uid"])
-		if uid <= 0 {
+		card, _ := item.(map[string]any)
+		threadKey := jsonString(card["thread_key"])
+		if threadKey == "" {
 			continue
 		}
-		msgFolder := jsonString(msg["folder"])
+		msgFolder := jsonString(card["folder"])
 		if msgFolder == "" {
 			msgFolder = folder
 		}
-		threadKey := jsonString(msg["thread_key"])
-		if threadKey == "" {
-			threadKey = fmt.Sprintf("uid:%d", uid)
+		threadID := formatImapThreadID(accountID, msgFolder, threadKey)
+		var originalThreadID string
+		if original := jsonString(card["original_thread_key"]); original != "" {
+			originalThreadID = formatImapThreadID(accountID, msgFolder, original)
 		}
-		currOldestUID, exists := oldestUID[threadKey]
-		if !exists || uid < currOldestUID {
-			oldestUID[threadKey] = uid
-			oldestDisplaySubject[threadKey] = normalizeThreadSubject(jsonString(msg["subject"]))
-			oldestGroupSubject[threadKey] = threadGroupingSubject(jsonString(msg["subject"]))
-		}
-	}
-
-	for _, item := range list {
-		msg, _ := item.(map[string]any)
-		uid := jsonNumber(msg["uid"])
-		if uid <= 0 {
-			continue
-		}
-		msgFolder := jsonString(msg["folder"])
-		if msgFolder == "" {
-			msgFolder = folder
-		}
-		threadKey := jsonString(msg["thread_key"])
-		if threadKey == "" {
-			threadKey = fmt.Sprintf("uid:%d", uid)
-		}
-		compoundKey := threadKey
-		normSub := ""
-		if shouldBranchThreadBySubject(threadKey) {
-			normSub = threadGroupingSubject(jsonString(msg["subject"]))
-			compoundKey = threadKey + "#" + normSub
-		}
-		group, exists := groups[compoundKey]
-		if !exists {
-			threadID := formatImapThreadID(accountID, msgFolder, compoundKey)
-
-			// Compute OriginalThreadID if this is a branched thread
-			var originalThreadID string
-			if shouldBranchThreadBySubject(threadKey) {
-				origSubject := oldestGroupSubject[threadKey]
-				if normSub != origSubject {
-					originalThreadID = formatImapThreadID(accountID, msgFolder, threadKey+"#"+origSubject)
-				}
-			}
-
-			// Thread title is the *root* message's normalized subject (without
-			// "Re:"/"Fwd:" prefixes) so the list shows the original conversation
-			// title regardless of which message we encountered first. Falls back
-			// to this message's raw subject only when normalization stripped
-			// everything (e.g. an isolated "Re:" with nothing after).
-			titleSubject := oldestDisplaySubject[threadKey]
-			if titleSubject == "" {
-				titleSubject = jsonString(msg["subject"])
-			}
-			group = &threadGroup{message: Message{
-				ID:                threadID,
-				AccountID:         accountID,
-				FolderID:          msgFolder,
-				ThreadID:          threadID,
-				FromName:          jsonString(msg["from_name"]),
-				FromAddr:          jsonString(msg["from_addr"]),
-				Subject:           titleSubject,
-				Date:              jsonNumber(msg["date"]),
-				OriginalThreadID:  originalThreadID,
-				RecipientOverflow: uint32(jsonNumber(msg["recipient_overflow"])),
-			}}
-			groups[compoundKey] = group
-			order = append(order, compoundKey)
-		}
-		if !jsonBool(msg["seen"]) {
-			group.message.Unread = true
-			group.message.UnreadCount++
-		}
-		if jsonBool(msg["starred"]) {
-			group.message.Starred = true
-		}
-	}
-	messages := make([]Message, 0, len(order))
-	for _, key := range order {
-		messages = append(messages, groups[key].message)
+		messages = append(messages, Message{
+			ID:                threadID,
+			AccountID:         accountID,
+			FolderID:          msgFolder,
+			ThreadID:          threadID,
+			FromName:          jsonString(card["from_name"]),
+			FromAddr:          jsonString(card["from_addr"]),
+			Subject:           jsonString(card["subject"]),
+			Date:              jsonNumber(card["date"]),
+			Unread:            jsonBool(card["unread"]),
+			UnreadCount:       uint32(jsonNumber(card["unread_count"])),
+			Starred:           jsonBool(card["starred"]),
+			OriginalThreadID:  originalThreadID,
+			RecipientOverflow: uint32(jsonNumber(card["recipient_overflow"])),
+		})
 	}
 	out := map[string]any{"threads": messages}
 	if cursor, _ := object["next_cursor"].(string); cursor != "" {
@@ -156,19 +87,13 @@ func threadsJSON(accountID, folder string, raw any) any {
 	return out
 }
 
-func threadMessagesJSON(accountID, threadID, folder string, raw any, subjectFilter string) any {
+func threadMessagesJSON(accountID, threadID, folder string, raw any) any {
 	object, _ := raw.(map[string]any)
 	list, _ := object["messages"].([]any)
 	messages := make([]Message, 0, len(list))
 	for _, item := range list {
 		entry, _ := item.(map[string]any)
 		msg, _ := entry["message"].(map[string]any)
-		if subjectFilter != "" {
-			normSub := threadGroupingSubject(jsonString(msg["subject"]))
-			if normSub != subjectFilter {
-				continue
-			}
-		}
 		uid := jsonNumber(entry["uid"])
 		attachments := msg["attachments"]
 		attachmentList, _ := attachments.([]any)
@@ -280,10 +205,6 @@ func formatImapThreadID(accountID, folder, threadKey string) string {
 	return fmt.Sprintf("%s#%s#t.%s", accountID, canonThreadFolder(folder), encoded)
 }
 
-func shouldBranchThreadBySubject(threadKey string) bool {
-	return !strings.HasPrefix(threadKey, "uid:") && !strings.HasPrefix(threadKey, "gmthrid:")
-}
-
 func formatParsedImapThreadIDInFolder(ids ImapThreadIDs, folder string) string {
 	if ids.ThreadKey == "" && ids.UID > 0 {
 		return fmt.Sprintf("%s#%s#%d", ids.Account, canonThreadFolder(folder), ids.UID)
@@ -301,41 +222,4 @@ func withMovedThreadLocation(res any, ids ImapThreadIDs, folderField string) map
 		out["thread_id"] = formatParsedImapThreadIDInFolder(ids, folder)
 	}
 	return out
-}
-
-var subjectPrefixRegex = regexp.MustCompile(`(?i)^(?:\[[^\]]+\]\s*)*(?:re|fw|fwd|aw|sv|vs|rv|res|tr|antw|wg|答复|回复|转发)(?:\[[0-9]+\]|\([0-9]+\))?[:：]\s*`)
-
-func normalizeThreadSubject(subject string) string {
-	subject = strings.TrimSpace(subject)
-	for {
-		loc := subjectPrefixRegex.FindStringIndex(subject)
-		if loc == nil || loc[0] != 0 {
-			break
-		}
-		subject = strings.TrimSpace(subject[loc[1]:])
-	}
-	return subject
-}
-
-var leadingBracketTagRegex = regexp.MustCompile(`^\s*\[[^\]]*\]\s*`)
-
-// threadGroupingSubject normalizes a subject for thread grouping/matching only.
-// In addition to Re:/Fwd: prefixes it strips ANY leading bracketed tag (e.g.
-// gateway-injected "[EXTERNAL]", "[CAUTION]") so a tagged inbound copy threads
-// with its untagged Sent counterpart. Not used for display — see
-// normalizeThreadSubject for the title-facing variant that preserves real tags.
-func threadGroupingSubject(subject string) string {
-	subject = strings.TrimSpace(subject)
-	for {
-		if loc := subjectPrefixRegex.FindStringIndex(subject); loc != nil && loc[0] == 0 {
-			subject = strings.TrimSpace(subject[loc[1]:])
-			continue
-		}
-		if loc := leadingBracketTagRegex.FindStringIndex(subject); loc != nil && loc[0] == 0 {
-			subject = strings.TrimSpace(subject[loc[1]:])
-			continue
-		}
-		break
-	}
-	return subject
 }

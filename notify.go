@@ -146,7 +146,7 @@ func (a *App) notifyNewMail(detail any) {
 		title:    title,
 		body:     body,
 		account:  account,
-		threadID: notificationThreadID(account, folder, threadKey, subject),
+		threadID: notificationThreadID(account, folder, threadKey),
 	}
 
 	// Off the sidecar read loop: the platform notify call can block briefly and
@@ -154,7 +154,7 @@ func (a *App) notifyNewMail(detail any) {
 	go a.deliverNotification(n)
 }
 
-func notificationThreadID(account, folder, threadKey, subject string) string {
+func notificationThreadID(account, folder, threadKey string) string {
 	if account == "" || threadKey == "" {
 		return ""
 	}
@@ -164,18 +164,11 @@ func notificationThreadID(account, folder, threadKey, subject string) string {
 	if folder == "" {
 		folder = "INBOX"
 	}
-	// formatImapThreadID canonicalizes the folder casing (inbox → INBOX), so this
-	// id lines up with the thread-list card the user clicks regardless of whether
-	// the list spelled the folder "inbox" or "INBOX".
-	compoundKey := threadKey
-	if shouldBranchThreadBySubject(threadKey) {
-		// Must use the grouping variant (not normalizeThreadSubject): threadRead's
-		// subjectFilter is matched against threadGroupingSubject, which strips
-		// leading bracket tags ([github], [EXTERNAL], …). Using the display variant
-		// here builds an id that never matches such threads on click.
-		compoundKey = threadKey + "#" + threadGroupingSubject(subject)
-	}
-	return formatImapThreadID(account, folder, compoundKey)
+	// The sidecar already emits the branch-aware card key (subject branching
+	// lives in the core), so this id lines up with the thread-list card the
+	// user clicks. formatImapThreadID canonicalizes the folder casing
+	// (inbox → INBOX) for the same reason.
+	return formatImapThreadID(account, folder, threadKey)
 }
 
 func firstNonEmpty(values ...string) string {
