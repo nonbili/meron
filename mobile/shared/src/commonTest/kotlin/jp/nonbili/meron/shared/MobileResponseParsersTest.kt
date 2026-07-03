@@ -299,4 +299,40 @@ class MobileResponseParsersTest {
             }
         assertEquals("Trash folder not found", failure.message)
     }
+
+    @Test
+    fun parsesThreadActionLocationFromArchiveResponse() {
+        val location =
+            parseThreadActionLocationResponse(
+                """{"ok":true,"moved":1,"folder":"Archive","thread_id":"acc#Archive#t.MQ"}""",
+            )
+
+        assertEquals("acc#Archive#t.MQ", location.threadId)
+        assertEquals("Archive", location.folder)
+        assertFalse(location.permanent)
+    }
+
+    @Test
+    fun parsesThreadActionLocationFromDeleteTrashResponse() {
+        val location =
+            parseThreadActionLocationResponse(
+                """{"ok":true,"deleted":1,"trash":"Trash"}""",
+            )
+
+        assertEquals("", location.threadId)
+        assertEquals("Trash", location.folder)
+        assertFalse(location.permanent)
+    }
+
+    @Test
+    fun parsesPermanentThreadActionResponse() {
+        val location =
+            parseThreadActionLocationResponse(
+                """{"ok":true,"deleted":1,"permanent":true}""",
+            )
+
+        assertEquals("", location.threadId)
+        assertEquals("", location.folder)
+        assertTrue(location.permanent)
+    }
 }

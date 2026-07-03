@@ -416,11 +416,13 @@ internal fun MailList(
                     when (dismissState.currentValue) {
                         SwipeToDismissBoxValue.StartToEnd -> {
                             dismissHandled = true
+                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
                             onArchive(thread)
                         }
 
                         SwipeToDismissBoxValue.EndToStart -> {
                             dismissHandled = true
+                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
                             onDelete(thread)
                         }
 

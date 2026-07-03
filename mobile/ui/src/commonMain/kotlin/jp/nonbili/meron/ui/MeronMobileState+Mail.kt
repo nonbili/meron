@@ -216,6 +216,7 @@ import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
 import jp.nonbili.meron.shared.parseStarredItemsResponse
 import jp.nonbili.meron.shared.parseStorageUsageResponse
+import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.parseThreadListPage
 import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
@@ -998,7 +999,7 @@ internal fun MeronMobileState.runCoreThreadAction(
     action: suspend MobileMailCommandClient.() -> String,
     update: (List<ThreadSummary>) -> List<ThreadSummary>,
     undoMessage: String? = null,
-    onUndo: (() -> Unit)? = null,
+    onUndo: ((String) -> Unit)? = null,
 ) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
@@ -1013,20 +1014,20 @@ internal fun MeronMobileState.runCoreThreadAction(
     // The action commits immediately; Undo issues a compensating action (onUndo).
     // Track the commit so an Undo tap waits for it to finish, and is skipped if
     // the commit itself failed (the UI has already rolled back in that case).
-    val committed = CompletableDeferred<Boolean>()
+    val committed = CompletableDeferred<String?>()
     scope.launch {
         runCatching {
             requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).action() })
-        }.onSuccess {
+        }.onSuccess { response ->
             if (undoMessage == null || onUndo == null) status = "$label complete"
-            committed.complete(true)
+            committed.complete(response)
         }.onFailure {
             Log.w("Mail", "$label failed", it)
             coreThreads = threadsBefore
             kanbanColumns = kanbanBefore
             status = "$label failed: ${it.message}"
             snackbarHost.currentSnackbarData?.dismiss()
-            committed.complete(false)
+            committed.complete(null)
         }
     }
     // Show the undo snackbar immediately rather than gating it on the round-trip,
@@ -1039,7 +1040,10 @@ internal fun MeronMobileState.runCoreThreadAction(
                     actionLabel = "Undo",
                     duration = SnackbarDuration.Long,
                 )
-            if (result == SnackbarResult.ActionPerformed && committed.await()) onUndo()
+            if (result == SnackbarResult.ActionPerformed) {
+                snackbarHost.currentSnackbarData?.dismiss()
+                committed.await()?.let { response -> onUndo(response) }
+            }
         }
     }
 }
@@ -1050,13 +1054,20 @@ internal fun MeronMobileState.restoreThread(
     thread: ThreadSummary,
     threadsSnapshot: List<ThreadSummary>,
     kanbanSnapshot: Map<String, KanbanColumnState>,
+    actionResponse: String,
 ) {
     if (!coreLoaded) return
+    val undoThreadId =
+        undoSourceThreadId(thread, actionResponse)
+            ?: run {
+                status = "Undo unavailable"
+                return
+            }
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
                 MobileMailCommandClient(core).move(
-                    MoveThreadParams(threadId = thread.id, targetFolderId = thread.folder),
+                    MoveThreadParams(threadId = undoThreadId, targetFolderId = thread.folder),
                 )
             }
         }.onSuccess {
@@ -1067,6 +1078,19 @@ internal fun MeronMobileState.restoreThread(
             status = "Undo failed: ${it.message}"
         }
     }
+}
+
+private fun undoSourceThreadId(
+    thread: ThreadSummary,
+    actionResponse: String,
+): String? {
+    val location = parseThreadActionLocationResponse(actionResponse)
+    if (location.permanent) return null
+    if (location.threadId.isNotBlank()) return location.threadId
+    if (location.folder.isBlank()) return thread.id
+    val threadKey = thread.id.substringAfterLast("#", missingDelimiterValue = "")
+    if (thread.accountId.isBlank() || threadKey.isBlank()) return thread.id
+    return "${thread.accountId}#${location.folder}#$threadKey"
 }
 
 internal fun MeronMobileState.toggleStar(thread: ThreadSummary) {
@@ -1387,7 +1411,7 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
             action = { archive(ThreadActionParams(threadId = thread.id)) },
             update = { threads -> threads.filterNot { it.id == thread.id } },
             undoMessage = "Archived",
-            onUndo = { restoreThread(thread, threadsSnapshot, kanbanSnapshot) },
+            onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
         )
     }
 }
@@ -1401,7 +1425,7 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
         action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
         update = { threads -> threads.filterNot { it.id == thread.id } },
         undoMessage = "Deleted",
-        onUndo = { restoreThread(thread, threadsSnapshot, kanbanSnapshot) },
+        onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
     )
 }
 

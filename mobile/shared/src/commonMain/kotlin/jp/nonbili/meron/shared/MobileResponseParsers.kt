@@ -21,6 +21,19 @@ fun requireCoreOk(responseJson: String): String {
     return responseJson
 }
 
+data class ThreadActionLocation(
+    val threadId: String = "",
+    val folder: String = "",
+    val permanent: Boolean = false,
+)
+
+fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocation =
+    ThreadActionLocation(
+        threadId = responseJson.findJsonStringProperty("thread_id").orEmpty(),
+        folder = responseJson.findJsonStringProperty("folder") ?: responseJson.findJsonStringProperty("trash").orEmpty(),
+        permanent = responseJson.findJsonBooleanProperty("permanent") ?: false,
+    )
+
 fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
     val accountsJson = responseJson.findJsonArrayProperty("accounts") ?: return emptyList()
     return accountsJson.jsonArrayElements().mapNotNull { item ->
