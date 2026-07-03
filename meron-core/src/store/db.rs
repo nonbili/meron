@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    params, Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior,
+};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(super) const ACCOUNTS_DDL: &str = "
 CREATE TABLE IF NOT EXISTS accounts (
@@ -160,15 +162,17 @@ fn open_inner(path: &Path, key: Option<&str>) -> Result<Connection> {
         .context("set busy timeout")?;
     // WAL + synchronous=NORMAL is the durable-but-fast desktop combo; busy_timeout
     // avoids spurious SQLITE_BUSY now that a reader can overlap a writer under WAL.
-    conn.execute_batch(
-        // foreign_keys is per-connection and off by default. No table declares a
-        // FOREIGN KEY today, so this is a no-op for now — it's set so that any FK
-        // constraints added in a future migration are enforced automatically.
-        "PRAGMA journal_mode = WAL;
-         PRAGMA synchronous = NORMAL;
-         PRAGMA busy_timeout = 5000;
-         PRAGMA foreign_keys = ON;",
-    )
+    with_busy_retry(|| {
+        conn.execute_batch(
+            // foreign_keys is per-connection and off by default. No table declares a
+            // FOREIGN KEY today, so this is a no-op for now — it's set so that any FK
+            // constraints added in a future migration are enforced automatically.
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;
+             PRAGMA foreign_keys = ON;",
+        )
+    })
     .context("set connection pragmas")?;
     run_migrations(&conn).context("run migrations")?;
     invalidate_body_cache_if_needed(&conn)?;
@@ -264,6 +268,31 @@ fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
 
 fn sql_single_quote(path: &Path) -> String {
     path.to_string_lossy().replace('\'', "''")
+}
+
+fn with_busy_retry<T>(mut f: impl FnMut() -> rusqlite::Result<T>) -> rusqlite::Result<T> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut delay = Duration::from_millis(10);
+    loop {
+        match f() {
+            Err(err) if is_database_locked(&err) && Instant::now() < deadline => {
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
+}
+
+fn is_database_locked(err: &rusqlite::Error) -> bool {
+    matches!(
+        err,
+        rusqlite::Error::SqliteFailure(failure, _)
+            if matches!(
+                failure.code,
+                ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked
+            )
+    )
 }
 
 fn db_path() -> PathBuf {
