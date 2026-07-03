@@ -15,6 +15,8 @@ class AndroidBackgroundSyncTest {
         assertTrue(isTransientNetworkError("connection refused"))
         assertTrue(isTransientNetworkError("connection reset by peer"))
         assertTrue(isTransientNetworkError("network is unreachable"))
+        assertTrue(isTransientNetworkError("oauth login failed: io: Software caused connection abort (os error 103)"))
+        assertTrue(isTransientNetworkError("write: broken pipe"))
 
         assertFalse(isTransientNetworkError("invalid password"))
         assertFalse(isTransientNetworkError("authentication failed"))

@@ -137,6 +137,8 @@ internal fun isTransientNetworkError(message: String): Boolean {
             lower.contains("network is unreachable") ||
             lower.contains("connection refused") ||
             lower.contains("connection reset") ||
+            lower.contains("connection abort") ||
+            lower.contains("broken pipe") ||
             lower.contains("failed to lookup address") ||
             lower.contains("no address associated with hostname")
 }
