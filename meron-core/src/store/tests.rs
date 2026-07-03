@@ -228,51 +228,46 @@ fn get_recent_page_can_return_only_unread_messages() {
 #[test]
 fn new_unread_inbox_summary_counts_uid_window_and_latest_unread() {
     let conn = test_conn();
-    upsert_messages(
-        &conn,
-        "acct",
-        "INBOX",
-        &[
-            MessageHeader {
-                uid: 1,
-                subject: "Before window".to_string(),
-                from_addr: "old@example.com".to_string(),
-                thread_key: "old".to_string(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 2,
-                subject: "Lower bound".to_string(),
-                from_addr: "lower@example.com".to_string(),
-                thread_key: String::new(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 3,
-                subject: "Already read".to_string(),
-                from_addr: "read@example.com".to_string(),
-                seen: true,
-                thread_key: "read".to_string(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 4,
-                subject: "Latest unread".to_string(),
-                from_name: "Aki".to_string(),
-                from_addr: "aki@example.com".to_string(),
-                thread_key: "fresh".to_string(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 5,
-                subject: "Upper bound excluded".to_string(),
-                from_addr: "upper@example.com".to_string(),
-                thread_key: "upper".to_string(),
-                ..Default::default()
-            },
-        ],
-    )
-    .unwrap();
+    let inbox_messages = vec![
+        MessageHeader {
+            uid: 1,
+            subject: "Before window".to_string(),
+            from_addr: "old@example.com".to_string(),
+            thread_key: "old".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 2,
+            subject: "Lower bound".to_string(),
+            from_addr: "lower@example.com".to_string(),
+            thread_key: String::new(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 3,
+            subject: "Already read".to_string(),
+            from_addr: "read@example.com".to_string(),
+            seen: true,
+            thread_key: "read".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 4,
+            subject: "Latest unread".to_string(),
+            from_name: "Aki".to_string(),
+            from_addr: "aki@example.com".to_string(),
+            thread_key: "fresh".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 5,
+            subject: "Upper bound excluded".to_string(),
+            from_addr: "upper@example.com".to_string(),
+            thread_key: "upper".to_string(),
+            ..Default::default()
+        },
+    ];
+    upsert_messages(&conn, "acct", "INBOX", &inbox_messages).unwrap();
     upsert_messages(
         &conn,
         "acct",
@@ -287,7 +282,8 @@ fn new_unread_inbox_summary_counts_uid_window_and_latest_unread() {
     )
     .unwrap();
 
-    let (count, latest) = new_unread_inbox_summary(&conn, "acct", 2, 5)
+    let synced = inbox_messages[1..4].to_vec();
+    let (count, latest) = new_unread_inbox_summary(&conn, "acct", 2, 5, &synced)
         .unwrap()
         .unwrap();
     assert_eq!(count, 2);
@@ -295,7 +291,16 @@ fn new_unread_inbox_summary_counts_uid_window_and_latest_unread() {
     assert_eq!(latest.subject, "Latest unread");
     assert_eq!(latest.thread_key, "fresh");
 
-    let (_, lower_bound) = new_unread_inbox_summary(&conn, "acct", 2, 3)
+    let conn = test_conn();
+    let lower = vec![MessageHeader {
+        uid: 2,
+        subject: "Lower bound".to_string(),
+        from_addr: "lower@example.com".to_string(),
+        thread_key: String::new(),
+        ..Default::default()
+    }];
+    upsert_messages(&conn, "acct", "INBOX", &lower).unwrap();
+    let (_, lower_bound) = new_unread_inbox_summary(&conn, "acct", 2, 3, &lower)
         .unwrap()
         .unwrap();
     assert_eq!(lower_bound.uid, 2);
@@ -320,17 +325,81 @@ fn new_unread_inbox_summary_ignores_empty_or_non_growing_windows() {
     .unwrap();
 
     assert!(
-        new_unread_inbox_summary(&conn, "acct", 0, 2)
+        new_unread_inbox_summary(&conn, "acct", 0, 2, &[])
             .unwrap()
             .is_none()
     );
     assert!(
-        new_unread_inbox_summary(&conn, "acct", 2, 2)
+        new_unread_inbox_summary(&conn, "acct", 2, 2, &[])
             .unwrap()
             .is_none()
     );
     assert!(
-        new_unread_inbox_summary(&conn, "acct", 3, 2)
+        new_unread_inbox_summary(&conn, "acct", 3, 2, &[])
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn new_unread_inbox_summary_ignores_observed_gmail_message_restored_with_new_uid() {
+    let conn = test_conn();
+    let old = vec![MessageHeader {
+        uid: 10,
+        subject: "Old unread".to_string(),
+        from_addr: "old@example.com".to_string(),
+        thread_key: "gmthrid:1".to_string(),
+        gmail_msg_id: Some(999),
+        ..Default::default()
+    }];
+    upsert_messages(&conn, "acct", "INBOX", &old).unwrap();
+    backfill_observed_mail_identities(&conn, "acct").unwrap();
+    delete_messages_by_uid(&conn, "acct", "INBOX", &[10]).unwrap();
+
+    let restored = vec![MessageHeader {
+        uid: 20,
+        subject: "Old unread".to_string(),
+        from_addr: "old@example.com".to_string(),
+        thread_key: "gmthrid:1".to_string(),
+        gmail_msg_id: Some(999),
+        ..Default::default()
+    }];
+    upsert_messages(&conn, "acct", "INBOX", &restored).unwrap();
+
+    assert!(
+        new_unread_inbox_summary(&conn, "acct", 20, 21, &restored)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn new_unread_inbox_summary_ignores_observed_message_id_restored_with_new_uid() {
+    let conn = test_conn();
+    let old = vec![MessageHeader {
+        uid: 10,
+        subject: "Old unread".to_string(),
+        from_addr: "old@example.com".to_string(),
+        thread_key: "mid@example.com".to_string(),
+        message_id: "Mid@Example.com".to_string(),
+        ..Default::default()
+    }];
+    upsert_messages(&conn, "acct", "INBOX", &old).unwrap();
+    backfill_observed_mail_identities(&conn, "acct").unwrap();
+    delete_messages_by_uid(&conn, "acct", "INBOX", &[10]).unwrap();
+
+    let restored = vec![MessageHeader {
+        uid: 20,
+        subject: "Old unread".to_string(),
+        from_addr: "old@example.com".to_string(),
+        thread_key: "mid@example.com".to_string(),
+        message_id: "mid@example.com".to_string(),
+        ..Default::default()
+    }];
+    upsert_messages(&conn, "acct", "INBOX", &restored).unwrap();
+
+    assert!(
+        new_unread_inbox_summary(&conn, "acct", 20, 21, &restored)
             .unwrap()
             .is_none()
     );
@@ -363,7 +432,16 @@ fn resolve_message_uids_prefers_explicit_then_single_then_thread() {
     .unwrap();
 
     assert_eq!(
-        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", None, Some(10), &[42, 43]).unwrap(),
+        resolve_message_uids(
+            &conn,
+            "acct",
+            "INBOX",
+            "thread-a",
+            None,
+            Some(10),
+            &[42, 43]
+        )
+        .unwrap(),
         vec![42, 43]
     );
     assert_eq!(
@@ -811,7 +889,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 
     for table in [
         "accounts",
@@ -822,6 +900,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
         "subscriptions",
         "meta",
         "settings",
+        "observed_mail_identities",
     ] {
         let exists = conn
             .query_row(
@@ -840,7 +919,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 }
 
 #[test]
@@ -868,7 +947,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 
     let _ = std::fs::remove_dir_all(dir);
 }

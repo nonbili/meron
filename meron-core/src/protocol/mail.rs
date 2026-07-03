@@ -77,10 +77,11 @@ fn finish_mobile_sync(
     for sync in outcomes {
         let (role, companion) = (sync.role, &sync.folder);
         match sync.result {
-            Ok(count) => crate::mlog!(
+            Ok(result) => crate::mlog!(
                 crate::log::Level::Info,
                 "mail.sync",
-                "{role} sync account={account_id} folder={companion} synced={count}"
+                "{role} sync account={account_id} folder={companion} synced={}",
+                result.count
             ),
             Err(err) => crate::mlog!(
                 crate::log::Level::Warn,
@@ -330,7 +331,7 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     };
     let folders_ms = folders_started.elapsed().as_millis();
     let messages_started = std::time::Instant::now();
-    let count = crate::ffi::engine_block_on(crate::engine::sync_messages(
+    let synced = crate::ffi::engine_block_on(crate::engine::sync_messages(
         &engine,
         &account_id,
         &folder,
@@ -339,21 +340,28 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     let messages_ms = messages_started.elapsed().as_millis();
     let new_messages = if is_inbox {
         let after = crate::ffi::mobile_inbox_uid_next(data_dir, &account_id).unwrap_or(0);
-        crate::ffi::mobile_new_messages_detail(data_dir, &account_id, inbox_uid_next_before, after)
+        crate::ffi::mobile_new_messages_detail(
+            data_dir,
+            &account_id,
+            inbox_uid_next_before,
+            after,
+            &synced.messages,
+        )
     } else {
         None
     };
     crate::mlog!(
         crate::log::Level::Info,
         "mail.sync",
-        "account={account_id} folder={folder} synced={count} folders={folders_count} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}"
+        "account={account_id} folder={folder} synced={} folders={folders_count} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}",
+        synced.count
     );
     run_mobile_sync_tail(data_dir, &engine, &account_id, &folder, limit, defer_tail);
     let mut response = json!({
         "ok": true,
         "account": account_id,
         "folder": folder,
-        "synced": count,
+        "synced": synced.count,
         "folders": folders_count,
     });
     if let Some(detail) = new_messages {

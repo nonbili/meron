@@ -197,9 +197,13 @@ fn spawn_message_sync(
                 } else {
                     0
                 };
-                if let Some((count, latest)) =
-                    new_unread_inbox_summary(&engine, &account, uid_next_before, uid_next_after)
-                {
+                if let Some((count, latest)) = new_unread_inbox_summary(
+                    &engine,
+                    &account,
+                    uid_next_before,
+                    uid_next_after,
+                    &synced.messages,
+                ) {
                     // Branch-aware card key so the notification click opens the
                     // exact list card the grouping produced.
                     let thread_key = store::card_thread_key(&latest);
@@ -224,7 +228,7 @@ fn spawn_message_sync(
                 emit(
                     &out,
                     "mail.synced",
-                    json!({ "account": account, "folder": folder, "synced": synced }),
+                    json!({ "account": account, "folder": folder, "synced": synced.count }),
                 )
                 .await
             }
@@ -375,11 +379,18 @@ fn new_unread_inbox_summary(
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
+    synced_messages: &[imap::MessageHeader],
 ) -> Option<(u32, imap::MessageHeader)> {
     let db = engine.db.lock().unwrap();
-    store::new_unread_inbox_summary(&db, account, uid_next_before, uid_next_after)
-        .ok()
-        .flatten()
+    store::new_unread_inbox_summary(
+        &db,
+        account,
+        uid_next_before,
+        uid_next_after,
+        synced_messages,
+    )
+    .ok()
+    .flatten()
 }
 
 /// Newest stored RSS item for an account, or None if the store is empty
@@ -537,7 +548,13 @@ async fn sync_and_notify(
     };
 
     let new_inbox = if is_inbox {
-        new_unread_inbox_summary(engine, account, uid_next_before, uid_next_after)
+        new_unread_inbox_summary(
+            engine,
+            account,
+            uid_next_before,
+            uid_next_after,
+            &synced.messages,
+        )
     } else {
         None
     };
@@ -570,7 +587,7 @@ async fn sync_and_notify(
         emit(
             out,
             "mail.synced",
-            json!({ "account": account, "folder": folder, "synced": synced }),
+            json!({ "account": account, "folder": folder, "synced": synced.count }),
         )
         .await;
     }
@@ -1136,7 +1153,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
             // Rewrite each card's identity to the correspondent so a thread shows the
             // same person/avatar in every folder (outbound copies show the recipient).
-            store::apply_card_identity(&engine.db.lock().unwrap(), &account, &folder, &mut messages);
+            store::apply_card_identity(
+                &engine.db.lock().unwrap(),
+                &account,
+                &folder,
+                &mut messages,
+            );
             if before_cursor.is_none() && filter != "starred" && query.is_empty() && refresh {
                 spawn_message_sync(engine.clone(), out.clone(), account, folder.clone(), limit);
             }
@@ -1547,9 +1569,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     .into_iter()
                     .filter(|header| header.seen != seen)
                     .filter(|header| match subject_filter.as_deref() {
-                        Some(filter) => {
-                            store::thread_grouping_subject(&header.subject) == filter
-                        }
+                        Some(filter) => store::thread_grouping_subject(&header.subject) == filter,
                         None => true,
                     })
                     .map(|header| header.uid)
@@ -1614,9 +1634,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     .into_iter()
                     .filter(|header| header.starred != starred)
                     .filter(|header| match subject_filter.as_deref() {
-                        Some(filter) => {
-                            store::thread_grouping_subject(&header.subject) == filter
-                        }
+                        Some(filter) => store::thread_grouping_subject(&header.subject) == filter,
                         None => true,
                     })
                     .map(|header| header.uid)

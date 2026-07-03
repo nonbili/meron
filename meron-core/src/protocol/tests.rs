@@ -874,44 +874,40 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
     seed_mobile_account(&data_dir, "me@example.com");
     let conn = store::open_at(data_dir.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
-    store::upsert_messages(
-        &conn,
-        "me@example.com",
-        "INBOX",
-        &[
-            MessageHeader {
-                uid: 1,
-                subject: "Old".to_string(),
-                from_addr: "old@example.com".to_string(),
-                date: 100,
-                thread_key: "old".to_string(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 2,
-                subject: "Already read".to_string(),
-                from_addr: "read@example.com".to_string(),
-                date: 200,
-                seen: true,
-                thread_key: "read".to_string(),
-                ..Default::default()
-            },
-            MessageHeader {
-                uid: 3,
-                subject: "Fresh".to_string(),
-                from_name: "Aki".to_string(),
-                from_addr: "aki@example.com".to_string(),
-                date: 300,
-                thread_key: "fresh".to_string(),
-                ..Default::default()
-            },
-        ],
-    )
-    .unwrap();
+    let messages = vec![
+        MessageHeader {
+            uid: 1,
+            subject: "Old".to_string(),
+            from_addr: "old@example.com".to_string(),
+            date: 100,
+            thread_key: "old".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 2,
+            subject: "Already read".to_string(),
+            from_addr: "read@example.com".to_string(),
+            date: 200,
+            seen: true,
+            thread_key: "read".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 3,
+            subject: "Fresh".to_string(),
+            from_name: "Aki".to_string(),
+            from_addr: "aki@example.com".to_string(),
+            date: 300,
+            thread_key: "fresh".to_string(),
+            ..Default::default()
+        },
+    ];
+    store::upsert_messages(&conn, "me@example.com", "INBOX", &messages).unwrap();
     drop(conn);
     let dir = data_dir.to_str().unwrap();
 
-    let detail = crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 2, 4).unwrap();
+    let detail =
+        crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 2, 4, &messages).unwrap();
     assert_eq!(detail["account"], "me@example.com");
     assert_eq!(detail["accountName"], "me@example.com");
     assert_eq!(detail["folder"], "inbox");
@@ -924,9 +920,9 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
     assert_eq!(detail["threadKey"], "fresh#Fresh");
 
     // First sync of a mailbox (no prior uid_next) must not summarize the backlog.
-    assert!(crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 0, 4).is_none());
+    assert!(crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 0, 4, &[]).is_none());
     // No uid growth means nothing new arrived.
-    assert!(crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 4, 4).is_none());
+    assert!(crate::ffi::mobile_new_messages_detail(dir, "me@example.com", 4, 4, &[]).is_none());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -1144,7 +1140,10 @@ fn mobile_protocol_lists_threads_from_store() {
     assert_eq!(first["unread"], true);
     assert_eq!(first["unread_count"], 1);
     assert_eq!(first["starred"], true);
-    assert_eq!(first["thread_id"], "me@example.com#INBOX#t.dG9waWMjTmV3ZXN0");
+    assert_eq!(
+        first["thread_id"],
+        "me@example.com#INBOX#t.dG9waWMjTmV3ZXN0"
+    );
 
     let unread = invoke_mobile_protocol_json(
         r#"{"id":65,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"unread"}}"#,
@@ -2537,8 +2536,7 @@ fn update_mobile_read_state_scopes_branched_threads_to_their_uids() {
     update_mobile_read_state(&conn, &parsed, &json!({}), &uids, true).unwrap();
 
     // Only the acted-on branch flips; the sibling branch keeps its unread state.
-    let headers =
-        store::get_thread_headers(&conn, "me@example.com", "INBOX", "root@host").unwrap();
+    let headers = store::get_thread_headers(&conn, "me@example.com", "INBOX", "root@host").unwrap();
     let seen_by_uid: std::collections::HashMap<u32, bool> = headers
         .iter()
         .map(|header| (header.uid, header.seen))

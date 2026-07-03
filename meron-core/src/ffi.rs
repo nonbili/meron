@@ -734,9 +734,15 @@ pub(crate) fn mobile_new_messages_detail(
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
+    synced_messages: &[crate::imap::MessageHeader],
 ) -> Option<Value> {
-    let (count, latest) =
-        mobile_new_unread_summary(data_dir, account, uid_next_before, uid_next_after)?;
+    let (count, latest) = mobile_new_unread_summary(
+        data_dir,
+        account,
+        uid_next_before,
+        uid_next_after,
+        synced_messages,
+    )?;
     Some(json!({
         "account": account,
         "accountName": mobile_account_label(data_dir, account),
@@ -764,11 +770,18 @@ fn mobile_new_unread_summary(
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
+    synced_messages: &[crate::imap::MessageHeader],
 ) -> Option<(u32, crate::imap::MessageHeader)> {
     let conn = mobile_db(data_dir).ok()?;
-    crate::store::new_unread_inbox_summary(&conn, account, uid_next_before, uid_next_after)
-        .ok()
-        .flatten()
+    crate::store::new_unread_inbox_summary(
+        &conn,
+        account,
+        uid_next_before,
+        uid_next_after,
+        synced_messages,
+    )
+    .ok()
+    .flatten()
 }
 
 fn mobile_account_label(data_dir: &str, account: &str) -> String {

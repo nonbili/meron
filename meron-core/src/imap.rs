@@ -151,6 +151,9 @@ pub struct MessageHeader {
     /// Normalized RFC Message-ID from the envelope, when available.
     #[serde(default)]
     pub message_id: String,
+    /// Gmail's stable per-message id (`X-GM-MSGID`), when the server exposes it.
+    #[serde(default)]
+    pub gmail_msg_id: Option<u64>,
     /// Normalized RFC In-Reply-To from the envelope, when available.
     #[serde(default)]
     pub in_reply_to: String,
@@ -510,6 +513,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
             starred,
             thread_key,
             message_id: ef.message_id,
+            gmail_msg_id: fetch.gmail_msg_id().copied(),
             in_reply_to: ef.in_reply_to,
             folder: String::new(),
             to: ef.to,
@@ -667,6 +671,7 @@ pub async fn fetch_by_message_ids(
                 starred,
                 thread_key,
                 message_id: ef.message_id,
+                gmail_msg_id: fetch.gmail_msg_id().copied(),
                 in_reply_to: ef.in_reply_to,
                 to: ef.to,
                 cc: ef.cc,
@@ -749,6 +754,7 @@ pub async fn fetch_headers_by_uid(
             starred,
             thread_key,
             message_id: ef.message_id,
+            gmail_msg_id: fetch.gmail_msg_id().copied(),
             in_reply_to: ef.in_reply_to,
             folder: String::new(),
             to: ef.to,
@@ -1457,8 +1463,8 @@ fn address_list(list: Option<&[async_imap::imap_proto::Address]>) -> Vec<Recipie
 /// server-side thread id, and `BODY.PEEK[]` when the full message is wanted.
 fn fetch_items(gmail: bool, body: bool) -> &'static str {
     match (gmail, body) {
-        (true, true) => "(UID FLAGS ENVELOPE RFC822.HEADER X-GM-THRID BODY.PEEK[])",
-        (true, false) => "(UID FLAGS ENVELOPE RFC822.HEADER X-GM-THRID)",
+        (true, true) => "(UID FLAGS ENVELOPE RFC822.HEADER X-GM-MSGID X-GM-THRID BODY.PEEK[])",
+        (true, false) => "(UID FLAGS ENVELOPE RFC822.HEADER X-GM-MSGID X-GM-THRID)",
         (false, true) => "(UID FLAGS ENVELOPE RFC822.HEADER BODY.PEEK[])",
         (false, false) => "(UID FLAGS ENVELOPE RFC822.HEADER)",
     }

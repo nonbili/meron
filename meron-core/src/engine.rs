@@ -526,16 +526,22 @@ pub async fn delete_to_trash(
 
 /// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into
 /// the store, resetting cached messages if the server's UIDVALIDITY changed.
+pub struct SyncMessagesResult {
+    pub count: usize,
+    pub messages: Vec<imap::MessageHeader>,
+}
+
 pub async fn sync_messages(
     engine: &Arc<Engine>,
     account: &str,
     folder: &str,
     limit: u32,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<SyncMessagesResult> {
     // Read the prior sync position before any network I/O so we can ask the
     // server for only the flag changes since then (CONDSTORE CHANGEDSINCE).
     let (prior_modseq, prior_validity) = {
         let db = engine.db.lock().unwrap();
+        store::backfill_observed_mail_identities(&db, account)?;
         let modseq = store::get_folder_modseq(&db, account, folder)?;
         let validity = store::get_folder_state(&db, account, folder)?
             .map(|(v, _)| v)
@@ -564,7 +570,8 @@ pub async fn sync_messages(
         })
         .await?;
 
-    let count = batch.messages.len();
+    let synced_messages = batch.messages.clone();
+    let count = synced_messages.len();
     let db = engine.db.lock().unwrap();
     if prior_validity != 0 && prior_validity != batch.uidvalidity {
         store::clear_folder_messages(&db, account, folder)?;
@@ -590,7 +597,10 @@ pub async fn sync_messages(
         }
     }
     store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)?;
-    Ok(count)
+    Ok(SyncMessagesResult {
+        count,
+        messages: synced_messages,
+    })
 }
 
 /// Pick the folder filling a special-use role from a cached folder list. The
@@ -663,10 +673,7 @@ const COMPANION_SYNC_TIMEOUT: Duration = Duration::from_secs(30);
 /// Callers resolve the names via `cached_sent_folder`/`cached_drafts_folder`,
 /// which already exclude the folder being synced; this only guards against the
 /// two roles resolving to the same mailbox.
-fn companion_folders(
-    sent: Option<String>,
-    drafts: Option<String>,
-) -> Vec<(&'static str, String)> {
+fn companion_folders(sent: Option<String>, drafts: Option<String>) -> Vec<(&'static str, String)> {
     let mut companions = Vec::new();
     if let Some(sent) = sent {
         companions.push(("Sent", sent));
@@ -686,7 +693,7 @@ fn companion_folders(
 pub struct CompanionSync {
     pub role: &'static str,
     pub folder: String,
-    pub result: anyhow::Result<usize>,
+    pub result: anyhow::Result<SyncMessagesResult>,
 }
 
 /// Piggyback Sent and Drafts envelope syncs onto a completed sync of `folder`,

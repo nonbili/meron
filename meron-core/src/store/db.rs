@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::{
-    params, Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior,
+    Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior, params,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -81,6 +81,15 @@ CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE OF subject, from_name, fro
   INSERT INTO messages_fts(rowid, subject, from_name, from_addr, body)
   VALUES (new.id, new.subject, new.from_name, new.from_addr, new.body);
 END;
+";
+
+const OBSERVED_MAIL_IDENTITIES_DDL: &str = "
+CREATE TABLE IF NOT EXISTS observed_mail_identities (
+  account       TEXT NOT NULL,
+  identity      TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account, identity)
+);
 ";
 
 const SCHEMA: &str = "
@@ -334,6 +343,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 4 {
         migrate_v4(&tx)?;
     }
+    if version < 5 {
+        migrate_v5(&tx)?;
+    }
 
     tx.commit()?;
     Ok(())
@@ -376,6 +388,14 @@ fn migrate_v3(conn: &Connection) -> Result<()> {
 fn migrate_v4(conn: &Connection) -> Result<()> {
     conn.execute_batch("ALTER TABLE folders ADD COLUMN special_use TEXT;")?;
     conn.execute_batch("PRAGMA user_version = 4;")?;
+    Ok(())
+}
+
+/// Stable message identities we've already seen, used to suppress "new mail"
+/// notifications when Gmail restores an older message with a fresh INBOX UID.
+fn migrate_v5(conn: &Connection) -> Result<()> {
+    conn.execute_batch(OBSERVED_MAIL_IDENTITIES_DDL)?;
+    conn.execute_batch("PRAGMA user_version = 5;")?;
     Ok(())
 }
 

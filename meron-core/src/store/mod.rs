@@ -37,6 +37,7 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<()> {
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::imap::{Folder, MessageHeader};
 use crate::parse::{Attachment, Message};
@@ -142,6 +143,9 @@ pub fn upsert_messages(
         }
         if !m.message_id.is_empty() {
             extra.insert("message_id".to_string(), json!(m.message_id));
+        }
+        if let Some(gmail_msg_id) = m.gmail_msg_id {
+            extra.insert("gmail_msg_id".to_string(), json!(gmail_msg_id));
         }
         if !m.in_reply_to.is_empty() {
             extra.insert("in_reply_to".to_string(), json!(m.in_reply_to));
@@ -324,29 +328,124 @@ pub fn get_recent_page(
     Ok((out, next_cursor))
 }
 
+fn now_epoch_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn mail_identity_from_parts(
+    folder: &str,
+    uid: u32,
+    gmail_msg_id: Option<u64>,
+    message_id: &str,
+) -> String {
+    if let Some(gmail_msg_id) = gmail_msg_id {
+        return format!("gmail:{gmail_msg_id}");
+    }
+    let message_id = message_id.trim();
+    if !message_id.is_empty() {
+        return format!("message-id:{}", message_id.to_lowercase());
+    }
+    format!("uid:{}:{uid}", folder.to_lowercase())
+}
+
+fn message_identity(header: &MessageHeader, folder: &str) -> String {
+    mail_identity_from_parts(folder, header.uid, header.gmail_msg_id, &header.message_id)
+}
+
+fn gmail_msg_id_from_json(value: Option<String>) -> Option<u64> {
+    value.and_then(|value| value.parse::<u64>().ok())
+}
+
+pub fn backfill_observed_mail_identities(conn: &Connection, account: &str) -> Result<()> {
+    let now = now_epoch_seconds();
+    conn.execute(
+        "INSERT OR IGNORE INTO observed_mail_identities(account, identity, first_seen_at)
+         SELECT account,
+                CASE
+                  WHEN json_extract(json, '$.gmail_msg_id') IS NOT NULL
+                    THEN 'gmail:' || json_extract(json, '$.gmail_msg_id')
+                  WHEN COALESCE(json_extract(json, '$.message_id'), '') <> ''
+                    THEN 'message-id:' || lower(json_extract(json, '$.message_id'))
+                  ELSE 'uid:' || lower(folder) || ':' || uid
+                END,
+                ?2
+         FROM messages
+         WHERE account = ?1 AND uid <> 0",
+        params![account, now],
+    )?;
+    Ok(())
+}
+
+/// Record message identities and return the subset that had not been observed
+/// before this call.
+fn record_observed_mail_identities(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    messages: &[MessageHeader],
+) -> Result<std::collections::HashSet<String>> {
+    let now = now_epoch_seconds();
+    let tx = conn.unchecked_transaction()?;
+    let mut new_identities = std::collections::HashSet::new();
+    {
+        let mut stmt = tx.prepare(
+            "INSERT OR IGNORE INTO observed_mail_identities(account, identity, first_seen_at)
+             VALUES(?1, ?2, ?3)",
+        )?;
+        for message in messages {
+            let identity = message_identity(message, folder);
+            let inserted = stmt.execute(params![account, &identity, now])?;
+            if inserted > 0 {
+                new_identities.insert(identity);
+            }
+        }
+    }
+    tx.commit()?;
+    Ok(new_identities)
+}
+
 /// Unread INBOX messages in the UID range that appeared during the last sync.
 pub fn new_unread_inbox_summary(
     conn: &Connection,
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
+    synced_messages: &[MessageHeader],
 ) -> Result<Option<(u32, MessageHeader)>> {
     if uid_next_before == 0 || uid_next_after <= uid_next_before {
+        return Ok(None);
+    }
+    let newly_observed = record_observed_mail_identities(conn, account, "INBOX", synced_messages)?;
+    if newly_observed.is_empty() {
         return Ok(None);
     }
 
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
+                json_extract(json, '$.to'),
+                CAST(json_extract(json, '$.gmail_msg_id') AS TEXT),
+                json_extract(json, '$.message_id') FROM messages
          WHERE account = ?1 AND folder = 'INBOX'
            AND uid >= ?2 AND uid < ?3 AND seen = 0
          ORDER BY uid DESC",
     )?;
     let rows = stmt.query_map(
         params![account, uid_next_before as i64, uid_next_after as i64],
-        message_header_from_row,
+        |row| {
+            let mut header = message_header_from_row(row)?;
+            header.gmail_msg_id = gmail_msg_id_from_json(row.get::<_, Option<String>>(9)?);
+            header.message_id = row.get::<_, Option<String>>(10)?.unwrap_or_default();
+            Ok(header)
+        },
     )?;
-    let headers = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let headers = rows
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|header| newly_observed.contains(&message_identity(header, "INBOX")))
+        .collect::<Vec<_>>();
     let Some(latest) = headers.first().cloned() else {
         return Ok(None);
     };
