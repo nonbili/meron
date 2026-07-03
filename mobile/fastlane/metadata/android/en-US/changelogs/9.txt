@@ -1,0 +1,3 @@
+- Notify new mail from background refresh
+- Treat connection aborts as transient in background sync
+- UI and performance fixes
