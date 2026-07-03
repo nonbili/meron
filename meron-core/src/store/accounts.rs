@@ -332,25 +332,48 @@ pub fn self_addrs(conn: &Connection, id: &str) -> std::collections::HashSet<Stri
     addrs
 }
 
+/// Whether a cached message is one this account sent: its From is one of the
+/// account's own addresses (primary or configured send-as alias), or it lives
+/// in a Sent mailbox — a copy filed there is outbound by definition, even when
+/// it was sent from an alias meron doesn't know about (e.g. a webmail send-as).
+/// `mine` comes from [`self_addrs`]; `folder` is the message's source mailbox.
+pub fn is_outgoing(
+    mine: &std::collections::HashSet<String>,
+    folder: &str,
+    from_addr: &str,
+) -> bool {
+    let from = from_addr.trim().to_lowercase();
+    (!from.is_empty() && mine.contains(&from)) || crate::imap::looks_like_sent(folder)
+}
+
 /// Rewrite the thread-card identity to show *the other party*: for messages this
-/// account sent (sender is one of our own addresses), replace `from_name`/`from_addr`
-/// with the first recipient and record the count of additional recipients in
+/// account sent (see [`is_outgoing`]), replace `from_name`/`from_addr` with the
+/// first recipient and record the count of additional recipients in
 /// `recipient_overflow`. Inbound messages — and outbound ones with no usable
 /// recipient (e.g. Bcc-only) — are left untouched. Display-only; these headers feed
-/// the thread list, not the real message envelope.
+/// the thread list, not the real message envelope. `folder` is the mailbox the
+/// list was read from, used when a row doesn't carry its own source folder.
 ///
 /// Junk display names (empty, or containing the address itself — some bots send
 /// `From: "addr addr" <addr>`, and replies copy that into `To:`) are replaced by
 /// the best name seen for that address anywhere in the cache, so the same thread
 /// shows the same correspondent name in every folder.
-pub fn apply_card_identity(conn: &Connection, account: &str, headers: &mut [MessageHeader]) {
+pub fn apply_card_identity(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    headers: &mut [MessageHeader],
+) {
     let mine = self_addrs(conn, account);
     let mut name_cache: std::collections::HashMap<String, Option<String>> =
         std::collections::HashMap::new();
     for header in headers {
-        let from = header.from_addr.trim().to_lowercase();
-        if !from.is_empty()
-            && mine.contains(&from)
+        let source_folder = if header.folder.is_empty() {
+            folder
+        } else {
+            header.folder.as_str()
+        };
+        if is_outgoing(&mine, source_folder, &header.from_addr)
             && let Some(first) = header.to.first().cloned()
         {
             header.recipient_overflow = (header.to.len() - 1) as u32;

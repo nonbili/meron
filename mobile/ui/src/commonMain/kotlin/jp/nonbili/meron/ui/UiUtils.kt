@@ -80,6 +80,10 @@ internal fun isOutgoing(
     message: MessageBody,
     accountEmail: String,
 ): Boolean {
+    // The core's classification (own address or Sent-folder provenance) covers
+    // alias-sent mail; the address match below remains for rows shaped before
+    // the flag existed.
+    if (message.outgoing) return true
     if (accountEmail.isBlank()) return false
     val acct = accountEmail.trim().lowercase()
     val from =

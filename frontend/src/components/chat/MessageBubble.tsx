@@ -59,6 +59,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
   const fromEmail = message.from_addr.trim().toLowerCase()
   const outgoing =
     !!message.send_status ||
+    message.outgoing === true ||
     (!!account && accountIdentities(account).some((identity) => identity.email.trim().toLowerCase() === fromEmail))
   const isDraft = isDraftFolder(message.folder_id)
   const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null

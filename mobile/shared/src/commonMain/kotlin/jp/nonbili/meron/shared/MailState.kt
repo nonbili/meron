@@ -124,6 +124,9 @@ data class MessageBody(
     val messageId: String = "",
     val references: String = "",
     val unread: Boolean = false,
+    // Sent by this account, classified by the core (own address or Sent-folder
+    // provenance) — true even for aliases not configured in meron.
+    val outgoing: Boolean = false,
     val starred: Boolean = false,
     val hasAttachments: Boolean = false,
     // True when the core has no cached body for this message (the on-demand

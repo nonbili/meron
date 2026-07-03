@@ -542,9 +542,11 @@ func TestIntegrationMailFlow(t *testing.T) {
 	// Last on purpose: no later subtest sends from alice, so nothing but the
 	// piggyback under test can refresh her Sent folder.
 	t.Run("sent from another client surfaces via inbox sync", func(t *testing.T) {
+		// From is a send-as alias meron knows nothing about: the message must
+		// still classify as outgoing purely from its Sent-folder provenance.
 		externalSubject := "Meron integration external sent " + nonce
 		raw := fmt.Sprintf(
-			"From: alice@maddy.test\r\nTo: bob@maddy.test\r\nSubject: %s\r\n"+
+			"From: Alice Alias <alice-alias@example.net>\r\nTo: bob@maddy.test\r\nSubject: %s\r\n"+
 				"Message-ID: <itest-external-%s@maddy.test>\r\nDate: %s\r\n\r\n"+
 				"sent from another client\r\n",
 			externalSubject, nonce, time.Now().Format(time.RFC1123Z))
@@ -553,8 +555,9 @@ func TestIntegrationMailFlow(t *testing.T) {
 		// The copy must reach the local store without Sent ever being opened:
 		// an INBOX refresh piggybacks a Sent envelope sync (messages.recent
 		// with refresh=false serves the store cache only).
+		var row map[string]any
 		deadline := time.Now().Add(60 * time.Second)
-		for {
+		for row == nil {
 			callMap(t, sidecar, "messages.recent", map[string]any{
 				"account": "alice",
 				"folder":  "INBOX",
@@ -567,14 +570,44 @@ func TestIntegrationMailFlow(t *testing.T) {
 				"refresh": false,
 				"limit":   50,
 			})
-			if messagesContainSubject(cached, externalSubject) {
-				break
+			rows, _ := cached["messages"].([]any)
+			for _, item := range rows {
+				message, ok := item.(map[string]any)
+				if ok && str(message, "subject") == externalSubject {
+					row = message
+					break
+				}
 			}
-			if time.Now().After(deadline) {
+			if row == nil && time.Now().After(deadline) {
 				t.Fatalf("externally appended Sent message never surfaced via inbox piggyback: %v", cached)
 			}
-			time.Sleep(500 * time.Millisecond)
+			if row == nil {
+				time.Sleep(500 * time.Millisecond)
+			}
 		}
+
+		thread := callMap(t, sidecar, "messages.thread", map[string]any{
+			"account":    "alice",
+			"folder":     "Sent",
+			"thread_key": str(row, "thread_key"),
+			"limit":      50,
+		})
+		entries, _ := thread["messages"].([]any)
+		for _, item := range entries {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			message, _ := entry["message"].(map[string]any)
+			if str(message, "subject") != externalSubject {
+				continue
+			}
+			if !boolValue(entry, "outgoing") {
+				t.Fatalf("alias-sent Sent copy not classified outgoing: %v", entry)
+			}
+			return
+		}
+		t.Fatalf("appended message missing from thread read: %v", thread)
 	})
 }
 

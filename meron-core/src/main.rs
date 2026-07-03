@@ -1169,7 +1169,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
             // Rewrite each card's identity to the correspondent so a thread shows the
             // same person/avatar in every folder (outbound copies show the recipient).
-            store::apply_card_identity(&engine.db.lock().unwrap(), &account, &mut messages);
+            store::apply_card_identity(&engine.db.lock().unwrap(), &account, &folder, &mut messages);
             if before_cursor.is_none() && filter != "starred" && query.is_empty() && refresh {
                 spawn_message_sync(engine.clone(), out.clone(), account, folder, limit);
             }
@@ -1364,7 +1364,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let uid = req_u32(p, "uid")?;
 
             let message = read_cached_or_fetch(engine, &account, &folder, uid).await?;
-            Ok(json!({ "message": serde_json::to_value(message)? }))
+            let mine = store::self_addrs(&engine.db.lock().unwrap(), &account);
+            let outgoing = store::is_outgoing(&mine, &folder, &message.from_addr);
+            Ok(json!({ "outgoing": outgoing, "message": serde_json::to_value(message)? }))
         }
 
         "messages.thread" => {
@@ -1438,6 +1440,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
             let mut messages = Vec::with_capacity(headers.len());
             let mut seen_message_ids = HashSet::new();
+            let mine = store::self_addrs(&engine.db.lock().unwrap(), &account);
             for header in headers {
                 // Use the header's folder when present (cross-folder query
                 // populates it); fall back to the requested folder otherwise.
@@ -1462,6 +1465,10 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     "seen": header.seen,
                     "starred": header.starred,
                     "folder": msg_folder,
+                    // Classified in the core (own address *or* Sent-folder
+                    // provenance) so both frontends render alias-sent mail as
+                    // outgoing without knowing the account's aliases.
+                    "outgoing": store::is_outgoing(&mine, msg_folder, &message.from_addr),
                     "message": serde_json::to_value(message)?,
                 }));
             }

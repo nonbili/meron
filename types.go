@@ -46,23 +46,27 @@ type Folder struct {
 }
 
 type Message struct {
-	ID               string `json:"id"`
-	AccountID        string `json:"account_id"`
-	FolderID         string `json:"folder_id"`
-	ThreadID         string `json:"thread_id"`
-	FromName         string `json:"from_name"`
-	FromAddr         string `json:"from_addr"`
-	To               string `json:"to"`
-	ReplyTo          string `json:"reply_to,omitempty"`
-	Cc               string `json:"cc,omitempty"`
-	Bcc              string `json:"bcc,omitempty"`
-	MessageID        string `json:"message_id,omitempty"`
-	References       string `json:"references,omitempty"`
-	Subject          string `json:"subject"`
-	Preview          string `json:"preview"`
-	Body             string `json:"body"`
-	BodyHTML         string `json:"body_html,omitempty"`
-	Date             int64  `json:"date"`
+	ID         string `json:"id"`
+	AccountID  string `json:"account_id"`
+	FolderID   string `json:"folder_id"`
+	ThreadID   string `json:"thread_id"`
+	FromName   string `json:"from_name"`
+	FromAddr   string `json:"from_addr"`
+	To         string `json:"to"`
+	ReplyTo    string `json:"reply_to,omitempty"`
+	Cc         string `json:"cc,omitempty"`
+	Bcc        string `json:"bcc,omitempty"`
+	MessageID  string `json:"message_id,omitempty"`
+	References string `json:"references,omitempty"`
+	Subject    string `json:"subject"`
+	Preview    string `json:"preview"`
+	Body       string `json:"body"`
+	BodyHTML   string `json:"body_html,omitempty"`
+	Date       int64  `json:"date"`
+	// Outgoing is classified by the core (own address or Sent-folder
+	// provenance), so alias-sent mail renders as sent-by-me even when the
+	// alias isn't configured in meron.
+	Outgoing         bool   `json:"outgoing,omitempty"`
 	Unread           bool   `json:"unread"`
 	UnreadCount      uint32 `json:"unread_count,omitempty"`
 	Starred          bool   `json:"starred"`

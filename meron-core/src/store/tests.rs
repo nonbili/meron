@@ -316,8 +316,18 @@ fn apply_card_identity_rewrites_outbound_to_counterparty() {
             from_addr: "me@example.com".into(),
             ..Default::default()
         },
+        // Sent-folder row from an *unconfigured* alias (e.g. webmail send-as):
+        // folder provenance alone marks it outbound.
+        MessageHeader {
+            uid: 5,
+            folder: "[Gmail]/Sent Mail".into(),
+            from_name: "Me".into(),
+            from_addr: "unknown-alias@other.jp".into(),
+            to: vec![recipient("Cleo", "cleo@example.com")],
+            ..Default::default()
+        },
     ];
-    apply_card_identity(&conn, "acct", &mut headers);
+    apply_card_identity(&conn, "acct", "INBOX", &mut headers);
 
     assert_eq!(headers[0].from_name, "Cleo");
     assert_eq!(headers[0].from_addr, "cleo@example.com");
@@ -328,6 +338,23 @@ fn apply_card_identity_rewrites_outbound_to_counterparty() {
     assert_eq!(headers[2].from_addr, "cleo@example.com");
     assert_eq!(headers[3].from_name, "Me");
     assert_eq!(headers[3].from_addr, "me@example.com");
+    assert_eq!(headers[4].from_name, "Cleo");
+    assert_eq!(headers[4].from_addr, "cleo@example.com");
+}
+
+#[test]
+fn is_outgoing_matches_own_addresses_and_sent_folder_provenance() {
+    let mine: std::collections::HashSet<String> =
+        ["me@example.com".to_string(), "alias@other.jp".to_string()].into();
+    // Own address (any casing), regardless of folder.
+    assert!(is_outgoing(&mine, "INBOX", "Me@Example.Com"));
+    assert!(is_outgoing(&mine, "", "alias@other.jp"));
+    // Sent-folder provenance wins even for an unconfigured alias.
+    assert!(is_outgoing(&mine, "[Gmail]/Sent Mail", "unknown@other.jp"));
+    assert!(is_outgoing(&mine, "Sent", "unknown@other.jp"));
+    // Inbound in a regular folder is not ours.
+    assert!(!is_outgoing(&mine, "INBOX", "cleo@example.com"));
+    assert!(!is_outgoing(&mine, "INBOX", ""));
 }
 
 #[test]
@@ -369,7 +396,7 @@ fn apply_card_identity_resolves_junk_display_names() {
             ..Default::default()
         },
     ];
-    apply_card_identity(&conn, "acct", &mut headers);
+    apply_card_identity(&conn, "acct", "INBOX", &mut headers);
 
     assert_eq!(headers[0].from_name, "Austin Mentions");
     assert_eq!(headers[0].from_addr, "bot@example.com");

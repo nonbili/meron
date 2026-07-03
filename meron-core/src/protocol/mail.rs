@@ -489,7 +489,7 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         }
     };
     with_mobile_db(data_dir, |conn| {
-        store::apply_card_identity(&conn, &account_id, &mut messages);
+        store::apply_card_identity(&conn, &account_id, &folder_id, &mut messages);
         let threads = thread_cards_json(&account_id, &folder_id, messages);
         let mut out = json!({ "threads": threads });
         if let Some(cursor) = next_cursor {
@@ -671,6 +671,7 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             }
         }
 
+        let mine = store::self_addrs(&conn, &parsed.account);
         let messages = headers
             .into_iter()
             .filter_map(|header| {
@@ -687,6 +688,7 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                     folder,
                     &header,
                     cached.as_ref(),
+                    &mine,
                 ))
             })
             .collect::<Vec<_>>();
@@ -1353,13 +1355,21 @@ pub(crate) fn message_json(
     folder: &str,
     header: &MessageHeader,
     cached: Option<&Message>,
+    mine: &std::collections::HashSet<String>,
 ) -> Value {
     let id = format!("{thread_id}#{}", header.uid);
+    let from_addr = cached
+        .map(|message| message.from_addr.as_str())
+        .unwrap_or(header.from_addr.as_str());
     json!({
         "id": id,
         "account_id": account_id,
         "folder_id": folder,
         "thread_id": thread_id,
+        // Classified in the core (own address *or* Sent-folder provenance) so
+        // both frontends render alias-sent mail as outgoing without knowing
+        // the account's aliases.
+        "outgoing": store::is_outgoing(mine, folder, from_addr),
         "from_name": cached.map(|message| message.from_name.as_str()).unwrap_or(header.from_name.as_str()),
         "from_addr": cached.map(|message| message.from_addr.as_str()).unwrap_or(header.from_addr.as_str()),
         "to": cached.map(|message| message.to.as_str()).unwrap_or(""),
