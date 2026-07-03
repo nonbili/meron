@@ -41,9 +41,10 @@ interface MessageBubbleProps {
   // Index of this bubble's first image within the thread-wide gallery list.
   galleryOffset: number
   onOpenContextMenu: (state: MessageContextMenuState) => void
+  onLinkHover?: (url: string | null) => void
 }
 
-export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: MessageBubbleProps) {
+export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLinkHover }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
   const accounts = useValue(accounts$)
@@ -274,6 +275,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu }: Mes
           useHtmlBody={useHtmlBody}
           normalizedSearchQuery={normalizedSearchQuery}
           activeSearchMatch={activeSearchMatch}
+          onLinkHover={onLinkHover}
         />
 
         {/* File attachments — click to save via native dialog (when on disk) */}

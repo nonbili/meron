@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import type { RefObject } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
 import { loadMoreMessages } from '../../states/mail'
 import type { Message } from '../../types'
+import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
 import { formatDateDivider } from './messageHelpers'
 import type { MessageContextMenuState } from './MessageContextMenu'
@@ -47,8 +49,14 @@ export function ConversationMessageList({
   onScroll: () => void
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
+  const [hoveredLink, setHoveredLink] = useState<string | null>(null)
+
   return (
-    <div style={wallpaperStyle} className={`flex-1 flex flex-col min-h-0 relative ${wallpaperClassName}`}>
+    <div
+      style={wallpaperStyle}
+      onMouseLeave={() => setHoveredLink(null)}
+      className={`flex-1 flex flex-col min-h-0 relative ${wallpaperClassName}`}
+    >
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -133,6 +141,7 @@ export function ConversationMessageList({
                     message={message}
                     galleryOffset={galleryOffsets.get(message.id) ?? 0}
                     onOpenContextMenu={onOpenContextMenu}
+                    onLinkHover={setHoveredLink}
                   />
                 </div>
               )
@@ -140,6 +149,7 @@ export function ConversationMessageList({
         </div>
         <div ref={bottomAnchorRef} className="message-scroll-anchor h-px" />
       </div>
+      <LinkHoverPreview url={hoveredLink} />
     </div>
   )
 }

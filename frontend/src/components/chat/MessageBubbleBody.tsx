@@ -20,17 +20,19 @@ export function MessageBubbleBody({
   useHtmlBody,
   normalizedSearchQuery,
   activeSearchMatch,
+  onLinkHover,
 }: {
   message: Message
   useHtmlBody: boolean
   normalizedSearchQuery: string
   activeSearchMatch: boolean
+  onLinkHover?: (url: string | null) => void
 }) {
   const { t } = useTranslation()
   if (useHtmlBody) {
     return (
       <div className="relative overflow-y-auto -mr-3.5 pr-3.5" style={{ maxHeight: MESSAGE_BODY_MAX_HEIGHT }}>
-        <BubbleHtmlFrame html={message.body_html!} />
+        <BubbleHtmlFrame html={message.body_html!} onLinkHover={onLinkHover} />
       </div>
     )
   }
@@ -127,6 +129,10 @@ export function MessageBubbleBody({
                       e.preventDefault()
                       openExternal(part.content)
                     }}
+                    onMouseEnter={() => onLinkHover?.(part.content)}
+                    onMouseLeave={() => onLinkHover?.(null)}
+                    onFocus={() => onLinkHover?.(part.content)}
+                    onBlur={() => onLinkHover?.(null)}
                     title={part.content}
                     className="text-accent hover:underline break-all font-semibold cursor-pointer"
                   >

@@ -24,7 +24,7 @@ function clampHeight(height: number) {
 // Renders an email's HTML body in a self-sizing sandboxed iframe, wraps each
 // <pre> in a copy-code affordance and tracks the content height so the frame
 // grows to fit while the bubble wrapper owns scrolling.
-export function BubbleHtmlFrame({ html }: { html: string }) {
+export function BubbleHtmlFrame({ html, onLinkHover }: { html: string; onLinkHover?: (url: string | null) => void }) {
   const { t } = useTranslation()
   const cacheKey = useMemo(() => cacheKeyForHtml(html), [html])
   const cachedHeight = measuredHeights.get(cacheKey)
@@ -198,6 +198,7 @@ export function BubbleHtmlFrame({ html }: { html: string }) {
         scrolling="no"
         onFrameClick={handleFrameClick}
         onReady={handleReady}
+        onLinkHover={onLinkHover}
         forwardContextMenu
       />
       {galleryIndex !== null && galleryItems[galleryIndex] && (

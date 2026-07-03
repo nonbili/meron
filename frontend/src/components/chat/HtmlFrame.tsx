@@ -17,6 +17,7 @@ interface HtmlFrameProps {
   prepareHtml?: (html: string) => string
   onFrameClick?: FrameClickHandler
   onReady?: FrameReadyHandler
+  onLinkHover?: (url: string | null) => void
   onScroll?: () => void
   // When set, right-clicks inside the frame are blocked from showing WebKit's
   // native menu and re-dispatched as a `contextmenu` event on the iframe
@@ -24,21 +25,28 @@ interface HtmlFrameProps {
   forwardContextMenu?: boolean
 }
 
-function openAnchor(anchor: HTMLAnchorElement, event: MouseEvent) {
+function anchorUrl(anchor: HTMLAnchorElement): string | null {
   const rawHref = anchor.getAttribute('href') ?? ''
-  if (!rawHref || rawHref.startsWith('#')) return
+  if (!rawHref || rawHref.startsWith('#')) return null
 
   let url: URL
   try {
     url = new URL(rawHref, anchor.ownerDocument.baseURI)
   } catch {
-    return
+    return null
   }
-  if (!EXTERNAL_PROTOCOLS.has(url.protocol)) return
+  if (!EXTERNAL_PROTOCOLS.has(url.protocol)) return null
+
+  return url.href
+}
+
+function openAnchor(anchor: HTMLAnchorElement, event: MouseEvent) {
+  const href = anchorUrl(anchor)
+  if (!href) return
 
   event.preventDefault()
   event.stopPropagation()
-  openExternal(url.href)
+  openExternal(href)
 }
 
 // Pause and unload every media element in a frame document. WebKitGTK keeps a
@@ -90,6 +98,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     prepareHtml,
     onFrameClick,
     onReady,
+    onLinkHover,
     onScroll,
     forwardContextMenu,
   }: HtmlFrameProps,
@@ -107,15 +116,17 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
   const onFrameClickRef = useRef(onFrameClick)
   const onReadyRef = useRef(onReady)
+  const onLinkHoverRef = useRef(onLinkHover)
   const onScrollRef = useRef(onScroll)
   const forwardContextMenuRef = useRef(forwardContextMenu)
 
   useEffect(() => {
     onFrameClickRef.current = onFrameClick
     onReadyRef.current = onReady
+    onLinkHoverRef.current = onLinkHover
     onScrollRef.current = onScroll
     forwardContextMenuRef.current = forwardContextMenu
-  }, [onFrameClick, onReady, onScroll, forwardContextMenu])
+  }, [onFrameClick, onReady, onLinkHover, onScroll, forwardContextMenu])
 
   const wire = useCallback(() => {
     const iframe = iframeRef.current
@@ -155,6 +166,27 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       }
       doc.addEventListener('click', handleClick, true)
       doc.addEventListener('auxclick', handleClick, true)
+    }
+
+    if (!doc.documentElement.dataset.meronFrameLinkHoverWired) {
+      doc.documentElement.dataset.meronFrameLinkHoverWired = '1'
+      const handleLinkEnter = (event: MouseEvent | FocusEvent) => {
+        const target = event.target as Element | null
+        const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null
+        onLinkHoverRef.current?.(anchor ? anchorUrl(anchor) : null)
+      }
+      const handleLinkLeave = (event: MouseEvent | FocusEvent) => {
+        const target = event.target as Element | null
+        const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null
+        if (!anchor) return
+        const related = 'relatedTarget' in event ? (event.relatedTarget as Node | null) : null
+        if (related && anchor.contains(related)) return
+        onLinkHoverRef.current?.(null)
+      }
+      doc.addEventListener('mouseover', handleLinkEnter, true)
+      doc.addEventListener('mouseout', handleLinkLeave, true)
+      doc.addEventListener('focusin', handleLinkEnter, true)
+      doc.addEventListener('focusout', handleLinkLeave, true)
     }
 
     if (!doc.documentElement.dataset.meronFrameContextWired) {

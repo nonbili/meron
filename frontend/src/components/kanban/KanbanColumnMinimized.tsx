@@ -85,7 +85,10 @@ export function KanbanColumnMinimized({
         )}
       </div>
       <div
-        className={clsx('max-h-52 truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}
+        className={clsx(
+          'max-h-[calc(100%-4.75rem)] truncate text-xs font-bold',
+          isPaused ? 'text-secondary' : 'text-primary',
+        )}
         style={{ writingMode: 'vertical-rl' }}
       >
         {folderLabel(column, labelFolders, accounts)}

@@ -1,7 +1,8 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
+import { LinkHoverPreview } from './LinkHoverPreview'
 import { isImage, mediaSrc } from './messageHelpers'
 import { applyReaderLayout, stripTrackingPixels } from './readerHtml'
 
@@ -31,6 +32,7 @@ interface HtmlMessageViewProps {
 export function HtmlMessageView({ scrollKey, title, html, text, attachments, viewMode }: HtmlMessageViewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const textRef = useRef<HTMLDivElement | null>(null)
+  const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
   const positionKey = `${scrollKey}:${viewMode}`
@@ -90,6 +92,10 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
 
   const sanitizedHtml = useMemo(() => (html ? stripTrackingPixels(html) : html), [html])
 
+  useEffect(() => {
+    setHoveredLink(null)
+  }, [html, viewMode])
+
   const openImage = useCallback((doc: Document, img: HTMLImageElement, event: Event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -139,7 +145,7 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
 
   if (viewMode === 'plain' || !html) {
     return (
-      <div ref={textRef} onScroll={saveScrollPosition} className="flex-1 overflow-y-auto bg-chat px-6 py-6">
+      <div ref={textRef} onScroll={saveScrollPosition} className="relative flex-1 overflow-y-auto bg-chat px-6 py-6">
         <div className="mx-auto max-w-[680px] space-y-5">
           {attachmentImages.length > 0 && (
             <AttachmentImageGrid images={attachmentImages} onOpen={openAttachmentImage} />
@@ -161,7 +167,7 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
   }
 
   return (
-    <>
+    <div className="relative flex min-h-0 flex-1 flex-col" onMouseLeave={() => setHoveredLink(null)}>
       <HtmlFrame
         ref={iframeRef}
         html={sanitizedHtml}
@@ -169,8 +175,10 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
         className="flex-1 w-full border-0 bg-white"
         onFrameClick={handleFrameClick}
         onReady={handleFrameReady}
+        onLinkHover={setHoveredLink}
         onScroll={saveScrollPosition}
       />
+      <LinkHoverPreview url={hoveredLink} />
       {attachmentImages.length > 0 && (
         <div className="shrink-0 border-t border-border bg-chat px-6 py-4">
           <div className="mx-auto max-w-[680px]">
@@ -186,7 +194,7 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
           onClose={() => setGalleryIndex(null)}
         />
       )}
-    </>
+    </div>
   )
 }
 
