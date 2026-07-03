@@ -373,13 +373,7 @@ pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Valu
         let folders = folders
             .into_iter()
             .map(|folder| {
-                let role = if folder.name.eq_ignore_ascii_case("INBOX") {
-                    "inbox"
-                } else if looks_like_archive_folder(&folder.name) {
-                    "archive"
-                } else {
-                    "folder"
-                };
+                let role = folder.role.clone();
                 json!({
                     "id": folder.name,
                     "account_id": account_id,
@@ -608,8 +602,15 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 }
             }
         } else {
-            store::get_thread_headers_all_folders(&conn, &parsed.account, &parsed.thread_key)
-                .map_err(|err| err.to_string())?
+            let mut headers =
+                store::get_thread_headers_all_folders(&conn, &parsed.account, &parsed.thread_key)
+                    .map_err(|err| err.to_string())?;
+            if let Some(subject_filter) = parsed.subject_filter.as_deref() {
+                headers.retain(|header| {
+                    store::thread_grouping_subject(&header.subject) == subject_filter
+                });
+            }
+            headers
         };
         // Mobile sync stores headers only, so the first time a thread is opened
         // its message bodies aren't cached yet. Fetch them on demand from IMAP
@@ -730,33 +731,11 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
-        let folder = parsed.folder.clone();
-        let op_uids = uids.clone();
-        let delete_result = crate::ffi::engine_block_on(engine.with_write_session(
+        let delete_result = crate::ffi::engine_block_on(crate::engine::delete_to_trash(
+            &engine,
             &parsed.account,
-            move |session| {
-                let folder = folder.clone();
-                let uids = op_uids.clone();
-                Box::pin(async move {
-                    let drafts = imap::find_drafts_folder(session).await?;
-                    let trash = if drafts.as_deref() == Some(folder.as_str()) {
-                        imap::expunge_uids(session, &folder, &uids).await?;
-                        None
-                    } else {
-                        let trash = imap::find_trash_folder(session).await?.ok_or_else(|| {
-                            anyhow::anyhow!("Trash folder not found for this account")
-                        })?;
-                        if trash == folder {
-                            imap::expunge_uids(session, &folder, &uids).await?;
-                            None
-                        } else {
-                            imap::move_to_folder(session, &folder, &trash, &uids).await?;
-                            Some(trash)
-                        }
-                    };
-                    anyhow::Ok(trash)
-                })
-            },
+            &parsed.folder,
+            &uids,
         ))?;
         let deleted = store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids)
             .map_err(|err| err.to_string())?;
@@ -1097,7 +1076,11 @@ pub(crate) fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Resu
                 },
             ))?;
         }
-        if has_requested_mobile_message_ids(params) {
+        if has_requested_mobile_message_ids(params) || parsed.subject_filter.is_some() {
+            // Explicit message ids, or a subject-branched card: `uids` is
+            // already scoped to exactly the acted-on messages. The
+            // whole-thread update below would star sibling branches sharing
+            // the root thread_key.
             for uid in uids {
                 store::update_message_starred(&conn, &parsed.account, &parsed.folder, uid, starred)
                     .map_err(|err| err.to_string())?;
@@ -1123,16 +1106,34 @@ pub(crate) fn cached_thread_uids(
     conn: &rusqlite::Connection,
     parsed: &ParsedThreadId,
 ) -> Result<Vec<u32>, String> {
+    // A uid-style id names exactly one message; answer it directly. Its
+    // display thread_key is "uid:{N}", which the store lookup below would no
+    // longer match once a resync fills in the row's real thread_key.
     if let Some(uid) = parsed.uid {
         return Ok(vec![uid]);
     }
-    Ok(
-        store::get_thread_headers(conn, &parsed.account, &parsed.folder, &parsed.thread_key)
-            .map_err(|err| err.to_string())?
-            .into_iter()
-            .map(|header| header.uid)
-            .collect(),
+    if let Some(subject_filter) = parsed.subject_filter.as_deref() {
+        return Ok(store::get_thread_headers(
+            conn,
+            &parsed.account,
+            &parsed.folder,
+            &parsed.thread_key,
+        )
+        .map_err(|err| err.to_string())?
+        .into_iter()
+        .filter(|header| store::thread_grouping_subject(&header.subject) == subject_filter)
+        .map(|header| header.uid)
+        .collect());
+    }
+    store::resolve_message_uids(
+        conn,
+        &parsed.account,
+        &parsed.folder,
+        &parsed.thread_key,
+        parsed.uid,
+        &[],
     )
+    .map_err(|err| err.to_string())
 }
 
 pub(crate) fn has_requested_mobile_message_ids(params: &Value) -> bool {
@@ -1175,7 +1176,10 @@ pub(crate) fn update_mobile_read_state(
     uids: &[u32],
     seen: bool,
 ) -> Result<(), String> {
-    if has_requested_mobile_message_ids(params) {
+    if has_requested_mobile_message_ids(params) || parsed.subject_filter.is_some() {
+        // Explicit message ids, or a subject-branched card: `uids` is already
+        // scoped to exactly the acted-on messages. The whole-thread update
+        // below would flip sibling branches sharing the root thread_key.
         for uid in uids {
             store::update_message_seen(conn, &parsed.account, &parsed.folder, *uid, seen)
                 .map_err(|err| err.to_string())?;
@@ -1208,11 +1212,8 @@ pub(crate) fn find_cached_archive_folder(
     conn: &rusqlite::Connection,
     account: &str,
 ) -> Result<String, String> {
-    store::get_folders(conn, account)
-        .map_err(|err| err.to_string())?
-        .into_iter()
-        .find(|folder| looks_like_archive_folder(&folder.name))
-        .map(|folder| folder.name)
+    let folders = store::get_folders(conn, account).map_err(|err| err.to_string())?;
+    crate::engine::cached_archive_folder_from_folders(folders, "")
         .ok_or_else(|| "Archive folder not found for this account".to_string())
 }
 
@@ -1222,19 +1223,6 @@ pub(crate) fn canon_folder(folder: &str) -> String {
     } else {
         folder.to_string()
     }
-}
-
-pub(crate) fn looks_like_archive_folder(name: &str) -> bool {
-    matches!(
-        name.to_lowercase().as_str(),
-        "archive"
-            | "archives"
-            | "all mail"
-            | "inbox.archive"
-            | "inbox.archives"
-            | "[gmail]/all mail"
-            | "[google mail]/all mail"
-    )
 }
 
 pub(crate) fn parse_mail_cursor(cursor: &str) -> Option<(i64, u32)> {
@@ -1250,43 +1238,36 @@ pub(crate) fn thread_cards_json(
     folder_id: &str,
     messages: Vec<MessageHeader>,
 ) -> Vec<Value> {
-    let mut out = Vec::new();
-    let mut seen_keys = std::collections::HashSet::new();
-    for message in messages {
-        let thread_key = if message.thread_key.is_empty() {
-            format!("uid:{}", message.uid)
-        } else {
-            message.thread_key.clone()
-        };
-        if !seen_keys.insert(thread_key.clone()) {
-            continue;
-        }
-        let message_folder = if message.folder.is_empty() {
-            folder_id.to_string()
-        } else {
-            message.folder.clone()
-        };
-        let thread_id = format_thread_id(account_id, &message_folder, &thread_key);
-        out.push(json!({
-            "id": thread_id,
-            "account_id": account_id,
-            "folder_id": message_folder,
-            "thread_id": thread_id,
-            "from_name": message.from_name,
-            "from_addr": message.from_addr,
-            "to": "",
-            "subject": message.subject,
-            "preview": "",
-            "body": "",
-            "date": message.date,
-            "unread": !message.seen,
-            "unread_count": if message.seen { 0 } else { 1 },
-            "starred": message.starred,
-            "has_attachments": false,
-            "recipient_overflow": message.recipient_overflow,
-        }));
-    }
-    out
+    store::group_thread_cards(messages, folder_id)
+        .into_iter()
+        .map(|card| {
+            let folder = card.header.folder.as_str();
+            let thread_id = format_thread_id(account_id, folder, &card.thread_key);
+            let original_thread_id = card
+                .original_thread_key
+                .as_deref()
+                .map(|key| format_thread_id(account_id, folder, key));
+            json!({
+                "id": thread_id,
+                "account_id": account_id,
+                "folder_id": folder,
+                "thread_id": thread_id,
+                "original_thread_id": original_thread_id,
+                "from_name": card.header.from_name,
+                "from_addr": card.header.from_addr,
+                "to": "",
+                "subject": card.header.subject,
+                "preview": "",
+                "body": "",
+                "date": card.header.date,
+                "unread": card.unread_count > 0,
+                "unread_count": card.unread_count,
+                "starred": card.header.starred,
+                "has_attachments": false,
+                "recipient_overflow": card.header.recipient_overflow,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn format_thread_id(account_id: &str, folder: &str, thread_key: &str) -> String {
@@ -1303,6 +1284,7 @@ pub(crate) struct ParsedThreadId {
     pub(crate) folder: String,
     pub(crate) thread_key: String,
     pub(crate) uid: Option<u32>,
+    pub(crate) subject_filter: Option<String>,
 }
 
 pub(crate) fn parse_thread_id(thread_id: &str) -> Option<ParsedThreadId> {
@@ -1317,11 +1299,18 @@ pub(crate) fn parse_thread_id(thread_id: &str) -> Option<ParsedThreadId> {
     if let Some(encoded) = key.strip_prefix("t.") {
         let decoded = URL_SAFE_NO_PAD.decode(encoded.as_bytes()).ok()?;
         let thread_key = String::from_utf8(decoded).ok()?;
+        let (root_thread_key, subject_filter) =
+            if store::should_branch_thread_by_subject(&thread_key) {
+                store::split_branch_compound_key(&thread_key)
+            } else {
+                (thread_key, None)
+            };
         return Some(ParsedThreadId {
             account,
             folder,
-            thread_key,
+            thread_key: root_thread_key,
             uid: None,
+            subject_filter,
         });
     }
     let uid = key.parse::<u32>().ok()?;
@@ -1330,6 +1319,7 @@ pub(crate) fn parse_thread_id(thread_id: &str) -> Option<ParsedThreadId> {
         folder,
         thread_key: format!("uid:{uid}"),
         uid: Some(uid),
+        subject_filter: None,
     })
 }
 

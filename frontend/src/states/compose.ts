@@ -604,7 +604,7 @@ function activateOpenDraftCompose(draft: Message): boolean {
 // stored as normal IMAP messages, but clicking one should resume editing rather
 // than open a read-only conversation.
 export async function openDraftCompose(thread: Message) {
-  if (!isDraftFolder(thread.folder_id)) return false
+  if (!isDraftFolder(thread.folder_id, thread.account_id)) return false
   if (accounts$.get().filter(isSendableAccount).length === 0) {
     showToast('Add a mail account before composing')
     return true
@@ -614,7 +614,10 @@ export async function openDraftCompose(thread: Message) {
 
   try {
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
-    const draft = newestMessage((result.messages ?? []).filter((message) => isDraftFolder(message.folder_id))) ?? thread
+    const draft =
+      newestMessage(
+        (result.messages ?? []).filter((message) => isDraftFolder(message.folder_id, message.account_id)),
+      ) ?? thread
     if (activateOpenDraftCompose(draft)) return true
     const id = openComposeTab(composeFromDraftMessage(draft))
     if (!id) return true

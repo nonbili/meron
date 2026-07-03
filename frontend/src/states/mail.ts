@@ -1016,7 +1016,7 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   const sourceFolder = sourceThread?.folder_id ?? ''
   // Drafts are expunged in place by the engine (never moved to Trash), so the
   // delete is permanent there too — but worded as a discard.
-  const isDraft = isDraftFolder(sourceFolder)
+  const isDraft = isDraftFolder(sourceFolder, sourceThread?.account_id)
   const permanent = options.permanent ?? (isDraft || isTrashFolderId(sourceThread?.account_id ?? '', sourceFolder))
   if (isDraft || permanent) {
     if (
@@ -1063,10 +1063,12 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   }
 }
 
-// True when `folderId` names an IMAP Drafts mailbox. Mirrors the core's
-// `looks_like_drafts` so the UI can word the delete as a permanent discard —
-// the engine expunges drafts in place rather than moving them to Trash.
-export function isDraftFolder(folderId: string): boolean {
+// Prefer the core-provided folder role. The name fallback is only for call
+// sites that have a bare folder id before folder metadata is loaded.
+export function isDraftFolder(folderId: string, accountId?: string): boolean {
+  const candidates = [...(accountId ? (mail$.foldersByAccount[accountId].get() ?? []) : []), ...mail$.folders.get()]
+  const folder = candidates.find((item) => item.id === folderId || item.name === folderId)
+  if (folder?.role) return folder.role === 'drafts'
   return ['drafts', 'draft', 'inbox.drafts', 'inbox.draft', '[gmail]/drafts', '[gmail]/draft'].includes(
     folderId.toLowerCase(),
   )
@@ -1143,7 +1145,7 @@ export async function deleteMessage(message: Message) {
     return
   }
 
-  const isDraft = isDraftFolder(message.folder_id)
+  const isDraft = isDraftFolder(message.folder_id, message.account_id)
   const confirmMessage = isDraft ? "Discard this draft? This can't be undone." : 'Move this message to Trash?'
   if (
     !(await confirmAction({

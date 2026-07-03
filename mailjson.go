@@ -19,11 +19,14 @@ func foldersJSON(accountID string, raw any) any {
 			continue
 		}
 		delimiter, _ := folderObject["delimiter"].(string)
-		role := "folder"
-		if strings.EqualFold(name, "INBOX") {
-			role = "inbox"
-		} else if looksLikeArchiveFolder(name) {
-			role = "archive"
+		role, _ := folderObject["role"].(string)
+		if role == "" {
+			role = "folder"
+			if strings.EqualFold(name, "INBOX") {
+				role = "inbox"
+			} else if looksLikeArchiveFolder(name) {
+				role = "archive"
+			}
 		}
 		unread := uint32(jsonNumber(folderObject["unread"]))
 		folders = append(folders, Folder{ID: name, AccountID: accountID, Name: name, Role: role, Delimiter: delimiter, Unread: unread})

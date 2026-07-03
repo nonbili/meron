@@ -33,7 +33,7 @@ export function MessageContextMenu({
   onSelectMessage?: (message: Message) => void
 }) {
   const { t } = useTranslation()
-  const isDraft = isDraftFolder(state.message.folder_id)
+  const isDraft = isDraftFolder(state.message.folder_id, state.message.account_id)
   return (
     <FloatingContextMenu
       x={state.x}

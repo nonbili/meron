@@ -152,7 +152,7 @@ function KanbanColumnContent({
       kind: isRss || starredFeed ? 'feed' : 'mail',
       unread: thread.unread,
       starred: thread.starred,
-      draft: !starredColumn && isDraftFolder(thread.folder_id),
+      draft: !starredColumn && isDraftFolder(thread.folder_id, thread.account_id),
       trash: labelFolders.some(
         (folder) =>
           folder.account_id === thread.account_id && folder.id === thread.folder_id && folder.role === 'trash',

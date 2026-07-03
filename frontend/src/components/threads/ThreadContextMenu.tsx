@@ -354,7 +354,7 @@ export function ThreadContextMenu({
     ),
   }))
   const inTrash = isTrashFolderId(menu.accountId, menu.folderId)
-  const inDrafts = isDraftFolder(menu.folderId)
+  const inDrafts = isDraftFolder(menu.folderId, menu.accountId)
 
   return (
     <FloatingContextMenu

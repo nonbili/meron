@@ -119,6 +119,9 @@ pub struct Folder {
     /// drafts) don't depend on name heuristics alone.
     #[serde(default)]
     pub special_use: Option<String>,
+    /// UI role computed from `special_use` plus core name heuristics.
+    #[serde(default)]
+    pub role: String,
 }
 
 /// One addressee parsed from an envelope `To`/`Cc` list.
@@ -434,6 +437,7 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
             delimiter: name.delimiter().map(|d| d.to_string()),
             unread: 0,
             special_use,
+            role: String::new(),
         });
     }
     Ok(out)
@@ -1207,7 +1211,7 @@ pub async fn find_drafts_folder(session: &mut Session) -> Result<Option<String>>
     Ok(by_attr.or(by_name))
 }
 
-fn looks_like_archive(name: &str) -> bool {
+pub fn looks_like_archive(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
     matches!(
         n.as_str(),
@@ -1231,7 +1235,7 @@ pub fn looks_like_sent(name: &str) -> bool {
     )
 }
 
-fn looks_like_trash(name: &str) -> bool {
+pub fn looks_like_trash(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
     matches!(
         n.as_str(),
@@ -1245,6 +1249,14 @@ fn looks_like_trash(name: &str) -> bool {
             | "inbox.deleted items"
             | "[gmail]/trash"
             | "[gmail]/bin"
+    )
+}
+
+pub fn looks_like_junk(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    matches!(
+        n.as_str(),
+        "junk" | "spam" | "bulk mail" | "inbox.junk" | "inbox.spam" | "[gmail]/spam"
     )
 }
 

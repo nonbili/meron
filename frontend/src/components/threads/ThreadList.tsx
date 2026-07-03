@@ -128,7 +128,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
       kind: isRSSAccount || starredFeed ? 'feed' : 'mail',
       unread: thread.unread,
       starred: thread.starred,
-      draft: !isStarredView && isDraftFolder(thread.folder_id),
+      draft: !isStarredView && isDraftFolder(thread.folder_id, thread.account_id),
       trash: folders.some((folder) => folder.id === thread.folder_id && folder.role === 'trash'),
     }
   }
@@ -345,7 +345,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                       return
                     }
                     clearBulkSelection()
-                    if (!isStarredView && isDraftFolder(thread.folder_id)) {
+                    if (!isStarredView && isDraftFolder(thread.folder_id, thread.account_id)) {
                       void openDraftCompose(thread)
                       ui$.selectedThread.set(thread.thread_id)
                       ui$.mobilePane.set('conversation')

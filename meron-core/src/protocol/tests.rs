@@ -1142,7 +1142,7 @@ fn mobile_protocol_lists_threads_from_store() {
     assert_eq!(first["unread"], true);
     assert_eq!(first["unread_count"], 1);
     assert_eq!(first["starred"], true);
-    assert_eq!(first["thread_id"], "me@example.com#INBOX#t.dG9waWM");
+    assert_eq!(first["thread_id"], "me@example.com#INBOX#t.dG9waWMjTmV3ZXN0");
 
     let unread = invoke_mobile_protocol_json(
         r#"{"id":65,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"unread"}}"#,
@@ -1326,7 +1326,7 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
     assert_eq!(sent_threads.len(), 1, "{sent}");
     assert_eq!(
         sent_threads[0]["thread_id"],
-        "me@example.com#Sent#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"
+        "me@example.com#Sent#t.cm9vdEBtYWlsLmdtYWlsLmNvbSN0ZXN0IG1haWxvMg"
     );
 
     let read = invoke_mobile_protocol_json(
@@ -1612,7 +1612,10 @@ fn mobile_protocol_mark_read_persists_locally_before_server_sync() {
         Some(data_dir.to_str().unwrap()),
     );
     let first = &threads["result"]["threads"][0];
-    assert_eq!(first["thread_id"], "me@example.com#INBOX#t.dG9waWM");
+    assert_eq!(
+        first["thread_id"],
+        "me@example.com#INBOX#t.dG9waWMjU2Vjb25k"
+    );
     assert_eq!(first["unread"], false);
     assert_eq!(first["unread_count"], 0);
     assert_eq!(first["starred"], false);
@@ -1952,9 +1955,10 @@ fn mobile_protocol_delete_requires_server_credentials() {
         Some(data_dir.to_str().unwrap()),
     );
     let rows = threads["result"]["threads"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
+    assert_eq!(rows.len(), 3);
     assert_eq!(rows[0]["subject"], "Delete me");
-    assert_eq!(rows[1]["subject"], "Keep me");
+    assert_eq!(rows[1]["subject"], "Delete me");
+    assert_eq!(rows[2]["subject"], "Keep me");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -2071,9 +2075,10 @@ fn mobile_protocol_archive_requires_server_credentials() {
         Some(data_dir.to_str().unwrap()),
     );
     let inbox_rows = inbox["result"]["threads"].as_array().unwrap();
-    assert_eq!(inbox_rows.len(), 2);
+    assert_eq!(inbox_rows.len(), 3);
     assert_eq!(inbox_rows[0]["subject"], "Archive me");
-    assert_eq!(inbox_rows[1]["subject"], "Keep me");
+    assert_eq!(inbox_rows[1]["subject"], "Archive me");
+    assert_eq!(inbox_rows[2]["subject"], "Keep me");
 
     let archive = invoke_mobile_protocol_json(
         r#"{"id":81,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"Archive","filter":"all"}}"#,
@@ -2430,6 +2435,7 @@ fn requested_mobile_uids_uses_message_ids_without_thread_fallback() {
         folder: "INBOX".to_string(),
         thread_key: "topic".to_string(),
         uid: None,
+        subject_filter: None,
     };
 
     let targeted = requested_mobile_uids(
@@ -2447,6 +2453,96 @@ fn requested_mobile_uids_uses_message_ids_without_thread_fallback() {
     let fallback = requested_mobile_uids(&conn, &parsed, &json!({})).unwrap();
     assert_eq!(fallback, vec![7, 8]);
 
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn parse_thread_id_round_trips_branch_root_containing_hash() {
+    // '#' is legal atext in a Message-ID; the branch join must not truncate it.
+    let compound = store::branch_compound_key("abc#123@host", "Topic");
+    let id = format_thread_id("me@example.com", "INBOX", &compound);
+    let parsed = parse_thread_id(&id).unwrap();
+    assert_eq!(parsed.thread_key, "abc#123@host");
+    assert_eq!(parsed.subject_filter.as_deref(), Some("Topic"));
+
+    // Legacy unbranched ids keep resolving to the whole thread.
+    let plain = parse_thread_id(&format_thread_id("me@example.com", "INBOX", "topic")).unwrap();
+    assert_eq!(plain.thread_key, "topic");
+    assert_eq!(plain.subject_filter, None);
+}
+
+#[test]
+fn cached_thread_uids_uid_style_survives_thread_key_backfill() {
+    let data_dir = unique_data_dir("uid-style-backfill");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    // The row was rendered as a uid-style card while its thread_key was empty,
+    // then a later sync filled in the real key.
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 9,
+            subject: "One".to_string(),
+            thread_key: "real-key@host".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    let parsed = parse_thread_id("me@example.com#INBOX#9").unwrap();
+    assert_eq!(parsed.uid, Some(9));
+    assert_eq!(cached_thread_uids(&conn, &parsed).unwrap(), vec![9]);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn update_mobile_read_state_scopes_branched_threads_to_their_uids() {
+    let data_dir = unique_data_dir("branch-read-scope");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[
+            MessageHeader {
+                uid: 1,
+                subject: "Topic".to_string(),
+                thread_key: "root@host".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 2,
+                subject: "New topic".to_string(),
+                thread_key: "root@host".to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    let parsed = ParsedThreadId {
+        account: "me@example.com".to_string(),
+        folder: "INBOX".to_string(),
+        thread_key: "root@host".to_string(),
+        uid: None,
+        subject_filter: Some("New topic".to_string()),
+    };
+    let uids = cached_thread_uids(&conn, &parsed).unwrap();
+    assert_eq!(uids, vec![2]);
+    update_mobile_read_state(&conn, &parsed, &json!({}), &uids, true).unwrap();
+
+    // Only the acted-on branch flips; the sibling branch keeps its unread state.
+    let headers =
+        store::get_thread_headers(&conn, "me@example.com", "INBOX", "root@host").unwrap();
+    let seen_by_uid: std::collections::HashMap<u32, bool> = headers
+        .iter()
+        .map(|header| (header.uid, header.seen))
+        .collect();
+    assert!(seen_by_uid[&2]);
+    assert!(!seen_by_uid[&1]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

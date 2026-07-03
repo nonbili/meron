@@ -89,14 +89,35 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
            FROM folders f WHERE f.account = ?1 ORDER BY f.name",
     )?;
     let rows = stmt.query_map(params![account], |row| {
+        let name = row.get::<_, String>(0)?;
+        let special_use = row.get::<_, Option<String>>(2)?;
         Ok(Folder {
-            name: row.get(0)?,
+            role: classify_folder_role(&name, special_use.as_deref()).to_string(),
+            name,
             delimiter: row.get(1)?,
-            special_use: row.get(2)?,
+            special_use,
             unread: row.get::<_, i64>(3)? as u32,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+pub fn classify_folder_role(name: &str, special_use: Option<&str>) -> &'static str {
+    match special_use.unwrap_or_default() {
+        "inbox" => "inbox",
+        "sent" => "sent",
+        "drafts" => "drafts",
+        "trash" => "trash",
+        "junk" => "junk",
+        "archive" | "all" => "archive",
+        _ if name.eq_ignore_ascii_case("INBOX") => "inbox",
+        _ if crate::imap::looks_like_sent(name) => "sent",
+        _ if crate::imap::looks_like_drafts(name) => "drafts",
+        _ if crate::imap::looks_like_trash(name) => "trash",
+        _ if crate::imap::looks_like_junk(name) => "junk",
+        _ if crate::imap::looks_like_archive(name) => "archive",
+        _ => "folder",
+    }
 }
 
 // ---- Messages (mail) --------------------------------------------------------
@@ -301,6 +322,35 @@ pub fn get_recent_page(
         None
     };
     Ok((out, next_cursor))
+}
+
+/// Unread INBOX messages in the UID range that appeared during the last sync.
+pub fn new_unread_inbox_summary(
+    conn: &Connection,
+    account: &str,
+    uid_next_before: u32,
+    uid_next_after: u32,
+) -> Result<Option<(u32, MessageHeader)>> {
+    if uid_next_before == 0 || uid_next_after <= uid_next_before {
+        return Ok(None);
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
+                json_extract(json, '$.to') FROM messages
+         WHERE account = ?1 AND folder = 'INBOX'
+           AND uid >= ?2 AND uid < ?3 AND seen = 0
+         ORDER BY uid DESC",
+    )?;
+    let rows = stmt.query_map(
+        params![account, uid_next_before as i64, uid_next_after as i64],
+        message_header_from_row,
+    )?;
+    let headers = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let Some(latest) = headers.first().cloned() else {
+        return Ok(None);
+    };
+    Ok(Some((headers.len() as u32, latest)))
 }
 
 pub fn search_messages(
@@ -551,6 +601,235 @@ pub fn get_thread_headers(
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+pub fn resolve_message_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    thread_key: &str,
+    uid: Option<u32>,
+    explicit_uids: &[u32],
+) -> Result<Vec<u32>> {
+    if !explicit_uids.is_empty() {
+        return Ok(explicit_uids.to_vec());
+    }
+    if thread_key.is_empty() {
+        return Ok(uid.into_iter().collect());
+    }
+    Ok(get_thread_headers(conn, account, folder, thread_key)?
+        .into_iter()
+        .map(|header| header.uid)
+        .collect())
+}
+
+#[derive(Clone)]
+pub struct ThreadCard {
+    pub thread_key: String,
+    pub original_thread_key: Option<String>,
+    pub header: MessageHeader,
+    pub unread_count: u32,
+}
+
+pub fn group_thread_cards(messages: Vec<MessageHeader>, default_folder: &str) -> Vec<ThreadCard> {
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    struct RootSubject {
+        display: String,
+        group: String,
+        uid: u32,
+    }
+
+    let mut roots: HashMap<String, RootSubject> = HashMap::new();
+    for message in &messages {
+        if message.uid == 0 {
+            continue;
+        }
+        let thread_key = effective_thread_key(message);
+        let entry = roots.entry(thread_key).or_default();
+        if entry.uid == 0 || message.uid < entry.uid {
+            entry.uid = message.uid;
+            entry.display = normalize_thread_subject(&message.subject);
+            entry.group = thread_grouping_subject(&message.subject);
+        }
+    }
+
+    let mut groups: HashMap<String, ThreadCard> = HashMap::new();
+    let mut order = Vec::new();
+    for message in messages {
+        if message.uid == 0 {
+            continue;
+        }
+        let base_key = effective_thread_key(&message);
+        let branch = should_branch_thread_by_subject(&base_key);
+        let group_subject = if branch {
+            thread_grouping_subject(&message.subject)
+        } else {
+            String::new()
+        };
+        let compound_key = if branch {
+            branch_compound_key(&base_key, &group_subject)
+        } else {
+            base_key.clone()
+        };
+        let card = groups.entry(compound_key.clone()).or_insert_with(|| {
+            order.push(compound_key.clone());
+            let root = roots.get(&base_key);
+            let mut header = message.clone();
+            if header.folder.is_empty() {
+                header.folder = default_folder.to_string();
+            }
+            header.thread_key = compound_key.clone();
+            let title = root.map(|root| root.display.as_str()).unwrap_or_default();
+            if !title.is_empty() {
+                header.subject = title.to_string();
+            }
+            let original_thread_key = if branch
+                && root
+                    .map(|root| root.group.as_str() != group_subject.as_str())
+                    .unwrap_or(false)
+            {
+                root.map(|root| branch_compound_key(&base_key, &root.group))
+            } else {
+                None
+            };
+            ThreadCard {
+                thread_key: compound_key.clone(),
+                original_thread_key,
+                header,
+                unread_count: 0,
+            }
+        });
+        if !message.seen {
+            card.unread_count += 1;
+            card.header.seen = false;
+        }
+        if message.starred {
+            card.header.starred = true;
+        }
+    }
+
+    order
+        .into_iter()
+        .filter_map(|key| groups.remove(&key))
+        .collect()
+}
+
+fn effective_thread_key(message: &MessageHeader) -> String {
+    if message.thread_key.is_empty() {
+        format!("uid:{}", message.uid)
+    } else {
+        message.thread_key.clone()
+    }
+}
+
+pub fn should_branch_thread_by_subject(thread_key: &str) -> bool {
+    !thread_key.starts_with("uid:") && !thread_key.starts_with("gmthrid:")
+}
+
+/// Join a root thread key and a grouping subject into one branch key. The root
+/// is a raw Message-ID, where `#` is legal atext — escape it so
+/// [`split_branch_compound_key`] can split at the first literal `#`
+/// unambiguously (the subject side stays verbatim; it is only ever compared
+/// whole against other grouping subjects).
+pub fn branch_compound_key(root: &str, group_subject: &str) -> String {
+    let escaped = root.replace('%', "%25").replace('#', "%23");
+    format!("{escaped}#{group_subject}")
+}
+
+/// Split a branch key built by [`branch_compound_key`] back into
+/// (root thread key, grouping subject). Keys without a `#` separator were
+/// never escaped (unbranched legacy ids) and come back verbatim with no
+/// subject.
+pub fn split_branch_compound_key(compound: &str) -> (String, Option<String>) {
+    match compound.split_once('#') {
+        Some((root, subject)) => (
+            root.replace("%23", "#").replace("%25", "%"),
+            Some(subject.to_string()),
+        ),
+        None => (compound.to_string(), None),
+    }
+}
+
+pub fn normalize_thread_subject(subject: &str) -> String {
+    let mut subject = subject.trim();
+    while let Some(rest) = strip_reply_prefix(subject) {
+        subject = rest.trim();
+    }
+    subject.to_string()
+}
+
+pub fn thread_grouping_subject(subject: &str) -> String {
+    let mut subject = subject.trim();
+    loop {
+        if let Some(rest) = strip_reply_prefix(subject) {
+            subject = rest.trim();
+            continue;
+        }
+        if let Some(rest) = strip_leading_bracket_tag(subject) {
+            subject = rest.trim();
+            continue;
+        }
+        break;
+    }
+    subject.to_string()
+}
+
+fn strip_reply_prefix(subject: &str) -> Option<&str> {
+    let mut probe = subject.trim_start();
+    while let Some(rest) = strip_leading_bracket_tag(probe) {
+        probe = rest.trim_start();
+    }
+
+    const PREFIXES: &[&str] = &[
+        "re", "fw", "fwd", "aw", "sv", "vs", "rv", "res", "tr", "antw", "wg", "答复", "回复",
+        "转发",
+    ];
+    // Try every prefix that matches, not just the first: "fw" is a string
+    // prefix of "Fwd:" but fails the colon check, and only the "fwd" entry
+    // succeeds (mirrors the Go regex alternation, where the engine picks the
+    // alternative that lets the trailing colon match).
+    for prefix in PREFIXES {
+        if !probe.is_char_boundary(prefix.len())
+            || !probe[..prefix.len()].eq_ignore_ascii_case(prefix)
+        {
+            continue;
+        }
+        let mut rest = &probe[prefix.len()..];
+        if let Some(after_count) = strip_reply_count(rest) {
+            rest = after_count;
+        }
+        let mut chars = rest.chars();
+        match chars.next() {
+            Some(':') | Some('：') => return Some(chars.as_str()),
+            _ => continue,
+        }
+    }
+    None
+}
+
+fn strip_reply_count(rest: &str) -> Option<&str> {
+    let bytes = rest.as_bytes();
+    let close = match bytes.first()? {
+        b'[' => b']',
+        b'(' => b')',
+        _ => return None,
+    };
+    let end = bytes.iter().position(|byte| *byte == close)?;
+    if end <= 1 || !bytes[1..end].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    Some(&rest[end + 1..])
+}
+
+fn strip_leading_bracket_tag(subject: &str) -> Option<&str> {
+    let trimmed = subject.trim_start();
+    if !trimmed.starts_with('[') {
+        return None;
+    }
+    let end = trimmed.find(']')?;
+    Some(&trimmed[end + 1..])
 }
 
 /// Message-IDs a thread references but hasn't cached locally. Across every

@@ -96,7 +96,7 @@ export function KanbanThreadCard({
           }
           onBulkPlainSelect?.()
           // A draft card opens the full composer rather than a read-only pane.
-          if (!starredColumn && isDraftFolder(thread.folder_id)) {
+          if (!starredColumn && isDraftFolder(thread.folder_id, thread.account_id)) {
             void openDraftCompose(thread)
             ui$.selectedThread.set(thread.thread_id)
             kanban$.paneThreadId.set(thread.thread_id)

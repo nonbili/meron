@@ -55,6 +55,24 @@ fn folders_round_trip_special_use_and_ensure_folder_keeps_it() {
 }
 
 #[test]
+fn folder_role_assignment_uses_special_use_then_name_fallback() {
+    let cases = [
+        ("Mail/Entwürfe", Some("drafts"), "drafts"),
+        ("Archive", Some("sent"), "sent"),
+        ("INBOX", None, "inbox"),
+        ("Sent Mail", None, "sent"),
+        ("Drafts", None, "drafts"),
+        ("Deleted Items", None, "trash"),
+        ("Spam", None, "junk"),
+        ("All Mail", None, "archive"),
+        ("Projects", None, "folder"),
+    ];
+    for (name, special_use, role) in cases {
+        assert_eq!(classify_folder_role(name, special_use), role, "{name}");
+    }
+}
+
+#[test]
 fn search_messages_matches_subject_sender_and_body_case_insensitively() {
     let conn = test_conn();
     insert_message(&conn, 1, "Quarterly Plan", "Aki", "aki@example.com", None);
@@ -205,6 +223,343 @@ fn get_recent_page_can_return_only_unread_messages() {
         vec![2]
     );
     assert_eq!(next_cursor, None);
+}
+
+#[test]
+fn new_unread_inbox_summary_counts_uid_window_and_latest_unread() {
+    let conn = test_conn();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[
+            MessageHeader {
+                uid: 1,
+                subject: "Before window".to_string(),
+                from_addr: "old@example.com".to_string(),
+                thread_key: "old".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 2,
+                subject: "Lower bound".to_string(),
+                from_addr: "lower@example.com".to_string(),
+                thread_key: String::new(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 3,
+                subject: "Already read".to_string(),
+                from_addr: "read@example.com".to_string(),
+                seen: true,
+                thread_key: "read".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 4,
+                subject: "Latest unread".to_string(),
+                from_name: "Aki".to_string(),
+                from_addr: "aki@example.com".to_string(),
+                thread_key: "fresh".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 5,
+                subject: "Upper bound excluded".to_string(),
+                from_addr: "upper@example.com".to_string(),
+                thread_key: "upper".to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    upsert_messages(
+        &conn,
+        "acct",
+        "Archive",
+        &[MessageHeader {
+            uid: 4,
+            subject: "Wrong folder".to_string(),
+            from_addr: "archive@example.com".to_string(),
+            thread_key: "archive".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+
+    let (count, latest) = new_unread_inbox_summary(&conn, "acct", 2, 5)
+        .unwrap()
+        .unwrap();
+    assert_eq!(count, 2);
+    assert_eq!(latest.uid, 4);
+    assert_eq!(latest.subject, "Latest unread");
+    assert_eq!(latest.thread_key, "fresh");
+
+    let (_, lower_bound) = new_unread_inbox_summary(&conn, "acct", 2, 3)
+        .unwrap()
+        .unwrap();
+    assert_eq!(lower_bound.uid, 2);
+    assert_eq!(lower_bound.thread_key, "uid:2");
+}
+
+#[test]
+fn new_unread_inbox_summary_ignores_empty_or_non_growing_windows() {
+    let conn = test_conn();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[MessageHeader {
+            uid: 1,
+            subject: "Unread".to_string(),
+            from_addr: "new@example.com".to_string(),
+            thread_key: "new".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+
+    assert!(
+        new_unread_inbox_summary(&conn, "acct", 0, 2)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        new_unread_inbox_summary(&conn, "acct", 2, 2)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        new_unread_inbox_summary(&conn, "acct", 3, 2)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn resolve_message_uids_prefers_explicit_then_single_then_thread() {
+    let conn = test_conn();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[
+            MessageHeader {
+                uid: 10,
+                subject: "Root".to_string(),
+                from_addr: "root@example.com".to_string(),
+                thread_key: "thread-a".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 11,
+                subject: "Reply".to_string(),
+                from_addr: "reply@example.com".to_string(),
+                thread_key: "thread-a".to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", Some(10), &[42, 43]).unwrap(),
+        vec![42, 43]
+    );
+    assert_eq!(
+        resolve_message_uids(&conn, "acct", "INBOX", "", Some(10), &[]).unwrap(),
+        vec![10]
+    );
+    assert_eq!(
+        resolve_message_uids(&conn, "acct", "INBOX", "", None, &[]).unwrap(),
+        Vec::<u32>::new()
+    );
+    assert_eq!(
+        resolve_message_uids(&conn, "acct", "INBOX", "thread-a", None, &[]).unwrap(),
+        vec![10, 11]
+    );
+}
+
+#[test]
+fn thread_subject_normalization_matches_desktop_prefix_semantics() {
+    // Parity with the Go subjectPrefixRegex alternation in mailjson.go: every
+    // listed prefix must strip when followed by a colon, including the ones
+    // that share a shorter list entry ("fwd" behind "fw", "res" behind "re").
+    let cases = [
+        ("Re: Topic", "Topic"),
+        ("Fwd: Topic", "Topic"),
+        ("FWD: Topic", "Topic"),
+        ("Res: Topic", "Topic"),
+        ("Re[2]: Topic", "Topic"),
+        ("FW(3): Topic", "Topic"),
+        ("回复：主题", "主题"),
+        ("Re: Fwd: Topic", "Topic"),
+        // Not reply prefixes: the colon check must reject these.
+        ("Ready: set", "Ready: set"),
+        ("Fwdish: nope", "Fwdish: nope"),
+        ("Topic", "Topic"),
+    ];
+    for (subject, expected) in cases {
+        assert_eq!(normalize_thread_subject(subject), expected, "{subject}");
+    }
+    // The grouping variant additionally drops leading bracket tags.
+    assert_eq!(thread_grouping_subject("[EXTERNAL] Re: Topic"), "Topic");
+    assert_eq!(thread_grouping_subject("[JIRA-1] Topic"), "Topic");
+}
+
+#[test]
+fn branch_compound_key_round_trips_hash_and_percent_in_root() {
+    let cases = ["abc#123@host", "plain@host", "50%25#done@host"];
+    for root in cases {
+        let compound = branch_compound_key(root, "Topic");
+        assert_eq!(
+            split_branch_compound_key(&compound),
+            (root.to_string(), Some("Topic".to_string())),
+            "{root}"
+        );
+    }
+    // Unbranched legacy keys pass through verbatim.
+    assert_eq!(
+        split_branch_compound_key("plain@host"),
+        ("plain@host".to_string(), None)
+    );
+}
+
+#[test]
+fn group_thread_cards_branches_subject_drift_and_links_to_root() {
+    use crate::imap::MessageHeader;
+    let messages = vec![
+        MessageHeader {
+            uid: 3,
+            subject: "New topic".to_string(),
+            from_name: "Newest".to_string(),
+            from_addr: "new@example.com".to_string(),
+            date: 300,
+            seen: false,
+            thread_key: "refs-root".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 2,
+            subject: "Re: Old topic".to_string(),
+            from_name: "Reply".to_string(),
+            from_addr: "reply@example.com".to_string(),
+            date: 200,
+            seen: true,
+            thread_key: "refs-root".to_string(),
+            ..Default::default()
+        },
+        MessageHeader {
+            uid: 1,
+            subject: "Old topic".to_string(),
+            from_name: "Root".to_string(),
+            from_addr: "root@example.com".to_string(),
+            date: 100,
+            seen: false,
+            thread_key: "refs-root".to_string(),
+            ..Default::default()
+        },
+    ];
+
+    let cards = group_thread_cards(messages, "INBOX");
+    assert_eq!(cards.len(), 2);
+    assert_eq!(cards[0].thread_key, "refs-root#New topic");
+    assert_eq!(
+        cards[0].original_thread_key.as_deref(),
+        Some("refs-root#Old topic")
+    );
+    assert_eq!(cards[0].header.subject, "Old topic");
+    assert_eq!(cards[0].unread_count, 1);
+    assert!(!cards[0].header.seen);
+
+    assert_eq!(cards[1].thread_key, "refs-root#Old topic");
+    assert_eq!(cards[1].original_thread_key, None);
+    assert_eq!(cards[1].header.subject, "Old topic");
+    assert_eq!(cards[1].unread_count, 1);
+}
+
+#[test]
+fn group_thread_cards_keeps_uid_and_gmail_threads_atomic() {
+    use crate::imap::MessageHeader;
+    let uid_cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 2,
+                subject: "Other".to_string(),
+                thread_key: "uid:2".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Root".to_string(),
+                thread_key: "uid:2".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(uid_cards.len(), 1);
+    assert_eq!(uid_cards[0].thread_key, "uid:2");
+
+    let gmail_cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 2,
+                subject: "Other".to_string(),
+                thread_key: "gmthrid:abc".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Root".to_string(),
+                thread_key: "gmthrid:abc".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(gmail_cards.len(), 1);
+    assert_eq!(gmail_cards[0].thread_key, "gmthrid:abc");
+}
+
+#[test]
+fn group_thread_cards_accumulates_unread_and_starred_across_group() {
+    use crate::imap::MessageHeader;
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 3,
+                subject: "Re: [EXTERNAL] Topic".to_string(),
+                seen: false,
+                starred: false,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 2,
+                subject: "[EXTERNAL] Topic".to_string(),
+                seen: false,
+                starred: true,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Topic".to_string(),
+                seen: true,
+                starred: false,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].thread_key, "refs-root#Topic");
+    assert_eq!(cards[0].header.subject, "Topic");
+    assert_eq!(cards[0].unread_count, 2);
+    assert!(cards[0].header.starred);
 }
 
 #[test]

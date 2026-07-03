@@ -763,43 +763,10 @@ fn mobile_new_unread_summary(
     uid_next_before: u32,
     uid_next_after: u32,
 ) -> Option<(u32, crate::imap::MessageHeader)> {
-    if uid_next_before == 0 || uid_next_after <= uid_next_before {
-        return None;
-    }
     let conn = mobile_db(data_dir).ok()?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key
-             FROM messages
-             WHERE account = ?1 AND folder = 'INBOX'
-               AND uid >= ?2 AND uid < ?3 AND seen = 0
-             ORDER BY uid DESC",
-        )
-        .ok()?;
-    let rows = stmt
-        .query_map(
-            rusqlite::params![account, uid_next_before as i64, uid_next_after as i64],
-            |row| {
-                let uid = row.get(0)?;
-                Ok(crate::imap::MessageHeader {
-                    uid,
-                    subject: row.get(1)?,
-                    from_name: row.get(2)?,
-                    from_addr: row.get(3)?,
-                    date: row.get(4)?,
-                    seen: row.get::<_, i64>(5)? != 0,
-                    starred: row.get::<_, i64>(6)? != 0,
-                    thread_key: row
-                        .get::<_, Option<String>>(7)?
-                        .filter(|key| !key.is_empty())
-                        .unwrap_or_else(|| format!("uid:{uid}")),
-                    ..Default::default()
-                })
-            },
-        )
-        .ok()?;
-    let headers = rows.collect::<rusqlite::Result<Vec<_>>>().ok()?;
-    Some((headers.len() as u32, headers.first()?.clone()))
+    crate::store::new_unread_inbox_summary(&conn, account, uid_next_before, uid_next_after)
+        .ok()
+        .flatten()
 }
 
 fn mobile_account_label(data_dir: &str, account: &str) -> String {

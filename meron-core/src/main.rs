@@ -374,45 +374,10 @@ fn new_unread_inbox_summary(
     uid_next_before: u32,
     uid_next_after: u32,
 ) -> Option<(u32, imap::MessageHeader)> {
-    if uid_next_before == 0 || uid_next_after <= uid_next_before {
-        return None;
-    }
-
     let db = engine.db.lock().unwrap();
-    let mut stmt = db
-        .prepare(
-            "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key
-             FROM messages
-             WHERE account = ?1 AND folder = 'INBOX'
-               AND uid >= ?2 AND uid < ?3 AND seen = 0
-             ORDER BY uid DESC",
-        )
-        .ok()?;
-    let rows = stmt
-        .query_map(
-            rusqlite::params![account, uid_next_before as i64, uid_next_after as i64],
-            |row| {
-                let uid = row.get(0)?;
-                Ok(imap::MessageHeader {
-                    uid,
-                    subject: row.get(1)?,
-                    from_name: row.get(2)?,
-                    from_addr: row.get(3)?,
-                    date: row.get(4)?,
-                    seen: row.get::<_, i64>(5)? != 0,
-                    starred: row.get::<_, i64>(6)? != 0,
-                    thread_key: row
-                        .get::<_, Option<String>>(7)?
-                        .filter(|key| !key.is_empty())
-                        .unwrap_or_else(|| format!("uid:{uid}")),
-                    ..Default::default()
-                })
-            },
-        )
-        .ok()?;
-    let headers = rows.collect::<rusqlite::Result<Vec<_>>>().ok()?;
-    let latest = headers.first()?.clone();
-    Some((headers.len() as u32, latest))
+    store::new_unread_inbox_summary(&db, account, uid_next_before, uid_next_after)
+        .ok()
+        .flatten()
 }
 
 /// Newest stored RSS item for an account, or None if the store is empty
@@ -1647,51 +1612,24 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 })
                 .unwrap_or_default();
 
-            let uids = if !explicit_uids.is_empty() {
-                explicit_uids
-            } else if thread_key.is_empty() {
-                uid.into_iter().collect::<Vec<_>>()
-            } else {
+            let uids = {
                 let db = engine.db.lock().unwrap();
-                store::get_thread_headers(&db, &account, &folder, &thread_key)?
-                    .into_iter()
-                    .map(|header| header.uid)
-                    .collect::<Vec<_>>()
+                store::resolve_message_uids(
+                    &db,
+                    &account,
+                    &folder,
+                    &thread_key,
+                    uid,
+                    &explicit_uids,
+                )?
             };
 
             if uids.is_empty() {
                 return Ok(json!({ "ok": true, "deleted": 0 }));
             }
 
-            // Returns None for a permanent expunge (drafts, or items already in
-            // Trash), or Some(trash) when the thread was moved to Trash.
             // Mutating, so it never auto-retries.
-            let trashed = engine
-                .with_write_session(&account, |session| {
-                    let folder = folder.clone();
-                    let uids = uids.clone();
-                    Box::pin(async move {
-                        // Drafts are discarded permanently (expunge in place) rather
-                        // than moved to Trash: they're unsent and ephemeral, and a
-                        // `\Draft` copy in Trash is confusing and handled
-                        // inconsistently by servers.
-                        let drafts = imap::find_drafts_folder(session).await?;
-                        if drafts.as_deref() == Some(folder.as_str()) {
-                            imap::expunge_uids(session, &folder, &uids).await?;
-                            return anyhow::Ok(None);
-                        }
-                        let trash = imap::find_trash_folder(session).await?.ok_or_else(|| {
-                            anyhow::anyhow!("Trash folder not found for this account")
-                        })?;
-                        if trash == folder {
-                            imap::expunge_uids(session, &folder, &uids).await?;
-                            return anyhow::Ok(None);
-                        }
-                        imap::move_to_folder(session, &folder, &trash, &uids).await?;
-                        anyhow::Ok(Some(trash))
-                    })
-                })
-                .await?;
+            let trashed = delete_to_trash(engine, &account, &folder, &uids).await?;
 
             let deleted = {
                 let db = engine.db.lock().unwrap();

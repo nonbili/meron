@@ -492,6 +492,38 @@ pub async fn sync_folders(
     Ok(folders)
 }
 
+/// Delete messages on the server. Returns `None` for a permanent expunge
+/// (Drafts, or items already in Trash), or `Some(trash)` when moved to Trash.
+pub async fn delete_to_trash(
+    engine: &Engine,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> anyhow::Result<Option<String>> {
+    engine
+        .with_write_session(account, |session| {
+            let folder = folder.to_string();
+            let uids = uids.to_vec();
+            Box::pin(async move {
+                let drafts = imap::find_drafts_folder(session).await?;
+                if drafts.as_deref() == Some(folder.as_str()) {
+                    imap::expunge_uids(session, &folder, &uids).await?;
+                    return anyhow::Ok(None);
+                }
+                let trash = imap::find_trash_folder(session)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("Trash folder not found for this account"))?;
+                if trash == folder {
+                    imap::expunge_uids(session, &folder, &uids).await?;
+                    return anyhow::Ok(None);
+                }
+                imap::move_to_folder(session, &folder, &trash, &uids).await?;
+                anyhow::Ok(Some(trash))
+            })
+        })
+        .await
+}
+
 /// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into
 /// the store, resetting cached messages if the server's UIDVALIDITY changed.
 pub async fn sync_messages(
@@ -603,6 +635,23 @@ pub fn cached_sent_folder(engine: &Arc<Engine>, account: &str, inbox: &str) -> O
 pub fn cached_drafts_folder(engine: &Arc<Engine>, account: &str, current: &str) -> Option<String> {
     let folders = store::get_folders(&engine.db.lock().unwrap(), account).ok()?;
     find_role_folder(folders, "drafts", imap::looks_like_drafts, current)
+}
+
+pub fn cached_archive_folder_from_folders(
+    folders: Vec<imap::Folder>,
+    current: &str,
+) -> Option<String> {
+    // Gmail advertises All Mail as \All rather than \Archive; either fills the
+    // archive role (the live `imap::find_archive_folder` accepts both too, and
+    // a localized name defeats the `looks_like_archive` fallback).
+    folders
+        .iter()
+        .find(|folder| {
+            matches!(folder.special_use.as_deref(), Some("archive" | "all"))
+                && !folder.name.eq_ignore_ascii_case(current)
+        })
+        .map(|folder| folder.name.clone())
+        .or_else(|| find_role_folder(folders, "archive", imap::looks_like_archive, current))
 }
 
 /// Per-folder cap for each piggybacked companion sync, so one slow mailbox
@@ -1330,8 +1379,9 @@ pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Pooled, companion_folders, find_role_folder, limit_prefetch_uids, pool_return, pool_take,
-        should_append_sent_copy, thread_gap_search_folders,
+        Pooled, cached_archive_folder_from_folders, companion_folders, find_role_folder,
+        limit_prefetch_uids, pool_return, pool_take, should_append_sent_copy,
+        thread_gap_search_folders,
     };
     use std::collections::HashMap;
     use std::time::{Duration, Instant};
@@ -1419,6 +1469,53 @@ mod tests {
         assert_eq!(
             find_role_folder(folders, "drafts", crate::imap::looks_like_drafts, "drafts"),
             None
+        );
+    }
+
+    #[test]
+    pub fn cached_archive_folder_prefers_server_attribute_over_name() {
+        let folders = vec![
+            role_folder("Archive", None),
+            role_folder("Mail/Archiv", Some("archive")),
+        ];
+        assert_eq!(
+            cached_archive_folder_from_folders(folders, "INBOX"),
+            Some("Mail/Archiv".to_string())
+        );
+    }
+
+    #[test]
+    pub fn cached_archive_folder_resolves_localized_attribute_only_name() {
+        let folders = vec![
+            role_folder("INBOX", None),
+            role_folder("Mail/Archiv", Some("archive")),
+        ];
+        assert_eq!(
+            cached_archive_folder_from_folders(folders, "INBOX"),
+            Some("Mail/Archiv".to_string())
+        );
+    }
+
+    #[test]
+    pub fn cached_archive_folder_accepts_gmail_all_attribute() {
+        // Gmail advertises All Mail as \All (recorded as "all"), and localized
+        // accounts defeat the name heuristic — the attribute alone must win.
+        let folders = vec![
+            role_folder("INBOX", None),
+            role_folder("[Gmail]/Alle Nachrichten", Some("all")),
+        ];
+        assert_eq!(
+            cached_archive_folder_from_folders(folders, "INBOX"),
+            Some("[Gmail]/Alle Nachrichten".to_string())
+        );
+    }
+
+    #[test]
+    pub fn cached_archive_folder_falls_back_to_name_heuristic() {
+        let folders = vec![role_folder("INBOX", None), role_folder("All Mail", None)];
+        assert_eq!(
+            cached_archive_folder_from_folders(folders, "INBOX"),
+            Some("All Mail".to_string())
         );
     }
 
