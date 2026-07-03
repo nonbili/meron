@@ -1,0 +1,4 @@
+- Show hovered link URLs
+- Add thread header copy actions
+- Use compact timestamps in mail UI
+- UI and performance fixes
