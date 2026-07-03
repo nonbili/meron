@@ -335,6 +335,12 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         return Err(format!("account needs reconnect: {account_id}"));
     }
     let creds_ms = started.elapsed().as_millis();
+    let is_inbox = folder.eq_ignore_ascii_case("INBOX");
+    let inbox_uid_next_before = if is_inbox {
+        crate::ffi::mobile_inbox_uid_next(data_dir, &account_id).unwrap_or(0)
+    } else {
+        0
+    };
 
     let folders_started = std::time::Instant::now();
     let folders_count = if sync_folders {
@@ -351,6 +357,12 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         limit,
     ))?;
     let messages_ms = messages_started.elapsed().as_millis();
+    let new_messages = if is_inbox {
+        let after = crate::ffi::mobile_inbox_uid_next(data_dir, &account_id).unwrap_or(0);
+        crate::ffi::mobile_new_messages_detail(data_dir, &account_id, inbox_uid_next_before, after)
+    } else {
+        None
+    };
     let resolved_sent = crate::engine::cached_sent_folder(&engine, &account_id, &folder);
     crate::mlog!(
         crate::log::Level::Info,
@@ -366,13 +378,17 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         limit,
         defer_tail,
     );
-    Ok(json!({
+    let mut response = json!({
         "ok": true,
         "account": account_id,
         "folder": folder,
         "synced": count,
         "folders": folders_count,
-    }))
+    });
+    if let Some(detail) = new_messages {
+        response["new_messages"] = detail;
+    }
+    Ok(response)
 }
 
 pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Value, String> {

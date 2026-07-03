@@ -73,18 +73,7 @@ class AndroidMailPushService :
         when (envelope.optString("event")) {
             "mail.newMessages" -> {
                 val detail = envelope.optJSONObject("detail") ?: return
-                if (!detail.optBoolean("muted")) {
-                    AndroidNotificationService.notifyNewMail(
-                        context = this,
-                        accountName = detail.optString("accountName"),
-                        from = detail.optString("from"),
-                        subject = detail.optString("subject"),
-                        count = detail.optInt("count", 1),
-                        accountId = detail.optString("account"),
-                        folder = detail.optString("folder"),
-                        threadKey = detail.optString("threadKey"),
-                    )
-                }
+                AndroidNotificationService.notifyNewMail(this, detail)
             }
         }
     }

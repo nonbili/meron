@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 
 object AndroidNotificationService {
     private const val CHANNEL_ID = "meron_sync"
@@ -61,6 +62,24 @@ object AndroidNotificationService {
         } catch (_: SecurityException) {
             // Notification permission can change after canNotify() checks it.
         }
+    }
+
+    /** Posts a new-mail notification from a `mail.newMessages`-shaped detail object; no-op when muted. */
+    fun notifyNewMail(
+        context: Context,
+        detail: JSONObject,
+    ) {
+        if (detail.optBoolean("muted")) return
+        notifyNewMail(
+            context = context,
+            accountName = detail.optString("accountName"),
+            from = detail.optString("from"),
+            subject = detail.optString("subject"),
+            count = detail.optInt("count", 1),
+            accountId = detail.optString("account"),
+            folder = detail.optString("folder"),
+            threadKey = detail.optString("threadKey"),
+        )
     }
 
     fun notifyNewMail(

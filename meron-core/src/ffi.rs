@@ -696,7 +696,6 @@ async fn mobile_idle_once(
 }
 
 async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> anyhow::Result<()> {
-    let before = mobile_inbox_uid_next(data_dir, account).unwrap_or(0);
     let data_dir_owned = data_dir.to_string();
     let account_owned = account.to_string();
     let folder_owned = folder.to_string();
@@ -714,24 +713,9 @@ async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> 
     .await?
     .map_err(|err| anyhow::anyhow!(err))?;
     let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
-    let after = mobile_inbox_uid_next(data_dir, account).unwrap_or(0);
 
-    if folder.eq_ignore_ascii_case("INBOX")
-        && let Some((count, latest)) = mobile_new_unread_summary(data_dir, account, before, after)
-    {
-        emit_event(
-            "mail.newMessages",
-            json!({
-                "account": account,
-                "accountName": mobile_account_label(data_dir, account),
-                "folder": "inbox",
-                "count": count,
-                "muted": mobile_account_muted(data_dir, account),
-                "from": display_from(&latest),
-                "subject": latest.subject,
-                "threadKey": latest.thread_key,
-            }),
-        );
+    if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
+        emit_event("mail.newMessages", detail.clone());
     } else {
         emit_event(
             "mail.synced",
@@ -741,7 +725,31 @@ async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> 
     Ok(())
 }
 
-fn mobile_inbox_uid_next(data_dir: &str, account: &str) -> Option<u32> {
+/// `mail.newMessages` detail for inbox messages that arrived between the two
+/// `uid_next` snapshots, or None when nothing new and unread did. Shared by the
+/// IDLE watch event and the `mail.sync` response so background workers — which
+/// have no live event listener — can notify from the response alone.
+pub(crate) fn mobile_new_messages_detail(
+    data_dir: &str,
+    account: &str,
+    uid_next_before: u32,
+    uid_next_after: u32,
+) -> Option<Value> {
+    let (count, latest) =
+        mobile_new_unread_summary(data_dir, account, uid_next_before, uid_next_after)?;
+    Some(json!({
+        "account": account,
+        "accountName": mobile_account_label(data_dir, account),
+        "folder": "inbox",
+        "count": count,
+        "muted": mobile_account_muted(data_dir, account),
+        "from": display_from(&latest),
+        "subject": latest.subject,
+        "threadKey": latest.thread_key,
+    }))
+}
+
+pub(crate) fn mobile_inbox_uid_next(data_dir: &str, account: &str) -> Option<u32> {
     let conn = mobile_db(data_dir).ok()?;
     crate::store::get_folder_state(&conn, account, "INBOX")
         .ok()

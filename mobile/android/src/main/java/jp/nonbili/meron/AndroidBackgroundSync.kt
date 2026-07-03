@@ -102,6 +102,9 @@ class AndroidBackgroundSyncWorker(
                 }
             } else {
                 refreshed += 1
+                syncResponse.optJSONObject("result")?.optJSONObject("new_messages")?.let { detail ->
+                    AndroidNotificationService.notifyNewMail(applicationContext, detail)
+                }
             }
         }
 
