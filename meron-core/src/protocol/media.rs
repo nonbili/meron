@@ -78,6 +78,15 @@ pub(crate) fn clear_mobile_storage_cache(data_dir: &str) -> Result<Value, String
     mobile_storage_usage(data_dir)
 }
 
+pub(crate) fn remove_mobile_account_media(data_dir: &str, account: &str) {
+    let root = Path::new(data_dir);
+    crate::parse::remove_account_media(&root.join("attachments"), account);
+    let account_dir = safe_media_segment(account);
+    for media_kind in ["avatars", "wallpapers"] {
+        let _ = std::fs::remove_dir_all(root.join("media").join(media_kind).join(&account_dir));
+    }
+}
+
 pub(crate) fn path_size_bytes(path: &Path) -> std::io::Result<u64> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,

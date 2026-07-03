@@ -26,7 +26,7 @@ use tokio::sync::Mutex;
 use meron_core::engine::*;
 use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
-use meron_core::{changelog, imap, rss, secrets, smtp, store};
+use meron_core::{changelog, imap, parse, rss, secrets, smtp, store};
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -1965,6 +1965,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 let db = engine.db.lock().unwrap();
                 store::delete_account(&db, &id)?;
             }
+            parse::remove_account_media(&parse::media_root(), &id);
             let _ = secrets::delete(&id);
             Ok(json!({ "ok": true }))
         }

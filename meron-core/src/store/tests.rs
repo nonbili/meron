@@ -953,6 +953,83 @@ fn concurrent_first_open_runs_migrations_once() {
 }
 
 #[test]
+fn delete_account_removes_account_scoped_state_only() {
+    let conn = test_conn();
+    for account in ["acct", "other"] {
+        conn.execute(
+            "INSERT INTO accounts(id, email) VALUES(?1, ?1)",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO folders(account, name) VALUES(?1, 'INBOX')",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages(account, folder, msg_id, uid) VALUES(?1, 'INBOX', '1', 1)",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO folder_state(account, folder, uid_next) VALUES(?1, 'INBOX', 2)",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO subscriptions(id, account, url, title) VALUES(?2, ?1, ?3, 'Feed')",
+            params![
+                account,
+                format!("feed-{account}"),
+                format!("https://{account}.example")
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO account_secrets(account_id, blob) VALUES(?1, 'secret')",
+            params![account],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO observed_mail_identities(account, identity, first_seen_at)
+             VALUES(?1, 'message-id:seen@example.com', 1)",
+            params![account],
+        )
+        .unwrap();
+    }
+
+    delete_account(&conn, "acct").unwrap();
+
+    for (table, column) in [
+        ("accounts", "id"),
+        ("folders", "account"),
+        ("messages", "account"),
+        ("folder_state", "account"),
+        ("subscriptions", "account"),
+        ("account_secrets", "account_id"),
+        ("observed_mail_identities", "account"),
+    ] {
+        let deleted_count: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = 'acct'"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(deleted_count, 0, "{table} retained deleted account rows");
+
+        let other_count: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = 'other'"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(other_count, 1, "{table} removed another account's row");
+    }
+}
+
+#[test]
 fn prefs_resolve_engine_default_and_persist_without_clobbering() {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch(db::ACCOUNTS_DDL).unwrap();

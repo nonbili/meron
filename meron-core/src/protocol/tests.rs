@@ -207,10 +207,8 @@ fn mobile_protocol_writes_account_media_files() {
     let avatar = invoke_mobile_protocol_json(&avatar_request, Some(data_dir_str));
     let avatar_url = avatar["result"]["url"].as_str().unwrap();
     assert!(avatar_url.starts_with("/media/avatars/"), "{avatar}");
-    assert!(
-        data_dir.join(avatar_url.trim_start_matches('/')).exists(),
-        "{avatar_url}"
-    );
+    let avatar_path = data_dir.join(avatar_url.trim_start_matches('/'));
+    assert!(avatar_path.exists(), "{avatar_url}");
 
     let wallpaper_request = format!(
         r#"{{"id":87,"method":"account.writeChatWallpaperFile","params":{{"id":"{email}","filename":"wallpaper.webp","mime":"image/webp","data":"d2FsbA=="}}}}"#
@@ -221,12 +219,14 @@ fn mobile_protocol_writes_account_media_files() {
         wallpaper_url.starts_with("/media/wallpapers/"),
         "{wallpaper}"
     );
-    assert!(
-        data_dir
-            .join(wallpaper_url.trim_start_matches('/'))
-            .exists(),
-        "{wallpaper_url}"
-    );
+    let wallpaper_path = data_dir.join(wallpaper_url.trim_start_matches('/'));
+    assert!(wallpaper_path.exists(), "{wallpaper_url}");
+
+    let attachment_dir = data_dir
+        .join("attachments")
+        .join(crate::parse::sanitize_segment(&email));
+    std::fs::create_dir_all(&attachment_dir).unwrap();
+    std::fs::write(attachment_dir.join("note.txt"), b"cached").unwrap();
 
     let set_wallpaper = format!(
         r#"{{"id":88,"method":"account.setChatWallpaper","params":{{"id":"{email}","wallpaper":{{"kind":"custom","url":"{wallpaper_url}"}}}}}}"#
@@ -245,6 +245,16 @@ fn mobile_protocol_writes_account_media_files() {
         listed["result"]["accounts"][0]["chat_wallpaper"]["url"],
         wallpaper_url
     );
+
+    let remove = format!(r#"{{"id":90,"method":"account.remove","params":{{"id":"{email}"}}}}"#);
+    assert!(
+        invoke_mobile_protocol_json(&remove, Some(data_dir_str))
+            .get("error")
+            .is_none()
+    );
+    assert!(!attachment_dir.exists());
+    assert!(!avatar_path.parent().unwrap().exists());
+    assert!(!wallpaper_path.parent().unwrap().exists());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

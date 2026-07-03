@@ -616,6 +616,15 @@ pub(crate) fn sanitize_segment(s: &str) -> String {
         .collect()
 }
 
+/// Best-effort removal of cached attachment/feed media for one account.
+pub fn remove_account_media(root: &Path, account: &str) {
+    let segment = sanitize_segment(account);
+    if segment.is_empty() {
+        return;
+    }
+    let _ = std::fs::remove_dir_all(root.join(segment));
+}
+
 pub fn html_to_text(html: &str) -> String {
     let options = ConversionOptions::builder()
         .extract_metadata(false)

@@ -70,6 +70,7 @@ pub(crate) fn remove_mobile_account(data_dir: &str, params: &Value) -> Result<Va
         store::delete_account(&conn, &id).map_err(|err| err.to_string())?;
         Ok(json!({ "ok": true }))
     })?;
+    remove_mobile_account_media(data_dir, &id);
     crate::ffi::evict_engine_account(&id);
     Ok(result)
 }
