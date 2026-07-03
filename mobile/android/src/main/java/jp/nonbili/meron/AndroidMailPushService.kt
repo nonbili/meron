@@ -174,7 +174,7 @@ class AndroidMailPushService :
         private fun foregroundNotification(context: Context): Notification =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_mail)
                 .setContentTitle("Meron live mail push")
                 .setContentText("Watching mail accounts for new messages")
                 .setContentIntent(AndroidNotificationService.openAppIntent(context))
