@@ -678,7 +678,8 @@ pub fn get_thread_headers(
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
     let mut stmt = conn.prepare(
-        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key FROM messages
+        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
+                json_extract(json, '$.in_reply_to') FROM messages
          WHERE account = ?1 AND folder = ?2 AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?3
          ORDER BY date ASC, uid ASC",
     )?;
@@ -696,6 +697,7 @@ pub fn get_thread_headers(
                 .get::<_, Option<String>>(7)?
                 .filter(|key| !key.is_empty())
                 .unwrap_or_else(|| format!("uid:{}", uid)),
+            in_reply_to: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
             folder: String::new(),
             ..Default::default()
         })
@@ -1070,7 +1072,8 @@ pub fn get_thread_headers_all_folders(
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
     let mut stmt = conn.prepare(
-        "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key
+        "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key,
+                json_extract(m.json, '$.in_reply_to')
          FROM messages m
          WHERE m.account = ?1 AND m.uid <> 0
            AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
@@ -1099,6 +1102,7 @@ pub fn get_thread_headers_all_folders(
                 .get::<_, Option<String>>(8)?
                 .filter(|key| !key.is_empty())
                 .unwrap_or_else(|| format!("uid:{uid}")),
+            in_reply_to: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
             ..Default::default()
         })
     })?;

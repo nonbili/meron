@@ -1383,6 +1383,7 @@ pub(crate) fn message_json(
         "cc": cached.map(|message| message.cc.as_str()).unwrap_or(""),
         "bcc": cached.map(|message| message.bcc.as_str()).unwrap_or(""),
         "message_id": cached.map(|message| message.message_id.as_str()).unwrap_or(""),
+        "in_reply_to": header.in_reply_to,
         "references": cached.map(|message| message.references.as_str()).unwrap_or(""),
         "subject": cached.map(|message| message.subject.as_str()).unwrap_or(header.subject.as_str()),
         "preview": cached.map(|message| message.preview.as_str()).unwrap_or(""),

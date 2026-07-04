@@ -4,13 +4,16 @@ import {
   activateConversationTab,
   closeMessageTab,
   compose$,
+  draftShouldOpenConversation,
   openDraftCompose,
+  openDraftConversationOrCompose,
   openMessageTab,
   openThreadTab,
   openThreadTabById,
 } from './compose'
 import { accounts$ } from './accounts'
 import { ui$ } from './ui'
+import { mail$ } from './mail'
 
 const message = (overrides: Partial<Message> = {}): Message => ({
   id: 'm1',
@@ -37,6 +40,11 @@ describe('openThreadTabById', () => {
     calls.length = 0
     compose$.tabs.set([])
     compose$.activeTab.set('')
+    compose$.conversationThread.set('')
+    mail$.messages.set([])
+    mail$.messagesCursor.set('')
+    mail$.messagesLoadingMore.set(false)
+    mail$.threadLoading.set(false)
     accounts$.set([
       {
         id: 'acc-notification',
@@ -197,6 +205,101 @@ describe('openThreadTabById', () => {
     expect(compose$.tabs.get()).toHaveLength(1)
     expect(compose$.activeTab.get()).toBe(firstTabId)
     expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
+  })
+
+  it('opens a Drafts row with a cached ancestor in the conversation view', async () => {
+    const ancestor = message({
+      id: 'acc-notification#INBOX#42#1',
+      folder_id: 'INBOX',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'you@example.com',
+      message_id: 'root@example.com',
+      subject: 'Thread subject',
+    })
+    const draft = message({
+      id: 'acc-notification#Drafts#42#99',
+      folder_id: 'Drafts',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'me@example.com',
+      to: 'you@example.com',
+      subject: 'Re: Thread subject',
+      body: 'draft reply',
+    })
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [ancestor, draft] }
+      return {}
+    }
+
+    const handled = await openDraftConversationOrCompose(draft)
+
+    expect(handled).toBe(true)
+    expect(compose$.tabs.get()).toHaveLength(0)
+    expect(compose$.activeTab.get()).toBe('')
+    expect(ui$.selectedThread.get()).toBe('acc-notification#Drafts#42')
+    expect(ui$.mobilePane.get()).toBe('conversation')
+    expect(mail$.messages.get()).toEqual([ancestor, draft])
+  })
+
+  it('opens a referenced Drafts row in the conversation view even without cached ancestors', async () => {
+    const draft = message({
+      id: 'acc-notification#Drafts#42#99',
+      folder_id: 'Drafts',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'me@example.com',
+      to: 'you@example.com',
+      subject: 'Re: Thread subject',
+      references: 'root@example.com',
+    })
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [draft] }
+      return {}
+    }
+
+    await openDraftConversationOrCompose(draft)
+
+    expect(compose$.tabs.get()).toHaveLength(0)
+    expect(ui$.selectedThread.get()).toBe('acc-notification#Drafts#42')
+    expect(mail$.messages.get()).toEqual([draft])
+  })
+
+  it('classifies standalone Drafts rows as composer-only', () => {
+    const draft = message({ folder_id: 'Drafts', references: '' })
+
+    expect(draftShouldOpenConversation([draft], draft)).toBe(false)
+  })
+
+  it('opens a standalone Drafts row through the shared helper as an editable compose tab', async () => {
+    const draft = message({
+      id: 'acc-notification#Drafts#42#99',
+      folder_id: 'Drafts',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'me@example.com',
+      to: 'you@example.com',
+      message_id: 'draft-id@example.com',
+      subject: 'Draft subject',
+      body: 'saved body',
+    })
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [draft] }
+      return {}
+    }
+
+    await openDraftConversationOrCompose(draft)
+
+    expect(compose$.tabs.get()).toHaveLength(1)
+    expect(compose$.activeTab.get()).toBe(compose$.tabs.get()[0].id)
+    expect(compose$.tabs.get()[0]).toMatchObject({
+      kind: 'compose',
+      subject: 'Draft subject',
+      compose: {
+        to: 'you@example.com',
+        text: 'saved body',
+        draftMessageId: 'draft-id@example.com',
+      },
+    })
   })
 })
 

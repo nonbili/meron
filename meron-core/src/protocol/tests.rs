@@ -1549,6 +1549,7 @@ fn mobile_protocol_thread_read_includes_cached_draft_reply() {
     assert_eq!(messages.len(), 2, "{read}");
     assert_eq!(messages[0]["message_id"], "root@mail.gmail.com");
     assert_eq!(messages[1]["message_id"], "draft-reply@mailo.com");
+    assert_eq!(messages[1]["in_reply_to"], "root@mail.gmail.com");
     assert_eq!(messages[1]["folder_id"], "Drafts");
     assert_eq!(messages[1]["body"], "draft reply");
 

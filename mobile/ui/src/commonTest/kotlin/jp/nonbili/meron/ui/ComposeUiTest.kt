@@ -1,6 +1,7 @@
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.DraftAttachment
+import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -164,6 +165,47 @@ class ComposeUiTest {
         assertTrue(updated.single().hasDraft)
     }
 
+    @Test
+    fun draftThreadWithCachedAncestorOpensConversation() {
+        val messages =
+            listOf(
+                messageBody(id = "m1", folderId = "INBOX"),
+                messageBody(id = "d1", folderId = "Drafts"),
+            )
+
+        assertTrue(draftThreadShouldOpenConversation(messages))
+    }
+
+    @Test
+    fun referencedDraftThreadOpensConversation() {
+        val messages =
+            listOf(
+                messageBody(id = "d1", folderId = "Drafts", references = "root@example.com"),
+            )
+
+        assertTrue(draftThreadShouldOpenConversation(messages))
+    }
+
+    @Test
+    fun inReplyToDraftThreadOpensConversation() {
+        val messages =
+            listOf(
+                messageBody(id = "d1", folderId = "Drafts", inReplyTo = "root@example.com"),
+            )
+
+        assertTrue(draftThreadShouldOpenConversation(messages))
+    }
+
+    @Test
+    fun standaloneDraftThreadOpensComposer() {
+        val messages =
+            listOf(
+                messageBody(id = "d1", folderId = "Drafts"),
+            )
+
+        assertFalse(draftThreadShouldOpenConversation(messages))
+    }
+
     private fun threadSummary(
         id: String,
         threadId: String = "",
@@ -175,5 +217,22 @@ class ComposeUiTest {
             subject = "Subject",
             sender = "sender@example.com",
             threadId = threadId,
+        )
+
+    private fun messageBody(
+        id: String,
+        folderId: String,
+        inReplyTo: String = "",
+        references: String = "",
+    ): MessageBody =
+        MessageBody(
+            id = id,
+            folderId = folderId,
+            from = "sender@example.com",
+            to = "me@example.com",
+            subject = "Subject",
+            body = "Body",
+            inReplyTo = inReplyTo,
+            references = references,
         )
 }

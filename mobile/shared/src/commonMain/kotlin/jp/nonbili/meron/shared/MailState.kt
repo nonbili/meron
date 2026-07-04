@@ -123,6 +123,7 @@ data class MessageBody(
     val fromAddr: String = "",
     val replyTo: String = "",
     val messageId: String = "",
+    val inReplyTo: String = "",
     val references: String = "",
     val unread: Boolean = false,
     // Sent by this account, classified by the core (own address or Sent-folder

@@ -694,6 +694,10 @@ internal fun MeronMobileState.openDraftCompose(
     }
 }
 
+internal fun draftThreadShouldOpenConversation(messages: List<MessageBody>): Boolean =
+    messages.any { it.folderId.isNotBlank() && !folderIsDrafts(it.folderId) } ||
+        messages.any { folderIsDrafts(it.folderId) && (it.references.isNotBlank() || it.inReplyTo.isNotBlank()) }
+
 internal fun MeronMobileState.readCoreThread(
     thread: ThreadSummary,
     sourceFolder: String = thread.folder,
@@ -704,14 +708,14 @@ internal fun MeronMobileState.readCoreThread(
     }
     val backendThreadId = thread.backendThreadId()
     val returnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
-    val opensDraftComposer = !threadIdIsRss(backendThreadId) && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))
+    val readsDraftThread = !threadIdIsRss(backendThreadId) && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))
     val selectedThread = if (sourceFolder.isNotBlank() && sourceFolder != thread.folder) thread.copy(folder = sourceFolder) else thread
     selectedCoreThread = selectedThread
     messages = emptyList()
     messageCursor = ""
     loadingMoreMessages = false
     previousTopScreen = returnScreen
-    if (!opensDraftComposer) {
+    if (!readsDraftThread) {
         screen = Screen.Thread
     }
     // Nothing is marked read on open: messages are marked incrementally as the
@@ -731,9 +735,16 @@ internal fun MeronMobileState.readCoreThread(
             val page = parseThreadReadPage(it)
             messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
-            if (opensDraftComposer) {
-                page.messages.lastOrNull()?.let { message ->
-                    openDraftCompose(message, selectedThread, returnScreen = returnScreen)
+            if (readsDraftThread) {
+                val draftMessage =
+                    page.messages.lastOrNull { message -> folderIsDrafts(message.folderId) }
+                        ?: page.messages.lastOrNull()
+                if (draftThreadShouldOpenConversation(page.messages)) {
+                    screen = Screen.Thread
+                } else {
+                    draftMessage?.let { message ->
+                        openDraftCompose(message, selectedThread, returnScreen = returnScreen)
+                    }
                 }
             }
         }.onFailure {

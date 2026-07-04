@@ -4,7 +4,13 @@ import { Search, X, Plus, ChevronLeft, SquarePen, MoreHorizontal } from 'lucide-
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { openAddFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
-import { openComposeTab, openThreadTab, openMessageTab, openDraftCompose, compose$ } from '../../states/compose'
+import {
+  openComposeTab,
+  openThreadTab,
+  openMessageTab,
+  openDraftConversationOrCompose,
+  compose$,
+} from '../../states/compose'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
   clearBulkSelection,
@@ -346,9 +352,9 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     }
                     clearBulkSelection()
                     if (!isStarredView && isDraftFolder(thread.folder_id, thread.account_id)) {
-                      void openDraftCompose(thread)
                       ui$.selectedThread.set(thread.thread_id)
                       ui$.mobilePane.set('conversation')
+                      void openDraftConversationOrCompose(thread)
                       return
                     }
                     if (isStarredView) {

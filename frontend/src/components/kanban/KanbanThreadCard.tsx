@@ -4,7 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'
 import { toggleBulkSelection, ui$, type BulkSelectionItem } from '../../states/ui'
-import { compose$, openMessageTab, openDraftCompose } from '../../states/compose'
+import { compose$, openMessageTab, openDraftConversationOrCompose } from '../../states/compose'
 import { isDraftFolder } from '../../states/mail'
 import { thread$ } from '../../states/thread'
 import { kanbanBoardColumnKey, kanban$, type KanbanColumn } from '../../states/kanban'
@@ -95,13 +95,13 @@ export function KanbanThreadCard({
             return
           }
           onBulkPlainSelect?.()
-          // A draft card opens the full composer rather than a read-only pane.
+          // Draft replies open in context; standalone drafts resume in composer.
           if (!starredColumn && isDraftFolder(thread.folder_id, thread.account_id)) {
-            void openDraftCompose(thread)
             ui$.selectedThread.set(thread.thread_id)
             kanban$.paneThreadId.set(thread.thread_id)
             kanban$.paneColumnKey.set(kanbanBoardColumnKey(boardId, column))
             ui$.mobilePane.set('conversation')
+            void openDraftConversationOrCompose(thread)
             return
           }
           if (starredColumn) {

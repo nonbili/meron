@@ -600,6 +600,27 @@ function activateOpenDraftCompose(draft: Message): boolean {
   return true
 }
 
+export function draftShouldOpenConversation(messages: Message[], draft: Message): boolean {
+  return (
+    messages.some((message) => !isDraftFolder(message.folder_id, message.account_id)) ||
+    !!draft.references?.trim() ||
+    !!draft.original_thread_id?.trim()
+  )
+}
+
+async function openDraftMessageInCompose(draft: Message) {
+  if (activateOpenDraftCompose(draft)) return true
+  const id = openComposeTab(composeFromDraftMessage(draft))
+  if (!id) return true
+
+  const valid = await readComposerAttachments(draft.attachments ?? [], draft.body_html ?? '')
+  if (valid.length > 0) {
+    const tab = compose$.tabs.get().find((t) => t.id === id)
+    if (tab?.compose) updateComposeDraft(id, { attachments: [...tab.compose.attachments, ...valid] })
+  }
+  return true
+}
+
 // Restore a saved server-side Drafts row into the full composer. Drafts are
 // stored as normal IMAP messages, but clicking one should resume editing rather
 // than open a read-only conversation.
@@ -618,15 +639,39 @@ export async function openDraftCompose(thread: Message) {
       newestMessage(
         (result.messages ?? []).filter((message) => isDraftFolder(message.folder_id, message.account_id)),
       ) ?? thread
-    if (activateOpenDraftCompose(draft)) return true
-    const id = openComposeTab(composeFromDraftMessage(draft))
-    if (!id) return true
+    await openDraftMessageInCompose(draft)
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : "Couldn't open draft", 'error')
+  }
+  return true
+}
 
-    const valid = await readComposerAttachments(draft.attachments ?? [], draft.body_html ?? '')
-    if (valid.length > 0) {
-      const tab = compose$.tabs.get().find((t) => t.id === id)
-      if (tab?.compose) updateComposeDraft(id, { attachments: [...tab.compose.attachments, ...valid] })
+export async function openDraftConversationOrCompose(thread: Message) {
+  if (!isDraftFolder(thread.folder_id, thread.account_id)) return false
+
+  try {
+    const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
+    const messages = result.messages ?? []
+    const draft = newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread
+
+    if (draftShouldOpenConversation(messages, draft)) {
+      compose$.activeTab.set('')
+      ui$.selectedThread.set(thread.thread_id)
+      ui$.mobilePane.set('conversation')
+      if (ui$.selectedThread.peek() === thread.thread_id) {
+        mail$.messages.set(messages)
+        mail$.messagesCursor.set('')
+        mail$.messagesLoadingMore.set(false)
+        mail$.threadLoading.set(false)
+      }
+      return true
     }
+
+    if (accounts$.get().filter(isSendableAccount).length === 0) {
+      showToast('Add a mail account before composing')
+      return true
+    }
+    await openDraftMessageInCompose(draft)
   } catch (error) {
     showToast(error instanceof Error ? error.message : "Couldn't open draft", 'error')
   }

@@ -219,6 +219,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 fromAddr = fromAddr,
                 replyTo = item.findJsonStringProperty("reply_to").orEmpty(),
                 messageId = item.findJsonStringProperty("message_id").orEmpty(),
+                inReplyTo = item.findJsonStringProperty("in_reply_to").orEmpty(),
                 references = item.findJsonStringProperty("references").orEmpty(),
                 unread = item.findJsonBooleanProperty("unread") ?: false,
                 outgoing = item.findJsonBooleanProperty("outgoing") ?: false,
