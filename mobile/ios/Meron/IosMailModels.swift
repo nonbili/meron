@@ -352,6 +352,7 @@ extension ThreadSummary {
             preview: preview,
             unread: unread,
             starred: starred,
+            hasDraft: hasDraft,
             dateEpochSeconds: dateEpochSeconds,
             feedUrl: feedUrl,
             threadId: threadId
@@ -368,6 +369,7 @@ extension ThreadSummary {
             preview: preview,
             unread: nextUnread ?? unread,
             starred: nextStarred ?? starred,
+            hasDraft: hasDraft,
             dateEpochSeconds: dateEpochSeconds,
             feedUrl: feedUrl,
             threadId: threadId
@@ -445,8 +447,10 @@ extension MessageBody {
             fromAddr: fromAddr,
             replyTo: replyTo,
             messageId: messageId,
+            inReplyTo: inReplyTo,
             references: references,
             unread: nextUnread ?? unread,
+            outgoing: outgoing,
             starred: nextStarred ?? starred,
             hasAttachments: hasAttachments,
             bodyMissing: bodyMissing,
