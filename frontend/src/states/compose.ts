@@ -3,7 +3,7 @@ import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, Me
 import { invoke } from '../lib/bridge'
 import { ui$, showToast } from './ui'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
-import { mail$, getActiveThread, isDraftFolder, loadThread } from './mail'
+import { mail$, getActiveThread, isDraftFolder, loadThread, discardSavedDraftCopy } from './mail'
 import { LOCAL_SEND_PREFIX, type PendingSend, setPendingSend, getPendingSend, discardPendingSend } from './pendingSends'
 import { htmlToText } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
@@ -186,6 +186,13 @@ export const compose$ = observable({
   // selectedThread; persisted to localStorage so a crash or restart doesn't
   // lose an in-progress reply.
   quickDrafts: initialDrafts.quick as Record<string, string>,
+  // Server-side draft backing the active thread's quick reply, shared with the
+  // full composer's saveDraft/discardDraft mechanism (mail.saveDraft/
+  // mail.discardDraft) rather than a separate persistence path. Reset on
+  // thread switch; re-derived from the thread's tail message when it's a
+  // saved draft (see hydrateQuickReplyFromTailDraft below).
+  quickReplyDraftId: '',
+  quickReplyDraftSaved: false,
 })
 
 // While the Current conversation tab is active (activeTab ""), mirror every
@@ -313,6 +320,132 @@ export function clearQuickDraft(threadId: string) {
     // ignore
   }
 }
+
+// Save the active thread's quick reply as a real server-side draft, reusing
+// the full composer's saveDraft RPC (saveComposedDraft/mail.saveDraft) rather
+// than a separate persistence path. No-op when there's nothing to save or no
+// sendable account. The draft id is minted once and reused across autosaves
+// so the server-side copy is replaced, not duplicated.
+export async function saveQuickReplyDraft() {
+  const activeT = getActiveThread()
+  if (!activeT) return
+  const text = compose$.composer.peek()
+  const attachments = compose$.composerAttachments.peek()
+  if (!text.trim() && attachments.length === 0) return
+
+  const replyAccountId = activeT.account_id || ui$.selectedAccount.peek()
+  if (!replyAccountId || replyAccountId === 'unified') return
+  const accounts = accounts$.peek()
+  const activeAcc = accounts.find((acc) => acc.id === replyAccountId) || accounts[0] || null
+  if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss') return
+
+  const target = pickReplyTarget(activeT)
+  const ownAddrs = ownAddressSet(accounts)
+  const { to, cc } = buildReplyRecipients(target, ownAddrs)
+  const { in_reply_to, references } = buildReplyThreading(target)
+  const fromEmail = activeAcc ? detectAliasFrom(target, activeAcc) : ''
+  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  const draftId = compose$.quickReplyDraftId.peek() || newDraftMessageId()
+  compose$.quickReplyDraftId.set(draftId)
+
+  try {
+    await saveComposedDraft({
+      accountId: replyAccountId,
+      from: fromEmail,
+      to,
+      cc,
+      subject,
+      rich: false,
+      content: text,
+      inReplyTo: in_reply_to,
+      references,
+      draftMessageId: draftId,
+      attachments,
+    })
+    compose$.quickReplyDraftSaved.set(true)
+  } catch (error) {
+    console.error('Quick reply draft autosave failed:', error)
+  }
+}
+
+// Discard the quick reply's server-side draft once the user has cleared the
+// text/attachments back to blank, mirroring the full composer's discard flow.
+export async function discardQuickReplyDraftIfEmpty() {
+  const text = compose$.composer.peek()
+  const attachments = compose$.composerAttachments.peek()
+  if (text.trim() || attachments.length > 0) return
+  if (!compose$.quickReplyDraftSaved.peek()) return
+  const draftId = compose$.quickReplyDraftId.peek()
+  if (!draftId) return
+  const activeT = getActiveThread()
+
+  compose$.quickReplyDraftId.set('')
+  compose$.quickReplyDraftSaved.set(false)
+  await discardSavedDraftCopy({
+    threadId: '',
+    messageId: '',
+    folderId: '',
+    accountId: activeT?.account_id,
+    draftMessageId: draftId,
+  })
+}
+
+let quickReplyDraftSaveTimer: ReturnType<typeof setTimeout> | null = null
+const QUICK_REPLY_DRAFT_SAVE_DELAY_MS = 1200
+
+/** Debounced counterpart to persistQuickDraft's localStorage cache: after the
+ * user stops typing, save (or discard, if now empty) the real server draft. */
+export function scheduleQuickReplyDraftSave() {
+  if (quickReplyDraftSaveTimer) clearTimeout(quickReplyDraftSaveTimer)
+  quickReplyDraftSaveTimer = setTimeout(() => {
+    quickReplyDraftSaveTimer = null
+    const text = compose$.composer.peek()
+    const attachments = compose$.composerAttachments.peek()
+    if (!text.trim() && attachments.length === 0) {
+      void discardQuickReplyDraftIfEmpty()
+    } else {
+      void saveQuickReplyDraft()
+    }
+  }, QUICK_REPLY_DRAFT_SAVE_DELAY_MS)
+}
+
+/** Cancel any pending debounced draft save — used when a send, thread switch,
+ * or escalation to the full editor should preempt it. */
+export function cancelQuickReplyDraftSave() {
+  if (quickReplyDraftSaveTimer) {
+    clearTimeout(quickReplyDraftSaveTimer)
+    quickReplyDraftSaveTimer = null
+  }
+}
+
+// Pre-fills the quick reply with an already-saved draft sitting at the tail of
+// the active thread, so the user can continue and send it inline instead of
+// being forced into the full editor. No-op when the tail message isn't a
+// draft, or is already the one loaded.
+function hydrateQuickReplyFromTailDraft(messages: Message[]) {
+  const activeThreadId = ui$.selectedThread.peek()
+  if (!activeThreadId) return
+  const inThread = messages.filter((message) => message.thread_id === activeThreadId)
+  const tail = newestMessage(inThread)
+  if (!tail || !isDraftFolder(tail.folder_id, tail.account_id)) return
+  const tailDraftId = tail.message_id || tail.id
+  if (compose$.quickReplyDraftId.peek() === tailDraftId) return
+
+  compose$.composer.set(tail.body ?? '')
+  compose$.composerAttachments.set([])
+  compose$.quickReplyDraftId.set(tailDraftId)
+  compose$.quickReplyDraftSaved.set(true)
+
+  if (tail.has_attachments) {
+    void readComposerAttachments(tail.attachments ?? [], tail.body_html ?? '').then((valid) => {
+      if (ui$.selectedThread.peek() === activeThreadId && compose$.quickReplyDraftId.peek() === tailDraftId) {
+        compose$.composerAttachments.set(valid)
+      }
+    })
+  }
+}
+
+mail$.messages.onChange(({ value }) => hydrateQuickReplyFromTailDraft(value))
 
 // Open a single message in its own reader tab. The HTML is already on the
 // message (shipped with threadRead), so this is instant — no fetch. Re-opening
@@ -477,6 +610,11 @@ export function openReplyInFullEditor() {
   const { to, cc } = buildReplyRecipients(target, ownAddrs)
   const { in_reply_to, references } = buildReplyThreading(target)
   const replyAcc = accounts.find((acc) => acc.id === t.account_id)
+  // Hand off any draft already saved for this quick reply so the full editor
+  // continues editing the same server-side draft instead of creating a
+  // duplicate one.
+  const existingDraftId = compose$.quickReplyDraftSaved.peek() ? compose$.quickReplyDraftId.peek() : undefined
+  cancelQuickReplyDraftSave()
   openComposeTab({
     accountId: t.account_id || undefined,
     fromEmail: replyAcc ? detectAliasFrom(target, replyAcc) : '',
@@ -488,11 +626,14 @@ export function openReplyInFullEditor() {
     attachments: compose$.composerAttachments.get(),
     inReplyTo: in_reply_to,
     references,
+    draftMessageId: existingDraftId,
     title: subject,
     threadId: t.thread_id,
   })
   compose$.composer.set('')
   compose$.composerAttachments.set([])
+  compose$.quickReplyDraftId.set('')
+  compose$.quickReplyDraftSaved.set(false)
 }
 
 export function openMailtoCompose(raw: string) {
@@ -1096,12 +1237,30 @@ export async function sendReply() {
   mail$.messages.push(sent)
   // Clear the composer optimistically. On failure the message stays in the pane
   // with a "failed" status (retry from the bubble or delete from the context
-  // menu), so we don't restore the draft.
+  // menu), so we don't restore the draft. Retry replays the stored PendingSend
+  // payload above, not the (now-cleared) composer text, so clearing here
+  // doesn't affect retry.
+  const savedDraftId = compose$.quickReplyDraftSaved.peek() ? compose$.quickReplyDraftId.peek() : ''
+  cancelQuickReplyDraftSave()
   compose$.composer.set('')
   compose$.composerAttachments.set([])
+  compose$.quickReplyDraftId.set('')
+  compose$.quickReplyDraftSaved.set(false)
   clearQuickDraft(activeT.thread_id)
 
   await dispatchSend(tempId)
+  // Discard the now-obsolete draft only once the send actually succeeded
+  // (dispatchSend drops the pending payload on success, keeps it on failure —
+  // a failed send should leave the draft in place as a safety net).
+  if (savedDraftId && !getPendingSend(tempId)) {
+    void discardSavedDraftCopy({
+      threadId: '',
+      messageId: '',
+      folderId: '',
+      accountId: replyAccountId,
+      draftMessageId: savedDraftId,
+    })
+  }
 }
 
 // Set the send lifecycle status on the optimistic message with the given id.

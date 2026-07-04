@@ -61,6 +61,8 @@ export function MessagePane() {
   // Ring-highlight for a message jumped to from the starred list; shares the
   // search-match ring styling in ConversationMessageList.
   const flashMessageId = useValue(thread$.flashMessageId)
+  const quickReplyDraftId = useValue(compose$.quickReplyDraftId)
+  const quickReplyDraftSaved = useValue(compose$.quickReplyDraftSaved)
   const tabs = useValue(compose$.tabs)
   const activeTab = useValue(compose$.activeTab)
   const activeTabData = tabs.find((tab) => tab.id === activeTab) ?? null
@@ -83,6 +85,17 @@ export function MessagePane() {
   // active thread, so re-reads of the open thread (sync refresh) don't flash.
   const showThreadLoading = threadLoading && !messages.some((message) => message.thread_id === activeThreadId)
   const unreadKey = messages.map((message) => `${message.id}:${message.unread ? '1' : '0'}`).join('|')
+  // Hide the tail draft message from the rendered conversation once quick
+  // reply has hydrated its content for inline editing — otherwise the same
+  // draft text would appear twice (as a bubble and pre-filled in the reply
+  // bar). Older draft messages elsewhere in the thread's history stay visible.
+  const displayMessages = useMemo(() => {
+    if (!quickReplyDraftSaved || !quickReplyDraftId) return messages
+    const tail = messages[messages.length - 1]
+    if (!tail) return messages
+    const tailId = tail.message_id || tail.id
+    return tailId === quickReplyDraftId ? messages.slice(0, -1) : messages
+  }, [messages, quickReplyDraftId, quickReplyDraftSaved])
 
   const accountConversationMode: ConversationMode = (activeAccount?.conversation_html ?? true) ? 'html' : 'plain'
   const conversationMode: ConversationMode = activeAccount
@@ -231,7 +244,7 @@ export function MessagePane() {
       )}
 
       <ConversationMessageList
-        messages={messages}
+        messages={displayMessages}
         showThreadLoading={showThreadLoading}
         messagesCursor={messagesCursor}
         messagesLoadingMore={messagesLoadingMore}

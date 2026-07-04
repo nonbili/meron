@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { compose$, persistQuickDraft, readQuickDraft, sendReply } from '../../states/compose'
+import {
+  cancelQuickReplyDraftSave,
+  compose$,
+  discardQuickReplyDraftIfEmpty,
+  persistQuickDraft,
+  readQuickDraft,
+  saveQuickReplyDraft,
+  scheduleQuickReplyDraftSave,
+  sendReply,
+} from '../../states/compose'
 import { getActiveThread } from '../../states/mail'
 import { showToast, ui$ } from '../../states/ui'
 import { settings$, isSendKey } from '../../states/settings'
@@ -65,6 +74,11 @@ export function useQuickReply() {
   // Hydrate the textarea with the per-thread saved draft when the user switches
   // threads. Runs only on threadId change, not on every composer keystroke — so
   // the synchronous typing path never has the value yanked out from under it.
+  // The server-side quick-reply draft (quickReplyDraftId/Saved) is reset here
+  // too — any pending debounced save for the outgoing thread is dropped rather
+  // than flushed (mirrors the mobile app's behavior), and the incoming
+  // thread's own saved draft (if its tail message is one) is re-hydrated
+  // separately by hydrateQuickReplyFromTailDraft once its messages load.
   useEffect(() => {
     const previous = lastHydratedThreadRef.current
     if (previous === activeThreadId) return
@@ -73,9 +87,12 @@ export function useQuickReply() {
       // we overwrite `composer` for the new thread.
       persistQuickDraft(previous, compose$.composer.peek())
     }
+    cancelQuickReplyDraftSave()
     lastHydratedThreadRef.current = activeThreadId
     const saved = activeThreadId ? readQuickDraft(activeThreadId) : ''
     compose$.composer.set(saved)
+    compose$.quickReplyDraftId.set('')
+    compose$.quickReplyDraftSaved.set(false)
   }, [activeThreadId])
 
   // Persist the current draft on every text change. Keyed on `composer` only
@@ -85,7 +102,23 @@ export function useQuickReply() {
     const owner = lastHydratedThreadRef.current
     if (!owner) return
     persistQuickDraft(owner, composer)
+    scheduleQuickReplyDraftSave()
   }, [composer])
+
+  // Attachments are a discrete action rather than a keystroke stream, so save
+  // (or discard, if that was the last thing keeping the draft non-empty)
+  // immediately instead of waiting out the debounce.
+  useEffect(() => {
+    const owner = lastHydratedThreadRef.current
+    if (!owner) return
+    cancelQuickReplyDraftSave()
+    if (!composer.trim() && composerAttachments.length === 0) {
+      void discardQuickReplyDraftIfEmpty()
+    } else {
+      void saveQuickReplyDraft()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerAttachments])
 
   const addAttachmentFiles = (files: ArrayLike<File>) => {
     logComposerPaste(

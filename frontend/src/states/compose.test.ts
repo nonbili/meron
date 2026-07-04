@@ -4,12 +4,15 @@ import {
   activateConversationTab,
   closeMessageTab,
   compose$,
+  discardQuickReplyDraftIfEmpty,
   draftShouldOpenConversation,
   openDraftCompose,
   openDraftConversationOrCompose,
   openMessageTab,
+  openReplyInFullEditor,
   openThreadTab,
   openThreadTabById,
+  saveQuickReplyDraft,
 } from './compose'
 import { accounts$ } from './accounts'
 import { ui$ } from './ui'
@@ -398,5 +401,173 @@ describe('tab navigation', () => {
     expect(compose$.activeTab.get()).toBe('')
     expect(ui$.selectedThread.get()).toBe('t-current')
     expect(compose$.tabs.get()).toHaveLength(0)
+  })
+})
+
+describe('quick reply draft sharing', () => {
+  const calls: { command: string; payload: unknown }[] = []
+
+  beforeEach(() => {
+    calls.length = 0
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    compose$.composer.set('')
+    compose$.composerAttachments.set([])
+    compose$.quickReplyDraftId.set('')
+    compose$.quickReplyDraftSaved.set(false)
+    mail$.messages.set([])
+    mail$.threads.set([])
+    mail$.folders.set([])
+    mail$.foldersByAccount.set({})
+    ui$.selectedThread.set('')
+    ui$.selectedAccount.set('acc-1')
+    accounts$.set([
+      {
+        id: 'acc-1',
+        email: 'me@example.com',
+        display_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            return {}
+          },
+        },
+      },
+    }
+  })
+
+  it('saves the quick reply as a server draft and reuses the same id across autosaves', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Hello there')
+
+    await saveQuickReplyDraft()
+
+    expect(calls.filter((c) => c.command === 'mail.saveDraft')).toHaveLength(1)
+    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
+    const firstDraftId = compose$.quickReplyDraftId.get()
+    expect(firstDraftId).toBeTruthy()
+
+    compose$.composer.set('Hello there, updated')
+    await saveQuickReplyDraft()
+
+    const saveCalls = calls.filter((c) => c.command === 'mail.saveDraft')
+    expect(saveCalls).toHaveLength(2)
+    expect(compose$.quickReplyDraftId.get()).toBe(firstDraftId)
+    expect((saveCalls[1].payload as { draft_id: string }).draft_id).toBe(firstDraftId)
+  })
+
+  it('does nothing when there is no active thread or the composer is empty', async () => {
+    await saveQuickReplyDraft()
+    expect(calls.some((c) => c.command === 'mail.saveDraft')).toBe(false)
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('discards the quick reply draft once cleared back to blank', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Hello there')
+    await saveQuickReplyDraft()
+    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
+
+    compose$.composer.set('')
+    await discardQuickReplyDraftIfEmpty()
+
+    expect(calls.some((c) => c.command === 'mail.discardDraft')).toBe(true)
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('does nothing when there is no saved draft to discard', async () => {
+    await discardQuickReplyDraftIfEmpty()
+    expect(calls.some((c) => c.command === 'mail.discardDraft')).toBe(false)
+  })
+
+  it('hydrates the quick reply from a saved draft at the tail of the conversation', () => {
+    ui$.selectedThread.set('t-2')
+    const ancestor = message({
+      id: 'm1',
+      thread_id: 't-2',
+      folder_id: 'INBOX',
+      date: 1000,
+    })
+    const draft = message({
+      id: 'd1',
+      thread_id: 't-2',
+      folder_id: 'Drafts',
+      message_id: 'draft-1@example.com',
+      body: 'saved draft body',
+      date: 2000,
+    })
+
+    mail$.messages.set([ancestor, draft])
+
+    expect(compose$.composer.get()).toBe('saved draft body')
+    expect(compose$.quickReplyDraftId.get()).toBe('draft-1@example.com')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
+  })
+
+  it('does not hydrate when the tail message is not a draft', () => {
+    ui$.selectedThread.set('t-3')
+    compose$.composer.set('unrelated text')
+    const onlyMessage = message({ id: 'm1', thread_id: 't-3', folder_id: 'INBOX', date: 1000 })
+
+    mail$.messages.set([onlyMessage])
+
+    expect(compose$.composer.get()).toBe('unrelated text')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('hands off the saved quick reply draft id when escalating to the full editor', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Hello there')
+    await saveQuickReplyDraft()
+    const draftId = compose$.quickReplyDraftId.get()
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()).toHaveLength(1)
+    expect(compose$.tabs.get()[0].compose?.draftMessageId).toBe(draftId)
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
   })
 })
