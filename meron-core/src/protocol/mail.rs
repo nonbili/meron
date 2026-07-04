@@ -492,7 +492,10 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
     };
     with_mobile_db(data_dir, |conn| {
         store::apply_card_identity(&conn, &account_id, &folder_id, &mut messages);
-        let threads = thread_cards_json(&account_id, &folder_id, messages);
+        let draft_thread_keys =
+            store::draft_thread_keys(&conn, &account_id).map_err(|err| err.to_string())?;
+        let threads =
+            thread_cards_json_with_drafts(&account_id, &folder_id, messages, &draft_thread_keys);
         let mut out = json!({ "threads": threads });
         if let Some(cursor) = next_cursor {
             out.as_object_mut()
@@ -1229,12 +1232,13 @@ pub(crate) fn parse_mail_cursor(cursor: &str) -> Option<(i64, u32)> {
     Some((parts[1].parse().ok()?, parts[2].parse().ok()?))
 }
 
-pub(crate) fn thread_cards_json(
+pub(crate) fn thread_cards_json_with_drafts(
     account_id: &str,
     folder_id: &str,
     messages: Vec<MessageHeader>,
+    draft_thread_keys: &std::collections::HashSet<String>,
 ) -> Vec<Value> {
-    store::group_thread_cards(messages, folder_id)
+    store::group_thread_cards_with_drafts(messages, folder_id, draft_thread_keys)
         .into_iter()
         .map(|card| {
             let folder = card.header.folder.as_str();
@@ -1259,6 +1263,7 @@ pub(crate) fn thread_cards_json(
                 "unread": card.unread_count > 0,
                 "unread_count": card.unread_count,
                 "starred": card.header.starred,
+                "has_draft": card.has_draft,
                 "has_attachments": false,
                 "recipient_overflow": card.header.recipient_overflow,
             })

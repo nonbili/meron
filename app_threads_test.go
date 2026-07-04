@@ -39,6 +39,7 @@ func TestThreadsJSONMapsCardsAndMintsIDs(t *testing.T) {
 				"unread":              true,
 				"unread_count":        float64(2),
 				"starred":             true,
+				"has_draft":           true,
 				"recipient_overflow":  float64(1),
 			},
 			map[string]any{
@@ -66,6 +67,9 @@ func TestThreadsJSONMapsCardsAndMintsIDs(t *testing.T) {
 	}
 	if !branch.Unread || branch.UnreadCount != 2 || !branch.Starred {
 		t.Errorf("flag fields not mapped: %#v", branch)
+	}
+	if !branch.HasDraft {
+		t.Errorf("HasDraft = false, want true: %#v", branch)
 	}
 
 	atomic := byID[formatImapThreadID("acc", "INBOX", "gmthrid:123")]

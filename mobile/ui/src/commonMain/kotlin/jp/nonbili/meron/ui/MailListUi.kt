@@ -601,6 +601,7 @@ internal fun MailRow(
     val unread = thread.unread
     val chat = LocalChatColors.current
     val senderLabel = thread.sender.ifBlank { thread.accountId }
+    val hasDraft = thread.hasDraft || folderIsDrafts(thread.folder)
     val rowSurface = MaterialTheme.colorScheme.surface
     val rowBackground =
         when {
@@ -681,6 +682,17 @@ internal fun MailRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(
                     buildAnnotatedString {
+                        if (hasDraft) {
+                            withStyle(
+                                SpanStyle(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                            ) {
+                                append(tr("chat.draft"))
+                                append(" ")
+                            }
+                        }
                         withStyle(
                             SpanStyle(
                                 color = MaterialTheme.colorScheme.onSurface,

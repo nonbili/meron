@@ -37,6 +37,7 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<()> {
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::imap::{Folder, MessageHeader};
@@ -702,6 +703,30 @@ pub fn get_thread_headers(
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+pub fn draft_thread_keys(conn: &Connection, account: &str) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid), m.folder, f.special_use
+           FROM messages m
+           LEFT JOIN folders f ON f.account = m.account AND f.name = m.folder
+          WHERE m.account = ?1 AND m.uid <> 0",
+    )?;
+    let rows = stmt.query_map(params![account], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
+    })?;
+    let mut out = HashSet::new();
+    for row in rows {
+        let (thread_key, folder, special_use) = row?;
+        if classify_folder_role(&folder, special_use.as_deref()) == "drafts" {
+            out.insert(thread_key);
+        }
+    }
+    Ok(out)
+}
+
 pub fn resolve_message_uids(
     conn: &Connection,
     account: &str,
@@ -730,9 +755,18 @@ pub struct ThreadCard {
     pub original_thread_key: Option<String>,
     pub header: MessageHeader,
     pub unread_count: u32,
+    pub has_draft: bool,
 }
 
 pub fn group_thread_cards(messages: Vec<MessageHeader>, default_folder: &str) -> Vec<ThreadCard> {
+    group_thread_cards_with_drafts(messages, default_folder, &HashSet::new())
+}
+
+pub fn group_thread_cards_with_drafts(
+    messages: Vec<MessageHeader>,
+    default_folder: &str,
+    draft_thread_keys: &HashSet<String>,
+) -> Vec<ThreadCard> {
     use std::collections::HashMap;
 
     #[derive(Default)]
@@ -796,6 +830,7 @@ pub fn group_thread_cards(messages: Vec<MessageHeader>, default_folder: &str) ->
                 original_thread_key,
                 header,
                 unread_count: 0,
+                has_draft: draft_thread_keys.contains(&base_key),
             }
         });
         if !message.seen {

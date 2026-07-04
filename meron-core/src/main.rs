@@ -1160,30 +1160,40 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 &mut messages,
             );
             if before_cursor.is_none() && filter != "starred" && query.is_empty() && refresh {
-                spawn_message_sync(engine.clone(), out.clone(), account, folder.clone(), limit);
+                spawn_message_sync(
+                    engine.clone(),
+                    out.clone(),
+                    account.clone(),
+                    folder.clone(),
+                    limit,
+                );
             }
             // Thread-list callers opt into core grouping (subject branching,
             // root titles, accumulated unread counts — shared with mobile) and
             // get ready cards; other consumers keep the raw rows.
             let mut out = if p.get("group").and_then(Value::as_bool).unwrap_or(false) {
-                let cards = store::group_thread_cards(messages, &folder)
-                    .into_iter()
-                    .map(|card| {
-                        json!({
-                            "thread_key": card.thread_key,
-                            "original_thread_key": card.original_thread_key,
-                            "folder": card.header.folder,
-                            "from_name": card.header.from_name,
-                            "from_addr": card.header.from_addr,
-                            "subject": card.header.subject,
-                            "date": card.header.date,
-                            "unread": card.unread_count > 0,
-                            "unread_count": card.unread_count,
-                            "starred": card.header.starred,
-                            "recipient_overflow": card.header.recipient_overflow,
+                let draft_thread_keys =
+                    store::draft_thread_keys(&engine.db.lock().unwrap(), &account)?;
+                let cards =
+                    store::group_thread_cards_with_drafts(messages, &folder, &draft_thread_keys)
+                        .into_iter()
+                        .map(|card| {
+                            json!({
+                                "thread_key": card.thread_key,
+                                "original_thread_key": card.original_thread_key,
+                                "folder": card.header.folder,
+                                "from_name": card.header.from_name,
+                                "from_addr": card.header.from_addr,
+                                "subject": card.header.subject,
+                                "date": card.header.date,
+                                "unread": card.unread_count > 0,
+                                "unread_count": card.unread_count,
+                                "starred": card.header.starred,
+                                "has_draft": card.has_draft,
+                                "recipient_overflow": card.header.recipient_overflow,
+                            })
                         })
-                    })
-                    .collect::<Vec<_>>();
+                        .collect::<Vec<_>>();
                 json!({ "cards": cards })
             } else {
                 json!({ "messages": serde_json::to_value(messages)? })

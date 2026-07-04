@@ -117,6 +117,7 @@ export type Message = {
   unread: boolean
   unread_count?: number
   starred: boolean
+  has_draft?: boolean
   has_attachments: boolean
   attachments?: Attachment[]
   /** Source feed URL; present on RSS feed threads only. */

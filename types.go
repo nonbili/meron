@@ -70,6 +70,7 @@ type Message struct {
 	Unread           bool   `json:"unread"`
 	UnreadCount      uint32 `json:"unread_count,omitempty"`
 	Starred          bool   `json:"starred"`
+	HasDraft         bool   `json:"has_draft,omitempty"`
 	HasAttachments   bool   `json:"has_attachments"`
 	Attachments      any    `json:"attachments,omitempty"`
 	OriginalThreadID string `json:"original_thread_id,omitempty"`

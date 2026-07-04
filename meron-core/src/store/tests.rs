@@ -73,6 +73,44 @@ fn folder_role_assignment_uses_special_use_then_name_fallback() {
 }
 
 #[test]
+fn draft_thread_keys_detects_special_use_and_name_fallback() {
+    let conn = test_conn();
+    upsert_folders(
+        &conn,
+        "acct",
+        &[
+            Folder {
+                name: "Mail/Entwürfe".to_string(),
+                special_use: Some("drafts".to_string()),
+                ..Default::default()
+            },
+            Folder {
+                name: "[Gmail]/Drafts".to_string(),
+                ..Default::default()
+            },
+            Folder {
+                name: "INBOX".to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO messages(account, folder, msg_id, uid, subject, thread_key)
+         VALUES('acct', 'Mail/Entwürfe', '1', 1, 'draft', 'root@h'),
+               ('acct', '[Gmail]/Drafts', '2', 2, 'draft', 'other@h'),
+               ('acct', 'INBOX', '3', 3, 'not draft', 'inbox@h')",
+        [],
+    )
+    .unwrap();
+
+    let keys = draft_thread_keys(&conn, "acct").unwrap();
+    assert!(keys.contains("root@h"));
+    assert!(keys.contains("other@h"));
+    assert!(!keys.contains("inbox@h"));
+}
+
+#[test]
 fn search_messages_matches_subject_sender_and_body_case_insensitively() {
     let conn = test_conn();
     insert_message(&conn, 1, "Quarterly Plan", "Aki", "aki@example.com", None);
@@ -638,6 +676,41 @@ fn group_thread_cards_accumulates_unread_and_starred_across_group() {
     assert_eq!(cards[0].header.subject, "Topic");
     assert_eq!(cards[0].unread_count, 2);
     assert!(cards[0].header.starred);
+}
+
+#[test]
+fn group_thread_cards_marks_groups_with_cached_drafts() {
+    use crate::imap::MessageHeader;
+    let draft_keys = ["refs-root".to_string()].into_iter().collect();
+    let cards = group_thread_cards_with_drafts(
+        vec![
+            MessageHeader {
+                uid: 2,
+                subject: "Re: Topic".to_string(),
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Other".to_string(),
+                thread_key: "other-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+        &draft_keys,
+    );
+
+    let marked = cards
+        .iter()
+        .find(|card| card.thread_key == "refs-root#Topic")
+        .unwrap();
+    let unmarked = cards
+        .iter()
+        .find(|card| card.thread_key == "other-root#Other")
+        .unwrap();
+    assert!(marked.has_draft);
+    assert!(!unmarked.has_draft);
 }
 
 #[test]
