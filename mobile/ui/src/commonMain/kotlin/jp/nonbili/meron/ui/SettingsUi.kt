@@ -603,7 +603,7 @@ internal fun SettingsScreen(
                         SettingsRow(
                             icon = Icons.Filled.Settings,
                             title = tr("settings.sections.general"),
-                            subtitle = tr("settings.rootGeneralSubtitle"),
+                            subtitle = null,
                             onClick = { settingsNavController.navigate(SettingsRoutes.General) },
                         )
                     }
@@ -611,13 +611,9 @@ internal fun SettingsScreen(
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
                             icon = Icons.Filled.ViewKanban,
+                            leading = { KanbanBoardTile(board, 40.dp) },
                             title = board.name,
-                            subtitle =
-                                if (board.id == activeKanbanBoardId) {
-                                    trf("settings.kanban.boardColumnsActive", board.columns.size)
-                                } else {
-                                    trf("settings.kanban.boardColumns", board.columns.size)
-                                },
+                            subtitle = trf("settings.kanban.boardColumns", board.columns.size),
                             onClick = {
                                 selectedSettingsBoardId = board.id
                                 settingsNavController.navigate(SettingsRoutes.KanbanBoard)
@@ -628,7 +624,7 @@ internal fun SettingsScreen(
                         SettingsRow(
                             icon = Icons.Filled.Add,
                             title = tr("settings.kanban.newBoard"),
-                            subtitle = tr("settings.kanban.newBoardHint"),
+                            subtitle = null,
                             onClick = {
                                 selectedSettingsBoardId = onCreateKanbanBoard()
                                 settingsNavController.navigate(SettingsRoutes.KanbanBoard)
@@ -654,7 +650,7 @@ internal fun SettingsScreen(
                         SettingsRow(
                             icon = Icons.Filled.Add,
                             title = tr("settings.account.addMailAccount"),
-                            subtitle = tr("settings.account.addMailAccountHint"),
+                            subtitle = null,
                             onClick = onAddMailAccount,
                         )
                     }
@@ -666,6 +662,9 @@ internal fun SettingsScreen(
                             SettingsAccountRow(
                                 account = account,
                                 hidden = account.id in hiddenNavigationAccountIds,
+                                fallbackTitle = tr("accounts.rssAtomFeeds"),
+                                showAccountIdFallback = false,
+                                showDefaultSubtitle = false,
                                 onClick = {
                                     selectedSettingsAccountId = account.id
                                     settingsNavController.navigate(SettingsRoutes.Account)
@@ -677,7 +676,7 @@ internal fun SettingsScreen(
                         SettingsRow(
                             icon = Icons.Filled.Add,
                             title = tr("mobile.accounts.addRssAccount"),
-                            subtitle = tr("accounts.providers.rssDescription"),
+                            subtitle = null,
                             onClick = onAddFeedAccount,
                         )
                     }
@@ -1008,6 +1007,13 @@ internal fun SettingsAccountDetailPage(
         mutableStateOf(account.aliases.map { it.email to it.name })
     }
     var confirmRemove by remember(account.id) { mutableStateOf(false) }
+    val accountTitle =
+        if (isRss) {
+            displayName.ifBlank { tr("accounts.rssAtomFeeds") }
+        } else {
+            displayName.ifBlank { account.email.ifBlank { account.id } }
+        }
+    val accountSubtitle = if (isRss) "" else account.email.ifBlank { account.id }
 
     // Autosave: every control persists immediately, matching the desktop panel.
     // The lambda reads the live state values at call time, so flipping a toggle
@@ -1037,7 +1043,7 @@ internal fun SettingsAccountDetailPage(
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text(tr("settings.account.removeAccountTitle")) },
-            text = { Text(trf("settings.account.removeAccountText", account.email.ifBlank { account.id })) },
+            text = { Text(trf("settings.account.removeAccountText", accountTitle)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false
@@ -1059,25 +1065,27 @@ internal fun SettingsAccountDetailPage(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 AccountAvatarEditor(
-                    name = displayName.ifBlank { account.email.ifBlank { account.id } },
+                    name = accountTitle,
                     url = avatarUrl,
                     onPick = onPickAvatar,
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        displayName.ifBlank { account.email.ifBlank { account.id } },
+                        accountTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        account.email.ifBlank { account.id },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (accountSubtitle.isNotBlank()) {
+                        Text(
+                            accountSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -2036,17 +2044,30 @@ internal fun SettingsEmptyLabel(text: String) {
 internal fun SettingsAccountRow(
     account: AccountSummary,
     hidden: Boolean,
+    fallbackTitle: String? = null,
+    showAccountIdFallback: Boolean = true,
+    showDefaultSubtitle: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+    val label =
+        if (showAccountIdFallback) {
+            account.displayName.ifBlank { account.email.ifBlank { account.id } }
+        } else {
+            account.displayName.ifBlank {
+                fallbackTitle ?: account.id.takeIf { showAccountIdFallback }.orEmpty()
+            }
+        }
     SettingsRow(
         icon = if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else Icons.Filled.Inbox,
+        leading = { AccountBadgeAvatar(label = label, avatarUrl = account.avatarUrl, size = 40.dp) },
         title = label,
         subtitle =
             listOfNotNull(
-                account.email.takeIf { it.isNotBlank() && it != label },
+                account.email.takeIf { showAccountIdFallback && it.isNotBlank() && it != label },
                 if (hidden) tr("settings.account.hiddenFromNavigation") else null,
-            ).joinToString(" · ").ifBlank { tr("settings.account.accountSettings") },
+            ).joinToString(" · ").ifBlank {
+                tr("settings.account.accountSettings").takeIf { showDefaultSubtitle }
+            },
         onClick = onClick,
     )
 }
@@ -2057,6 +2078,7 @@ internal fun SettingsRow(
     title: String,
     subtitle: String?,
     onClick: () -> Unit,
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     destructive: Boolean = false,
 ) {
@@ -2064,7 +2086,14 @@ internal fun SettingsRow(
     ListItem(
         headlineContent = { Text(title, color = accent) },
         supportingContent = subtitle?.let { { Text(it) } },
-        leadingContent = { Icon(icon, contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
+        leadingContent =
+            leading ?: {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
         trailingContent = trailing,
         modifier = Modifier.clickable(onClick = onClick),
     )
