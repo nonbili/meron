@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
@@ -337,6 +338,9 @@ internal fun SettingsScreen(
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
+    syncDiagnosticLogEnabled: Boolean,
+    onToggleSyncDiagnosticLog: () -> Unit,
+    onShareDiagnosticLog: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
     storageUsage: StorageUsage?,
@@ -450,6 +454,9 @@ internal fun SettingsScreen(
                     backgroundSyncEnabled = backgroundSyncEnabled,
                     onToggleBackgroundSync = onToggleBackgroundSync,
                     onRefreshBackground = onRefreshBackground,
+                    syncDiagnosticLogEnabled = syncDiagnosticLogEnabled,
+                    onToggleSyncDiagnosticLog = onToggleSyncDiagnosticLog,
+                    onShareDiagnosticLog = onShareDiagnosticLog,
                     pollIntervalMinutes = pollIntervalMinutes,
                     onCyclePollInterval = onCyclePollInterval,
                     storageUsage = storageUsage,
@@ -740,6 +747,9 @@ internal fun SettingsGeneralPage(
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
+    syncDiagnosticLogEnabled: Boolean,
+    onToggleSyncDiagnosticLog: () -> Unit,
+    onShareDiagnosticLog: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
     storageUsage: StorageUsage?,
@@ -889,6 +899,25 @@ internal fun SettingsGeneralPage(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     },
+                )
+            }
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.BugReport,
+                title = tr("settings.syncDiagnosticLog"),
+                subtitle = tr("settings.syncDiagnosticLogHint"),
+                checked = syncDiagnosticLogEnabled,
+                onToggle = onToggleSyncDiagnosticLog,
+            )
+        }
+        if (syncDiagnosticLogEnabled) {
+            item {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    title = tr("settings.shareSyncLog"),
+                    subtitle = tr("settings.shareSyncLogHint"),
+                    onClick = onShareDiagnosticLog,
                 )
             }
         }

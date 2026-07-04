@@ -21,10 +21,37 @@ import java.util.concurrent.TimeUnit
 private const val KEY_MANUAL_RUN = "jp.nonbili.meron.background_sync.MANUAL_RUN"
 private const val TAG = "MeronBgSync"
 
-/** Email (or id) of an account for logs — never secrets. */
+private val emailRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+
+/** Mask the local part of an email so the diagnostic log (which a user may
+ *  share with support) keeps the domain for context but never the full
+ *  address, e.g. "j***@gmail.com". */
+private fun redactEmail(email: String): String {
+    val at = email.indexOf('@')
+    if (at <= 0) return "***"
+    return "${email[0]}***${email.substring(at)}"
+}
+
+/** Redacted label for an account — a masked email, or the bare account id
+ *  when there's no email. Never a secret (token/password). */
 private fun accountLabel(account: JSONObject): String {
     val email = account.optString("email")
-    return if (email.isNotBlank()) email else account.optString("id")
+    return if (email.isNotBlank()) redactEmail(email) else account.optString("id")
+}
+
+/** Mask any email addresses that leak into a server-provided error message
+ *  before it's written to the shareable diagnostic log. */
+private fun redactMessage(message: String): String = emailRegex.replace(message) { redactEmail(it.value) }
+
+private fun logEvent(
+    context: Context,
+    message: String,
+    warning: Boolean = false,
+) {
+    if (warning) Log.w(TAG, message) else Log.i(TAG, message)
+    if (loadAppBoolean(context, SYNC_DIAGNOSTIC_LOG_ENABLED_PREF, false)) {
+        AndroidSyncDiagnosticLog.append(context, message)
+    }
 }
 
 class AndroidBackgroundSyncWorker(
@@ -36,7 +63,7 @@ class AndroidBackgroundSyncWorker(
             !inputData.getBoolean(KEY_MANUAL_RUN, false) &&
             !loadAppBoolean(applicationContext, BACKGROUND_SYNC_ENABLED_PREF, true)
         ) {
-            Log.i(TAG, "background refresh skipped because background sync is disabled")
+            logEvent(applicationContext, "background refresh skipped because background sync is disabled")
             return Result.success()
         }
         if (!MeronCoreNative.isLoaded()) return Result.success()
@@ -68,7 +95,11 @@ class AndroidBackgroundSyncWorker(
                 GoogleAccountManagerAuth.TokenRefresh.Failed -> {
                     // Managed Gmail account whose token can no longer be minted;
                     // skip the doomed sync and report it so the user can reconnect.
-                    Log.w(TAG, "${syncRequest.method} token refresh failed for account ${accountLabel(account)}")
+                    logEvent(
+                        applicationContext,
+                        "${syncRequest.method} token refresh failed for account ${accountLabel(account)}",
+                        warning = true,
+                    )
                     failed += 1
                     continue
                 }
@@ -76,7 +107,11 @@ class AndroidBackgroundSyncWorker(
                 GoogleAccountManagerAuth.TokenRefresh.TransientError -> {
                     // Network hiccup while minting; the sync would hit the same
                     // network, so retry the whole run instead.
-                    Log.w(TAG, "${syncRequest.method} token refresh hit a network error for account ${accountLabel(account)}")
+                    logEvent(
+                        applicationContext,
+                        "${syncRequest.method} token refresh hit a network error for account ${accountLabel(account)}",
+                        warning = true,
+                    )
                     hasTransientNetworkError = true
                     continue
                 }
@@ -89,11 +124,12 @@ class AndroidBackgroundSyncWorker(
             if (syncResponse.has("error")) {
                 val errorMessage = syncResponse.optJSONObject("error")?.optString("message") ?: ""
                 // Log the error message (never the payload) so background failures
-                // are diagnosable via Logcat; the app is closed during periodic runs
-                // so core's own log events don't reach the platform logger.
-                Log.w(
-                    TAG,
-                    "${syncRequest.method} failed for account ${accountLabel(account)}: $errorMessage",
+                // are diagnosable; the app is closed during periodic runs so
+                // core's own log events don't reach the platform logger.
+                logEvent(
+                    applicationContext,
+                    "${syncRequest.method} failed for account ${accountLabel(account)}: ${redactMessage(errorMessage)}",
+                    warning = true,
                 )
                 if (isTransientNetworkError(errorMessage)) {
                     hasTransientNetworkError = true
@@ -108,7 +144,10 @@ class AndroidBackgroundSyncWorker(
             }
         }
 
-        Log.i(TAG, "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed hasTransient=$hasTransientNetworkError")
+        logEvent(
+            applicationContext,
+            "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed hasTransient=$hasTransientNetworkError",
+        )
         val body = backgroundRefreshSummary(refreshed = refreshed, skipped = skipped, failed = failed)
         if (
             shouldNotifyRefreshComplete(

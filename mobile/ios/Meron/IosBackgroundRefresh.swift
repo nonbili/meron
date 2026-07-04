@@ -342,6 +342,7 @@ enum IosBackgroundRefresh {
         guard let accounts = accountList["result"] as? [String: Any],
               let accountRows = accounts["accounts"] as? [[String: Any]]
         else {
+            IosSyncDiagnosticLog.append("account.list failed")
             return RefreshResult(refreshed: 0, skipped: 0, failed: 1)
         }
 
@@ -370,13 +371,21 @@ enum IosBackgroundRefresh {
                 method: request.method,
                 params: request.params
             )
-            if response["error"] == nil {
-                refreshed += 1
-            } else {
+            if let error = response["error"] as? [String: Any] {
+                let message = error["message"] as? String ?? ""
+                IosSyncDiagnosticLog.append(
+                    "\(request.method) failed for account \(IosSyncLogRedaction.accountLabel(account)): "
+                        + IosSyncLogRedaction.redactMessage(message)
+                )
                 failed += 1
+            } else {
+                refreshed += 1
             }
         }
 
+        IosSyncDiagnosticLog.append(
+            "background refresh done: refreshed=\(refreshed) skipped=\(skipped) failed=\(failed)"
+        )
         return RefreshResult(refreshed: refreshed, skipped: skipped, failed: failed)
     }
 

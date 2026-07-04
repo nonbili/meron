@@ -11,6 +11,7 @@
 		A10000000000000000000003 /* RustCoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* RustCoreBridge.swift */; };
 		A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* IosBackgroundRefresh.swift */; };
 		A10000000000000000000005 /* IosAppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* IosAppPaths.swift */; };
+		A10000000000000000000210 /* IosSyncDiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000211 /* IosSyncDiagnosticLog.swift */; };
 		A10000000000000000000006 /* RustCoreBridgeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* RustCoreBridgeContractTests.swift */; };
 		A10000000000000000000007 /* MailtoUrlContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* MailtoUrlContractTests.swift */; };
 		A10000000000000000000008 /* IosNotificationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* IosNotificationContractTests.swift */; };
@@ -47,6 +48,7 @@
 		A10000000000000000000015 /* Meron-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Meron-Bridging-Header.h"; sourceTree = "<group>"; };
 		A10000000000000000000016 /* IosBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundRefresh.swift; sourceTree = "<group>"; };
 		A10000000000000000000017 /* IosAppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosAppPaths.swift; sourceTree = "<group>"; };
+		A10000000000000000000211 /* IosSyncDiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosSyncDiagnosticLog.swift; sourceTree = "<group>"; };
 		A10000000000000000000018 /* RustCoreBridgeContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RustCoreBridgeContractTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000019 /* MeronTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeronTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000001A /* MailtoUrlContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailtoUrlContractTests.swift; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 				A10000000000000000000014 /* RustCoreBridge.swift */,
 				A10000000000000000000016 /* IosBackgroundRefresh.swift */,
 				A10000000000000000000017 /* IosAppPaths.swift */,
+				A10000000000000000000211 /* IosSyncDiagnosticLog.swift */,
 				A1000000000000000000000C /* IosDbKey.swift */,
 				A1000000000000000000001E /* Meron.entitlements */,
 				A10000000000000000000015 /* Meron-Bridging-Header.h */,
@@ -324,6 +327,7 @@
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
 				A10000000000000000000004 /* IosBackgroundRefresh.swift in Sources */,
 				A10000000000000000000005 /* IosAppPaths.swift in Sources */,
+				A10000000000000000000210 /* IosSyncDiagnosticLog.swift in Sources */,
 				A1000000000000000000000B /* IosDbKey.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

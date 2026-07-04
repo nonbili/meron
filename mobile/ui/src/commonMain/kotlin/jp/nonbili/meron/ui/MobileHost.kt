@@ -56,6 +56,11 @@ interface MobileHost {
 
     fun runBackgroundRefreshOnce()
 
+    /** Export the on-device background-sync diagnostic log via the platform
+     *  share sheet, so a user can send it to support without adb. No-op where
+     *  no diagnostic log is kept. */
+    fun shareDiagnosticLog() {}
+
     fun notifyNewMail(
         accountName: String,
         from: String,

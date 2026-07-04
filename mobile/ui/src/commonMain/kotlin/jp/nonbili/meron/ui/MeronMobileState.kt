@@ -151,6 +151,7 @@ internal class MeronMobileState(
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))
+    var syncDiagnosticLogEnabled by mutableStateOf(loadAppBoolean(prefs, SYNC_DIAGNOSTIC_LOG_ENABLED_PREF, false))
     var pollIntervalMinutes by mutableStateOf(
         coercePollIntervalMinutes(loadAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, 15)),
     )

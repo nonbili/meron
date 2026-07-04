@@ -4,17 +4,26 @@ import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.window.ComposeUIViewController
 import jp.nonbili.meron.shared.MeronCore
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.AuthenticationServices.ASPresentationAnchor
 import platform.AuthenticationServices.ASWebAuthenticationPresentationContextProvidingProtocol
 import platform.AuthenticationServices.ASWebAuthenticationSession
+import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
 import platform.Foundation.NSError
+import platform.Foundation.NSFileManager
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSString
 import platform.Foundation.NSURL
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSUserDomainMask
+import platform.Foundation.stringWithContentsOfFile
+import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIApplicationWillEnterForegroundNotification
+import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
 import platform.UserNotifications.UNAuthorizationOptionAlert
@@ -102,6 +111,17 @@ private class IosMobileHost(
         ) { _ -> refreshNotificationAuthorization() }
     }
 
+    override fun shareDiagnosticLog() {
+        val body =
+            readSyncDiagnosticLog().ifBlank {
+                "No background sync activity recorded yet. Enable diagnostic logging in Settings and try again after the next sync."
+            }
+        val disclosure =
+            "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +
+                "Review before sharing.\n\n"
+        presentDiagnosticLogShareSheet(disclosure + body)
+    }
+
     override fun notificationsEnabled(): Boolean = notificationsGranted
 
     override fun requestNotificationPermission() {
@@ -134,6 +154,36 @@ private class IosMobileHost(
             if (changed) NotificationPermissionSignal.signal()
         }
     }
+}
+
+// Mirrors IosAppPaths.mobileDataDirectory() + IosSyncDiagnosticLog's file name
+// on the Swift side (both read/write the same app-support-directory file).
+@OptIn(ExperimentalForeignApi::class)
+private fun readSyncDiagnosticLog(): String {
+    val base =
+        NSFileManager.defaultManager
+            .URLsForDirectory(NSApplicationSupportDirectory, NSUserDomainMask)
+            .firstOrNull() as? NSURL ?: return ""
+    val path =
+        base
+            .URLByAppendingPathComponent("Meron", isDirectory = true)
+            ?.URLByAppendingPathComponent("sync-diagnostic.log")
+            ?.path ?: return ""
+    return NSString.stringWithContentsOfFile(path, encoding = NSUTF8StringEncoding, error = null) ?: ""
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun presentDiagnosticLogShareSheet(text: String) {
+    val rootViewController =
+        (UIApplication.sharedApplication.windows.firstOrNull() as? UIWindow)?.rootViewController ?: return
+    var presenter = rootViewController
+    while (true) {
+        presenter = presenter.presentedViewController ?: break
+    }
+    val activityController = UIActivityViewController(activityItems = listOf(text), applicationActivities = null)
+    // Avoids the iPad requirement to set a popover sourceView/sourceRect.
+    activityController.modalPresentationStyle = UIModalPresentationFullScreen
+    presenter.presentViewController(activityController, animated = true, completion = null)
 }
 
 private class IosPlatformServices : PlatformServices {

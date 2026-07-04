@@ -83,13 +83,7 @@ class AndroidPlatformServices(
         fileName: String,
         mimeType: String,
     ) {
-        val uri = writeCacheFile(bytes, fileName)
-        val intent =
-            Intent(Intent.ACTION_SEND)
-                .setType(mimeType)
-                .putExtra(Intent.EXTRA_STREAM, uri)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        activity.startActivity(Intent.createChooser(intent, fileName))
+        shareBytesViaFileProvider(activity, bytes, fileName, mimeType)
     }
 
     override fun saveFile(
@@ -121,16 +115,24 @@ class AndroidPlatformServices(
                 mimeType = activity.contentResolver.getType(this) ?: "application/octet-stream",
             )
         }.getOrNull()
+}
 
-    private fun writeCacheFile(
-        bytes: ByteArray,
-        fileName: String,
-    ): Uri {
-        val dir = File(activity.cacheDir, "attachments").apply { mkdirs() }
-        val file = File(dir, fileName.ifBlank { "meron-file" })
-        file.writeBytes(bytes)
-        return FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
-    }
+private fun shareBytesViaFileProvider(
+    activity: ComponentActivity,
+    bytes: ByteArray,
+    fileName: String,
+    mimeType: String,
+) {
+    val dir = File(activity.cacheDir, "attachments").apply { mkdirs() }
+    val file = File(dir, fileName.ifBlank { "meron-file" })
+    file.writeBytes(bytes)
+    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+    val intent =
+        Intent(Intent.ACTION_SEND)
+            .setType(mimeType)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    activity.startActivity(Intent.createChooser(intent, fileName))
 }
 
 internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001
@@ -239,6 +241,17 @@ class AndroidMobileHost(
 
     override fun runBackgroundRefreshOnce() {
         AndroidBackgroundSyncScheduler.runOnce(activity)
+    }
+
+    override fun shareDiagnosticLog() {
+        val body =
+            AndroidSyncDiagnosticLog.read(activity).ifBlank {
+                "No background sync activity recorded yet. Enable diagnostic logging in Settings and try again after the next sync."
+            }
+        val disclosure =
+            "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +
+                "Review before sharing.\n\n"
+        shareBytesViaFileProvider(activity, (disclosure + body).toByteArray(), "meron-sync-log.txt", "text/plain")
     }
 
     override fun notifyNewMail(

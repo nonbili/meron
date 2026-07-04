@@ -19,6 +19,7 @@ private const val APP_LANGUAGE_PREF = "app_language"
 internal const val INBOX_FOLDER = "inbox"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
+internal const val SYNC_DIAGNOSTIC_LOG_ENABLED_PREF = "sync_diagnostic_log_enabled_v1"
 private val supportedAppLanguageTags =
     setOf("ar", "de", "el", "en", "es", "et", "fr", "it", "ja", "ko", "lv", "pl", "pt", "pt-BR", "sv", "tr", "vi", "zh-Hans", "zh-Hant")
 
