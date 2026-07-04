@@ -431,6 +431,9 @@ private fun MeronMobileScreenContent(
             }
         }
         val popAppBack: () -> Unit = {
+            if (screen == Screen.Thread) {
+                flushQuickReplyAutosave()
+            }
             if (!navController.popBackStack()) {
                 screen = previousTopScreen
             }
@@ -815,7 +818,7 @@ private fun MeronMobileScreenContent(
             composable(AppRoutes.Thread) {
                 ThreadScreen(
                     thread = selectedCoreThread,
-                    messages = messages,
+                    messages = visibleThreadMessages(),
                     accountEmail = selectedThreadAccount?.email.orEmpty(),
                     wallpaperPresetId = selectedThreadAccount?.chatWallpaperPresetId.orEmpty(),
                     wallpaperCustomUrl =
@@ -879,10 +882,7 @@ private fun MeronMobileScreenContent(
                     canLoadOlder = messageCursor.isNotBlank(),
                     loadingOlder = loadingMoreMessages,
                     onLoadOlder = ::loadMoreThreadMessages,
-                    onQuickReplyChange = {
-                        quickReplyBody = it
-                        quickReplyFailure = ""
-                    },
+                    onQuickReplyChange = ::onQuickReplyBodyChange,
                     quickReplyAttachments = quickReplyAttachments,
                     quickReplyFailure = quickReplyFailure,
                     sendShortcutMode = sendShortcutMode,
@@ -890,11 +890,17 @@ private fun MeronMobileScreenContent(
                         pickAttachmentInto { picked ->
                             quickReplyAttachments = quickReplyAttachments + picked
                             quickReplyFailure = ""
+                            autoSaveQuickReplyDraft()
                         }
                     },
                     onRemoveQuickReplyAttachment = { attachment ->
                         quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
                         quickReplyFailure = ""
+                        if (quickReplyBody.isBlank() && quickReplyAttachments.isEmpty()) {
+                            discardQuickReplyDraftIfEmpty()
+                        } else {
+                            autoSaveQuickReplyDraft()
+                        }
                     },
                     onOpenFullReply = ::openQuickReplyInFullEditor,
                     onSendReply = ::sendQuickReply,

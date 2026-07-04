@@ -18,6 +18,7 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.coercePollIntervalMinutes
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -133,6 +134,15 @@ internal class MeronMobileState(
     var quickReplyBody by mutableStateOf("")
     var quickReplyAttachments by mutableStateOf(emptyList<DraftAttachment>())
     var quickReplyFailure by mutableStateOf("")
+    var quickReplyDraftId by mutableStateOf("")
+    var quickReplyDraftSaved by mutableStateOf(false)
+    var quickReplyInReplyTo by mutableStateOf("")
+    var quickReplyReferences by mutableStateOf("")
+    var quickReplyThreadId by mutableStateOf("")
+
+    // Debounce bookkeeping for autosaving the quick-reply draft as the user
+    // types; not UI state, so a plain var rather than mutableStateOf.
+    var quickReplyAutosaveJob: Job? = null
     var status by mutableStateOf("")
     var syncing by mutableStateOf(false)
     var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))

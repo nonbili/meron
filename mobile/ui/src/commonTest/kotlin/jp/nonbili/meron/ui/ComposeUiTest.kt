@@ -1,8 +1,14 @@
 package jp.nonbili.meron.ui
 
+import jp.nonbili.meron.shared.CloseableHandle
+import jp.nonbili.meron.shared.CoreEvent
+import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.DraftAttachment
+import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.ThreadSummary
+import kotlinx.coroutines.CoroutineScope
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -206,6 +212,48 @@ class ComposeUiTest {
         assertFalse(draftThreadShouldOpenConversation(messages))
     }
 
+    @Test
+    fun visibleThreadMessagesHidesTailDraftHydratedIntoQuickReply() {
+        val state = testState()
+        state.messages =
+            listOf(
+                messageBody(id = "m1", folderId = "INBOX"),
+                messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1"),
+            )
+        state.quickReplyDraftId = "draft-1"
+
+        val visible = state.visibleThreadMessages()
+
+        assertEquals(listOf("m1"), visible.map { it.id })
+    }
+
+    @Test
+    fun visibleThreadMessagesKeepsNonTailDraftVisible() {
+        val state = testState()
+        state.messages =
+            listOf(
+                messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1"),
+                messageBody(id = "m2", folderId = "INBOX"),
+            )
+        state.quickReplyDraftId = "draft-1"
+
+        val visible = state.visibleThreadMessages()
+
+        assertEquals(listOf("d1", "m2"), visible.map { it.id })
+    }
+
+    @Test
+    fun visibleThreadMessagesReturnsAllWhenNoQuickReplyDraftHydrated() {
+        val state = testState()
+        state.messages =
+            listOf(
+                messageBody(id = "m1", folderId = "INBOX"),
+                messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1"),
+            )
+
+        assertEquals(state.messages, state.visibleThreadMessages())
+    }
+
     private fun threadSummary(
         id: String,
         threadId: String = "",
@@ -224,6 +272,7 @@ class ComposeUiTest {
         folderId: String,
         inReplyTo: String = "",
         references: String = "",
+        messageId: String = "",
     ): MessageBody =
         MessageBody(
             id = id,
@@ -234,5 +283,143 @@ class ComposeUiTest {
             body = "Body",
             inReplyTo = inReplyTo,
             references = references,
+            messageId = messageId,
         )
+
+    private fun testState(): MeronMobileState =
+        MeronMobileState(
+            scope = CoroutineScope(EmptyCoroutineContext),
+            core = FakeCore(),
+            coreLoaded = true,
+            prefs = FakePreferences(),
+            kanbanPrefs = FakePreferences(),
+            services = FakePlatformServices(),
+            locale = FakeLocaleController(),
+            mobileHost = DefaultMobileHost(),
+        )
+
+    private class FakePlatformServices : PlatformServices {
+        override fun openUrl(url: String) {}
+
+        override fun openOAuthUrl(
+            url: String,
+            callbackScheme: String,
+            onCallback: (String) -> Unit,
+            onFailure: (String) -> Unit,
+        ) {}
+
+        override fun copyText(
+            label: String,
+            value: String,
+        ) {}
+
+        override fun copyImage(
+            bytes: ByteArray,
+            mimeType: String,
+            label: String,
+        ) {}
+
+        override fun shareFile(
+            bytes: ByteArray,
+            fileName: String,
+            mimeType: String,
+        ) {}
+
+        override fun saveFile(
+            bytes: ByteArray,
+            fileName: String,
+            mimeType: String,
+        ) {}
+
+        override fun pickFile(
+            mimeTypes: List<String>,
+            onPicked: (PickedFile?) -> Unit,
+        ) {}
+
+        override fun pickImage(onPicked: (PickedFile?) -> Unit) {}
+    }
+
+    private class FakePreferences : AppPreferences {
+        private val strings = mutableMapOf<String, String>()
+        private val booleans = mutableMapOf<String, Boolean>()
+        private val ints = mutableMapOf<String, Int>()
+        private val stringSets = mutableMapOf<String, Set<String>>()
+
+        override fun getString(
+            key: String,
+            default: String,
+        ): String = strings[key] ?: default
+
+        override fun putString(
+            key: String,
+            value: String,
+        ) {
+            strings[key] = value
+        }
+
+        override fun getBoolean(
+            key: String,
+            default: Boolean,
+        ): Boolean = booleans[key] ?: default
+
+        override fun putBoolean(
+            key: String,
+            value: Boolean,
+        ) {
+            booleans[key] = value
+        }
+
+        override fun getInt(
+            key: String,
+            default: Int,
+        ): Int = ints[key] ?: default
+
+        override fun putInt(
+            key: String,
+            value: Int,
+        ) {
+            ints[key] = value
+        }
+
+        override fun getStringSet(
+            key: String,
+            default: Set<String>,
+        ): Set<String> = stringSets[key] ?: default
+
+        override fun putStringSet(
+            key: String,
+            value: Set<String>,
+        ) {
+            stringSets[key] = value
+        }
+
+        override fun remove(key: String) {
+            strings.remove(key)
+            booleans.remove(key)
+            ints.remove(key)
+            stringSets.remove(key)
+        }
+    }
+
+    private class FakeLocaleController : LocaleController {
+        override fun currentLanguageTag(): String = ""
+
+        override fun apply(tag: String) {}
+
+        override fun displayName(tag: String): String = tag
+    }
+
+    private class FakeCore : MeronCore {
+        override suspend fun invoke(
+            command: String,
+            payloadJson: String,
+        ): String = "{}"
+
+        override fun events(): CoreEventStream =
+            object : CoreEventStream {
+                override fun subscribe(listener: (CoreEvent) -> Unit): CloseableHandle = CloseableHandle {}
+            }
+
+        override suspend fun protocolVersion(): Int = 0
+    }
 }

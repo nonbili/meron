@@ -715,6 +715,17 @@ internal fun MeronMobileState.readCoreThread(
     messageCursor = ""
     loadingMoreMessages = false
     previousTopScreen = returnScreen
+    if (quickReplyThreadId != backendThreadId) {
+        quickReplyAutosaveJob?.cancel()
+        quickReplyBody = ""
+        quickReplyAttachments = emptyList()
+        quickReplyFailure = ""
+        quickReplyDraftId = ""
+        quickReplyDraftSaved = false
+        quickReplyInReplyTo = ""
+        quickReplyReferences = ""
+        quickReplyThreadId = backendThreadId
+    }
     if (!readsDraftThread) {
         screen = Screen.Thread
     }
@@ -735,6 +746,7 @@ internal fun MeronMobileState.readCoreThread(
             val page = parseThreadReadPage(it)
             messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
+            hydrateQuickReplyFromTailDraft(backendThreadId, messages)
             if (readsDraftThread) {
                 val draftMessage =
                     page.messages.lastOrNull { message -> folderIsDrafts(message.folderId) }
@@ -749,6 +761,47 @@ internal fun MeronMobileState.readCoreThread(
             }
         }.onFailure {
             status = "Could not open message: ${it.message}"
+        }
+    }
+}
+
+// Pre-fills the quick-reply bar from an already-saved draft reply sitting at
+// the tail of the conversation, so the user can continue and send it inline
+// instead of being forced into the full editor. No-op when the tail message
+// isn't a draft, or is already the one loaded (e.g. re-entrant calls from
+// loadMoreThreadMessages).
+private fun MeronMobileState.hydrateQuickReplyFromTailDraft(
+    threadBackendId: String,
+    mergedMessages: List<MessageBody>,
+) {
+    if (quickReplyThreadId != threadBackendId) return
+    val tail = mergedMessages.lastOrNull() ?: return
+    if (!folderIsDrafts(tail.folderId)) return
+    val normalizedTailId = tail.messageId.normalizedComposeDraftId()
+    if (quickReplyDraftId.isNotBlank() && quickReplyDraftId.normalizedComposeDraftId() == normalizedTailId) return
+    quickReplyBody = tail.body
+    quickReplyDraftId = tail.messageId.trim().trim('<', '>').ifBlank { newDraftMessageId() }
+    quickReplyDraftSaved = true
+    quickReplyInReplyTo = tail.inReplyTo
+    quickReplyReferences = tail.references
+    quickReplyFailure = ""
+    if (!tail.hasAttachments) {
+        quickReplyAttachments = emptyList()
+        return
+    }
+    scope.launch {
+        val copied =
+            runCatching {
+                withContext(ioDispatcher) {
+                    val client = MobileMailCommandClient(core)
+                    forwardableAttachments(tail).mapNotNull { attachment ->
+                        val data = parseAttachmentDataResponse(client.readAttachment(AttachmentReadParams(attachment.key)))
+                        data.takeIf { it.isNotBlank() }?.let { attachmentToDraftAttachment(attachment, it) }
+                    }
+                }
+            }.getOrElse { emptyList() }
+        if (quickReplyThreadId == threadBackendId && quickReplyDraftId.normalizedComposeDraftId() == normalizedTailId) {
+            quickReplyAttachments = copied
         }
     }
 }

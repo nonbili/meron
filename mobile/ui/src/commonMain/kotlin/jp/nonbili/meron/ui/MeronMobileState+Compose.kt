@@ -419,10 +419,140 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
     )
 }
 
+private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): Boolean {
+    val thread = selectedCoreThread
+    val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
+    val parent = messages.lastOrNull { !folderIsDrafts(it.folderId) } ?: messages.lastOrNull()
+    if (accountId.isBlank() || thread == null || parent == null) {
+        if (showStatus) status = "Open a mail thread before saving a reply draft."
+        return false
+    }
+    if (quickReplyBody.isBlank() && quickReplyAttachments.isEmpty()) {
+        if (showStatus) status = "Nothing to save."
+        return false
+    }
+    val account = coreAccounts.firstOrNull { it.id == accountId }
+    val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
+    val replyParams =
+        parent.toReplyMailParams(
+            accountId = accountId,
+            body = quickReplyBody.trim(),
+            from = replyFrom,
+            ownAddresses = ownAddressList(coreAccounts),
+            attachments = quickReplyAttachments,
+        )
+    val draftId = quickReplyDraftId.ifBlank { newDraftMessageId(accountId) }
+    quickReplyDraftId = draftId
+    quickReplyInReplyTo = replyParams.inReplyTo
+    quickReplyReferences = replyParams.references
+    val draft = ComposeDraft(replyParams.to, replyParams.cc, "", replyParams.subject, quickReplyBody.trim(), quickReplyAttachments)
+    if (showStatus) status = "Saving draft..."
+    return runCatching {
+        withContext(ioDispatcher) {
+            val params =
+                draft
+                    .toSaveDraftParams(
+                        accountId = accountId,
+                        draftId = draftId,
+                        from = replyFrom,
+                    ).copy(
+                        inReplyTo = replyParams.inReplyTo,
+                        references = replyParams.references,
+                    )
+            MobileMailCommandClient(core).saveDraft(params)
+        }
+    }.fold(
+        onSuccess = {
+            quickReplyDraftSaved = true
+            markThreadDraftEverywhere(thread.id)
+            if (showStatus) status = "Draft saved"
+            true
+        },
+        onFailure = {
+            if (showStatus) status = "Draft save failed: ${it.message}"
+            false
+        },
+    )
+}
+
+// Hides the tail draft message from the rendered conversation once quick
+// reply has hydrated its content for inline editing — otherwise the same
+// draft text would appear twice (as a bubble and pre-filled in the reply bar).
+// Older draft messages elsewhere in the thread's history are left visible.
+internal fun MeronMobileState.visibleThreadMessages(): List<MessageBody> {
+    if (quickReplyDraftId.isBlank()) return messages
+    val normalizedDraftId = quickReplyDraftId.normalizedComposeDraftId()
+    val tail = messages.lastOrNull() ?: return messages
+    return if (tail.messageId.normalizedComposeDraftId() == normalizedDraftId) messages.dropLast(1) else messages
+}
+
+internal fun MeronMobileState.autoSaveQuickReplyDraft() {
+    scope.launch {
+        saveQuickReplyDraft(showStatus = false)
+    }
+}
+
+// Flushes any pending debounced autosave immediately — used when navigating
+// away from the thread screen, mirroring closeCompose()'s autosave-on-close
+// for the full composer, so the last few keystrokes aren't lost to the
+// debounce window.
+internal fun MeronMobileState.flushQuickReplyAutosave() {
+    quickReplyAutosaveJob?.cancel()
+    quickReplyAutosaveJob = null
+    if (quickReplyBody.isBlank() && quickReplyAttachments.isEmpty()) {
+        discardQuickReplyDraftIfEmpty()
+    } else {
+        autoSaveQuickReplyDraft()
+    }
+}
+
+internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
+    if (quickReplyBody.isNotBlank() || quickReplyAttachments.isNotEmpty()) return
+    val draftId = quickReplyDraftId.takeIf { quickReplyDraftSaved } ?: return
+    val thread = selectedCoreThread ?: return
+    val accountId = thread.accountId.ifBlank { defaultSendAccountId() }
+    quickReplyDraftId = ""
+    quickReplyDraftSaved = false
+    quickReplyInReplyTo = ""
+    quickReplyReferences = ""
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                MobileMailCommandClient(core).discardDraft(DiscardDraftParams(accountId = accountId, draftId = draftId))
+            }
+        }.onSuccess {
+            syncCoreThreads(syncFirst = false)
+            val normalizedDraftId = draftId.normalizedComposeDraftId()
+            selectedCoreThread =
+                selectedCoreThread?.copy(
+                    hasDraft =
+                        messages.any {
+                            it.messageId.normalizedComposeDraftId() != normalizedDraftId && folderIsDrafts(it.folderId)
+                        },
+                )
+        }
+    }
+}
+
+internal fun MeronMobileState.onQuickReplyBodyChange(value: String) {
+    quickReplyBody = value
+    quickReplyFailure = ""
+    quickReplyAutosaveJob?.cancel()
+    quickReplyAutosaveJob =
+        scope.launch {
+            delay(1200)
+            if (quickReplyBody.isBlank() && quickReplyAttachments.isEmpty()) {
+                discardQuickReplyDraftIfEmpty()
+            } else {
+                saveQuickReplyDraft(showStatus = false)
+            }
+        }
+}
+
 internal fun MeronMobileState.openQuickReplyInFullEditor() {
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
-    val parent = messages.lastOrNull()
+    val parent = messages.lastOrNull { !folderIsDrafts(it.folderId) } ?: messages.lastOrNull()
     if (accountId.isBlank() || thread == null || parent == null) {
         status = "Open a mail thread before replying."
         return
@@ -452,13 +582,21 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
     attachments = quickReplyAttachments
     composeFromAccountId = accountId
     composeFromEmail = replyFrom
-    composeDraftId = ""
-    composeDraftSaved = false
+    // Hand off any draft already saved for this quick reply so continuing in the
+    // full editor keeps editing the same server-side draft instead of creating a
+    // duplicate one.
+    composeDraftId = quickReplyDraftId
+    composeDraftSaved = quickReplyDraftSaved
     composeInReplyTo = params.inReplyTo
     composeReferences = params.references
+    quickReplyAutosaveJob?.cancel()
     quickReplyBody = ""
     quickReplyAttachments = emptyList()
     quickReplyFailure = ""
+    quickReplyDraftId = ""
+    quickReplyDraftSaved = false
+    quickReplyInReplyTo = ""
+    quickReplyReferences = ""
     composeReturnScreen = Screen.Thread
     screen = Screen.Compose
     status = ""
@@ -529,13 +667,14 @@ private fun MeronMobileState.removeDiscardedDraftFromOpenThread(draftId: String?
     selectedCoreThread = selectedCoreThread?.copy(hasDraft = messages.any { folderIsDrafts(it.folderId) })
 }
 
-private fun String.normalizedComposeDraftId(): String = trim().trim('<', '>').lowercase()
+internal fun String.normalizedComposeDraftId(): String = trim().trim('<', '>').lowercase()
 
 internal fun MeronMobileState.sendQuickReply() {
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
-    val parent = messages.lastOrNull()
-    val replyBody = quickReplyBody.trim()
+    val parent = messages.lastOrNull { !folderIsDrafts(it.folderId) } ?: messages.lastOrNull()
+    val sentBody = quickReplyBody.trim()
+    val sentAttachments = quickReplyAttachments
     if (accountId.isBlank() || thread == null || parent == null) {
         status = "Open a mail thread before replying."
         return
@@ -544,11 +683,13 @@ internal fun MeronMobileState.sendQuickReply() {
         status = "RSS items do not support replies."
         return
     }
-    if (replyBody.isBlank() && quickReplyAttachments.isEmpty()) {
+    if (sentBody.isBlank() && sentAttachments.isEmpty()) {
         status = "Write a reply or attach a file before sending."
         return
     }
     quickReplyFailure = ""
+    quickReplyAutosaveJob?.cancel()
+    val savedDraftId = quickReplyDraftId.takeIf { quickReplyDraftSaved }
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
     val outboundMessageId = newDraftMessageId(accountId).replace("meron-draft-", "meron-")
@@ -556,15 +697,17 @@ internal fun MeronMobileState.sendQuickReply() {
         parent
             .toReplyMailParams(
                 accountId = accountId,
-                body = replyBody,
+                body = sentBody,
                 from = replyFrom,
                 ownAddresses = ownAddressList(coreAccounts),
-                attachments = quickReplyAttachments,
+                attachments = sentAttachments,
             ).copy(messageId = outboundMessageId)
     // Render the sent bubble optimistically — before the send round-trip — so
     // replying feels instant. The bubble shows a "Sending…" status until the
     // canonical stored message replaces it on re-fetch; on failure it flips to
-    // "Failed" and stays visible so the reply isn't lost.
+    // "Failed" and stays visible so the reply isn't lost. The reply-bar text
+    // itself is left populated until the send actually succeeds, so a failed
+    // send can be retried with its real content instead of resending blank.
     val tempId = "local-send-${currentTimeMillis()}"
     val optimistic =
         MessageBody(
@@ -575,30 +718,39 @@ internal fun MeronMobileState.sendQuickReply() {
             to = params.to,
             cc = params.cc,
             subject = params.subject,
-            body = replyBody,
+            body = sentBody,
             messageId = outboundMessageId,
             references = params.references,
             dateEpochSeconds = currentTimeMillis() / 1000,
-            hasAttachments = quickReplyAttachments.isNotEmpty(),
+            hasAttachments = sentAttachments.isNotEmpty(),
             attachments =
-                quickReplyAttachments.map {
+                sentAttachments.map {
                     MessageAttachment(filename = it.displayName, mimeType = it.mimeType, sizeBytes = it.sizeBytes)
                 },
             sendStatus = SendStatus.Sending,
         )
     messages = messages + optimistic
-    quickReplyBody = ""
-    quickReplyAttachments = emptyList()
     status = "Sending reply..."
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                MobileMailCommandClient(core).send(params)
+                val client = MobileMailCommandClient(core)
+                client.send(params)
+                if (!savedDraftId.isNullOrBlank()) {
+                    runCatching { client.discardDraft(DiscardDraftParams(accountId = accountId, draftId = savedDraftId)) }
+                }
             }
         }.onSuccess {
             quickReplyFailure = ""
+            quickReplyBody = ""
+            quickReplyAttachments = emptyList()
+            quickReplyDraftId = ""
+            quickReplyDraftSaved = false
+            quickReplyInReplyTo = ""
+            quickReplyReferences = ""
             status = "Reply sent"
             messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.None) else it }
+            syncCoreThreads(syncFirst = false)
             runCatching { reloadCurrentThreadMessages() }
                 .onFailure { }
         }.onFailure {
