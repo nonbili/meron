@@ -37,12 +37,25 @@ import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -80,6 +93,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -91,6 +105,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -269,6 +285,7 @@ internal fun ComposeScreen(
     onAcceptRecipientSuggestion: (field: String, contact: ContactSuggestion) -> Unit,
     onAttach: () -> Unit,
     onClearAttachments: () -> Unit,
+    onRemoveAttachment: (DraftAttachment) -> Unit,
     sendShortcutMode: SendShortcutMode,
     onSaveDraft: () -> Unit,
     onDiscardDraft: () -> Unit,
@@ -278,6 +295,7 @@ internal fun ComposeScreen(
     var confirmDiscard by remember { mutableStateOf(false) }
     var overflowOpen by remember { mutableStateOf(false) }
     var showCcBcc by remember { mutableStateOf(cc.isNotBlank() || bcc.isNotBlank()) }
+    var maxLabelWidth by remember { mutableStateOf(0.dp) }
     val hasContent =
         to.isNotBlank() || cc.isNotBlank() || bcc.isNotBlank() ||
             subject.isNotBlank() || body.isNotBlank() || attachments.isNotEmpty()
@@ -315,8 +333,13 @@ internal fun ComposeScreen(
                     IconButton(onClick = onAttach) {
                         Icon(Icons.Filled.AttachFile, contentDescription = tr("composer.actions.attachFiles"))
                     }
-                    IconButton(onClick = onSend, enabled = to.isNotBlank()) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = tr("buttons.send"), tint = MaterialTheme.colorScheme.primary)
+                    val sendEnabled = to.isNotBlank()
+                    IconButton(onClick = onSend, enabled = sendEnabled) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = tr("buttons.send"),
+                            tint = if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        )
                     }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
@@ -354,7 +377,7 @@ internal fun ComposeScreen(
                 .imePadding(),
         ) {
             val optionalFieldsHeight = (if (sendIdentities.size > 1) 56 else 0) + (if (showCcBcc) 128 else 0)
-            val attachmentHeight = attachments.size * 26 + if (attachments.isNotEmpty()) 44 else 0
+            val attachmentHeight = attachments.size * 36 + if (attachments.isNotEmpty()) 44 else 0
             val bodyMinHeight =
                 max(
                     280f,
@@ -363,32 +386,41 @@ internal fun ComposeScreen(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (sendIdentities.size > 1) {
                     FromIdentitySelector(
                         identities = sendIdentities,
                         selectedKey = selectedFromKey,
                         onSelect = onFromChange,
+                        labelWidth = maxLabelWidth,
+                        onLabelWidthChanged = { maxLabelWidth = it },
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ComposeField(
-                        value = to,
-                        onChange = onToChange,
-                        label = tr("composer.fields.to"),
-                        field = "to",
-                        suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
-                        onFocus = onRecipientFocus,
-                        onAcceptSuggestion = onAcceptRecipientSuggestion,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!showCcBcc) {
-                        TextButton(onClick = { showCcBcc = true }) { Text(tr("composer.actions.ccBcc")) }
-                    }
-                }
+                ComposeField(
+                    value = to,
+                    onChange = onToChange,
+                    label = tr("composer.fields.to"),
+                    field = "to",
+                    suggestions = if (recipientSuggestionField == "to") recipientSuggestions else emptyList(),
+                    onFocus = onRecipientFocus,
+                    onAcceptSuggestion = onAcceptRecipientSuggestion,
+                    placeholder = tr("composer.placeholders.recipient"),
+                    trailingContent = if (!showCcBcc) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = tr("composer.actions.ccBcc"),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .clickable { showCcBcc = true }
+                            )
+                        }
+                    } else null,
+                    labelWidth = maxLabelWidth,
+                    onLabelWidthChanged = { maxLabelWidth = it },
+                )
                 if (showCcBcc) {
                     ComposeField(
                         value = cc,
@@ -398,6 +430,9 @@ internal fun ComposeScreen(
                         suggestions = if (recipientSuggestionField == "cc") recipientSuggestions else emptyList(),
                         onFocus = onRecipientFocus,
                         onAcceptSuggestion = onAcceptRecipientSuggestion,
+                        placeholder = tr("composer.placeholders.commaSeparated"),
+                        labelWidth = maxLabelWidth,
+                        onLabelWidthChanged = { maxLabelWidth = it },
                     )
                     ComposeField(
                         value = bcc,
@@ -407,14 +442,33 @@ internal fun ComposeScreen(
                         suggestions = if (recipientSuggestionField == "bcc") recipientSuggestions else emptyList(),
                         onFocus = onRecipientFocus,
                         onAcceptSuggestion = onAcceptRecipientSuggestion,
+                        placeholder = tr("composer.placeholders.commaSeparated"),
+                        labelWidth = maxLabelWidth,
+                        onLabelWidthChanged = { maxLabelWidth = it },
                     )
                 }
-                ComposeField(subject, onSubjectChange, tr("composer.fields.subject"))
-                OutlinedTextField(
+                ComposeField(
+                    value = subject,
+                    onChange = onSubjectChange,
+                    label = tr("composer.fields.subject"),
+                    placeholder = tr("composer.fields.subject"),
+                    labelWidth = maxLabelWidth,
+                    onLabelWidthChanged = { maxLabelWidth = it },
+                )
+                TextField(
                     value = body,
                     onValueChange = onBodyChange,
-                    placeholder = { Text(tr("composer.placeholders.message")) },
+                    placeholder = { Text(tr("composer.placeholders.message"), style = MaterialTheme.typography.bodyMedium) },
                     keyboardOptions = nativeTextKeyboardOptions,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium,
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -428,23 +482,377 @@ internal fun ComposeScreen(
                                 }
                             },
                 )
-                attachments.forEach { attachment ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(
-                            "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
                 if (attachments.isNotEmpty()) {
-                    TextButton(onClick = onClearAttachments) { Text(tr("mobile.compose.clearAttachments")) }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        attachments.forEach { attachment ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AttachFile,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(
+                                    onClick = { onRemoveAttachment(attachment) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = tr("composer.actions.removeAttachment"),
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        TextButton(
+                            onClick = onClearAttachments,
+                            modifier = Modifier.align(Alignment.Start)
+                        ) {
+                            Text(tr("mobile.compose.clearAttachments"))
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+internal fun parseRecipients(value: String): Pair<List<String>, String> {
+    if (value.isEmpty()) return Pair(emptyList(), "")
+    val parts = value.split(",")
+    if (parts.size <= 1) {
+        return Pair(emptyList(), value)
+    }
+    val completed = parts.subList(0, parts.size - 1)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+    val activeInput = parts.last().trimStart()
+    return Pair(completed, activeInput)
+}
+
+private fun getAvatarColor(identifier: String): Color {
+    val colors = listOf(
+        Color(0xFFC2185B),
+        Color(0xFF7B1FA2),
+        Color(0xFF512DA8),
+        Color(0xFF303F9F),
+        Color(0xFF1976D2),
+        Color(0xFF00796B),
+        Color(0xFF388E3C),
+        Color(0xFFF57C00),
+        Color(0xFF5D4037),
+        Color(0xFF455A64)
+    )
+    val hash = identifier.hashCode()
+    val index = abs(hash) % colors.size
+    return colors[index]
+}
+
+internal fun parseEmailRecipient(recipient: String): Pair<String, String> {
+    val trimmed = recipient.trim()
+    if (trimmed.contains("<") && trimmed.endsWith(">")) {
+        val name = trimmed.substringBefore("<").trim()
+        val email = trimmed.substringAfter("<").removeSuffix(">").trim()
+        return Pair(name, email)
+    }
+    if (trimmed.contains("(") && trimmed.endsWith(")")) {
+        val email = trimmed.substringBefore("(").trim()
+        val name = trimmed.substringAfter("(").removeSuffix(")").trim()
+        return Pair(name, email)
+    }
+    return Pair("", trimmed)
+}
+
+@Composable
+internal fun RecipientChip(
+    recipient: String,
+    onDelete: () -> Unit,
+) {
+    val (name, email) = remember(recipient) { parseEmailRecipient(recipient) }
+    val displayName = if (name.isNotEmpty()) name else email
+    val initials = if (displayName.isNotEmpty()) displayName.take(1).uppercase() else "?"
+    var menuExpanded by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+
+    Box {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .height(32.dp)
+                .clickable { menuExpanded = true }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(end = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(getAvatarColor(email), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initials,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            modifier = Modifier
+                .width(280.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(getAvatarColor(email), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = initials,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    Column {
+                        if (name.isNotEmpty()) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = email,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ContentCopy,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = tr("common.copy"),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    },
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(email))
+                        menuExpanded = false
+                    }
+                )
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = tr("buttons.delete"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    onClick = {
+                        onDelete()
+                        menuExpanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun RecipientChipsInput(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    keyboardOptions: KeyboardOptions,
+    onFocusChanged: (FocusState) -> Unit,
+    isFocused: Boolean,
+) {
+    val (completed, activeInput) = remember(value) { parseRecipients(value) }
+    var initialized by remember { mutableStateOf(false) }
+
+    // Maintain local TextFieldValue state for correct cursor positioning
+    var activeInputState by remember { mutableStateOf(TextFieldValue("")) }
+
+    // Keep activeInputState in sync with parent activeInput changes (e.g. initial reply, suggestion click, or backspace deletion)
+    LaunchedEffect(activeInput) {
+        if (activeInput != activeInputState.text) {
+            activeInputState = TextFieldValue(
+                text = activeInput,
+                selection = TextRange(activeInput.length)
+            )
+        }
+    }
+
+    LaunchedEffect(value) {
+        if (!initialized) {
+            initialized = true
+            if (value.isNotEmpty() && !value.trim().endsWith(",")) {
+                onChange(value.trim() + ", ")
+            }
+        }
+    }
+
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        completed.forEach { recipient ->
+            RecipientChip(
+                recipient = recipient,
+                onDelete = {
+                    val newCompleted = completed.filter { it != recipient }
+                    val newValue = if (newCompleted.isEmpty()) {
+                        activeInput
+                    } else {
+                        newCompleted.joinToString(", ") + (if (activeInput.isNotEmpty()) ", $activeInput" else "")
+                    }
+                    onChange(newValue)
+                }
+            )
+        }
+        
+        BasicTextField(
+            value = activeInputState,
+            onValueChange = { newActiveState ->
+                // Update local state immediately to preserve cursor position
+                activeInputState = newActiveState
+
+                val newActiveText = newActiveState.text
+                val committedValue = if (newActiveText.endsWith(",")) {
+                    val cleaned = newActiveText.removeSuffix(",").trim()
+                    if (cleaned.isNotEmpty()) {
+                        (completed + cleaned).joinToString(", ") + ", "
+                    } else {
+                        value
+                    }
+                } else {
+                    if (completed.isEmpty()) {
+                        newActiveText
+                    } else {
+                        completed.joinToString(", ") + ", " + newActiveText
+                    }
+                }
+                onChange(committedValue)
+            },
+            keyboardOptions = keyboardOptions,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier
+                .widthIn(min = 120.dp)
+                .align(Alignment.CenterVertically)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
+                        onChange((completed + activeInput.trim()).joinToString(", ") + ", ")
+                    }
+                    onFocusChanged(focusState)
+                },
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (activeInput.isEmpty() && completed.isEmpty() && placeholder.isNotEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
     }
 }
 
@@ -453,39 +861,76 @@ internal fun FromIdentitySelector(
     identities: List<SendIdentity>,
     selectedKey: String,
     onSelect: (String) -> Unit,
+    labelWidth: Dp = 0.dp,
+    onLabelWidthChanged: (Dp) -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = identities.firstOrNull { identityKey(it) == selectedKey } ?: identities.firstOrNull()
+    val density = LocalDensity.current
     Box {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth()) {
-                Text(tr("composer.fields.from"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable { expanded = true }
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = tr("composer.fields.from"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .onGloballyPositioned { layoutCoordinates ->
+                        val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
+                        if (widthDp > labelWidth) {
+                            onLabelWidthChanged(widthDp)
+                        }
+                    }
+                    .then(
+                        if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth()
+                    ),
+            )
+            Box(modifier = Modifier.weight(1f)) {
                 Text(
-                    selected?.let { formatSendIdentity(it) } ?: tr("mobile.compose.selectSender"),
+                    text = selected?.let { formatSendIdentity(it) } ?: tr("mobile.compose.selectSender"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            identities.forEach { identity ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            formatSendIdentity(identity),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    identities.forEach { identity ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    formatSendIdentity(identity),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            onClick = {
+                                onSelect(identityKey(identity))
+                                expanded = false
+                            },
                         )
-                    },
-                    onClick = {
-                        onSelect(identityKey(identity))
-                        expanded = false
-                    },
-                )
+                    }
+                }
             }
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = tr("common.more"),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp)
+            )
         }
     }
+    HorizontalDivider(
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+        thickness = 0.5.dp,
+    )
 }
 
 @Composable
@@ -498,28 +943,84 @@ internal fun ComposeField(
     onFocus: (field: String, value: String) -> Unit = { _, _ -> },
     onAcceptSuggestion: (field: String, contact: ContactSuggestion) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
+    placeholder: String = "",
+    autoFocus: Boolean = false,
+    trailingContent: @Composable (RowScope.() -> Unit)? = null,
+    labelWidth: Dp = 0.dp,
+    onLabelWidthChanged: (Dp) -> Unit = {},
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    var isFocused by remember { mutableStateOf(false) }
+    val isRecipientField = field == "to" || field == "cc" || field == "bcc"
+    val density = LocalDensity.current
+
+    Column(modifier) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onChange,
-                label = { Text(label) },
-                singleLine = true,
-                keyboardOptions = nativeTextKeyboardOptions,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .onFocusChanged {
-                            if (it.isFocused && field.isNotBlank()) onFocus(field, value)
-                        },
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .onGloballyPositioned { layoutCoordinates ->
+                        val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
+                        if (widthDp > labelWidth) {
+                            onLabelWidthChanged(widthDp)
+                        }
+                    }
+                    .then(
+                        if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth()
+                    ),
             )
 
-            if (value.isEmpty()) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (isRecipientField) {
+                    RecipientChipsInput(
+                        value = value,
+                        onChange = onChange,
+                        placeholder = placeholder,
+                        keyboardOptions = nativeTextKeyboardOptions,
+                        onFocusChanged = {
+                            isFocused = it.isFocused
+                            if (it.isFocused && field.isNotBlank()) onFocus(field, value)
+                        },
+                        isFocused = isFocused,
+                    )
+                } else {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onChange,
+                        keyboardOptions = nativeTextKeyboardOptions,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged {
+                                    isFocused = it.isFocused
+                                    if (it.isFocused && field.isNotBlank()) onFocus(field, value)
+                                },
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (value.isEmpty() && placeholder.isNotEmpty()) {
+                                    Text(
+                                        text = placeholder,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+                }
+            }
+
+            if (value.isEmpty() && !isRecipientField) {
                 val clipboardManager = LocalClipboardManager.current
                 IconButton(
                     onClick = {
@@ -532,26 +1033,78 @@ internal fun ComposeField(
                     Icon(
                         Icons.Filled.ContentPaste,
                         contentDescription = "Paste",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+
+            if (trailingContent != null) {
+                trailingContent()
             }
         }
-        if (suggestions.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(suggestions, key = { it.addr }) { contact ->
-                    FilterChip(
-                        selected = false,
-                        onClick = { onAcceptSuggestion(field, contact) },
-                        label = {
-                            Text(
-                                formatContactSuggestion(contact),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                    )
+
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+            thickness = 0.5.dp,
+        )
+
+        val activeInputText = if (isRecipientField) parseRecipients(value).second else value
+        val showSuggestions = isFocused && suggestions.isNotEmpty() && activeInputText.trim().isNotEmpty()
+
+        if (showSuggestions) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                ) {
+                    suggestions.forEach { contact ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onAcceptSuggestion(field, contact) }
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(getAvatarColor(contact.addr), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val initials = if (contact.name.isNotEmpty()) contact.name.take(1).uppercase() else contact.addr.take(1).uppercase()
+                                Text(
+                                    text = initials,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Column {
+                                if (contact.name.isNotEmpty()) {
+                                    Text(
+                                        text = contact.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = contact.addr,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                thickness = 0.5.dp,
+            )
         }
     }
 }

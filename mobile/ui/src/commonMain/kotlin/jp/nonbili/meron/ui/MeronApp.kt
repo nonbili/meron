@@ -966,6 +966,9 @@ private fun MeronMobileScreenContent(
                         }
                     },
                     onClearAttachments = { attachments = emptyList() },
+                    onRemoveAttachment = { draftAttachment ->
+                        attachments = attachments.filter { it.id != draftAttachment.id }
+                    },
                     sendShortcutMode = sendShortcutMode,
                     onSaveDraft = ::saveComposeDraft,
                     onDiscardDraft = ::discardComposeDraft,
