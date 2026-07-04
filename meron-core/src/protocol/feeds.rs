@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn add_mobile_rss_account(data_dir: &str, params: &Value) -> Result<Value, String> {
-    let feed_url = req_str(params, "feed_url")?;
+    let feed_url = opt_str(params, "feed_url");
     let display_name = opt_str(params, "display_name");
     with_mobile_db_mutex(data_dir, |db| {
         let account = rss::add(&db, &feed_url, &display_name).map_err(|err| format!("{err:#}"))?;

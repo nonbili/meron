@@ -1306,10 +1306,19 @@ internal fun AddAccountScreen(
 
                 else -> {
                     item {
-                        SetupCard(title = tr("feeds.fallbackName")) {
-                            SetupField(rssFeedUrl, onRssFeedUrlChange, tr("feeds.url"))
-                            SetupField(rssDisplayName, onRssDisplayNameChange, tr("accounts.rssFeedName"))
-                            Button(onClick = onAddRss, modifier = Modifier.fillMaxWidth()) { Text(tr("feeds.actions.addFeed")) }
+                        SetupCard(title = "") {
+                            SetupField(rssDisplayName, onRssDisplayNameChange, tr("accounts.fields.accountName"))
+                            SetupField(rssFeedUrl, onRssFeedUrlChange, tr("accounts.fields.firstFeedUrl"))
+                            Text(
+                                tr("accounts.setup.feedAccountHint"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Button(
+                                onClick = onAddRss,
+                                enabled = rssDisplayName.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(tr("accounts.actions.saveAccount")) }
                         }
                     }
                 }
