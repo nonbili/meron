@@ -293,6 +293,7 @@ internal fun ThreadScreen(
     onSendReply: () -> Unit,
     onForward: (MessageBody) -> Unit,
     onEditAsNew: (MessageBody) -> Unit,
+    onOpenDraft: (MessageBody) -> Unit,
     onToggleMessageRead: (MessageBody) -> Unit,
     onToggleMessageStarred: (MessageBody) -> Unit,
     onDeleteMessage: (MessageBody) -> Unit,
@@ -663,6 +664,7 @@ internal fun ThreadScreen(
                                 actionsEnabled = !isRss,
                                 onForward = onForward,
                                 onEditAsNew = onEditAsNew,
+                                onOpenDraft = onOpenDraft,
                                 onToggleRead = onToggleMessageRead,
                                 onToggleStarred = onToggleMessageStarred,
                                 onDelete = onDeleteMessage,
@@ -1085,6 +1087,7 @@ internal fun MessageBubble(
     actionsEnabled: Boolean,
     onForward: (MessageBody) -> Unit,
     onEditAsNew: (MessageBody) -> Unit,
+    onOpenDraft: (MessageBody) -> Unit,
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
@@ -1147,15 +1150,40 @@ internal fun MessageBubble(
                 } else {
                     Spacer(Modifier.weight(1f))
                 }
+                if (folderIsDrafts(message.folderId)) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = tr("chat.draft"),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
                 Text(
                     formatInboxTimestamp(message.dateEpochSeconds),
                     fontSize = 10.5.sp,
                     color = textColor.copy(alpha = 0.55f),
                 )
-                IconButton(onClick = { onOpenMessage(message) }, modifier = Modifier.size(24.dp)) {
+                val isDraft = folderIsDrafts(message.folderId)
+                IconButton(
+                    onClick = {
+                        if (isDraft) {
+                            onOpenDraft(message)
+                        } else {
+                            onOpenMessage(message)
+                        }
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
                     Icon(
-                        Icons.Filled.OpenInFull,
-                        contentDescription = tr("threads.actions.openInNewTab"),
+                        imageVector = if (isDraft) Icons.Filled.Edit else Icons.Filled.OpenInFull,
+                        contentDescription = if (isDraft) tr("chat.draft") else tr("threads.actions.openInNewTab"),
                         modifier = Modifier.size(15.dp),
                         tint = textColor.copy(alpha = 0.55f),
                     )

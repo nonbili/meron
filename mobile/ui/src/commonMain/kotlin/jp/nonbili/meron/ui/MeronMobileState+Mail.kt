@@ -778,7 +778,8 @@ private fun mergeLocalSendMessages(
     val local =
         current.filter { message ->
             val localSend = message.id.startsWith("local-send-")
-            if (!localSend && message.sendStatus == SendStatus.None) return@filter false
+            val localDraft = message.id.startsWith("local-draft-")
+            if (!localSend && !localDraft && message.sendStatus == SendStatus.None) return@filter false
             if (message.id in refreshedIds) return@filter false
             val messageId = message.messageId.normalizedMessageId()
             messageId.isBlank() || messageId !in refreshedMessageIds

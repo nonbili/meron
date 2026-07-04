@@ -107,7 +107,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -377,7 +379,7 @@ private fun String.decodeJsonString(): String {
     return out.toString()
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalEncodingApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalEncodingApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun MeronMobileScreenContent(
     state: MeronMobileState,
@@ -405,8 +407,10 @@ private fun MeronMobileScreenContent(
             if (currentRoute == null) {
                 pendingRoute = targetRoute
             } else if (currentRoute != targetRoute) {
-                navController.navigate(targetRoute) {
-                    launchSingleTop = true
+                if (!navController.popBackStack(targetRoute, inclusive = false)) {
+                    navController.navigate(targetRoute) {
+                        launchSingleTop = true
+                    }
                 }
             }
         }
@@ -896,6 +900,11 @@ private fun MeronMobileScreenContent(
                     onSendReply = ::sendQuickReply,
                     onForward = { openMessageCompose(it, forward = true) },
                     onEditAsNew = { openMessageCompose(it, forward = false) },
+                    onOpenDraft = { message ->
+                        selectedCoreThread?.let { thread ->
+                            openDraftCompose(message, thread)
+                        }
+                    },
                     onToggleMessageRead = ::toggleMessageRead,
                     onToggleMessageStarred = ::toggleMessageStarred,
                     onDeleteMessage = ::deleteMessage,
@@ -926,6 +935,9 @@ private fun MeronMobileScreenContent(
             }
 
             composable(AppRoutes.Compose) {
+                BackHandler(
+                    onBack = { closeCompose() },
+                )
                 ComposeScreen(
                     sendIdentities = composeIdentityCandidates(),
                     selectedFromKey = selectedComposeIdentity()?.let { identityKey(it) }.orEmpty(),
@@ -971,6 +983,7 @@ private fun MeronMobileScreenContent(
                     },
                     sendShortcutMode = sendShortcutMode,
                     onSaveDraft = ::saveComposeDraft,
+                    onAutoSaveDraft = ::autoSaveComposeDraft,
                     onDiscardDraft = ::discardComposeDraft,
                     onSend = ::sendMail,
                     onBack = ::closeCompose,

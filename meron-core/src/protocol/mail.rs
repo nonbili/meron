@@ -4,6 +4,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 const MOBILE_BODY_PREFETCH_DAYS: u32 = 7;
 const MOBILE_BODY_PREFETCH_MAX: usize = 20;
 const MOBILE_BODY_PREFETCH_TIMEOUT_SECS: u64 = 20;
+const DRAFT_SYNC_LIMIT: u32 = 20;
 
 fn prefetch_mobile_bodies(
     data_dir: &str,
@@ -231,17 +232,36 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
         .map_err(|err| format!("{err:#}"))?;
         let saved_id = draft_id.clone();
         let saved_bytes = raw.len();
-        crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
-            let raw = raw.clone();
-            let saved_id = saved_id.clone();
-            Box::pin(async move {
-                let drafts = imap::find_drafts_folder(session)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-                imap::replace_draft(session, &drafts, &raw, &saved_id).await?;
-                anyhow::Ok(())
-            })
-        }))?;
+        let drafts_folder =
+            crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
+                let raw = raw.clone();
+                let saved_id = saved_id.clone();
+                Box::pin(async move {
+                    let drafts = imap::find_drafts_folder(session)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+                    imap::replace_draft(session, &drafts, &raw, &saved_id).await?;
+                    anyhow::Ok(drafts)
+                })
+            }))?;
+        // The IMAP APPEND above lands the draft on the server, but the local
+        // store (what mail.threadRead / thread lists read from) doesn't know
+        // about it yet. Without this, the draft is invisible in the UI until
+        // some other action happens to resync the Drafts folder. Best-effort:
+        // a sync failure here shouldn't fail the save, since the draft is
+        // already safely on the server.
+        if let Err(err) = crate::ffi::engine_block_on(crate::engine::sync_messages(
+            &engine,
+            &account_id,
+            &drafts_folder,
+            DRAFT_SYNC_LIMIT,
+        )) {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.saveDraft",
+                "post-save Drafts sync failed for {account_id}: {err}"
+            );
+        }
         Ok(json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes }))
     })
 }

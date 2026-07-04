@@ -262,6 +262,42 @@ import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 import kotlin.math.max
 
+private const val COMPOSE_AUTOSAVE_DELAY_MS = 3_000L
+
+internal data class ComposeAutosaveSnapshot(
+    val selectedFromKey: String,
+    val to: String,
+    val cc: String,
+    val bcc: String,
+    val subject: String,
+    val body: String,
+    val attachments: List<DraftAttachment>,
+)
+
+internal fun composeAutosaveSnapshot(
+    selectedFromKey: String,
+    to: String,
+    cc: String,
+    bcc: String,
+    subject: String,
+    body: String,
+    attachments: List<DraftAttachment>,
+): ComposeAutosaveSnapshot? {
+    val hasContent =
+        to.isNotBlank() || cc.isNotBlank() || bcc.isNotBlank() ||
+            subject.isNotBlank() || body.isNotBlank() || attachments.isNotEmpty()
+    if (!hasContent) return null
+    return ComposeAutosaveSnapshot(
+        selectedFromKey = selectedFromKey,
+        to = to,
+        cc = cc,
+        bcc = bcc,
+        subject = subject,
+        body = body,
+        attachments = attachments,
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ComposeScreen(
@@ -288,6 +324,7 @@ internal fun ComposeScreen(
     onRemoveAttachment: (DraftAttachment) -> Unit,
     sendShortcutMode: SendShortcutMode,
     onSaveDraft: () -> Unit,
+    onAutoSaveDraft: () -> Unit,
     onDiscardDraft: () -> Unit,
     onSend: () -> Unit,
     onBack: () -> Unit,
@@ -299,6 +336,35 @@ internal fun ComposeScreen(
     val hasContent =
         to.isNotBlank() || cc.isNotBlank() || bcc.isNotBlank() ||
             subject.isNotBlank() || body.isNotBlank() || attachments.isNotEmpty()
+    val autosaveSnapshot =
+        remember(selectedFromKey, to, cc, bcc, subject, body, attachments) {
+            composeAutosaveSnapshot(
+                selectedFromKey = selectedFromKey,
+                to = to,
+                cc = cc,
+                bcc = bcc,
+                subject = subject,
+                body = body,
+                attachments = attachments,
+            )
+        }
+    var autosaveInitialized by remember { mutableStateOf(false) }
+    var lastAutosavedSnapshot by remember { mutableStateOf<ComposeAutosaveSnapshot?>(null) }
+
+    LaunchedEffect(autosaveSnapshot) {
+        if (!autosaveInitialized) {
+            autosaveInitialized = true
+            lastAutosavedSnapshot = autosaveSnapshot
+            return@LaunchedEffect
+        }
+        val snapshot = autosaveSnapshot ?: return@LaunchedEffect
+        if (snapshot == lastAutosavedSnapshot) return@LaunchedEffect
+        delay(COMPOSE_AUTOSAVE_DELAY_MS)
+        if (snapshot != lastAutosavedSnapshot) {
+            onAutoSaveDraft()
+            lastAutosavedSnapshot = snapshot
+        }
+    }
 
     if (confirmDiscard) {
         AlertDialog(
