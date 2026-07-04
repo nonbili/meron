@@ -29,6 +29,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -113,6 +115,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.LeadingIconTab
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -1212,7 +1216,23 @@ internal fun AddAccountScreen(
     onRssDisplayNameChange: (String) -> Unit,
     onAddRss: () -> Unit,
 ) {
-    var section by remember(initialSection) { mutableStateOf(initialSection) }
+    val pagerState = rememberPagerState(initialPage = initialSection) { 3 }
+    val coroutineScope = rememberCoroutineScope()
+    val tabs = listOf(
+        tr("accounts.setup.oauthTab"),
+        tr("accounts.setup.passwordTab"),
+        tr("accounts.setup.rssTab"),
+    )
+    val icons = listOf(
+        Icons.Default.PersonAdd,
+        Icons.Default.Inbox,
+        Icons.Default.RssFeed,
+    )
+
+    LaunchedEffect(initialSection) {
+        pagerState.scrollToPage(initialSection)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1225,100 +1245,116 @@ internal fun AddAccountScreen(
             )
         },
     ) { innerPadding ->
-        LazyColumn(
-            Modifier
+        Column(
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
-                .imePadding(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        tr("accounts.setup.oauthTab"),
-                        tr("accounts.setup.passwordTab"),
-                        tr("accounts.setup.rssTab"),
-                    ).forEachIndexed { index, label ->
-                        FilterChip(
-                            selected = section == index,
-                            onClick = { section = index },
-                            label = { Text(label) },
-                        )
-                    }
+            SecondaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                tabs.forEachIndexed { index, label ->
+                    LeadingIconTab(
+                        selected = pagerState.currentPage == index,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        text = { Text(label, maxLines = 1) },
+                        icon = { Icon(icons[index], contentDescription = label) },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            when (section) {
-                0 -> {
-                    item {
-                        SetupCard(title = "") {
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                OAuthSignInButton(
-                                    label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.googleName")),
-                                    provider = "google",
-                                    onClick = onConnectGoogleDeviceAccount,
-                                )
-                                OAuthSignInButton(
-                                    label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.outlookName")),
-                                    provider = "outlook",
-                                    onClick = onLaunchOAuth,
-                                )
-                            }
-                            if (oauthAuthorizationCode.isNotBlank()) {
-                                Text(
-                                    tr("accounts.oauth.finishingSignIn"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+                    .imePadding()
+            ) { page ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    when (page) {
+                        0 -> {
+                            item {
+                                SetupCard(title = "") {
+                                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        OAuthSignInButton(
+                                            label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.googleName")),
+                                            provider = "google",
+                                            onClick = onConnectGoogleDeviceAccount,
+                                        )
+                                        OAuthSignInButton(
+                                            label = trf("accounts.oauth.signInWithProvider", tr("accounts.providers.outlookName")),
+                                            provider = "outlook",
+                                            onClick = onLaunchOAuth,
+                                        )
+                                    }
+                                    if (oauthAuthorizationCode.isNotBlank()) {
+                                        Text(
+                                            tr("accounts.oauth.finishingSignIn"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                }
 
-                1 -> {
-                    item {
-                        SetupCard(title = tr("accounts.setup.imapSmtpAccount")) {
-                            SetupField(displayName, onDisplayNameChange, tr("accounts.fields.displayNameMeronOnly"))
-                            SetupField(senderName, onSenderNameChange, tr("accounts.fields.senderNameOutgoing"))
-                            SetupField(email, onEmailChange, tr("accounts.fields.emailAddress"), onFocusLost = onEmailBlur)
-                            SetupField(password, onPasswordChange, tr("accounts.fields.password"), isPassword = true)
-                            OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
-                                Text(tr("mobile.accounts.findMailSettings"))
+                        1 -> {
+                            item {
+                                SetupCard(title = "") {
+                                    SetupField(displayName, onDisplayNameChange, tr("accounts.fields.displayNameMeronOnly"))
+                                    SetupField(senderName, onSenderNameChange, tr("accounts.fields.senderNameOutgoing"))
+                                    SetupField(email, onEmailChange, tr("accounts.fields.emailAddress"), onFocusLost = onEmailBlur)
+                                    SetupField(password, onPasswordChange, tr("accounts.fields.password"), isPassword = true)
+                                    OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
+                                        Text(tr("mobile.accounts.findMailSettings"))
+                                    }
+                                    TextButton(
+                                        onClick = { onServerSettingsOpenChange(!serverSettingsOpen) },
+                                        modifier = Modifier.align(Alignment.Start),
+                                    ) {
+                                        Text(tr("accounts.advancedServerSettings"))
+                                    }
+                                    if (serverSettingsOpen) {
+                                        SetupField(username, onUsernameChange, tr("accounts.fields.username"))
+                                        SetupField(host, onHostChange, tr("accounts.fields.imapHost"))
+                                        SetupField(imapPort, onImapPortChange, tr("accounts.fields.imapPort"))
+                                        SetupField(smtpHost, onSmtpHostChange, tr("accounts.fields.smtpHost"))
+                                        SetupField(smtpPort, onSmtpPortChange, tr("accounts.fields.smtpPort"))
+                                    }
+                                    Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text(tr("accounts.actions.addAccount")) }
+                                }
                             }
-                            TextButton(
-                                onClick = { onServerSettingsOpenChange(!serverSettingsOpen) },
-                                modifier = Modifier.align(Alignment.Start),
-                            ) {
-                                Text(tr("accounts.advancedServerSettings"))
-                            }
-                            if (serverSettingsOpen) {
-                                SetupField(username, onUsernameChange, tr("accounts.fields.username"))
-                                SetupField(host, onHostChange, tr("accounts.fields.imapHost"))
-                                SetupField(imapPort, onImapPortChange, tr("accounts.fields.imapPort"))
-                                SetupField(smtpHost, onSmtpHostChange, tr("accounts.fields.smtpHost"))
-                                SetupField(smtpPort, onSmtpPortChange, tr("accounts.fields.smtpPort"))
-                            }
-                            Button(onClick = onAddPassword, modifier = Modifier.fillMaxWidth()) { Text(tr("accounts.actions.addAccount")) }
                         }
-                    }
-                }
 
-                else -> {
-                    item {
-                        SetupCard(title = "") {
-                            SetupField(rssDisplayName, onRssDisplayNameChange, tr("accounts.fields.accountName"))
-                            SetupField(rssFeedUrl, onRssFeedUrlChange, tr("accounts.fields.firstFeedUrl"))
-                            Text(
-                                tr("accounts.setup.feedAccountHint"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Button(
-                                onClick = onAddRss,
-                                enabled = rssDisplayName.isNotBlank(),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text(tr("accounts.actions.saveAccount")) }
+                        else -> {
+                            item {
+                                SetupCard(title = "") {
+                                    SetupField(rssDisplayName, onRssDisplayNameChange, tr("accounts.fields.accountName"))
+                                    SetupField(rssFeedUrl, onRssFeedUrlChange, tr("accounts.fields.firstFeedUrl"))
+                                    Text(
+                                        tr("accounts.setup.feedAccountHint"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Button(
+                                        onClick = onAddRss,
+                                        enabled = rssDisplayName.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) { Text(tr("accounts.actions.saveAccount")) }
+                                }
+                            }
                         }
                     }
                 }
@@ -1426,61 +1462,58 @@ internal fun SetupField(
             }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            state = textFieldState,
-            label = { Text(label) },
-            placeholder = placeholder?.let { { Text(it) } },
-            lineLimits = TextFieldLineLimits.SingleLine,
-            keyboardOptions = nativeTextKeyboardOptions,
-            modifier =
-                Modifier.weight(1f).let { m ->
-                    if (onFocusLost != null) {
-                        m.onFocusChanged { focusState ->
-                            if (wasFocused && !focusState.isFocused) onFocusLost()
-                            wasFocused = focusState.isFocused
-                        }
-                    } else {
-                        m
+    OutlinedTextField(
+        state = textFieldState,
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        lineLimits = TextFieldLineLimits.SingleLine,
+        keyboardOptions = nativeTextKeyboardOptions,
+        modifier =
+            Modifier.fillMaxWidth().let { m ->
+                if (onFocusLost != null) {
+                    m.onFocusChanged { focusState ->
+                        if (wasFocused && !focusState.isFocused) onFocusLost()
+                        wasFocused = focusState.isFocused
                     }
-                },
-            outputTransformation = if (isPassword && !revealed) PasswordOutputTransformation else null,
-        )
-
-        if (isPassword || value.isEmpty()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                val clipboardManager = LocalClipboardManager.current
-                if (value.isEmpty()) {
-                    IconButton(onClick = {
-                        val text = clipboardManager.getText()?.text.orEmpty()
-                        if (text.isNotEmpty()) {
-                            onChange(text)
-                        }
-                    }) {
-                        Icon(
-                            Icons.Filled.ContentPaste,
-                            contentDescription = "Paste",
-                        )
-                    }
+                } else {
+                    m
                 }
-                if (isPassword) {
-                    IconButton(onClick = { revealed = !revealed }) {
-                        Icon(
-                            if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = if (revealed) "Hide password" else "Show password",
-                        )
+            },
+        outputTransformation = if (isPassword && !revealed) PasswordOutputTransformation else null,
+        trailingIcon = if (isPassword || value.isEmpty()) {
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val clipboardManager = LocalClipboardManager.current
+                    if (value.isEmpty()) {
+                        IconButton(onClick = {
+                            val text = clipboardManager.getText()?.text.orEmpty()
+                            if (text.isNotEmpty()) {
+                                onChange(text)
+                            }
+                        }) {
+                            Icon(
+                                Icons.Filled.ContentPaste,
+                                contentDescription = "Paste",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    if (isPassword) {
+                        IconButton(onClick = { revealed = !revealed }) {
+                            Icon(
+                                if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (revealed) "Hide password" else "Show password",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }
-        }
-    }
+        } else null
+    )
 }
 
 /**
