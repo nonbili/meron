@@ -228,6 +228,7 @@ import jp.nonbili.meron.shared.folderIsTrash
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.forwardableAttachments
+import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.isOAuthCallbackUrl
 import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
@@ -1433,9 +1434,10 @@ internal fun MessageBubble(
                     )
                 }
             }
-            if (message.attachments.isNotEmpty()) {
+            val standaloneAttachmentsForMessage = standaloneAttachments(message)
+            if (standaloneAttachmentsForMessage.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    message.attachments.forEach { attachment ->
+                    standaloneAttachmentsForMessage.forEach { attachment ->
                         AttachmentRow(
                             attachment = attachment,
                             textColor = textColor,
@@ -1665,9 +1667,10 @@ internal fun MessageReaderScreen(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
-                if (message.attachments.isNotEmpty()) {
+                val standaloneAttachmentsForMessage = standaloneAttachments(message)
+                if (standaloneAttachmentsForMessage.isNotEmpty()) {
                     HorizontalDivider()
-                    message.attachments.forEach { attachment ->
+                    standaloneAttachmentsForMessage.forEach { attachment ->
                         AttachmentRow(
                             attachment = attachment,
                             textColor = MaterialTheme.colorScheme.onSurface,

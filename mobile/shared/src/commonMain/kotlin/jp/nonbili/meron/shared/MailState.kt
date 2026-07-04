@@ -317,6 +317,20 @@ fun forwardableAttachments(message: MessageBody): List<MessageAttachment> =
         key.isNotBlank() && attachment.url.isBlank() && !message.bodyHtml.contains("/media/$key")
     }
 
+// Attachments to list (with a Save row) below the message body. Excludes
+// attachments already rendered inline in bodyHtml, which would otherwise show
+// up twice — once inline, once as a redundant row. Mail inlines images via
+// cid: (rewritten to "/media/<key>"); feed items keep their original remote
+// image URL in the html instead, so both references are checked.
+fun standaloneAttachments(message: MessageBody): List<MessageAttachment> =
+    message.attachments.filter { attachment ->
+        val key = attachment.key.trim()
+        val referencedByKey = key.isNotBlank() && message.bodyHtml.contains("/media/$key")
+        val url = attachment.url.trim()
+        val referencedByUrl = url.isNotBlank() && message.bodyHtml.contains(url)
+        !referencedByKey && !referencedByUrl
+    }
+
 fun attachmentToDraftAttachment(
     attachment: MessageAttachment,
     dataBase64: String,
