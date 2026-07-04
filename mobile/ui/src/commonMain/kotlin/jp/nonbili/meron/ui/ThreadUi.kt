@@ -815,7 +815,7 @@ internal fun ConversationDetailsScreen(
     val participants = remember(messages, isRss, ownEmail) { conversationParticipants(messages, ownEmail, isRss) }
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
     val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
-    val mediaRows = remember(mediaItems) { mediaItems.chunked(3) }
+    val mediaRows = remember(mediaItems) { mediaItems.chunked(3).withIndex().toList() }
 
     BackHandler(onBack = onBack)
 
@@ -969,7 +969,8 @@ internal fun ConversationDetailsScreen(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    items(mediaRows, key = { row -> row.joinToString("|") { "${it.type}-${it.filename}" } }) { row ->
+                    items(mediaRows, key = { "media-row-${it.index}" }) { indexedRow ->
+                        val row = indexedRow.value
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
