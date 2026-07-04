@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -815,7 +816,7 @@ internal fun ConversationDetailsScreen(
     val participants = remember(messages, isRss, ownEmail) { conversationParticipants(messages, ownEmail, isRss) }
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
     val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
-    val mediaRows = remember(mediaItems) { mediaItems.chunked(3).withIndex().toList() }
+    val mediaRows = remember(mediaItems) { mediaItems.chunked(3) }
 
     BackHandler(onBack = onBack)
 
@@ -969,8 +970,10 @@ internal fun ConversationDetailsScreen(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    items(mediaRows, key = { "media-row-${it.index}" }) { indexedRow ->
-                        val row = indexedRow.value
+                    itemsIndexed(
+                        mediaRows,
+                        key = { index, row -> "$index:${row.joinToString("|") { "${it.type}-${it.filename}" }}" },
+                    ) { _, row ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2639,8 +2642,9 @@ internal fun AttachmentImageGrid(
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap? = { null },
     onOpen: (MessageAttachment) -> Unit,
 ) {
+    val rows = remember(images) { images.chunked(3) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        images.chunked(3).forEach { row ->
+        rows.forEach { row ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),

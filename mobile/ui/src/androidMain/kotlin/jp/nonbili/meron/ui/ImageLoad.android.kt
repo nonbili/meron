@@ -5,9 +5,9 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 
 private const val REMOTE_IMAGE_CACHE_MAX_BYTES = 1024L * 1024L * 1024L
 private const val REMOTE_IMAGE_CONNECT_TIMEOUT_MS = 10_000
@@ -59,7 +59,7 @@ internal fun androidMediaRoot(
 internal fun androidMediaRootDirectoryName(relative: String): String =
     if (relative.startsWith("avatars/") || relative.startsWith("wallpapers/")) "media" else "attachments"
 
-internal fun remoteImageCacheKey(url: String): String = sha256Hex(url.encodeToByteArray())
+internal fun remoteImageCacheKey(url: String): String = sha256Hex(url)
 
 internal fun cachedRemoteImageFile(
     cacheDir: File,
@@ -93,8 +93,13 @@ private fun loadRemoteImageBytes(
     if (cacheDir != null) {
         cacheDir.mkdirs()
         cachedRemoteImageFile(cacheDir, url)?.let { file ->
-            val bytes = file.readBytes()
-            if (bytes.isNotEmpty()) {
+            val bytes =
+                try {
+                    file.readBytes()
+                } catch (_: IOException) {
+                    null
+                }
+            if (bytes != null && bytes.isNotEmpty()) {
                 file.setLastModified(System.currentTimeMillis())
                 return bytes
             }
@@ -111,14 +116,14 @@ private fun loadRemoteImageBytes(
         if (connection.responseCode !in 200..299) return null
         val bytes = connection.inputStream.use { it.readBytes() }
         if (bytes.isEmpty()) return null
-        val ext = sniffImageExtension(bytes, connection.contentType) ?: return null
-        if (cacheDir != null) {
+        val ext = sniffImageExtension(bytes, connection.contentType)
+        if (cacheDir != null && ext != null) {
             cacheDir.mkdirs()
             val target = File(cacheDir, "${remoteImageCacheKey(url)}.$ext")
-            val tmp = File(cacheDir, "${target.name}.tmp")
+            val tmp = File(cacheDir, "${target.name}.${System.nanoTime()}.tmp")
             tmp.writeBytes(bytes)
             if (!tmp.renameTo(target)) {
-                target.writeBytes(bytes)
+                tmp.copyTo(target, overwrite = true)
                 tmp.delete()
             }
             target.setLastModified(System.currentTimeMillis())
@@ -159,9 +164,3 @@ private fun imageExtensionFromFileName(name: String): String? =
 
 private fun ByteArray.decodeHead(maxBytes: Int): String =
     copyOfRange(0, size.coerceAtMost(maxBytes)).decodeToString()
-
-private fun sha256Hex(bytes: ByteArray): String =
-    MessageDigest
-        .getInstance("SHA-256")
-        .digest(bytes)
-        .joinToString("") { "%02x".format(it.toInt() and 0xFF) }

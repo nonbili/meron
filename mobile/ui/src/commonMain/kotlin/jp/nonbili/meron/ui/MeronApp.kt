@@ -920,10 +920,13 @@ private fun MeronMobileScreenContent(
                     onShareImageAttachment = ::shareImageAttachment,
                     onCopyImageAttachment = ::copyImageAttachment,
                     loadImageAttachment = { attachment ->
-                        if (attachment.key.isNotBlank()) {
-                            withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
-                        } else {
-                            loadImageBitmapRef(attachment.url)
+                        val cacheKey = attachment.key.ifBlank { attachment.url }
+                        loadCachedImageBitmap(cacheKey) {
+                            if (attachment.key.isNotBlank()) {
+                                withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                            } else {
+                                loadImageBitmapRef(attachment.url)
+                            }
                         }
                     },
                     onComposeTo = { email ->

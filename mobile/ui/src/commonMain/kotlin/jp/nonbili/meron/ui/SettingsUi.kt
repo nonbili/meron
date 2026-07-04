@@ -1377,12 +1377,14 @@ internal fun WallpaperPresetGrid(
     onUpload: () -> Unit,
     uploadLabel: String,
 ) {
+    val rows = remember {
+        (listOf<Pair<String, String>?>(null) + wallpaperPresets.map { it.first to it.second }).chunked(3)
+    }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val tiles = listOf<Pair<String, String>?>(null) + wallpaperPresets.map { it.first to it.second }
-        tiles.chunked(3).forEach { row ->
+        rows.forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

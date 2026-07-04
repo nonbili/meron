@@ -842,10 +842,13 @@ internal fun MeronMobileState.openMessageAttachment(attachment: MessageAttachmen
     }
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) { readAttachmentBytes(attachment) }
-        }.onSuccess { bytes ->
+            withContext(ioDispatcher) {
+                val bytes = readAttachmentBytes(attachment)
+                val image = if (attachment.mimeType.startsWith("image/")) decodeImageBitmap(bytes) else null
+                bytes to image
+            }
+        }.onSuccess { (bytes, image) ->
             if (attachment.mimeType.startsWith("image/")) {
-                val image = decodeImageBitmap(bytes)
                 if (image == null) {
                     status = "Attachment image could not be decoded"
                     return@onSuccess
