@@ -249,6 +249,10 @@ internal fun MeronMobileState.applyAccounts(
     selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
         ?: selectedCoreAccountId.takeIf { sel -> sel == UNIFIED_ACCOUNT_ID || parsed.any { it.id == sel } }
         ?: UNIFIED_ACCOUNT_ID
+    if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+        selectedCoreFolder = INBOX_FOLDER
+    }
+    saveLastMailLocation(prefs, selectedCoreAccountId, selectedCoreFolder)
     kanbanBoards = ensureKanbanDefaults(kanbanPrefs, kanbanBoards, parsed)
     if (activeKanbanBoardId.isBlank() || kanbanBoards.none { it.id == activeKanbanBoardId }) {
         activeKanbanBoardId = kanbanBoards.firstOrNull()?.id.orEmpty()

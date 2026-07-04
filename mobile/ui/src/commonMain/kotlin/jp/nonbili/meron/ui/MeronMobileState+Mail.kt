@@ -298,6 +298,7 @@ internal fun MeronMobileState.selectCoreMailbox(
     cacheVisibleMailbox()
     selectedCoreAccountId = accountId.ifBlank { UNIFIED_ACCOUNT_ID }
     selectedCoreFolder = folderId.ifBlank { INBOX_FOLDER }
+    saveLastMailLocation(prefs, selectedCoreAccountId, selectedCoreFolder)
     selectedCoreThread = null
     selectedMailThreadIds = emptySet()
     mailSelectionMenuOpen = false

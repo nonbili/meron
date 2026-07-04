@@ -63,6 +63,21 @@ internal fun saveLastTopScreen(
     },
 )
 
+internal fun loadLastMailAccountId(prefs: AppPreferences): String =
+    prefs.getString(LAST_MAIL_ACCOUNT_PREF, UNIFIED_ACCOUNT_ID).ifBlank { UNIFIED_ACCOUNT_ID }
+
+internal fun loadLastMailFolder(prefs: AppPreferences): String =
+    prefs.getString(LAST_MAIL_FOLDER_PREF, INBOX_FOLDER).ifBlank { INBOX_FOLDER }
+
+internal fun saveLastMailLocation(
+    prefs: AppPreferences,
+    accountId: String,
+    folder: String,
+) {
+    prefs.putString(LAST_MAIL_ACCOUNT_PREF, accountId.ifBlank { UNIFIED_ACCOUNT_ID })
+    prefs.putString(LAST_MAIL_FOLDER_PREF, folder.ifBlank { INBOX_FOLDER })
+}
+
 fun loadAppearanceMode(prefs: AppPreferences): AppAppearanceMode {
     val stored = prefs.getString(APPEARANCE_MODE_PREF, AppAppearanceMode.Indigo.storageValue)
     return AppAppearanceMode.entries.firstOrNull { it.storageValue == stored && it != AppAppearanceMode.System }
