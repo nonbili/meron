@@ -777,6 +777,7 @@ private fun MeronMobileScreenContent(
         }
 
         val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
+        val selectedAccountIsRss = selectedAccount != null && accountSummaryIsRss(selectedAccount)
         val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
         val selectedThreadAccountId = selectedThreadAccount?.id.orEmpty()
         val drawerFolders = foldersByAccount.values.flatten().ifEmpty { coreFolders }
@@ -1334,7 +1335,7 @@ private fun MeronMobileScreenContent(
                                 screen = Screen.Mail
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                                     selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
+                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 }
                                 scope.launch { drawerState.close() }
                             },
@@ -1342,7 +1343,7 @@ private fun MeronMobileScreenContent(
                                 screen = Screen.Mail
                                 if (selectedCoreAccountId != account.id) {
                                     selectCoreMailbox(account.id, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
+                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 }
                                 scope.launch { drawerState.close() }
                             },
@@ -1650,7 +1651,7 @@ private fun MeronMobileScreenContent(
                             onSelectUnified = {
                                 if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                                     selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER)
+                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 }
                                 screen = Screen.Mail
                                 scope.launch { drawerState.close() }
@@ -1658,7 +1659,7 @@ private fun MeronMobileScreenContent(
                             onSelectAccount = { account ->
                                 if (selectedCoreAccountId != account.id) {
                                     selectCoreMailbox(account.id, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER)
+                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
                                 }
                                 screen = Screen.Mail
                                 scope.launch { drawerState.close() }
@@ -2088,10 +2089,18 @@ private fun MeronMobileScreenContent(
 
                                     coreThreads.isEmpty() && (syncing || !initialThreadsLoaded) -> {
                                         LoadingState(
-                                            if (blockingMailboxLoadSlow) {
-                                                "Still syncing your inbox… The first sync can take a while."
+                                            if (selectedAccountIsRss) {
+                                                if (blockingMailboxLoadSlow) {
+                                                    "Still syncing feeds… The first sync can take a while."
+                                                } else {
+                                                    "Loading feeds…"
+                                                }
                                             } else {
-                                                "Loading your inbox…"
+                                                if (blockingMailboxLoadSlow) {
+                                                    "Still syncing your inbox… The first sync can take a while."
+                                                } else {
+                                                    "Loading your inbox…"
+                                                }
                                             },
                                         )
                                     }
@@ -2100,20 +2109,18 @@ private fun MeronMobileScreenContent(
                                         EmptyState(
                                             icon = Icons.Outlined.Drafts,
                                             title =
-                                                if (mailSearch.isBlank() &&
-                                                    mailFilter == FilterMode.All
-                                                ) {
-                                                    tr("empty.nothingHereYet")
+                                                if (mailSearch.isBlank() && mailFilter == FilterMode.All) {
+                                                    if (selectedAccountIsRss) tr("empty.noFeeds") else tr("empty.nothingHereYet")
                                                 } else {
                                                     tr("empty.noMatchingMail")
                                                 },
                                             text =
                                                 if (mailSearch.isBlank() && mailFilter == FilterMode.All) {
-                                                    tr("empty.pullLatestMessages")
+                                                    if (selectedAccountIsRss) tr("empty.addFeedToStart") else tr("empty.pullLatestMessages")
                                                 } else {
                                                     tr("empty.adjustSearchFilter")
                                                 },
-                                            actionLabel = tr("mobile.mail.syncMailbox"),
+                                            actionLabel = if (selectedAccountIsRss) tr("feeds.actions.syncFeeds") else tr("mobile.mail.syncMailbox"),
                                             onAction = ::syncCoreThreads,
                                         )
                                     }

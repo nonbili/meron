@@ -528,7 +528,9 @@ internal fun MeronMobileState.addFeedToSelectedRssAccount() {
             addFeedUrl = ""
             showAddFeedDialog = false
             status = "Feed added"
-            syncCoreThreads(accountOverride = account.id, syncFirst = true)
+            // feed.add already fetched and stored the new feed's items, so
+            // re-fetching here would be a redundant (and slow) network round-trip.
+            syncCoreThreads(accountOverride = account.id, syncFirst = false)
         }.onFailure {
             status = "Add feed failed: ${it.message}"
         }

@@ -456,7 +456,9 @@ internal fun MeronMobileState.addRssAccount() {
             }
             screen = Screen.Mail
             status = "Added RSS feed"
-            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = true)
+            // account.addRss already fetched and stored the starter feed's items,
+            // so re-fetching here would be a redundant (and slow) network round-trip.
+            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = false)
         }.onFailure {
             status = "Add RSS failed: ${it.message}"
         }
