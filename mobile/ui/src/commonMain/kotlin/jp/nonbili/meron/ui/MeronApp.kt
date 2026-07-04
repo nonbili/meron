@@ -902,7 +902,7 @@ private fun MeronMobileScreenContent(
                     onEditAsNew = { openMessageCompose(it, forward = false) },
                     onOpenDraft = { message ->
                         selectedCoreThread?.let { thread ->
-                            openDraftCompose(message, thread)
+                            openDraftCompose(message, thread, returnScreen = Screen.Thread)
                         }
                     },
                     onToggleMessageRead = ::toggleMessageRead,
@@ -1587,7 +1587,7 @@ private fun MeronMobileScreenContent(
                             filter = kanbanFilter,
                             search = kanbanSearch,
                             searchScope = kanbanSearchScope,
-                            onOpen = ::readCoreThread,
+                            onOpen = { thread, column -> readCoreThread(thread, sourceFolder = column.folderId) },
                             selectedThreadIds = selectedMailThreadIds,
                             selectionActive = mailSelectionActive,
                             onToggleSelected = { thread ->

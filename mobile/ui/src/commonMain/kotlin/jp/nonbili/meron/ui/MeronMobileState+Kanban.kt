@@ -406,7 +406,7 @@ internal fun MeronMobileState.loadKanbanColumn(
             }
             updateKanbanColumn(key) {
                 it.copy(
-                    threads = withLocalDraftFlags(result.threads),
+                    threads = withLocalDraftFlags(withoutLocallyDiscardedThreads(result.threads)),
                     loading = false,
                     loadingMore = false,
                     error = null,
@@ -465,6 +465,7 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
 internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
     accountId: String,
     folderId: String,
+    refresh: Boolean = false,
 ) {
     val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
     val folder = folderId.ifBlank { INBOX_FOLDER }
@@ -482,9 +483,11 @@ internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
             directFolderMatch || unifiedInboxMatch
         }.distinctBy(::kanbanColumnKey)
         .forEach { column ->
-            // The IDLE/event path has already synced the core DB. Re-read the
-            // affected active Kanban columns from cache without another IMAP pass.
-            loadKanbanColumn(column, refresh = false)
+            // The IDLE/event path has already synced the core DB, so callers can
+            // re-read the affected active Kanban columns from cache without
+            // another IMAP pass. Callers whose own action (e.g. discarding a
+            // draft) didn't go through that sync must pass refresh = true.
+            loadKanbanColumn(column, refresh = refresh)
         }
 }
 

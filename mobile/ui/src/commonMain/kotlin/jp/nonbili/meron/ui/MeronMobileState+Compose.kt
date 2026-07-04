@@ -468,10 +468,24 @@ internal fun MeronMobileState.discardComposeDraft() {
     val identity = selectedComposeIdentity()
     val accountId = identity?.accountId ?: defaultSendAccountId()
     val draftId = composeDraftId.takeIf { composeDraftSaved }
+    val returnScreen = composeReturnScreen
+    val thread = selectedCoreThread
+    val draftThread = thread?.takeIf { folderIsDrafts(it.folder) }
     if (!draftId.isNullOrBlank() && accountId.isBlank()) {
         status = "Select or add an account before discarding."
         return
     }
+    val previousMessages = messages
+    val previousThread = selectedCoreThread
+    val previousThreads = coreThreads
+    val previousKanbanColumns = kanbanColumns
+    removeDiscardedDraftFromOpenThread(draftId)
+    if (draftThread != null) {
+        removeThreadEverywhere(draftThread.id)
+        locallyDiscardedThreadIds = locallyDiscardedThreadIds + draftThread.id
+    }
+    clearComposeDraftState()
+    screen = returnScreen
     status = "Discarding draft..."
     scope.launch {
         runCatching {
@@ -483,15 +497,39 @@ internal fun MeronMobileState.discardComposeDraft() {
                 }
             }
         }.onSuccess {
-            clearComposeDraftState()
-            closeCompose()
             status = "Draft discarded"
-            syncCoreThreads(syncFirst = false)
+            syncCoreThreads(syncFirst = true)
+            if (thread != null) {
+                refreshKanbanColumnsForMailEvent(accountId, thread.folder, refresh = true)
+            }
+            if (draftThread == null) {
+                runCatching { reloadCurrentThreadMessages() }
+            }
         }.onFailure {
+            messages = previousMessages
+            selectedCoreThread = previousThread
+            coreThreads = previousThreads
+            kanbanColumns = previousKanbanColumns
+            if (draftThread != null) {
+                locallyDiscardedThreadIds = locallyDiscardedThreadIds - draftThread.id
+            }
             status = "Draft discard failed: ${it.message}"
         }
     }
 }
+
+private fun MeronMobileState.removeDiscardedDraftFromOpenThread(draftId: String?) {
+    val normalizedDraftId = draftId?.normalizedComposeDraftId().orEmpty()
+    if (normalizedDraftId.isBlank()) return
+    messages =
+        messages.filterNot { message ->
+            message.id == "local-draft-$normalizedDraftId" ||
+                message.messageId.normalizedComposeDraftId() == normalizedDraftId
+        }
+    selectedCoreThread = selectedCoreThread?.copy(hasDraft = messages.any { folderIsDrafts(it.folderId) })
+}
+
+private fun String.normalizedComposeDraftId(): String = trim().trim('<', '>').lowercase()
 
 internal fun MeronMobileState.sendQuickReply() {
     val thread = selectedCoreThread
@@ -770,6 +808,18 @@ internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
 
 internal fun MeronMobileState.withLocalDraftFlags(threads: List<ThreadSummary>): List<ThreadSummary> =
     threadsWithDraftFlag(threads, locallyDraftedThreadIds)
+
+// A just-discarded draft can briefly reappear in a server refetch: some IMAP
+// providers (Gmail included) don't guarantee an expunge on one connection is
+// visible to a concurrent read session immediately. Keep hiding a discarded
+// thread until a fetch actually confirms it's gone, then stop tracking it.
+internal fun MeronMobileState.withoutLocallyDiscardedThreads(threads: List<ThreadSummary>): List<ThreadSummary> {
+    if (locallyDiscardedThreadIds.isEmpty()) return threads
+    locallyDiscardedThreadIds =
+        locallyDiscardedThreadIds.filter { id -> threads.any { it.id == id } }.toSet()
+    if (locallyDiscardedThreadIds.isEmpty()) return threads
+    return threads.filterNot { it.id in locallyDiscardedThreadIds }
+}
 
 internal fun threadsWithDraftFlag(
     threads: List<ThreadSummary>,

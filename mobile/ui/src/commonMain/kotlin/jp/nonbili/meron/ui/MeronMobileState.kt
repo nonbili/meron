@@ -127,6 +127,7 @@ internal class MeronMobileState(
     var composeInReplyTo by mutableStateOf("")
     var composeReferences by mutableStateOf("")
     var locallyDraftedThreadIds by mutableStateOf(emptySet<String>())
+    var locallyDiscardedThreadIds by mutableStateOf(emptySet<String>())
     var subject by mutableStateOf("")
     var body by mutableStateOf("")
     var quickReplyBody by mutableStateOf("")

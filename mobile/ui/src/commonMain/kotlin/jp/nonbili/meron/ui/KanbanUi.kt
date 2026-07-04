@@ -442,7 +442,7 @@ internal fun KanbanScreen(
     filter: FilterMode,
     search: String,
     searchScope: String,
-    onOpen: (ThreadSummary) -> Unit,
+    onOpen: (ThreadSummary, KanbanColumnSpec) -> Unit,
     selectedThreadIds: Set<String>,
     selectionActive: Boolean,
     onToggleSelected: (ThreadSummary) -> Unit,
@@ -575,7 +575,7 @@ internal fun KanbanColumn(
     filter: FilterMode,
     search: String,
     searchScope: String,
-    onOpen: (ThreadSummary) -> Unit,
+    onOpen: (ThreadSummary, KanbanColumnSpec) -> Unit,
     selectedThreadIds: Set<String>,
     selectionActive: Boolean,
     onToggleSelected: (ThreadSummary) -> Unit,
@@ -694,7 +694,7 @@ internal fun KanbanColumn(
                                 if (selectionActive) {
                                     onToggleSelected(thread)
                                 } else {
-                                    onOpen(thread)
+                                    onOpen(thread, column)
                                 }
                             },
                             onLongPress = { onLongPress(thread) },

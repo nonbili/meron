@@ -406,7 +406,7 @@ internal fun MeronMobileState.syncCoreThreads(
                         result.copy(
                             folders = result.folders,
                             folder = result.folder,
-                            threads = withLocalDraftFlags(result.threads),
+                            threads = withLocalDraftFlags(withoutLocallyDiscardedThreads(result.threads)),
                             nextCursor = result.nextCursor,
                             accountCursors = result.accountCursors,
                         )
@@ -423,7 +423,7 @@ internal fun MeronMobileState.syncCoreThreads(
             }
             val folder = result.folder
             selectedCoreFolder = folder
-            val parsedThreads = withLocalDraftFlags(result.threads)
+            val parsedThreads = withLocalDraftFlags(withoutLocallyDiscardedThreads(result.threads))
             coreThreads = parsedThreads
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
@@ -655,6 +655,7 @@ internal fun MeronMobileState.loadStarredItems() {
 internal fun MeronMobileState.openDraftCompose(
     message: MessageBody,
     thread: ThreadSummary,
+    returnScreen: Screen = Screen.Mail,
 ) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
@@ -684,7 +685,7 @@ internal fun MeronMobileState.openDraftCompose(
                     .trim('<', '>')
                     .ifBlank { newDraftMessageId(thread.accountId) }
             composeDraftSaved = true
-            composeReturnScreen = Screen.Mail
+            composeReturnScreen = returnScreen
             screen = Screen.Compose
             status = "Draft ready"
         }.onFailure {
@@ -693,18 +694,26 @@ internal fun MeronMobileState.openDraftCompose(
     }
 }
 
-internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
+internal fun MeronMobileState.readCoreThread(
+    thread: ThreadSummary,
+    sourceFolder: String = thread.folder,
+) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
         return
     }
     val backendThreadId = thread.backendThreadId()
-    selectedCoreThread = thread
+    val returnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
+    val opensDraftComposer = !threadIdIsRss(backendThreadId) && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))
+    val selectedThread = if (sourceFolder.isNotBlank() && sourceFolder != thread.folder) thread.copy(folder = sourceFolder) else thread
+    selectedCoreThread = selectedThread
     messages = emptyList()
     messageCursor = ""
     loadingMoreMessages = false
-    previousTopScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
-    screen = Screen.Thread
+    previousTopScreen = returnScreen
+    if (!opensDraftComposer) {
+        screen = Screen.Thread
+    }
     // Nothing is marked read on open: messages are marked incrementally as the
     // user scrolls past them (see the scroll-driven marking in ThreadUi),
     // mirroring desktop.
@@ -722,9 +731,9 @@ internal fun MeronMobileState.readCoreThread(thread: ThreadSummary) {
             val page = parseThreadReadPage(it)
             messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
-            if (!threadIdIsRss(thread.id) && folderIsDrafts(thread.folder)) {
+            if (opensDraftComposer) {
                 page.messages.lastOrNull()?.let { message ->
-                    openDraftCompose(message, thread)
+                    openDraftCompose(message, selectedThread, returnScreen = returnScreen)
                 }
             }
         }.onFailure {
