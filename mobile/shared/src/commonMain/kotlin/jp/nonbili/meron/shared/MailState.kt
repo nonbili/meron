@@ -86,6 +86,21 @@ data class MessageAttachment(
     val url: String = "",
 )
 
+data class ThreadGalleryImage(
+    val attachment: MessageAttachment,
+    val ref: String,
+    val filename: String,
+    val messageId: String,
+)
+
+data class ThreadMediaItem(
+    val attachment: MessageAttachment,
+    val ref: String,
+    val filename: String,
+    val type: String,
+    val galleryIndex: Int? = null,
+)
+
 data class StorageUsage(
     val cacheBytes: Long = 0,
     val dbBytes: Long = 0,
@@ -330,6 +345,58 @@ fun standaloneAttachments(message: MessageBody): List<MessageAttachment> =
         val referencedByUrl = url.isNotBlank() && message.bodyHtml.contains(url)
         !referencedByKey && !referencedByUrl
     }
+
+fun attachmentMediaRef(attachment: MessageAttachment): String {
+    val key = attachment.key.trim()
+    if (key.isNotBlank()) return "/media/$key"
+    return attachment.url.trim()
+}
+
+fun buildThreadGalleryImages(messages: List<MessageBody>): List<ThreadGalleryImage> =
+    messages.flatMap { message ->
+        message.attachments
+            .filter { it.mimeType.startsWith("image/") }
+            .mapNotNull { attachment ->
+                val ref = attachmentMediaRef(attachment)
+                if (ref.isBlank()) {
+                    null
+                } else {
+                    ThreadGalleryImage(
+                        attachment = attachment,
+                        ref = ref,
+                        filename = attachment.filename.ifBlank { "Image" },
+                        messageId = message.id,
+                    )
+                }
+            }
+    }
+
+fun buildThreadMediaItems(messages: List<MessageBody>): List<ThreadMediaItem> {
+    var imageIndex = 0
+    val items =
+        messages.flatMap { message ->
+            message.attachments.mapNotNull { attachment ->
+                val mime = attachment.mimeType
+                val type =
+                    when {
+                        mime.startsWith("image/") -> "image"
+                        mime.startsWith("video/") -> "video"
+                        else -> return@mapNotNull null
+                    }
+                val ref = attachmentMediaRef(attachment)
+                if (ref.isBlank()) return@mapNotNull null
+                val galleryIndex = if (type == "image") imageIndex++ else null
+                ThreadMediaItem(
+                    attachment = attachment,
+                    ref = ref,
+                    filename = attachment.filename.ifBlank { if (type == "image") "Image" else "Video" },
+                    type = type,
+                    galleryIndex = galleryIndex,
+                )
+            }
+        }
+    return items.asReversed()
+}
 
 fun attachmentToDraftAttachment(
     attachment: MessageAttachment,

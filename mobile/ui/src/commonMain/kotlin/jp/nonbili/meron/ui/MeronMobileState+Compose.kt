@@ -880,6 +880,47 @@ internal fun MeronMobileState.copyImagePreview(preview: ImagePreview) {
     status = "Image copied."
 }
 
+internal fun MeronMobileState.shareImageAttachment(attachment: MessageAttachment) {
+    if (attachment.url.isNotBlank()) {
+        services.openUrl(attachment.url)
+        return
+    }
+    if (attachment.key.isBlank()) {
+        status = "Attachment is not cached."
+        return
+    }
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) { readAttachmentBytes(attachment) }
+        }.onSuccess { bytes ->
+            services.shareFile(
+                bytes,
+                safeAttachmentFilename(attachment.filename),
+                attachment.mimeType.ifBlank { "image/*" },
+            )
+        }.onFailure {
+            status = "Image share failed: ${it.message}"
+        }
+    }
+}
+
+internal fun MeronMobileState.copyImageAttachment(attachment: MessageAttachment) {
+    if (attachment.key.isBlank()) {
+        status = "Attachment is not cached."
+        return
+    }
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) { readAttachmentBytes(attachment) }
+        }.onSuccess { bytes ->
+            services.copyImage(bytes, attachment.mimeType.ifBlank { "image/*" }, attachment.filename.ifBlank { "Image" })
+            status = "Image copied."
+        }.onFailure {
+            status = "Image copy failed: ${it.message}"
+        }
+    }
+}
+
 internal fun MeronMobileState.openCompose() {
     to = ""
     cc = ""

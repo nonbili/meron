@@ -23,9 +23,11 @@ actual fun MailWebView(
     modifier: Modifier,
     onContentHeight: (Dp) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenImage: (String) -> Unit,
 ) {
     val latestOnHeight = rememberUpdatedState(onContentHeight)
     val latestOnOpenUrl = rememberUpdatedState(onOpenUrl)
+    val latestOnOpenImage = rememberUpdatedState(onOpenImage)
     UIKitView(
         modifier = modifier,
         factory = {
@@ -40,6 +42,10 @@ actual fun MailWebView(
             config.userContentController.addScriptMessageHandler(
                 scriptMessageHandler = LinkMessageHandler { url -> latestOnOpenUrl.value(url) },
                 name = "meronLink",
+            )
+            config.userContentController.addScriptMessageHandler(
+                scriptMessageHandler = ImageMessageHandler { src -> latestOnOpenImage.value(src) },
+                name = "meronImage",
             )
             WKWebView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0), configuration = config).apply {
                 // Compose owns capped bubble scrolling; the web view is measured
@@ -76,5 +82,17 @@ private class LinkMessageHandler(
         didReceiveScriptMessage: WKScriptMessage,
     ) {
         (didReceiveScriptMessage.body as? String)?.takeIf { it.isNotBlank() }?.let(onOpenUrl)
+    }
+}
+
+private class ImageMessageHandler(
+    private val onOpenImage: (String) -> Unit,
+) : NSObject(),
+    WKScriptMessageHandlerProtocol {
+    override fun userContentController(
+        userContentController: WKUserContentController,
+        didReceiveScriptMessage: WKScriptMessage,
+    ) {
+        (didReceiveScriptMessage.body as? String)?.takeIf { it.isNotBlank() }?.let(onOpenImage)
     }
 }

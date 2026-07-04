@@ -14,4 +14,5 @@ expect fun MailWebView(
     modifier: Modifier,
     onContentHeight: (Dp) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenImage: (String) -> Unit = {},
 )

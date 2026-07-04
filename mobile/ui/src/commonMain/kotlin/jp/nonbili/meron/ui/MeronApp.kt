@@ -917,6 +917,15 @@ private fun MeronMobileScreenContent(
                     onDeleteMessage = ::deleteMessage,
                     onOpenAttachment = ::openMessageAttachment,
                     onSaveAttachment = ::saveMessageAttachment,
+                    onShareImageAttachment = ::shareImageAttachment,
+                    onCopyImageAttachment = ::copyImageAttachment,
+                    loadImageAttachment = { attachment ->
+                        if (attachment.key.isNotBlank()) {
+                            withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                        } else {
+                            loadImageBitmapRef(attachment.url)
+                        }
+                    },
                     onComposeTo = { email ->
                         composeFromAccountId = selectedCoreThread?.accountId ?: selectedCoreAccountId
                         composeFromEmail = ""

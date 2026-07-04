@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -36,7 +40,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -59,15 +70,20 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -136,6 +152,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -214,13 +231,18 @@ import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.SyncMailParams
 import jp.nonbili.meron.shared.SyncRssParams
 import jp.nonbili.meron.shared.ThreadActionParams
+import jp.nonbili.meron.shared.ThreadGalleryImage
 import jp.nonbili.meron.shared.ThreadListParams
+import jp.nonbili.meron.shared.ThreadMediaItem
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.accountSummaryIsRss
+import jp.nonbili.meron.shared.attachmentMediaRef
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.buildThreadGalleryImages
+import jp.nonbili.meron.shared.buildThreadMediaItems
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
@@ -305,6 +327,9 @@ internal fun ThreadScreen(
     onDeleteMessage: (MessageBody) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
+    onShareImageAttachment: (MessageAttachment) -> Unit,
+    onCopyImageAttachment: (MessageAttachment) -> Unit,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
     onComposeTo: (String) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onRetryLoadMessages: () -> Unit,
@@ -320,12 +345,15 @@ internal fun ThreadScreen(
     var activeSearchIndex by remember(thread?.id) { mutableStateOf(0) }
     var detailsOpen by remember(thread?.id) { mutableStateOf(false) }
     var readerMessage by remember(thread?.id) { mutableStateOf<MessageBody?>(null) }
+    var galleryIndex by remember(thread?.id) { mutableStateOf<Int?>(null) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var overflowOpen by remember(thread?.id) { mutableStateOf(false) }
     val normalizedSearch = threadSearch.trim().lowercase()
     val currentThreadAccountId = thread?.accountId.orEmpty()
     val currentThreadFolder = thread?.folder.orEmpty()
+    val galleryImages = remember(messages) { buildThreadGalleryImages(messages) }
+    val mediaItems = remember(messages) { buildThreadMediaItems(messages) }
     val targetMoveFolders =
         remember(currentThreadFolder, moveFolders) {
             moveFolders.filterNot { folder -> folder.name.equals(currentThreadFolder, ignoreCase = true) }
@@ -456,6 +484,34 @@ internal fun ThreadScreen(
             }
     }
 
+    fun galleryIndexForAttachment(attachment: MessageAttachment): Int? {
+        val ref = attachmentMediaRef(attachment)
+        return galleryImages.indexOfFirst { image ->
+            image.attachment.key.isNotBlank() && image.attachment.key == attachment.key ||
+                image.ref == ref && ref.isNotBlank()
+        }.takeIf { it >= 0 }
+    }
+
+    fun openGalleryForAttachment(attachment: MessageAttachment) {
+        galleryIndexForAttachment(attachment)?.let { galleryIndex = it } ?: onOpenAttachment(attachment)
+    }
+
+    fun openGalleryForHtmlSrc(src: String) {
+        val normalized = src.trim()
+        if (normalized.isBlank()) return
+        val idx =
+            galleryImages.indexOfFirst { image ->
+                image.ref == normalized ||
+                    normalized.endsWith(image.ref) ||
+                    image.attachment.key.isNotBlank() && normalized.contains("/media/${image.attachment.key}")
+            }
+        if (idx >= 0) {
+            galleryIndex = idx
+        } else {
+            services.openUrl(normalized)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
         topBar = {
@@ -566,6 +622,8 @@ internal fun ThreadScreen(
         if (detailsOpen) {
             ConversationDetailsDialog(
                 messages = messages,
+                mediaItems = mediaItems,
+                loadImageAttachment = loadImageAttachment,
                 isRss = isRss,
                 ownEmail = accountEmail,
                 onDismiss = { detailsOpen = false },
@@ -578,6 +636,10 @@ internal fun ThreadScreen(
                 },
                 onOpenAttachment = onOpenAttachment,
                 onSaveAttachment = onSaveAttachment,
+                onOpenGalleryIndex = { index ->
+                    detailsOpen = false
+                    galleryIndex = index
+                },
             )
         }
         if (moveDialogOpen && thread != null) {
@@ -676,6 +738,9 @@ internal fun ThreadScreen(
                                 onDelete = onDeleteMessage,
                                 onOpenAttachment = onOpenAttachment,
                                 onSaveAttachment = onSaveAttachment,
+                                loadImageAttachment = loadImageAttachment,
+                                onOpenImageAttachment = ::openGalleryForAttachment,
+                                onOpenHtmlImage = ::openGalleryForHtmlSrc,
                                 onCopyMessageText = onCopyMessageText,
                                 onOpenMessage = { readerMessage = it },
                                 onOpenUrl = services::openUrl,
@@ -710,8 +775,25 @@ internal fun ThreadScreen(
             onCopy = { label, value -> services.copyText(label, value) },
             onOpenAttachment = onOpenAttachment,
             onSaveAttachment = onSaveAttachment,
+            loadImageAttachment = loadImageAttachment,
+            onOpenImageAttachment = ::openGalleryForAttachment,
+            onOpenHtmlImage = ::openGalleryForHtmlSrc,
             onOpenUrl = services::openUrl,
         )
+    }
+    galleryIndex?.let { index ->
+        if (galleryImages.getOrNull(index) != null) {
+            ThreadImageGallery(
+                images = galleryImages,
+                index = index,
+                onIndexChange = { galleryIndex = it },
+                onClose = { galleryIndex = null },
+                onSave = onSaveAttachment,
+                onShare = onShareImageAttachment,
+                onCopy = onCopyImageAttachment,
+                loadImageAttachment = loadImageAttachment,
+            )
+        }
     }
 }
 }
@@ -719,6 +801,8 @@ internal fun ThreadScreen(
 @Composable
 internal fun ConversationDetailsDialog(
     messages: List<MessageBody>,
+    mediaItems: List<ThreadMediaItem>,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
     isRss: Boolean,
     ownEmail: String,
     onDismiss: () -> Unit,
@@ -726,10 +810,10 @@ internal fun ConversationDetailsDialog(
     onCopy: (String, String) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
+    onOpenGalleryIndex: (Int) -> Unit,
 ) {
     val participants = remember(messages, isRss, ownEmail) { conversationParticipants(messages, ownEmail, isRss) }
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
-    val mediaAttachments = remember(attachments) { attachments.filter { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") } }
     val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -818,7 +902,7 @@ internal fun ConversationDetailsDialog(
                 }
 
                 // Section 2: Media
-                if (mediaAttachments.isNotEmpty()) {
+                if (mediaItems.isNotEmpty()) {
                     item {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 12.dp),
@@ -832,58 +916,30 @@ internal fun ConversationDetailsDialog(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    items(mediaAttachments.withIndex().toList(), key = { "media-${it.index}" }) { indexed ->
-                        val attachment = indexed.value
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    item {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height((((mediaItems.size + 2) / 3) * 102).coerceAtMost(360).dp),
+                            contentPadding = PaddingValues(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Image,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = attachment.filename.ifBlank { tr("chat.attachment") },
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                            itemsIndexed(mediaItems, key = { index, item -> "${item.type}-${item.filename}-$index" }) { _, item ->
+                                ConversationMediaTile(
+                                    item = item,
+                                    loadImageAttachment = loadImageAttachment,
+                                    onOpen = {
+                                        val imageIndex = item.galleryIndex
+                                        if (item.type == "image" && imageIndex != null) {
+                                            onOpenGalleryIndex(imageIndex)
+                                        } else {
+                                            onOpenAttachment(item.attachment)
+                                        }
+                                    },
                                 )
-                                Text(
-                                    text = listOf(
-                                        attachment.mimeType,
-                                        formatBytes(attachment.sizeBytes),
-                                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = { onOpenAttachment(attachment) },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text(tr("kanban.actions.openThread"), fontSize = 12.sp)
-                                }
-                                TextButton(
-                                    onClick = { onSaveAttachment(attachment) },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text(tr("buttons.save"), fontSize = 12.sp)
-                                }
                             }
                         }
                     }
@@ -966,6 +1022,300 @@ internal fun ConversationDetailsDialog(
             TextButton(onClick = onDismiss) { Text(tr("buttons.done")) }
         },
     )
+}
+
+@Composable
+private fun ConversationMediaTile(
+    item: ThreadMediaItem,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    onOpen: () -> Unit,
+) {
+    Surface(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Black.copy(alpha = 0.08f),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(96.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.type == "image") {
+                AsyncAttachmentImage(
+                    attachment = item.attachment,
+                    ref = item.ref,
+                    loadImageAttachment = loadImageAttachment,
+                    contentDescription = item.filename,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+                    Text(
+                        item.filename,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AsyncMediaImage(
+    ref: String,
+    contentDescription: String,
+    modifier: Modifier,
+    contentScale: ContentScale,
+) {
+    var bitmap by remember(ref) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(ref) {
+        bitmap = loadImageBitmapRef(ref)
+    }
+    val image = bitmap
+    if (image != null) {
+        Image(
+            bitmap = image,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale,
+        )
+    } else {
+        Box(modifier.background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Image, contentDescription = null, tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun AsyncAttachmentImage(
+    attachment: MessageAttachment,
+    ref: String,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    contentDescription: String,
+    modifier: Modifier,
+    contentScale: ContentScale,
+) {
+    var bitmap by remember(attachment.key, attachment.url, ref) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(attachment.key, attachment.url, ref) {
+        bitmap = loadImageAttachment(attachment) ?: loadImageBitmapRef(ref)
+    }
+    val image = bitmap
+    if (image != null) {
+        Image(
+            bitmap = image,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale,
+        )
+    } else {
+        Box(modifier.background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Image, contentDescription = null, tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun ThreadImageGallery(
+    images: List<ThreadGalleryImage>,
+    index: Int,
+    onIndexChange: (Int) -> Unit,
+    onClose: () -> Unit,
+    onSave: (MessageAttachment) -> Unit,
+    onShare: (MessageAttachment) -> Unit,
+    onCopy: (MessageAttachment) -> Unit,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+) {
+    val current = images.getOrNull(index) ?: return
+    val canPrev = index > 0
+    val canNext = index < images.lastIndex
+    var scale by remember(current.ref) { mutableStateOf(1f) }
+    var offset by remember(current.ref) { mutableStateOf(Offset.Zero) }
+    var swipeDistance by remember(current.ref) { mutableStateOf(0f) }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    BackHandler(onBack = onClose)
+
+    fun goPrev() {
+        if (!canPrev) return
+        scale = 1f
+        offset = Offset.Zero
+        onIndexChange(index - 1)
+    }
+
+    fun goNext() {
+        if (!canNext) return
+        scale = 1f
+        offset = Offset.Zero
+        onIndexChange(index + 1)
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.94f)),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"), tint = Color.White)
+            }
+            Text(
+                if (images.size > 1) "${index + 1} / ${images.size}" else "",
+                color = Color.White.copy(alpha = 0.86f),
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = tr("common.more"), tint = Color.White)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(tr("common.share")) },
+                        leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onShare(current.attachment)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("common.copy")) },
+                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onCopy(current.attachment)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("buttons.save")) },
+                        leadingIcon = { Icon(Icons.Filled.Save, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onSave(current.attachment)
+                        },
+                    )
+                }
+            }
+        }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 64.dp)
+                .pointerInput(current.ref, scale) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (scale <= 1.02f && abs(swipeDistance) > 80f) {
+                                if (swipeDistance > 0f) goPrev() else goNext()
+                            }
+                            swipeDistance = 0f
+                        },
+                        onDragCancel = { swipeDistance = 0f },
+                        onHorizontalDrag = { _, dragAmount ->
+                            if (scale <= 1.02f) swipeDistance += dragAmount
+                        },
+                    )
+                }
+                .pointerInput(current.ref) {
+                    // Only track multi-touch here so a single-finger drag is left
+                    // unconsumed for the horizontal-drag detector above to see —
+                    // detectTransformGestures reacts to one finger too and would
+                    // otherwise swallow the swipe-to-navigate gesture.
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val event = awaitPointerEvent()
+                            if (event.changes.size >= 2) {
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+                                val nextScale = (scale * zoomChange).coerceIn(1f, 6f)
+                                scale = nextScale
+                                offset = if (nextScale == 1f) Offset.Zero else offset + panChange
+                                event.changes.forEach { it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncAttachmentImage(
+                attachment = current.attachment,
+                ref = current.ref,
+                loadImageAttachment = loadImageAttachment,
+                contentDescription = current.filename,
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        },
+                contentScale = ContentScale.Fit,
+            )
+        }
+
+        Row(
+            Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(
+                enabled = canPrev,
+                onClick = ::goPrev,
+            ) {
+                Icon(
+                    Icons.Filled.KeyboardArrowLeft,
+                    contentDescription = tr("chat.previousImage"),
+                    tint = if (canPrev) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.18f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            IconButton(
+                enabled = canNext,
+                onClick = ::goNext,
+            ) {
+                Icon(
+                    Icons.Filled.KeyboardArrowRight,
+                    contentDescription = tr("chat.nextImage"),
+                    tint = if (canNext) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.18f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+
+        Text(
+            current.filename,
+            color = Color.White.copy(alpha = 0.78f),
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 18.dp),
+        )
+    }
 }
 
 @Composable
@@ -1228,6 +1578,9 @@ internal fun MessageBubble(
     onDelete: (MessageBody) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    onOpenImageAttachment: (MessageAttachment) -> Unit,
+    onOpenHtmlImage: (String) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onOpenMessage: (MessageBody) -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -1401,7 +1754,12 @@ internal fun MessageBubble(
                 }
             }
             if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
-                HtmlMessageBody(html = message.bodyHtml, maxHeight = bodyMaxHeight, onOpenUrl = onOpenUrl)
+                HtmlMessageBody(
+                    html = message.bodyHtml,
+                    maxHeight = bodyMaxHeight,
+                    onOpenUrl = onOpenUrl,
+                    onOpenImage = onOpenHtmlImage,
+                )
             } else if (message.bodyMissing) {
                 // The core has no cached body (the on-demand fetch failed) — a
                 // different state from a genuinely empty message, so offer a retry
@@ -1436,8 +1794,17 @@ internal fun MessageBubble(
             }
             val standaloneAttachmentsForMessage = standaloneAttachments(message)
             if (standaloneAttachmentsForMessage.isNotEmpty()) {
+                val (imageAttachments, otherAttachments) =
+                    standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    standaloneAttachmentsForMessage.forEach { attachment ->
+                    if (imageAttachments.isNotEmpty()) {
+                        AttachmentImageGrid(
+                            images = imageAttachments,
+                            loadImageAttachment = loadImageAttachment,
+                            onOpen = onOpenImageAttachment,
+                        )
+                    }
+                    otherAttachments.forEach { attachment ->
                         AttachmentRow(
                             attachment = attachment,
                             textColor = textColor,
@@ -1488,6 +1855,9 @@ internal fun MessageReaderScreen(
     onCopy: (String, String) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    onOpenImageAttachment: (MessageAttachment) -> Unit,
+    onOpenHtmlImage: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
 ) {
     val messageTextLabel = tr("chat.messageText")
@@ -1658,7 +2028,7 @@ internal fun MessageReaderScreen(
                 }
                 HorizontalDivider()
                 if (preferHtml && message.bodyHtml.isNotBlank()) {
-                    HtmlMessageBody(html = message.bodyHtml, onOpenUrl = onOpenUrl)
+                    HtmlMessageBody(html = message.bodyHtml, onOpenUrl = onOpenUrl, onOpenImage = onOpenHtmlImage)
                 } else {
                     Text(
                         message.body.ifBlank {
@@ -1670,7 +2040,16 @@ internal fun MessageReaderScreen(
                 val standaloneAttachmentsForMessage = standaloneAttachments(message)
                 if (standaloneAttachmentsForMessage.isNotEmpty()) {
                     HorizontalDivider()
-                    standaloneAttachmentsForMessage.forEach { attachment ->
+                    val (imageAttachments, otherAttachments) =
+                        standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
+                    if (imageAttachments.isNotEmpty()) {
+                        AttachmentImageGrid(
+                            images = imageAttachments,
+                            loadImageAttachment = loadImageAttachment,
+                            onOpen = onOpenImageAttachment,
+                        )
+                    }
+                    otherAttachments.forEach { attachment ->
                         AttachmentRow(
                             attachment = attachment,
                             textColor = MaterialTheme.colorScheme.onSurface,
@@ -1927,6 +2306,7 @@ internal fun HtmlMessageBody(
     html: String,
     maxHeight: Dp = Dp.Unspecified,
     onOpenUrl: (String) -> Unit,
+    onOpenImage: (String) -> Unit = {},
 ) {
     // The WebView can't tell Compose how tall its content is, so a tiny script
     // reports document height through a platform bridge and we size the view to
@@ -1962,11 +2342,81 @@ internal fun HtmlMessageBody(
                   max-width: 100% !important;
                   height: auto !important;
                 }
+                div[data-meron-image-grid] {
+                  display: flex !important;
+                  flex-wrap: wrap !important;
+                  gap: 4px !important;
+                }
+                div[data-meron-image-grid] > * {
+                  flex: 1 1 30% !important;
+                  max-width: calc(33.333% - 3px) !important;
+                  box-sizing: border-box !important;
+                  margin: 0 !important;
+                }
               </style>
             </head>
             <body>$html
               <script>
                 (function () {
+                  // Feed/newsletter HTML often lists photos as a bare run of
+                  // sibling `<img>` (or single-image `<p>`/`<div>`) elements,
+                  // which would otherwise stack one per row at full width.
+                  // Wrap runs of 2+ into a flex grid so they tile 2-3 across.
+                  function isImageOnlyBlock(el) {
+                    if (!el || el.nodeType !== 1) return false;
+                    if (el.tagName === 'IMG') return true;
+                    if (el.children.length !== 1) return false;
+                    for (var i = 0; i < el.childNodes.length; i++) {
+                      var n = el.childNodes[i];
+                      if (n.nodeType === 3 && n.textContent.trim().length > 0) return false;
+                    }
+                    return isImageOnlyBlock(el.children[0]);
+                  }
+                  function findImageBlock(img) {
+                    var node = img;
+                    while (node.parentElement && node.parentElement !== document.body) {
+                      if (isImageOnlyBlock(node.parentElement)) {
+                        node = node.parentElement;
+                      } else {
+                        break;
+                      }
+                    }
+                    return node;
+                  }
+                  function groupConsecutiveImages() {
+                    var imgs = Array.prototype.slice.call(document.querySelectorAll('img'));
+                    var blocks = [];
+                    var seen = [];
+                    imgs.forEach(function (img) {
+                      var block = findImageBlock(img);
+                      if (seen.indexOf(block) === -1) {
+                        seen.push(block);
+                        blocks.push(block);
+                      }
+                    });
+                    var i = 0;
+                    while (i < blocks.length) {
+                      var run = [blocks[i]];
+                      var j = i + 1;
+                      while (
+                        j < blocks.length &&
+                        run[run.length - 1].nextElementSibling === blocks[j] &&
+                        run[run.length - 1].parentElement === blocks[j].parentElement
+                      ) {
+                        run.push(blocks[j]);
+                        j++;
+                      }
+                      if (run.length > 1) {
+                        var grid = document.createElement('div');
+                        grid.setAttribute('data-meron-image-grid', '1');
+                        run[0].parentNode.insertBefore(grid, run[0]);
+                        run.forEach(function (block) {
+                          grid.appendChild(block);
+                        });
+                      }
+                      i = j;
+                    }
+                  }
                   function report() {
                     var h = Math.ceil(
                       Math.max(
@@ -1986,6 +2436,23 @@ internal fun HtmlMessageBody(
                   }
                   document.addEventListener('click', function (event) {
                     var target = event.target;
+                    var image = target && target.closest ? target.closest('img[src]') : null;
+                    if (image) {
+                      var src = image.getAttribute('src');
+                      if (src) {
+                        event.preventDefault();
+                        if (window.MeronImage && window.MeronImage.open) {
+                          window.MeronImage.open(src);
+                        } else if (
+                          window.webkit &&
+                          window.webkit.messageHandlers &&
+                          window.webkit.messageHandlers.meronImage
+                        ) {
+                          window.webkit.messageHandlers.meronImage.postMessage(src);
+                        }
+                        return;
+                      }
+                    }
                     var anchor = target && target.closest ? target.closest('a[href]') : null;
                     if (!anchor) return;
                     var href = anchor.getAttribute('href');
@@ -2002,6 +2469,7 @@ internal fun HtmlMessageBody(
                       window.webkit.messageHandlers.meronLink.postMessage(url);
                     }
                   });
+                  groupConsecutiveImages();
                   window.addEventListener('load', report);
                   document.addEventListener('DOMContentLoaded', report);
                   if (window.ResizeObserver) {
@@ -2038,6 +2506,7 @@ internal fun HtmlMessageBody(
                 html = mobileHtml,
                 onContentHeight = { contentHeight = it },
                 onOpenUrl = onOpenUrl,
+                onOpenImage = onOpenImage,
                 modifier = webViewModifier,
             )
         }
@@ -2046,8 +2515,44 @@ internal fun HtmlMessageBody(
             html = mobileHtml,
             onContentHeight = { contentHeight = it },
             onOpenUrl = onOpenUrl,
+            onOpenImage = onOpenImage,
             modifier = webViewModifier,
         )
+    }
+}
+
+@Composable
+internal fun AttachmentImageGrid(
+    images: List<MessageAttachment>,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap? = { null },
+    onOpen: (MessageAttachment) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        images.chunked(3).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                row.forEach { attachment ->
+                    Surface(
+                        onClick = { onOpen(attachment) },
+                        modifier = Modifier.weight(1f).aspectRatio(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.08f),
+                    ) {
+                        AsyncAttachmentImage(
+                            attachment = attachment,
+                            ref = attachmentMediaRef(attachment),
+                            loadImageAttachment = loadImageAttachment,
+                            contentDescription = attachment.filename.ifBlank { "Image" },
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 

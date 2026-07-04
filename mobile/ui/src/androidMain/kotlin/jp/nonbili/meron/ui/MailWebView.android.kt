@@ -19,9 +19,11 @@ actual fun MailWebView(
     modifier: Modifier,
     onContentHeight: (Dp) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenImage: (String) -> Unit,
 ) {
     val latestOnHeight = rememberUpdatedState(onContentHeight)
     val latestOnOpenUrl = rememberUpdatedState(onOpenUrl)
+    val latestOnOpenImage = rememberUpdatedState(onOpenImage)
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -77,6 +79,15 @@ actual fun MailWebView(
                         }
                     },
                     "MeronLink",
+                )
+                addJavascriptInterface(
+                    object {
+                        @JavascriptInterface
+                        fun open(src: String) {
+                            if (src.isNotBlank()) post { latestOnOpenImage.value(src) }
+                        }
+                    },
+                    "MeronImage",
                 )
             }
         },
