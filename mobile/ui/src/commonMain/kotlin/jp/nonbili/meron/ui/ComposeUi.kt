@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -373,7 +373,7 @@ internal fun ComposeScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(innerPadding)
-                .navigationBarsPadding()
+                .consumeWindowInsets(innerPadding)
                 .imePadding(),
         ) {
             val optionalFieldsHeight = (if (sendIdentities.size > 1) 56 else 0) + (if (showCcBcc) 128 else 0)
@@ -1163,6 +1163,7 @@ internal fun AddAccountScreen(
             Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
                 .imePadding(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

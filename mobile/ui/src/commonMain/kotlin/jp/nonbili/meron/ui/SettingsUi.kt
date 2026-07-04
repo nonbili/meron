@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -421,7 +422,7 @@ internal fun SettingsScreen(
         NavHost(
             navController = settingsNavController,
             startDestination = SettingsRoutes.Root,
-            modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
+            modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).imePadding(),
         ) {
             composable(SettingsRoutes.General) {
                 SettingsGeneralPage(
