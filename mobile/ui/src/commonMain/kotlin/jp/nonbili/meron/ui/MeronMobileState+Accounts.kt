@@ -686,24 +686,32 @@ internal fun MeronMobileState.connectGoogleDeviceAccount() {
         return
     }
     mobileHost.connectGoogleDeviceAccount { account ->
-        if (account != null) {
-            addGoogleDeviceAccount(account)
-        } else {
-            val deviceAuthError = mobileHost.lastGoogleDeviceAuthError
-            if (mobileHost.googleRedirectUri.isBlank()) {
+        when (account) {
+            is GoogleDeviceAccountResult.Connected -> {
+                addGoogleDeviceAccount(account.account)
+            }
+
+            GoogleDeviceAccountResult.Cancelled -> {
+                status = "Google sign-in cancelled."
+            }
+
+            is GoogleDeviceAccountResult.Failed -> {
+                val deviceAuthError = account.message.ifBlank { mobileHost.lastGoogleDeviceAuthError }
+                if (mobileHost.googleRedirectUri.isBlank()) {
+                    status =
+                        listOf(
+                            deviceAuthError,
+                            "Google browser sign-in requires a configured HTTPS redirect URI.",
+                        ).filter { it.isNotBlank() }.joinToString(" ")
+                    return@connectGoogleDeviceAccount
+                }
                 status =
                     listOf(
                         deviceAuthError,
-                        "Google browser sign-in requires a configured HTTPS redirect URI.",
+                        "Opening Google sign-in in browser...",
                     ).filter { it.isNotBlank() }.joinToString(" ")
-                return@connectGoogleDeviceAccount
+                launchOAuthFlow()
             }
-            status =
-                listOf(
-                    deviceAuthError,
-                    "Opening Google sign-in in browser...",
-                ).filter { it.isNotBlank() }.joinToString(" ")
-            launchOAuthFlow()
         }
     }
 }

@@ -10,6 +10,15 @@ data class GoogleDeviceAccount(
     val expiresAtEpochSeconds: Long,
 )
 
+/** Final outcome of platform Google account sign-in. */
+sealed interface GoogleDeviceAccountResult {
+    data class Connected(val account: GoogleDeviceAccount) : GoogleDeviceAccountResult
+
+    data object Cancelled : GoogleDeviceAccountResult
+
+    data class Failed(val message: String) : GoogleDeviceAccountResult
+}
+
 /** Result of silently refreshing a managed Google access token. */
 sealed interface ManagedTokenRefresh {
     data object NotNeeded : ManagedTokenRefresh
@@ -81,14 +90,14 @@ interface MobileHost {
     /** Whether the platform offers system Google account sign-in (Android only). */
     val supportsGoogleDeviceAuth: Boolean
 
-    /** Last system Google sign-in failure, if the host returned no account. */
+    /** Last system Google sign-in failure, if the host returned a failure. */
     val lastGoogleDeviceAuthError: String
         get() = ""
 
     /** Run the full system Google sign-in (pick account, mint token, fetch name).
-     *  [onResult] gets the connected account, or null on cancel/failure. No-op
+     *  [onResult] gets the connected account, user cancellation, or failure. No-op
      *  where unsupported. */
-    fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit)
+    fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit)
 
     /** Silently mint a fresh access token for a managed Google account before sync. */
     suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh
@@ -140,7 +149,8 @@ open class DefaultMobileHost(
 
     override val coreProtocolVersion: Int = 0
 
-    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) = onResult(null)
+    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit) =
+        onResult(GoogleDeviceAccountResult.Cancelled)
 
     override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh = ManagedTokenRefresh.NotNeeded
 

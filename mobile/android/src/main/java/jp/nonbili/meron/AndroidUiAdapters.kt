@@ -2,6 +2,7 @@ package jp.nonbili.meron
 
 import android.Manifest
 import android.accounts.AccountManager
+import android.accounts.OperationCanceledException
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.FileProvider
 import jp.nonbili.meron.ui.GoogleDeviceAccount
+import jp.nonbili.meron.ui.GoogleDeviceAccountResult
 import jp.nonbili.meron.ui.ManagedTokenRefresh
 import jp.nonbili.meron.ui.MobileHost
 import jp.nonbili.meron.ui.PickedFile
@@ -138,22 +140,32 @@ class AndroidMobileHost(
 ) : MobileHost {
     private companion object {
         const val GOOGLE_AUTH_LOG_TAG = "Meron.GoogleAuth"
+
+        fun isGoogleAuthCancelled(error: Throwable): Boolean =
+            error is OperationCanceledException || error.cause is OperationCanceledException
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var pendingGoogleAccountResult: ((GoogleDeviceAccount?) -> Unit)? = null
+    private var pendingGoogleAccountResult: ((GoogleDeviceAccountResult) -> Unit)? = null
     private val googleAccountPicker =
         activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val callback = pendingGoogleAccountResult
             pendingGoogleAccountResult = null
             val accountName = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            if (result.resultCode == Activity.RESULT_CANCELED) {
+                lastGoogleDeviceAuthError = ""
+                Log.i(GOOGLE_AUTH_LOG_TAG, "Google account picker cancelled")
+                callback?.invoke(GoogleDeviceAccountResult.Cancelled)
+                return@registerForActivityResult
+            }
             if (result.resultCode != Activity.RESULT_OK || accountName.isNullOrBlank()) {
-                lastGoogleDeviceAuthError = "Google account picker did not return an account."
+                val message = "Google account picker did not return an account."
+                lastGoogleDeviceAuthError = message
                 Log.i(
                     GOOGLE_AUTH_LOG_TAG,
                     "Google account picker returned no account; resultCode=${result.resultCode} accountPresent=${!accountName.isNullOrBlank()}",
                 )
-                callback?.invoke(null)
+                callback?.invoke(GoogleDeviceAccountResult.Failed(message))
                 return@registerForActivityResult
             }
             Log.i(GOOGLE_AUTH_LOG_TAG, "Google account picker selected account; requesting token")
@@ -173,14 +185,20 @@ class AndroidMobileHost(
                         expiresAtEpochSeconds = expiresAt,
                     )
                 }.onSuccess {
-                    callback?.invoke(it)
+                    callback?.invoke(GoogleDeviceAccountResult.Connected(it))
                 }.onFailure {
+                    if (isGoogleAuthCancelled(it)) {
+                        lastGoogleDeviceAuthError = ""
+                        Log.i(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request cancelled")
+                        callback?.invoke(GoogleDeviceAccountResult.Cancelled)
+                        return@onFailure
+                    }
                     lastGoogleDeviceAuthError =
                         it.message?.takeIf { message -> message.isNotBlank() }
                             ?: it::class.simpleName
                             ?: "Google AccountManager token request failed."
                     Log.w(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request failed; falling back to browser", it)
-                    callback?.invoke(null)
+                    callback?.invoke(GoogleDeviceAccountResult.Failed(lastGoogleDeviceAuthError))
                 }
             }
         }
@@ -235,7 +253,7 @@ class AndroidMobileHost(
         AndroidNotificationService.notifyNewMail(activity, accountName, from, subject, count, accountId, folder, threadKey)
     }
 
-    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccount?) -> Unit) {
+    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit) {
         lastGoogleDeviceAuthError = ""
         Log.i(GOOGLE_AUTH_LOG_TAG, "Launching Google account picker")
         pendingGoogleAccountResult = onResult
