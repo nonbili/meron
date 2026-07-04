@@ -95,9 +95,7 @@ export function AccountDialogCustom({
           className={`${isSetup ? 'rounded-2xl p-4 text-sm gap-3' : 'rounded-xl p-3 text-[11px] gap-2'} flex items-start bg-accent/[0.06] border border-accent/15 leading-relaxed text-secondary -mt-1`}
         >
           <Info size={isSetup ? 16 : 14} className="shrink-0 mt-0.5 text-accent" />
-          <p className="flex-1 font-medium">
-            {t('accounts.appPasswordHint', { provider: appPasswordHint.provider })}
-          </p>
+          <p className="flex-1 font-medium">{t('accounts.appPasswordHint', { provider: appPasswordHint.provider })}</p>
         </div>
       )}
 

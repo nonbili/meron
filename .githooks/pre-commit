@@ -1,0 +1,53 @@
+#!/bin/sh
+# Auto-formats staged files per-language, then re-stages them.
+# Installed via: git config core.hooksPath .githooks (see package.json predev/prebuild)
+
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+staged_files() {
+    git diff --cached --name-only --diff-filter=ACM -- "$@"
+}
+
+restage() {
+    [ "$#" -gt 0 ] && git add -- "$@"
+}
+
+# Go
+go_files=$(staged_files '*.go')
+if [ -n "$go_files" ] && command -v gofmt >/dev/null 2>&1; then
+    echo "$go_files" | xargs gofmt -w
+    restage $go_files
+fi
+
+# Rust (meron-core)
+rust_files=$(staged_files 'meron-core/*.rs')
+if [ -n "$rust_files" ] && command -v rustfmt >/dev/null 2>&1; then
+    echo "$rust_files" | xargs rustfmt --edition 2024
+    restage $rust_files
+fi
+
+# Frontend (TS/TSX/CSS/JSON)
+frontend_files=$(staged_files 'frontend/src/*.ts' 'frontend/src/*.tsx' 'frontend/src/*.css' 'frontend/src/*.json')
+if [ -n "$frontend_files" ] && [ -x frontend/node_modules/.bin/prettier ]; then
+    echo "$frontend_files" | xargs frontend/node_modules/.bin/prettier --write
+    restage $frontend_files
+fi
+
+# Android (Kotlin)
+kotlin_files=$(staged_files 'mobile/*.kt' 'mobile/*.kts')
+if [ -n "$kotlin_files" ] && command -v ktlint >/dev/null 2>&1; then
+    echo "$kotlin_files" | xargs ktlint -F --relative || true
+    restage $kotlin_files
+fi
+
+# iOS (Swift)
+swift_files=$(staged_files 'mobile/ios/*.swift')
+if [ -n "$swift_files" ] && command -v swiftformat >/dev/null 2>&1; then
+    echo "$swift_files" | xargs swiftformat
+    restage $swift_files
+fi
+
+exit 0

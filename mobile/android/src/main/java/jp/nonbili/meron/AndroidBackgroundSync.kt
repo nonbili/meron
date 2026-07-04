@@ -118,7 +118,9 @@ class AndroidBackgroundSyncWorker(
 
                 GoogleAccountManagerAuth.TokenRefresh.NotNeeded,
                 is GoogleAccountManagerAuth.TokenRefresh.Refreshed,
-                -> Unit
+                -> {
+                    Unit
+                }
             }
             val syncResponse = JSONObject(MeronCoreNative.invokeJson(syncRequest.requestJson))
             if (syncResponse.has("error")) {
@@ -164,22 +166,21 @@ class AndroidBackgroundSyncWorker(
             Result.success()
         }
     }
-
 }
 
 internal fun isTransientNetworkError(message: String): Boolean {
     val lower = message.lowercase()
     return lower.contains("tcp connect") ||
-            lower.contains("dial tcp") ||
-            lower.contains("timeout") ||
-            lower.contains("timed out") ||
-            lower.contains("network is unreachable") ||
-            lower.contains("connection refused") ||
-            lower.contains("connection reset") ||
-            lower.contains("connection abort") ||
-            lower.contains("broken pipe") ||
-            lower.contains("failed to lookup address") ||
-            lower.contains("no address associated with hostname")
+        lower.contains("dial tcp") ||
+        lower.contains("timeout") ||
+        lower.contains("timed out") ||
+        lower.contains("network is unreachable") ||
+        lower.contains("connection refused") ||
+        lower.contains("connection reset") ||
+        lower.contains("connection abort") ||
+        lower.contains("broken pipe") ||
+        lower.contains("failed to lookup address") ||
+        lower.contains("no address associated with hostname")
 }
 
 internal fun shouldNotifyRefreshComplete(

@@ -11,20 +11,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -34,23 +37,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.focus.FocusState
-import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -98,6 +91,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -107,20 +101,19 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.LeadingIconTab
-import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
@@ -137,6 +130,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -151,20 +145,26 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.PopupProperties
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -476,18 +476,22 @@ internal fun ComposeScreen(
                     onFocus = onRecipientFocus,
                     onAcceptSuggestion = onAcceptRecipientSuggestion,
                     placeholder = tr("composer.placeholders.recipient"),
-                    trailingContent = if (!showCcBcc) {
-                        {
-                            Icon(
-                                imageVector = Icons.Filled.ArrowDropDown,
-                                contentDescription = tr("composer.actions.ccBcc"),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .clickable { showCcBcc = true }
-                            )
-                        }
-                    } else null,
+                    trailingContent =
+                        if (!showCcBcc) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = tr("composer.actions.ccBcc"),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier =
+                                        Modifier
+                                            .padding(end = 12.dp)
+                                            .clickable { showCcBcc = true },
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     labelWidth = maxLabelWidth,
                     onLabelWidthChanged = { maxLabelWidth = it },
                 )
@@ -530,14 +534,15 @@ internal fun ComposeScreen(
                     onValueChange = onBodyChange,
                     placeholder = { Text(tr("composer.placeholders.message"), style = MaterialTheme.typography.bodyMedium) },
                     keyboardOptions = nativeTextKeyboardOptions,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                    ),
+                    colors =
+                        TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
                     textStyle = MaterialTheme.typography.bodyMedium,
                     modifier =
                         Modifier
@@ -554,22 +559,23 @@ internal fun ComposeScreen(
                 )
                 if (attachments.isNotEmpty()) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         attachments.forEach { attachment ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.AttachFile,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
                                     text = "${attachment.displayName} · ${formatBytes(attachment.sizeBytes)}",
@@ -580,20 +586,20 @@ internal fun ComposeScreen(
                                 )
                                 IconButton(
                                     onClick = { onRemoveAttachment(attachment) },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = tr("composer.actions.removeAttachment"),
                                         modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
                         }
                         TextButton(
                             onClick = onClearAttachments,
-                            modifier = Modifier.align(Alignment.Start)
+                            modifier = Modifier.align(Alignment.Start),
                         ) {
                             Text(tr("mobile.compose.clearAttachments"))
                         }
@@ -610,26 +616,29 @@ internal fun parseRecipients(value: String): Pair<List<String>, String> {
     if (parts.size <= 1) {
         return Pair(emptyList(), value)
     }
-    val completed = parts.subList(0, parts.size - 1)
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
+    val completed =
+        parts
+            .subList(0, parts.size - 1)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
     val activeInput = parts.last().trimStart()
     return Pair(completed, activeInput)
 }
 
 private fun getAvatarColor(identifier: String): Color {
-    val colors = listOf(
-        Color(0xFFC2185B),
-        Color(0xFF7B1FA2),
-        Color(0xFF512DA8),
-        Color(0xFF303F9F),
-        Color(0xFF1976D2),
-        Color(0xFF00796B),
-        Color(0xFF388E3C),
-        Color(0xFFF57C00),
-        Color(0xFF5D4037),
-        Color(0xFF455A64)
-    )
+    val colors =
+        listOf(
+            Color(0xFFC2185B),
+            Color(0xFF7B1FA2),
+            Color(0xFF512DA8),
+            Color(0xFF303F9F),
+            Color(0xFF1976D2),
+            Color(0xFF00796B),
+            Color(0xFF388E3C),
+            Color(0xFFF57C00),
+            Color(0xFF5D4037),
+            Color(0xFF455A64),
+        )
     val hash = identifier.hashCode()
     val index = abs(hash) % colors.size
     return colors[index]
@@ -666,26 +675,28 @@ internal fun RecipientChip(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-            modifier = Modifier
-                .height(32.dp)
-                .clickable { menuExpanded = true }
+            modifier =
+                Modifier
+                    .height(32.dp)
+                    .clickable { menuExpanded = true },
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(end = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(getAvatarColor(email), CircleShape),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .background(getAvatarColor(email), CircleShape),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = initials,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
                     )
                 }
                 Text(
@@ -693,7 +704,7 @@ internal fun RecipientChip(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -701,33 +712,37 @@ internal fun RecipientChip(
         DropdownMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
-            modifier = Modifier
-                .width(280.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            modifier =
+                Modifier
+                    .width(280.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(getAvatarColor(email), CircleShape),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(40.dp)
+                                .background(getAvatarColor(email), CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = initials,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
                         )
                     }
                     Column {
@@ -738,7 +753,7 @@ internal fun RecipientChip(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         Text(
@@ -746,7 +761,7 @@ internal fun RecipientChip(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -754,62 +769,62 @@ internal fun RecipientChip(
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     thickness = 0.5.dp,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
 
                 DropdownMenuItem(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.ContentCopy,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                             Text(
                                 text = tr("common.copy"),
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     },
                     onClick = {
                         clipboardManager.setText(AnnotatedString(email))
                         menuExpanded = false
-                    }
+                    },
                 )
 
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     thickness = 0.5.dp,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
 
                 DropdownMenuItem(
                     text = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                             Text(
                                 text = tr("buttons.delete"),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
                             )
                         }
                     },
                     onClick = {
                         onDelete()
                         menuExpanded = false
-                    }
+                    },
                 )
             }
         }
@@ -835,10 +850,11 @@ internal fun RecipientChipsInput(
     // Keep activeInputState in sync with parent activeInput changes (e.g. initial reply, suggestion click, or backspace deletion)
     LaunchedEffect(activeInput) {
         if (activeInput != activeInputState.text) {
-            activeInputState = TextFieldValue(
-                text = activeInput,
-                selection = TextRange(activeInput.length)
-            )
+            activeInputState =
+                TextFieldValue(
+                    text = activeInput,
+                    selection = TextRange(activeInput.length),
+                )
         }
     }
 
@@ -852,9 +868,10 @@ internal fun RecipientChipsInput(
     }
 
     FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -863,16 +880,17 @@ internal fun RecipientChipsInput(
                 recipient = recipient,
                 onDelete = {
                     val newCompleted = completed.filter { it != recipient }
-                    val newValue = if (newCompleted.isEmpty()) {
-                        activeInput
-                    } else {
-                        newCompleted.joinToString(", ") + (if (activeInput.isNotEmpty()) ", $activeInput" else "")
-                    }
+                    val newValue =
+                        if (newCompleted.isEmpty()) {
+                            activeInput
+                        } else {
+                            newCompleted.joinToString(", ") + (if (activeInput.isNotEmpty()) ", $activeInput" else "")
+                        }
                     onChange(newValue)
-                }
+                },
             )
         }
-        
+
         BasicTextField(
             value = activeInputState,
             onValueChange = { newActiveState ->
@@ -880,48 +898,50 @@ internal fun RecipientChipsInput(
                 activeInputState = newActiveState
 
                 val newActiveText = newActiveState.text
-                val committedValue = if (newActiveText.endsWith(",")) {
-                    val cleaned = newActiveText.removeSuffix(",").trim()
-                    if (cleaned.isNotEmpty()) {
-                        (completed + cleaned).joinToString(", ") + ", "
+                val committedValue =
+                    if (newActiveText.endsWith(",")) {
+                        val cleaned = newActiveText.removeSuffix(",").trim()
+                        if (cleaned.isNotEmpty()) {
+                            (completed + cleaned).joinToString(", ") + ", "
+                        } else {
+                            value
+                        }
                     } else {
-                        value
+                        if (completed.isEmpty()) {
+                            newActiveText
+                        } else {
+                            completed.joinToString(", ") + ", " + newActiveText
+                        }
                     }
-                } else {
-                    if (completed.isEmpty()) {
-                        newActiveText
-                    } else {
-                        completed.joinToString(", ") + ", " + newActiveText
-                    }
-                }
                 onChange(committedValue)
             },
             keyboardOptions = keyboardOptions,
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-            modifier = Modifier
-                .widthIn(min = 120.dp)
-                .align(Alignment.CenterVertically)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
-                        onChange((completed + activeInput.trim()).joinToString(", ") + ", ")
-                    }
-                    onFocusChanged(focusState)
-                },
+            modifier =
+                Modifier
+                    .widthIn(min = 120.dp)
+                    .align(Alignment.CenterVertically)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
+                            onChange((completed + activeInput.trim()).joinToString(", ") + ", ")
+                        }
+                        onFocusChanged(focusState)
+                    },
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier.padding(vertical = 6.dp),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.CenterStart,
                 ) {
                     if (activeInput.isEmpty() && completed.isEmpty() && placeholder.isNotEmpty()) {
                         Text(
                             text = placeholder,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                     innerTextField()
                 }
-            }
+            },
         )
     }
 }
@@ -939,11 +959,12 @@ internal fun FromIdentitySelector(
     val density = LocalDensity.current
     Box {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable { expanded = true }
-                .padding(horizontal = 16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable { expanded = true }
+                    .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -951,16 +972,16 @@ internal fun FromIdentitySelector(
                 text = tr("composer.fields.from"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .onGloballyPositioned { layoutCoordinates ->
-                        val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
-                        if (widthDp > labelWidth) {
-                            onLabelWidthChanged(widthDp)
-                        }
-                    }
-                    .then(
-                        if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth()
-                    ),
+                modifier =
+                    Modifier
+                        .onGloballyPositioned { layoutCoordinates ->
+                            val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
+                            if (widthDp > labelWidth) {
+                                onLabelWidthChanged(widthDp)
+                            }
+                        }.then(
+                            if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth(),
+                        ),
             )
             Box(modifier = Modifier.weight(1f)) {
                 Text(
@@ -993,7 +1014,7 @@ internal fun FromIdentitySelector(
                 imageVector = Icons.Filled.ArrowDropDown,
                 contentDescription = tr("common.more"),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 12.dp)
+                modifier = Modifier.padding(end = 12.dp),
             )
         }
     }
@@ -1033,16 +1054,16 @@ internal fun ComposeField(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .onGloballyPositioned { layoutCoordinates ->
-                        val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
-                        if (widthDp > labelWidth) {
-                            onLabelWidthChanged(widthDp)
-                        }
-                    }
-                    .then(
-                        if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth()
-                    ),
+                modifier =
+                    Modifier
+                        .onGloballyPositioned { layoutCoordinates ->
+                            val widthDp = with(density) { layoutCoordinates.size.width.toDp() }
+                            if (widthDp > labelWidth) {
+                                onLabelWidthChanged(widthDp)
+                            }
+                        }.then(
+                            if (labelWidth > 0.dp) Modifier.width(labelWidth) else Modifier.wrapContentWidth(),
+                        ),
             )
 
             Box(modifier = Modifier.weight(1f)) {
@@ -1074,18 +1095,18 @@ internal fun ComposeField(
                         decorationBox = { innerTextField ->
                             Box(
                                 modifier = Modifier.padding(vertical = 12.dp),
-                                contentAlignment = Alignment.CenterStart
+                                contentAlignment = Alignment.CenterStart,
                             ) {
                                 if (value.isEmpty() && placeholder.isNotEmpty()) {
                                     Text(
                                         text = placeholder,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     )
                                 }
                                 innerTextField()
                             }
-                        }
+                        },
                     )
                 }
             }
@@ -1124,32 +1145,34 @@ internal fun ComposeField(
         if (showSuggestions) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 ) {
                     suggestions.forEach { contact ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onAcceptSuggestion(field, contact) }
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onAcceptSuggestion(field, contact) }
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(getAvatarColor(contact.addr), CircleShape),
-                                contentAlignment = Alignment.Center
+                                modifier =
+                                    Modifier
+                                        .size(36.dp)
+                                        .background(getAvatarColor(contact.addr), CircleShape),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 val initials = if (contact.name.isNotEmpty()) contact.name.take(1).uppercase() else contact.addr.take(1).uppercase()
                                 Text(
                                     text = initials,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
                                 )
                             }
                             Column {
@@ -1158,13 +1181,13 @@ internal fun ComposeField(
                                         text = contact.name,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                                 Text(
                                     text = contact.addr,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -1218,16 +1241,18 @@ internal fun AddAccountScreen(
 ) {
     val pagerState = rememberPagerState(initialPage = initialSection) { 3 }
     val coroutineScope = rememberCoroutineScope()
-    val tabs = listOf(
-        tr("accounts.setup.oauthTab"),
-        tr("accounts.setup.passwordTab"),
-        tr("accounts.setup.rssTab"),
-    )
-    val icons = listOf(
-        Icons.Default.PersonAdd,
-        Icons.Default.Inbox,
-        Icons.Default.RssFeed,
-    )
+    val tabs =
+        listOf(
+            tr("accounts.setup.oauthTab"),
+            tr("accounts.setup.passwordTab"),
+            tr("accounts.setup.rssTab"),
+        )
+    val icons =
+        listOf(
+            Icons.Default.PersonAdd,
+            Icons.Default.Inbox,
+            Icons.Default.RssFeed,
+        )
 
     LaunchedEffect(initialSection) {
         pagerState.scrollToPage(initialSection)
@@ -1246,14 +1271,15 @@ internal fun AddAccountScreen(
         },
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding),
         ) {
             SecondaryTabRow(
                 selectedTabIndex = pagerState.currentPage,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 tabs.forEachIndexed { index, label ->
                     LeadingIconTab(
@@ -1273,10 +1299,11 @@ internal fun AddAccountScreen(
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
-                    .imePadding()
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                        .imePadding(),
             ) { page ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -1480,39 +1507,42 @@ internal fun SetupField(
                 }
             },
         outputTransformation = if (isPassword && !revealed) PasswordOutputTransformation else null,
-        trailingIcon = if (isPassword || value.isEmpty()) {
-            {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    val clipboardManager = LocalClipboardManager.current
-                    if (value.isEmpty()) {
-                        IconButton(onClick = {
-                            val text = clipboardManager.getText()?.text.orEmpty()
-                            if (text.isNotEmpty()) {
-                                onChange(text)
+        trailingIcon =
+            if (isPassword || value.isEmpty()) {
+                {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        val clipboardManager = LocalClipboardManager.current
+                        if (value.isEmpty()) {
+                            IconButton(onClick = {
+                                val text = clipboardManager.getText()?.text.orEmpty()
+                                if (text.isNotEmpty()) {
+                                    onChange(text)
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Filled.ContentPaste,
+                                    contentDescription = "Paste",
+                                    modifier = Modifier.size(20.dp),
+                                )
                             }
-                        }) {
-                            Icon(
-                                Icons.Filled.ContentPaste,
-                                contentDescription = "Paste",
-                                modifier = Modifier.size(20.dp),
-                            )
                         }
-                    }
-                    if (isPassword) {
-                        IconButton(onClick = { revealed = !revealed }) {
-                            Icon(
-                                if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = if (revealed) "Hide password" else "Show password",
-                                modifier = Modifier.size(20.dp),
-                            )
+                        if (isPassword) {
+                            IconButton(onClick = { revealed = !revealed }) {
+                                Icon(
+                                    if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (revealed) "Hide password" else "Show password",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }
-            }
-        } else null
+            } else {
+                null
+            },
     )
 }
 

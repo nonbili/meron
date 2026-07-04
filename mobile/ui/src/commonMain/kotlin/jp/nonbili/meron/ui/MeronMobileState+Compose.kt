@@ -978,7 +978,10 @@ private fun MeronMobileState.showLocalDraftInOpenThread() {
     messages =
         (
             messages.filterNot {
-                it.id == localDraft.id || it.messageId.trim().trim('<', '>').lowercase() == normalizedDraftId
+                it.id == localDraft.id || it.messageId
+                    .trim()
+                    .trim('<', '>')
+                    .lowercase() == normalizedDraftId
             } + localDraft
         ).sortedBy { it.dateEpochSeconds }
     selectedCoreThread = thread.copy(hasDraft = true)
@@ -989,9 +992,10 @@ internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
     if (threadId.isBlank()) return
     locallyDraftedThreadIds = locallyDraftedThreadIds + threadId
     coreThreads = threadsWithDraftFlag(coreThreads, setOf(threadId))
-    selectedCoreThread = selectedCoreThread?.let { thread ->
-        if (thread.id == threadId || thread.threadId == threadId) thread.copy(hasDraft = true) else thread
-    }
+    selectedCoreThread =
+        selectedCoreThread?.let { thread ->
+            if (thread.id == threadId || thread.threadId == threadId) thread.copy(hasDraft = true) else thread
+        }
     kanbanColumns =
         kanbanColumns.mapValues { (_, state) ->
             state.copy(threads = threadsWithDraftFlag(state.threads, setOf(threadId)))
@@ -1002,8 +1006,7 @@ internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
         }
 }
 
-internal fun MeronMobileState.withLocalDraftFlags(threads: List<ThreadSummary>): List<ThreadSummary> =
-    threadsWithDraftFlag(threads, locallyDraftedThreadIds)
+internal fun MeronMobileState.withLocalDraftFlags(threads: List<ThreadSummary>): List<ThreadSummary> = threadsWithDraftFlag(threads, locallyDraftedThreadIds)
 
 // A just-discarded draft can briefly reappear in a server refetch: some IMAP
 // providers (Gmail included) don't guarantee an expunge on one connection is

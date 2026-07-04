@@ -426,6 +426,7 @@ func iosSelectionMoveCopyAvailability(selectedThreads: [ThreadSummary], rssMoveT
     }
     return IosSelectionMoveCopyAvailability(canMove: true, canCopy: true)
 }
+
 struct IosCommand: Identifiable {
     let id: String
     let label: String
@@ -435,6 +436,7 @@ struct IosCommand: Identifiable {
     let role: ButtonRole?
     let action: () -> Void
 }
+
 func iosCommandMatches(_ command: IosCommand, query: String) -> Bool {
     let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !normalized.isEmpty else { return true }
@@ -833,6 +835,7 @@ func plainMessageAttributedString(_ text: String, searchQuery: String = "", acti
     }
     return output
 }
+
 func loadIosKanbanBoards() -> [IosKanbanBoardSpec] {
     guard let data = UserDefaults.standard.data(forKey: "ios_kanban_boards_v1"),
           let boards = try? JSONDecoder().decode([IosKanbanBoardSpec].self, from: data)
@@ -932,7 +935,7 @@ func messagesAfterDeletingMessage(_ messages: [MessageBody], messageId: String) 
     messages.filter { $0.id != messageId }
 }
 
-func messageDeleteRequiresConfirmation(folder: String) -> Bool {
+func messageDeleteRequiresConfirmation(folder _: String) -> Bool {
     true
 }
 
@@ -993,7 +996,7 @@ func composeDraftHasContent(
 
 func composeDraftCanSend(
     to: String,
-    subject: String,
+    subject _: String,
     body: String,
     attachments: [DraftAttachment]
 ) -> Bool {
@@ -1589,7 +1592,7 @@ private func composeInlineMarkdownAsHtml(_ value: String) -> String {
         (#"\*\*([^*]+)\*\*"#, "<strong>$1</strong>"),
         (#"__([^_]+)__"#, "<u>$1</u>"),
         (#"~~([^~]+)~~"#, "<s>$1</s>"),
-        (#"(^|[^*])\*([^*\n]+)\*([^*]|$)"#, "$1<em>$2</em>$3")
+        (#"(^|[^*])\*([^*\n]+)\*([^*]|$)"#, "$1<em>$2</em>$3"),
     ]
     for (pattern, replacement) in replacements {
         output = output.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)

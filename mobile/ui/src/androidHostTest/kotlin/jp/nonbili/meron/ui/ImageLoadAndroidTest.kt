@@ -35,14 +35,16 @@ class ImageLoadAndroidTest {
         withTempDir("meron-image-cache-find") { dir ->
             val key = remoteImageCacheKey("https://example.com/photo")
             File(dir, "$key.txt").writeText("not-image")
-            val old = File(dir, "$key.jpg").apply {
-                writeBytes(byteArrayOf(1))
-                setLastModified(100)
-            }
-            val newest = File(dir, "$key.webp").apply {
-                writeBytes(byteArrayOf(2))
-                setLastModified(200)
-            }
+            val old =
+                File(dir, "$key.jpg").apply {
+                    writeBytes(byteArrayOf(1))
+                    setLastModified(100)
+                }
+            val newest =
+                File(dir, "$key.webp").apply {
+                    writeBytes(byteArrayOf(2))
+                    setLastModified(200)
+                }
 
             assertEquals(newest, cachedRemoteImageFile(dir, "https://example.com/photo"))
             assertTrue(old.exists())
@@ -53,18 +55,21 @@ class ImageLoadAndroidTest {
     @Test
     fun pruneRemoteImageCacheDeletesOldestFilesFirst() {
         withTempDir("meron-image-cache-prune") { dir ->
-            val oldest = File(dir, "old.png").apply {
-                writeBytes(ByteArray(60))
-                setLastModified(100)
-            }
-            val middle = File(dir, "middle.png").apply {
-                writeBytes(ByteArray(50))
-                setLastModified(200)
-            }
-            val newest = File(dir, "new.png").apply {
-                writeBytes(ByteArray(40))
-                setLastModified(300)
-            }
+            val oldest =
+                File(dir, "old.png").apply {
+                    writeBytes(ByteArray(60))
+                    setLastModified(100)
+                }
+            val middle =
+                File(dir, "middle.png").apply {
+                    writeBytes(ByteArray(50))
+                    setLastModified(200)
+                }
+            val newest =
+                File(dir, "new.png").apply {
+                    writeBytes(ByteArray(40))
+                    setLastModified(300)
+                }
 
             pruneRemoteImageCache(dir, maxBytes = 90)
 

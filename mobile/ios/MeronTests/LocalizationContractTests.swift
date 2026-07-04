@@ -63,7 +63,6 @@ final class LocalizationContractTests: XCTestCase {
         XCTAssertEqual(iosAppLocale("ja").identifier, "ja")
         XCTAssertEqual(iosAppLanguageDisplayName("pt-BR"), "Português (Brasil)")
     }
-
 }
 
 private extension Bundle {

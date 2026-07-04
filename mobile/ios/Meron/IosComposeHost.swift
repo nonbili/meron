@@ -1,5 +1,5 @@
-import SwiftUI
 import MeronUI
+import SwiftUI
 
 private final class IosCloseableHandle: CloseableHandle {
     private let onClose: () -> Void
@@ -51,7 +51,7 @@ struct IosComposeHost: UIViewControllerRepresentable {
     let incomingNotificationThreadTarget: NotificationThreadTarget?
     let coreProtocolVersion: Int32
 
-    func makeUIViewController(context: Context) -> UIViewController {
+    func makeUIViewController(context _: Context) -> UIViewController {
         IosMainViewControllerKt.MainViewController(
             core: core,
             coreLoaded: coreLoaded,
@@ -67,5 +67,5 @@ struct IosComposeHost: UIViewControllerRepresentable {
         )
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_: UIViewController, context _: Context) {}
 }

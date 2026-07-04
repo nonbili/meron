@@ -1,8 +1,10 @@
 {
   "scripts": {
+    "predev": "git config core.hooksPath .githooks",
     "dev": "wails dev",
     "dev:core": "cargo watch -w meron-core/src -x \"build --manifest-path meron-core/Cargo.toml\"",
     "build:core": "cargo build --manifest-path meron-core/Cargo.toml",
+    "prebuild": "git config core.hooksPath .githooks",
     "build": "wails build",
     "build:release": "./scripts/build.sh",
     "generate": "wails generate module",

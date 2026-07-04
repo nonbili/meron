@@ -66,12 +66,7 @@ export function AboutDialog() {
           <p className="mt-4 max-w-[18rem] text-sm leading-6 text-secondary">{comments}</p>
 
           <div className="mt-5 flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              rightIcon={ExternalLink}
-              onClick={() => openExternal(SOURCE_URL)}
-            >
+            <Button variant="secondary" size="sm" rightIcon={ExternalLink} onClick={() => openExternal(SOURCE_URL)}>
               {t('about.sourceCode')}
             </Button>
             <Button

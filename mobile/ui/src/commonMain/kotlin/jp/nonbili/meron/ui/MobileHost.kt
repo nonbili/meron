@@ -12,11 +12,15 @@ data class GoogleDeviceAccount(
 
 /** Final outcome of platform Google account sign-in. */
 sealed interface GoogleDeviceAccountResult {
-    data class Connected(val account: GoogleDeviceAccount) : GoogleDeviceAccountResult
+    data class Connected(
+        val account: GoogleDeviceAccount,
+    ) : GoogleDeviceAccountResult
 
     data object Cancelled : GoogleDeviceAccountResult
 
-    data class Failed(val message: String) : GoogleDeviceAccountResult
+    data class Failed(
+        val message: String,
+    ) : GoogleDeviceAccountResult
 }
 
 /** Result of silently refreshing a managed Google access token. */
@@ -154,8 +158,7 @@ open class DefaultMobileHost(
 
     override val coreProtocolVersion: Int = 0
 
-    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit) =
-        onResult(GoogleDeviceAccountResult.Cancelled)
+    override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit) = onResult(GoogleDeviceAccountResult.Cancelled)
 
     override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh = ManagedTokenRefresh.NotNeeded
 

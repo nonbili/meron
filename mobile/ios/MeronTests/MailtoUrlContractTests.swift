@@ -155,7 +155,7 @@ final class MailtoUrlContractTests: XCTestCase {
                         mimeType: "text/plain",
                         sizeBytes: 4,
                         dataBase64: "ZGF0YQ=="
-                    )
+                    ),
                 ]
             )
         )
@@ -945,12 +945,12 @@ final class MailtoUrlContractTests: XCTestCase {
     }
 
     func testExternalMessageNavigationUrlAllowsOnlySafeExternalSchemes() throws {
-        XCTAssertEqual(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "https://example.com")))?.absoluteString, "https://example.com")
-        XCTAssertEqual(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "http://example.com")))?.absoluteString, "http://example.com")
-        XCTAssertEqual(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "mailto:me@example.com")))?.absoluteString, "mailto:me@example.com")
-        XCTAssertEqual(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "tel:+15555550123")))?.absoluteString, "tel:+15555550123")
-        XCTAssertNil(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "javascript:alert(1)"))))
-        XCTAssertNil(externalMessageNavigationUrl(try XCTUnwrap(URL(string: "data:text/html,hello"))))
+        XCTAssertEqual(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "https://example.com")))?.absoluteString, "https://example.com")
+        XCTAssertEqual(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "http://example.com")))?.absoluteString, "http://example.com")
+        XCTAssertEqual(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "mailto:me@example.com")))?.absoluteString, "mailto:me@example.com")
+        XCTAssertEqual(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "tel:+15555550123")))?.absoluteString, "tel:+15555550123")
+        XCTAssertNil(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "javascript:alert(1)"))))
+        XCTAssertNil(try externalMessageNavigationUrl(XCTUnwrap(URL(string: "data:text/html,hello"))))
         XCTAssertNil(externalMessageNavigationUrl(nil))
     }
 

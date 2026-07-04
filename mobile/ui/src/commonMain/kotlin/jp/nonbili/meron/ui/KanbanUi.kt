@@ -847,33 +847,36 @@ internal fun KanbanMinimizedColumn(
     }
 }
 
-private fun Modifier.rotate90(): Modifier = this.then(
-    layout { measurable, constraints ->
-        val childConstraints = constraints.copy(
-            minWidth = constraints.minHeight,
-            maxWidth = constraints.maxHeight,
-            minHeight = constraints.minWidth,
-            maxHeight = constraints.maxWidth
-        )
-        val placeable = measurable.measure(childConstraints)
-        layout(placeable.height, placeable.width) {
-            placeable.placeWithLayer(
-                x = (placeable.height - placeable.width) / 2,
-                y = (placeable.width - placeable.height) / 2
-            ) {
-                rotationZ = 90f
+private fun Modifier.rotate90(): Modifier =
+    this.then(
+        layout { measurable, constraints ->
+            val childConstraints =
+                constraints.copy(
+                    minWidth = constraints.minHeight,
+                    maxWidth = constraints.maxHeight,
+                    minHeight = constraints.minWidth,
+                    maxHeight = constraints.maxWidth,
+                )
+            val placeable = measurable.measure(childConstraints)
+            layout(placeable.height, placeable.width) {
+                placeable.placeWithLayer(
+                    x = (placeable.height - placeable.width) / 2,
+                    y = (placeable.width - placeable.height) / 2,
+                ) {
+                    rotationZ = 90f
+                }
             }
-        }
-    }
-)
+        },
+    )
 
 @Composable
 internal fun CollapsedColumnTitle(title: String) {
     Text(
         text = title,
-        modifier = Modifier
-            .rotate90()
-            .heightIn(max = 180.dp),
+        modifier =
+            Modifier
+                .rotate90()
+                .heightIn(max = 180.dp),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         fontSize = 11.sp,

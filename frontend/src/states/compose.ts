@@ -793,7 +793,8 @@ export async function openDraftConversationOrCompose(thread: Message) {
   try {
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
     const messages = result.messages ?? []
-    const draft = newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread
+    const draft =
+      newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread
 
     if (draftShouldOpenConversation(messages, draft)) {
       compose$.activeTab.set('')

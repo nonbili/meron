@@ -15,11 +15,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -426,7 +426,12 @@ internal fun SettingsScreen(
         NavHost(
             navController = settingsNavController,
             startDestination = SettingsRoutes.Root,
-            modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).imePadding(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding(),
         ) {
             composable(SettingsRoutes.General) {
                 SettingsGeneralPage(
@@ -1414,9 +1419,10 @@ internal fun WallpaperPresetGrid(
     onUpload: () -> Unit,
     uploadLabel: String,
 ) {
-    val rows = remember {
-        (listOf<Pair<String, String>?>(null) + wallpaperPresets.map { it.first to it.second }).chunked(3)
-    }
+    val rows =
+        remember {
+            (listOf<Pair<String, String>?>(null) + wallpaperPresets.map { it.first to it.second }).chunked(3)
+        }
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

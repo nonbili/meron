@@ -556,8 +556,7 @@ internal fun pageableMailAccounts(
     }
 }
 
-internal fun MeronMobileState.pageableCoreAccounts(): List<AccountSummary> =
-    pageableMailAccounts(selectedCoreAccountId, coreAccounts, mailboxCursor, mailboxAccountCursors)
+internal fun MeronMobileState.pageableCoreAccounts(): List<AccountSummary> = pageableMailAccounts(selectedCoreAccountId, coreAccounts, mailboxCursor, mailboxAccountCursors)
 
 // `quiet` suppresses the "Loaded N older message(s)" status for auto-fired
 // pagination — store reloads (e.g. after a background sync event) shrink the
@@ -783,7 +782,11 @@ private fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     val normalizedTailId = tail.messageId.normalizedComposeDraftId()
     if (quickReplyDraftId.isNotBlank() && quickReplyDraftId.normalizedComposeDraftId() == normalizedTailId) return
     quickReplyBody = tail.body
-    quickReplyDraftId = tail.messageId.trim().trim('<', '>').ifBlank { newDraftMessageId() }
+    quickReplyDraftId =
+        tail.messageId
+            .trim()
+            .trim('<', '>')
+            .ifBlank { newDraftMessageId() }
     quickReplyDraftSaved = true
     quickReplyInReplyTo = tail.inReplyTo
     quickReplyReferences = tail.references

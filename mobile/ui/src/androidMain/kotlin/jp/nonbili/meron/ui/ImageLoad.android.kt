@@ -56,8 +56,7 @@ internal fun androidMediaRoot(
         androidMediaRootDirectoryName(relative),
     ).canonicalFile
 
-internal fun androidMediaRootDirectoryName(relative: String): String =
-    if (relative.startsWith("avatars/") || relative.startsWith("wallpapers/")) "media" else "attachments"
+internal fun androidMediaRootDirectoryName(relative: String): String = if (relative.startsWith("avatars/") || relative.startsWith("wallpapers/")) "media" else "attachments"
 
 internal fun remoteImageCacheKey(url: String): String = sha256Hex(url)
 
@@ -107,11 +106,12 @@ private fun loadRemoteImageBytes(
         }
     }
 
-    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-        connectTimeout = REMOTE_IMAGE_CONNECT_TIMEOUT_MS
-        readTimeout = REMOTE_IMAGE_READ_TIMEOUT_MS
-        instanceFollowRedirects = true
-    }
+    val connection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = REMOTE_IMAGE_CONNECT_TIMEOUT_MS
+            readTimeout = REMOTE_IMAGE_READ_TIMEOUT_MS
+            instanceFollowRedirects = true
+        }
     return try {
         if (connection.responseCode !in 200..299) return null
         val bytes = connection.inputStream.use { it.readBytes() }
@@ -159,8 +159,6 @@ private fun sniffImageExtension(
     }
 }
 
-private fun imageExtensionFromFileName(name: String): String? =
-    name.substringAfterLast('.', "").lowercase().takeIf { it in setOf("jpg", "png", "gif", "webp", "svg") }
+private fun imageExtensionFromFileName(name: String): String? = name.substringAfterLast('.', "").lowercase().takeIf { it in setOf("jpg", "png", "gif", "webp", "svg") }
 
-private fun ByteArray.decodeHead(maxBytes: Int): String =
-    copyOfRange(0, size.coerceAtMost(maxBytes)).decodeToString()
+private fun ByteArray.decodeHead(maxBytes: Int): String = copyOfRange(0, size.coerceAtMost(maxBytes)).decodeToString()

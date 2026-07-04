@@ -357,7 +357,8 @@ class ComposeMainActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            jp.nonbili.meron.ui.NotificationPermissionSignal.signal()
+            jp.nonbili.meron.ui.NotificationPermissionSignal
+                .signal()
         }
     }
 

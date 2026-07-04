@@ -1,5 +1,8 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -7,6 +10,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +27,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -35,22 +46,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -73,16 +68,16 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
@@ -131,7 +126,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -143,7 +137,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
@@ -151,6 +147,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -164,7 +161,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -177,6 +176,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountAliasParams
@@ -248,7 +248,6 @@ import jp.nonbili.meron.shared.folderIsTrash
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.forwardableAttachments
-import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.isOAuthCallbackUrl
 import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
@@ -272,6 +271,7 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
+import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -484,10 +484,11 @@ internal fun ThreadScreen(
 
     fun galleryIndexForAttachment(attachment: MessageAttachment): Int? {
         val ref = attachmentMediaRef(attachment)
-        return galleryImages.indexOfFirst { image ->
-            image.attachment.key.isNotBlank() && image.attachment.key == attachment.key ||
-                image.ref == ref && ref.isNotBlank()
-        }.takeIf { it >= 0 }
+        return galleryImages
+            .indexOfFirst { image ->
+                (image.attachment.key.isNotBlank() && image.attachment.key == attachment.key) ||
+                    (image.ref == ref && ref.isNotBlank())
+            }.takeIf { it >= 0 }
     }
 
     fun openGalleryForAttachment(attachment: MessageAttachment) {
@@ -501,7 +502,7 @@ internal fun ThreadScreen(
             galleryImages.indexOfFirst { image ->
                 image.ref == normalized ||
                     normalized.endsWith(image.ref) ||
-                    image.attachment.key.isNotBlank() && normalized.contains("/media/${image.attachment.key}")
+                    (image.attachment.key.isNotBlank() && normalized.contains("/media/${image.attachment.key}"))
             }
         if (idx >= 0) {
             galleryIndex = idx
@@ -512,288 +513,288 @@ internal fun ThreadScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column(Modifier.clickable { detailsOpen = true }) {
-                        Text(
-                            thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        val subtitle = threadHeaderSubtitle(messages, accountEmail, isRss)
-                        if (subtitle.isNotBlank()) {
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column(Modifier.clickable { detailsOpen = true }) {
                             Text(
-                                subtitle,
+                                thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium,
                             )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onToggleStar) {
-                        Icon(
-                            if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = tr("chat.star"),
-                            tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { overflowOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
-                        }
-                        DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
-                                leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
-                                onClick = {
-                                    overflowOpen = false
-                                    onArchive()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(tr("chat.searchThread")) },
-                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                                onClick = {
-                                    overflowOpen = false
-                                    searchOpen = !searchOpen
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
-                                leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
-                                onClick = {
-                                    overflowOpen = false
-                                    detailsOpen = true
-                                },
-                            )
-                            if (!isRss) {
-                                DropdownMenuItem(
-                                    text = { Text(if (preferHtml) "View as plain text" else "View as HTML") },
-                                    leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
-                                    onClick = {
-                                        overflowOpen = false
-                                        onPreferHtmlChange(!preferHtml)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(tr("threads.actions.moveTo")) },
-                                    leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                                    onClick = {
-                                        overflowOpen = false
-                                        moveDialogOpen = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(tr("threads.actions.copyTo")) },
-                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                    onClick = {
-                                        overflowOpen = false
-                                        copyDialogOpen = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
-                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                    onClick = {
-                                        overflowOpen = false
-                                        onDelete()
-                                    },
+                            val subtitle = threadHeaderSubtitle(messages, accountEmail, isRss)
+                            if (subtitle.isNotBlank()) {
+                                Text(
+                                    subtitle,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        if (moveDialogOpen && thread != null) {
-            MoveThreadDialog(
-                thread = thread,
-                folders = targetMoveFolders,
-                onMove = { folder ->
-                    moveDialogOpen = false
-                    onMoveToFolder(folder)
-                },
-                onCreateAndMove = { name ->
-                    moveDialogOpen = false
-                    onCreateFolderAndMove(name)
-                },
-                onDismiss = { moveDialogOpen = false },
-            )
-        }
-        if (copyDialogOpen && thread != null) {
-            CopyThreadDialog(
-                thread = thread,
-                folders = targetCopyFolders,
-                onCopy = { folder ->
-                    copyDialogOpen = false
-                    onCopyToFolder(folder)
-                },
-                onDismiss = { copyDialogOpen = false },
-            )
-        }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-                .imePadding(),
-        ) {
-            if (searchOpen) {
-                ConversationSearchBar(
-                    query = threadSearch,
-                    onQueryChange = { threadSearch = it },
-                    matchLabel = if (normalizedSearch.isBlank()) "" else "${if (searchMatches.isEmpty()) 0 else activeSearchIndex + 1}/${searchMatches.size}",
-                    canNavigate = searchMatches.isNotEmpty(),
-                    onPrevious = { goToSearchMatch(-1) },
-                    onNext = { goToSearchMatch(1) },
-                    onClose = {
-                        threadSearch = ""
-                        searchOpen = false
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = onToggleStar) {
+                            Icon(
+                                if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = tr("chat.star"),
+                                tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { overflowOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
+                            }
+                            DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
+                                    leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onArchive()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(tr("chat.searchThread")) },
+                                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        searchOpen = !searchOpen
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
+                                    leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                                    onClick = {
+                                        overflowOpen = false
+                                        detailsOpen = true
+                                    },
+                                )
+                                if (!isRss) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (preferHtml) "View as plain text" else "View as HTML") },
+                                        leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
+                                        onClick = {
+                                            overflowOpen = false
+                                            onPreferHtmlChange(!preferHtml)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr("threads.actions.moveTo")) },
+                                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                                        onClick = {
+                                            overflowOpen = false
+                                            moveDialogOpen = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr("threads.actions.copyTo")) },
+                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                        onClick = {
+                                            overflowOpen = false
+                                            copyDialogOpen = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            overflowOpen = false
+                                            onDelete()
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     },
                 )
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                ChatWallpaperBackground(
-                    presetId = wallpaperPresetId,
-                    customUrl = wallpaperCustomUrl,
-                    modifier = Modifier.matchParentSize(),
+            },
+        ) { innerPadding ->
+            if (moveDialogOpen && thread != null) {
+                MoveThreadDialog(
+                    thread = thread,
+                    folders = targetMoveFolders,
+                    onMove = { folder ->
+                        moveDialogOpen = false
+                        onMoveToFolder(folder)
+                    },
+                    onCreateAndMove = { name ->
+                        moveDialogOpen = false
+                        onCreateFolderAndMove(name)
+                    },
+                    onDismiss = { moveDialogOpen = false },
                 )
-                if (messages.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                } else {
-                    LazyColumn(
-                        Modifier.fillMaxSize(),
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        if (canLoadOlder || loadingOlder) {
-                            item {
-                                Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
-                                    if (loadingOlder) {
-                                        CircularProgressIndicator(Modifier.size(24.dp))
-                                    } else {
-                                        OutlinedButton(onClick = onLoadOlder) {
-                                            Text(tr("threads.actions.loadMore"))
+            }
+            if (copyDialogOpen && thread != null) {
+                CopyThreadDialog(
+                    thread = thread,
+                    folders = targetCopyFolders,
+                    onCopy = { folder ->
+                        copyDialogOpen = false
+                        onCopyToFolder(folder)
+                    },
+                    onDismiss = { copyDialogOpen = false },
+                )
+            }
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding(),
+            ) {
+                if (searchOpen) {
+                    ConversationSearchBar(
+                        query = threadSearch,
+                        onQueryChange = { threadSearch = it },
+                        matchLabel = if (normalizedSearch.isBlank()) "" else "${if (searchMatches.isEmpty()) 0 else activeSearchIndex + 1}/${searchMatches.size}",
+                        canNavigate = searchMatches.isNotEmpty(),
+                        onPrevious = { goToSearchMatch(-1) },
+                        onNext = { goToSearchMatch(1) },
+                        onClose = {
+                            threadSearch = ""
+                            searchOpen = false
+                        },
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    ChatWallpaperBackground(
+                        presetId = wallpaperPresetId,
+                        customUrl = wallpaperCustomUrl,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    if (messages.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        LazyColumn(
+                            Modifier.fillMaxSize(),
+                            state = listState,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (canLoadOlder || loadingOlder) {
+                                item {
+                                    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
+                                        if (loadingOlder) {
+                                            CircularProgressIndicator(Modifier.size(24.dp))
+                                        } else {
+                                            OutlinedButton(onClick = onLoadOlder) {
+                                                Text(tr("threads.actions.loadMore"))
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        items(messages, key = { it.id }) { message ->
-                            val outgoing = isOutgoing(message, accountEmail)
-                            MessageBubble(
-                                message = message,
-                                outgoing = outgoing,
-                                chat = chat,
-                                preferHtml = preferHtml,
-                                searchQuery = normalizedSearch,
-                                activeSearchMatch = message.id == activeSearchId,
-                                actionsEnabled = !isRss,
-                                onForward = onForward,
-                                onEditAsNew = onEditAsNew,
-                                onOpenDraft = onOpenDraft,
-                                onToggleRead = onToggleMessageRead,
-                                onToggleStarred = onToggleMessageStarred,
-                                onDelete = onDeleteMessage,
-                                onOpenAttachment = onOpenAttachment,
-                                onSaveAttachment = onSaveAttachment,
-                                loadImageAttachment = loadImageAttachment,
-                                onOpenImageAttachment = ::openGalleryForAttachment,
-                                onOpenHtmlImage = ::openGalleryForHtmlSrc,
-                                onCopyMessageText = onCopyMessageText,
-                                onOpenMessage = { readerMessage = it },
-                                onOpenUrl = services::openUrl,
-                                onRetryLoad = onRetryLoadMessages,
-                            )
+                            items(messages, key = { it.id }) { message ->
+                                val outgoing = isOutgoing(message, accountEmail)
+                                MessageBubble(
+                                    message = message,
+                                    outgoing = outgoing,
+                                    chat = chat,
+                                    preferHtml = preferHtml,
+                                    searchQuery = normalizedSearch,
+                                    activeSearchMatch = message.id == activeSearchId,
+                                    actionsEnabled = !isRss,
+                                    onForward = onForward,
+                                    onEditAsNew = onEditAsNew,
+                                    onOpenDraft = onOpenDraft,
+                                    onToggleRead = onToggleMessageRead,
+                                    onToggleStarred = onToggleMessageStarred,
+                                    onDelete = onDeleteMessage,
+                                    onOpenAttachment = onOpenAttachment,
+                                    onSaveAttachment = onSaveAttachment,
+                                    loadImageAttachment = loadImageAttachment,
+                                    onOpenImageAttachment = ::openGalleryForAttachment,
+                                    onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                                    onCopyMessageText = onCopyMessageText,
+                                    onOpenMessage = { readerMessage = it },
+                                    onOpenUrl = services::openUrl,
+                                    onRetryLoad = onRetryLoadMessages,
+                                )
+                            }
                         }
                     }
                 }
+                if (thread != null && !isRss && messages.isNotEmpty()) {
+                    ReplyBar(
+                        value = quickReplyBody,
+                        onChange = onQuickReplyChange,
+                        attachments = quickReplyAttachments,
+                        failureMessage = quickReplyFailure,
+                        sendShortcutMode = sendShortcutMode,
+                        onAttach = onQuickReplyAttach,
+                        onRemoveAttachment = onRemoveQuickReplyAttachment,
+                        onOpenFullEditor = onOpenFullReply,
+                        onSend = onSendReply,
+                    )
+                }
             }
-            if (thread != null && !isRss && messages.isNotEmpty()) {
-                ReplyBar(
-                    value = quickReplyBody,
-                    onChange = onQuickReplyChange,
-                    attachments = quickReplyAttachments,
-                    failureMessage = quickReplyFailure,
-                    sendShortcutMode = sendShortcutMode,
-                    onAttach = onQuickReplyAttach,
-                    onRemoveAttachment = onRemoveQuickReplyAttachment,
-                    onOpenFullEditor = onOpenFullReply,
-                    onSend = onSendReply,
+        }
+
+        if (detailsOpen) {
+            ConversationDetailsScreen(
+                messages = messages,
+                mediaItems = mediaItems,
+                loadImageAttachment = loadImageAttachment,
+                isRss = isRss,
+                feedUrl = thread?.feedUrl.orEmpty(),
+                ownEmail = accountEmail,
+                onBack = { detailsOpen = false },
+                onComposeTo = { email ->
+                    detailsOpen = false
+                    onComposeTo(email)
+                },
+                onCopy = { label, value ->
+                    services.copyText(label, value)
+                },
+                onOpenAttachment = onOpenAttachment,
+                onSaveAttachment = onSaveAttachment,
+                onOpenGalleryIndex = { index -> galleryIndex = index },
+                onOpenUrl = services::openUrl,
+            )
+        }
+
+        // Overlay the full-screen message reader when open
+        readerMessage?.let { reader ->
+            MessageReaderScreen(
+                message = reader,
+                preferHtml = preferHtml,
+                onBack = { readerMessage = null },
+                onCopy = { label, value -> services.copyText(label, value) },
+                onOpenAttachment = onOpenAttachment,
+                onSaveAttachment = onSaveAttachment,
+                loadImageAttachment = loadImageAttachment,
+                onOpenImageAttachment = ::openGalleryForAttachment,
+                onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                onOpenUrl = services::openUrl,
+            )
+        }
+        galleryIndex?.let { index ->
+            if (galleryImages.getOrNull(index) != null) {
+                ThreadImageGallery(
+                    images = galleryImages,
+                    index = index,
+                    onIndexChange = { galleryIndex = it },
+                    onClose = { galleryIndex = null },
+                    onSave = onSaveAttachment,
+                    onShare = onShareImageAttachment,
+                    onCopy = onCopyImageAttachment,
+                    loadImageAttachment = loadImageAttachment,
                 )
             }
         }
     }
-
-    if (detailsOpen) {
-        ConversationDetailsScreen(
-            messages = messages,
-            mediaItems = mediaItems,
-            loadImageAttachment = loadImageAttachment,
-            isRss = isRss,
-            feedUrl = thread?.feedUrl.orEmpty(),
-            ownEmail = accountEmail,
-            onBack = { detailsOpen = false },
-            onComposeTo = { email ->
-                detailsOpen = false
-                onComposeTo(email)
-            },
-            onCopy = { label, value ->
-                services.copyText(label, value)
-            },
-            onOpenAttachment = onOpenAttachment,
-            onSaveAttachment = onSaveAttachment,
-            onOpenGalleryIndex = { index -> galleryIndex = index },
-            onOpenUrl = services::openUrl,
-        )
-    }
-
-    // Overlay the full-screen message reader when open
-    readerMessage?.let { reader ->
-        MessageReaderScreen(
-            message = reader,
-            preferHtml = preferHtml,
-            onBack = { readerMessage = null },
-            onCopy = { label, value -> services.copyText(label, value) },
-            onOpenAttachment = onOpenAttachment,
-            onSaveAttachment = onSaveAttachment,
-            loadImageAttachment = loadImageAttachment,
-            onOpenImageAttachment = ::openGalleryForAttachment,
-            onOpenHtmlImage = ::openGalleryForHtmlSrc,
-            onOpenUrl = services::openUrl,
-        )
-    }
-    galleryIndex?.let { index ->
-        if (galleryImages.getOrNull(index) != null) {
-            ThreadImageGallery(
-                images = galleryImages,
-                index = index,
-                onIndexChange = { galleryIndex = it },
-                onClose = { galleryIndex = null },
-                onSave = onSaveAttachment,
-                onShare = onShareImageAttachment,
-                onCopy = onCopyImageAttachment,
-                loadImageAttachment = loadImageAttachment,
-            )
-        }
-    }
-}
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -841,235 +842,238 @@ internal fun ConversationDetailsScreen(
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-                // Section 0: Feed URL
-                if (isRss && feedUrl.isNotBlank()) {
-                    item {
-                        Text(
-                            text = tr("chat.feedUrl").uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                        )
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onOpenUrl(feedUrl) }
-                                    .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(
-                                text = feedUrl,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = { onCopy("Feed URL", feedUrl) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentCopy,
-                                    contentDescription = tr("common.copy"),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(top = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-
-                // Section 1: People
-                if (participants.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                        )
-                    }
-                    items(participants, key = { it.email }) { person ->
-                        Row(
-                            modifier = Modifier
+            // Section 0: Feed URL
+            if (isRss && feedUrl.isNotBlank()) {
+                item {
+                    Text(
+                        text = tr("chat.feedUrl").uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    )
+                    Row(
+                        modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenUrl(feedUrl) }
                                 .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Avatar(person.name.ifBlank { person.email }, 36.dp)
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = person.name.ifBlank { person.email } + if (person.isSelf) " (${tr("chat.you")})" else "",
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (person.name.isNotBlank() && person.name != person.email) {
-                                    Text(
-                                        text = person.email,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { onCopy("Email address", person.email) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ContentCopy,
-                                        contentDescription = tr("chat.copyEmailAddress"),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                if (!person.isSelf) {
-                                    IconButton(
-                                        onClick = { onComposeTo(person.email) },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Email,
-                                            contentDescription = tr("mobile.tabs.mail"),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Section 2: Media
-                if (mediaItems.isNotEmpty()) {
-                    item {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         Text(
-                            text = tr("chat.media").uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = feedUrl,
                             color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
-                    }
-                    itemsIndexed(
-                        mediaRows,
-                        key = { index, row -> "$index:${row.joinToString("|") { "${it.type}-${it.filename}" }}" },
-                    ) { _, row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            row.forEach { item ->
-                                Box(Modifier.weight(1f)) {
-                                    ConversationMediaTile(
-                                        item = item,
-                                        loadImageAttachment = loadImageAttachment,
-                                        onOpen = {
-                                            val imageIndex = item.galleryIndex
-                                            if (item.type == "image" && imageIndex != null) {
-                                                onOpenGalleryIndex(imageIndex)
-                                            } else {
-                                                onOpenAttachment(item.attachment)
-                                            }
-                                        },
-                                    )
-                                }
-                            }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-
-                // Section 3: Files
-                if (fileAttachments.isNotEmpty()) {
-                    item {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = tr("chat.files").uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
-                    items(fileAttachments.withIndex().toList(), key = { "file-${it.index}" }) { indexed ->
-                        val attachment = indexed.value
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        IconButton(
+                            onClick = { onCopy("Feed URL", feedUrl) },
+                            modifier = Modifier.size(36.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.AttachFile,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                imageVector = Icons.Filled.ContentCopy,
+                                contentDescription = tr("common.copy"),
+                                modifier = Modifier.size(18.dp),
                             )
-                            Column(Modifier.weight(1f)) {
+                        }
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(top = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
+                }
+            }
+
+            // Section 1: People
+            if (participants.isNotEmpty()) {
+                item {
+                    Text(
+                        text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    )
+                }
+                items(participants, key = { it.email }) { person ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Avatar(person.name.ifBlank { person.email }, 36.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = person.name.ifBlank { person.email } + if (person.isSelf) " (${tr("chat.you")})" else "",
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (person.name.isNotBlank() && person.name != person.email) {
                                 Text(
-                                    text = attachment.filename.ifBlank { tr("chat.attachment") },
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = listOf(
-                                        attachment.mimeType,
-                                        formatBytes(attachment.sizeBytes),
-                                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                                    text = person.email,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(
+                                onClick = { onCopy("Email address", person.email) },
+                                modifier = Modifier.size(36.dp),
                             ) {
-                                TextButton(
-                                    onClick = { onOpenAttachment(attachment) },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCopy,
+                                    contentDescription = tr("chat.copyEmailAddress"),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            if (!person.isSelf) {
+                                IconButton(
+                                    onClick = { onComposeTo(person.email) },
+                                    modifier = Modifier.size(36.dp),
                                 ) {
-                                    Text(tr("kanban.actions.openThread"), fontSize = 12.sp)
-                                }
-                                TextButton(
-                                    onClick = { onSaveAttachment(attachment) },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text(tr("buttons.save"), fontSize = 12.sp)
+                                    Icon(
+                                        imageVector = Icons.Filled.Email,
+                                        contentDescription = tr("mobile.tabs.mail"),
+                                        modifier = Modifier.size(18.dp),
+                                    )
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            // Section 2: Media
+            if (mediaItems.isNotEmpty()) {
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
+                    Text(
+                        text = tr("chat.media").uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                itemsIndexed(
+                    mediaRows,
+                    key = { index, row -> "$index:${row.joinToString("|") { "${it.type}-${it.filename}" }}" },
+                ) { _, row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        row.forEach { item ->
+                            Box(Modifier.weight(1f)) {
+                                ConversationMediaTile(
+                                    item = item,
+                                    loadImageAttachment = loadImageAttachment,
+                                    onOpen = {
+                                        val imageIndex = item.galleryIndex
+                                        if (item.type == "image" && imageIndex != null) {
+                                            onOpenGalleryIndex(imageIndex)
+                                        } else {
+                                            onOpenAttachment(item.attachment)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+
+            // Section 3: Files
+            if (fileAttachments.isNotEmpty()) {
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
+                    Text(
+                        text = tr("chat.files").uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                items(fileAttachments.withIndex().toList(), key = { "file-${it.index}" }) { indexed ->
+                    val attachment = indexed.value
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = attachment.filename.ifBlank { tr("chat.attachment") },
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text =
+                                    listOf(
+                                        attachment.mimeType,
+                                        formatBytes(attachment.sizeBytes),
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { onOpenAttachment(attachment) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp),
+                            ) {
+                                Text(tr("kanban.actions.openThread"), fontSize = 12.sp)
+                            }
+                            TextButton(
+                                onClick = { onSaveAttachment(attachment) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp),
+                            ) {
+                                Text(tr("buttons.save"), fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1245,8 +1249,7 @@ private fun ThreadImageGallery(
                 alpha = 1f - progress * 0.4f
                 scaleX = 1f - progress * 0.05f
                 scaleY = 1f - progress * 0.05f
-            }
-            .background(Color.Black.copy(alpha = 0.94f)),
+            }.background(Color.Black.copy(alpha = 0.94f)),
     ) {
         Row(
             Modifier
@@ -1333,7 +1336,10 @@ private fun ThreadImageGallery(
                                 }
                         }
                         when (dragMode) {
-                            1 -> swipeDistance += dragAmount.x
+                            1 -> {
+                                swipeDistance += dragAmount.x
+                            }
+
                             2 -> {
                                 val resistance =
                                     if (screenHeightPx > 0f) {
@@ -1345,8 +1351,7 @@ private fun ThreadImageGallery(
                             }
                         }
                     }
-                }
-                .pointerInput(current.ref) {
+                }.pointerInput(current.ref) {
                     // Only track multi-touch here so a single-finger drag is left
                     // unconsumed for the horizontal-drag detector above to see —
                     // detectTransformGestures reacts to one finger too and would
@@ -1595,8 +1600,6 @@ internal fun FolderDestinationAction(
     }
 }
 
-
-
 @Composable
 internal fun ImagePreviewDialog(
     preview: ImagePreview,
@@ -1757,14 +1760,14 @@ internal fun MessageBubble(
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(end = 4.dp),
                     ) {
                         Text(
                             text = tr("chat.draft"),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                         )
                     }
                 }
@@ -1782,7 +1785,7 @@ internal fun MessageBubble(
                             onOpenMessage(message)
                         }
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
                 ) {
                     Icon(
                         imageVector = if (isDraft) Icons.Filled.Edit else Icons.Filled.OpenInFull,
@@ -1993,7 +1996,7 @@ internal fun MessageReaderScreen(
                 initialValue = pullDistancePx,
                 targetValue = target,
                 initialVelocity = velocityY,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
             ) { value, _ ->
                 pullDistancePx = value
             }
@@ -2004,7 +2007,7 @@ internal fun MessageReaderScreen(
                 initialValue = pullDistancePx,
                 targetValue = 0f,
                 initialVelocity = velocityY,
-                animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
             ) { value, _ ->
                 pullDistancePx = value
             }
@@ -2021,9 +2024,12 @@ internal fun MessageReaderScreen(
                 ): Offset {
                     if (dismissedByPull || isAnimating) return Offset.Zero
 
-                    val resistance = if (screenHeightPx > 0f) {
-                        (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
-                    } else 0.8f
+                    val resistance =
+                        if (screenHeightPx > 0f) {
+                            (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
+                        } else {
+                            0.8f
+                        }
 
                     // When pulling down (available.y > 0) and at the top of the scrollable content (scrollState.value == 0)
                     if (available.y > 0f && scrollState.value == 0) {
@@ -2050,52 +2056,55 @@ internal fun MessageReaderScreen(
         }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onSizeChanged { size ->
-                screenHeightPx = size.height.toFloat()
-            }
-            .graphicsLayer {
-                translationY = pullDistancePx
-                val progress = if (screenHeightPx > 0f) (pullDistancePx / screenHeightPx).coerceIn(0f, 1f) else 0f
-                alpha = 1f - progress * 0.4f
-                scaleX = 1f - progress * 0.05f
-                scaleY = 1f - progress * 0.05f
-            }
-            .nestedScroll(pullToConversationConnection)
-            .pointerInput(Unit) {
-                detectTapGestures { }
-            }
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .onSizeChanged { size ->
+                    screenHeightPx = size.height.toFloat()
+                }.graphicsLayer {
+                    translationY = pullDistancePx
+                    val progress = if (screenHeightPx > 0f) (pullDistancePx / screenHeightPx).coerceIn(0f, 1f) else 0f
+                    alpha = 1f - progress * 0.4f
+                    scaleX = 1f - progress * 0.05f
+                    scaleY = 1f - progress * 0.05f
+                }.nestedScroll(pullToConversationConnection)
+                .pointerInput(Unit) {
+                    detectTapGestures { }
+                },
     ) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    modifier = Modifier.pointerInput(message.id, screenHeightPx) {
-                        detectVerticalDragGestures(
-                            onVerticalDrag = { _, dragAmount ->
-                                if (!dismissedByPull && !isAnimating) {
-                                    val resistance = if (screenHeightPx > 0f) {
-                                        (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
-                                    } else 0.8f
-                                    pullDistancePx = (pullDistancePx + dragAmount * resistance).coerceAtLeast(0f)
-                                }
-                            },
-                            onDragEnd = {
-                                if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
-                                    coroutineScope.launch {
-                                        handleDragRelease(0f)
+                    modifier =
+                        Modifier.pointerInput(message.id, screenHeightPx) {
+                            detectVerticalDragGestures(
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (!dismissedByPull && !isAnimating) {
+                                        val resistance =
+                                            if (screenHeightPx > 0f) {
+                                                (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
+                                            } else {
+                                                0.8f
+                                            }
+                                        pullDistancePx = (pullDistancePx + dragAmount * resistance).coerceAtLeast(0f)
                                     }
-                                }
-                            },
-                            onDragCancel = {
-                                if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
-                                    coroutineScope.launch {
-                                        handleDragRelease(0f)
+                                },
+                                onDragEnd = {
+                                    if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
+                                        coroutineScope.launch {
+                                            handleDragRelease(0f)
+                                        }
                                     }
-                                }
-                            }
-                        )
-                    },
+                                },
+                                onDragCancel = {
+                                    if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
+                                        coroutineScope.launch {
+                                            handleDragRelease(0f)
+                                        }
+                                    }
+                                },
+                            )
+                        },
                     title = {
                         Text(
                             message.subject.ifBlank { tr("threads.noSubject") },

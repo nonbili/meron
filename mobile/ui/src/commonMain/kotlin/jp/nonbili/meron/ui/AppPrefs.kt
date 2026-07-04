@@ -63,11 +63,9 @@ internal fun saveLastTopScreen(
     },
 )
 
-internal fun loadLastMailAccountId(prefs: AppPreferences): String =
-    prefs.getString(LAST_MAIL_ACCOUNT_PREF, UNIFIED_ACCOUNT_ID).ifBlank { UNIFIED_ACCOUNT_ID }
+internal fun loadLastMailAccountId(prefs: AppPreferences): String = prefs.getString(LAST_MAIL_ACCOUNT_PREF, UNIFIED_ACCOUNT_ID).ifBlank { UNIFIED_ACCOUNT_ID }
 
-internal fun loadLastMailFolder(prefs: AppPreferences): String =
-    prefs.getString(LAST_MAIL_FOLDER_PREF, INBOX_FOLDER).ifBlank { INBOX_FOLDER }
+internal fun loadLastMailFolder(prefs: AppPreferences): String = prefs.getString(LAST_MAIL_FOLDER_PREF, INBOX_FOLDER).ifBlank { INBOX_FOLDER }
 
 internal fun saveLastMailLocation(
     prefs: AppPreferences,

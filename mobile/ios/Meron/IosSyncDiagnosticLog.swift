@@ -7,7 +7,7 @@ enum IosSyncDiagnosticLog {
     private static let fileName = "sync-diagnostic.log"
     private static let maxLines = 500
 
-    // Mirrors IosAppPreferences("meron_app") + SYNC_DIAGNOSTIC_LOG_ENABLED_PREF.
+    /// Mirrors IosAppPreferences("meron_app") + SYNC_DIAGNOSTIC_LOG_ENABLED_PREF.
     private static let enabledDefaultsKey = "meron_app.sync_diagnostic_log_enabled_v1"
 
     private static var isEnabled: Bool {

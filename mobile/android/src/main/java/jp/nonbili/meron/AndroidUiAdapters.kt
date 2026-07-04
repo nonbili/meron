@@ -143,8 +143,7 @@ class AndroidMobileHost(
     private companion object {
         const val GOOGLE_AUTH_LOG_TAG = "Meron.GoogleAuth"
 
-        fun isGoogleAuthCancelled(error: Throwable): Boolean =
-            error is OperationCanceledException || error.cause is OperationCanceledException
+        fun isGoogleAuthCancelled(error: Throwable): Boolean = error is OperationCanceledException || error.cause is OperationCanceledException
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

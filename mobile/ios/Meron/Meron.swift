@@ -1,5 +1,5 @@
-import SwiftUI
 import MeronUI
+import SwiftUI
 import UIKit
 
 @main

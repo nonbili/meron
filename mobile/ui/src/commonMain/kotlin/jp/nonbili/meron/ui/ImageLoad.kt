@@ -10,11 +10,12 @@ import kotlinx.coroutines.withContext
  *  on any failure (caller falls back to a generated avatar). */
 expect suspend fun loadImageBytes(ref: String): ByteArray?
 
-internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? = loadCachedImageBitmap(ref) {
-    loadImageBytes(ref)?.let { bytes ->
-        withContext(ioDispatcher) { decodeImageBitmap(bytes) }
+internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? =
+    loadCachedImageBitmap(ref) {
+        loadImageBytes(ref)?.let { bytes ->
+            withContext(ioDispatcher) { decodeImageBitmap(bytes) }
+        }
     }
-}
 
 internal suspend fun loadFirstImageBitmap(refs: List<String>): ImageBitmap? {
     for (ref in refs) loadImageBitmapRef(ref)?.let { return it }
@@ -23,7 +24,10 @@ internal suspend fun loadFirstImageBitmap(refs: List<String>): ImageBitmap? {
 
 private const val IMAGE_BITMAP_CACHE_MAX_BYTES = 64L * 1024L * 1024L
 
-private class CachedBitmap(val bitmap: ImageBitmap, val bytes: Long)
+private class CachedBitmap(
+    val bitmap: ImageBitmap,
+    val bytes: Long,
+)
 
 private val imageBitmapCacheMutex = Mutex()
 private val imageBitmapCache = LinkedHashMap<String, CachedBitmap>()

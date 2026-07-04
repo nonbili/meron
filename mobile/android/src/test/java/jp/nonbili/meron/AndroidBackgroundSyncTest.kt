@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidBackgroundSyncTest {
-
     @Test
     fun testIsTransientNetworkError() {
         assertTrue(isTransientNetworkError("tcp connect: failed to lookup address information: No address associated with hostname"))
