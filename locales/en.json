@@ -121,6 +121,7 @@
   "chat.messageId": "Message ID",
   "chat.messageLoadFailed": "Couldn't load this message.",
   "chat.messageText": "Message text",
+  "chat.messagesCount": "{count, plural, one {{count} message} other {{count} messages}}",
   "chat.moreActions": "More actions",
   "chat.moreMessageActions": "More message actions",
   "chat.newMessageTo": "New message to {email}",

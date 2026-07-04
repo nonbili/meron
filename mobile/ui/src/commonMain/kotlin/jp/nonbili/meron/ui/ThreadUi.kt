@@ -1,5 +1,6 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -52,13 +53,16 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
@@ -88,6 +92,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -723,91 +728,234 @@ internal fun ConversationDetailsDialog(
 ) {
     val participants = remember(messages, isRss, ownEmail) { conversationParticipants(messages, ownEmail, isRss) }
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
-    val mediaCount = attachments.count { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") }
-    val fileCount = attachments.size - mediaCount
+    val mediaAttachments = remember(attachments) { attachments.filter { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") } }
+    val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("chat.conversationDetails")) },
         text = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 460.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                // Section 1: People
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistiveStat(tr("chat.peopleLabel"), participants.size.toString())
-                        AssistiveStat(tr("chat.media"), mediaCount.toString())
-                        AssistiveStat(tr("chat.files"), fileCount.toString())
-                    }
-                }
-                item {
-                    Text(tr("chat.peopleLabel"), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
                 }
                 if (participants.isEmpty()) {
                     item {
-                        Text(tr("chat.noConversationParticipants"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = tr("chat.noConversationParticipants"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
                     }
                 } else {
                     items(participants, key = { it.email }) { person ->
                         Row(
-                            Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Avatar(person.name.ifBlank { person.email }, 34.dp)
+                            Avatar(person.name.ifBlank { person.email }, 36.dp)
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    person.name.ifBlank { person.email } + if (person.isSelf) " (${tr("chat.you")})" else "",
+                                    text = person.name.ifBlank { person.email } + if (person.isSelf) " (${tr("chat.you")})" else "",
+                                    fontWeight = FontWeight.Medium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Text(
-                                    "${person.email} · ${person.count}",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                                if (person.name.isNotBlank() && person.name != person.email) {
+                                    Text(
+                                        text = person.email,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                            TextButton(onClick = { onCopy("Email address", person.email) }) { Text(tr("chat.copyEmailAddress")) }
-                            if (!person.isSelf) {
-                                TextButton(onClick = { onComposeTo(person.email) }) { Text(tr("mobile.tabs.mail")) }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { onCopy("Email address", person.email) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = tr("chat.copyEmailAddress"),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                if (!person.isSelf) {
+                                    IconButton(
+                                        onClick = { onComposeTo(person.email) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Email,
+                                            contentDescription = tr("mobile.tabs.mail"),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                item {
-                    HorizontalDivider()
-                    Text(tr("chat.sharedFiles"), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                }
-                if (attachments.isEmpty()) {
+
+                // Section 2: Media
+                if (mediaAttachments.isNotEmpty()) {
                     item {
-                        Text(tr("chat.noSharedFilesLoaded"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        Text(
+                            text = tr("chat.media").uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
-                } else {
-                    items(attachments.withIndex().toList(), key = { it.index }) { indexed ->
+                    items(mediaAttachments.withIndex().toList(), key = { "media-${it.index}" }) { indexed ->
                         val attachment = indexed.value
                         Row(
-                            Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(Icons.Filled.AttachFile, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Filled.Image,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
                             Column(Modifier.weight(1f)) {
-                                Text(attachment.filename.ifBlank { tr("chat.attachment") }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
-                                    listOf(
+                                    text = attachment.filename.ifBlank { tr("chat.attachment") },
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = listOf(
                                         attachment.mimeType,
                                         formatBytes(attachment.sizeBytes),
                                     ).filter { it.isNotBlank() }.joinToString(" · "),
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            TextButton(onClick = { onOpenAttachment(attachment) }) { Text(tr("kanban.actions.openThread")) }
-                            TextButton(onClick = { onSaveAttachment(attachment) }) { Text(tr("buttons.save")) }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { onOpenAttachment(attachment) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(tr("kanban.actions.openThread"), fontSize = 12.sp)
+                                }
+                                TextButton(
+                                    onClick = { onSaveAttachment(attachment) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(tr("buttons.save"), fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Section 3: Files
+                if (fileAttachments.isNotEmpty()) {
+                    item {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        Text(
+                            text = tr("chat.files").uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    items(fileAttachments.withIndex().toList(), key = { "file-${it.index}" }) { indexed ->
+                        val attachment = indexed.value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = attachment.filename.ifBlank { tr("chat.attachment") },
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = listOf(
+                                        attachment.mimeType,
+                                        formatBytes(attachment.sizeBytes),
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { onOpenAttachment(attachment) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(tr("kanban.actions.openThread"), fontSize = 12.sp)
+                                }
+                                TextButton(
+                                    onClick = { onSaveAttachment(attachment) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(tr("buttons.save"), fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -981,21 +1129,7 @@ internal fun FolderDestinationAction(
     }
 }
 
-@Composable
-internal fun AssistiveStat(
-    label: String,
-    value: String,
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontWeight = FontWeight.Bold)
-            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
+
 
 @Composable
 internal fun ImagePreviewDialog(
