@@ -183,8 +183,9 @@ fn open_inner(path: &Path, key: Option<&str>) -> Result<Connection> {
         )
     })
     .context("set connection pragmas")?;
-    run_migrations(&conn).context("run migrations")?;
-    invalidate_body_cache_if_needed(&conn)?;
+    with_anyhow_busy_retry(|| run_migrations(&conn)).context("run migrations")?;
+    with_anyhow_busy_retry(|| invalidate_body_cache_if_needed(&conn))
+        .context("invalidate body cache if needed")?;
     Ok(conn)
 }
 
@@ -291,6 +292,28 @@ fn with_busy_retry<T>(mut f: impl FnMut() -> rusqlite::Result<T>) -> rusqlite::R
             result => return result,
         }
     }
+}
+
+fn with_anyhow_busy_retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut delay = Duration::from_millis(10);
+    loop {
+        match f() {
+            Err(err) if anyhow_error_is_database_locked(&err) && Instant::now() < deadline => {
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
+}
+
+fn anyhow_error_is_database_locked(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<rusqlite::Error>()
+            .is_some_and(is_database_locked)
+    })
 }
 
 fn is_database_locked(err: &rusqlite::Error) -> bool {
