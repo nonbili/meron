@@ -406,7 +406,7 @@ internal fun MeronMobileState.loadKanbanColumn(
             }
             updateKanbanColumn(key) {
                 it.copy(
-                    threads = result.threads,
+                    threads = withLocalDraftFlags(result.threads),
                     loading = false,
                     loadingMore = false,
                     error = null,
@@ -446,7 +446,7 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
             }
             updateKanbanColumn(key) { current ->
                 val existingIds = current.threads.map { it.id }.toSet()
-                val appended = result.threads.filterNot { it.id in existingIds }
+                val appended = withLocalDraftFlags(result.threads).filterNot { it.id in existingIds }
                 current.copy(
                     threads = (current.threads + appended).sortedByDescending { it.dateEpochSeconds },
                     loadingMore = false,

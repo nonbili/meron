@@ -1,11 +1,14 @@
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.DraftAttachment
+import jp.nonbili.meron.shared.ThreadSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ComposeUiTest {
     @Test
@@ -134,4 +137,43 @@ class ComposeUiTest {
 
         assertNotEquals(first, second)
     }
+
+    @Test
+    fun threadsWithDraftFlagMarksVisibleThreadListRow() {
+        val threads =
+            listOf(
+                threadSummary(id = "acc#INBOX#one"),
+                threadSummary(id = "acc#INBOX#two"),
+            )
+
+        val updated = threadsWithDraftFlag(threads, "acc#INBOX#two")
+
+        assertFalse(updated[0].hasDraft)
+        assertTrue(updated[1].hasDraft)
+    }
+
+    @Test
+    fun threadsWithDraftFlagCanMatchThreadIdAlias() {
+        val threads =
+            listOf(
+                threadSummary(id = "row-1", threadId = "acc#INBOX#one"),
+            )
+
+        val updated = threadsWithDraftFlag(threads, "acc#INBOX#one")
+
+        assertTrue(updated.single().hasDraft)
+    }
+
+    private fun threadSummary(
+        id: String,
+        threadId: String = "",
+    ): ThreadSummary =
+        ThreadSummary(
+            id = id,
+            accountId = "acc",
+            folder = "INBOX",
+            subject = "Subject",
+            sender = "sender@example.com",
+            threadId = threadId,
+        )
 }

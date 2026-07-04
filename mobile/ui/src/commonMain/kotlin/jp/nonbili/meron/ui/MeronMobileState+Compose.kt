@@ -401,6 +401,7 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
     }.fold(
         onSuccess = {
             composeDraftSaved = true
+            selectedCoreThread?.let { markThreadDraftEverywhere(it.id) }
             if (showStatus) status = "Draft saved"
             syncCoreThreads(syncFirst = false)
             runCatching { reloadCurrentThreadMessages() }
@@ -747,6 +748,52 @@ private fun MeronMobileState.showLocalDraftInOpenThread() {
             } + localDraft
         ).sortedBy { it.dateEpochSeconds }
     selectedCoreThread = thread.copy(hasDraft = true)
+    markThreadDraftEverywhere(thread.id)
+}
+
+internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
+    if (threadId.isBlank()) return
+    locallyDraftedThreadIds = locallyDraftedThreadIds + threadId
+    coreThreads = threadsWithDraftFlag(coreThreads, setOf(threadId))
+    selectedCoreThread = selectedCoreThread?.let { thread ->
+        if (thread.id == threadId || thread.threadId == threadId) thread.copy(hasDraft = true) else thread
+    }
+    kanbanColumns =
+        kanbanColumns.mapValues { (_, state) ->
+            state.copy(threads = threadsWithDraftFlag(state.threads, setOf(threadId)))
+        }
+    mailboxCache =
+        mailboxCache.mapValues { (_, cached) ->
+            cached.copy(threads = threadsWithDraftFlag(cached.threads, setOf(threadId)))
+        }
+}
+
+internal fun MeronMobileState.withLocalDraftFlags(threads: List<ThreadSummary>): List<ThreadSummary> =
+    threadsWithDraftFlag(threads, locallyDraftedThreadIds)
+
+internal fun threadsWithDraftFlag(
+    threads: List<ThreadSummary>,
+    threadId: String,
+): List<ThreadSummary> = threadsWithDraftFlag(threads, setOf(threadId))
+
+internal fun threadsWithDraftFlag(
+    threads: List<ThreadSummary>,
+    threadIds: Set<String>,
+): List<ThreadSummary> {
+    if (threadIds.isEmpty()) return threads
+    var changed = false
+    val updated =
+        threads.map { thread ->
+            if (thread.id !in threadIds && thread.threadId !in threadIds) {
+                thread
+            } else if (thread.hasDraft) {
+                thread
+            } else {
+                changed = true
+                thread.copy(hasDraft = true)
+            }
+        }
+    return if (changed) updated else threads
 }
 
 // Re-open account setup pre-filled so the user can fix credentials. OAuth

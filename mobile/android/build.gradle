@@ -170,6 +170,10 @@ tasks.register("packageRustCoreAndroid", Exec) {
     group = "build"
     workingDir rootProject.projectDir.parentFile
     commandLine "${rootProject.projectDir}/scripts/package-rust-core-android.sh"
+    inputs.dir("${rootProject.projectDir}/../meron-core/src")
+    inputs.file("${rootProject.projectDir}/../meron-core/Cargo.toml")
+    inputs.file("${rootProject.projectDir}/../meron-core/Cargo.lock")
+    outputs.file("${projectDir}/src/main/jniLibs/arm64-v8a/libmeron_core.so")
     doFirst {
         def releaseRequested = gradle.taskGraph.allTasks.any { task ->
             task.path == ":android:assembleRelease" || task.path == ":android:bundleRelease"
@@ -189,7 +193,5 @@ tasks.register("copyUiComposeResources", Copy) {
 tasks.named("preBuild").configure {
     dependsOn tasks.named("generateI18n")
     dependsOn tasks.named("copyUiComposeResources")
-    if (project.hasProperty("packageRustCore")) {
-        dependsOn tasks.named("packageRustCoreAndroid")
-    }
+    dependsOn tasks.named("packageRustCoreAndroid")
 }

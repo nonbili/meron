@@ -127,7 +127,7 @@ export function ThreadListItem({
           <div className="flex items-center gap-1.5 min-w-0">
             {!bulkSelectable && thread.starred && <Star size={11} className="fill-amber-500 text-amber-500 shrink-0" />}
             <p className={clsx('flex-1 truncate text-[12px] leading-snug', unread ? 'font-semibold' : 'font-normal')}>
-              {hasDraft && <span className="mr-1 font-semibold text-accent">{t('chat.draft')}</span>}
+              {hasDraft && <span className="mr-1 font-normal text-rose-500">{t('chat.draft')}</span>}
               <span className={clsx(unread ? 'text-primary' : 'text-primary/85')}>{threadTitle}</span>
               {thread.preview && (
                 <span className={clsx(unread ? 'text-secondary/90 font-medium' : 'text-secondary/75 font-normal')}>

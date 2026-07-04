@@ -584,7 +584,7 @@ private fun MeronMobileScreenContent(
                             }.onSuccess { (importJson, foldersJson, threadsJson) ->
                                 val imported = parseOpmlImportCountResponse(importJson)
                                 coreFolders = parseFolderListResponse(foldersJson)
-                                coreThreads = parseThreadListResponse(threadsJson)
+                                coreThreads = withLocalDraftFlags(parseThreadListResponse(threadsJson))
                                 selectedCoreFolder = INBOX_FOLDER
                                 status = if (imported == 0) "No new feeds imported" else "Imported $imported feed(s)"
                             }.onFailure {

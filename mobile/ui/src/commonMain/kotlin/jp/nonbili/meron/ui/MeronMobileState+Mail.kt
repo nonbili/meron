@@ -266,7 +266,7 @@ private fun MeronMobileState.cacheVisibleMailbox() {
                 MailboxLoadResult(
                     folders = coreFolders,
                     folder = folderId,
-                    threads = coreThreads,
+                    threads = withLocalDraftFlags(coreThreads),
                     nextCursor = mailboxCursor,
                     accountCursors = mailboxAccountCursors,
                 )
@@ -283,7 +283,7 @@ private fun MeronMobileState.restoreCachedMailbox(
         foldersByAccount = foldersByAccount + cached.folders.groupBy { it.accountId }
     }
     selectedCoreFolder = cached.folder
-    coreThreads = cached.threads
+    coreThreads = withLocalDraftFlags(cached.threads)
     mailboxCursor = cached.nextCursor
     mailboxAccountCursors = cached.accountCursors
     initialThreadsLoaded = true
@@ -406,7 +406,7 @@ internal fun MeronMobileState.syncCoreThreads(
                         result.copy(
                             folders = result.folders,
                             folder = result.folder,
-                            threads = result.threads,
+                            threads = withLocalDraftFlags(result.threads),
                             nextCursor = result.nextCursor,
                             accountCursors = result.accountCursors,
                         )
@@ -423,7 +423,7 @@ internal fun MeronMobileState.syncCoreThreads(
             }
             val folder = result.folder
             selectedCoreFolder = folder
-            val parsedThreads = result.threads
+            val parsedThreads = withLocalDraftFlags(result.threads)
             coreThreads = parsedThreads
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
@@ -614,7 +614,7 @@ internal fun MeronMobileState.loadMoreCoreThreads(quiet: Boolean = false) {
                 foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
             }
             val existingIds = coreThreads.map { it.id }.toSet()
-            val appended = result.threads.filterNot { it.id in existingIds }
+            val appended = withLocalDraftFlags(result.threads).filterNot { it.id in existingIds }
             coreThreads = (coreThreads + appended).sortedByDescending { it.dateEpochSeconds }
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
@@ -857,7 +857,7 @@ internal fun MeronMobileState.openNotificationThread(target: NotificationThreadT
                 foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
             }
             selectedCoreFolder = result.folder
-            coreThreads = result.threads
+            coreThreads = withLocalDraftFlags(result.threads)
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
             syncing = false
