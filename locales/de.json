@@ -115,6 +115,7 @@
   "chat.draft": "Entwurf",
   "chat.failedToSendRetry": "Senden fehlgeschlagen – klicken zum Wiederholen",
   "chat.feedDetails": "Feed-Details",
+  "chat.feedUrl": "Feed-URL",
   "chat.fileItems": "{count, plural, one {{count} Datei} other {{count} Dateien}}",
   "chat.files": "Dateien",
   "chat.hideDetails": "Details ausblenden",

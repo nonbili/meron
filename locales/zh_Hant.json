@@ -115,6 +115,7 @@
   "chat.draft": "草稿",
   "chat.failedToSendRetry": "傳送失敗 - 按一下以重試",
   "chat.feedDetails": "訂閱源詳細資訊",
+  "chat.feedUrl": "訂閱源網址",
   "chat.fileItems": "{count, plural, one {{count} 個檔案} other {{count} 個檔案}}",
   "chat.files": "檔案",
   "chat.hideDetails": "隱藏詳細資訊",

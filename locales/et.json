@@ -115,6 +115,7 @@
   "chat.draft": "Mustand",
   "chat.failedToSendRetry": "Saatmine ebaõnnestus – klõpsa uuesti proovimiseks",
   "chat.feedDetails": "Voo üksikasjad",
+  "chat.feedUrl": "Voo URL",
   "chat.fileItems": "{count, plural, one {{count} fail} other {{count} faili}}",
   "chat.files": "Failid",
   "chat.hideDetails": "Peida üksikasjad",

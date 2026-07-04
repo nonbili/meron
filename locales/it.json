@@ -115,6 +115,7 @@
   "chat.draft": "Bozza",
   "chat.failedToSendRetry": "Invio non riuscito - clicca per riprovare",
   "chat.feedDetails": "Dettagli feed",
+  "chat.feedUrl": "URL del feed",
   "chat.fileItems": "{count, plural, one {{count} file} other {{count} file}}",
   "chat.files": "File",
   "chat.hideDetails": "Nascondi dettagli",

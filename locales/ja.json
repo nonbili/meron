@@ -115,6 +115,7 @@
   "chat.draft": "下書き",
   "chat.failedToSendRetry": "送信に失敗しました - クリックして再試行",
   "chat.feedDetails": "フィードの詳細",
+  "chat.feedUrl": "フィードURL",
   "chat.fileItems": "{count, plural, one {{count}件のファイル} other {{count}件のファイル}}",
   "chat.files": "ファイル",
   "chat.hideDetails": "詳細を非表示",

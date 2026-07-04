@@ -115,6 +115,7 @@
   "chat.draft": "Bản nháp",
   "chat.failedToSendRetry": "Gửi thất bại - nhấp để thử lại",
   "chat.feedDetails": "Chi tiết nguồn tin",
+  "chat.feedUrl": "URL nguồn tin",
   "chat.fileItems": "{count, plural, one {{count} tệp} other {{count} tệp}}",
   "chat.files": "Tệp",
   "chat.hideDetails": "Ẩn chi tiết",

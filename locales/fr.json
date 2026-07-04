@@ -115,6 +115,7 @@
   "chat.draft": "Brouillon",
   "chat.failedToSendRetry": "Échec de l'envoi - cliquez pour réessayer",
   "chat.feedDetails": "Détails du flux",
+  "chat.feedUrl": "URL du flux",
   "chat.fileItems": "{count, plural, one {{count} fichier} other {{count} fichiers}}",
   "chat.files": "Fichiers",
   "chat.hideDetails": "Masquer les détails",

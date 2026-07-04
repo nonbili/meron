@@ -115,6 +115,7 @@
   "chat.draft": "초안",
   "chat.failedToSendRetry": "전송 실패 - 다시 시도하려면 클릭하세요",
   "chat.feedDetails": "피드 세부 정보",
+  "chat.feedUrl": "피드 URL",
   "chat.fileItems": "{count, plural, one {파일 {count}개} other {파일 {count}개}}",
   "chat.files": "파일",
   "chat.hideDetails": "세부 정보 숨기기",

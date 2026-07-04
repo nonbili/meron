@@ -115,6 +115,7 @@
   "chat.draft": "Rascunho",
   "chat.failedToSendRetry": "Falha ao enviar - clique para tentar novamente",
   "chat.feedDetails": "Detalhes do feed",
+  "chat.feedUrl": "URL do feed",
   "chat.fileItems": "{count, plural, one {{count} arquivo} other {{count} arquivos}}",
   "chat.files": "Arquivos",
   "chat.hideDetails": "Ocultar detalhes",

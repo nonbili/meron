@@ -115,6 +115,7 @@
   "chat.draft": "Melnraksts",
   "chat.failedToSendRetry": "Neizdevās nosūtīt — noklikšķiniet, lai mēģinātu vēlreiz",
   "chat.feedDetails": "Plūsmas informācija",
+  "chat.feedUrl": "Plūsmas URL",
   "chat.fileItems": "{count, plural, one {{count} fails} other {{count} faili}}",
   "chat.files": "Faili",
   "chat.hideDetails": "Slēpt informāciju",

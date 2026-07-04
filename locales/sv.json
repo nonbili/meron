@@ -115,6 +115,7 @@
   "chat.draft": "Förslag",
   "chat.failedToSendRetry": "Kunde inte skicka - klicka för att försöka igen",
   "chat.feedDetails": "Flödesdetaljer",
+  "chat.feedUrl": "Flödes-URL",
   "chat.fileItems": "{count, plural, one {{count} fil} other {{count} filer}}",
   "chat.files": "Filer",
   "chat.hideDetails": "Dölj detaljer",

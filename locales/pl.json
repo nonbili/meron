@@ -115,6 +115,7 @@
   "chat.draft": "Projekt",
   "chat.failedToSendRetry": "Nie udało się wysłać - kliknij, aby spróbować ponownie",
   "chat.feedDetails": "Szczegóły kanału",
+  "chat.feedUrl": "Adres URL kanału",
   "chat.fileItems": "{count, plural, one {{count} plik} other {{count} plików}}",
   "chat.files": "Pliki",
   "chat.hideDetails": "Ukryj szczegóły",

@@ -115,6 +115,7 @@
   "chat.draft": "Προσχέδιο",
   "chat.failedToSendRetry": "Αποτυχία αποστολής - κάντε κλικ για επαναδοκιμή",
   "chat.feedDetails": "Λεπτομέρειες ροής",
+  "chat.feedUrl": "Διεύθυνση URL ροής",
   "chat.fileItems": "{count, plural, one {{count} αρχείο} other {{count} αρχεία}}",
   "chat.files": "Αρχεία",
   "chat.hideDetails": "Απόκρυψη λεπτομερειών",

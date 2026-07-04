@@ -28,9 +28,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -46,8 +43,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -517,7 +514,7 @@ internal fun ThreadScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(Modifier.clickable { detailsOpen = true }) {
                         Text(
                             thread?.subject?.ifBlank { "(no subject)" } ?: "Conversation",
                             maxLines = 1,
@@ -572,7 +569,7 @@ internal fun ThreadScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(tr("chat.conversationDetails")) },
+                                text = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
                                 leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
                                 onClick = {
                                     overflowOpen = false
@@ -619,29 +616,6 @@ internal fun ThreadScreen(
             )
         },
     ) { innerPadding ->
-        if (detailsOpen) {
-            ConversationDetailsDialog(
-                messages = messages,
-                mediaItems = mediaItems,
-                loadImageAttachment = loadImageAttachment,
-                isRss = isRss,
-                ownEmail = accountEmail,
-                onDismiss = { detailsOpen = false },
-                onComposeTo = { email ->
-                    detailsOpen = false
-                    onComposeTo(email)
-                },
-                onCopy = { label, value ->
-                    services.copyText(label, value)
-                },
-                onOpenAttachment = onOpenAttachment,
-                onSaveAttachment = onSaveAttachment,
-                onOpenGalleryIndex = { index ->
-                    detailsOpen = false
-                    galleryIndex = index
-                },
-            )
-        }
         if (moveDialogOpen && thread != null) {
             MoveThreadDialog(
                 thread = thread,
@@ -766,6 +740,29 @@ internal fun ThreadScreen(
         }
     }
 
+    if (detailsOpen) {
+        ConversationDetailsScreen(
+            messages = messages,
+            mediaItems = mediaItems,
+            loadImageAttachment = loadImageAttachment,
+            isRss = isRss,
+            feedUrl = thread?.feedUrl.orEmpty(),
+            ownEmail = accountEmail,
+            onBack = { detailsOpen = false },
+            onComposeTo = { email ->
+                detailsOpen = false
+                onComposeTo(email)
+            },
+            onCopy = { label, value ->
+                services.copyText(label, value)
+            },
+            onOpenAttachment = onOpenAttachment,
+            onSaveAttachment = onSaveAttachment,
+            onOpenGalleryIndex = { index -> galleryIndex = index },
+            onOpenUrl = services::openUrl,
+        )
+    }
+
     // Overlay the full-screen message reader when open
     readerMessage?.let { reader ->
         MessageReaderScreen(
@@ -798,51 +795,107 @@ internal fun ThreadScreen(
 }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-internal fun ConversationDetailsDialog(
+internal fun ConversationDetailsScreen(
     messages: List<MessageBody>,
     mediaItems: List<ThreadMediaItem>,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
     isRss: Boolean,
+    feedUrl: String,
     ownEmail: String,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onComposeTo: (String) -> Unit,
     onCopy: (String, String) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     onOpenGalleryIndex: (Int) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     val participants = remember(messages, isRss, ownEmail) { conversationParticipants(messages, ownEmail, isRss) }
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
     val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(tr("chat.conversationDetails")) },
-        text = {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 460.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                // Section 1: People
-                item {
-                    Text(
-                        text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                }
-                if (participants.isEmpty()) {
+    val mediaRows = remember(mediaItems) { mediaItems.chunked(3) }
+
+    BackHandler(onBack = onBack)
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+                // Section 0: Feed URL
+                if (isRss && feedUrl.isNotBlank()) {
                     item {
                         Text(
-                            text = tr("chat.noConversationParticipants"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 8.dp)
+                            text = tr("chat.feedUrl").uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onOpenUrl(feedUrl) }
+                                    .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = feedUrl,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(
+                                onClick = { onCopy("Feed URL", feedUrl) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCopy,
+                                    contentDescription = tr("common.copy"),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(top = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                     }
-                } else {
+                }
+
+                // Section 1: People
+                if (participants.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
                     items(participants, key = { it.email }) { person ->
                         Row(
                             modifier = Modifier
@@ -916,31 +969,28 @@ internal fun ConversationDetailsDialog(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    item {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height((((mediaItems.size + 2) / 3) * 102).coerceAtMost(360).dp),
-                            contentPadding = PaddingValues(vertical = 4.dp),
+                    items(mediaRows, key = { row -> row.joinToString("|") { "${it.type}-${it.filename}" } }) { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            itemsIndexed(mediaItems, key = { index, item -> "${item.type}-${item.filename}-$index" }) { _, item ->
-                                ConversationMediaTile(
-                                    item = item,
-                                    loadImageAttachment = loadImageAttachment,
-                                    onOpen = {
-                                        val imageIndex = item.galleryIndex
-                                        if (item.type == "image" && imageIndex != null) {
-                                            onOpenGalleryIndex(imageIndex)
-                                        } else {
-                                            onOpenAttachment(item.attachment)
-                                        }
-                                    },
-                                )
+                            row.forEach { item ->
+                                Box(Modifier.weight(1f)) {
+                                    ConversationMediaTile(
+                                        item = item,
+                                        loadImageAttachment = loadImageAttachment,
+                                        onOpen = {
+                                            val imageIndex = item.galleryIndex
+                                            if (item.type == "image" && imageIndex != null) {
+                                                onOpenGalleryIndex(imageIndex)
+                                            } else {
+                                                onOpenAttachment(item.attachment)
+                                            }
+                                        },
+                                    )
+                                }
                             }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
@@ -1016,12 +1066,8 @@ internal fun ConversationDetailsDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(tr("buttons.done")) }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -1141,6 +1187,13 @@ private fun ThreadImageGallery(
     var offset by remember(current.ref) { mutableStateOf(Offset.Zero) }
     var swipeDistance by remember(current.ref) { mutableStateOf(0f) }
     var menuOpen by remember { mutableStateOf(false) }
+    // 0 = undecided, 1 = horizontal swipe (change photo), 2 = vertical pull (dismiss).
+    var dragMode by remember(current.ref) { mutableStateOf(0) }
+    var pullDistancePx by remember(current.ref) { mutableStateOf(0f) }
+    var screenHeightPx by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    val dismissThresholdPx = remember(density) { with(density) { 120.dp.toPx() } }
+    val coroutineScope = rememberCoroutineScope()
 
     BackHandler(onBack = onClose)
 
@@ -1158,9 +1211,37 @@ private fun ThreadImageGallery(
         onIndexChange(index + 1)
     }
 
+    suspend fun settleOrDismissPull(velocityY: Float) {
+        if (pullDistancePx >= dismissThresholdPx || velocityY > 1000f) {
+            val target = if (screenHeightPx > 0f) screenHeightPx else with(density) { 800.dp.toPx() }
+            animate(
+                initialValue = pullDistancePx,
+                targetValue = target,
+                initialVelocity = velocityY,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            ) { value, _ -> pullDistancePx = value }
+            onClose()
+        } else {
+            animate(
+                initialValue = pullDistancePx,
+                targetValue = 0f,
+                initialVelocity = velocityY,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+            ) { value, _ -> pullDistancePx = value }
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
+            .onSizeChanged { size -> screenHeightPx = size.height.toFloat() }
+            .graphicsLayer {
+                translationY = pullDistancePx
+                val progress = if (screenHeightPx > 0f) (pullDistancePx / screenHeightPx).coerceIn(0f, 1f) else 0f
+                alpha = 1f - progress * 0.4f
+                scaleX = 1f - progress * 0.05f
+                scaleY = 1f - progress * 0.05f
+            }
             .background(Color.Black.copy(alpha = 0.94f)),
     ) {
         Row(
@@ -1218,18 +1299,48 @@ private fun ThreadImageGallery(
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 64.dp)
                 .pointerInput(current.ref, scale) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (scale <= 1.02f && abs(swipeDistance) > 80f) {
-                                if (swipeDistance > 0f) goPrev() else goNext()
-                            }
+                    if (scale > 1.02f) return@pointerInput
+                    detectDragGestures(
+                        onDragStart = {
+                            dragMode = 0
                             swipeDistance = 0f
                         },
-                        onDragCancel = { swipeDistance = 0f },
-                        onHorizontalDrag = { _, dragAmount ->
-                            if (scale <= 1.02f) swipeDistance += dragAmount
+                        onDragEnd = {
+                            if (dragMode == 1 && abs(swipeDistance) > 80f) {
+                                if (swipeDistance > 0f) goPrev() else goNext()
+                            } else if (dragMode == 2) {
+                                coroutineScope.launch { settleOrDismissPull(0f) }
+                            }
+                            swipeDistance = 0f
+                            dragMode = 0
                         },
-                    )
+                        onDragCancel = {
+                            if (dragMode == 2) coroutineScope.launch { settleOrDismissPull(0f) }
+                            swipeDistance = 0f
+                            dragMode = 0
+                        },
+                    ) { _, dragAmount ->
+                        if (dragMode == 0) {
+                            dragMode =
+                                when {
+                                    abs(dragAmount.x) > abs(dragAmount.y) -> 1
+                                    dragAmount.y > 0f -> 2
+                                    else -> 0
+                                }
+                        }
+                        when (dragMode) {
+                            1 -> swipeDistance += dragAmount.x
+                            2 -> {
+                                val resistance =
+                                    if (screenHeightPx > 0f) {
+                                        (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
+                                    } else {
+                                        0.8f
+                                    }
+                                pullDistancePx = (pullDistancePx + dragAmount.y * resistance).coerceAtLeast(0f)
+                            }
+                        }
+                    }
                 }
                 .pointerInput(current.ref) {
                     // Only track multi-touch here so a single-finger drag is left
@@ -2086,7 +2197,7 @@ internal fun threadHeaderSubtitle(
     if (messages.isEmpty()) return ""
     val count = messages.size
     val countLabel = if (count == 1) "1 message" else "$count messages"
-    if (isRss) return countLabel
+    if (isRss) return formatInboxTimestamp(messages.maxOf { it.dateEpochSeconds })
     val others =
         messages
             .filterNot { isOutgoing(it, ownEmail) }

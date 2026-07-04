@@ -115,6 +115,7 @@
   "chat.draft": "Taslak",
   "chat.failedToSendRetry": "Gönderilemedi - yeniden denemek için tıklayın",
   "chat.feedDetails": "Besleme detayları",
+  "chat.feedUrl": "Besleme URL'si",
   "chat.fileItems": "{count, plural, one {{count} dosya} other {{count} dosya}}",
   "chat.files": "Dosyalar",
   "chat.hideDetails": "Detayları gizle",
