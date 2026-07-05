@@ -29,6 +29,7 @@ import {
   formatFullTimestamp,
   formatMessageStamp,
   getVisibleMedia,
+  htmlReferencesMedia,
   mediaSrc,
   parseAddressList,
 } from './messageHelpers'
@@ -71,11 +72,9 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
   const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(message, account, revealed)
   const normalizedSearchQuery = search.trim()
   const useHtmlBody = conversationMode === 'html' && !!message.body_html && !normalizedSearchQuery
-  const htmlReferencesAttachment = (image: (typeof attachmentImages)[number]) =>
-    !!image.key && !!message.body_html?.includes(`/media/${image.key}`)
   const showAttachmentImages =
     attachmentImages.length > 0 &&
-    (!useHtmlBody || (outgoing && attachmentImages.some((image) => !htmlReferencesAttachment(image))))
+    (!useHtmlBody || (outgoing && attachmentImages.some((image) => !htmlReferencesMedia(message.body_html, image))))
   const activeSearchMatch = activeSearchId === message.id
 
   const replyToRaw = message.reply_to?.trim()

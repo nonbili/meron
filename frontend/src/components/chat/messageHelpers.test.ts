@@ -6,6 +6,7 @@ import {
   formatMessageStamp,
   getShortenedLinkText,
   getVisibleMedia,
+  htmlReferencesMedia,
   isImage,
   isVideo,
   mediaSrc,
@@ -44,6 +45,27 @@ describe('messageHelpers file and media helpers', () => {
     expect(isImage({ mime: 'application/pdf' } as any)).toBe(false)
     expect(mediaSrc({ key: 'acct/file.png' } as any)).toBe('/media/acct/file.png')
     expect(mediaSrc({ url: 'https://example.com/file.png' } as any)).toBe('https://example.com/file.png')
+  })
+
+  it('detects media already present in html bodies', () => {
+    expect(
+      htmlReferencesMedia('<img src="/media/account/image.png">', {
+        key: 'account/image.png',
+        url: null,
+      } as any),
+    ).toBe(true)
+    expect(
+      htmlReferencesMedia('<img src="https://example.com/image.jpg?width=600&amp;height=400">', {
+        key: null,
+        url: 'https://example.com/image.jpg?width=600&height=400',
+      } as any),
+    ).toBe(true)
+    expect(
+      htmlReferencesMedia('<img src="https://example.com/other.jpg">', {
+        key: null,
+        url: 'https://example.com/image.jpg',
+      } as any),
+    ).toBe(false)
   })
 
   it('hides remote media until account settings or reveal allow them', () => {

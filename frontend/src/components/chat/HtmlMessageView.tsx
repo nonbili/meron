@@ -3,7 +3,7 @@ import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
 import { LinkHoverPreview } from './LinkHoverPreview'
-import { isImage, mediaSrc } from './messageHelpers'
+import { htmlReferencesMedia, isImage, mediaSrc } from './messageHelpers'
 import { applyReaderLayout, stripTrackingPixels } from './readerHtml'
 
 const readerScrollPositions = new Map<string, number>()
@@ -40,7 +40,7 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
     () =>
       (attachments ?? []).filter((attachment) => {
         if (!isImage(attachment) || (!attachment.key && !attachment.url)) return false
-        return !attachment.key || !html?.includes(`/media/${attachment.key}`)
+        return !htmlReferencesMedia(html, attachment)
       }),
     [attachments, html],
   )

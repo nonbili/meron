@@ -97,6 +97,19 @@ export function mediaSrc(media: Attachment): string {
   return media.key ? `/media/${media.key}` : media.url!
 }
 
+export function htmlReferencesMedia(html: string | undefined, media: Attachment): boolean {
+  if (!html) return false
+  if (media.key && html.includes(`/media/${media.key}`)) return true
+  if (!media.url) return false
+
+  const escapedUrl = escapeHtmlAttribute(media.url)
+  return html.includes(media.url) || html.includes(escapedUrl)
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;')
+}
+
 export function isVideo(a: Attachment): boolean {
   return (a.mime ?? '').toLowerCase().startsWith('video/')
 }
