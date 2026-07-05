@@ -1529,23 +1529,22 @@ private fun MeronMobileScreenContent(
                                             IconButton(onClick = { kanbanMenuOpen = true }) {
                                                 Icon(Icons.Filled.MoreVert, contentDescription = tr("kanban.actions.boardOptions"))
                                             }
-                                            DropdownMenu(expanded = kanbanMenuOpen, onDismissRequest = { kanbanMenuOpen = false }) {
-                                                FilterMode.values().forEach { mode ->
-                                                    DropdownMenuItem(
-                                                        text = { Text(mode.label()) },
-                                                        leadingIcon = {
-                                                            RadioButton(
-                                                                selected = kanbanFilter == mode,
-                                                                onClick = null,
-                                                            )
-                                                        },
-                                                        onClick = {
-                                                            kanbanMenuOpen = false
-                                                            persistKanbanFilter(mode)
-                                                            loadKanbanBoard(refresh = true)
-                                                        },
-                                                    )
-                                                }
+                                            DropdownMenu(
+                                                expanded = kanbanMenuOpen,
+                                                onDismissRequest = { kanbanMenuOpen = false },
+                                                modifier = Modifier.width(260.dp),
+                                            ) {
+                                                FilterModeSegmentedControl(
+                                                    filter = kanbanFilter,
+                                                    onFilterChange = { mode ->
+                                                        persistKanbanFilter(mode)
+                                                        loadKanbanBoard(refresh = true)
+                                                    },
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                )
                                                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                 DropdownMenuItem(
                                                     text = { Text(tr("mobile.actions.refreshBoard")) },
@@ -1576,6 +1575,7 @@ private fun MeronMobileScreenContent(
                                                 )
                                                 DropdownMenuItem(
                                                     text = { Text(tr("kanban.actions.boardOptions")) },
+                                                    leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                                                     enabled = activeKanbanBoard != null,
                                                     onClick = {
                                                         kanbanMenuOpen = false
@@ -1842,45 +1842,44 @@ private fun MeronMobileScreenContent(
                                             }
                                         }
                                     } else {
+                                        val loadedUnread = coreThreads.any { it.unread }
+                                        val folderUnreadTotal =
+                                            if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+                                                val includedAccountIds =
+                                                    coreAccounts.filter { it.includedInUnified }.map { it.id }.toSet()
+                                                coreFolders
+                                                    .filter { it.accountId in includedAccountIds }
+                                                    .groupBy { it.accountId }
+                                                    .values
+                                                    .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
+                                            } else {
+                                                folderUnread(
+                                                    coreFolders.filter { it.accountId == selectedCoreAccountId },
+                                                    selectedCoreFolder,
+                                                )
+                                            }
+                                        val showMarkAllRead = folderUnreadTotal > 0 || loadedUnread
+                                        val showAccountActions = selectedAccount != null
                                         Box {
                                             IconButton(onClick = { mailboxMenuOpen = true }) {
                                                 Icon(Icons.Filled.MoreVert, contentDescription = tr("threads.actions.title"))
                                             }
-                                            DropdownMenu(expanded = mailboxMenuOpen, onDismissRequest = { mailboxMenuOpen = false }) {
-                                                val loadedUnread = coreThreads.any { it.unread }
-                                                val folderUnreadTotal =
-                                                    if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-                                                        val includedAccountIds =
-                                                            coreAccounts.filter { it.includedInUnified }.map { it.id }.toSet()
-                                                        coreFolders
-                                                            .filter { it.accountId in includedAccountIds }
-                                                            .groupBy { it.accountId }
-                                                            .values
-                                                            .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
-                                                    } else {
-                                                        folderUnread(
-                                                            coreFolders.filter { it.accountId == selectedCoreAccountId },
-                                                            selectedCoreFolder,
-                                                        )
-                                                    }
-                                                val showMarkAllRead = folderUnreadTotal > 0 || loadedUnread
-                                                val showAccountActions = selectedAccount != null
-                                                FilterMode.values().forEach { mode ->
-                                                    DropdownMenuItem(
-                                                        text = { Text(mode.label()) },
-                                                        leadingIcon = {
-                                                            RadioButton(
-                                                                selected = mailFilter == mode,
-                                                                onClick = null,
-                                                            )
-                                                        },
-                                                        onClick = {
-                                                            mailboxMenuOpen = false
-                                                            mailFilter = mode
-                                                            syncCoreThreads(syncFirst = false)
-                                                        },
-                                                    )
-                                                }
+                                            DropdownMenu(
+                                                expanded = mailboxMenuOpen,
+                                                onDismissRequest = { mailboxMenuOpen = false },
+                                                modifier = Modifier.width(260.dp),
+                                            ) {
+                                                FilterModeSegmentedControl(
+                                                    filter = mailFilter,
+                                                    onFilterChange = { mode ->
+                                                        mailFilter = mode
+                                                        syncCoreThreads(syncFirst = false)
+                                                    },
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                )
                                                 if (showMarkAllRead || showAccountActions) {
                                                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                                 }
@@ -1902,6 +1901,9 @@ private fun MeronMobileScreenContent(
                                                     }
                                                     DropdownMenuItem(
                                                         text = { Text(tr("settings.account.accountSettings")) },
+                                                        leadingIcon = {
+                                                            Icon(Icons.Filled.Settings, contentDescription = null)
+                                                        },
                                                         onClick = {
                                                             mailboxMenuOpen = false
                                                             accountSettingsTargetId = selectedAccount.id

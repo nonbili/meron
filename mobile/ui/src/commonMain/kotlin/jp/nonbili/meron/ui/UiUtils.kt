@@ -13,8 +13,13 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -367,4 +372,30 @@ internal fun safeAttachmentFilename(name: String): String {
             .joinToString("")
             .trim('.', '_')
     return cleaned.ifBlank { "attachment" }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun FilterModeSegmentedControl(
+    filter: FilterMode,
+    onFilterChange: (FilterMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SingleChoiceSegmentedButtonRow(
+        modifier = modifier,
+    ) {
+        FilterMode.values().forEachIndexed { index, mode ->
+            SegmentedButton(
+                selected = filter == mode,
+                onClick = { onFilterChange(mode) },
+                shape =
+                    SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = FilterMode.values().size,
+                    ),
+                icon = {},
+                label = { Text(mode.label()) },
+            )
+        }
+    }
 }

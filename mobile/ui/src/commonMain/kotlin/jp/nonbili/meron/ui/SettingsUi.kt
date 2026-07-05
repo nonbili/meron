@@ -117,7 +117,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
@@ -269,7 +271,7 @@ import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun SettingsScreen(
     onBack: () -> Unit,
@@ -355,6 +357,7 @@ internal fun SettingsScreen(
     val settingsBackStackEntry by settingsNavController.currentBackStackEntryAsState()
     var selectedSettingsAccountId by remember { mutableStateOf<String?>(null) }
     var selectedSettingsBoardId by remember { mutableStateOf<String?>(null) }
+    var directOpenRoute by remember { mutableStateOf<String?>(null) }
     val page =
         when (settingsBackStackEntry?.destination?.route ?: SettingsRoutes.Root) {
             SettingsRoutes.General -> SettingsPage.General
@@ -367,6 +370,7 @@ internal fun SettingsScreen(
     LaunchedEffect(initialAccountId) {
         if (!initialAccountId.isNullOrBlank()) {
             selectedSettingsAccountId = initialAccountId
+            directOpenRoute = SettingsRoutes.Account
             settingsNavController.navigate(SettingsRoutes.Account) {
                 launchSingleTop = true
             }
@@ -376,6 +380,7 @@ internal fun SettingsScreen(
     LaunchedEffect(initialKanbanBoardId) {
         if (!initialKanbanBoardId.isNullOrBlank()) {
             selectedSettingsBoardId = initialKanbanBoardId
+            directOpenRoute = SettingsRoutes.KanbanBoard
             settingsNavController.navigate(SettingsRoutes.KanbanBoard) {
                 launchSingleTop = true
             }
@@ -396,6 +401,15 @@ internal fun SettingsScreen(
             onDismiss = { showLanguagePicker = false },
         )
     }
+    val handleBack: () -> Unit = {
+        if (settingsBackStackEntry?.destination?.route == directOpenRoute) {
+            directOpenRoute = null
+            onBack()
+        } else if (!settingsNavController.popBackStack()) {
+            onBack()
+        }
+    }
+    BackHandler(onBack = handleBack)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -412,11 +426,7 @@ internal fun SettingsScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (!settingsNavController.popBackStack()) {
-                            onBack()
-                        }
-                    }) {
+                    IconButton(onClick = handleBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
                     }
                 },
@@ -474,6 +484,10 @@ internal fun SettingsScreen(
             }
 
             composable(SettingsRoutes.Account) {
+                BackHandler(enabled = directOpenRoute == SettingsRoutes.Account) {
+                    directOpenRoute = null
+                    onBack()
+                }
                 val account = selectedSettingsAccountId?.let { id -> accounts.firstOrNull { it.id == id } }
                 if (account == null) {
                     LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
@@ -525,6 +539,10 @@ internal fun SettingsScreen(
             }
 
             composable(SettingsRoutes.KanbanBoard) {
+                BackHandler(enabled = directOpenRoute == SettingsRoutes.KanbanBoard) {
+                    directOpenRoute = null
+                    onBack()
+                }
                 val board = selectedSettingsBoardId?.let { id -> kanbanBoards.firstOrNull { it.id == id } }
                 if (board == null) {
                     LaunchedEffect(Unit) { settingsNavController.popBackStack(SettingsRoutes.Root, inclusive = false) }
