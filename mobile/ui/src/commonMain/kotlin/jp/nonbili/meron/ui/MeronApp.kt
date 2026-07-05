@@ -7,94 +7,52 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MarkEmailUnread
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.NotificationsNone
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -106,9 +64,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -125,18 +81,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -228,7 +179,6 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
-import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
@@ -239,13 +189,13 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
-private const val MAILBOX_BLOCKING_WARN_AFTER_MS = 10_000L
-private const val MAILBOX_BLOCKING_TIMEOUT_MS = 15_000L
+internal const val MAILBOX_BLOCKING_WARN_AFTER_MS = 10_000L
+internal const val MAILBOX_BLOCKING_TIMEOUT_MS = 15_000L
 
 // Hard cap for a blocking load whose sync is still in flight: past the soft
 // timeout the loader shows "still syncing" copy, past this one we give up and
 // surface the timeout error.
-private const val MAILBOX_BLOCKING_HARD_TIMEOUT_MS = 60_000L
+internal const val MAILBOX_BLOCKING_HARD_TIMEOUT_MS = 60_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -305,24 +255,6 @@ fun MeronApp(
     }
 }
 
-@Composable
-private fun MailSelectionTitle(
-    selectedCount: Int,
-    height: Dp,
-) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(height),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            "$selectedCount selected",
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
 @OptIn(ExperimentalEncodingApi::class)
 private fun PickedFile.toDraftAttachment(): DraftAttachment =
     DraftAttachment(
@@ -332,52 +264,6 @@ private fun PickedFile.toDraftAttachment(): DraftAttachment =
         sizeBytes = bytes.size.toLong(),
         dataBase64 = Base64.Default.encode(bytes),
     )
-
-private fun String.jsonStringValue(key: String): String {
-    val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*"((?:\\.|[^"\\])*)"""")
-    return pattern
-        .find(this)
-        ?.groupValues
-        ?.get(1)
-        ?.decodeJsonString()
-        .orEmpty()
-}
-
-private fun String.jsonIntValue(
-    key: String,
-    defaultValue: Int,
-): Int {
-    val pattern = Regex(""""${Regex.escape(key)}"\s*:\s*(-?\d+)""")
-    return pattern
-        .find(this)
-        ?.groupValues
-        ?.get(1)
-        ?.toIntOrNull() ?: defaultValue
-}
-
-private fun String.decodeJsonString(): String {
-    val out = StringBuilder()
-    var index = 0
-    while (index < length) {
-        val ch = this[index]
-        if (ch == '\\' && index + 1 < length) {
-            when (val escaped = this[index + 1]) {
-                '"', '\\', '/' -> out.append(escaped)
-                'b' -> out.append('\b')
-                'f' -> out.append('\u000c')
-                'n' -> out.append('\n')
-                'r' -> out.append('\r')
-                't' -> out.append('\t')
-                else -> out.append(escaped)
-            }
-            index += 2
-        } else {
-            out.append(ch)
-            index += 1
-        }
-    }
-    return out.toString()
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalEncodingApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -1218,1007 +1104,44 @@ private fun MeronMobileScreenContent(
             }
 
             composable(AppRoutes.Starred) {
-                ModalNavigationDrawer(
+                StarredRouteContent(
+                    state = state,
                     drawerState = drawerState,
-                    drawerContent = {
-                        MailDrawer(
-                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
-                            selectedAccountId = selectedCoreAccountId,
-                            folders = drawerFolders,
-                            currentScreen = screen,
-                            showUnreadBadges = showUnreadBadges,
-                            showUnifiedInboxNav = showUnifiedInboxNav,
-                            showStarredNav = showStarredNav,
-                            kanbanBoards = kanbanBoards,
-                            activeKanbanBoardId = activeKanbanBoardId,
-                            onSelectUnified = {
-                                screen = Screen.Mail
-                                selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                                syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectAccount = { account ->
-                                screen = Screen.Mail
-                                selectCoreMailbox(account.id, INBOX_FOLDER)
-                                syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectStarred = { scope.launch { drawerState.close() } },
-                            onSelectKanban = {
-                                screen = Screen.Kanban
-                                previousTopScreen = Screen.Kanban
-                                loadKanbanBoard(refresh = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectKanbanBoard = { board ->
-                                activeKanbanBoardId = board.id
-                                saveActiveKanbanBoardId(kanbanPrefs, board.id)
-                                screen = Screen.Kanban
-                                previousTopScreen = Screen.Kanban
-                                loadKanbanBoard(refresh = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onAddAccount = {
-                                addSection = 0
-                                passwordServerSettingsOpen = false
-                                previousTopScreen = Screen.Starred
-                                screen = Screen.AddAccount
-                                scope.launch { drawerState.close() }
-                            },
-                            onOpenSettings = {
-                                previousTopScreen = screen
-                                screen = Screen.Settings
-                                scope.launch { drawerState.close() }
-                            },
-                            onShowAbout = {
-                                showAboutDialog = true
-                                scope.launch { drawerState.close() }
-                            },
-                            googleReauthAccountId = googleReauthAccountId,
-                            onReconnectGoogle = {
-                                connectGoogleDeviceAccount()
-                                scope.launch { drawerState.close() }
-                            },
-                        )
-                    },
-                ) {
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = {
-                                    Column {
-                                        Text(tr("mobile.tabs.starred"), fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            tr("mobile.mail.starredSubtitle"),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                navigationIcon = {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = tr("mobile.actions.openNavigation"))
-                                    }
-                                },
-                                actions = {
-                                    IconButton(onClick = ::loadStarredItems) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = tr("mobile.actions.refreshStarred"))
-                                    }
-                                },
-                            )
-                        },
-                        snackbarHost = { SnackbarHost(snackbarHost) },
-                    ) { innerPadding ->
-                        Box(Modifier.fillMaxSize().padding(innerPadding)) {
-                            if (syncing) {
-                                CircularProgressIndicator(Modifier.padding(top = 4.dp).align(Alignment.TopCenter).size(28.dp))
-                            }
-                            if (starredItems.isEmpty()) {
-                                EmptyState(
-                                    icon = Icons.Filled.StarBorder,
-                                    title = tr("empty.noStarredItems"),
-                                    text = tr("empty.noStarredItemsText"),
-                                    actionLabel = tr("mobile.actions.refresh"),
-                                    onAction = ::loadStarredItems,
-                                )
-                            } else {
-                                StarredItemList(
-                                    items = starredItems,
-                                    showSenderImages = showSenderImages,
-                                    onOpen = ::readStarredItem,
-                                    onToggleRead = ::toggleStarredItemRead,
-                                    onUnstar = ::unstarStarredItem,
-                                    onDelete = ::deleteStarredMailItem,
-                                )
-                            }
-                        }
-                    }
-                }
+                    drawerFolders = drawerFolders,
+                )
             }
 
             composable(AppRoutes.Kanban) {
-                ModalNavigationDrawer(
+                KanbanRouteContent(
+                    state = state,
                     drawerState = drawerState,
-                    drawerContent = {
-                        MailDrawer(
-                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
-                            selectedAccountId = selectedCoreAccountId,
-                            folders = drawerFolders,
-                            currentScreen = screen,
-                            showUnreadBadges = showUnreadBadges,
-                            showUnifiedInboxNav = showUnifiedInboxNav,
-                            showStarredNav = showStarredNav,
-                            kanbanBoards = kanbanBoards,
-                            activeKanbanBoardId = activeKanbanBoardId,
-                            onSelectUnified = {
-                                screen = Screen.Mail
-                                if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                                    selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                }
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectAccount = { account ->
-                                screen = Screen.Mail
-                                if (selectedCoreAccountId != account.id) {
-                                    selectCoreMailbox(account.id, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                }
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectStarred = {
-                                screen = Screen.Starred
-                                previousTopScreen = Screen.Starred
-                                loadStarredItems()
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectKanban = { scope.launch { drawerState.close() } },
-                            onSelectKanbanBoard = { board ->
-                                if (activeKanbanBoardId != board.id) {
-                                    activeKanbanBoardId = board.id
-                                    saveActiveKanbanBoardId(kanbanPrefs, board.id)
-                                    loadKanbanBoard(refresh = false)
-                                }
-                                scope.launch { drawerState.close() }
-                            },
-                            onAddAccount = {
-                                addSection = 0
-                                passwordServerSettingsOpen = false
-                                previousTopScreen = Screen.Kanban
-                                screen = Screen.AddAccount
-                                scope.launch { drawerState.close() }
-                            },
-                            onOpenSettings = {
-                                previousTopScreen = screen
-                                screen = Screen.Settings
-                                scope.launch { drawerState.close() }
-                            },
-                            onShowAbout = {
-                                showAboutDialog = true
-                                scope.launch { drawerState.close() }
-                            },
-                            googleReauthAccountId = googleReauthAccountId,
-                            onReconnectGoogle = {
-                                connectGoogleDeviceAccount()
-                                scope.launch { drawerState.close() }
-                            },
-                        )
-                    },
-                ) {
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = {
-                                    if (mailSelectionActive) {
-                                        MailSelectionTitle(selectedMailThreads.size, height = 52.dp)
-                                    } else {
-                                        KanbanHeaderSearchField(
-                                            search = kanbanSearch,
-                                            searchScope = kanbanSearchScope,
-                                            columns = activeKanbanBoard?.columns.orEmpty(),
-                                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
-                                            foldersByAccount = foldersByAccount,
-                                            onSearchChange = ::persistKanbanSearch,
-                                            onSearchScopeChange = ::persistKanbanSearchScope,
-                                            onSearchSubmit = { loadKanbanBoard(refresh = true) },
-                                        )
-                                    }
-                                },
-                                navigationIcon = {
-                                    if (mailSelectionActive) {
-                                        IconButton(onClick = {
-                                            selectedMailThreadIds = emptySet()
-                                            mailSelectionMenuOpen = false
-                                        }) {
-                                            Icon(Icons.Filled.Close, contentDescription = tr("mobile.actions.clearSelection"))
-                                        }
-                                    } else {
-                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                            Icon(Icons.Filled.Menu, contentDescription = tr("mobile.actions.openNavigation"))
-                                        }
-                                    }
-                                },
-                                actions = {
-                                    if (mailSelectionActive) {
-                                        IconButton(onClick = {
-                                            selectedMailThreads.forEach(::archiveOrRemove)
-                                            selectedMailThreadIds = emptySet()
-                                        }) {
-                                            Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
-                                        }
-                                        IconButton(onClick = {
-                                            selectedMailThreads.forEach(::deleteThread)
-                                            selectedMailThreadIds = emptySet()
-                                        }) {
-                                            Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
-                                        }
-                                        Box {
-                                            IconButton(onClick = { mailSelectionMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
-                                            }
-                                            DropdownMenu(
-                                                expanded = mailSelectionMenuOpen,
-                                                onDismissRequest = { mailSelectionMenuOpen = false },
-                                            ) {
-                                                val markRead = selectedMailThreads.any { it.unread }
-                                                DropdownMenuItem(
-                                                    text = { Text(if (markRead) tr("threads.actions.markAsRead") else tr("threads.actions.markAsUnread")) },
-                                                    leadingIcon = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null) },
-                                                    onClick = {
-                                                        mailSelectionMenuOpen = false
-                                                        selectedMailThreads
-                                                            .filter { it.unread == markRead }
-                                                            .forEach(::toggleRead)
-                                                        selectedMailThreadIds = emptySet()
-                                                    },
-                                                )
-                                                val star = selectedMailThreads.any { !it.starred }
-                                                DropdownMenuItem(
-                                                    text = { Text(if (star) tr("chat.star") else tr("chat.unstar")) },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
-                                                            contentDescription = null,
-                                                        )
-                                                    },
-                                                    onClick = {
-                                                        mailSelectionMenuOpen = false
-                                                        selectedMailThreads
-                                                            .filter { it.starred != star }
-                                                            .forEach(::toggleStar)
-                                                        selectedMailThreadIds = emptySet()
-                                                    },
-                                                )
-                                                val singleSelectedMailThread =
-                                                    selectedMailThreads
-                                                        .singleOrNull()
-                                                        ?.takeUnless { threadIdIsRss(it.id) }
-                                                if (singleSelectedMailThread != null) {
-                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("threads.actions.moveTo")) },
-                                                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                                                        onClick = {
-                                                            mailSelectionMenuOpen = false
-                                                            ensureThreadActionFolders(
-                                                                thread = singleSelectedMailThread,
-                                                                includeAllMailAccounts = false,
-                                                            ) {
-                                                                selectedMailMoveThread = singleSelectedMailThread
-                                                            }
-                                                        },
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("threads.actions.copyTo")) },
-                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                                        onClick = {
-                                                            mailSelectionMenuOpen = false
-                                                            ensureThreadActionFolders(
-                                                                thread = singleSelectedMailThread,
-                                                                includeAllMailAccounts = true,
-                                                            ) {
-                                                                selectedMailCopyThread = singleSelectedMailThread
-                                                            }
-                                                        },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        Box {
-                                            IconButton(onClick = { kanbanMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = tr("kanban.actions.boardOptions"))
-                                            }
-                                            DropdownMenu(
-                                                expanded = kanbanMenuOpen,
-                                                onDismissRequest = { kanbanMenuOpen = false },
-                                                modifier = Modifier.width(260.dp),
-                                            ) {
-                                                FilterModeSegmentedControl(
-                                                    filter = kanbanFilter,
-                                                    onFilterChange = { mode ->
-                                                        persistKanbanFilter(mode)
-                                                        loadKanbanBoard(refresh = true)
-                                                    },
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                )
-                                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                DropdownMenuItem(
-                                                    text = { Text(tr("mobile.actions.refreshBoard")) },
-                                                    leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                                                    onClick = {
-                                                        kanbanMenuOpen = false
-                                                        loadKanbanBoard(refresh = true)
-                                                    },
-                                                )
-                                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                DropdownMenuItem(
-                                                    text = { Text(tr("kanban.actions.addColumn")) },
-                                                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                                                    onClick = {
-                                                        kanbanMenuOpen = false
-                                                        coreAccounts.forEach { account ->
-                                                            scope.launch {
-                                                                runCatching {
-                                                                    withContext(ioDispatcher) {
-                                                                        val client = MobileMailCommandClient(core)
-                                                                        loadAccountFolders(client, account)
-                                                                    }
-                                                                }.onSuccess { foldersByAccount = foldersByAccount + (account.id to it) }
-                                                            }
-                                                        }
-                                                        showKanbanColumnDialog = true
-                                                    },
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text(tr("kanban.actions.boardOptions")) },
-                                                    leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                                    enabled = activeKanbanBoard != null,
-                                                    onClick = {
-                                                        kanbanMenuOpen = false
-                                                        activeKanbanBoard?.let { board ->
-                                                            kanbanSettingsTargetId = board.id
-                                                            previousTopScreen = Screen.Kanban
-                                                            screen = Screen.Settings
-                                                        }
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                            )
-                        },
-                        floatingActionButton = {
-                            if (coreAccounts.any { !accountSummaryIsRss(it) }) {
-                                ExtendedFloatingActionButton(
-                                    onClick = ::openCompose,
-                                    icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
-                                    text = { Text(tr("mobile.tabs.compose")) },
-                                )
-                            }
-                        },
-                        snackbarHost = { SnackbarHost(snackbarHost) },
-                    ) { innerPadding ->
-                        KanbanScreen(
-                            modifier = Modifier.fillMaxSize().padding(innerPadding),
-                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
-                            accountsLoading = !initialAccountsLoaded || accountsLoading,
-                            board = activeKanbanBoard,
-                            columns = kanbanColumns,
-                            foldersByAccount = foldersByAccount,
-                            filter = kanbanFilter,
-                            search = kanbanSearch,
-                            searchScope = kanbanSearchScope,
-                            onOpen = { thread, column -> readCoreThread(thread, sourceFolder = column.folderId) },
-                            selectedThreadIds = selectedMailThreadIds,
-                            selectionActive = mailSelectionActive,
-                            onToggleSelected = { thread ->
-                                selectedMailThreadIds =
-                                    if (thread.id in selectedMailThreadIds) {
-                                        selectedMailThreadIds - thread.id
-                                    } else {
-                                        selectedMailThreadIds + thread.id
-                                    }
-                                if (selectedMailThreadIds.isEmpty()) {
-                                    mailSelectionMenuOpen = false
-                                }
-                            },
-                            onLongPress = { thread ->
-                                selectedMailThreadIds =
-                                    if (thread.id in selectedMailThreadIds) {
-                                        selectedMailThreadIds
-                                    } else {
-                                        selectedMailThreadIds + thread.id
-                                    }
-                            },
-                            onToggleStar = ::toggleStar,
-                            onRefreshColumn = { loadKanbanColumn(it, refresh = true) },
-                            onLoadMoreColumn = ::loadMoreKanbanColumn,
-                            onMarkColumnAllRead = ::markKanbanColumnAllRead,
-                            onRemoveColumn = ::removeKanbanColumn,
-                            onMoveColumn = ::moveKanbanColumn,
-                            onSearchColumn = { column ->
-                                persistKanbanSearchScope(kanbanColumnKey(column))
-                                if (kanbanSearch.isNotBlank()) loadKanbanBoard(refresh = true)
-                            },
-                            onAddColumn = { showKanbanColumnDialog = true },
-                            showSenderImages = showSenderImages,
-                            kanbanColumnWidth = kanbanColumnWidth.dp,
-                        )
-                    }
-                }
+                    drawerFolders = drawerFolders,
+                    mailSelectionActive = mailSelectionActive,
+                    selectedMailThreads = selectedMailThreads,
+                    activeKanbanBoard = activeKanbanBoard,
+                )
             }
 
             composable(AppRoutes.Mail) {
-                ModalNavigationDrawer(
+                MailRouteContent(
+                    state = state,
                     drawerState = drawerState,
-                    drawerContent = {
-                        MailDrawer(
-                            accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
-                            selectedAccountId = selectedCoreAccountId,
-                            folders = drawerFolders,
-                            currentScreen = screen,
-                            showUnreadBadges = showUnreadBadges,
-                            showUnifiedInboxNav = showUnifiedInboxNav,
-                            showStarredNav = showStarredNav,
-                            kanbanBoards = kanbanBoards,
-                            activeKanbanBoardId = activeKanbanBoardId,
-                            onSelectUnified = {
-                                if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                                    selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                }
-                                screen = Screen.Mail
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectAccount = { account ->
-                                if (selectedCoreAccountId != account.id) {
-                                    selectCoreMailbox(account.id, INBOX_FOLDER)
-                                    syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
-                                }
-                                screen = Screen.Mail
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectStarred = {
-                                screen = Screen.Starred
-                                previousTopScreen = Screen.Starred
-                                loadStarredItems()
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectKanban = {
-                                screen = Screen.Kanban
-                                previousTopScreen = Screen.Kanban
-                                loadKanbanBoard(refresh = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onSelectKanbanBoard = { board ->
-                                activeKanbanBoardId = board.id
-                                saveActiveKanbanBoardId(kanbanPrefs, board.id)
-                                screen = Screen.Kanban
-                                previousTopScreen = Screen.Kanban
-                                loadKanbanBoard(refresh = false)
-                                scope.launch { drawerState.close() }
-                            },
-                            onAddAccount = {
-                                addSection = 0
-                                passwordServerSettingsOpen = false
-                                previousTopScreen = screen
-                                screen = Screen.AddAccount
-                                scope.launch { drawerState.close() }
-                            },
-                            onOpenSettings = {
-                                previousTopScreen = screen
-                                screen = Screen.Settings
-                                scope.launch { drawerState.close() }
-                            },
-                            onShowAbout = {
-                                showAboutDialog = true
-                                scope.launch { drawerState.close() }
-                            },
-                            googleReauthAccountId = googleReauthAccountId,
-                            onReconnectGoogle = {
-                                connectGoogleDeviceAccount()
-                                scope.launch { drawerState.close() }
-                            },
-                        )
-                    },
-                ) {
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = {
-                                    if (mailSelectionActive) {
-                                        MailSelectionTitle(selectedMailThreads.size, height = 44.dp)
-                                    } else {
-                                        MailHeaderSearchField(
-                                            search = mailSearch,
-                                            onSearchChange = { mailSearch = it },
-                                            onSearchSubmit = { syncCoreThreads(syncFirst = false) },
-                                        )
-                                    }
-                                },
-                                navigationIcon = {
-                                    if (mailSelectionActive) {
-                                        IconButton(onClick = {
-                                            selectedMailThreadIds = emptySet()
-                                            mailSelectionMenuOpen = false
-                                        }) {
-                                            Icon(Icons.Filled.Close, contentDescription = tr("mobile.actions.clearSelection"))
-                                        }
-                                    } else {
-                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                            Icon(Icons.Filled.Menu, contentDescription = tr("mobile.actions.openNavigation"))
-                                        }
-                                    }
-                                },
-                                actions = {
-                                    if (mailSelectionActive) {
-                                        IconButton(onClick = {
-                                            selectedMailThreads.forEach(::archiveOrRemove)
-                                            selectedMailThreadIds = emptySet()
-                                        }) {
-                                            Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
-                                        }
-                                        IconButton(onClick = {
-                                            selectedMailThreads.forEach(::deleteThread)
-                                            selectedMailThreadIds = emptySet()
-                                        }) {
-                                            Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
-                                        }
-                                        Box {
-                                            IconButton(onClick = { mailSelectionMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
-                                            }
-                                            DropdownMenu(
-                                                expanded = mailSelectionMenuOpen,
-                                                onDismissRequest = { mailSelectionMenuOpen = false },
-                                            ) {
-                                                val markRead = selectedMailThreads.any { it.unread }
-                                                DropdownMenuItem(
-                                                    text = { Text(if (markRead) tr("threads.actions.markAsRead") else tr("threads.actions.markAsUnread")) },
-                                                    leadingIcon = { Icon(Icons.Filled.MarkEmailUnread, contentDescription = null) },
-                                                    onClick = {
-                                                        mailSelectionMenuOpen = false
-                                                        selectedMailThreads
-                                                            .filter { it.unread == markRead }
-                                                            .forEach(::toggleRead)
-                                                        selectedMailThreadIds = emptySet()
-                                                    },
-                                                )
-                                                val star = selectedMailThreads.any { !it.starred }
-                                                DropdownMenuItem(
-                                                    text = { Text(if (star) tr("chat.star") else tr("chat.unstar")) },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
-                                                            contentDescription = null,
-                                                        )
-                                                    },
-                                                    onClick = {
-                                                        mailSelectionMenuOpen = false
-                                                        selectedMailThreads
-                                                            .filter { it.starred != star }
-                                                            .forEach(::toggleStar)
-                                                        selectedMailThreadIds = emptySet()
-                                                    },
-                                                )
-                                                val singleSelectedMailThread =
-                                                    selectedMailThreads
-                                                        .singleOrNull()
-                                                        ?.takeUnless { threadIdIsRss(it.id) }
-                                                if (singleSelectedMailThread != null) {
-                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("threads.actions.moveTo")) },
-                                                        leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                                                        onClick = {
-                                                            mailSelectionMenuOpen = false
-                                                            ensureThreadActionFolders(
-                                                                thread = singleSelectedMailThread,
-                                                                includeAllMailAccounts = false,
-                                                            ) {
-                                                                selectedMailMoveThread = singleSelectedMailThread
-                                                            }
-                                                        },
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("threads.actions.copyTo")) },
-                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                                        onClick = {
-                                                            mailSelectionMenuOpen = false
-                                                            ensureThreadActionFolders(
-                                                                thread = singleSelectedMailThread,
-                                                                includeAllMailAccounts = true,
-                                                            ) {
-                                                                selectedMailCopyThread = singleSelectedMailThread
-                                                            }
-                                                        },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        val loadedUnread = coreThreads.any { it.unread }
-                                        val folderUnreadTotal =
-                                            if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-                                                val includedAccountIds =
-                                                    coreAccounts.filter { it.includedInUnified }.map { it.id }.toSet()
-                                                coreFolders
-                                                    .filter { it.accountId in includedAccountIds }
-                                                    .groupBy { it.accountId }
-                                                    .values
-                                                    .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
-                                            } else {
-                                                folderUnread(
-                                                    coreFolders.filter { it.accountId == selectedCoreAccountId },
-                                                    selectedCoreFolder,
-                                                )
-                                            }
-                                        val showMarkAllRead = folderUnreadTotal > 0 || loadedUnread
-                                        val showAccountActions = selectedAccount != null
-                                        Box {
-                                            IconButton(onClick = { mailboxMenuOpen = true }) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = tr("threads.actions.title"))
-                                            }
-                                            DropdownMenu(
-                                                expanded = mailboxMenuOpen,
-                                                onDismissRequest = { mailboxMenuOpen = false },
-                                                modifier = Modifier.width(260.dp),
-                                            ) {
-                                                FilterModeSegmentedControl(
-                                                    filter = mailFilter,
-                                                    onFilterChange = { mode ->
-                                                        mailFilter = mode
-                                                        syncCoreThreads(syncFirst = false)
-                                                    },
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                )
-                                                if (showMarkAllRead || showAccountActions) {
-                                                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                }
-                                                if (showMarkAllRead) {
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("threads.actions.markAllAsRead")) },
-                                                        leadingIcon = {
-                                                            Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
-                                                        },
-                                                        onClick = {
-                                                            mailboxMenuOpen = false
-                                                            markVisibleMailboxAllRead()
-                                                        },
-                                                    )
-                                                }
-                                                if (showAccountActions) {
-                                                    if (showMarkAllRead) {
-                                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                    }
-                                                    DropdownMenuItem(
-                                                        text = { Text(tr("settings.account.accountSettings")) },
-                                                        leadingIcon = {
-                                                            Icon(Icons.Filled.Settings, contentDescription = null)
-                                                        },
-                                                        onClick = {
-                                                            mailboxMenuOpen = false
-                                                            accountSettingsTargetId = selectedAccount.id
-                                                            previousTopScreen = Screen.Mail
-                                                            screen = Screen.Settings
-                                                        },
-                                                    )
-                                                    if (selectedAccount.let(::accountSummaryIsRss)) {
-                                                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                                        DropdownMenuItem(
-                                                            text = { Text(tr("feeds.actions.addFeed")) },
-                                                            onClick = {
-                                                                mailboxMenuOpen = false
-                                                                addFeedUrl = ""
-                                                                showAddFeedDialog = true
-                                                            },
-                                                        )
-                                                        DropdownMenuItem(
-                                                            text = { Text(tr("common.import")) },
-                                                            onClick = {
-                                                                mailboxMenuOpen = false
-                                                                services.pickFile(
-                                                                    listOf("text/xml", "application/xml", "text/*", "*/*"),
-                                                                    importOpml,
-                                                                )
-                                                            },
-                                                        )
-                                                        DropdownMenuItem(
-                                                            text = { Text(tr("common.export")) },
-                                                            onClick = {
-                                                                mailboxMenuOpen = false
-                                                                exportOpmlForSelectedAccount()
-                                                            },
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                            )
-                        },
-                        floatingActionButton = {
-                            if (coreAccounts.isNotEmpty()) {
-                                ExtendedFloatingActionButton(
-                                    onClick = ::openCompose,
-                                    icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
-                                    text = { Text(tr("mobile.tabs.compose")) },
-                                )
-                            }
-                        },
-                        snackbarHost = { SnackbarHost(snackbarHost) },
-                    ) { innerPadding ->
-                        Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                            val reconnectAccount2 = selectedAccount?.takeIf { it.needsReconnect }
-                            when {
-                                reconnectAccount2 != null -> {
-                                    StatusBanner(
-                                        message = "Can't sign in to ${reconnectAccount2.email.ifBlank {
-                                            reconnectAccount2.displayName
-                                        }}. Update the credentials to reconnect.",
-                                        isError = true,
-                                        actionLabel = "Reconnect",
-                                        onAction = { reconnectAccount(reconnectAccount2) },
-                                        onDismiss = null,
-                                    )
-                                }
-
-                                errorBanner != null -> {
-                                    val authLike = isAuthError(errorBanner!!)
-                                    StatusBanner(
-                                        message = errorBanner!!,
-                                        isError = true,
-                                        actionLabel = if (authLike && selectedAccount != null) "Reconnect" else "Retry",
-                                        onAction = {
-                                            if (authLike && selectedAccount != null) {
-                                                reconnectAccount(selectedAccount)
-                                            } else {
-                                                syncCoreThreads()
-                                            }
-                                        },
-                                        onDismiss = { errorBanner = null },
-                                    )
-                                }
-
-                                !notificationPermissionGranted &&
-                                    !notificationBannerDismissed &&
-                                    coreAccounts.isNotEmpty() &&
-                                    initialThreadsLoaded &&
-                                    !syncing -> {
-                                    StatusBanner(
-                                        message = tr("mobile.mail.notificationsBannerText"),
-                                        isError = false,
-                                        icon = Icons.Outlined.NotificationsNone,
-                                        actionLabel = tr("mobile.mail.notificationsBannerEnable"),
-                                        onAction = {
-                                            mobileHost.requestNotificationPermission()
-                                            notificationPermissionGranted = mobileHost.notificationsEnabled()
-                                        },
-                                        onDismiss = {
-                                            notificationBannerDismissed = true
-                                            saveAppBoolean(prefs, NOTIFICATION_BANNER_DISMISSED_PREF, true)
-                                        },
-                                    )
-                                }
-                            }
-                            val showingBlockingInboxLoad =
-                                !initialAccountsLoaded ||
-                                    accountsLoading ||
-                                    (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded))
-                            LaunchedEffect(
-                                screen,
-                                initialAccountsLoaded,
-                                accountsLoading,
-                                coreAccounts.size,
-                                coreThreads.size,
-                                syncing,
-                                initialThreadsLoaded,
-                                selectedCoreAccountId,
-                                selectedCoreFolder,
-                            ) {
-                                if (screen == Screen.Mail) {
-                                    Log.i(
-                                        "MailLoad",
-                                        "render mail blocking=$showingBlockingInboxLoad initialAccountsLoaded=$initialAccountsLoaded accountsLoading=$accountsLoading accounts=${coreAccounts.size} threads=${coreThreads.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
-                                    )
-                                }
-                            }
-                            LaunchedEffect(
-                                screen,
-                                showingBlockingInboxLoad,
-                                activeMailboxLoadKey,
-                                activeMailboxLoadStartedAtMillis,
-                            ) {
-                                if (screen != Screen.Mail || !showingBlockingInboxLoad) return@LaunchedEffect
-                                delay(MAILBOX_BLOCKING_WARN_AFTER_MS)
-                                val stillBlocking =
-                                    screen == Screen.Mail &&
-                                        (
-                                            !initialAccountsLoaded ||
-                                                accountsLoading ||
-                                                (coreThreads.isEmpty() && (syncing || !initialThreadsLoaded))
-                                        )
-                                if (stillBlocking && !blockingMailboxLoadWarned) {
-                                    blockingMailboxLoadWarned = true
-                                    Log.w(
-                                        "MailLoad",
-                                        "mail UI still blocking after ${MAILBOX_BLOCKING_WARN_AFTER_MS}ms accountsLoaded=$initialAccountsLoaded accountsLoading=$accountsLoading accounts=${coreAccounts.size} threads=${coreThreads.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
-                                    )
-                                }
-                                delay(MAILBOX_BLOCKING_TIMEOUT_MS - MAILBOX_BLOCKING_WARN_AFTER_MS)
-                                val stillBlocked = {
-                                    screen == Screen.Mail &&
-                                        coreAccounts.isNotEmpty() &&
-                                        coreThreads.isEmpty() &&
-                                        (syncing || !initialThreadsLoaded)
-                                }
-                                if (stillBlocked() && syncing) {
-                                    // The sync request is still in flight — a slow
-                                    // first sync, not a failure. Switch the loader
-                                    // copy and give it until the hard cap before
-                                    // treating it as an error.
-                                    Log.w(
-                                        "MailLoad",
-                                        "mail sync still running after ${MAILBOX_BLOCKING_TIMEOUT_MS}ms accounts=${coreAccounts.size} activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
-                                    )
-                                    blockingMailboxLoadSlow = true
-                                    delay(MAILBOX_BLOCKING_HARD_TIMEOUT_MS - MAILBOX_BLOCKING_TIMEOUT_MS)
-                                }
-                                if (stillBlocked()) {
-                                    Log.w(
-                                        "MailLoad",
-                                        "mail UI unblocked accounts=${coreAccounts.size} syncing=$syncing initialThreadsLoaded=$initialThreadsLoaded activeLoad=$activeMailboxLoadKey selectedAccount=$selectedCoreAccountId folder=$selectedCoreFolder",
-                                    )
-                                    syncing = false
-                                    initialThreadsLoaded = true
-                                    blockingMailboxLoadSlow = false
-                                    errorBanner = "Inbox load timed out. Pull to refresh or tap Retry."
-                                }
-                            }
-                            PullToRefreshBox(
-                                isRefreshing = syncing && !showingBlockingInboxLoad,
-                                onRefresh = { syncCoreThreads() },
-                                modifier = Modifier.fillMaxSize(),
-                            ) {
-                                when {
-                                    !initialAccountsLoaded || accountsLoading -> {
-                                        LoadingState("Loading your inbox…")
-                                    }
-
-                                    coreAccounts.isEmpty() -> {
-                                        EmptyState(
-                                            icon = Icons.Filled.PersonAdd,
-                                            title = tr("empty.welcomeTitle"),
-                                            text = tr("empty.mailOrRssSetupText"),
-                                            actionLabel = tr("accounts.actions.addAccount"),
-                                            onAction = {
-                                                addSection = 0
-                                                passwordServerSettingsOpen = false
-                                                screen = Screen.AddAccount
-                                            },
-                                        )
-                                    }
-
-                                    coreThreads.isEmpty() && (syncing || !initialThreadsLoaded) -> {
-                                        LoadingState(
-                                            if (selectedAccountIsRss) {
-                                                if (blockingMailboxLoadSlow) {
-                                                    "Still syncing feeds… The first sync can take a while."
-                                                } else {
-                                                    "Loading feeds…"
-                                                }
-                                            } else {
-                                                if (blockingMailboxLoadSlow) {
-                                                    "Still syncing your inbox… The first sync can take a while."
-                                                } else {
-                                                    "Loading your inbox…"
-                                                }
-                                            },
-                                        )
-                                    }
-
-                                    coreThreads.isEmpty() -> {
-                                        EmptyState(
-                                            icon = Icons.Outlined.Drafts,
-                                            title =
-                                                if (mailSearch.isBlank() && mailFilter == FilterMode.All) {
-                                                    if (selectedAccountIsRss) tr("empty.noFeeds") else tr("empty.nothingHereYet")
-                                                } else {
-                                                    tr("empty.noMatchingMail")
-                                                },
-                                            text =
-                                                if (mailSearch.isBlank() && mailFilter == FilterMode.All) {
-                                                    if (selectedAccountIsRss) tr("empty.addFeedToStart") else tr("empty.pullLatestMessages")
-                                                } else {
-                                                    tr("empty.adjustSearchFilter")
-                                                },
-                                            actionLabel = if (selectedAccountIsRss) tr("feeds.actions.syncFeeds") else tr("mobile.mail.syncMailbox"),
-                                            onAction = ::syncCoreThreads,
-                                        )
-                                    }
-
-                                    else -> {
-                                        MailList(
-                                            threads = coreThreads,
-                                            accounts = coreAccounts,
-                                            canLoadMore = pageableCoreAccounts().isNotEmpty(),
-                                            loadingMore = loadingMoreThreads,
-                                            onOpen = ::readCoreThread,
-                                            onToggleStar = ::toggleStar,
-                                            onArchive = ::archiveOrRemove,
-                                            onDelete = ::deleteThread,
-                                            onCopyFeedUrl = { thread ->
-                                                services.copyText("Feed URL", thread.feedUrl)
-                                                status = "Copied feed URL"
-                                            },
-                                            selectedThreadIds = selectedMailThreadIds,
-                                            selectionActive = mailSelectionActive,
-                                            onToggleSelected = { thread ->
-                                                selectedMailThreadIds =
-                                                    if (thread.id in selectedMailThreadIds) {
-                                                        selectedMailThreadIds - thread.id
-                                                    } else {
-                                                        selectedMailThreadIds + thread.id
-                                                    }
-                                                if (selectedMailThreadIds.isEmpty()) {
-                                                    mailSelectionMenuOpen = false
-                                                }
-                                            },
-                                            onLongPress = { thread ->
-                                                selectedMailThreadIds =
-                                                    if (thread.id in selectedMailThreadIds) {
-                                                        selectedMailThreadIds
-                                                    } else {
-                                                        selectedMailThreadIds + thread.id
-                                                    }
-                                            },
-                                            onLoadMore = { userInitiated ->
-                                                loadMoreCoreThreads(quiet = !userInitiated)
-                                            },
-                                            showSenderImages = showSenderImages,
-                                            showAccountBadge = selectedCoreAccountId == UNIFIED_ACCOUNT_ID,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                    drawerFolders = drawerFolders,
+                    selectedAccount = selectedAccount,
+                    selectedAccountIsRss = selectedAccountIsRss,
+                    mailSelectionActive = mailSelectionActive,
+                    selectedMailThreads = selectedMailThreads,
+                    importOpml = importOpml,
+                )
             }
         }
 
         if (showAddFeedDialog) {
-            AlertDialog(
-                onDismissRequest = { showAddFeedDialog = false },
-                title = { Text(tr("feeds.actions.addFeed")) },
-                text = {
-                    OutlinedTextField(
-                        value = addFeedUrl,
-                        onValueChange = { addFeedUrl = it },
-                        label = { Text(tr("feeds.url")) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = ::addFeedToSelectedRssAccount) {
-                        Text(tr("common.add"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddFeedDialog = false }) {
-                        Text(tr("buttons.cancel"))
-                    }
-                },
+            AddFeedDialog(
+                url = addFeedUrl,
+                onUrlChange = { addFeedUrl = it },
+                onAdd = ::addFeedToSelectedRssAccount,
+                onDismiss = { showAddFeedDialog = false },
             )
         }
 
@@ -2311,27 +1234,11 @@ private fun MeronMobileScreenContent(
         }
 
         showKanbanCreateFolderDialog?.let { account ->
-            AlertDialog(
-                onDismissRequest = { showKanbanCreateFolderDialog = null },
-                title = { Text(tr("folders.create")) },
-                text = {
-                    OutlinedTextField(
-                        value = kanbanFolderNameInput,
-                        onValueChange = { kanbanFolderNameInput = it },
-                        label = { Text(tr("folders.namePlaceholder")) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { createFolderForKanban(account, kanbanFolderNameInput) }) {
-                        Text(tr("folders.create"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showKanbanCreateFolderDialog = null }) {
-                        Text(tr("buttons.cancel"))
-                    }
-                },
+            KanbanCreateFolderDialog(
+                name = kanbanFolderNameInput,
+                onNameChange = { kanbanFolderNameInput = it },
+                onCreate = { createFolderForKanban(account, kanbanFolderNameInput) },
+                onDismiss = { showKanbanCreateFolderDialog = null },
             )
         }
 
