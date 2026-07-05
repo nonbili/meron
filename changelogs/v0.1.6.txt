@@ -1,0 +1,4 @@
+- Share composer draft mechanism with quick reply
+- Make Kanban horizontal scrollbar easier to drag
+- Avoid duplicated media grids in feeds
+- UI fixes
