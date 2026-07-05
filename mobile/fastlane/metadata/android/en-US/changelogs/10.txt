@@ -1,0 +1,5 @@
+- Support draft autosave
+- Add image gallery and grid views
+- Improve settings navigation
+- Fix feed account setup
+- UI fixes
