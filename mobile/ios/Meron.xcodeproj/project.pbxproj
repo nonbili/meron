@@ -23,7 +23,16 @@
 		A10000000000000000000117 /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000118 /* LocalizationContractTests.swift */; };
 		A10000000000000000000119 /* LocalizedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011A /* LocalizedCatalog.swift */; };
 		A1000000000000000000011B /* IosComposeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011C /* IosComposeHost.swift */; };
-		A1000000000000000000011D /* IosContractHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000011E /* IosContractHelpers.swift */; };
+		A10000000000000000000300 /* HtmlSanitization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000301 /* HtmlSanitization.swift */; };
+		A10000000000000000000302 /* AddressFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000303 /* AddressFormatting.swift */; };
+		A10000000000000000000304 /* ThreadActionLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000305 /* ThreadActionLabels.swift */; };
+		A10000000000000000000306 /* PlainMessageParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000307 /* PlainMessageParsing.swift */; };
+		A10000000000000000000308 /* MessageMediaVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000309 /* MessageMediaVisibility.swift */; };
+		A1000000000000000000030A /* KanbanHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000030B /* KanbanHelpers.swift */; };
+		A1000000000000000000030C /* ComposeValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000030D /* ComposeValidation.swift */; };
+		A1000000000000000000030E /* ThemeHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000030F /* ThemeHelpers.swift */; };
+		A10000000000000000000310 /* OAuthHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000311 /* OAuthHelpers.swift */; };
+		A10000000000000000000312 /* NavigationLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000313 /* NavigationLabels.swift */; };
 		A10000000000000000000201 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000200 /* Assets.xcassets */; };
 		A10000000000000000000203 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
@@ -61,7 +70,16 @@
 		A10000000000000000000118 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000011A /* LocalizedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedCatalog.swift; sourceTree = "<group>"; };
 		A1000000000000000000011C /* IosComposeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosComposeHost.swift; sourceTree = "<group>"; };
-		A1000000000000000000011E /* IosContractHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosContractHelpers.swift; sourceTree = "<group>"; };
+		A10000000000000000000301 /* HtmlSanitization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlSanitization.swift; sourceTree = "<group>"; };
+		A10000000000000000000303 /* AddressFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressFormatting.swift; sourceTree = "<group>"; };
+		A10000000000000000000305 /* ThreadActionLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadActionLabels.swift; sourceTree = "<group>"; };
+		A10000000000000000000307 /* PlainMessageParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainMessageParsing.swift; sourceTree = "<group>"; };
+		A10000000000000000000309 /* MessageMediaVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageMediaVisibility.swift; sourceTree = "<group>"; };
+		A1000000000000000000030B /* KanbanHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanHelpers.swift; sourceTree = "<group>"; };
+		A1000000000000000000030D /* ComposeValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeValidation.swift; sourceTree = "<group>"; };
+		A1000000000000000000030F /* ThemeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeHelpers.swift; sourceTree = "<group>"; };
+		A10000000000000000000311 /* OAuthHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthHelpers.swift; sourceTree = "<group>"; };
+		A10000000000000000000313 /* NavigationLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationLabels.swift; sourceTree = "<group>"; };
 		A10000000000000000000200 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000000000000000000202 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -99,7 +117,16 @@
 			children = (
 				A10000000000000000000011 /* Meron.swift */,
 				A1000000000000000000011C /* IosComposeHost.swift */,
-				A1000000000000000000011E /* IosContractHelpers.swift */,
+				A10000000000000000000301 /* HtmlSanitization.swift */,
+				A10000000000000000000303 /* AddressFormatting.swift */,
+				A10000000000000000000305 /* ThreadActionLabels.swift */,
+				A10000000000000000000307 /* PlainMessageParsing.swift */,
+				A10000000000000000000309 /* MessageMediaVisibility.swift */,
+				A1000000000000000000030B /* KanbanHelpers.swift */,
+				A1000000000000000000030D /* ComposeValidation.swift */,
+				A1000000000000000000030F /* ThemeHelpers.swift */,
+				A10000000000000000000311 /* OAuthHelpers.swift */,
+				A10000000000000000000313 /* NavigationLabels.swift */,
 				A10000000000000000000103 /* IosMailModels.swift */,
 				A1000000000000000000011A /* LocalizedCatalog.swift */,
 				A10000000000000000000014 /* RustCoreBridge.swift */,
@@ -321,7 +348,16 @@
 			files = (
 				A10000000000000000000001 /* Meron.swift in Sources */,
 				A1000000000000000000011B /* IosComposeHost.swift in Sources */,
-				A1000000000000000000011D /* IosContractHelpers.swift in Sources */,
+				A10000000000000000000300 /* HtmlSanitization.swift in Sources */,
+				A10000000000000000000302 /* AddressFormatting.swift in Sources */,
+				A10000000000000000000304 /* ThreadActionLabels.swift in Sources */,
+				A10000000000000000000306 /* PlainMessageParsing.swift in Sources */,
+				A10000000000000000000308 /* MessageMediaVisibility.swift in Sources */,
+				A1000000000000000000030A /* KanbanHelpers.swift in Sources */,
+				A1000000000000000000030C /* ComposeValidation.swift in Sources */,
+				A1000000000000000000030E /* ThemeHelpers.swift in Sources */,
+				A10000000000000000000310 /* OAuthHelpers.swift in Sources */,
+				A10000000000000000000312 /* NavigationLabels.swift in Sources */,
 				A10000000000000000000092 /* IosMailModels.swift in Sources */,
 				A10000000000000000000119 /* LocalizedCatalog.swift in Sources */,
 				A10000000000000000000003 /* RustCoreBridge.swift in Sources */,
