@@ -301,7 +301,7 @@ export function KanbanView({ boardId }: { boardId: string }) {
           {boardWallpaper && (
             <div className={`absolute inset-0 ${boardWallpaper.className}`} style={boardWallpaper.style} />
           )}
-          <div className="relative flex flex-1 min-h-0 gap-2 overflow-x-auto p-2">
+          <div className="relative flex flex-1 min-h-0 gap-2 overflow-x-auto p-2 kanban-scrollbar">
             {visibleColumns.length === 0 ? (
               <div className="flex flex-1 items-center justify-center">
                 <EmptyState title={t('empty.noColumns')} text={t('empty.noColumnsText')} />

@@ -309,6 +309,31 @@ textarea,
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Custom Scrollbar for Kanban Board */
+.kanban-scrollbar::-webkit-scrollbar {
+  height: 10px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.2);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+  border: 0px solid transparent;
+}
+
+.dark .kanban-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dark .kanban-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 /* Custom patterns */
 .me-wallpaper {
   background:
