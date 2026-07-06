@@ -680,8 +680,17 @@ func (a *App) mailDiscardDraft(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, errors.New("mail engine unavailable")
 	}
-	return a.sidecar.Call("discard_draft", map[string]any{
+	params := map[string]any{
 		"account":  accountID,
 		"draft_id": draftID,
-	})
+	}
+	if threadID, _ := payload["thread_id"].(string); threadID != "" {
+		if ids, ok := parseImapThreadID(threadID); ok && ids.Account == accountID {
+			params["thread_key"] = ids.ThreadKey
+			if ids.UID > 0 && ids.ThreadKey == "" {
+				params["thread_key"] = fmt.Sprintf("uid:%d", ids.UID)
+			}
+		}
+	}
+	return a.sidecar.Call("discard_draft", params)
 }

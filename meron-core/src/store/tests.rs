@@ -1310,12 +1310,12 @@ fn get_thread_headers_all_folders_dedupes_self_sent_by_message_id() {
     // same RFC Message-ID but distinct per-folder UIDs. The thread view must
     // collapse the pair into one bubble.
     conn.execute(
-            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, thread_key, json)
-             VALUES('acct', '[Gmail]/Sent Mail', '462', 462, 'test', 'Me', 'me@example.com', 100, 'self-key',
+            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, thread_key, json)
+             VALUES('acct', '[Gmail]/Sent Mail', '462', 462, 'test', 'Me', 'me@example.com', 100, 1, 'self-key',
                       '{\"message_id\":\"mid@host\"}'),
-                   ('acct', 'INBOX', '1440', 1440, 'test', 'Me', 'me@example.com', 100, 'self-key',
+                   ('acct', 'INBOX', '1440', 1440, 'test', 'Me', 'me@example.com', 100, 0, 'self-key',
                       '{\"message_id\":\"mid@host\"}'),
-                   ('acct', 'INBOX', '1441', 1441, 'reply', 'Them', 'them@example.com', 200, 'self-key',
+                   ('acct', 'INBOX', '1441', 1441, 'reply', 'Them', 'them@example.com', 200, 1, 'self-key',
                       '{\"message_id\":\"other@host\"}')",
             [],
         )
@@ -1323,9 +1323,9 @@ fn get_thread_headers_all_folders_dedupes_self_sent_by_message_id() {
 
     let headers = get_thread_headers_all_folders(&conn, "acct", "self-key").unwrap();
     let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
-    // The self-sent pair collapses to the lowest-id row (the Sent copy,
-    // inserted first); the distinct reply stays.
-    assert_eq!(uids, vec![462, 1441]);
+    // The self-sent pair collapses to the unread copy when one exists, so the
+    // visible bubble can be marked read and clear the thread badge.
+    assert_eq!(uids, vec![1440, 1441]);
 }
 
 #[test]
@@ -1472,6 +1472,180 @@ fn upsert_messages_preserves_message_id_casing_in_json() {
         .unwrap();
     assert_eq!(message_id, "nonbili/NouTube/issues/253@github.com");
     assert_eq!(thread_key, "nonbili/NouTube/issues/253@github.com");
+}
+
+#[test]
+fn delete_draft_copies_removes_stale_autosaves_keeping_live_uid() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    // Two autosaves of the same draft (stable Message-ID, fresh UID per APPEND)
+    // plus an unrelated draft that must survive.
+    let draft = |uid: u32, message_id: &str| MessageHeader {
+        uid,
+        subject: "Re: test".into(),
+        date: 100 + uid as i64,
+        thread_key: "root@mail.example".into(),
+        message_id: message_id.into(),
+        ..Default::default()
+    };
+    upsert_messages(
+        &conn,
+        "acct",
+        "Drafts",
+        &[
+            draft(10, "Meron-Draft-1@meron"),
+            draft(11, "meron-draft-1@meron"),
+            draft(12, "meron-draft-2@meron"),
+        ],
+    )
+    .unwrap();
+
+    // Replace path: keep the newest copy, drop the stale one (id compared
+    // case-insensitively, matching the thread-key inheritance lookup).
+    let deleted =
+        delete_draft_copies(&conn, "acct", "Drafts", "meron-draft-1@meron", Some(11)).unwrap();
+    assert_eq!(deleted, 1);
+    let uids: Vec<u32> = conn
+        .prepare("SELECT uid FROM messages WHERE folder = 'Drafts' ORDER BY uid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(uids, vec![11, 12]);
+
+    // Discard path: no survivor, every copy goes.
+    let deleted =
+        delete_draft_copies(&conn, "acct", "Drafts", "meron-draft-1@meron", None).unwrap();
+    assert_eq!(deleted, 1);
+    // Blank id is a no-op, never a mass delete.
+    assert_eq!(
+        delete_draft_copies(&conn, "acct", "Drafts", " ", None).unwrap(),
+        0
+    );
+}
+
+#[test]
+fn delete_draft_sibling_copies_drops_hidden_same_id_rows() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    let draft = |uid: u32, message_id: &str| MessageHeader {
+        uid,
+        subject: "Re: test".into(),
+        date: 100 + uid as i64,
+        thread_key: "root@mail.example".into(),
+        message_id: message_id.into(),
+        ..Default::default()
+    };
+    // The pane dedupes uid 10/11 (same Message-ID) into one bubble; discarding
+    // it deletes only the visible uid, so the sibling cleanup must catch the
+    // hidden copy — while leaving the unrelated draft alone.
+    upsert_messages(
+        &conn,
+        "acct",
+        "Drafts",
+        &[
+            draft(10, "meron-draft-1@meron"),
+            draft(11, "meron-draft-1@meron"),
+            draft(12, "meron-draft-2@meron"),
+        ],
+    )
+    .unwrap();
+
+    let deleted = delete_draft_sibling_copies(&conn, "acct", "Drafts", &[11]).unwrap();
+    assert_eq!(deleted, 1);
+    delete_messages_by_uid(&conn, "acct", "Drafts", &[11]).unwrap();
+    let uids: Vec<u32> = conn
+        .prepare("SELECT uid FROM messages WHERE folder = 'Drafts' ORDER BY uid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(uids, vec![12]);
+}
+
+#[test]
+fn delete_quick_reply_drafts_in_thread_removes_only_meron_drafts() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    let draft = |uid: u32, thread_key: &str, message_id: &str| MessageHeader {
+        uid,
+        subject: "Re: test".into(),
+        date: 100 + uid as i64,
+        thread_key: thread_key.into(),
+        message_id: message_id.into(),
+        ..Default::default()
+    };
+    upsert_messages(
+        &conn,
+        "acct",
+        "Drafts",
+        &[
+            draft(10, "root@mail.example", "meron-draft-old@meron"),
+            draft(11, "root@mail.example", "meron-draft-new@meron"),
+            draft(12, "root@mail.example", "manual-draft@example.com"),
+            draft(13, "other@mail.example", "meron-draft-other@meron"),
+        ],
+    )
+    .unwrap();
+
+    let deleted =
+        delete_quick_reply_drafts_in_thread(&conn, "acct", "Drafts", "root@mail.example").unwrap();
+    assert_eq!(deleted, 2);
+    let uids: Vec<u32> = conn
+        .prepare("SELECT uid FROM messages WHERE folder = 'Drafts' ORDER BY uid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(uids, vec![12, 13]);
+}
+
+#[test]
+fn collapse_thread_draft_headers_keeps_newest_draft_only() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    upsert_folders(
+        &conn,
+        "acct",
+        &[crate::imap::Folder {
+            name: "Drafts".into(),
+            delimiter: None,
+            special_use: Some("drafts".into()),
+            role: "drafts".into(),
+            unread: 0,
+        }],
+    )
+    .unwrap();
+    let header = |uid: u32, folder: &str, date: i64| MessageHeader {
+        uid,
+        folder: folder.into(),
+        subject: "Re: test".into(),
+        date,
+        thread_key: "root@example.com".into(),
+        message_id: format!("draft-{uid}@example.com"),
+        ..Default::default()
+    };
+
+    let collapsed = collapse_thread_draft_headers(
+        &conn,
+        "acct",
+        "INBOX",
+        vec![
+            header(1, "INBOX", 100),
+            header(10, "Drafts", 110),
+            header(11, "Drafts", 120),
+        ],
+    )
+    .unwrap();
+
+    let uids = collapsed
+        .into_iter()
+        .map(|header| header.uid)
+        .collect::<Vec<_>>();
+    assert_eq!(uids, vec![1, 11]);
 }
 
 #[test]

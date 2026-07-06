@@ -1064,8 +1064,9 @@ pub fn get_thread_reference_gaps(
 /// same RFC `Message-ID` lands as two rows under one `thread_key` (distinct
 /// per-folder UIDs sidestep the `UNIQUE(account, folder, msg_id)` constraint).
 /// We collapse those to a single bubble by keeping, per non-empty
-/// `Message-ID`, only the lowest-`id` row. Rows without a `Message-ID` (e.g.
-/// drafts) are never collapsed — a NULL `Message-ID` never equates in SQL.
+/// `Message-ID`, the unread copy if any, otherwise the lowest-`id` row. Rows
+/// without a `Message-ID` (e.g. drafts) are never collapsed — a NULL
+/// `Message-ID` never equates in SQL.
 pub fn get_thread_headers_all_folders(
     conn: &Connection,
     account: &str,
@@ -1083,7 +1084,7 @@ pub fn get_thread_headers_all_folders(
                AND COALESCE(NULLIF(dup.thread_key, ''), 'uid:' || dup.uid) = ?2
                AND COALESCE(json_extract(m.json, '$.message_id'), '') <> ''
                AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
-               AND dup.id < m.id
+               AND (dup.seen < m.seen OR (dup.seen = m.seen AND dup.id < m.id))
            )
          ORDER BY m.date ASC, m.uid ASC",
     )?;
@@ -1261,6 +1262,141 @@ pub fn update_thread_starred(
         params![account, folder, thread_key, starred as i64],
     )?;
     Ok(())
+}
+
+/// A folder's special-use role, resolved from the synced folders table (server
+/// attribute when recorded, name heuristic otherwise).
+pub fn folder_role(conn: &Connection, account: &str, folder: &str) -> Result<String> {
+    let special_use: Option<String> = conn
+        .query_row(
+            "SELECT special_use FROM folders WHERE account = ?1 AND name = ?2",
+            params![account, folder],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(classify_folder_role(folder, special_use.as_deref()).to_string())
+}
+
+/// Collapse multiple cached draft autosave rows in a conversation to the newest
+/// one for display. This is intentionally render-time only: old builds could
+/// mint different Message-IDs for the same quick-reply draft, so Message-ID
+/// dedupe alone cannot hide them, but deleting by thread would be too broad for
+/// a cache repair.
+pub fn collapse_thread_draft_headers(
+    conn: &Connection,
+    account: &str,
+    default_folder: &str,
+    headers: Vec<MessageHeader>,
+) -> Result<Vec<MessageHeader>> {
+    let mut newest_draft: Option<(usize, i64, u32)> = None;
+    let mut draft_flags = Vec::with_capacity(headers.len());
+    for (idx, header) in headers.iter().enumerate() {
+        let folder = if header.folder.is_empty() {
+            default_folder
+        } else {
+            header.folder.as_str()
+        };
+        let is_draft = folder_role(conn, account, folder)? == "drafts";
+        draft_flags.push(is_draft);
+        if is_draft {
+            match newest_draft {
+                Some((_, date, uid)) if (header.date, header.uid) <= (date, uid) => {}
+                _ => newest_draft = Some((idx, header.date, header.uid)),
+            }
+        }
+    }
+    let Some((keep_idx, _, _)) = newest_draft else {
+        return Ok(headers);
+    };
+    Ok(headers
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, header)| {
+            if draft_flags[idx] && idx != keep_idx {
+                None
+            } else {
+                Some(header)
+            }
+        })
+        .collect())
+}
+
+/// Delete every locally cached row in `folder` sharing a Message-ID with any of
+/// `uids`. The thread read collapses same-Message-ID copies into one bubble, so
+/// discarding the visible draft must also drop hidden stale autosave siblings —
+/// otherwise the thread card keeps reporting `has_draft`. Call before
+/// `delete_messages_by_uid` (it reads the rows to get their ids).
+pub fn delete_draft_sibling_copies(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> Result<usize> {
+    let mut deleted = 0usize;
+    for uid in uids {
+        let message_id: Option<String> = conn
+            .query_row(
+                "SELECT json_extract(json, '$.message_id') FROM messages
+                 WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                params![account, folder, *uid],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if let Some(message_id) = message_id {
+            deleted += delete_draft_copies(conn, account, folder, &message_id, Some(*uid))?;
+        }
+    }
+    Ok(deleted)
+}
+
+/// Remove locally cached copies of a draft (matched by its stable Message-ID),
+/// optionally keeping one UID — the copy that survived the server-side
+/// replace/prune. Autosaves APPEND under a fresh UID each time, so without this
+/// the expunged prior copy lingers locally as a duplicate until the next full
+/// Drafts sync.
+pub fn delete_draft_copies(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    message_id: &str,
+    keep_uid: Option<u32>,
+) -> Result<usize> {
+    if message_id.trim().is_empty() {
+        return Ok(0);
+    }
+    let deleted = conn.execute(
+        "DELETE FROM messages
+         WHERE account = ?1 AND folder = ?2
+           AND lower(COALESCE(json_extract(json, '$.message_id'), '')) = lower(?3)
+           AND (?4 IS NULL OR uid <> ?4)",
+        params![account, folder, message_id.trim(), keep_uid],
+    )?;
+    Ok(deleted)
+}
+
+/// Remove locally cached quick-reply draft rows in a thread. This repairs stale
+/// duplicates left by older autosave code that minted multiple `meron-draft-*`
+/// Message-IDs for the same quick reply; the server discard still targets the
+/// one draft Message-ID the client knows about.
+pub fn delete_quick_reply_drafts_in_thread(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    thread_key: &str,
+) -> Result<usize> {
+    if thread_key.trim().is_empty() {
+        return Ok(0);
+    }
+    let deleted = conn.execute(
+        "DELETE FROM messages
+         WHERE account = ?1 AND folder = ?2
+           AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?3
+           AND lower(COALESCE(json_extract(json, '$.message_id'), '')) LIKE 'meron-draft-%@meron'",
+        params![account, folder, thread_key],
+    )?;
+    Ok(deleted)
 }
 
 pub fn delete_messages_by_uid(

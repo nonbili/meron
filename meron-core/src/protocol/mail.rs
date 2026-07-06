@@ -231,8 +231,9 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
         )
         .map_err(|err| format!("{err:#}"))?;
         let saved_id = draft_id.clone();
+        let local_draft_id = draft_id.clone();
         let saved_bytes = raw.len();
-        let drafts_folder =
+        let (drafts_folder, batch) =
             crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
                 let raw = raw.clone();
                 let saved_id = saved_id.clone();
@@ -241,27 +242,36 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
                         .await?
                         .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
                     imap::replace_draft(session, &drafts, &raw, &saved_id).await?;
-                    anyhow::Ok(drafts)
+                    let batch = imap::fetch_recent(session, &drafts, DRAFT_SYNC_LIMIT).await?;
+                    anyhow::Ok((drafts, batch))
                 })
             }))?;
-        // The IMAP APPEND above lands the draft on the server, but the local
-        // store (what mail.threadRead / thread lists read from) doesn't know
-        // about it yet. Without this, the draft is invisible in the UI until
-        // some other action happens to resync the Drafts folder. Best-effort:
-        // a sync failure here shouldn't fail the save, since the draft is
-        // already safely on the server.
-        if let Err(err) = crate::ffi::engine_block_on(crate::engine::sync_messages(
-            &engine,
+        store::upsert_messages(&conn, &account_id, &drafts_folder, &batch.messages)
+            .map_err(|err| err.to_string())?;
+        let keep_uid = batch
+            .messages
+            .iter()
+            .filter(|message| message.message_id.eq_ignore_ascii_case(&local_draft_id))
+            .map(|message| message.uid)
+            .max();
+        if keep_uid.is_some() {
+            store::delete_draft_copies(
+                &conn,
+                &account_id,
+                &drafts_folder,
+                &local_draft_id,
+                keep_uid,
+            )
+            .map_err(|err| err.to_string())?;
+        }
+        store::set_folder_state(
+            &conn,
             &account_id,
             &drafts_folder,
-            DRAFT_SYNC_LIMIT,
-        )) {
-            crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.saveDraft",
-                "post-save Drafts sync failed for {account_id}: {err}"
-            );
-        }
+            batch.uidvalidity,
+            batch.uid_next,
+        )
+        .map_err(|err| err.to_string())?;
         Ok(json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes }))
     })
 }
@@ -278,7 +288,8 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
         }
-        let deleted =
+        let local_draft_id = draft_id.clone();
+        let (drafts, deleted) =
             crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
                 let draft_id = draft_id.clone();
                 Box::pin(async move {
@@ -286,9 +297,22 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
                         .await?
                         .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
                     let deleted = imap::discard_draft(session, &drafts, &draft_id).await?;
-                    anyhow::Ok(deleted)
+                    anyhow::Ok((drafts, deleted))
                 })
             }))?;
+        store::delete_draft_copies(&conn, &account_id, &drafts, &local_draft_id, None)
+            .map_err(|err| err.to_string())?;
+        if let Some(parsed) = parse_thread_id(&opt_str(params, "thread_id")) {
+            if parsed.account == account_id {
+                store::delete_quick_reply_drafts_in_thread(
+                    &conn,
+                    &account_id,
+                    &drafts,
+                    &parsed.thread_key,
+                )
+                .map_err(|err| err.to_string())?;
+            }
+        }
         Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
     })
 }
@@ -641,6 +665,13 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                     store::thread_grouping_subject(&header.subject) == subject_filter
                 });
             }
+            headers = store::collapse_thread_draft_headers(
+                &conn,
+                &parsed.account,
+                &parsed.folder,
+                headers,
+            )
+            .map_err(|err| err.to_string())?;
             headers
         };
         // Mobile sync stores headers only, so the first time a thread is opened
@@ -704,6 +735,7 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         }
 
         let mine = store::self_addrs(&conn, &parsed.account);
+        let mut seen_message_ids = std::collections::HashSet::new();
         let messages = headers
             .into_iter()
             .filter_map(|header| {
@@ -714,6 +746,13 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 };
                 let cached =
                     store::get_cached_message(&conn, &parsed.account, folder, header.uid).ok()?;
+                let message_id_key = cached
+                    .as_ref()
+                    .map(|message| message.message_id.trim().to_ascii_lowercase())
+                    .unwrap_or_default();
+                if !message_id_key.is_empty() && !seen_message_ids.insert(message_id_key) {
+                    return None;
+                }
                 Some(message_json(
                     &parsed.account,
                     &thread_id,
@@ -768,6 +807,16 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
             &parsed.folder,
             &uids,
         ))?;
+        // Discarding a draft must also drop hidden local copies sharing its
+        // Message-ID (stale autosaves the pane deduped away), or the thread
+        // card keeps its has_draft badge until the next full sync.
+        if store::folder_role(&conn, &parsed.account, &parsed.folder)
+            .map_err(|err| err.to_string())?
+            == "drafts"
+        {
+            store::delete_draft_sibling_copies(&conn, &parsed.account, &parsed.folder, &uids)
+                .map_err(|err| err.to_string())?;
+        }
         let deleted = store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids)
             .map_err(|err| err.to_string())?;
         match delete_result {

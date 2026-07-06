@@ -55,6 +55,66 @@ function updateKanbanThread(threadId: string, update: (thread: Message) => Messa
   if (changed) kanban$.threads.set(nextColumns)
 }
 
+function folderMatches(folder: Folder, accountId: string | undefined, folderId: string | undefined): boolean {
+  if (!folderId) return false
+  const wanted = folderId.toLowerCase()
+  const folderIsInbox = folder.role === 'inbox' || folder.id.toLowerCase() === 'inbox'
+  const idMatches = wanted === 'inbox' ? folderIsInbox : folder.id === folderId
+  return idMatches && (!accountId || folder.account_id === accountId || folder.account_id === 'unified')
+}
+
+function decrementFolderUnread(accountId: string | undefined, folderId: string | undefined, count: number) {
+  if (count <= 0 || !folderId) return
+  const dec = (folder: Folder) =>
+    folderMatches(folder, accountId, folderId) ? { ...folder, unread: Math.max(0, folder.unread - count) } : folder
+
+  mail$.folders.set(mail$.folders.get().map(dec))
+  if (accountId) {
+    const byAccount = mail$.foldersByAccount.get()
+    const accountFolders = byAccount[accountId]
+    if (accountFolders) {
+      mail$.foldersByAccount.set({
+        ...byAccount,
+        [accountId]: accountFolders.map(dec),
+      })
+    }
+  }
+}
+
+function reconcileThreadUnreadFromLoadedMessages(
+  threadId: string,
+  messages: Message[],
+  nextCursor: string | undefined,
+) {
+  if (nextCursor) return
+  const threadMessages = messages.filter((message) => message.thread_id === threadId)
+  if (threadMessages.length === 0 || threadMessages.some((message) => message.unread)) return
+
+  const thread = mail$.threads.get().find((item) => item.thread_id === threadId)
+  if (!thread?.unread) return
+  const unreadCount = Math.max(1, thread.unread_count ?? 0)
+  mail$.threads.set(
+    mail$.threads
+      .get()
+      .map((item) => (item.thread_id === threadId ? { ...item, unread: false, unread_count: 0 } : item)),
+  )
+  decrementFolderUnread(thread.account_id, thread.folder_id, unreadCount)
+  updateKanbanThread(threadId, (item) => ({ ...item, unread: false, unread_count: 0 }))
+}
+
+function reconcileThreadDraftFromLoadedMessages(threadId: string, messages: Message[]) {
+  if (!threadId) return
+  const threadMessages = messages.filter((message) => message.thread_id === threadId)
+  if (threadMessages.some((message) => isDraftFolder(message.folder_id, message.account_id))) return
+
+  mail$.threads.set(
+    mail$.threads
+      .get()
+      .map((thread) => (thread.thread_id === threadId ? { ...thread, has_draft: false } : thread)),
+  )
+  updateKanbanThread(threadId, (thread) => ({ ...thread, has_draft: false }))
+}
+
 function removeKanbanThread(threadId: string) {
   const columns = kanban$.threads.get()
   let changed = false
@@ -577,6 +637,7 @@ export async function loadThread(threadId: string) {
     mail$.messages.set(result.messages)
     mail$.messagesCursor.set(result.next_cursor ?? '')
     mail$.messagesLoadingMore.set(false)
+    reconcileThreadUnreadFromLoadedMessages(threadId, result.messages, result.next_cursor)
   } finally {
     if (ui$.selectedThread.get() === threadId) {
       mail$.threadLoading.set(false)
@@ -612,6 +673,8 @@ export async function markThreadRead(threadId: string) {
   if (!threadId) return
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
+  const previousFolders = mail$.folders.get()
+  const previousFoldersByAccount = mail$.foldersByAccount.get()
   const previousKanbanThreads = kanban$.threads.get()
   const hasUnread =
     previousThreads.some((thread) => thread.thread_id === threadId && thread.unread) ||
@@ -620,6 +683,13 @@ export async function markThreadRead(threadId: string) {
       threads.some((thread) => thread.thread_id === threadId && thread.unread),
     )
   if (!hasUnread) return
+
+  const localThread = previousThreads.find((thread) => thread.thread_id === threadId)
+  const localMessages = previousMessages.filter((message) => message.thread_id === threadId)
+  const localMessageUnread = localMessages.filter((message) => message.unread).length
+  const unreadCount = Math.max(1, localThread?.unread_count ?? localMessageUnread)
+  const accountId = localThread?.account_id || localMessages[0]?.account_id
+  const folderId = localThread?.folder_id || localMessages[0]?.folder_id
 
   mail$.readThreads[threadId].set(true)
   mail$.threads.set(
@@ -630,6 +700,7 @@ export async function markThreadRead(threadId: string) {
   mail$.messages.set(
     previousMessages.map((message) => (message.thread_id === threadId ? { ...message, unread: false } : message)),
   )
+  decrementFolderUnread(accountId, folderId, unreadCount)
   updateKanbanThread(threadId, (thread) => ({ ...thread, unread: false, unread_count: 0 }))
 
   try {
@@ -638,6 +709,8 @@ export async function markThreadRead(threadId: string) {
     mail$.readThreads[threadId].set(undefined)
     mail$.threads.set(previousThreads)
     mail$.messages.set(previousMessages)
+    mail$.folders.set(previousFolders)
+    mail$.foldersByAccount.set(previousFoldersByAccount)
     kanban$.threads.set(previousKanbanThreads)
     throw error
   } finally {
@@ -1085,9 +1158,17 @@ export async function discardSavedDraftCopy(draft: {
 
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
-  const nextMessages = draft.messageId
-    ? previousMessages.filter((message) => message.id !== draft.messageId)
-    : previousMessages
+  const nextMessages = previousMessages.filter((message) => {
+    if (draft.messageId && message.id === draft.messageId) return false
+    if (
+      draft.draftMessageId &&
+      message.message_id === draft.draftMessageId &&
+      isDraftFolder(message.folder_id, message.account_id)
+    ) {
+      return false
+    }
+    return true
+  })
   const selectedThread = ui$.selectedThread.get()
   const removeThread = !!draft.threadId && !nextMessages.some((message) => message.thread_id === draft.threadId)
 
@@ -1096,6 +1177,8 @@ export async function discardSavedDraftCopy(draft: {
     mail$.threads.set(previousThreads.filter((thread) => thread.thread_id !== draft.threadId))
     removeKanbanThread(draft.threadId)
     if (selectedThread === draft.threadId) ui$.selectedThread.set('')
+  } else {
+    reconcileThreadDraftFromLoadedMessages(draft.threadId, nextMessages)
   }
 
   try {
@@ -1103,6 +1186,7 @@ export async function discardSavedDraftCopy(draft: {
       await invoke('mail.discardDraft', {
         account_id: draft.accountId,
         draft_id: draft.draftMessageId,
+        thread_id: draft.threadId,
       })
     } else {
       const res = await invoke('mail.delete', {
@@ -1110,9 +1194,10 @@ export async function discardSavedDraftCopy(draft: {
         message_ids: [draft.messageId],
         folder: draft.folderId,
       })
-      assertDeleteAffected(res)
+      if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(res)
     }
     await loadThreads(false)
+    if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, mail$.messages.get())
     const selectedAcc = ui$.selectedAccount.get()
     if (selectedAcc) void loadFolders(selectedAcc, false)
     if (draft.accountId && draft.accountId !== selectedAcc) void loadFolders(draft.accountId, false)
@@ -1170,7 +1255,7 @@ export async function deleteMessage(message: Message) {
       message_ids: [message.id],
       folder: message.folder_id,
     })
-    assertDeleteAffected(res)
+    if (!isDraft) assertDeleteAffected(res)
     showToast(isDraft ? 'Draft discarded' : 'Message moved to Trash')
     // No messages left from this thread: drop the now-empty conversation.
     if (!nextMessages.some((item) => item.thread_id === threadId)) {
@@ -1251,6 +1336,8 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
   const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)))
   if (!threadId || uniqueIds.length === 0) return
 
+  const previousFolders = mail$.folders.get()
+  const previousFoldersByAccount = mail$.foldersByAccount.get()
   const unreadIds = new Set(
     mail$.messages
       .get()
@@ -1258,6 +1345,9 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
       .map((message) => message.id),
   )
   if (unreadIds.size === 0) return
+
+  const localThread = findLocalThread(threadId)
+  const localMessage = mail$.messages.get().find((message) => unreadIds.has(message.id))
 
   mail$.messages.set(
     mail$.messages.get().map((message) => (unreadIds.has(message.id) ? { ...message, unread: false } : message)),
@@ -1269,10 +1359,22 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
       return { ...thread, unread: unreadCount > 0, unread_count: unreadCount }
     }),
   )
+  decrementFolderUnread(
+    localThread?.account_id || localMessage?.account_id,
+    localThread?.folder_id || localMessage?.folder_id,
+    unreadIds.size,
+  )
 
   const accountId = findLocalThread(threadId)?.account_id
-  await invoke('mail.markRead', { thread_id: threadId, message_ids: Array.from(unreadIds) })
-  refreshFoldersAfterFlagChange(accountId)
+  try {
+    await invoke('mail.markRead', { thread_id: threadId, message_ids: Array.from(unreadIds) })
+  } catch (error) {
+    mail$.folders.set(previousFolders)
+    mail$.foldersByAccount.set(previousFoldersByAccount)
+    throw error
+  } finally {
+    refreshFoldersAfterFlagChange(accountId)
+  }
 }
 
 export async function markMessageReadState(message: Message, seen: boolean) {

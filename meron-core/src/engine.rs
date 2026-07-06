@@ -1219,6 +1219,19 @@ pub async fn append_to_drafts(
     {
         let db = engine.db.lock().unwrap();
         store::upsert_messages(&db, account, &drafts, &batch.messages)?;
+        // replace_draft expunged the prior server copy, but its locally cached
+        // row (older UID) survives the upsert; drop every copy of this draft
+        // except the one the batch just brought in, or the thread view shows
+        // duplicate draft bubbles until the next full Drafts sync.
+        let keep_uid = batch
+            .messages
+            .iter()
+            .filter(|m| m.message_id.eq_ignore_ascii_case(message_id))
+            .map(|m| m.uid)
+            .max();
+        if keep_uid.is_some() {
+            store::delete_draft_copies(&db, account, &drafts, message_id, keep_uid)?;
+        }
         store::set_folder_state(&db, account, &drafts, batch.uidvalidity, batch.uid_next)?;
     }
     Ok(())

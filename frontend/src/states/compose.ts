@@ -16,11 +16,9 @@ import { formatFullTimestamp } from '../components/chat/messageHelpers'
 // drafts live here too. Persisted to localStorage (volatile editor buffers, not
 // DB settings).
 
-// Persisted drafts: per-thread quick-reply text and per-tab full-editor drafts.
-// Attachments are intentionally NOT persisted — their base64 payloads would
-// quickly blow past localStorage's ~5MB budget. Only text fields survive
-// restarts; the user reattaches files if needed.
-const DRAFTS_KEY = 'meron-drafts'
+// Persisted full-editor drafts. Attachments are intentionally NOT persisted —
+// their base64 payloads would quickly blow past localStorage's ~5MB budget.
+// Only text fields survive restarts; the user reattaches files if needed.
 const COMPOSE_TABS_KEY = 'meron-compose-tabs'
 
 /** Stable Message-ID for a draft, reused across autosaves so the server-side
@@ -115,19 +113,6 @@ function conversationHtmlBody(text: string, attachments: ComposerAttachment[]): 
   return `${body}${imageHtml}`
 }
 
-type PersistedDrafts = { quick: Record<string, string> }
-function loadPersistedDrafts(): PersistedDrafts {
-  try {
-    const raw = localStorage.getItem(DRAFTS_KEY)
-    if (!raw) return { quick: {} }
-    const parsed = JSON.parse(raw)
-    return { quick: parsed?.quick && typeof parsed.quick === 'object' ? parsed.quick : {} }
-  } catch {
-    return { quick: {} }
-  }
-}
-const initialDrafts = loadPersistedDrafts()
-
 type PersistedComposeTab = {
   id: string
   subject: string
@@ -182,10 +167,6 @@ export const compose$ = observable({
   conversationThread: '',
   composer: '',
   composerAttachments: [] as ComposerAttachment[],
-  // Per-thread quick-reply draft text. The active textarea reads/writes via
-  // selectedThread; persisted to localStorage so a crash or restart doesn't
-  // lose an in-progress reply.
-  quickDrafts: initialDrafts.quick as Record<string, string>,
   // Server-side draft backing the active thread's quick reply, shared with the
   // full composer's saveDraft/discardDraft mechanism (mail.saveDraft/
   // mail.discardDraft) rather than a separate persistence path. Reset on
@@ -274,59 +255,31 @@ compose$.tabs.onChange(({ value: tabs }) => {
   }
 })
 
-// Per-thread quick-reply draft persistence. Hydration (loading the draft when a
-// thread is selected) lives in MessagePane so we never reassign the textarea's
-// value from inside an observable listener — doing that fights React's input
-// handling and drops characters under fast typing.
-let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
-const DRAFT_SAVE_DELAY_MS = 500
-
-/** Save the visible textarea text under `threadId` to localStorage, debounced. */
-export function persistQuickDraft(threadId: string, text: string) {
-  if (!threadId) return
-  if (draftSaveTimer) clearTimeout(draftSaveTimer)
-  draftSaveTimer = setTimeout(() => {
-    draftSaveTimer = null
-    const map = { ...compose$.quickDrafts.peek() }
-    if (text.trim()) {
-      map[threadId] = text
-    } else {
-      delete map[threadId]
-    }
-    compose$.quickDrafts.set(map)
-    try {
-      localStorage.setItem(DRAFTS_KEY, JSON.stringify({ quick: map }))
-    } catch {
-      // localStorage quota exceeded — drop silently.
-    }
-  }, DRAFT_SAVE_DELAY_MS)
-}
-
-/** Read the saved draft for a thread, "" when none. */
-export function readQuickDraft(threadId: string): string {
-  return compose$.quickDrafts.peek()[threadId] ?? ''
-}
-
-/** Discard the persisted draft for a thread after a successful send. */
-export function clearQuickDraft(threadId: string) {
-  if (!threadId) return
-  const map = { ...compose$.quickDrafts.peek() }
-  if (!(threadId in map)) return
-  delete map[threadId]
-  compose$.quickDrafts.set(map)
-  try {
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify({ quick: map }))
-  } catch {
-    // ignore
-  }
-}
+// The one in-flight (or queued) quick-reply save. Saves are chained onto it so
+// autosaves can't overtake each other on the wire, and discardQuickReplyDraftIfEmpty
+// awaits it before trusting quickReplyDraftSaved — the flag is only set once the
+// RPC resolves, so peeking it mid-save would miss the draft about to be created.
+let quickReplyDraftSaveInFlight: Promise<void> | null = null
 
 // Save the active thread's quick reply as a real server-side draft, reusing
 // the full composer's saveDraft RPC (saveComposedDraft/mail.saveDraft) rather
 // than a separate persistence path. No-op when there's nothing to save or no
 // sendable account. The draft id is minted once and reused across autosaves
 // so the server-side copy is replaced, not duplicated.
-export async function saveQuickReplyDraft() {
+export function saveQuickReplyDraft(): Promise<void> {
+  const previous = quickReplyDraftSaveInFlight
+  const run = (async () => {
+    if (previous) await previous
+    await performQuickReplyDraftSave()
+  })()
+  quickReplyDraftSaveInFlight = run
+  void run.finally(() => {
+    if (quickReplyDraftSaveInFlight === run) quickReplyDraftSaveInFlight = null
+  })
+  return run
+}
+
+async function performQuickReplyDraftSave() {
   const activeT = getActiveThread()
   if (!activeT) return
   const text = compose$.composer.peek()
@@ -362,15 +315,41 @@ export async function saveQuickReplyDraft() {
       draftMessageId: draftId,
       attachments,
     })
-    compose$.quickReplyDraftSaved.set(true)
   } catch (error) {
     console.error('Quick reply draft autosave failed:', error)
+    return
+  }
+
+  // The composer may have gone blank while the RPC was in flight (cleared by
+  // the user, a send, or escalation to the full editor) — any discard that ran
+  // in that window saw quickReplyDraftSaved still false and bailed. Drop the
+  // draft we just wrote instead of letting it resurrect on the next thread open.
+  const sameThread = ui$.selectedThread.peek() === activeT.thread_id
+  if (sameThread && !compose$.composer.peek().trim() && compose$.composerAttachments.peek().length === 0) {
+    if (compose$.quickReplyDraftId.peek() === draftId) {
+      compose$.quickReplyDraftId.set('')
+      compose$.quickReplyDraftSaved.set(false)
+    }
+    await discardSavedDraftCopy({
+      threadId: activeT.thread_id,
+      messageId: '',
+      folderId: '',
+      accountId: replyAccountId,
+      draftMessageId: draftId,
+    })
+    return
+  }
+  if (sameThread && compose$.quickReplyDraftId.peek() === draftId) {
+    compose$.quickReplyDraftSaved.set(true)
   }
 }
 
 // Discard the quick reply's server-side draft once the user has cleared the
 // text/attachments back to blank, mirroring the full composer's discard flow.
 export async function discardQuickReplyDraftIfEmpty() {
+  // Wait out any in-flight autosave before peeking the flags below; the save
+  // itself re-checks on completion and self-discards if the composer is blank.
+  while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
   const text = compose$.composer.peek()
   const attachments = compose$.composerAttachments.peek()
   if (text.trim() || attachments.length > 0) return
@@ -382,7 +361,7 @@ export async function discardQuickReplyDraftIfEmpty() {
   compose$.quickReplyDraftId.set('')
   compose$.quickReplyDraftSaved.set(false)
   await discardSavedDraftCopy({
-    threadId: '',
+    threadId: activeT?.thread_id ?? '',
     messageId: '',
     folderId: '',
     accountId: activeT?.account_id,
@@ -393,8 +372,7 @@ export async function discardQuickReplyDraftIfEmpty() {
 let quickReplyDraftSaveTimer: ReturnType<typeof setTimeout> | null = null
 const QUICK_REPLY_DRAFT_SAVE_DELAY_MS = 1200
 
-/** Debounced counterpart to persistQuickDraft's localStorage cache: after the
- * user stops typing, save (or discard, if now empty) the real server draft. */
+/** After the user stops typing, save (or discard, if now empty) the real server draft. */
 export function scheduleQuickReplyDraftSave() {
   if (quickReplyDraftSaveTimer) clearTimeout(quickReplyDraftSaveTimer)
   quickReplyDraftSaveTimer = setTimeout(() => {
@@ -417,6 +395,15 @@ export function cancelQuickReplyDraftSave() {
     quickReplyDraftSaveTimer = null
   }
 }
+
+ui$.selectedThread.onChange(({ value }) => {
+  if (value) return
+  cancelQuickReplyDraftSave()
+  compose$.composer.set('')
+  compose$.composerAttachments.set([])
+  compose$.quickReplyDraftId.set('')
+  compose$.quickReplyDraftSaved.set(false)
+})
 
 // Pre-fills the quick reply with an already-saved draft sitting at the tail of
 // the active thread, so the user can continue and send it inline instead of
@@ -1247,7 +1234,6 @@ export async function sendReply() {
   compose$.composerAttachments.set([])
   compose$.quickReplyDraftId.set('')
   compose$.quickReplyDraftSaved.set(false)
-  clearQuickDraft(activeT.thread_id)
 
   await dispatchSend(tempId)
   // Discard the now-obsolete draft only once the send actually succeeded
@@ -1255,7 +1241,7 @@ export async function sendReply() {
   // a failed send should leave the draft in place as a safety net).
   if (savedDraftId && !getPendingSend(tempId)) {
     void discardSavedDraftCopy({
-      threadId: '',
+      threadId: activeT.thread_id,
       messageId: '',
       folderId: '',
       accountId: replyAccountId,

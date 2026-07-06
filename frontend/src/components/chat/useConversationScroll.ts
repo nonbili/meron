@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { markMessagesRead, markThreadRead } from '../../states/mail'
+import { markMessagesRead } from '../../states/mail'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 
 // Owns the conversation scroll container and all of its positioning behaviour:
 // restoring scroll when returning to a thread, autoscrolling on new messages,
-// jumping to the first unread on open, and marking messages/threads read as they
+// jumping to the first unread on open, and marking rendered messages read as they
 // scroll past. Returns the refs the message list wires up plus the scroll
 // handler. `unreadKey` changes whenever any message's unread flag flips.
 export function useConversationScroll(
@@ -19,7 +19,6 @@ export function useConversationScroll(
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null)
   const messagesWrapperRef = useRef<HTMLDivElement | null>(null)
   const lastScrollHeightRef = useRef(0)
-  const markingThreadRef = useRef('')
   const markingMessageIdsRef = useRef(new Set<string>())
   const conversationScrollTopRef = useRef(new Map<string, number>())
   const pendingScrollRestoreThreadRef = useRef('')
@@ -52,33 +51,24 @@ export function useConversationScroll(
     const hasUnread = messages.some((message) => message.thread_id === activeThreadId && message.unread)
     if (!hasUnread) return
 
-    const viewportTop = container.scrollTop + 24
-    const passedMessageIds = Array.from(container.querySelectorAll<HTMLElement>('[data-unread="true"]'))
-      .filter((element) => element.offsetTop + element.offsetHeight < viewportTop)
+    const containerRect = container.getBoundingClientRect()
+    const visibleMessageIds = Array.from(container.querySelectorAll<HTMLElement>('[data-unread="true"]'))
+      .filter((element) => {
+        const rect = element.getBoundingClientRect()
+        return rect.top < containerRect.bottom && rect.bottom > containerRect.top
+      })
       .map((element) => element.dataset.messageId)
       .filter((id): id is string => !!id && !markingMessageIdsRef.current.has(id))
 
-    if (passedMessageIds.length > 0) {
-      for (const id of passedMessageIds) {
-        markingMessageIdsRef.current.add(id)
-      }
-      void markMessagesRead(activeThreadId, passedMessageIds).catch((error) => {
-        for (const id of passedMessageIds) {
-          markingMessageIdsRef.current.delete(id)
-        }
-        console.error('Failed to mark messages read:', error)
-      })
+    if (visibleMessageIds.length === 0) return
+    for (const id of visibleMessageIds) {
+      markingMessageIdsRef.current.add(id)
     }
-
-    if (markingThreadRef.current === activeThreadId) return
-
-    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight
-    if (remaining > 160) return
-
-    markingThreadRef.current = activeThreadId
-    void markThreadRead(activeThreadId).catch((error) => {
-      markingThreadRef.current = ''
-      console.error('Failed to mark thread read:', error)
+    void markMessagesRead(activeThreadId, visibleMessageIds).catch((error) => {
+      for (const id of visibleMessageIds) {
+        markingMessageIdsRef.current.delete(id)
+      }
+      console.error('Failed to mark visible messages read:', error)
     })
   }, [activeThreadId, messages])
 
@@ -96,7 +86,6 @@ export function useConversationScroll(
   }, [activeTab, saveConversationScroll])
 
   useEffect(() => {
-    markingThreadRef.current = ''
     markingMessageIdsRef.current.clear()
   }, [activeThreadId, unreadKey])
 
@@ -115,6 +104,7 @@ export function useConversationScroll(
         if (pinned) {
           container.scrollTop = Math.max(0, pinned.offsetTop - container.offsetTop - 24)
           lastScrollHeightRef.current = container.scrollHeight
+          maybeMarkRead()
           return
         }
       }
@@ -127,6 +117,7 @@ export function useConversationScroll(
         container.scrollTop = container.scrollHeight
       }
       lastScrollHeightRef.current = container.scrollHeight
+      maybeMarkRead()
     })
 
     observer.observe(wrapper)
@@ -188,12 +179,16 @@ export function useConversationScroll(
     positionedThreadRef.current = activeThreadId
     if (messages.some((message) => message.unread)) {
       const firstUnread = container.querySelector<HTMLElement>('[data-unread="true"]')
-      if (!firstUnread) return
+      if (!firstUnread) {
+        maybeMarkRead()
+        return
+      }
       container.scrollTop = Math.max(0, firstUnread.offsetTop - container.offsetTop - 24)
+      maybeMarkRead()
     } else {
       container.scrollTop = container.scrollHeight
+      maybeMarkRead()
     }
-    maybeMarkRead()
   }, [activeTab, activeThreadId, messages.length, unreadKey, maybeMarkRead, pendingScrollMessageId])
 
   return { scrollRef, bottomAnchorRef, messagesWrapperRef, handleConversationScroll, maybeMarkRead }

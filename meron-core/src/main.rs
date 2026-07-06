@@ -1371,17 +1371,35 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             if draft_id.trim().is_empty() {
                 return Ok(json!({ "ok": true, "deleted": 0 }));
             }
-            let deleted = engine
+            let (drafts, deleted) = engine
                 .with_write_session(&account, |session| {
                     let draft_id = draft_id.clone();
                     Box::pin(async move {
                         let drafts = imap::find_drafts_folder(session)
                             .await?
                             .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-                        imap::discard_draft(session, &drafts, &draft_id).await
+                        let deleted = imap::discard_draft(session, &drafts, &draft_id).await?;
+                        anyhow::Ok((drafts, deleted))
                     })
                 })
                 .await?;
+            // Drop the locally cached copies too, or the discarded draft keeps
+            // showing in the thread view until the next full Drafts sync.
+            store::delete_draft_copies(
+                &engine.db.lock().unwrap(),
+                &account,
+                &drafts,
+                &draft_id,
+                None,
+            )?;
+            if let Ok(thread_key) = req_str(p, "thread_key") {
+                store::delete_quick_reply_drafts_in_thread(
+                    &engine.db.lock().unwrap(),
+                    &account,
+                    &drafts,
+                    &thread_key,
+                )?;
+            }
             Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
         }
 
@@ -1447,6 +1465,10 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     .filter(|header| store::thread_grouping_subject(&header.subject) == filter)
                     .collect(),
                 None => headers,
+            };
+            let headers = {
+                let db = engine.db.lock().unwrap();
+                store::collapse_thread_draft_headers(&db, &account, &folder, headers)?
             };
 
             // `before_cursor` / `limit` are honored as a date-ordered slice so
@@ -1725,6 +1747,12 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
             let deleted = {
                 let db = engine.db.lock().unwrap();
+                // Discarding a draft must also drop hidden local copies sharing
+                // its Message-ID (stale autosaves the pane deduped away), or the
+                // thread card keeps its has_draft badge until the next full sync.
+                if store::folder_role(&db, &account, &folder)? == "drafts" {
+                    store::delete_draft_sibling_copies(&db, &account, &folder, &uids)?;
+                }
                 store::delete_messages_by_uid(&db, &account, &folder, &uids)?
             };
             match trashed {

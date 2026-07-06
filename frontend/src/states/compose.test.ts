@@ -492,17 +492,77 @@ describe('quick reply draft sharing', () => {
       from_addr: 'them@example.com',
       message_id: 'root@example.com',
     })
+    const draft = message({
+      id: 'draft-row',
+      account_id: 'acc-1',
+      folder_id: 'Drafts',
+      thread_id: 't-1',
+      from_addr: 'me@example.com',
+      message_id: 'draft-1@example.com',
+      body: 'Hello there',
+      date: thread.date + 1,
+    })
     mail$.threads.set([thread])
-    mail$.messages.set([thread])
+    mail$.messages.set([thread, draft])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Hello there')
-    await saveQuickReplyDraft()
-    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
+    compose$.quickReplyDraftId.set('draft-1@example.com')
+    compose$.quickReplyDraftSaved.set(true)
 
     compose$.composer.set('')
     await discardQuickReplyDraftIfEmpty()
 
-    expect(calls.some((c) => c.command === 'mail.discardDraft')).toBe(true)
+    expect(calls.find((c) => c.command === 'mail.discardDraft')?.payload).toMatchObject({
+      account_id: 'acc-1',
+      draft_id: 'draft-1@example.com',
+      thread_id: 't-1',
+    })
+    expect(mail$.messages.get()).toEqual([thread])
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('discards the draft when the composer is cleared while the autosave is still in flight', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('abc')
+
+    let saveStarted!: () => void
+    const started = new Promise<void>((resolve) => (saveStarted = resolve))
+    let releaseSave!: () => void
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.saveDraft') {
+        saveStarted()
+        await new Promise<void>((resolve) => (releaseSave = resolve))
+      }
+      return {}
+    }
+
+    const save = saveQuickReplyDraft()
+    await started
+
+    // Cleared mid-save: quickReplyDraftSaved is still false here, so this
+    // discard alone can't see the draft the RPC is about to create.
+    compose$.composer.set('')
+    const discard = discardQuickReplyDraftIfEmpty()
+    releaseSave()
+    await save
+    await discard
+
+    expect(calls.filter((c) => c.command === 'mail.saveDraft')).toHaveLength(1)
+    const discardCalls = calls.filter((c) => c.command === 'mail.discardDraft')
+    expect(discardCalls).toHaveLength(1)
+    expect(discardCalls[0].payload).toMatchObject({ account_id: 'acc-1', thread_id: 't-1' })
     expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
   })
@@ -544,6 +604,19 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([onlyMessage])
 
     expect(compose$.composer.get()).toBe('unrelated text')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('clears quick reply state when the active conversation is closed', () => {
+    ui$.selectedThread.set('t-4')
+    compose$.composer.set('abc')
+    compose$.quickReplyDraftId.set('draft-1@example.com')
+    compose$.quickReplyDraftSaved.set(true)
+
+    ui$.selectedThread.set('')
+
+    expect(compose$.composer.get()).toBe('')
+    expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
   })
 

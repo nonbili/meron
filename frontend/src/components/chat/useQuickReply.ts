@@ -4,8 +4,6 @@ import {
   cancelQuickReplyDraftSave,
   compose$,
   discardQuickReplyDraftIfEmpty,
-  persistQuickDraft,
-  readQuickDraft,
   saveQuickReplyDraft,
   scheduleQuickReplyDraftSave,
   sendReply,
@@ -43,6 +41,7 @@ export function useQuickReply() {
   const replyFocus = useValue(ui$.replyFocus)
   const lastImagePasteAtRef = useRef(0)
   const lastHydratedThreadRef = useRef('')
+  const suppressNextDraftSaveRef = useRef(false)
   const [sendingReply, setSendingReply] = useState(false)
 
   const handleSendReply = useCallback(async () => {
@@ -71,39 +70,39 @@ export function useQuickReply() {
     textarea?.setSelectionRange(len, len)
   }, [replyFocus])
 
-  // Hydrate the textarea with the per-thread saved draft when the user switches
-  // threads. Runs only on threadId change, not on every composer keystroke — so
-  // the synchronous typing path never has the value yanked out from under it.
-  // The server-side quick-reply draft (quickReplyDraftId/Saved) is reset here
-  // too — any pending debounced save for the outgoing thread is dropped rather
-  // than flushed (mirrors the mobile app's behavior), and the incoming
-  // thread's own saved draft (if its tail message is one) is re-hydrated
-  // separately by hydrateQuickReplyFromTailDraft once its messages load.
+  // Reset quick reply state when the user switches threads. Any pending
+  // debounced save for the outgoing thread is dropped rather than flushed
+  // (mirrors the mobile app's behavior), and the incoming thread's saved draft
+  // (if its tail message is one) is re-hydrated by hydrateQuickReplyFromTailDraft
+  // once its messages load.
   useEffect(() => {
     const previous = lastHydratedThreadRef.current
     if (previous === activeThreadId) return
-    if (previous) {
-      // Flush the about-to-be-replaced text under its real owner thread before
-      // we overwrite `composer` for the new thread.
-      persistQuickDraft(previous, compose$.composer.peek())
-    }
     cancelQuickReplyDraftSave()
     lastHydratedThreadRef.current = activeThreadId
-    const saved = activeThreadId ? readQuickDraft(activeThreadId) : ''
-    compose$.composer.set(saved)
+    suppressNextDraftSaveRef.current = true
+    compose$.composer.set('')
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
   }, [activeThreadId])
 
-  // Persist the current draft on every text change. Keyed on `composer` only
-  // (not `activeThreadId`), and writes against `lastHydratedThreadRef.current`,
-  // so we never persist thread A's text under thread B during a switch.
+  // Save or discard the current quick reply after text changes. Keyed on
+  // `composer` only (not `activeThreadId`), and scheduled against
+  // `lastHydratedThreadRef.current`, so thread-switch resets do not autosave.
   useEffect(() => {
     const owner = lastHydratedThreadRef.current
     if (!owner) return
-    persistQuickDraft(owner, composer)
-    scheduleQuickReplyDraftSave()
-  }, [composer])
+    if (suppressNextDraftSaveRef.current) {
+      suppressNextDraftSaveRef.current = false
+      return
+    }
+    if (!composer.trim() && composerAttachments.length === 0) {
+      cancelQuickReplyDraftSave()
+      void discardQuickReplyDraftIfEmpty()
+    } else {
+      scheduleQuickReplyDraftSave()
+    }
+  }, [composer, composerAttachments.length])
 
   // Attachments are a discrete action rather than a keystroke stream, so save
   // (or discard, if that was the last thing keeping the draft non-empty)

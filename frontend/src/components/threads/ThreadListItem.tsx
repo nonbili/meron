@@ -139,7 +139,7 @@ export function ThreadListItem({
             {unread && bulkSelectable ? (
               <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
             ) : unread ? (
-              <span className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
+              <span className="h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
                 {thread.unread_count ?? 1}
               </span>
             ) : null}

@@ -10,8 +10,10 @@ import {
   copyThreadToFolder,
   deleteThread,
   discardSavedDraftCopy,
+  loadThread,
   mail$,
   markAllRead,
+  markMessagesRead,
   moveThreadToFolder,
 } from './mail'
 import { runToastUndo, settleConfirm, toggleBulkSelection, ui$, type BulkSelectionItem } from './ui'
@@ -100,6 +102,114 @@ describe('markAllRead', () => {
     ])
     expect(calls.filter((call) => call.command === 'mail.folderList').map((call) => call.payload)).toEqual([
       { account_id: 'acc', refresh: false },
+    ])
+  })
+})
+
+describe('thread read state', () => {
+  const calls: { command: string; payload: unknown }[] = []
+
+  beforeEach(() => {
+    calls.length = 0
+    mail$.threads.set([thread({ unread: true, unread_count: 2 })])
+    mail$.messages.set([])
+    mail$.folders.set([{ id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 2 }])
+    mail$.foldersByAccount.set({})
+    mail$.threadLoading.set(false)
+    mail$.messagesCursor.set('')
+    ui$.selectedThread.set('acc:inbox:thread:1')
+    ui$.selectedAccount.set('acc')
+    ui$.selectedFolder.set('inbox')
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            if (command === 'mail.threadRead') {
+              return {
+                messages: [
+                  thread({ id: 'acc:inbox:thread:1#101', unread: true, unread_count: 2 }),
+                  thread({ id: 'acc:inbox:thread:1#102', unread: true, unread_count: 2 }),
+                ],
+                next_cursor: '',
+              }
+            }
+            if (command === 'mail.folderList') {
+              return { folders: [{ id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 1 }] }
+            }
+            return { ok: true }
+          },
+        },
+      },
+    }
+  })
+
+  it('does not mark a full thread read just because it was opened', async () => {
+    await loadThread('acc:inbox:thread:1')
+    await nextTick()
+
+    expect(mail$.threads.get()[0].unread).toBe(true)
+    expect(mail$.threads.get()[0].unread_count).toBe(2)
+    expect(mail$.messages.get().map((message) => message.unread)).toEqual([true, true])
+    expect(mail$.folders.get()[0].unread).toBe(2)
+    expect(calls.some((call) => call.command === 'mail.markRead')).toBe(false)
+  })
+
+  it('clears a stale thread badge when all loaded messages are already read', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') {
+        return {
+          messages: [
+            thread({ id: 'acc:inbox:thread:1#101', unread: false, unread_count: 2 }),
+            thread({ id: 'acc:inbox:thread:1#102', unread: false, unread_count: 2 }),
+          ],
+          next_cursor: '',
+        }
+      }
+      return { ok: true }
+    }
+
+    await loadThread('acc:inbox:thread:1')
+    await nextTick()
+
+    expect(mail$.threads.get()[0].unread).toBe(false)
+    expect(mail$.threads.get()[0].unread_count).toBe(0)
+    expect(mail$.folders.get()[0].unread).toBe(0)
+    expect(calls.some((call) => call.command === 'mail.markRead')).toBe(false)
+  })
+
+  it('keeps the thread badge when unread messages may exist on an older page', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') {
+        return {
+          messages: [thread({ id: 'acc:inbox:thread:1#101', unread: false, unread_count: 2 })],
+          next_cursor: 'date:1:1',
+        }
+      }
+      return { ok: true }
+    }
+
+    await loadThread('acc:inbox:thread:1')
+    await nextTick()
+
+    expect(mail$.threads.get()[0].unread).toBe(true)
+    expect(mail$.threads.get()[0].unread_count).toBe(2)
+    expect(mail$.folders.get()[0].unread).toBe(2)
+    expect(calls.some((call) => call.command === 'mail.markRead')).toBe(false)
+  })
+
+  it('marks only the visible message ids read', async () => {
+    await loadThread('acc:inbox:thread:1')
+    await markMessagesRead('acc:inbox:thread:1', ['acc:inbox:thread:1#101'])
+
+    expect(mail$.threads.get()[0].unread).toBe(true)
+    expect(mail$.threads.get()[0].unread_count).toBe(1)
+    expect(mail$.messages.get().map((message) => message.unread)).toEqual([false, true])
+    expect(mail$.folders.get()[0].unread).toBe(1)
+    expect(calls.filter((call) => call.command === 'mail.markRead').map((call) => call.payload)).toEqual([
+      { thread_id: 'acc:inbox:thread:1', message_ids: ['acc:inbox:thread:1#101'] },
     ])
   })
 })
@@ -342,6 +452,39 @@ describe('deleteThread', () => {
     })
     expect(calls.some((call) => call.command === 'mail.delete')).toBe(false)
     expect(ui$.toast.get()).toBe('')
+  })
+
+  it('clears the thread draft badge when the quick reply draft is discarded', async () => {
+    const inboxThread = thread({
+      has_draft: true,
+      preview: 'test',
+    })
+    const inboxMessage = thread({
+      id: 'acc:inbox:thread:1#101',
+      folder_id: 'inbox',
+      message_id: 'root@example.com',
+    })
+    const draftMessage = thread({
+      id: 'acc:Drafts:thread:1#201',
+      folder_id: 'Drafts',
+      message_id: 'draft-id@example.com',
+      body: 'test',
+    })
+    mail$.threads.set([inboxThread])
+    mail$.messages.set([inboxMessage, draftMessage])
+    responses['mail.discardDraft'] = { ok: true, deleted: 1, permanent: true }
+    responses['mail.threadList'] = { threads: [{ ...inboxThread, has_draft: true }] }
+
+    await discardSavedDraftCopy({
+      threadId: 'acc:inbox:thread:1',
+      messageId: '',
+      folderId: '',
+      accountId: 'acc',
+      draftMessageId: 'draft-id@example.com',
+    })
+
+    expect(mail$.messages.get()).toEqual([inboxMessage])
+    expect(mail$.threads.get()[0]).toMatchObject({ has_draft: false, preview: 'test' })
   })
 })
 

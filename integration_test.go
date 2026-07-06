@@ -329,6 +329,84 @@ func TestIntegrationMailFlow(t *testing.T) {
 		})
 	})
 
+	t.Run("quick reply draft lifecycle", func(t *testing.T) {
+		// The quick reply saves a *reply* draft: it must thread into the
+		// conversation it answers (that is what the frontend hydrates the box
+		// from), and discard_draft with a thread_key must scrub it from the
+		// thread so a cleared reply cannot resurface on the next thread open.
+		quickSubject := "Meron integration quick reply " + nonce
+		quickMessageID := fmt.Sprintf("itest-qr-%s@maddy.test", nonce)
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    quickSubject,
+			"body":       "please reply inline",
+			"message_id": quickMessageID,
+		}); err != nil {
+			t.Fatalf("send quick reply fixture: %v", err)
+		}
+		original := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == quickSubject
+		})
+		threadKey := str(original, "thread_key")
+		if threadKey == "" {
+			t.Fatalf("quick reply fixture has empty thread_key: %v", original)
+		}
+
+		// Same Message-ID shape the frontend mints (newDraftMessageId): the
+		// store-side thread cleanup only targets meron-draft-*@meron ids.
+		draftID := fmt.Sprintf("meron-draft-%s-itest@meron", nonce)
+		draftSubject := "Re: " + quickSubject
+		if _, err := sidecar.Call("save_draft", map[string]any{
+			"account":     "bob",
+			"to":          "alice@maddy.test",
+			"subject":     draftSubject,
+			"body":        "quick reply draft body",
+			"in_reply_to": quickMessageID,
+			"references":  quickMessageID,
+			"draft_id":    draftID,
+		}); err != nil {
+			t.Fatalf("save_draft: %v", err)
+		}
+
+		draft := pollFolder(t, sidecar, "bob", "Drafts", func(m map[string]any) bool {
+			return str(m, "subject") == draftSubject
+		})
+		if got := str(draft, "thread_key"); got != threadKey {
+			t.Fatalf("reply draft thread_key = %q, want %q (draft would not hydrate into its thread)", got, threadKey)
+		}
+		thread := callMap(t, sidecar, "messages.thread", map[string]any{
+			"account":    "bob",
+			"folder":     "INBOX",
+			"thread_key": threadKey,
+		})
+		if !threadContainsSubject(thread, draftSubject) {
+			t.Fatalf("messages.thread does not include the reply draft: %v", thread)
+		}
+
+		if _, err := sidecar.Call("discard_draft", map[string]any{
+			"account":    "bob",
+			"draft_id":   draftID,
+			"thread_key": threadKey,
+		}); err != nil {
+			t.Fatalf("discard_draft: %v", err)
+		}
+		assertNoMessageInFolder(t, sidecar, "bob", "Drafts", func(m map[string]any) bool {
+			return str(m, "subject") == draftSubject
+		})
+		thread = callMap(t, sidecar, "messages.thread", map[string]any{
+			"account":    "bob",
+			"folder":     "INBOX",
+			"thread_key": threadKey,
+		})
+		if threadContainsSubject(thread, draftSubject) {
+			t.Fatalf("discarded reply draft still in messages.thread: %v", thread)
+		}
+		if !threadContainsSubject(thread, quickSubject) {
+			t.Fatalf("original message missing from thread after draft discard: %v", thread)
+		}
+	})
+
 	t.Run("attachments", func(t *testing.T) {
 		attachmentSubject := "Meron integration attachment " + nonce
 		attachmentBody := "attachment body " + nonce
@@ -689,6 +767,23 @@ func foldersContain(result map[string]any, name string) bool {
 func threadLength(result map[string]any) int {
 	messages, _ := result["messages"].([]any)
 	return len(messages)
+}
+
+// messages.thread rows are wrappers ({folder, uid, message: {...}}), unlike the
+// flat rows messages.recent returns.
+func threadContainsSubject(result map[string]any, subject string) bool {
+	rows, _ := result["messages"].([]any)
+	for _, row := range rows {
+		wrapper, ok := row.(map[string]any)
+		if !ok {
+			continue
+		}
+		message, ok := wrapper["message"].(map[string]any)
+		if ok && str(message, "subject") == subject {
+			return true
+		}
+	}
+	return false
 }
 
 func messagesContainSubject(result map[string]any, subject string) bool {
