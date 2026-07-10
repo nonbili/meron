@@ -8,11 +8,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.LocaleList
 import android.provider.OpenableColumns
+import android.util.Base64
 import jp.nonbili.meron.shared.ComposeDraft
+import jp.nonbili.meron.shared.DraftAttachment
 import jp.nonbili.meron.shared.isOAuthCallbackUrl
 import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.parseMailtoUrl
 import java.util.Locale
+import java.util.UUID
 
 private const val APP_PREFS = "meron_app"
 private const val APP_LANGUAGE_PREF = "app_language"
@@ -85,6 +88,56 @@ internal fun Intent.toMailtoDraft(): ComposeDraft? {
     if (action != Intent.ACTION_SENDTO && action != Intent.ACTION_VIEW) return null
     return parseMailtoUrl(uri)
 }
+
+internal fun Intent.toSharedComposeDraft(context: Context): ComposeDraft? {
+    val mailtoDraft = toMailtoDraft()
+    if (mailtoDraft != null) return mailtoDraft
+    if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return null
+
+    val subject = getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+    val text =
+        getCharSequenceExtra(Intent.EXTRA_TEXT)
+            ?.toString()
+            ?: getStringExtra(Intent.EXTRA_HTML_TEXT).orEmpty()
+    val attachments = streamUris().mapNotNull { it.toDraftAttachment(context, type) }
+    if (subject.isBlank() && text.isBlank() && attachments.isEmpty()) return null
+
+    return ComposeDraft(subject = subject, body = text, attachments = attachments)
+}
+
+@Suppress("DEPRECATION")
+private fun Intent.streamUris(): List<Uri> {
+    val uris = mutableListOf<Uri>()
+    getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
+    getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
+    val clip = clipData
+    if (clip != null) {
+        for (index in 0 until clip.itemCount) {
+            clip.getItemAt(index).uri?.let { uris += it }
+        }
+    }
+    return uris.distinctBy { it.toString() }
+}
+
+private fun Uri.toDraftAttachment(
+    context: Context,
+    intentMimeType: String?,
+): DraftAttachment? =
+    runCatching {
+        val bytes = context.contentResolver.openInputStream(this)?.use { it.readBytes() } ?: return null
+        val mimeType =
+            context.contentResolver.getType(this)
+                ?: intentMimeType?.takeUnless { it == "*/*" }
+                ?: "application/octet-stream"
+        val displayName = context.displayNameFor(this)
+        DraftAttachment(
+            id = UUID.randomUUID().toString(),
+            displayName = displayName,
+            mimeType = mimeType,
+            sizeBytes = bytes.size.toLong(),
+            dataBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+        )
+    }.getOrNull()
 
 internal fun Intent.toOAuthCallbackUrl(): String? {
     val uri = data?.toString() ?: return null

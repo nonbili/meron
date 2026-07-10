@@ -622,9 +622,10 @@ private fun MeronMobileScreenContent(
                 bcc = draft.bcc
                 subject = draft.subject
                 body = draft.body
+                attachments = draft.attachments
                 composeReturnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
                 screen = Screen.Compose
-                status = "Loaded compose draft from mailto link"
+                status = "Loaded compose draft"
             }
         }
 

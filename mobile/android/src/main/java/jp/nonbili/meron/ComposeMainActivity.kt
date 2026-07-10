@@ -281,7 +281,7 @@ class ComposeMainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        incomingMailtoDraft = intent.toMailtoDraft()
+        incomingMailtoDraft = intent.toSharedComposeDraft(this)
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
         AndroidNotificationService.ensureChannels(this)
@@ -344,7 +344,7 @@ class ComposeMainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        incomingMailtoDraft = intent.toMailtoDraft()
+        incomingMailtoDraft = intent.toSharedComposeDraft(this)
         incomingOAuthCallbackUrl = intent.toOAuthCallbackUrl()
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
     }
