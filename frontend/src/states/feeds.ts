@@ -39,7 +39,10 @@ export async function removeFeed(threadId: string) {
     }
     ui$.editFeed.set(null)
     showToast('Feed removed')
-    await Promise.all([loadThreads(false), loadFolders(ui$.selectedAccount.get(), false)])
+    // A feed removal is an explicit list mutation, so replace the current list.
+    // Background loads merge missing first-page rows back in to preserve pages
+    // loaded by scrolling, which would keep the removed feed visible.
+    await Promise.all([loadThreads(true), loadFolders(ui$.selectedAccount.get(), false)])
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Failed to remove feed', 'error')
   }
