@@ -188,7 +188,8 @@ internal fun kanbanColumnUnreadCount(
             .filter { it.includedInUnified }
             .sumOf { account -> folderUnread(foldersByAccount[account.id], column.folderId) }
     }
-    return folderUnread(foldersByAccount[column.accountId], column.folderId).takeIf { it > 0 } ?: loadedUnreadCount(loadedThreads)
+    val folders = foldersByAccount[column.accountId] ?: return loadedUnreadCount(loadedThreads)
+    return folderUnread(folders, column.folderId)
 }
 
 internal fun columnTitle(

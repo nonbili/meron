@@ -61,6 +61,24 @@ class UnreadCountHelpersTest {
     }
 
     @Test
+    fun kanbanColumnUnreadTrustsGenuineZeroFolderTotal() {
+        val foldersByAccount =
+            mapOf(
+                "acc1" to listOf(FolderSummary(accountId = "acc1", name = "INBOX", unread = 0)),
+            )
+
+        val count =
+            kanbanColumnUnreadCount(
+                column = KanbanColumnSpec(accountId = "acc1", folderId = "inbox"),
+                foldersByAccount = foldersByAccount,
+                accounts = listOf(account("acc1")),
+                loadedThreads = listOf(thread("t1", unread = true)),
+            )
+
+        assertEquals(0, count)
+    }
+
+    @Test
     fun kanbanColumnUnreadFallsBackToLoadedStarredItems() {
         val count =
             kanbanColumnUnreadCount(
