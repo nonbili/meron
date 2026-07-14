@@ -357,6 +357,18 @@ describe('kanbanColumnUnreadCount', () => {
     ).toBe(70)
   })
 
+  it('trusts a genuinely-zero folder total instead of a stale loaded thread count', () => {
+    const foldersByAccount = {
+      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 0 } as Folder],
+    }
+
+    expect(
+      kanbanColumnUnreadCount({ accountId: 'acc1', folderId: 'inbox' }, foldersByAccount, [account('acc1')], [
+        message({ unread: true, unread_count: 1 }),
+      ]),
+    ).toBe(0)
+  })
+
   it('falls back to loaded unread message totals when no folder total exists', () => {
     expect(
       kanbanColumnUnreadCount(

@@ -131,8 +131,9 @@ export function kanbanColumnUnreadCount(
       0,
     )
   }
-  const fromFolders = folderUnread(foldersByAccount[column.accountId], column.folderId)
-  return fromFolders || loadedUnreadCount(loadedThreads)
+  const folders = foldersByAccount[column.accountId]
+  if (!folders) return loadedUnreadCount(loadedThreads)
+  return folderUnread(folders, column.folderId)
 }
 
 type ColumnPage = {

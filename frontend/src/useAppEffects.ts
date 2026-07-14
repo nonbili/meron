@@ -75,6 +75,21 @@ export function useAppEffects() {
   }, [showUnreadBadge, accounts])
 
   useEffect(() => {
+    // Safety net: event-driven refreshes (refreshFoldersAfterFlagChange,
+    // mail.synced/newMessages handlers below) can each individually miss an
+    // account if their one-shot refreshAccountFoldersCache call fails silently.
+    // Periodically re-seed every account's folder cache so a missed refresh
+    // self-heals within one interval instead of leaving a badge stuck stale.
+    if (!showUnreadBadge) return
+    const timer = window.setInterval(() => {
+      for (const account of accounts) {
+        void refreshAccountFoldersCache(account.id, false)
+      }
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [showUnreadBadge, accounts])
+
+  useEffect(() => {
     if (startupSyncDone.current || accounts.length === 0) return
     startupSyncDone.current = true
     for (const account of accounts) {

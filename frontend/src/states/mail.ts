@@ -352,7 +352,8 @@ export async function refreshAccountFoldersCache(accountId: string, refresh = fa
     const folders = result.folders || []
     mail$.foldersByAccount[accountId].set(folders)
     return folders
-  } catch {
+  } catch (error) {
+    console.error('refreshAccountFoldersCache failed:', error)
     return []
   }
 }

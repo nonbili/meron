@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -251,6 +252,90 @@ func TestIntegrationMailFlow(t *testing.T) {
 		})
 		if !boolValue(moved, "seen") || !boolValue(moved, "starred") {
 			t.Fatalf("moved message lost flags: %v", moved)
+		}
+	})
+
+	t.Run("failed imap write does not falsely mark read locally", func(t *testing.T) {
+		// Regression test: messages.markRead/markStarred/markAllRead must not
+		// commit the local "seen"/"starred" state when the IMAP STORE itself
+		// fails (dropped connection, offline, etc) — otherwise the local store
+		// and every unread badge built on it silently drift from server truth.
+		flagFailSubject := "Meron integration flagfail " + nonce
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@maddy.test",
+			"subject":    flagFailSubject,
+			"body":       "should stay unread after a failed write",
+			"message_id": fmt.Sprintf("itest-flagfail-%s@maddy.test", nonce),
+		}); err != nil {
+			t.Fatalf("send flagfail fixture: %v", err)
+		}
+		message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == flagFailSubject
+		})
+		uid := num(message, "uid")
+		if uid == 0 {
+			t.Fatalf("delivered flagfail fixture has no uid: %v", message)
+		}
+
+		docker := dockerBin(t)
+		network := runCmd(t, docker, "inspect", "-f", "{{range $net,$v := .NetworkSettings.Networks}}{{$net}}{{end}}", server.container)
+		if network == "" {
+			t.Skip("could not determine container network; skipping simulated IMAP outage")
+		}
+
+		runCmd(t, docker, "network", "disconnect", network, server.container)
+		reconnected := false
+		reconnect := func() {
+			if reconnected {
+				return
+			}
+			reconnected = true
+			if out, err := exec.Command(docker, "network", "connect", network, server.container).CombinedOutput(); err != nil {
+				t.Logf("docker network connect %s %s: %v\n%s", network, server.container, err, out)
+			}
+			waitForIMAPGreeting(t, server.imapPort, docker, server.container)
+			// with_write_session doesn't retry a stale pooled connection (only
+			// reads do), so both accounts can be left holding a dead socket from
+			// the outage above. Pause/resume forces the engine to drop pooled
+			// sessions, so later subtests in this shared run don't inherit them.
+			for _, account := range []string{"alice", "bob"} {
+				callMap(t, sidecar, "account.setPaused", map[string]any{"account": account, "enabled": true})
+				callMap(t, sidecar, "account.setPaused", map[string]any{"account": account, "enabled": false})
+			}
+		}
+		defer reconnect()
+
+		if _, err := sidecar.Call("messages.markRead", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+			"seen":    true,
+		}); err == nil {
+			t.Fatalf("messages.markRead succeeded despite a severed IMAP connection")
+		}
+
+		reconnect()
+
+		stillUnread := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == flagFailSubject
+		})
+		if boolValue(stillUnread, "seen") {
+			t.Fatalf("message was marked seen locally despite the IMAP write having failed: %v", stillUnread)
+		}
+
+		// A retry once connectivity is restored should succeed normally.
+		callMap(t, sidecar, "messages.markRead", map[string]any{
+			"account": "bob",
+			"folder":  "INBOX",
+			"uid":     uid,
+			"seen":    true,
+		})
+		updated := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == flagFailSubject && boolValue(m, "seen")
+		})
+		if num(updated, "uid") != uid {
+			t.Fatalf("flagged message uid = %d, want %d", num(updated, "uid"), uid)
 		}
 	})
 

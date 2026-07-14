@@ -1609,13 +1609,13 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             if !uids.is_empty() {
-                let _ = engine
+                engine
                     .with_write_session(&account, |session| {
                         let folder = folder.clone();
                         let uids = uids.clone();
                         Box::pin(async move { imap::set_seen(session, &folder, &uids, seen).await })
                     })
-                    .await;
+                    .await?;
             }
 
             {
@@ -1674,7 +1674,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             if !uids.is_empty() {
-                let _ = engine
+                engine
                     .with_write_session(&account, |session| {
                         let folder = folder.clone();
                         let uids = uids.clone();
@@ -1682,7 +1682,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                             imap::set_starred(session, &folder, &uids, starred).await
                         })
                     })
-                    .await;
+                    .await?;
             }
 
             {
@@ -1975,13 +1975,13 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             if !uids.is_empty() {
-                let _ = engine
+                engine
                     .with_write_session(&account, |session| {
                         let folder = folder.clone();
                         let uids = uids.clone();
                         Box::pin(async move { imap::set_seen(session, &folder, &uids, true).await })
                     })
-                    .await;
+                    .await?;
             }
 
             {
