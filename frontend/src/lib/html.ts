@@ -1,3 +1,20 @@
+/** Rewrite `cid:<inlineId>` image refs to `data:` URLs from the matching
+ * composer attachments. Used for locally-rendered copies of an outgoing
+ * message (the optimistic sent bubble/reader): they never went through the
+ * backend's cid-to-`/media/<key>` rewrite, so without this the reader has no
+ * way to resolve the refs and shows broken images. */
+export function resolveInlineCids(
+  html: string,
+  attachments: Array<{ inlineId?: string; mime: string; data: string }>,
+): string {
+  let out = html
+  for (const attachment of attachments) {
+    if (!attachment.inlineId) continue
+    out = out.split(`cid:${attachment.inlineId}`).join(`data:${attachment.mime};base64,${attachment.data}`)
+  }
+  return out
+}
+
 /** Derive a plaintext fallback from rich-text HTML while preserving visible line breaks. */
 export function htmlToText(html: string): string {
   const div = document.createElement('div')
@@ -49,8 +66,15 @@ export function htmlToText(html: string): string {
       return
     }
     if (node.tagName === 'IMG') {
+      // Composer inline images are block-level, so put the alt (the image's
+      // filename) on its own paragraph rather than gluing it to the text
+      // before/after the image.
       const alt = node.getAttribute('alt')?.trim()
-      if (alt) out += alt
+      if (alt) {
+        appendNewlines(2)
+        out += alt
+        appendNewlines(2)
+      }
       return
     }
 

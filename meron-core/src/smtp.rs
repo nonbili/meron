@@ -424,4 +424,65 @@ mod tests {
             "wire copy must not leak Bcc: {wire}"
         );
     }
+
+    #[test]
+    fn inline_image_send_parses_back_with_media_refs() {
+        // Full send-side/receive-side roundtrip for composer inline images:
+        // the built MIME's `cid:` refs must come back from parse_message with
+        // every `cid:` rewritten to the served `/media/<key>` path, so a
+        // message sent from Meron renders its inline images in Meron too.
+        use base64::Engine as _;
+        let atts = vec![
+            super::AttachmentInput {
+                filename: "pasted-image-1.png".into(),
+                mime: "image/png".into(),
+                data: base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]),
+                inline_id: "meron-image-1784002518563-a1b2c3d@meron".into(),
+            },
+            super::AttachmentInput {
+                filename: "pasted-image-2.png".into(),
+                mime: "image/png".into(),
+                data: base64::engine::general_purpose::STANDARD.encode([9u8, 8, 7]),
+                inline_id: "meron-image-1784002609378-x9y8z7w@meron".into(),
+            },
+        ];
+        let html = r#"<p>one</p><img src="cid:meron-image-1784002518563-a1b2c3d@meron" alt="pasted-image-1.png"><p>two</p><img src="cid:meron-image-1784002609378-x9y8z7w@meron" alt="pasted-image-2.png"><p>bye</p>"#;
+        let raw = build_message(
+            "Alice",
+            "alice@x.com",
+            "bob@y.com",
+            "",
+            "",
+            false,
+            "Subject",
+            "plain fallback",
+            html,
+            &atts,
+            "",
+            "",
+            "",
+            "",
+        )
+        .expect("build_message");
+
+        let root =
+            std::env::temp_dir().join(format!("meron-inline-roundtrip-{}", std::process::id()));
+        let ctx = crate::parse::MediaCtx {
+            root: root.clone(),
+            account: "acct".into(),
+            folder: "Sent".into(),
+            uid: 1,
+        };
+        let msg = crate::parse::parse_message(&raw, Some(&ctx));
+        let _ = std::fs::remove_dir_all(&root);
+
+        let html_out = msg.body_html.expect("html kept");
+        assert!(
+            !html_out.contains("cid:"),
+            "unrewritten cid ref: {html_out}"
+        );
+        assert!(html_out.contains("/media/acct/Sent/1/0.png"), "{html_out}");
+        assert!(html_out.contains("/media/acct/Sent/1/1.png"), "{html_out}");
+        assert_eq!(msg.attachments.len(), 2);
+    }
 }

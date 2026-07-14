@@ -5,7 +5,7 @@ import { ui$, showToast } from './ui'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { mail$, getActiveThread, isDraftFolder, loadThread, discardSavedDraftCopy } from './mail'
 import { LOCAL_SEND_PREFIX, type PendingSend, setPendingSend, getPendingSend, discardPendingSend } from './pendingSends'
-import { htmlToText } from '../lib/html'
+import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
 import { splitAddressList, bareAddr } from '../lib/address'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
@@ -966,7 +966,9 @@ export function appendSentMessage(args: {
   if (!activeT || activeT.thread_id !== args.threadId) return
 
   const account = accounts$.get().find((acc) => acc.id === args.accountId)
-  const html = args.rich ? args.content : ''
+  // The content still carries `cid:` refs (what actually went out on the wire);
+  // resolve them against the attachment bytes so this local copy renders.
+  const html = args.rich ? resolveInlineCids(args.content, args.attachments) : ''
   const body = args.rich ? htmlToText(args.content) : args.content
   const sent: Message = {
     id: `${LOCAL_SEND_PREFIX}${Date.now()}`,
