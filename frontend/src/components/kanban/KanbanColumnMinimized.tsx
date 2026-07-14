@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Pause } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -49,6 +49,23 @@ export function KanbanColumnMinimized({
   const columnAccount = column.accountId !== 'unified' ? accounts.find((a) => a.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
   const isPaused = !!columnAccount?.paused
+  const label = folderLabel(column, labelFolders, accounts)
+
+  // WebKitGTK (Wails on Linux) can mis-measure the intrinsic size of vertical-rl
+  // text on first layout and never re-measure, clipping the label to a couple of
+  // characters. Measure the text horizontally instead (via the hidden span below)
+  // and set the vertical label's height explicitly.
+  const measureRef = useRef<HTMLSpanElement | null>(null)
+  const [labelHeight, setLabelHeight] = useState<number>()
+  useLayoutEffect(() => {
+    const el = measureRef.current
+    if (!el) return
+    const update = () => setLabelHeight(el.offsetWidth)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <section
@@ -84,11 +101,14 @@ export function KanbanColumnMinimized({
           </span>
         )}
       </div>
+      <span ref={measureRef} aria-hidden className="invisible absolute whitespace-nowrap text-xs font-bold">
+        {label}
+      </span>
       <div
         className={clsx('min-h-0 truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}
-        style={{ writingMode: 'vertical-rl' }}
+        style={{ writingMode: 'vertical-rl', height: labelHeight }}
       >
-        {folderLabel(column, labelFolders, accounts)}
+        {label}
       </div>
       {unreadCount > 0 && (
         <div className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
