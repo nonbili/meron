@@ -602,8 +602,8 @@ internal fun EmptyState(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     text: String,
-    actionLabel: String,
-    onAction: () -> Unit,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
@@ -615,8 +615,10 @@ internal fun EmptyState(
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(20.dp))
-        Button(onClick = onAction) { Text(actionLabel) }
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = onAction) { Text(actionLabel) }
+        }
     }
 }
 

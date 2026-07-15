@@ -372,6 +372,7 @@ internal fun MailList(
     showAccountBadge: Boolean,
 ) {
     val listState = rememberLazyListState()
+    var pendingFeedRemoval by remember { mutableStateOf<ThreadSummary?>(null) }
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     // Read the list through rememberUpdatedState so the derivation tracks the
     // current page count; a keyless remember would freeze the first list's size
@@ -388,6 +389,26 @@ internal fun MailList(
     }
     LaunchedEffect(nearBottom, canLoadMore, loadingMore) {
         if (nearBottom && canLoadMore && !loadingMore) onLoadMore(false)
+    }
+    pendingFeedRemoval?.let { thread ->
+        AlertDialog(
+            onDismissRequest = { pendingFeedRemoval = null },
+            title = { Text(tr("feeds.actions.confirmDelete")) },
+            text = { Text(tr("feeds.deleteHint")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingFeedRemoval = null
+                        onArchive(thread)
+                    },
+                ) {
+                    Text(tr("buttons.delete"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingFeedRemoval = null }) { Text(tr("buttons.cancel")) }
+            },
+        )
     }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
         items(threads, key = { it.id }) { thread ->
@@ -409,6 +430,7 @@ internal fun MailList(
                         },
                 )
             } else {
+                val isRss = threadIdIsRss(thread.id)
                 val dismissState = rememberSwipeToDismissBoxState()
                 var dismissHandled by remember(thread.id) { mutableStateOf(false) }
                 LaunchedEffect(dismissState.currentValue) {
@@ -423,18 +445,18 @@ internal fun MailList(
                         SwipeToDismissBoxValue.EndToStart -> {
                             dismissHandled = true
                             dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            onDelete(thread)
+                            if (isRss) pendingFeedRemoval = thread else onDelete(thread)
                         }
 
                         SwipeToDismissBoxValue.Settled -> {
-                            Unit
+                            dismissHandled = false
                         }
                     }
                 }
                 SwipeToDismissBox(
                     state = dismissState,
+                    enableDismissFromStartToEnd = !isRss,
                     backgroundContent = {
-                        val isRss = threadIdIsRss(thread.id)
                         val direction = dismissState.dismissDirection
                         val deleting = direction == SwipeToDismissBoxValue.EndToStart
                         Box(

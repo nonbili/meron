@@ -1062,8 +1062,8 @@ internal fun MailRouteContent(
                                         } else {
                                             tr("empty.adjustSearchFilter")
                                         },
-                                    actionLabel = if (selectedAccountIsRss) tr("feeds.actions.syncFeeds") else tr("mobile.mail.syncMailbox"),
-                                    onAction = ::syncCoreThreads,
+                                    actionLabel = if (selectedAccountIsRss) null else tr("mobile.mail.syncMailbox"),
+                                    onAction = if (selectedAccountIsRss) null else ({ syncCoreThreads() }),
                                 )
                             }
 

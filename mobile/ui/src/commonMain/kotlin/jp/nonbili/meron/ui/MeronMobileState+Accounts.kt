@@ -456,11 +456,15 @@ internal fun MeronMobileState.addRssAccount() {
             rssAccountAdding = false
             val parsedNew = parseAccountListResponse(json)
             val oldIds = coreAccounts.map { it.id }.toSet()
-            val newRssAccount = parsedNew.firstOrNull { it.id !in oldIds && it.engine == "rss" }
-            applyAccounts(json)
+            val newRssAccount = parsedNew.firstOrNull { it.id !in oldIds && accountSummaryIsRss(it) }
             if (newRssAccount != null) {
-                selectedCoreAccountId = newRssAccount.id
+                // Switch away from Unified before publishing the refreshed account
+                // list, so effects observing coreAccounts load the new RSS mailbox.
+                selectCoreMailbox(newRssAccount.id, INBOX_FOLDER)
             }
+            applyAccounts(json)
+            rssDisplayName = ""
+            rssFeedUrl = ""
             screen = Screen.Mail
             status = "RSS account added"
             // account.addRss already fetched and stored the starter feed's items,
@@ -475,6 +479,24 @@ internal fun MeronMobileState.addRssAccount() {
             rssAccountAdding = false
             status = "Add RSS failed: ${it.message}"
         }
+    }
+}
+
+internal fun nextRssAccountDisplayName(accounts: List<AccountSummary>): String {
+    val names =
+        accounts
+            .filter(::accountSummaryIsRss)
+            .map {
+                it.displayName
+                    .ifBlank { it.email }
+                    .trim()
+                    .lowercase()
+            }.toSet()
+    var suffix = 0
+    while (true) {
+        val candidate = if (suffix == 0) "RSS" else "RSS$suffix"
+        if (candidate.lowercase() !in names) return candidate
+        suffix += 1
     }
 }
 

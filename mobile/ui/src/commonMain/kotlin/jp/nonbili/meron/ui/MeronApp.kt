@@ -897,6 +897,11 @@ private fun MeronMobileScreenContent(
             }
 
             composable(AppRoutes.AddAccount) {
+                LaunchedEffect(Unit) {
+                    if (rssDisplayName.isBlank()) {
+                        rssDisplayName = nextRssAccountDisplayName(coreAccounts)
+                    }
+                }
                 AddAccountScreen(
                     onBack = popAppBack,
                     initialSection = addSection,

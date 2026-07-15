@@ -1087,6 +1087,7 @@ internal fun MeronMobileState.runCoreThreadAction(
     update: (List<ThreadSummary>) -> List<ThreadSummary>,
     undoMessage: String? = null,
     onUndo: ((String) -> Unit)? = null,
+    afterSuccess: (() -> Unit)? = null,
 ) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
@@ -1108,6 +1109,7 @@ internal fun MeronMobileState.runCoreThreadAction(
         }.onSuccess { response ->
             if (undoMessage == null || onUndo == null) status = "$label complete"
             committed.complete(response)
+            afterSuccess?.invoke()
         }.onFailure {
             Log.w("Mail", "$label failed", it)
             coreThreads = threadsBefore
@@ -1488,6 +1490,14 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
             label = "Remove feed",
             action = { removeRssFeed(RemoveRssFeedParams(threadId = thread.id)) },
             update = { threads -> threads.filterNot { it.id == thread.id } },
+            afterSuccess = {
+                syncCoreThreads(
+                    accountOverride = thread.accountId,
+                    folderOverride = INBOX_FOLDER,
+                    syncFirst = false,
+                    successStatus = "Feed removed",
+                )
+            },
         )
     } else {
         val threadsSnapshot = coreThreads
