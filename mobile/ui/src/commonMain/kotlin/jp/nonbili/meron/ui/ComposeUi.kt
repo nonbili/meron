@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -104,7 +105,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -224,6 +227,7 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
+import jp.nonbili.meron.shared.splitRecipientEntries
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
@@ -301,6 +305,7 @@ internal fun ComposeScreen(
     onDiscardDraft: () -> Unit,
     onSend: () -> Unit,
     onBack: () -> Unit,
+    sending: Boolean = false,
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
     var overflowOpen by remember { mutableStateOf(false) }
@@ -372,7 +377,7 @@ internal fun ComposeScreen(
                     IconButton(onClick = onAttach) {
                         Icon(Icons.Filled.AttachFile, contentDescription = tr("composer.actions.attachFiles"))
                     }
-                    val sendEnabled = to.isNotBlank()
+                    val sendEnabled = to.isNotBlank() && !sending
                     IconButton(onClick = onSend, enabled = sendEnabled) {
                         Icon(
                             Icons.AutoMirrored.Filled.Send,
@@ -581,7 +586,9 @@ internal fun ComposeScreen(
 
 internal fun parseRecipients(value: String): Pair<List<String>, String> {
     if (value.isEmpty()) return Pair(emptyList(), "")
-    val parts = value.split(",")
+    // Quote/bracket-aware split so a quoted display name ("Doe, Jane" <j@x>)
+    // stays one recipient instead of becoming two chips.
+    val parts = splitRecipientEntries(value)
     if (parts.size <= 1) {
         return Pair(emptyList(), value)
     }
@@ -616,7 +623,16 @@ private fun getAvatarColor(identifier: String): Color {
 internal fun parseEmailRecipient(recipient: String): Pair<String, String> {
     val trimmed = recipient.trim()
     if (trimmed.contains("<") && trimmed.endsWith(">")) {
-        val name = trimmed.substringBefore("<").trim()
+        // Strip the quotes a quoted display name carries so the chip shows
+        // `Doe, Jane`, not `"Doe, Jane"`.
+        val name =
+            trimmed
+                .substringBefore("<")
+                .trim()
+                .removeSurrounding("\"")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .trim()
         val email = trimmed.substringAfter("<").removeSuffix(">").trim()
         return Pair(name, email)
     }
@@ -812,6 +828,7 @@ internal fun RecipientChipsInput(
 ) {
     val (completed, activeInput) = remember(value) { parseRecipients(value) }
     var initialized by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
 
     // Maintain local TextFieldValue state for correct cursor positioning
     var activeInputState by remember { mutableStateOf(TextFieldValue("")) }
@@ -840,9 +857,14 @@ internal fun RecipientChipsInput(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { focusRequester.requestFocus() }
                 .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
     ) {
         completed.forEach { recipient ->
             RecipientChip(
@@ -867,8 +889,11 @@ internal fun RecipientChipsInput(
                 activeInputState = newActiveState
 
                 val newActiveText = newActiveState.text
+                // Don't treat a comma inside an unfinished quoted name
+                // ("Doe,) as a commit — wait for the closing quote.
+                val quotesBalanced = newActiveText.count { it == '"' } % 2 == 0
                 val committedValue =
-                    if (newActiveText.endsWith(",")) {
+                    if (newActiveText.endsWith(",") && quotesBalanced) {
                         val cleaned = newActiveText.removeSuffix(",").trim()
                         if (cleaned.isNotEmpty()) {
                             (completed + cleaned).joinToString(", ") + ", "
@@ -890,6 +915,7 @@ internal fun RecipientChipsInput(
                 Modifier
                     .widthIn(min = 120.dp)
                     .align(Alignment.CenterVertically)
+                    .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
                             onChange((completed + activeInput.trim()).joinToString(", ") + ", ")
