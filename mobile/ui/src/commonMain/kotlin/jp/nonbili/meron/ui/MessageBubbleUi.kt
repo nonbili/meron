@@ -59,6 +59,7 @@ internal fun MessageBubble(
     searchQuery: String,
     activeSearchMatch: Boolean,
     actionsEnabled: Boolean,
+    showSubject: Boolean,
     onForward: (MessageBody) -> Unit,
     onEditAsNew: (MessageBody) -> Unit,
     onOpenDraft: (MessageBody) -> Unit,
@@ -241,6 +242,15 @@ internal fun MessageBubble(
                         }
                     }
                 }
+            }
+            if (showSubject && message.subject.isNotBlank()) {
+                Text(
+                    text = highlightedMessageText(message.subject, searchQuery, activeSearchMatch),
+                    color = textColor,
+                    fontSize = 16.sp,
+                    lineHeight = 21.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
                 HtmlMessageBody(

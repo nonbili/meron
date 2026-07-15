@@ -936,6 +936,7 @@ private fun MeronMobileScreenContent(
                     onRssFeedUrlChange = { rssFeedUrl = it },
                     rssDisplayName = rssDisplayName,
                     onRssDisplayNameChange = { rssDisplayName = it },
+                    rssAccountAdding = rssAccountAdding,
                     onAddRss = ::addRssAccount,
                 )
             }
@@ -1140,9 +1141,19 @@ private fun MeronMobileScreenContent(
         if (showAddFeedDialog) {
             AddFeedDialog(
                 url = addFeedUrl,
-                onUrlChange = { addFeedUrl = it },
+                onUrlChange = {
+                    addFeedUrl = it
+                    addFeedError = ""
+                },
+                error = addFeedError,
+                submitting = addFeedSubmitting,
                 onAdd = ::addFeedToSelectedRssAccount,
-                onDismiss = { showAddFeedDialog = false },
+                onDismiss = {
+                    if (!addFeedSubmitting) {
+                        showAddFeedDialog = false
+                        addFeedError = ""
+                    }
+                },
             )
         }
 

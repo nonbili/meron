@@ -318,6 +318,7 @@ internal fun MeronMobileState.syncCoreThreads(
     accountOverride: String? = null,
     folderOverride: String? = null,
     syncFirst: Boolean = true,
+    successStatus: String? = null,
 ) {
     if (!coreLoaded) {
         status = "Rust core not packaged."
@@ -440,7 +441,7 @@ internal fun MeronMobileState.syncCoreThreads(
             initialThreadsLoaded = true
             errorBanner = null
             val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
-            status = if (newCount > 0) "$newCount new message(s)" else ""
+            status = successStatus ?: if (newCount > 0) "$newCount new message(s)" else ""
             Log.i(
                 "MailLoad",
                 "sync success account=$accountId folder=$folder threads=${parsedThreads.size} cursor=${mailboxCursor.isNotBlank()} accountCursors=${mailboxAccountCursors.size} initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing",
@@ -503,20 +504,23 @@ private fun MeronMobileState.deepenMailboxSync(
 }
 
 internal fun MeronMobileState.addFeedToSelectedRssAccount() {
+    if (addFeedSubmitting) return
     val account = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
     val feedUrl = addFeedUrl.trim()
     if (account == null || !accountSummaryIsRss(account)) {
-        status = "Select an RSS account first."
+        addFeedError = "Select an RSS account first."
         return
     }
     if (feedUrl.isBlank()) {
-        status = "Feed URL is required."
+        addFeedError = "Feed URL is required."
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        addFeedError = "Rust core not packaged."
         return
     }
+    addFeedError = ""
+    addFeedSubmitting = true
     status = "Adding feed..."
     scope.launch {
         runCatching {
@@ -526,14 +530,17 @@ internal fun MeronMobileState.addFeedToSelectedRssAccount() {
                 )
             }
         }.onSuccess {
+            addFeedSubmitting = false
             addFeedUrl = ""
+            addFeedError = ""
             showAddFeedDialog = false
             status = "Feed added"
             // feed.add already fetched and stored the new feed's items, so
             // re-fetching here would be a redundant (and slow) network round-trip.
-            syncCoreThreads(accountOverride = account.id, syncFirst = false)
+            syncCoreThreads(accountOverride = account.id, syncFirst = false, successStatus = "Feed added")
         }.onFailure {
-            status = "Add feed failed: ${it.message}"
+            addFeedSubmitting = false
+            addFeedError = "Add feed failed: ${it.message}"
         }
     }
 }

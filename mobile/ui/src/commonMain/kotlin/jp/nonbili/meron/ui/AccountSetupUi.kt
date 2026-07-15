@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -104,6 +105,7 @@ internal fun AddAccountScreen(
     onRssFeedUrlChange: (String) -> Unit,
     rssDisplayName: String,
     onRssDisplayNameChange: (String) -> Unit,
+    rssAccountAdding: Boolean,
     onAddRss: () -> Unit,
 ) {
     val pagerState = rememberPagerState(initialPage = initialSection) { 3 }
@@ -244,9 +246,19 @@ internal fun AddAccountScreen(
                                     )
                                     Button(
                                         onClick = onAddRss,
-                                        enabled = rssDisplayName.isNotBlank(),
+                                        enabled = rssDisplayName.isNotBlank() && !rssAccountAdding,
                                         modifier = Modifier.fillMaxWidth(),
-                                    ) { Text(tr("accounts.actions.saveAccount")) }
+                                    ) {
+                                        if (rssAccountAdding) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                            )
+                                        } else {
+                                            Text(tr("accounts.actions.saveAccount"))
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -55,7 +55,7 @@
   "accounts.rssFeeds": "RSS Feeds",
   "accounts.setup.chooseProvider": "Choose a provider to connect.",
   "accounts.setup.connectMailAccount": "Connect a Mail Account",
-  "accounts.setup.feedAccountHint": "Create the account now; add more feeds anytime with the \"+\" above the feed list.",
+  "accounts.setup.feedAccountHint": "An RSS account can contain multiple feeds. Add the first feed now, or add feeds later from the account menu.",
   "accounts.setup.imapSmtpAccount": "IMAP / SMTP account",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Password",

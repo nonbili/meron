@@ -517,6 +517,7 @@ internal fun ThreadScreen(
                                     searchQuery = normalizedSearch,
                                     activeSearchMatch = message.id == activeSearchId,
                                     actionsEnabled = !isRss,
+                                    showSubject = isRss,
                                     onForward = onForward,
                                     onEditAsNew = onEditAsNew,
                                     onOpenDraft = onOpenDraft,

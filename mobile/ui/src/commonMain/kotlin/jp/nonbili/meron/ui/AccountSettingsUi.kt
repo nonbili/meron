@@ -191,7 +191,7 @@ internal fun SettingsAccountDetailPage(
         item {
             SettingsTextRow(
                 value = displayName,
-                label = if (isRss) tr("settings.account.feedGroupName") else tr("accounts.fields.accountName"),
+                label = tr("accounts.fields.accountName"),
                 onValueChange = {
                     displayName = it
                     persist()

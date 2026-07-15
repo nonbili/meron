@@ -438,10 +438,12 @@ internal fun MeronMobileState.autodiscoverPasswordAccount(auto: Boolean = false)
 }
 
 internal fun MeronMobileState.addRssAccount() {
+    if (rssAccountAdding) return
     if (!coreLoaded) {
         status = "Rust core not packaged."
         return
     }
+    rssAccountAdding = true
     status = "Adding RSS account..."
     scope.launch {
         runCatching {
@@ -451,6 +453,7 @@ internal fun MeronMobileState.addRssAccount() {
                 client.listAccounts()
             }
         }.onSuccess { json ->
+            rssAccountAdding = false
             val parsedNew = parseAccountListResponse(json)
             val oldIds = coreAccounts.map { it.id }.toSet()
             val newRssAccount = parsedNew.firstOrNull { it.id !in oldIds && it.engine == "rss" }
@@ -459,11 +462,17 @@ internal fun MeronMobileState.addRssAccount() {
                 selectedCoreAccountId = newRssAccount.id
             }
             screen = Screen.Mail
-            status = "Added RSS feed"
+            status = "RSS account added"
             // account.addRss already fetched and stored the starter feed's items,
             // so re-fetching here would be a redundant (and slow) network round-trip.
-            syncCoreThreads(accountOverride = selectedCoreAccountId, folderOverride = INBOX_FOLDER, syncFirst = false)
+            syncCoreThreads(
+                accountOverride = selectedCoreAccountId,
+                folderOverride = INBOX_FOLDER,
+                syncFirst = false,
+                successStatus = "RSS account added",
+            )
         }.onFailure {
+            rssAccountAdding = false
             status = "Add RSS failed: ${it.message}"
         }
     }

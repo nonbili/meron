@@ -628,6 +628,12 @@ internal fun MailRouteContent(
                             } else {
                                 MailHeaderSearchField(
                                     search = mailSearch,
+                                    placeholder =
+                                        if (selectedAccountIsRss) {
+                                            tr("threads.searchFeeds")
+                                        } else {
+                                            null
+                                        },
                                     onSearchChange = { mailSearch = it },
                                     onSearchSubmit = { syncCoreThreads(syncFirst = false) },
                                 )
@@ -754,7 +760,15 @@ internal fun MailRouteContent(
                                 val showAccountActions = selectedAccount != null
                                 Box {
                                     IconButton(onClick = { mailboxMenuOpen = true }) {
-                                        Icon(Icons.Filled.MoreVert, contentDescription = tr("threads.actions.title"))
+                                        Icon(
+                                            Icons.Filled.MoreVert,
+                                            contentDescription =
+                                                if (selectedAccountIsRss) {
+                                                    tr("feeds.manageSubscription")
+                                                } else {
+                                                    tr("threads.actions.title")
+                                                },
+                                        )
                                     }
                                     DropdownMenu(
                                         expanded = mailboxMenuOpen,
@@ -810,6 +824,7 @@ internal fun MailRouteContent(
                                                     onClick = {
                                                         mailboxMenuOpen = false
                                                         addFeedUrl = ""
+                                                        addFeedError = ""
                                                         showAddFeedDialog = true
                                                     },
                                                 )
@@ -839,12 +854,26 @@ internal fun MailRouteContent(
                     )
                 },
                 floatingActionButton = {
-                    if (coreAccounts.isNotEmpty()) {
-                        ExtendedFloatingActionButton(
-                            onClick = ::openCompose,
-                            icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
-                            text = { Text(tr("mobile.tabs.compose")) },
-                        )
+                    when {
+                        selectedAccountIsRss -> {
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    addFeedUrl = ""
+                                    addFeedError = ""
+                                    showAddFeedDialog = true
+                                },
+                                icon = { Icon(Icons.Filled.Add, contentDescription = tr("feeds.actions.addFeed")) },
+                                text = { Text(tr("feeds.actions.addFeed")) },
+                            )
+                        }
+
+                        coreAccounts.any { !accountSummaryIsRss(it) } -> {
+                            ExtendedFloatingActionButton(
+                                onClick = ::openCompose,
+                                icon = { Icon(Icons.Filled.Edit, contentDescription = tr("mobile.tabs.compose")) },
+                                text = { Text(tr("mobile.tabs.compose")) },
+                            )
+                        }
                     }
                 },
                 snackbarHost = { SnackbarHost(snackbarHost) },
