@@ -617,6 +617,7 @@ private fun MeronMobileScreenContent(
             incomingMailtoDraft?.let { draft ->
                 composeDraftId = ""
                 composeDraftSaved = false
+                composeDraftAccountId = ""
                 to = draft.to
                 cc = draft.cc
                 bcc = draft.bcc
@@ -773,6 +774,7 @@ private fun MeronMobileScreenContent(
                     onQuickReplyChange = ::onQuickReplyBodyChange,
                     quickReplyAttachments = quickReplyAttachments,
                     quickReplyFailure = quickReplyFailure,
+                    quickReplySending = quickReplySendInFlight,
                     sendShortcutMode = sendShortcutMode,
                     onQuickReplyAttach = {
                         pickAttachmentInto { picked ->
@@ -827,6 +829,7 @@ private fun MeronMobileScreenContent(
                         attachments = emptyList()
                         composeDraftId = ""
                         composeDraftSaved = false
+                        composeDraftAccountId = ""
                         composeReturnScreen = Screen.Thread
                         screen = Screen.Compose
                     },
@@ -893,6 +896,7 @@ private fun MeronMobileScreenContent(
                     onDiscardDraft = ::discardComposeDraft,
                     onSend = ::sendMail,
                     onBack = ::closeCompose,
+                    sending = composeSendInFlight,
                 )
             }
 

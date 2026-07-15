@@ -4,12 +4,31 @@
 
 use anyhow::{Context, Result};
 use async_smtp::authentication::{Credentials, Mechanism};
+use async_smtp::error::Error as SmtpError;
 use async_smtp::{EmailAddress, Envelope, SendableEmail, SmtpClient, SmtpTransport};
 use base64::Engine as _;
 use mail_builder::MessageBuilder;
+use std::time::Duration;
 use tokio::io::BufReader;
 
 use crate::imap::{Creds, connect_stream};
+
+/// Cap on each pre-DATA exchange (greeting, STARTTLS, AUTH). async-smtp has no
+/// I/O timeouts of its own, so without these a connection that dies mid-command
+/// hangs the send forever.
+const SMTP_COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
+/// Cap on the DATA phase, sized for large attachments on slow uplinks.
+const SMTP_DATA_TIMEOUT: Duration = Duration::from_secs(300);
+
+async fn with_timeout<T>(
+    limit: Duration,
+    what: &str,
+    fut: impl std::future::Future<Output = T>,
+) -> Result<T> {
+    tokio::time::timeout(limit, fut)
+        .await
+        .map_err(|_| anyhow::anyhow!("{what} timed out after {}s", limit.as_secs()))
+}
 
 #[derive(serde::Deserialize, Debug)]
 pub struct AttachmentInput {
@@ -20,12 +39,43 @@ pub struct AttachmentInput {
     pub inline_id: String,
 }
 
-/// Split a comma-separated recipient string into trimmed, non-empty addresses.
+/// Split a comma-separated recipient string into trimmed, non-empty entries.
+/// Commas inside a double-quoted display name (`"Doe, Jane" <j@x>`) or inside
+/// the `<...>` address brackets don't split, so quoted contact names survive.
 fn parse_addrs(raw: &str) -> Vec<String> {
-    raw.split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut in_brackets = false;
+    for ch in raw.chars() {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+                current.push(ch);
+            }
+            '<' if !in_quotes => {
+                in_brackets = true;
+                current.push(ch);
+            }
+            '>' if !in_quotes => {
+                in_brackets = false;
+                current.push(ch);
+            }
+            ',' if !in_quotes && !in_brackets => {
+                let entry = current.trim();
+                if !entry.is_empty() {
+                    out.push(entry.to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let entry = current.trim();
+    if !entry.is_empty() {
+        out.push(entry.to_string());
+    }
+    out
 }
 
 /// Split a `Name <addr>` (or bare `addr`) entry into its display name and
@@ -40,10 +90,19 @@ fn split_name_addr(entry: &str) -> (String, String) {
         && let Some(end_rel) = trimmed[start + 1..].find('>')
     {
         let name = trimmed[..start].trim();
-        // Strip surrounding quotes from quoted display names.
-        let name = name.trim_matches('"').trim();
+        // Unwrap a quoted display name (`"Doe, Jane"`) and undo its escapes;
+        // mail-builder re-encodes the raw name itself.
+        let name = if name.len() >= 2 && name.starts_with('"') && name.ends_with('"') {
+            name[1..name.len() - 1]
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .trim()
+                .to_string()
+        } else {
+            name.to_string()
+        };
         let addr = trimmed[start + 1..start + 1 + end_rel].trim();
-        return (name.to_string(), addr.to_string());
+        return (name, addr.to_string());
     }
     (String::new(), trimmed.to_string())
 }
@@ -126,12 +185,15 @@ pub fn build_message(
     }
 
     for att in attachments {
-        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&att.data) {
-            if !att.inline_id.trim().is_empty() {
-                builder = builder.inline(&att.mime, att.inline_id.trim(), bytes);
-            } else {
-                builder = builder.attachment(&att.mime, &att.filename, bytes);
-            }
+        // A decode failure must fail the whole build: silently dropping the
+        // attachment would send the message without its file and report success.
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&att.data)
+            .with_context(|| format!("decode attachment {:?}", att.filename))?;
+        if !att.inline_id.trim().is_empty() {
+            builder = builder.inline(&att.mime, att.inline_id.trim(), bytes);
+        } else {
+            builder = builder.attachment(&att.mime, &att.filename, bytes);
         }
     }
 
@@ -218,15 +280,21 @@ pub async fn send(
     // wraps the socket up front. smtp_starttls takes precedence over smtp_tls.
     let implicit_tls = creds.smtp_tls && !creds.smtp_starttls;
     let stream = connect_stream(host, port, implicit_tls).await?;
-    let mut transport = SmtpTransport::new(SmtpClient::new(), BufReader::new(stream))
-        .await
-        .context("smtp connect")?;
+    let mut transport = with_timeout(
+        SMTP_COMMAND_TIMEOUT,
+        "smtp greeting",
+        SmtpTransport::new(SmtpClient::new(), BufReader::new(stream)),
+    )
+    .await?
+    .context("smtp connect")?;
 
     if creds.smtp_starttls {
         // `starttls()` issues the command and returns the raw stream to upgrade;
         // we then re-run EHLO over TLS via a transport built without expecting a
         // greeting (the server sends none after STARTTLS).
-        let inner = transport.starttls().await.context("SMTP STARTTLS")?;
+        let inner = with_timeout(SMTP_COMMAND_TIMEOUT, "smtp starttls", transport.starttls())
+            .await?
+            .context("SMTP STARTTLS")?;
         let tcp = match inner.into_inner() {
             crate::imap::Stream::Plain(tcp) => tcp,
             crate::imap::Stream::Tls(_) => {
@@ -237,48 +305,98 @@ pub async fn send(
         };
         let tls = crate::imap::upgrade_to_tls(host, tcp).await?;
         let upgraded = crate::imap::Stream::Tls(Box::new(tls));
-        transport = SmtpTransport::new(
-            SmtpClient::new().without_greeting(),
-            BufReader::new(upgraded),
+        transport = with_timeout(
+            SMTP_COMMAND_TIMEOUT,
+            "smtp ehlo",
+            SmtpTransport::new(
+                SmtpClient::new().without_greeting(),
+                BufReader::new(upgraded),
+            ),
         )
-        .await
+        .await?
         .context("smtp connect (post-STARTTLS)")?;
     }
 
-    // Only authenticates if the server advertises a supported mechanism.
     let secret = if creds.is_oauth() {
         creds.access_token.clone().unwrap_or_default()
     } else {
         creds.password.clone()
     };
-    let credentials = Credentials::new(creds.user.clone(), secret);
+    let credentials = Credentials::new(creds.user.clone(), secret.clone());
     let mechanisms = if creds.is_oauth() {
         vec![Mechanism::Xoauth2]
     } else {
         vec![Mechanism::Plain, Mechanism::Login]
     };
-    transport
-        .try_login(&credentials, &mechanisms)
-        .await
-        .context("smtp auth")?;
+    // AUTH explicitly instead of try_login: try_login silently skips auth when
+    // the EHLO capabilities include none of our mechanisms, which would surface
+    // later as a confusing RCPT/DATA rejection instead of an auth error. Try
+    // each mechanism in order; only a command-level rejection (502/503/504 —
+    // the server doesn't do AUTH at all) falls through to unauthenticated
+    // submission, preserving relays that accept mail without login. An empty
+    // secret means a deliberately unauthenticated relay; skip AUTH entirely.
+    if !secret.is_empty() {
+        let mut authed = false;
+        let mut auth_unsupported = true;
+        let mut last_err: Option<SmtpError> = None;
+        for mechanism in &mechanisms {
+            match with_timeout(
+                SMTP_COMMAND_TIMEOUT,
+                "smtp auth",
+                transport.auth(*mechanism, &credentials),
+            )
+            .await?
+            {
+                Ok(_) => {
+                    authed = true;
+                    break;
+                }
+                Err(err) => {
+                    let command_rejected = matches!(
+                        &err,
+                        SmtpError::Permanent(resp)
+                            if resp.has_code(502) || resp.has_code(503) || resp.has_code(504)
+                    );
+                    if !command_rejected {
+                        auth_unsupported = false;
+                    }
+                    last_err = Some(err);
+                }
+            }
+        }
+        if !authed {
+            if !auth_unsupported {
+                let err = last_err.expect("auth failed without an error");
+                return Err(anyhow::Error::new(err).context("smtp auth"));
+            }
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.send",
+                "SMTP server rejected AUTH as unsupported; submitting unauthenticated"
+            );
+        }
+    }
 
     // SMTP envelope addresses must be bare ("addr@host"); MIME header entries
     // may carry a display name. The header form survives in `to_list`/`cc_list`
     // for the builder above; here we strip down to the address for RCPT TO.
     let mut recipients = Vec::new();
-    for addr in to_list.iter().chain(cc_list.iter()).chain(bcc_list.iter()) {
-        recipients.push(EmailAddress::new(bare_addr(addr)).context("recipient address")?);
+    for addr in envelope_recipients(&to_list, &cc_list, &bcc_list) {
+        recipients.push(EmailAddress::new(addr).context("recipient address")?);
     }
     let envelope = Envelope::new(
         Some(EmailAddress::new(from.to_string()).context("from address")?),
         recipients,
     )
     .context("envelope")?;
-    transport
-        .send(SendableEmail::new(envelope, raw.clone()))
-        .await
-        .context("smtp send")?;
-    let _ = transport.quit().await;
+    with_timeout(
+        SMTP_DATA_TIMEOUT,
+        "smtp send",
+        transport.send(SendableEmail::new(envelope, raw.clone())),
+    )
+    .await?
+    .context("smtp send")?;
+    let _ = with_timeout(Duration::from_secs(10), "smtp quit", transport.quit()).await;
 
     // Return the copy to file in Sent: identical to the transmitted message
     // unless there's a Bcc, in which case we rebuild with the `Bcc:` header (and
@@ -303,6 +421,20 @@ pub async fn send(
             &message_id,
         )
     }
+}
+
+/// Flatten to/cc/bcc header entries into the bare envelope address list,
+/// dropping case-insensitive duplicates so no recipient gets two RCPT TOs.
+fn envelope_recipients(to: &[String], cc: &[String], bcc: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for entry in to.iter().chain(cc.iter()).chain(bcc.iter()) {
+        let bare = bare_addr(entry);
+        if seen.insert(bare.to_lowercase()) {
+            out.push(bare);
+        }
+    }
+    out
 }
 
 /// Extract the bare email address from a "Name <addr>" header entry, or return
@@ -343,6 +475,85 @@ mod tests {
     }
 
     #[test]
+    fn parse_addrs_keeps_quoted_and_bracketed_commas() {
+        assert_eq!(
+            parse_addrs("\"Doe, Jane\" <j@x.com>, a@y.com"),
+            vec!["\"Doe, Jane\" <j@x.com>", "a@y.com"]
+        );
+        // Unterminated quote: the rest of the string stays one entry rather
+        // than producing bogus half-recipients.
+        assert_eq!(
+            parse_addrs("\"Doe, Jane <j@x.com>"),
+            vec!["\"Doe, Jane <j@x.com>"]
+        );
+    }
+
+    #[test]
+    fn envelope_recipients_dedupes_case_insensitively() {
+        let to = vec!["Alice <a@x.com>".to_string(), "b@y.com".to_string()];
+        let cc = vec!["A@X.COM".to_string()];
+        let bcc = vec!["b@y.com".to_string(), "c@z.com".to_string()];
+        assert_eq!(
+            super::envelope_recipients(&to, &cc, &bcc),
+            vec!["a@x.com", "b@y.com", "c@z.com"]
+        );
+    }
+
+    #[test]
+    fn build_message_rejects_undecodable_attachment() {
+        let atts = vec![super::AttachmentInput {
+            filename: "broken.bin".into(),
+            mime: "application/octet-stream".into(),
+            data: "not!!valid@@base64".into(),
+            inline_id: String::new(),
+        }];
+        let err = build_message(
+            "Alice",
+            "alice@x.com",
+            "bob@y.com",
+            "",
+            "",
+            false,
+            "Subject",
+            "body",
+            "",
+            &atts,
+            "",
+            "",
+            "",
+            "",
+        )
+        .expect_err("must fail instead of sending without the attachment");
+        assert!(err.to_string().contains("broken.bin"), "{err:#}");
+    }
+
+    #[test]
+    fn build_message_addresses_quoted_comma_recipient() {
+        let raw = build_message(
+            "Alice",
+            "alice@x.com",
+            "\"Doe, Jane\" <j@x.com>",
+            "",
+            "",
+            false,
+            "Subject",
+            "body",
+            "",
+            &[],
+            "",
+            "",
+            "",
+            "",
+        )
+        .expect("build_message");
+        let raw = String::from_utf8(raw).expect("utf8");
+        assert!(raw.contains("<j@x.com>"), "{raw}");
+        // The display name must stay attached to the one recipient, not split
+        // into a second bogus address.
+        assert!(!raw.contains("<Doe>"), "{raw}");
+    }
+
+    #[test]
     fn split_name_addr_handles_named_quoted_and_bare() {
         assert_eq!(
             split_name_addr("Alice Example <a@x.com>"),
@@ -355,6 +566,14 @@ mod tests {
         assert_eq!(
             split_name_addr(" a@x.com "),
             (String::new(), "a@x.com".to_string())
+        );
+        assert_eq!(
+            split_name_addr("\"Doe, Jane\" <j@x.com>"),
+            ("Doe, Jane".to_string(), "j@x.com".to_string())
+        );
+        assert_eq!(
+            split_name_addr("\"Ada \\\"Lovelace\\\"\" <a@x.com>"),
+            ("Ada \"Lovelace\"".to_string(), "a@x.com".to_string())
         );
     }
 

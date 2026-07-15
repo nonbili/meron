@@ -125,6 +125,17 @@ internal class MeronMobileState(
     var composeFromEmail by mutableStateOf("")
     var composeDraftId by mutableStateOf("")
     var composeDraftSaved by mutableStateOf(false)
+
+    // Account the draft was last saved under. Discards must target this
+    // account: the user can switch the From identity to another account after
+    // an autosave, and discarding under the new account would orphan the copy
+    // on the old one.
+    var composeDraftAccountId by mutableStateOf("")
+
+    // True while a send round-trip is running; gates re-entry (a second Send
+    // tap must not submit the message twice) and pauses draft autosaves so a
+    // save landing mid-send can't resurrect the just-discarded draft.
+    var composeSendInFlight by mutableStateOf(false)
     var composeInReplyTo by mutableStateOf("")
     var composeReferences by mutableStateOf("")
     var locallyDraftedThreadIds by mutableStateOf(emptySet<String>())
@@ -139,6 +150,10 @@ internal class MeronMobileState(
     var quickReplyInReplyTo by mutableStateOf("")
     var quickReplyReferences by mutableStateOf("")
     var quickReplyThreadId by mutableStateOf("")
+
+    // Same double-send/autosave-race gate as composeSendInFlight, for the
+    // inline reply bar.
+    var quickReplySendInFlight by mutableStateOf(false)
 
     // Debounce bookkeeping for autosaving the quick-reply draft as the user
     // types; not UI state, so a plain var rather than mutableStateOf.

@@ -123,6 +123,7 @@ internal fun ThreadScreen(
     onQuickReplyChange: (String) -> Unit,
     quickReplyAttachments: List<DraftAttachment>,
     quickReplyFailure: String,
+    quickReplySending: Boolean = false,
     sendShortcutMode: SendShortcutMode,
     onQuickReplyAttach: () -> Unit,
     onRemoveQuickReplyAttachment: (DraftAttachment) -> Unit,
@@ -549,6 +550,7 @@ internal fun ThreadScreen(
                         onRemoveAttachment = onRemoveQuickReplyAttachment,
                         onOpenFullEditor = onOpenFullReply,
                         onSend = onSendReply,
+                        sending = quickReplySending,
                     )
                 }
             }
@@ -942,6 +944,7 @@ internal fun ReplyBar(
     onRemoveAttachment: (DraftAttachment) -> Unit,
     onOpenFullEditor: () -> Unit,
     onSend: () -> Unit,
+    sending: Boolean = false,
 ) {
     Surface(tonalElevation = 3.dp, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(
@@ -981,7 +984,7 @@ internal fun ReplyBar(
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    TextButton(onClick = onSend, enabled = value.isNotBlank() || attachments.isNotEmpty()) {
+                    TextButton(onClick = onSend, enabled = !sending && (value.isNotBlank() || attachments.isNotEmpty())) {
                         Text(tr("chat.retry"))
                     }
                 }
@@ -991,7 +994,7 @@ internal fun ReplyBar(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                val canSend = value.isNotBlank() || attachments.isNotEmpty()
+                val canSend = !sending && (value.isNotBlank() || attachments.isNotEmpty())
                 TextField(
                     value = value,
                     onValueChange = onChange,

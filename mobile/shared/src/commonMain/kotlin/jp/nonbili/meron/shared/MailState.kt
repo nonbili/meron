@@ -232,28 +232,88 @@ fun accountSummaryIsRss(account: AccountSummary): Boolean = account.engine == "r
 
 fun threadIdIsRss(threadId: String): Boolean = threadId.contains("#rss#")
 
+// Display names carrying recipient-list specials must be quoted (RFC 5322
+// quoted-string), otherwise a "Doe, Jane <j@x>" entry splits into two bogus
+// recipients everywhere the list is comma-parsed.
+private const val DISPLAY_NAME_SPECIALS = ",;<>@\"\\"
+
+private fun quoteDisplayName(name: String): String =
+    if (name.any { it in DISPLAY_NAME_SPECIALS }) {
+        "\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    } else {
+        name
+    }
+
 fun formatContactSuggestion(contact: ContactSuggestion): String {
     val name = contact.name.trim()
     val addr = contact.addr.trim()
     return if (name.isNotBlank() && !name.equals(addr, ignoreCase = true)) {
-        "$name <$addr>"
+        "${quoteDisplayName(name)} <$addr>"
     } else {
         addr
     }
+}
+
+// Index of the last comma that actually separates recipients — commas inside
+// a double-quoted display name or inside `<...>` don't count. -1 when none.
+fun lastRecipientSeparatorIndex(value: String): Int {
+    var inQuotes = false
+    var inBrackets = false
+    var last = -1
+    value.forEachIndexed { index, ch ->
+        when {
+            ch == '"' -> inQuotes = !inQuotes
+            ch == '<' && !inQuotes -> inBrackets = true
+            ch == '>' && !inQuotes -> inBrackets = false
+            ch == ',' && !inQuotes && !inBrackets -> last = index
+        }
+    }
+    return last
+}
+
+// Split on recipient-separating commas only, preserving raw (untrimmed)
+// segments so callers keep their own whitespace semantics.
+fun splitRecipientEntries(value: String): List<String> {
+    val parts = mutableListOf<String>()
+    var start = 0
+    var inQuotes = false
+    var inBrackets = false
+    value.forEachIndexed { index, ch ->
+        when {
+            ch == '"' -> {
+                inQuotes = !inQuotes
+            }
+
+            ch == '<' && !inQuotes -> {
+                inBrackets = true
+            }
+
+            ch == '>' && !inQuotes -> {
+                inBrackets = false
+            }
+
+            ch == ',' && !inQuotes && !inBrackets -> {
+                parts.add(value.substring(start, index))
+                start = index + 1
+            }
+        }
+    }
+    parts.add(value.substring(start))
+    return parts
 }
 
 fun replaceRecipientTail(
     value: String,
     contact: ContactSuggestion,
 ): String {
-    val index = value.lastIndexOf(',')
+    val index = lastRecipientSeparatorIndex(value)
     val head = if (index < 0) "" else value.substring(0, index + 1)
     val prefix = if (head.isBlank()) "" else "$head "
     return "$prefix${formatContactSuggestion(contact)}, "
 }
 
 fun recipientTail(value: String): String {
-    val index = value.lastIndexOf(',')
+    val index = lastRecipientSeparatorIndex(value)
     return (if (index < 0) value else value.substring(index + 1)).trim()
 }
 

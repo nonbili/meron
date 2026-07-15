@@ -154,6 +154,40 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun quotesDisplayNamesWithRecipientSpecials() {
+        assertEquals(
+            "\"Doe, Jane\" <jane@example.com>",
+            formatContactSuggestion(ContactSuggestion(name = "Doe, Jane", addr = "jane@example.com")),
+        )
+        assertEquals(
+            "\"Ada \\\"Lovelace\\\"\" <ada@example.com>",
+            formatContactSuggestion(ContactSuggestion(name = "Ada \"Lovelace\"", addr = "ada@example.com")),
+        )
+        // Plain names stay unquoted.
+        assertEquals(
+            "Bea <bea@example.com>",
+            formatContactSuggestion(ContactSuggestion(name = "Bea", addr = "bea@example.com")),
+        )
+    }
+
+    @Test
+    fun recipientHelpersIgnoreCommasInQuotesAndBrackets() {
+        val quoted = "\"Doe, Jane\" <jane@example.com>, be"
+        assertEquals("be", recipientTail(quoted))
+        assertEquals(
+            listOf("\"Doe, Jane\" <jane@example.com>", " be"),
+            splitRecipientEntries(quoted),
+        )
+        // A completed quoted-name entry is not split when the suggestion for
+        // the tail is accepted.
+        assertEquals(
+            "\"Doe, Jane\" <jane@example.com>, Bea <bea@example.com>, ",
+            replaceRecipientTail(quoted, ContactSuggestion(name = "Bea", addr = "bea@example.com")),
+        )
+        assertEquals(-1, lastRecipientSeparatorIndex("\"Doe, Jane\" <jane@example.com>"))
+    }
+
+    @Test
     fun buildsSendIdentitiesAndDetectsReplyAlias() {
         val account =
             AccountSummary(

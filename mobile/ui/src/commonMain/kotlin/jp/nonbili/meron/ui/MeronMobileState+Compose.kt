@@ -261,6 +261,7 @@ internal fun MeronMobileState.clearComposeDraftState() {
     composeFromEmail = ""
     composeDraftId = ""
     composeDraftSaved = false
+    composeDraftAccountId = ""
     composeInReplyTo = ""
     composeReferences = ""
     recipientSuggestionField = ""
@@ -315,9 +316,9 @@ internal fun MeronMobileState.acceptRecipientSuggestion(
 }
 
 internal fun MeronMobileState.sendMail() {
+    if (composeSendInFlight) return
     val identity = selectedComposeIdentity()
     val accountId = identity?.accountId ?: defaultSendAccountId()
-    val savedDraftId = composeDraftId.takeIf { composeDraftSaved }
     if (accountId.isBlank()) {
         status = "Select or add an account before sending."
         return
@@ -327,28 +328,41 @@ internal fun MeronMobileState.sendMail() {
         status = "Complete To, Subject, and Body or Attachments before sending."
         return
     }
+    composeSendInFlight = true
     status = "Sending..."
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
                 val params =
                     draft.toSendMailParams(accountId = accountId, from = identity?.email.orEmpty()).copy(
                         inReplyTo = composeInReplyTo,
                         references = composeReferences,
                     )
-                client.send(params)
-                if (!savedDraftId.isNullOrBlank()) {
-                    runCatching { client.discardDraft(DiscardDraftParams(accountId = accountId, draftId = savedDraftId)) }
-                }
+                MobileMailCommandClient(core).send(params)
             }
         }.onSuccess {
+            // Read the draft id after the send completes so an autosave that
+            // landed mid-send is discarded too, and target the account the
+            // draft was actually saved under.
+            val draftId = composeDraftId
+            val draftAccountId = composeDraftAccountId.ifBlank { accountId }
+            if (draftId.isNotBlank()) {
+                runCatching {
+                    withContext(ioDispatcher) {
+                        MobileMailCommandClient(core).discardDraft(
+                            DiscardDraftParams(accountId = draftAccountId, draftId = draftId),
+                        )
+                    }
+                }
+            }
             clearComposeDraftState()
+            composeSendInFlight = false
             closeCompose()
             errorBanner = null
             status = "Message sent"
             syncCoreThreads()
         }.onFailure {
+            composeSendInFlight = false
             errorBanner = it.message ?: "Send failed"
             status = "Send failed: ${it.message}"
         }
@@ -368,6 +382,8 @@ internal fun MeronMobileState.autoSaveComposeDraft() {
 }
 
 private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Boolean {
+    // A send is about to discard the draft; saving now could resurrect it.
+    if (composeSendInFlight) return false
     val identity = selectedComposeIdentity()
     val accountId = identity?.accountId ?: defaultSendAccountId()
     if (accountId.isBlank()) {
@@ -381,6 +397,7 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
     }
     val draftId = composeDraftId.ifBlank { newDraftMessageId(accountId) }
     composeDraftId = draftId
+    val previousDraftAccountId = composeDraftAccountId
     if (showStatus) status = "Saving draft..."
     return runCatching {
         withContext(ioDispatcher) {
@@ -401,6 +418,18 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
     }.fold(
         onSuccess = {
             composeDraftSaved = true
+            composeDraftAccountId = accountId
+            // The From identity moved to another account since the last save:
+            // clean up the copy left in the previous account's Drafts.
+            if (previousDraftAccountId.isNotBlank() && previousDraftAccountId != accountId) {
+                runCatching {
+                    withContext(ioDispatcher) {
+                        MobileMailCommandClient(core).discardDraft(
+                            DiscardDraftParams(accountId = previousDraftAccountId, draftId = draftId),
+                        )
+                    }
+                }
+            }
             selectedCoreThread?.let { markThreadDraftEverywhere(it.id) }
             if (showStatus) status = "Draft saved"
             syncCoreThreads(syncFirst = false)
@@ -420,6 +449,8 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
 }
 
 private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): Boolean {
+    // A send is about to discard the draft; saving now could resurrect it.
+    if (quickReplySendInFlight) return false
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
     val parent = messages.lastOrNull { !folderIsDrafts(it.folderId) } ?: messages.lastOrNull()
@@ -587,6 +618,7 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
     // duplicate one.
     composeDraftId = quickReplyDraftId
     composeDraftSaved = quickReplyDraftSaved
+    composeDraftAccountId = if (quickReplyDraftSaved) accountId else ""
     composeInReplyTo = params.inReplyTo
     composeReferences = params.references
     quickReplyAutosaveJob?.cancel()
@@ -604,7 +636,7 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
 
 internal fun MeronMobileState.discardComposeDraft() {
     val identity = selectedComposeIdentity()
-    val accountId = identity?.accountId ?: defaultSendAccountId()
+    val accountId = composeDraftAccountId.ifBlank { identity?.accountId ?: defaultSendAccountId() }
     val draftId = composeDraftId.takeIf { composeDraftSaved }
     val returnScreen = composeReturnScreen
     val thread = selectedCoreThread
@@ -670,6 +702,7 @@ private fun MeronMobileState.removeDiscardedDraftFromOpenThread(draftId: String?
 internal fun String.normalizedComposeDraftId(): String = trim().trim('<', '>').lowercase()
 
 internal fun MeronMobileState.sendQuickReply() {
+    if (quickReplySendInFlight) return
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
     val parent = messages.lastOrNull { !folderIsDrafts(it.folderId) } ?: messages.lastOrNull()
@@ -689,7 +722,7 @@ internal fun MeronMobileState.sendQuickReply() {
     }
     quickReplyFailure = ""
     quickReplyAutosaveJob?.cancel()
-    val savedDraftId = quickReplyDraftId.takeIf { quickReplyDraftSaved }
+    quickReplySendInFlight = true
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
     val outboundMessageId = newDraftMessageId(accountId).replace("meron-draft-", "meron-")
@@ -734,13 +767,22 @@ internal fun MeronMobileState.sendQuickReply() {
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                client.send(params)
-                if (!savedDraftId.isNullOrBlank()) {
-                    runCatching { client.discardDraft(DiscardDraftParams(accountId = accountId, draftId = savedDraftId)) }
-                }
+                MobileMailCommandClient(core).send(params)
             }
         }.onSuccess {
+            // Read the draft id after the send completes so an autosave that
+            // landed mid-send is discarded too.
+            val draftId = quickReplyDraftId
+            if (draftId.isNotBlank()) {
+                runCatching {
+                    withContext(ioDispatcher) {
+                        MobileMailCommandClient(core).discardDraft(
+                            DiscardDraftParams(accountId = accountId, draftId = draftId),
+                        )
+                    }
+                }
+            }
+            quickReplySendInFlight = false
             quickReplyFailure = ""
             quickReplyBody = ""
             quickReplyAttachments = emptyList()
@@ -754,6 +796,7 @@ internal fun MeronMobileState.sendQuickReply() {
             runCatching { reloadCurrentThreadMessages() }
                 .onFailure { }
         }.onFailure {
+            quickReplySendInFlight = false
             val message = it.message ?: "Send failed"
             quickReplyFailure = message
             status = "Reply failed: $message"
@@ -796,6 +839,7 @@ internal fun MeronMobileState.openMessageCompose(
             composeFromEmail = ""
             composeDraftId = ""
             composeDraftSaved = false
+            composeDraftAccountId = ""
             composeReturnScreen = Screen.Thread
             screen = Screen.Compose
             status = if (forward) "Forward draft ready" else "Copied message into compose"
@@ -933,6 +977,7 @@ internal fun MeronMobileState.openCompose() {
     attachments = emptyList()
     composeDraftId = ""
     composeDraftSaved = false
+    composeDraftAccountId = ""
     composeReturnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
     screen = Screen.Compose
 }

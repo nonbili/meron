@@ -1268,20 +1268,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             // Client-generated Message-ID so the optimistic bubble and a quick
             // follow-up reply share the id the Sent copy will carry.
             let message_id = req_str(p, "message_id").unwrap_or_default();
-            let attachments: Vec<smtp::AttachmentInput> = match p.get("attachments") {
-                Some(Value::Array(arr)) => {
-                    let mut list = Vec::new();
-                    for val in arr {
-                        if let Ok(att) =
-                            serde_json::from_value::<smtp::AttachmentInput>(val.clone())
-                        {
-                            list.push(att);
-                        }
-                    }
-                    list
-                }
-                _ => Vec::new(),
-            };
+            let attachments = opt_attachments(p)?;
             let requested_from = req_str(p, "from").unwrap_or_default();
             let creds = engine.ensure_valid_creds(&account).await?;
             let (from_addr, sender_name) =
@@ -1324,20 +1311,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let in_reply_to = req_str(p, "in_reply_to").unwrap_or_default();
             let references = req_str(p, "references").unwrap_or_default();
             let reply_to = req_str(p, "reply_to").unwrap_or_default();
-            let attachments: Vec<smtp::AttachmentInput> = match p.get("attachments") {
-                Some(Value::Array(arr)) => {
-                    let mut list = Vec::new();
-                    for val in arr {
-                        if let Ok(att) =
-                            serde_json::from_value::<smtp::AttachmentInput>(val.clone())
-                        {
-                            list.push(att);
-                        }
-                    }
-                    list
-                }
-                _ => Vec::new(),
-            };
+            let attachments = opt_attachments(p)?;
             let requested_from = req_str(p, "from").unwrap_or_default();
             let creds = engine.ensure_valid_creds(&account).await?;
             let (from_addr, sender_name) =
@@ -2279,6 +2253,23 @@ fn parse_mail_cursor(raw: &str) -> Option<(i64, u32)> {
 /// Whether an account is RSS-backed (vs mail), per its row in the unified DB.
 fn is_rss(engine: &Arc<Engine>, account: &str) -> anyhow::Result<bool> {
     Ok(store::account_engine(&engine.db.lock().unwrap(), account)?.as_deref() == Some("rss"))
+}
+
+/// Parse the optional `attachments` array. An entry that fails to deserialize
+/// is a hard error: skipping it would send/save the message without its file
+/// while reporting success.
+fn opt_attachments(params: &Value) -> anyhow::Result<Vec<smtp::AttachmentInput>> {
+    match params.get("attachments") {
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .map(|val| {
+                serde_json::from_value::<smtp::AttachmentInput>(val.clone())
+                    .map_err(|err| anyhow::anyhow!("invalid attachment: {err}"))
+            })
+            .collect(),
+        Some(Value::Null) | None => Ok(Vec::new()),
+        Some(_) => Err(anyhow::anyhow!("attachments must be an array")),
+    }
 }
 
 fn req_str(params: &Value, key: &str) -> anyhow::Result<String> {

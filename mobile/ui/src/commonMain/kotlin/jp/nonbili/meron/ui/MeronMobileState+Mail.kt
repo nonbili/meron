@@ -694,6 +694,7 @@ internal fun MeronMobileState.openDraftCompose(
                     .trim('<', '>')
                     .ifBlank { newDraftMessageId(thread.accountId) }
             composeDraftSaved = true
+            composeDraftAccountId = thread.accountId
             composeReturnScreen = returnScreen
             screen = Screen.Compose
             status = "Draft ready"

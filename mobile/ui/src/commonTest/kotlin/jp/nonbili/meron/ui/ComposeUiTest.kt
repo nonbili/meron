@@ -47,6 +47,13 @@ class ComposeUiTest {
     }
 
     @Test
+    fun testParseRecipientsKeepsQuotedCommaNameAsOneChip() {
+        val (completed, active) = parseRecipients("\"Doe, Jane\" <jane@example.com>, bo")
+        assertEquals(listOf("\"Doe, Jane\" <jane@example.com>"), completed)
+        assertEquals("bo", active)
+    }
+
+    @Test
     fun testParseEmailRecipientRawEmail() {
         val (name, email) = parseEmailRecipient("alice@example.com")
         assertEquals("", name)
