@@ -117,6 +117,7 @@ class AndroidBackgroundSyncWorker(
                 }
 
                 GoogleAccountManagerAuth.TokenRefresh.NotNeeded,
+                GoogleAccountManagerAuth.TokenRefresh.StillFresh,
                 is GoogleAccountManagerAuth.TokenRefresh.Refreshed,
                 -> {
                     Unit

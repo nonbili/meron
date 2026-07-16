@@ -306,6 +306,7 @@ internal fun ComposeScreen(
     onSend: () -> Unit,
     onBack: () -> Unit,
     sending: Boolean = false,
+    snackbarHost: @Composable () -> Unit = {},
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
     var overflowOpen by remember { mutableStateOf(false) }
@@ -365,6 +366,10 @@ internal fun ComposeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
+        // Render status snackbars here too — without a host on this screen,
+        // send/draft failures would queue up and only appear after navigating
+        // back to the thread list.
+        snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
                 title = { Text(tr("composer.actions.newMessage")) },

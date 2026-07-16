@@ -272,10 +272,17 @@ class AndroidMobileHost(
         googleAccountPicker.launch(GoogleAccountManagerAuth.chooseAccountIntent())
     }
 
-    override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh =
-        when (val refresh = GoogleAccountManagerAuth.mintIfNeeded(activity, accountId)) {
+    override suspend fun refreshManagedGoogleToken(
+        accountId: String,
+        force: Boolean,
+    ): ManagedTokenRefresh =
+        when (val refresh = GoogleAccountManagerAuth.mintIfNeeded(activity, accountId, skipIfFresh = !force)) {
             GoogleAccountManagerAuth.TokenRefresh.NotNeeded -> {
                 ManagedTokenRefresh.NotNeeded
+            }
+
+            GoogleAccountManagerAuth.TokenRefresh.StillFresh -> {
+                ManagedTokenRefresh.StillFresh
             }
 
             is GoogleAccountManagerAuth.TokenRefresh.Refreshed -> {

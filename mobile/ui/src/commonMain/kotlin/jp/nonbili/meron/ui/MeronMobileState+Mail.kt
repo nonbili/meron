@@ -1026,7 +1026,10 @@ internal fun MeronMobileState.runStarredItemAction(
     }
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) { MobileMailCommandClient(core).action() }
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, item.accountId) { client.action() }
+            }
         }.onSuccess {
             starredItems = update(starredItems)
             status = "$label complete"
@@ -1106,7 +1109,12 @@ internal fun MeronMobileState.runCoreThreadAction(
     val committed = CompletableDeferred<String?>()
     scope.launch {
         runCatching {
-            requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).action() })
+            requireCoreOk(
+                withContext(ioDispatcher) {
+                    val client = MobileMailCommandClient(core)
+                    withManagedGoogleAuth(client, thread.accountId) { client.action() }
+                },
+            )
         }.onSuccess { response ->
             if (undoMessage == null || onUndo == null) status = "$label complete"
             committed.complete(response)
@@ -1240,9 +1248,12 @@ internal fun MeronMobileState.toggleMessageRead(message: MessageBody) {
         runCatching {
             requireCoreOk(
                 withContext(ioDispatcher) {
-                    MobileMailCommandClient(core).markRead(
-                        MarkReadParams(threadId = thread.id, seen = seen, messageIds = listOf(message.id)),
-                    )
+                    val client = MobileMailCommandClient(core)
+                    withManagedGoogleAuth(client, thread.accountId) {
+                        client.markRead(
+                            MarkReadParams(threadId = thread.id, seen = seen, messageIds = listOf(message.id)),
+                        )
+                    }
                 },
             )
         }.onSuccess {
@@ -1281,7 +1292,9 @@ internal fun MeronMobileState.markMessagesReadOnScroll(messageIds: List<String>)
                     if (threadIdIsRss(backendThreadId)) {
                         client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true, itemKeys = ids))
                     } else {
-                        client.markRead(MarkReadParams(threadId = backendThreadId, seen = true, messageIds = ids))
+                        withManagedGoogleAuth(client, thread.accountId) {
+                            client.markRead(MarkReadParams(threadId = backendThreadId, seen = true, messageIds = ids))
+                        }
                     }
                 },
             )
@@ -1307,7 +1320,9 @@ internal fun MeronMobileState.markThreadReadOnScroll() {
                     if (threadIdIsRss(backendThreadId)) {
                         client.markRssRead(RssMarkReadParams(threadId = backendThreadId, seen = true))
                     } else {
-                        client.markRead(MarkReadParams(threadId = backendThreadId, seen = true))
+                        withManagedGoogleAuth(client, thread.accountId) {
+                            client.markRead(MarkReadParams(threadId = backendThreadId, seen = true))
+                        }
                     }
                 },
             )
@@ -1324,9 +1339,12 @@ internal fun MeronMobileState.toggleMessageStarred(message: MessageBody) {
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                MobileMailCommandClient(core).markStarred(
-                    MarkStarredParams(threadId = thread.id, starred = starred, messageIds = listOf(message.id)),
-                )
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, thread.accountId) {
+                    client.markStarred(
+                        MarkStarredParams(threadId = thread.id, starred = starred, messageIds = listOf(message.id)),
+                    )
+                }
             }
         }.onSuccess {
             updateMessageEverywhere(message.id) { it.copy(starred = starred) }
@@ -1352,13 +1370,16 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
         runCatching {
             val response =
                 withContext(ioDispatcher) {
-                    MobileMailCommandClient(core).delete(
-                        ThreadActionParams(
-                            threadId = thread.id,
-                            folderId = messageFolder,
-                            messageIds = listOf(message.id),
-                        ),
-                    )
+                    val client = MobileMailCommandClient(core)
+                    withManagedGoogleAuth(client, thread.accountId) {
+                        client.delete(
+                            ThreadActionParams(
+                                threadId = thread.id,
+                                folderId = messageFolder,
+                                messageIds = listOf(message.id),
+                            ),
+                        )
+                    }
                 }
             requireCoreOk(response)
         }.onSuccess {
@@ -1404,7 +1425,11 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 mailTargets.forEach { (accountId, folderId) ->
-                    requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId)))
+                    requireCoreOk(
+                        withManagedGoogleAuth(client, accountId) {
+                            client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId))
+                        },
+                    )
                 }
                 rssTargets.forEach { thread ->
                     requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))
@@ -1466,7 +1491,11 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
                         requireCoreOk(client.markRead(MarkReadParams(threadId = target, messageIds = messageIds)))
                     } else {
                         val folderId = if (column.accountId == UNIFIED_ACCOUNT_ID) INBOX_FOLDER else column.folderId
-                        requireCoreOk(client.markAllRead(MarkAllReadParams(accountId = target, folderId = folderId)))
+                        requireCoreOk(
+                            withManagedGoogleAuth(client, target) {
+                                client.markAllRead(MarkAllReadParams(accountId = target, folderId = folderId))
+                            },
+                        )
                     }
                 }
                 rssTargets.forEach { thread ->
@@ -1560,16 +1589,17 @@ internal fun MeronMobileState.ensureThreadActionFolders(
                 accounts.associate { account ->
                     var folders = loadAccountFolders(client, account)
                     if (folders.hasOnlyBootstrapInbox()) {
-                        ensureManagedGoogleToken(client, account.id)
-                        client.sync(
-                            SyncMailParams(
-                                accountId = account.id,
-                                folderId = INBOX_FOLDER,
-                                limit = 1,
-                                folders = true,
-                                deferTail = true,
-                            ),
-                        )
+                        withManagedGoogleAuth(client, account.id) {
+                            client.sync(
+                                SyncMailParams(
+                                    accountId = account.id,
+                                    folderId = INBOX_FOLDER,
+                                    limit = 1,
+                                    folders = true,
+                                    deferTail = true,
+                                ),
+                            )
+                        }
                         folders = loadAccountFolders(client, account)
                     }
                     account.id to folders

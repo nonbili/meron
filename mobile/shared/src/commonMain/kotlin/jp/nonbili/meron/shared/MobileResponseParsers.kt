@@ -21,6 +21,22 @@ fun requireCoreOk(responseJson: String): String {
     return responseJson
 }
 
+/**
+ * True when a core failure message says the mail server rejected our OAuth
+ * credentials — the shapes meron-core produces for an expired/revoked access
+ * token: "oauth login failed: ... [AUTHENTICATIONFAILED] Invalid credentials"
+ * from IMAP XOAUTH2, and "smtp auth: ..." from an SMTP AUTH rejection. Used to
+ * decide whether re-minting a host-managed Google token and retrying once is
+ * worthwhile.
+ */
+fun isOAuthLoginFailure(message: String?): Boolean {
+    val normalized = message?.lowercase() ?: return false
+    return "oauth login failed" in normalized ||
+        "authenticationfailed" in normalized ||
+        "invalid credentials" in normalized ||
+        "smtp auth" in normalized
+}
+
 data class ThreadActionLocation(
     val threadId: String = "",
     val folder: String = "",

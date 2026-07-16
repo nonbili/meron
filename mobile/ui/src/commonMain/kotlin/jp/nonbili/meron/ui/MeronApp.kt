@@ -48,6 +48,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -922,6 +923,7 @@ private fun MeronMobileScreenContent(
                     onSend = ::sendMail,
                     onBack = ::closeCompose,
                     sending = composeSendInFlight,
+                    snackbarHost = { SnackbarHost(snackbarHost) },
                 )
             }
 

@@ -27,6 +27,10 @@ sealed interface GoogleDeviceAccountResult {
 sealed interface ManagedTokenRefresh {
     data object NotNeeded : ManagedTokenRefresh
 
+    /** The token already pushed into core is comfortably before its recorded
+     *  expiry; minting was skipped. */
+    data object StillFresh : ManagedTokenRefresh
+
     data class Refreshed(
         val accessToken: String,
         val expiresAtEpochSeconds: Long,
@@ -108,8 +112,15 @@ interface MobileHost {
      *  where unsupported. */
     fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit)
 
-    /** Silently mint a fresh access token for a managed Google account before sync. */
-    suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh
+    /** Silently mint a fresh access token for a managed Google account before a
+     *  server-touching command. Unless [force], the host may skip minting and
+     *  return [ManagedTokenRefresh.StillFresh] while the last pushed token is
+     *  comfortably before expiry; [force] mints regardless — used after the
+     *  server rejected the stored token. */
+    suspend fun refreshManagedGoogleToken(
+        accountId: String,
+        force: Boolean = false,
+    ): ManagedTokenRefresh
 
     /** Persist the latest known expiry for a managed Google account. */
     fun recordManagedGoogleExpiry(
@@ -160,7 +171,10 @@ open class DefaultMobileHost(
 
     override fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit) = onResult(GoogleDeviceAccountResult.Cancelled)
 
-    override suspend fun refreshManagedGoogleToken(accountId: String): ManagedTokenRefresh = ManagedTokenRefresh.NotNeeded
+    override suspend fun refreshManagedGoogleToken(
+        accountId: String,
+        force: Boolean,
+    ): ManagedTokenRefresh = ManagedTokenRefresh.NotNeeded
 
     override fun recordManagedGoogleExpiry(
         accountId: String,

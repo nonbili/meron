@@ -45,6 +45,13 @@ object GoogleAccountManagerAuth {
     /** Assumed access-token lifetime (Google access tokens last ~1h). */
     const val TOKEN_LIFETIME_SECONDS = 3600L
 
+    /**
+     * How long before the recorded expiry a token stops counting as fresh.
+     * Matches meron-core's own 5-minute refresh margin, so a token we skip
+     * re-minting cannot expire mid-command.
+     */
+    const val FRESH_MARGIN_SECONDS = 300L
+
     private fun key(accountId: String) = "managed.$accountId"
 
     private fun expiryKey(accountId: String) = "expiry.$accountId"
@@ -53,6 +60,12 @@ object GoogleAccountManagerAuth {
     sealed class TokenRefresh {
         /** Not a managed account, so nothing to do. */
         data object NotNeeded : TokenRefresh()
+
+        /**
+         * The token already pushed into meron-core is comfortably before its
+         * recorded expiry; minting was skipped.
+         */
+        data object StillFresh : TokenRefresh()
 
         /** A fresh token was minted; push it into meron-core, then [recordExpiry]. */
         data class Refreshed(
@@ -100,7 +113,11 @@ object GoogleAccountManagerAuth {
         context: Context,
         accountId: String,
     ) {
-        prefs(context).edit().remove(key(accountId)).apply()
+        prefs(context)
+            .edit()
+            .remove(key(accountId))
+            .remove(expiryKey(accountId))
+            .apply()
     }
 
     /** Device account name for a managed account, or null if not managed here. */
@@ -118,6 +135,14 @@ object GoogleAccountManagerAuth {
         prefs(context).edit().putLong(expiryKey(accountId), expiresAt).apply()
     }
 
+    /** Recorded expiry of the token last pushed into meron-core (0 if unknown). */
+    fun recordedExpiry(
+        context: Context,
+        accountId: String,
+    ): Long =
+        prefs(context)
+            .getLong(expiryKey(accountId), 0L)
+
     /**
      * Mint a fresh access token for managed accounts before sync. Returns
      * [TokenRefresh.NotNeeded] only for non-managed accounts.
@@ -125,13 +150,23 @@ object GoogleAccountManagerAuth {
      * The local expiry is advisory UI state; meron-core has the authoritative
      * token and can drift from this preference after reconnects or restores.
      * Re-minting here keeps platform-managed Gmail from falling back to core's
-     * browser OAuth refresh path.
+     * browser OAuth refresh path. [skipIfFresh] trades that certainty for
+     * cheapness: it skips minting while the recorded expiry is comfortably
+     * away, for callers that run before every server-touching command and
+     * force-mint on an auth failure anyway.
      */
     suspend fun mintIfNeeded(
         context: Context,
         accountId: String,
+        skipIfFresh: Boolean = false,
     ): TokenRefresh {
         val deviceAccount = managedAccountName(context, accountId) ?: return TokenRefresh.NotNeeded
+        if (skipIfFresh) {
+            val now = System.currentTimeMillis() / 1000L
+            if (recordedExpiry(context, accountId) > now + FRESH_MARGIN_SECONDS) {
+                return TokenRefresh.StillFresh
+            }
+        }
         val token =
             try {
                 silentToken(context, deviceAccount)

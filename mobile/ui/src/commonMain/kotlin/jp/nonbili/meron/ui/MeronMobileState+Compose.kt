@@ -341,7 +341,8 @@ internal fun MeronMobileState.sendMail() {
                         inReplyTo = composeInReplyTo,
                         references = composeReferences,
                     )
-                MobileMailCommandClient(core).send(params)
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, accountId) { client.send(params) }
             }
         }.onSuccess {
             // Read the draft id after the send completes so an autosave that
@@ -414,9 +415,8 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
                         inReplyTo = composeInReplyTo,
                         references = composeReferences,
                     )
-            MobileMailCommandClient(core).saveDraft(
-                params,
-            )
+            val client = MobileMailCommandClient(core)
+            withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
         }
     }.fold(
         onSuccess = {
@@ -493,7 +493,8 @@ private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): B
                         inReplyTo = replyParams.inReplyTo,
                         references = replyParams.references,
                     )
-            MobileMailCommandClient(core).saveDraft(params)
+            val client = MobileMailCommandClient(core)
+            withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
         }
     }.fold(
         onSuccess = {
@@ -552,7 +553,10 @@ internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                MobileMailCommandClient(core).discardDraft(DiscardDraftParams(accountId = accountId, draftId = draftId))
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, accountId) {
+                    client.discardDraft(DiscardDraftParams(accountId = accountId, draftId = draftId))
+                }
             }
         }.onSuccess {
             syncCoreThreads(syncFirst = false)
@@ -664,9 +668,12 @@ internal fun MeronMobileState.discardComposeDraft() {
         runCatching {
             if (!draftId.isNullOrBlank()) {
                 withContext(ioDispatcher) {
-                    MobileMailCommandClient(core).discardDraft(
-                        DiscardDraftParams(accountId = accountId, draftId = draftId),
-                    )
+                    val client = MobileMailCommandClient(core)
+                    withManagedGoogleAuth(client, accountId) {
+                        client.discardDraft(
+                            DiscardDraftParams(accountId = accountId, draftId = draftId),
+                        )
+                    }
                 }
             }
         }.onSuccess {
@@ -772,7 +779,8 @@ internal fun MeronMobileState.sendQuickReply() {
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
-                MobileMailCommandClient(core).send(params)
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, accountId) { client.send(params) }
             }
         }.onSuccess {
             // Read the draft id after the send completes so an autosave that
@@ -822,8 +830,13 @@ internal fun MeronMobileState.openMessageCompose(
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
+                val accountId = selectedCoreThread?.accountId.orEmpty()
                 forwardableAttachments(message).mapNotNull { attachment ->
-                    val data = parseAttachmentDataResponse(client.readAttachment(AttachmentReadParams(attachment.key)))
+                    val response =
+                        withManagedGoogleAuth(client, accountId) {
+                            client.readAttachment(AttachmentReadParams(attachment.key))
+                        }
+                    val data = parseAttachmentDataResponse(response)
                     data.takeIf { it.isNotBlank() }?.let { attachmentToDraftAttachment(attachment, it) }
                 }
             }
@@ -856,7 +869,11 @@ internal fun MeronMobileState.openMessageCompose(
 
 @OptIn(ExperimentalEncodingApi::class)
 internal suspend fun MeronMobileState.readAttachmentBytes(attachment: MessageAttachment): ByteArray {
-    val response = MobileMailCommandClient(core).readAttachment(AttachmentReadParams(attachment.key))
+    val client = MobileMailCommandClient(core)
+    val response =
+        withManagedGoogleAuth(client, selectedCoreThread?.accountId.orEmpty()) {
+            client.readAttachment(AttachmentReadParams(attachment.key))
+        }
     val data = parseAttachmentDataResponse(response)
     if (data.isBlank()) error("Attachment data is empty")
     return Base64.Default.decode(data)

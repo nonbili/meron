@@ -23,6 +23,20 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun detectsOAuthLoginFailureMessages() {
+        assertTrue(
+            isOAuthLoginFailure(
+                """oauth login failed: no response: code: None, info: Some("[AUTHENTICATIONFAILED] Invalid credentials (Failure)")""",
+            ),
+        )
+        assertTrue(isOAuthLoginFailure("smtp auth: permanent error (535): 5.7.8 Username and Password not accepted"))
+        assertTrue(isOAuthLoginFailure("login failed: [AUTHENTICATIONFAILED] Invalid credentials"))
+        assertFalse(isOAuthLoginFailure(null))
+        assertFalse(isOAuthLoginFailure("smtp connect: connection refused"))
+        assertFalse(isOAuthLoginFailure("account needs reconnect: me@gmail.com"))
+    }
+
+    @Test
     fun parsesStorageUsageEnvelope() {
         val usage =
             parseStorageUsageResponse(

@@ -191,6 +191,7 @@ import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
@@ -199,6 +200,7 @@ import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.isOAuthCallbackUrl
+import jp.nonbili.meron.shared.isOAuthLoginFailure
 import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
@@ -225,6 +227,7 @@ import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -795,30 +798,37 @@ private fun MeronMobileState.addGoogleDeviceAccount(account: GoogleDeviceAccount
 
 /**
  * For host-managed Gmail accounts, mint a fresh access token and push it into
- * meron-core before a sync. No-op for browser-flow / non-managed accounts.
- * Failures are swallowed so a stale token still attempts the sync.
+ * meron-core before a server-touching command. No-op for browser-flow /
+ * non-managed accounts, and — unless [force] — while the last pushed token is
+ * comfortably before expiry. Returns true only when a fresh token was pushed
+ * into core. Failures are swallowed so a stale token still attempts the
+ * command.
  */
 internal suspend fun MeronMobileState.ensureManagedGoogleToken(
     client: MobileMailCommandClient,
     accountId: String,
-) {
-    when (val refresh = mobileHost.refreshManagedGoogleToken(accountId)) {
-        ManagedTokenRefresh.NotNeeded -> {
+    force: Boolean = false,
+): Boolean {
+    when (val refresh = mobileHost.refreshManagedGoogleToken(accountId, force)) {
+        ManagedTokenRefresh.NotNeeded, ManagedTokenRefresh.StillFresh -> {
             Unit
         }
 
         is ManagedTokenRefresh.Refreshed -> {
-            runCatching {
-                client.updateOAuthToken(
-                    UpdateOAuthTokenParams(
-                        accountId = accountId,
-                        accessToken = refresh.accessToken,
-                        tokenExpiresAt = refresh.expiresAtEpochSeconds,
-                    ),
-                )
-            }.onSuccess {
+            val pushed =
+                runCatching {
+                    client.updateOAuthToken(
+                        UpdateOAuthTokenParams(
+                            accountId = accountId,
+                            accessToken = refresh.accessToken,
+                            tokenExpiresAt = refresh.expiresAtEpochSeconds,
+                        ),
+                    )
+                }
+            if (pushed.isSuccess) {
                 mobileHost.recordManagedGoogleExpiry(accountId, refresh.expiresAtEpochSeconds)
                 if (googleReauthAccountId == accountId) googleReauthAccountId = null
+                return true
             }
         }
 
@@ -830,10 +840,35 @@ internal suspend fun MeronMobileState.ensureManagedGoogleToken(
 
         ManagedTokenRefresh.TransientError -> {
             // Network hiccup while minting — not a reconnect case. Attempt the
-            // sync with the stored token; it may still be valid.
+            // command with the stored token; it may still be valid.
             Unit
         }
     }
+    return false
+}
+
+/**
+ * Run a server-touching mail command with managed-Gmail token upkeep: refresh
+ * the pushed token first when it is near expiry, and if the server still
+ * rejects our OAuth credentials (token revoked mid-session, or core state that
+ * drifted from the host's expiry record), force-mint a fresh token and retry
+ * once. Non-managed accounts run [action] unchanged. Handles both failure
+ * shapes: hosts whose core invoke throws on an error payload, and ones that
+ * return the payload for the caller to inspect.
+ */
+internal suspend fun MeronMobileState.withManagedGoogleAuth(
+    client: MobileMailCommandClient,
+    accountId: String,
+    action: suspend () -> String,
+): String {
+    if (accountId.isBlank()) return action()
+    ensureManagedGoogleToken(client, accountId)
+    val first = runCatching { action() }
+    (first.exceptionOrNull() as? CancellationException)?.let { throw it }
+    val errorMessage = first.exceptionOrNull()?.message ?: first.getOrNull()?.let(::coreErrorMessage)
+    if (!isOAuthLoginFailure(errorMessage)) return first.getOrThrow()
+    if (!ensureManagedGoogleToken(client, accountId, force = true)) return first.getOrThrow()
+    return action()
 }
 
 internal fun MeronMobileState.exchangeOAuthCode() {
@@ -1027,17 +1062,18 @@ internal suspend fun MeronMobileState.loadAccountInbox(
             Log.i("MailLoad", "loadAccountInbox sync rss account=${account.id}")
             client.syncRss(SyncRssParams(accountId = account.id))
         } else {
-            ensureManagedGoogleToken(client, account.id)
             Log.i("MailLoad", "loadAccountInbox sync mail account=${account.id} folder=$requestedFolder")
-            client.sync(
-                SyncMailParams(
-                    accountId = account.id,
-                    folderId = requestedFolder,
-                    limit = syncLimit,
-                    folders = true,
-                    deferTail = true,
-                ),
-            )
+            withManagedGoogleAuth(client, account.id) {
+                client.sync(
+                    SyncMailParams(
+                        accountId = account.id,
+                        folderId = requestedFolder,
+                        limit = syncLimit,
+                        folders = true,
+                        deferTail = true,
+                    ),
+                )
+            }
         }
     }
     val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
