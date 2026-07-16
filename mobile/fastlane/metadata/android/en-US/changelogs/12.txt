@@ -1,0 +1,3 @@
+- Improve RSS account lifecycle and UX
+- Support receiving sharing
+- Prevent crashes
