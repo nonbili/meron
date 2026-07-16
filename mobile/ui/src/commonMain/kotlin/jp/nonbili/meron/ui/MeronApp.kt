@@ -89,6 +89,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -183,6 +185,7 @@ import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.io.encoding.Base64
@@ -265,6 +268,22 @@ private fun PickedFile.toDraftAttachment(): DraftAttachment =
         dataBase64 = Base64.Default.encode(bytes),
     )
 
+// Mutating the back stack while a NavHost transition is still running can make
+// AnimatedContent recompose an already-destroyed NavBackStackEntry, crashing in
+// its ViewModelStore. Only pop/navigate once the current entry has settled.
+internal fun canMutateBackStack(entryState: Lifecycle.State?): Boolean = entryState == null || entryState.isAtLeast(Lifecycle.State.RESUMED)
+
+// Waits for the entry to leave its transition; returns false if it was
+// destroyed instead (the back stack changed, so the caller's navigation
+// request is stale and must be dropped).
+private suspend fun NavBackStackEntry.awaitSettled(): Boolean {
+    val state =
+        lifecycle.currentStateFlow.first {
+            it == Lifecycle.State.DESTROYED || it.isAtLeast(Lifecycle.State.RESUMED)
+        }
+    return state != Lifecycle.State.DESTROYED
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalEncodingApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun MeronMobileScreenContent(
@@ -289,10 +308,12 @@ private fun MeronMobileScreenContent(
         var pendingRoute by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(screen) {
             val targetRoute = screen.route()
-            val currentRoute = currentBackStackEntry?.destination?.route
+            val currentEntry = currentBackStackEntry
+            val currentRoute = currentEntry?.destination?.route
             if (currentRoute == null) {
                 pendingRoute = targetRoute
             } else if (currentRoute != targetRoute) {
+                if (!currentEntry.awaitSettled()) return@LaunchedEffect
                 if (!navController.popBackStack(targetRoute, inclusive = false)) {
                     navController.navigate(targetRoute) {
                         launchSingleTop = true
@@ -301,10 +322,12 @@ private fun MeronMobileScreenContent(
             }
         }
         LaunchedEffect(currentBackStackEntry?.destination?.route) {
-            val currentRoute = currentBackStackEntry?.destination?.route
+            val currentEntry = currentBackStackEntry
+            val currentRoute = currentEntry?.destination?.route
             val queuedRoute = pendingRoute
             if (queuedRoute != null && currentRoute != null && currentRoute != queuedRoute) {
                 pendingRoute = null
+                if (!currentEntry.awaitSettled()) return@LaunchedEffect
                 navController.navigate(queuedRoute) {
                     launchSingleTop = true
                 }
@@ -317,11 +340,13 @@ private fun MeronMobileScreenContent(
             }
         }
         val popAppBack: () -> Unit = {
-            if (screen == Screen.Thread) {
-                flushQuickReplyAutosave()
-            }
-            if (!navController.popBackStack()) {
-                screen = previousTopScreen
+            if (canMutateBackStack(navController.currentBackStackEntry?.lifecycle?.currentState)) {
+                if (screen == Screen.Thread) {
+                    flushQuickReplyAutosave()
+                }
+                if (!navController.popBackStack()) {
+                    screen = previousTopScreen
+                }
             }
         }
         DisposableEffect(Unit) {
