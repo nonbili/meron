@@ -1,0 +1,2 @@
+- Keep managed Gmail tokens fresh
+- Improve diagnostics and sending feedback
