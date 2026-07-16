@@ -1,16 +1,21 @@
 package jp.nonbili.meron.ui
 
 import android.annotation.SuppressLint
+import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -24,6 +29,10 @@ actual fun MailWebView(
     val latestOnHeight = rememberUpdatedState(onContentHeight)
     val latestOnOpenUrl = rememberUpdatedState(onOpenUrl)
     val latestOnOpenImage = rememberUpdatedState(onOpenImage)
+    // Inside NavHost this is the back-stack entry's lifecycle: RESUMED only
+    // once the navigation transition has settled.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
+        .collectAsState()
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -92,7 +101,17 @@ actual fun MailWebView(
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            // WebView draws through a GL functor that hwui cannot render into
+            // the offscreen layers used by navigation transitions — doing so
+            // crashes natively (SkSurface::getCanvas in GLFunctorDrawable) on
+            // GL-pipeline devices. Skip drawing until the transition settles;
+            // the page keeps loading and measuring while INVISIBLE.
+            webView.visibility =
+                if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) View.VISIBLE else View.INVISIBLE
+            if (webView.tag != html) {
+                webView.tag = html
+                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            }
         },
     )
 }
