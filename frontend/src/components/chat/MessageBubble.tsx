@@ -234,7 +234,12 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
                       className={`block w-full overflow-hidden hover:opacity-90 cursor-pointer ${btnClass}`}
                       title={image.filename}
                     >
-                      <img src={src} alt={image.filename} loading="lazy" className="w-full h-full object-cover" />
+                      <img
+                        src={src}
+                        alt={image.filename}
+                        loading="lazy"
+                        className="w-full h-full object-cover object-top"
+                      />
                     </button>
                   )
                 })}
