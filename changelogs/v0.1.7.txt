@@ -1,0 +1,5 @@
+- Save quick reply drafts to the server and improve draft saving reliability
+- Prevent duplicate sends and improve SMTP delivery reliability
+- Fix inline images and attachment filenames in sent messages
+- Keep Kanban unread counts in sync
+- Fix feed removal and minimized Kanban column labels

@@ -543,6 +543,11 @@ export function openComposeTab(
   if (sendable.length === 0) return undefined
   const selected = ui$.selectedAccount.get()
   const accountId = seed?.accountId ?? sendable.find((acc) => acc.id === selected)?.id ?? sendable[0].id
+  // Only a truly blank compose (no seeded body) should pick up the account's
+  // HTML/plain preference; reply/forward/mailto paths that seed plain `text`
+  // stay plain since the editor only ever hydrates from `html`.
+  const hasSeededBody = !!(seed?.text || seed?.html)
+  const account = sendable.find((acc) => acc.id === accountId)
 
   const draft: ComposeDraft = {
     accountId,
@@ -552,7 +557,7 @@ export function openComposeTab(
     bcc: seed?.bcc ?? '',
     replyTo: seed?.replyTo ?? '',
     subject: seed?.subject ?? '',
-    rich: seed?.rich ?? false,
+    rich: seed?.rich ?? (hasSeededBody ? false : (account?.conversation_html ?? true)),
     html: seed?.html ?? '',
     text: seed?.text ?? '',
     showCcBcc:
