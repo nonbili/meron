@@ -163,7 +163,9 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
             )
         }
     return ThreadListPage(
-        threads = threads,
+        // Thread ids key the LazyColumn items; a duplicate id in one core
+        // response (e.g. unified or search listings) would crash composition.
+        threads = threads.distinctBy { it.id },
         nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
     )
 }
@@ -177,22 +179,24 @@ data class ThreadReadPage(
 
 fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
     val itemsJson = responseJson.findJsonArrayProperty("items") ?: return emptyList()
-    return itemsJson.jsonArrayElements().mapNotNull { item ->
-        val id = item.findJsonStringProperty("id").orEmpty()
-        val threadId = item.findJsonStringProperty("thread_id").orEmpty()
-        if (id.isBlank() || threadId.isBlank()) return@mapNotNull null
-        StarredItemSummary(
-            id = id,
-            threadId = threadId,
-            accountId = item.findJsonStringProperty("account_id").orEmpty(),
-            folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
-            subject = item.findJsonStringProperty("subject").orEmpty(),
-            sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
-            preview = item.findJsonStringProperty("preview").orEmpty(),
-            unread = item.findJsonBooleanProperty("unread") ?: false,
-            dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
-        )
-    }
+    return itemsJson
+        .jsonArrayElements()
+        .mapNotNull { item ->
+            val id = item.findJsonStringProperty("id").orEmpty()
+            val threadId = item.findJsonStringProperty("thread_id").orEmpty()
+            if (id.isBlank() || threadId.isBlank()) return@mapNotNull null
+            StarredItemSummary(
+                id = id,
+                threadId = threadId,
+                accountId = item.findJsonStringProperty("account_id").orEmpty(),
+                folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
+                subject = item.findJsonStringProperty("subject").orEmpty(),
+                sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
+                preview = item.findJsonStringProperty("preview").orEmpty(),
+                unread = item.findJsonBooleanProperty("unread") ?: false,
+                dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
+            )
+        }.distinctBy { it.id }
 }
 
 fun parseThreadReadPage(responseJson: String): ThreadReadPage {
@@ -244,7 +248,8 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
             )
         }
     return ThreadReadPage(
-        messages = messages,
+        // Message ids key the conversation LazyColumn items; duplicates crash.
+        messages = messages.distinctBy { it.id },
         nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
     )
 }

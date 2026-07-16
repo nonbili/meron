@@ -232,6 +232,9 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.math.abs
 
+// Only touched from the main thread (all send paths run in the UI scope).
+private var localSendSequence = 0L
+
 internal fun MeronMobileState.defaultSendAccountId(): String =
     selectedCoreAccountId.takeIf { selected ->
         selected != UNIFIED_ACCOUNT_ID && coreAccounts.any { it.id == selected && !accountSummaryIsRss(it) }
@@ -741,7 +744,9 @@ internal fun MeronMobileState.sendQuickReply() {
     // "Failed" and stays visible so the reply isn't lost. The reply-bar text
     // itself is left populated until the send actually succeeds, so a failed
     // send can be retried with its real content instead of resending blank.
-    val tempId = "local-send-${currentTimeMillis()}"
+    // A counter suffix keeps ids unique even for two sends in the same
+    // millisecond — message ids key the conversation list, duplicates crash.
+    val tempId = "local-send-${currentTimeMillis()}-${localSendSequence++}"
     val optimistic =
         MessageBody(
             id = tempId,

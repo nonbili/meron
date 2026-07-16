@@ -106,6 +106,39 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun dropsDuplicateThreadIdsInOnePage() {
+        val page =
+            parseThreadListPage(
+                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","subject":"first","date":1700000000},{"id":"acc#INBOX#t","subject":"dupe","date":1700000001},{"id":"acc#INBOX#u","date":1700000002}]}}""",
+            )
+
+        assertEquals(listOf("acc#INBOX#t", "acc#INBOX#u"), page.threads.map { it.id })
+        assertEquals("first", page.threads[0].subject)
+    }
+
+    @Test
+    fun dropsDuplicateStarredItemIds() {
+        val items =
+            parseStarredItemsResponse(
+                """{"id":3,"result":{"items":[{"id":"m1","thread_id":"t1","subject":"first"},{"id":"m1","thread_id":"t1","subject":"dupe"},{"id":"m2","thread_id":"t1"}]}}""",
+            )
+
+        assertEquals(listOf("m1", "m2"), items.map { it.id })
+        assertEquals("first", items[0].subject)
+    }
+
+    @Test
+    fun dropsDuplicateMessageIdsInThreadPage() {
+        val page =
+            parseThreadReadPage(
+                """{"id":4,"result":{"messages":[{"id":"m1","body":"first"},{"id":"m1","body":"dupe"},{"id":"m2","body":"other"}]}}""",
+            )
+
+        assertEquals(listOf("m1", "m2"), page.messages.map { it.id })
+        assertEquals("first", page.messages[0].body)
+    }
+
+    @Test
     fun toleratesBareResultShape() {
         val accounts = parseAccountListResponse("""{"accounts":[{"id":"rss-1","email":"rss-1.local"}]}""")
 
