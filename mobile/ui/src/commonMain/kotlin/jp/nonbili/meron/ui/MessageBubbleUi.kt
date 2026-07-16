@@ -343,6 +343,14 @@ internal fun MessageBubble(
     }
 }
 
+// Compose Constraints packs sizes into bit fields and cannot represent
+// dimensions past ~262k px; sizing the WebView to an unclamped page height
+// (a very tall newsletter, or a bogus negative report from the JS bridge)
+// makes measurement throw. 20000dp stays well under the limit at any density.
+internal val MailBodyMaxReportedHeight = 20_000.dp
+
+internal fun clampMailBodyHeight(reported: Dp): Dp = reported.coerceIn(0.dp, MailBodyMaxReportedHeight)
+
 @Composable
 internal fun HtmlMessageBody(
     html: String,
@@ -546,7 +554,7 @@ internal fun HtmlMessageBody(
         ) {
             MailWebView(
                 html = mobileHtml,
-                onContentHeight = { contentHeight = it },
+                onContentHeight = { contentHeight = clampMailBodyHeight(it) },
                 onOpenUrl = onOpenUrl,
                 onOpenImage = onOpenImage,
                 modifier = webViewModifier,
@@ -555,7 +563,7 @@ internal fun HtmlMessageBody(
     } else {
         MailWebView(
             html = mobileHtml,
-            onContentHeight = { contentHeight = it },
+            onContentHeight = { contentHeight = clampMailBodyHeight(it) },
             onOpenUrl = onOpenUrl,
             onOpenImage = onOpenImage,
             modifier = webViewModifier,
