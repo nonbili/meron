@@ -6,10 +6,12 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.parseAccountListResponse
@@ -32,11 +34,31 @@ class AndroidMailPushService :
     // AccountManager calls inside mintAndPushToken hop to IO themselves.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var tokenRemintJob: Job? = null
+    private var foregroundActive = false
 
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
-        startForeground(NOTIFICATION_ID, foregroundNotification(this))
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                foregroundNotification(this),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    0
+                },
+            )
+        } catch (e: Exception) {
+            // startForeground can still be rejected (background-start
+            // restrictions, battery saver states); fail quietly instead of
+            // crashing service creation.
+            Log.w(TAG, "live mail push unavailable: ${e.message}")
+            stopSelf()
+            return
+        }
+        foregroundActive = true
         if (!MeronCoreNative.isLoaded()) {
             stopSelf()
             return
@@ -50,13 +72,23 @@ class AndroidMailPushService :
         flags: Int,
         startId: Int,
     ): Int {
-        if (!isEnabled(this)) {
+        if (!foregroundActive || !isEnabled(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
         scope.launch { refreshWatches() }
         ensureTokenRemintLoop()
         return START_STICKY
+    }
+
+    // specialUse has no time budget, but if the system ever delivers a
+    // timeout (e.g. the type changes again) the app crashes unless the
+    // service stops promptly.
+    override fun onTimeout(
+        startId: Int,
+        fgsType: Int,
+    ) {
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -143,7 +175,13 @@ class AndroidMailPushService :
         fun start(context: Context) {
             if (!isEnabled(context)) return
             val intent = Intent(context, AndroidMailPushService::class.java)
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                // Background-start restrictions (Android 12+) can reject the
+                // request when nothing foreground is behind it.
+                Log.w(TAG, "cannot start live mail push: ${e.message}")
+            }
         }
 
         fun stop(context: Context) {

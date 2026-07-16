@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Gmail via on-device Google account (AccountManager). -->
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
@@ -24,10 +24,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- specialUse instead of dataSync: Android 15 caps dataSync services
+             at ~6h/day, but live mail push must hold IMAP IDLE connections
+             open indefinitely while the user has it enabled. -->
         <service
             android:name=".AndroidMailPushService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Maintains persistent IMAP IDLE connections to the user's mail servers so new-mail notifications arrive in real time; IMAP has no push transport (unlike FCM) and disconnecting ends server-side notification delivery." />
+        </service>
 
         <activity
             android:name=".ComposeMainActivity"
