@@ -21,17 +21,6 @@ import java.util.concurrent.TimeUnit
 private const val KEY_MANUAL_RUN = "jp.nonbili.meron.background_sync.MANUAL_RUN"
 private const val TAG = "MeronBgSync"
 
-private val emailRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
-
-/** Mask the local part of an email so the diagnostic log (which a user may
- *  share with support) keeps the domain for context but never the full
- *  address, e.g. "j***@gmail.com". */
-private fun redactEmail(email: String): String {
-    val at = email.indexOf('@')
-    if (at <= 0) return "***"
-    return "${email[0]}***${email.substring(at)}"
-}
-
 /** Redacted label for an account — a masked email, or the bare account id
  *  when there's no email. Never a secret (token/password). */
 private fun accountLabel(account: JSONObject): String {
@@ -39,19 +28,13 @@ private fun accountLabel(account: JSONObject): String {
     return if (email.isNotBlank()) redactEmail(email) else account.optString("id")
 }
 
-/** Mask any email addresses that leak into a server-provided error message
- *  before it's written to the shareable diagnostic log. */
-private fun redactMessage(message: String): String = emailRegex.replace(message) { redactEmail(it.value) }
-
 private fun logEvent(
     context: Context,
     message: String,
     warning: Boolean = false,
 ) {
     if (warning) Log.w(TAG, message) else Log.i(TAG, message)
-    if (loadAppBoolean(context, SYNC_DIAGNOSTIC_LOG_ENABLED_PREF, false)) {
-        AndroidSyncDiagnosticLog.append(context, message)
-    }
+    AndroidSyncDiagnosticLog.appendRedacted(context, message)
 }
 
 class AndroidBackgroundSyncWorker(

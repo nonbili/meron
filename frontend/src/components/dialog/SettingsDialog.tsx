@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -19,6 +19,7 @@ import {
   SpellCheck,
   Pause,
   BellOff,
+  ScrollText,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -433,6 +434,7 @@ function GeneralSection() {
       </SettingsGroup>
 
       <StorageGroup />
+      <LogsGroup />
     </div>
   )
 }
@@ -521,6 +523,115 @@ function StorageGroup() {
         }
       />
     </SettingsGroup>
+  )
+}
+
+function LogsGroup() {
+  const { t } = useTranslation()
+  const [viewerOpen, setViewerOpen] = useState(false)
+  return (
+    <SettingsGroup title={t('settings.sections.logs')}>
+      <SettingRow
+        title={t('settings.sections.logs')}
+        hint={t('settings.syncDiagnosticLogHint')}
+        control={
+          <button
+            onClick={() => setViewerOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[10px] cursor-pointer transition-colors"
+          >
+            <ScrollText size={12} />
+            {t('settings.viewSyncLog')}
+          </button>
+        }
+      />
+      {viewerOpen && <LogViewerDialog onClose={() => setViewerOpen(false)} />}
+    </SettingsGroup>
+  )
+}
+
+// In-app viewer for the local app log, so the user can inspect what would be
+// shared before exporting it (export lives in the dialog header).
+function LogViewerDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
+  const [log, setLog] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // The newest entries are at the end; start there.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el && log) el.scrollTop = el.scrollHeight
+  }, [log])
+
+  useEffect(() => {
+    let alive = true
+    invoke<{ log: string }>('log.read')
+      .then((res) => {
+        if (alive) setLog(res?.log ?? '')
+      })
+      .catch((error) => {
+        showToast(error instanceof Error ? error.message : String(error), 'error')
+        if (alive) setLog('')
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Layered above Settings; stop Esc from bubbling up and closing Settings too.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [onClose])
+
+  const exportLog = async () => {
+    try {
+      const res = await invoke<{ saved: boolean; path?: string }>('log.export')
+      if (res?.saved) showToast('Log exported', 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }
+
+  return (
+    <div
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      className="fixed inset-0 flex items-center justify-center bg-black/35 dark:bg-black/60 backdrop-blur-[3px] z-50 p-4 select-none animate-fade-in"
+    >
+      <div className="bg-chats border border-border/80 text-primary max-w-3xl w-full h-[560px] max-h-[85vh] rounded-3xl shadow-2xl shadow-black/20 dark:shadow-black/45 animate-slide-up flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between gap-4 px-6 py-4.5 border-b border-border/60 shrink-0 bg-chats/95">
+          <h2 className="text-base font-bold tracking-tight leading-tight">{t('settings.viewSyncLog')}</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void exportLog()}
+              disabled={!log}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[10px] cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={12} />
+              {t('common.export')}
+            </button>
+            <IconButton icon={X} iconSize={16} label={t('buttons.close')} size="sm" onClick={onClose} />
+          </div>
+        </div>
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 select-text">
+          {log === null ? (
+            <p className="text-xs text-secondary">{t('common.loading')}</p>
+          ) : log === '' ? (
+            <p className="text-xs text-secondary">{t('settings.syncLogEmpty')}</p>
+          ) : (
+            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-4 text-primary">{log}</pre>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

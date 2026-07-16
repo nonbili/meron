@@ -383,12 +383,24 @@ internal fun ComposeScreen(
                         Icon(Icons.Filled.AttachFile, contentDescription = tr("composer.actions.attachFiles"))
                     }
                     val sendEnabled = to.isNotBlank() && !sending
+                    val sendingDescription = tr("composer.status.sending")
                     IconButton(onClick = onSend, enabled = sendEnabled) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = tr("buttons.send"),
-                            tint = if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                        )
+                        if (sending) {
+                            CircularProgressIndicator(
+                                modifier =
+                                    Modifier
+                                        .size(20.dp)
+                                        .semantics { contentDescription = sendingDescription },
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = tr("buttons.send"),
+                                tint = if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            )
+                        }
                     }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {

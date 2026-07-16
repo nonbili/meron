@@ -2,6 +2,7 @@ package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -53,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -132,8 +137,7 @@ internal fun SettingsScreen(
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
-    syncDiagnosticLogEnabled: Boolean,
-    onToggleSyncDiagnosticLog: () -> Unit,
+    readDiagnosticLog: () -> String,
     onShareDiagnosticLog: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
@@ -157,6 +161,7 @@ internal fun SettingsScreen(
             SettingsRoutes.AccountWallpaper -> selectedSettingsAccountId?.let { SettingsPage.AccountWallpaper(it) } ?: SettingsPage.Root
             SettingsRoutes.KanbanBoard -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardDetail(it) } ?: SettingsPage.Root
             SettingsRoutes.KanbanBoardWallpaper -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardWallpaper(it) } ?: SettingsPage.Root
+            SettingsRoutes.SyncLog -> SettingsPage.SyncLog
             else -> SettingsPage.Root
         }
     LaunchedEffect(initialAccountId) {
@@ -214,12 +219,20 @@ internal fun SettingsScreen(
                             is SettingsPage.AccountWallpaper -> tr("settings.account.chatBackground")
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
                             is SettingsPage.KanbanBoardWallpaper -> tr("settings.account.chatBackground")
+                            SettingsPage.SyncLog -> tr("settings.viewSyncLog")
                         },
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = handleBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                    }
+                },
+                actions = {
+                    if (page == SettingsPage.SyncLog) {
+                        IconButton(onClick = onShareDiagnosticLog) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = tr("settings.shareSyncLog"))
+                        }
                     }
                 },
             )
@@ -261,9 +274,7 @@ internal fun SettingsScreen(
                     backgroundSyncEnabled = backgroundSyncEnabled,
                     onToggleBackgroundSync = onToggleBackgroundSync,
                     onRefreshBackground = onRefreshBackground,
-                    syncDiagnosticLogEnabled = syncDiagnosticLogEnabled,
-                    onToggleSyncDiagnosticLog = onToggleSyncDiagnosticLog,
-                    onShareDiagnosticLog = onShareDiagnosticLog,
+                    onOpenSyncLog = { settingsNavController.navigate(SettingsRoutes.SyncLog) },
                     pollIntervalMinutes = pollIntervalMinutes,
                     onCyclePollInterval = onCyclePollInterval,
                     storageUsage = storageUsage,
@@ -408,6 +419,13 @@ internal fun SettingsScreen(
                 }
             }
 
+            composable(SettingsRoutes.SyncLog) {
+                SettingsSyncLogPage(
+                    logText = remember { readDiagnosticLog() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
             composable(SettingsRoutes.Root) {
                 // Mirrors the desktop Settings sidebar: a single "General" entry,
                 // then Kanban boards, Mail accounts, and Feed accounts sections.
@@ -502,6 +520,27 @@ internal fun SettingsScreen(
     }
 }
 
+/** In-app viewer for the on-device diagnostic log, so a user can inspect what
+ *  happened before deciding to share it (sharing lives in the top bar). */
+@Composable
+private fun SettingsSyncLogPage(
+    logText: String,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    // The newest entries are at the end; start there.
+    LaunchedEffect(logText) { scrollState.scrollTo(scrollState.maxValue) }
+    Column(modifier.verticalScroll(scrollState).padding(16.dp)) {
+        if (logText.isBlank()) {
+            Text(tr("settings.syncLogEmpty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            SelectionContainer {
+                Text(logText, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+}
+
 private sealed class SettingsPage {
     data object Root : SettingsPage()
 
@@ -522,6 +561,8 @@ private sealed class SettingsPage {
     data class KanbanBoardWallpaper(
         val boardId: String,
     ) : SettingsPage()
+
+    data object SyncLog : SettingsPage()
 }
 
 private object SettingsRoutes {
@@ -531,6 +572,7 @@ private object SettingsRoutes {
     const val AccountWallpaper = "settings/account-wallpaper"
     const val KanbanBoard = "settings/kanban-board"
     const val KanbanBoardWallpaper = "settings/kanban-board-wallpaper"
+    const val SyncLog = "settings/sync-log"
 }
 
 // Combines the desktop "General" section: Appearance, Sidebar, Kanban,
@@ -561,9 +603,7 @@ internal fun SettingsGeneralPage(
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
-    syncDiagnosticLogEnabled: Boolean,
-    onToggleSyncDiagnosticLog: () -> Unit,
-    onShareDiagnosticLog: () -> Unit,
+    onOpenSyncLog: () -> Unit,
     pollIntervalMinutes: Int,
     onCyclePollInterval: () -> Unit,
     storageUsage: StorageUsage?,
@@ -717,23 +757,12 @@ internal fun SettingsGeneralPage(
             }
         }
         item {
-            SettingsToggleRow(
+            SettingsRow(
                 icon = Icons.Filled.BugReport,
-                title = tr("settings.syncDiagnosticLog"),
+                title = tr("settings.viewSyncLog"),
                 subtitle = tr("settings.syncDiagnosticLogHint"),
-                checked = syncDiagnosticLogEnabled,
-                onToggle = onToggleSyncDiagnosticLog,
+                onClick = onOpenSyncLog,
             )
-        }
-        if (syncDiagnosticLogEnabled) {
-            item {
-                SettingsRow(
-                    icon = Icons.AutoMirrored.Filled.Send,
-                    title = tr("settings.shareSyncLog"),
-                    subtitle = tr("settings.shareSyncLogHint"),
-                    onClick = onShareDiagnosticLog,
-                )
-            }
         }
         if (notificationsNeedPermission) {
             item {

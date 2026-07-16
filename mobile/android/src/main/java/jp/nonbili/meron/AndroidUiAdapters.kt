@@ -199,6 +199,10 @@ class AndroidMobileHost(
                             ?: it::class.simpleName
                             ?: "Google AccountManager token request failed."
                     Log.w(GOOGLE_AUTH_LOG_TAG, "Google AccountManager token request failed; falling back to browser", it)
+                    AndroidSyncDiagnosticLog.appendRedacted(
+                        activity,
+                        "$GOOGLE_AUTH_LOG_TAG token request failed; falling back to browser: ${it.message}",
+                    )
                     callback?.invoke(GoogleDeviceAccountResult.Failed(lastGoogleDeviceAuthError))
                 }
             }
@@ -242,10 +246,12 @@ class AndroidMobileHost(
         AndroidBackgroundSyncScheduler.runOnce(activity)
     }
 
+    override fun readDiagnosticLog(): String = AndroidSyncDiagnosticLog.read(activity)
+
     override fun shareDiagnosticLog() {
         val body =
             AndroidSyncDiagnosticLog.read(activity).ifBlank {
-                "No background sync activity recorded yet. Enable diagnostic logging in Settings and try again after the next sync."
+                "No log entries recorded yet. Try again after the next sync."
             }
         val disclosure =
             "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +

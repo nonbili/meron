@@ -7,13 +7,6 @@ enum IosSyncDiagnosticLog {
     private static let fileName = "sync-diagnostic.log"
     private static let maxLines = 500
 
-    /// Mirrors IosAppPreferences("meron_app") + SYNC_DIAGNOSTIC_LOG_ENABLED_PREF.
-    private static let enabledDefaultsKey = "meron_app.sync_diagnostic_log_enabled_v1"
-
-    private static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledDefaultsKey)
-    }
-
     private static var logFileURL: URL {
         URL(fileURLWithPath: IosAppPaths.mobileDataDirectory()).appendingPathComponent(fileName)
     }
@@ -26,7 +19,6 @@ enum IosSyncDiagnosticLog {
     }()
 
     static func append(_ message: String) {
-        guard isEnabled else { return }
         let url = logFileURL
         let timestamp = timestampFormatter.string(from: Date())
         let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""

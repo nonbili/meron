@@ -1120,12 +1120,7 @@ private fun MeronMobileScreenContent(
                         mobileHost.runBackgroundRefreshOnce()
                         status = "Queued background refresh"
                     },
-                    syncDiagnosticLogEnabled = syncDiagnosticLogEnabled,
-                    onToggleSyncDiagnosticLog = {
-                        val next = !syncDiagnosticLogEnabled
-                        syncDiagnosticLogEnabled = next
-                        saveAppBoolean(prefs, SYNC_DIAGNOSTIC_LOG_ENABLED_PREF, next)
-                    },
+                    readDiagnosticLog = { mobileHost.readDiagnosticLog() },
                     onShareDiagnosticLog = { mobileHost.shareDiagnosticLog() },
                     pollIntervalMinutes = pollIntervalMinutes,
                     onCyclePollInterval = {

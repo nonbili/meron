@@ -54,7 +54,7 @@ class AndroidMailPushService :
             // startForeground can still be rejected (background-start
             // restrictions, battery saver states); fail quietly instead of
             // crashing service creation.
-            Log.w(TAG, "live mail push unavailable: ${e.message}")
+            logWarn(this, "live mail push unavailable: ${e.message}")
             stopSelf()
             return
         }
@@ -129,7 +129,7 @@ class AndroidMailPushService :
             // may be expired, and core has no refresh token for managed accounts.
             val refresh = GoogleAccountManagerAuth.mintAndPushToken(this, account.id)
             if (refresh == GoogleAccountManagerAuth.TokenRefresh.Failed) {
-                Log.w(TAG, "not watching ${account.id}: silent token mint failed, reconnect needed")
+                logWarn(this, "not watching ${account.id}: silent token mint failed, reconnect needed")
                 return@forEach
             }
             watched.add(key)
@@ -180,7 +180,7 @@ class AndroidMailPushService :
             } catch (e: Exception) {
                 // Background-start restrictions (Android 12+) can reject the
                 // request when nothing foreground is behind it.
-                Log.w(TAG, "cannot start live mail push: ${e.message}")
+                logWarn(context, "cannot start live mail push: ${e.message}")
             }
         }
 
@@ -193,6 +193,14 @@ class AndroidMailPushService :
         }
 
         fun isEnabled(context: Context): Boolean = loadAppBoolean(context, LIVE_MAIL_PUSH_PREF, false)
+
+        private fun logWarn(
+            context: Context,
+            message: String,
+        ) {
+            Log.w(TAG, message)
+            AndroidSyncDiagnosticLog.appendRedacted(context, "$TAG: $message")
+        }
 
         private fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

@@ -111,10 +111,12 @@ private class IosMobileHost(
         ) { _ -> refreshNotificationAuthorization() }
     }
 
+    override fun readDiagnosticLog(): String = readSyncDiagnosticLog()
+
     override fun shareDiagnosticLog() {
         val body =
             readSyncDiagnosticLog().ifBlank {
-                "No background sync activity recorded yet. Enable diagnostic logging in Settings and try again after the next sync."
+                "No log entries recorded yet. Try again after the next sync."
             }
         val disclosure =
             "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +

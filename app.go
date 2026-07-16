@@ -129,6 +129,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.traySetUnread(payload)
 	case "changelog.fetch":
 		return a.changelogFetch()
+	case "log.read":
+		return a.logRead()
+	case "log.export":
+		return a.logExport()
 	case "storage.usage":
 		return a.storageUsage()
 	case "storage.clearCache":
