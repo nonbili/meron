@@ -192,11 +192,16 @@ internal fun ThreadScreen(
     // One-shot positioning when the thread's messages first arrive, mirroring
     // desktop: jump to the first unread message, or the newest when all read.
     var openScrollPositioned by remember(thread?.id) { mutableStateOf(false) }
+    var autoLoadOlderArmed by remember(thread?.id) { mutableStateOf(false) }
     LaunchedEffect(thread?.id, messages.isEmpty()) {
         if (openScrollPositioned || messages.isEmpty()) return@LaunchedEffect
         openScrollPositioned = true
         val headerItemCount = if (canLoadOlder || loadingOlder) 1 else 0
-        val target = threadOpenScrollIndex(messages, headerItemCount) ?: return@LaunchedEffect
+        val target = threadOpenScrollIndex(messages, headerItemCount)
+        if (target == null) {
+            autoLoadOlderArmed = true
+            return@LaunchedEffect
+        }
         listState.scrollToItem(target)
         // HTML bubbles measure their bodies asynchronously in a WebView, so at
         // this point the list may still fit the viewport and the scroll above
@@ -215,6 +220,15 @@ internal fun ThreadScreen(
                 anchor.cancel()
             }
         }
+        autoLoadOlderArmed = true
+    }
+    val currentOnLoadOlder by rememberUpdatedState(onLoadOlder)
+    LaunchedEffect(thread?.id, autoLoadOlderArmed, canLoadOlder, loadingOlder) {
+        if (thread == null || !autoLoadOlderArmed || !canLoadOlder || loadingOlder) return@LaunchedEffect
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .first { firstVisibleIndex -> firstVisibleIndex == 0 }
+        currentOnLoadOlder()
     }
     // Mark messages read as their bubbles scroll past the top of the viewport,
     // and the whole thread once the view reaches the bottom — desktop's

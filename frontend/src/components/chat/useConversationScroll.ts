@@ -89,7 +89,11 @@ export function useConversationScroll(
     markingMessageIdsRef.current.clear()
   }, [activeThreadId, unreadKey])
 
-  useEffect(() => {
+  // Attach before paint and before child HtmlFrame effects begin reporting their
+  // measured heights. On a cold open, attaching in a passive effect can miss the
+  // first placeholder-to-content resize and leave a fully read thread at the top
+  // instead of keeping its initial newest-message anchor.
+  useLayoutEffect(() => {
     const container = scrollRef.current
     const wrapper = messagesWrapperRef.current
     if (activeTab !== '' || !container || !wrapper || !activeThreadId) return

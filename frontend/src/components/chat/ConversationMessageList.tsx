@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
@@ -8,6 +8,8 @@ import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
 import { formatDateDivider } from './messageHelpers'
 import type { MessageContextMenuState } from './MessageContextMenu'
+
+const AUTO_LOAD_EARLIER_THRESHOLD_PX = 400
 
 function hasSelectedText(): boolean {
   return !!window.getSelection()?.toString().trim()
@@ -50,6 +52,45 @@ export function ConversationMessageList({
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
+  const autoLoadInFlightRef = useRef(false)
+  const activeThreadIdRef = useRef(activeThreadId)
+  activeThreadIdRef.current = activeThreadId
+
+  const loadEarlier = useCallback(() => {
+    if (!messagesCursor || messagesLoadingMore || autoLoadInFlightRef.current) return
+    const container = scrollRef.current
+    const prevHeight = container?.scrollHeight ?? 0
+    const prevTop = container?.scrollTop ?? 0
+    const loadingThreadId = activeThreadId
+    autoLoadInFlightRef.current = true
+
+    const restoreScrollPosition = () => {
+      requestAnimationFrame(() => {
+        const el = scrollRef.current
+        if (el && activeThreadIdRef.current === loadingThreadId) {
+          el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+        }
+        autoLoadInFlightRef.current = false
+      })
+    }
+    void loadMoreMessages(activeThreadId).then(restoreScrollPosition, restoreScrollPosition)
+  }, [activeThreadId, messagesCursor, messagesLoadingMore, scrollRef])
+
+  const handleScroll = useCallback(() => {
+    onScroll()
+    const container = scrollRef.current
+    if (container && container.scrollTop <= AUTO_LOAD_EARLIER_THRESHOLD_PX) loadEarlier()
+  }, [loadEarlier, onScroll, scrollRef])
+
+  // Also fill a short viewport automatically: when ten messages do not create
+  // enough overflow there may be no scroll event to trigger the threshold.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const container = scrollRef.current
+      if (container && container.scrollTop <= AUTO_LOAD_EARLIER_THRESHOLD_PX) loadEarlier()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeThreadId, loadEarlier, messages.length, scrollRef])
 
   return (
     <div
@@ -59,7 +100,7 @@ export function ConversationMessageList({
     >
       <div
         ref={scrollRef}
-        onScroll={onScroll}
+        onScroll={handleScroll}
         className="message-scroll flex-1 overflow-y-auto px-4 py-6 space-y-4 z-10 relative"
       >
         {showThreadLoading && (
@@ -72,18 +113,7 @@ export function ConversationMessageList({
             <button
               type="button"
               disabled={messagesLoadingMore}
-              onClick={() => {
-                const container = scrollRef.current
-                const prevHeight = container?.scrollHeight ?? 0
-                const prevTop = container?.scrollTop ?? 0
-                void loadMoreMessages(activeThreadId).then(() => {
-                  requestAnimationFrame(() => {
-                    const el = scrollRef.current
-                    if (!el) return
-                    el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
-                  })
-                })
-              }}
+              onClick={loadEarlier}
               className="rounded-full bg-active border border-border/30 px-4 py-1 text-xs font-medium text-secondary hover:bg-active disabled:opacity-50 cursor-pointer"
             >
               {messagesLoadingMore ? 'Loading…' : 'Load earlier messages'}
