@@ -52,18 +52,27 @@ export function KanbanColumnMinimized({
   const label = folderLabel(column, labelFolders, accounts)
 
   // WebKitGTK (Wails on Linux) can mis-measure the intrinsic size of vertical-rl
-  // text on first layout and never re-measure, clipping the label to a couple of
-  // characters. Measure the text horizontally instead (via the hidden span below)
-  // and set the vertical label's height explicitly.
+  // text, and horizontal and vertical glyph advances are not necessarily equal.
+  // Keep the label in the browser's ordinary horizontal text layout and rotate it
+  // visually instead. The outer box still needs the horizontal text width as its
+  // preferred height so flexbox can make room for the rotated label.
   const measureRef = useRef<HTMLSpanElement | null>(null)
+  const labelBoxRef = useRef<HTMLDivElement | null>(null)
   const [labelHeight, setLabelHeight] = useState<number>()
+  const [labelMaxWidth, setLabelMaxWidth] = useState<number>()
   useLayoutEffect(() => {
-    const el = measureRef.current
-    if (!el) return
-    const update = () => setLabelHeight(el.offsetWidth)
+    const measure = measureRef.current
+    const labelBox = labelBoxRef.current
+    if (!measure || !labelBox) return
+    const update = () => {
+      const preferredHeight = Math.ceil(measure.getBoundingClientRect().width)
+      setLabelHeight(preferredHeight)
+      setLabelMaxWidth(labelBox.clientHeight || preferredHeight)
+    }
     update()
     const observer = new ResizeObserver(update)
-    observer.observe(el)
+    observer.observe(measure)
+    observer.observe(labelBox)
     return () => observer.disconnect()
   }, [])
 
@@ -104,11 +113,22 @@ export function KanbanColumnMinimized({
       <span ref={measureRef} aria-hidden className="invisible absolute whitespace-nowrap text-xs font-bold">
         {label}
       </span>
-      <div
-        className={clsx('min-h-0 truncate text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}
-        style={{ writingMode: 'vertical-rl', height: labelHeight }}
-      >
-        {label}
+      <div ref={labelBoxRef} className="relative min-h-0 w-full shrink overflow-hidden" style={{ height: labelHeight }}>
+        <span
+          className={clsx(
+            'absolute top-0 block truncate whitespace-nowrap text-xs font-bold leading-4',
+            isPaused ? 'text-secondary' : 'text-primary',
+          )}
+          style={{
+            left: 'calc(50% + 0.5rem)',
+            width: labelMaxWidth,
+            transform: 'rotate(90deg)',
+            transformOrigin: 'top left',
+            visibility: labelMaxWidth === undefined ? 'hidden' : undefined,
+          }}
+        >
+          {label}
+        </span>
       </div>
       {unreadCount > 0 && (
         <div className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">

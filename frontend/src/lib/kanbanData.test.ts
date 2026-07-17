@@ -363,9 +363,12 @@ describe('kanbanColumnUnreadCount', () => {
     }
 
     expect(
-      kanbanColumnUnreadCount({ accountId: 'acc1', folderId: 'inbox' }, foldersByAccount, [account('acc1')], [
-        message({ unread: true, unread_count: 1 }),
-      ]),
+      kanbanColumnUnreadCount(
+        { accountId: 'acc1', folderId: 'inbox' },
+        foldersByAccount,
+        [account('acc1')],
+        [message({ unread: true, unread_count: 1 })],
+      ),
     ).toBe(0)
   })
 

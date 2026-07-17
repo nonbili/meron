@@ -44,18 +44,20 @@ const READER_CSS = `
     scrollbar-gutter: stable;
   }
   pre::-webkit-scrollbar {
-    height: 8px;
+    height: 10px;
   }
   pre::-webkit-scrollbar-track {
     background: transparent;
   }
   pre::-webkit-scrollbar-thumb {
-    border: 2px solid #f1f5f9;
+    border: 2px solid transparent;
+    background-clip: padding-box;
     border-radius: 999px;
     background: #cbd5e1;
   }
   pre::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+    border: 0px solid transparent;
   }
   pre code {
     display: block;
