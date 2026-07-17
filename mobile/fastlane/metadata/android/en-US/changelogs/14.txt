@@ -1,0 +1,3 @@
+- Paginate and virtualize conversations
+- Auto-load history and preserve scroll position
+- Diagnose Rust core load failures and surface them in view logs
