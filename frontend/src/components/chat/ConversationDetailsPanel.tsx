@@ -158,11 +158,17 @@ export function ConversationDetailsPanel({
                         openExternal(item.url)
                       }
                     }}
-                    className="group relative aspect-square overflow-hidden rounded-md border border-border/30 bg-black/5 dark:bg-white/5 hover:opacity-90 cursor-pointer"
+                    className="group relative aspect-square overflow-hidden rounded-md border border-border/30 bg-black/5 dark:bg-white/5 hover:opacity-90 cursor-pointer [content-visibility:auto] [contain-intrinsic-size:auto_none]"
                     title={item.filename}
                   >
                     {item.type === 'image' ? (
-                      <img src={item.src} alt={item.filename} loading="lazy" className="h-full w-full object-cover" />
+                      <img
+                        src={item.src}
+                        alt={item.filename}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
                       // Static tile — never a live <video>. Each <video> spins up a
                       // GStreamer pipeline in WebKitGTK; a grid of them freezes the
