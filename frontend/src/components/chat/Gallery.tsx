@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Copy, Download, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { copyAttachmentImage, downloadAttachment } from '../../states/mail'
 import { MenuItem } from '../menu/MenuItem'
+import { VideoAttachment } from './VideoAttachment'
 
 // The native WebKitGTK image context menu ("Save Image As", "Open Image in New
 // Window") is dead inside the Wails webview — there's no browser download or
@@ -19,9 +20,14 @@ const MAX_SCALE = 8
 const ZOOM_SPEED = 0.0025
 
 export type GalleryItem = {
+  // Defaults to 'image' so callers that only ever build image lists (e.g. the
+  // HTML-frame galleries) don't need to tag their items.
+  type?: 'image' | 'video'
   src: string
   filename: string
-  // The text of the message the image came from, shown as a one-line caption.
+  // External/source URL for videos, used by the system-player fallback.
+  url?: string
+  // The text of the message the media came from, shown as a one-line caption.
   caption?: string
 }
 
@@ -208,31 +214,51 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
           </button>
         )}
 
-        <img
-          src={current.src}
-          alt={current.filename}
-          draggable={false}
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => {
-            if (!canSave) return // let the default menu show for remote URLs
-            event.preventDefault()
-            event.stopPropagation()
-            setMenu({ x: event.clientX, y: event.clientY })
-          }}
-          onDoubleClick={(event) => {
-            event.stopPropagation()
-            resetZoom()
-          }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-            cursor: zoomed ? (isPanning ? 'grabbing' : 'grab') : 'default',
-            transition: isPanning ? 'none' : 'transform 0.12s ease-out',
-          }}
-          className="max-h-full max-w-full object-contain rounded-md shadow-2xl will-change-transform"
-        />
+        {current.type === 'video' ? (
+          // Keyed by index so paging remounts the player: the poster comes back
+          // and the previous clip's pipeline is torn down by the unmount effect.
+          // Zoom/pan/copy stay image-only; the native controls own the gestures.
+          <div
+            key={index}
+            onClick={(event) => event.stopPropagation()}
+            className="flex w-full max-w-4xl items-center justify-center"
+          >
+            <VideoAttachment
+              src={current.src}
+              externalUrl={current.url ?? current.src}
+              externalLabel={t('chat.openExternalPlayer')}
+              className="group relative w-full"
+              videoClassName="w-full max-h-[78vh] rounded-md bg-black shadow-2xl"
+              posterClassName="flex aspect-video w-full items-center justify-center rounded-md bg-black text-white/90 transition-colors hover:text-white cursor-pointer shadow-2xl"
+            />
+          </div>
+        ) : (
+          <img
+            src={current.src}
+            alt={current.filename}
+            draggable={false}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => {
+              if (!canSave) return // let the default menu show for remote URLs
+              event.preventDefault()
+              event.stopPropagation()
+              setMenu({ x: event.clientX, y: event.clientY })
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              resetZoom()
+            }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              cursor: zoomed ? (isPanning ? 'grabbing' : 'grab') : 'default',
+              transition: isPanning ? 'none' : 'transform 0.12s ease-out',
+            }}
+            className="max-h-full max-w-full object-contain rounded-md shadow-2xl will-change-transform"
+          />
+        )}
 
         {hasNext && (
           <button

@@ -3,18 +3,29 @@ import type { GalleryItem } from './Gallery'
 import type { ConversationMediaItem, ConversationFileItem, Participant } from './ConversationDetailsPanel'
 import { getVisibleMedia, mediaSrc, normalizeBodyText, parseAddressList } from './messageHelpers'
 
-// Flat list of every visible image across the thread, plus the starting index
-// for each message so a bubble can map its local image index to the global one.
+// Flat list of every visible image and video across the thread, plus the
+// starting index for each message so a bubble can map its local image index to
+// the global one. Images are pushed before videos within each message so those
+// bubble-local image indices stay valid.
 export function buildGalleryItems(messages: Message[], accounts: Account[], revealedRemote: Record<string, boolean>) {
   const items: GalleryItem[] = []
   const offsets = new Map<string, number>()
   for (const message of messages) {
     offsets.set(message.id, items.length)
     const account = accounts.find((acc) => acc.id === message.account_id)
-    const { attachmentImages } = getVisibleMedia(message, account, !!revealedRemote[message.id])
+    const { attachmentImages, videos } = getVisibleMedia(message, account, !!revealedRemote[message.id])
     const caption = normalizeBodyText(message.body).replace(/\s+/g, ' ').trim()
     for (const image of attachmentImages) {
-      items.push({ src: mediaSrc(image), filename: image.filename, caption })
+      items.push({ type: 'image', src: mediaSrc(image), filename: image.filename, caption })
+    }
+    for (const video of videos) {
+      items.push({
+        type: 'video',
+        src: mediaSrc(video),
+        url: video.url ?? mediaSrc(video),
+        filename: video.filename,
+        caption,
+      })
     }
   }
   return { galleryItems: items, galleryOffsets: offsets }
@@ -24,7 +35,9 @@ export function buildGalleryItems(messages: Message[], accounts: Account[], reve
 export function buildThreadMedia(messages: Message[], accounts: Account[], revealedRemote: Record<string, boolean>) {
   const media: ConversationMediaItem[] = []
   const files: ConversationFileItem[] = []
-  let imageIndex = 0
+  // Must count media in the exact order buildGalleryItems pushes them (images
+  // then videos per message) so galleryIndex opens the lightbox on the right item.
+  let galleryIndex = 0
   for (const message of messages) {
     const account = accounts.find((acc) => acc.id === message.account_id)
     const {
@@ -33,11 +46,18 @@ export function buildThreadMedia(messages: Message[], accounts: Account[], revea
       files: msgFiles,
     } = getVisibleMedia(message, account, !!revealedRemote[message.id])
     for (const image of attachmentImages) {
-      media.push({ type: 'image', src: mediaSrc(image), filename: image.filename, galleryIndex: imageIndex })
-      imageIndex++
+      media.push({ type: 'image', src: mediaSrc(image), filename: image.filename, galleryIndex })
+      galleryIndex++
     }
     for (const video of videos) {
-      media.push({ type: 'video', src: mediaSrc(video), filename: video.filename, url: video.url ?? mediaSrc(video) })
+      media.push({
+        type: 'video',
+        src: mediaSrc(video),
+        filename: video.filename,
+        url: video.url ?? mediaSrc(video),
+        galleryIndex,
+      })
+      galleryIndex++
     }
     for (const file of msgFiles) {
       files.push({ filename: file.filename, size: file.size, key: file.key })

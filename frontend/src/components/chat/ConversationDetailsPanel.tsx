@@ -16,8 +16,8 @@ export type ConversationMediaItem = {
   filename: string
   // External/source URL, used to open videos the in-app webview can't decode.
   url?: string
-  // For images, the index into the thread-wide gallery list so a thumbnail can
-  // open the same lightbox the message bubbles use.
+  // Index into the thread-wide gallery list so a thumbnail can open the same
+  // lightbox the message bubbles use.
   galleryIndex?: number
 }
 
@@ -152,7 +152,7 @@ export function ConversationDetailsPanel({
                     key={idx}
                     type="button"
                     onClick={() => {
-                      if (item.type === 'image' && item.galleryIndex !== undefined) {
+                      if (item.galleryIndex !== undefined) {
                         onOpenImage(item.galleryIndex)
                       } else if (item.url) {
                         openExternal(item.url)
@@ -172,7 +172,7 @@ export function ConversationDetailsPanel({
                     ) : (
                       // Static tile — never a live <video>. Each <video> spins up a
                       // GStreamer pipeline in WebKitGTK; a grid of them freezes the
-                      // webview. Click opens the source in the system player instead.
+                      // webview. Click opens the lightbox, which mounts one player.
                       <span className="flex h-full w-full items-center justify-center bg-black/75 text-white/90">
                         <Play size={22} fill="currentColor" />
                       </span>
