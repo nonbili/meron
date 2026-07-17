@@ -35,6 +35,15 @@ internal class MeronMobileState(
 ) {
     val snackbarHost = SnackbarHostState()
 
+    /** Error for actions that need the native core when it failed to load;
+     *  includes the host's load diagnostics (ABIs, missing split APK, ...) so a
+     *  screenshot of the message is enough to diagnose the install. */
+    val coreUnavailableMessage: String
+        get() {
+            val detail = mobileHost.coreLoadDiagnostics.trim()
+            return if (detail.isEmpty()) "Rust core not packaged." else "Rust core not packaged. $detail"
+        }
+
     // Wired by the composable after its platform pickers/launchers are created.
     var launchOpmlExport: (String) -> Unit = {}
     var launchAttachmentSave: (String) -> Unit = {}

@@ -285,7 +285,7 @@ private fun findOAuthResultAccount(
 
 internal fun MeronMobileState.listAccounts() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         initialAccountsLoaded = true
         return
     }
@@ -329,7 +329,7 @@ internal fun MeronMobileState.clearStorageCache() {
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     storageClearConfirming = false
@@ -351,7 +351,7 @@ internal fun MeronMobileState.clearStorageCache() {
 
 internal fun MeronMobileState.addPasswordAccount() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val params =
@@ -400,7 +400,7 @@ internal fun MeronMobileState.autodiscoverPasswordAccount(auto: Boolean = false)
     if (auto && emailValue.equals(lastAutodiscoverEmail, ignoreCase = true)) return
     lastAutodiscoverEmail = emailValue
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     status = "Finding mail settings..."
@@ -443,7 +443,7 @@ internal fun MeronMobileState.autodiscoverPasswordAccount(auto: Boolean = false)
 internal fun MeronMobileState.addRssAccount() {
     if (rssAccountAdding) return
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     rssAccountAdding = true
@@ -510,7 +510,7 @@ internal fun MeronMobileState.exportOpmlForSelectedAccount() {
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -547,7 +547,7 @@ internal fun MeronMobileState.saveAccountSettings(
     aliasesText: String,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val aliases =
@@ -615,7 +615,7 @@ internal fun MeronMobileState.setAccountNavigationVisible(
 
 internal fun MeronMobileState.removeAccount(account: AccountSummary) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -646,7 +646,7 @@ internal fun MeronMobileState.moveAccount(
     delta: Int,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val oldIndex = coreAccounts.indexOfFirst { it.id == account.id }
@@ -673,7 +673,7 @@ internal fun MeronMobileState.moveAccount(
 
 internal fun MeronMobileState.addOAuthAccount() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val refreshToken = oauthRefreshToken.trim()
@@ -718,7 +718,7 @@ internal fun MeronMobileState.addOAuthAccount() {
  */
 internal fun MeronMobileState.connectGoogleDeviceAccount() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     if (!mobileHost.supportsGoogleDeviceAuth) {
@@ -873,7 +873,7 @@ internal suspend fun MeronMobileState.withManagedGoogleAuth(
 
 internal fun MeronMobileState.exchangeOAuthCode() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val code = oauthAuthorizationCode.trim()

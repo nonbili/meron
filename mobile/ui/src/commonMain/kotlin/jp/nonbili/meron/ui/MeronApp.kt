@@ -475,7 +475,7 @@ private fun MeronMobileScreenContent(
                             return@onSuccess
                         }
                         if (!coreLoaded) {
-                            status = "Rust core not packaged."
+                            status = coreUnavailableMessage
                             return@onSuccess
                         }
                         scope.launch {
@@ -560,7 +560,7 @@ private fun MeronMobileScreenContent(
                         )
                     }.onSuccess { params ->
                         if (!coreLoaded) {
-                            status = "Rust core not packaged."
+                            status = coreUnavailableMessage
                             return@onSuccess
                         }
                         scope.launch {

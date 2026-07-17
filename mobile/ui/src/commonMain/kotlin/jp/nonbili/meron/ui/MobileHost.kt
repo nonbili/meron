@@ -64,6 +64,13 @@ interface MobileHost {
 
     fun runBackgroundRefreshOnce()
 
+    /** Human-readable detail on why the native Rust core failed to load
+     *  (loadLibrary error, device ABIs, install completeness), appended to
+     *  core-unavailable errors so a user report explains the cause. Empty when
+     *  the core loaded or the platform has no detail. */
+    val coreLoadDiagnostics: String
+        get() = ""
+
     /** Contents of the on-device diagnostic log, for viewing inside the app.
      *  Empty where no diagnostic log is kept. */
     fun readDiagnosticLog(): String = ""

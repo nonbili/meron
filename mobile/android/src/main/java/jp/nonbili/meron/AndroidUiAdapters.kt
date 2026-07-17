@@ -137,6 +137,32 @@ private fun shareBytesViaFileProvider(
 
 internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001
 
+/** One-line explanation of why libmeron_core.so failed to load, with the facts
+ *  needed to diagnose a bad install from a screenshot: the loader error, the
+ *  device's supported ABIs (we only ship arm64-v8a), whether the per-ABI split
+ *  APK made it onto the device (lost when the app is shared/restored instead
+ *  of installed from Play), and the installer package. Empty once the core is
+ *  loaded. */
+internal fun describeCoreLoadFailure(context: Context): String {
+    if (MeronCoreNative.isLoaded()) return ""
+    val error = MeronCoreNative.loadError().ifBlank { "libmeron_core.so not found" }
+    val abis = Build.SUPPORTED_ABIS.joinToString(", ").ifBlank { "unknown" }
+    val splits =
+        context.applicationInfo.splitSourceDirs
+            ?.joinToString(", ") { File(it).name }
+            ?.ifBlank { null } ?: "none"
+    val installer =
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(context.packageName)
+            }
+        }.getOrNull() ?: "unknown"
+    return "$error (device ABIs: $abis; APK splits: $splits; installer: $installer)"
+}
+
 class AndroidMobileHost(
     private val activity: ComponentActivity,
 ) : MobileHost {
@@ -223,6 +249,8 @@ class AndroidMobileHost(
             .versionName
             .orEmpty()
     override val coreProtocolVersion: Int = MeronCoreNative.protocolVersion()
+
+    override val coreLoadDiagnostics: String = describeCoreLoadFailure(activity)
 
     override fun notificationsEnabled(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

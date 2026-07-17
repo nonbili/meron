@@ -321,7 +321,7 @@ internal fun MeronMobileState.syncCoreThreads(
     successStatus: String? = null,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val accountId = accountOverride ?: selectedCoreAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
@@ -516,7 +516,7 @@ internal fun MeronMobileState.addFeedToSelectedRssAccount() {
         return
     }
     if (!coreLoaded) {
-        addFeedError = "Rust core not packaged."
+        addFeedError = coreUnavailableMessage
         return
     }
     addFeedError = ""
@@ -643,7 +643,7 @@ internal fun MeronMobileState.loadMoreCoreThreads(quiet: Boolean = false) {
 
 internal fun MeronMobileState.loadStarredItems() {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     syncing = true
@@ -667,7 +667,7 @@ internal fun MeronMobileState.openDraftCompose(
     returnScreen: Screen = Screen.Mail,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -713,7 +713,7 @@ internal fun MeronMobileState.readCoreThread(
     sourceFolder: String = thread.folder,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val backendThreadId = thread.backendThreadId()
@@ -892,7 +892,7 @@ internal suspend fun MeronMobileState.refreshOpenThreadFor(eventAccount: String)
 
 internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     mailSearch = ""
@@ -1021,7 +1021,7 @@ internal fun MeronMobileState.runStarredItemAction(
     update: (List<StarredItemSummary>) -> List<StarredItemSummary>,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -1094,7 +1094,7 @@ internal fun MeronMobileState.runCoreThreadAction(
     afterSuccess: (() -> Unit)? = null,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     // Apply optimistically so the UI reacts instantly, then revert if the core
@@ -1395,7 +1395,7 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
 internal fun MeronMobileState.markVisibleMailboxAllRead() {
     val unread = coreThreads.filter { it.unread }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val accountsById = coreAccounts.associateBy { it.id }
@@ -1451,7 +1451,7 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
     val key = kanbanColumnKey(column)
     val unread = kanbanColumns[key]?.threads.orEmpty().filter { it.unread }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val accountsById = coreAccounts.associateBy { it.id }
@@ -1568,7 +1568,7 @@ internal fun MeronMobileState.ensureThreadActionFolders(
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val accounts =
@@ -1629,7 +1629,7 @@ internal fun MeronMobileState.moveThreadToFolder(
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val threadsBefore = coreThreads
@@ -1680,7 +1680,7 @@ internal fun MeronMobileState.copyThreadToFolder(
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     status = "Copying..."
@@ -1723,7 +1723,7 @@ internal fun MeronMobileState.createFolderAndMoveThread(
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     status = "Creating folder..."

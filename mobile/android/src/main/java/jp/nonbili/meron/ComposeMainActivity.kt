@@ -286,6 +286,9 @@ class ComposeMainActivity : ComponentActivity() {
         incomingNotificationThreadTarget = intent.toNotificationThreadTarget()
         AndroidNotificationService.ensureChannels(this)
         AndroidSyncDiagnosticLog.installUiLogSink(this)
+        if (!MeronCoreNative.isLoaded()) {
+            AndroidSyncDiagnosticLog.append(this, "Rust core failed to load: ${describeCoreLoadFailure(this)}")
+        }
         AndroidBackgroundSyncScheduler.sync(this, loadAppBoolean(this, BACKGROUND_SYNC_ENABLED_PREF, true))
         jp.nonbili.meron.ui.androidImageContext = this
         val coreInitJson =

@@ -388,7 +388,7 @@ internal fun MeronMobileState.loadKanbanColumn(
     refresh: Boolean = false,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     val key = kanbanColumnKey(column)

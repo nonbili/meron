@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -756,14 +757,6 @@ internal fun SettingsGeneralPage(
                 )
             }
         }
-        item {
-            SettingsRow(
-                icon = Icons.Filled.BugReport,
-                title = tr("settings.viewSyncLog"),
-                subtitle = tr("settings.syncDiagnosticLogHint"),
-                onClick = onOpenSyncLog,
-            )
-        }
         if (notificationsNeedPermission) {
             item {
                 SettingsRow(
@@ -773,6 +766,14 @@ internal fun SettingsGeneralPage(
                     onClick = onEnableNotifications,
                 )
             }
+        }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.BugReport,
+                title = tr("settings.viewSyncLog"),
+                subtitle = tr("settings.syncDiagnosticLogHint"),
+                onClick = onOpenSyncLog,
+            )
         }
 
         item { SettingsSectionLabel(tr("settings.sections.storage")) }
@@ -869,8 +870,8 @@ internal fun SettingsRow(
 ) {
     val accent = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     ListItem(
-        headlineContent = { Text(title, color = accent) },
-        supportingContent = subtitle?.let { { Text(it) } },
+        headlineContent = { Text(title, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = subtitle?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
         leadingContent =
             leading ?: {
                 Icon(
@@ -925,8 +926,8 @@ internal fun SettingsToggleRow(
     onToggle: () -> Unit,
 ) {
     ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = subtitle?.let { { Text(it) } },
+        headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = subtitle?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
         leadingContent = { Icon(icon, contentDescription = null) },
         trailingContent = {
             Switch(

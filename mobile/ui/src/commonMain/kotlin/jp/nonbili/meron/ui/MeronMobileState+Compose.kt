@@ -823,7 +823,7 @@ internal fun MeronMobileState.openMessageCompose(
     forward: Boolean,
 ) {
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -886,7 +886,7 @@ internal fun MeronMobileState.saveMessageAttachment(attachment: MessageAttachmen
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     pendingAttachmentSave = attachment
@@ -903,7 +903,7 @@ internal fun MeronMobileState.openMessageAttachment(attachment: MessageAttachmen
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
@@ -1273,7 +1273,7 @@ internal fun MeronMobileState.createFolderForKanban(
         return
     }
     if (!coreLoaded) {
-        status = "Rust core not packaged."
+        status = coreUnavailableMessage
         return
     }
     scope.launch {
