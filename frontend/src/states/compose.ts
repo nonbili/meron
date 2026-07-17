@@ -1,6 +1,7 @@
 import { observable } from '@legendapp/state'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
+import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { ui$, showToast } from './ui'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { mail$, getActiveThread, isDraftFolder, loadThread, discardSavedDraftCopy } from './mail'
@@ -513,7 +514,10 @@ export async function openThreadTabById(threadId: string) {
   }
 
   try {
-    const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: threadId, limit: 30 })
+    const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
+      thread_id: threadId,
+      limit: CONVERSATION_PAGE_SIZE,
+    })
     const message = newestMessage(result.messages ?? [])
     if (!message) {
       showToast("Couldn't open notification thread", 'error')
@@ -767,7 +771,10 @@ export async function openDraftCompose(thread: Message) {
   if (activateOpenDraftCompose(thread)) return true
 
   try {
-    const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
+    const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
+      thread_id: thread.thread_id,
+      limit: CONVERSATION_PAGE_SIZE,
+    })
     const draft =
       newestMessage(
         (result.messages ?? []).filter((message) => isDraftFolder(message.folder_id, message.account_id)),
@@ -783,7 +790,10 @@ export async function openDraftConversationOrCompose(thread: Message) {
   if (!isDraftFolder(thread.folder_id, thread.account_id)) return false
 
   try {
-    const result = await invoke<{ messages: Message[] }>('mail.threadRead', { thread_id: thread.thread_id, limit: 30 })
+    const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
+      thread_id: thread.thread_id,
+      limit: CONVERSATION_PAGE_SIZE,
+    })
     const messages = result.messages ?? []
     const draft =
       newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread

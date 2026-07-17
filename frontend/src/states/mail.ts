@@ -7,6 +7,7 @@ import { kanban$ } from './kanban'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { mergeStarredItems } from '../lib/starredItems'
 import { isLocalSendId, discardPendingSend } from './pendingSends'
+import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 
 // Mail data cache — the frontend view of the sidecar's `folders` and `messages`
 // tables (threads are messages grouped by the sidecar). Ephemeral: repopulated
@@ -34,8 +35,6 @@ export const mail$ = observable({
   threadLoading: false,
   readThreads: {} as Record<string, boolean>,
 })
-
-const THREAD_PAGE_SIZE = 30
 
 function updateKanbanThread(threadId: string, update: (thread: Message) => Message) {
   const columns = kanban$.threads.get()
@@ -108,9 +107,7 @@ function reconcileThreadDraftFromLoadedMessages(threadId: string, messages: Mess
   if (threadMessages.some((message) => isDraftFolder(message.folder_id, message.account_id))) return
 
   mail$.threads.set(
-    mail$.threads
-      .get()
-      .map((thread) => (thread.thread_id === threadId ? { ...thread, has_draft: false } : thread)),
+    mail$.threads.get().map((thread) => (thread.thread_id === threadId ? { ...thread, has_draft: false } : thread)),
   )
   updateKanbanThread(threadId, (thread) => ({ ...thread, has_draft: false }))
 }
@@ -629,7 +626,7 @@ export async function loadThread(threadId: string) {
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
       thread_id: threadId,
-      limit: THREAD_PAGE_SIZE,
+      limit: CONVERSATION_PAGE_SIZE,
     })
     // Guard against a stale response: the user may have switched threads while
     // this was in flight (e.g. during the ancestor fetch). Don't overwrite the
@@ -655,7 +652,7 @@ export async function loadMoreMessages(threadId: string) {
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
       thread_id: threadId,
-      limit: THREAD_PAGE_SIZE,
+      limit: CONVERSATION_PAGE_SIZE,
       before_cursor: cursor,
     })
     if (ui$.selectedThread.get() !== threadId) return

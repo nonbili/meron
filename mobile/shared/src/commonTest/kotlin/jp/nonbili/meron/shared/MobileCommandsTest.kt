@@ -428,7 +428,7 @@ class MobileCommandsTest {
             client.readRssThread(RssThreadParams(threadId = "rss-account#rss#feed-1"))
         }
         assertEquals(MobileCommand.RssThread, core.lastCommand)
-        assertEquals("""{"thread_id":"rss-account#rss#feed-1"}""", core.lastPayloadJson)
+        assertEquals("""{"thread_id":"rss-account#rss#feed-1","limit":10}""", core.lastPayloadJson)
 
         runSuspend {
             client.markRssRead(
@@ -484,7 +484,7 @@ class MobileCommandsTest {
 
         runSuspend { client.readThread(ThreadReadParams(threadId = "thread1")) }
         assertEquals(MobileCommand.ThreadRead, core.lastCommand)
-        assertEquals("""{"thread_id":"thread1"}""", core.lastPayloadJson)
+        assertEquals("""{"thread_id":"thread1","limit":10}""", core.lastPayloadJson)
 
         runSuspend { client.sync(SyncMailParams(accountId = "acc1")) }
         assertEquals(MobileCommand.Sync, core.lastCommand)
@@ -597,9 +597,9 @@ class MobileCommandsTest {
     }
 
     @Test
-    fun threadReadOmitsOptionalPaginationWhenUnset() {
+    fun threadReadUsesSharedConversationPageSizeByDefault() {
         assertEquals(
-            """{"id":5,"method":"mail.threadRead","params":{"thread_id":"acc#imap#inbox#thread"}}""",
+            """{"id":5,"method":"mail.threadRead","params":{"thread_id":"acc#imap#inbox#thread","limit":10}}""",
             threadReadRequest(id = 5, params = ThreadReadParams(threadId = "acc#imap#inbox#thread")).toJson(),
         )
     }

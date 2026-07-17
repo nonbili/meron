@@ -1,5 +1,7 @@
 package jp.nonbili.meron.shared
 
+const val CONVERSATION_PAGE_SIZE = 10
+
 object MobileCommand {
     const val AccountList = "account.list"
     const val AccountAddPassword = "account.addPassword"
@@ -412,7 +414,7 @@ data class ThreadListParams(
 data class ThreadReadParams(
     val threadId: String,
     val beforeCursor: String? = null,
-    val limit: Int? = null,
+    val limit: Int? = CONVERSATION_PAGE_SIZE,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -458,7 +460,7 @@ data class SyncRssParams(
 data class RssThreadParams(
     val threadId: String,
     val beforeCursor: String? = null,
-    val limit: Int? = null,
+    val limit: Int? = CONVERSATION_PAGE_SIZE,
 ) {
     fun toJson(): String =
         jsonObject(

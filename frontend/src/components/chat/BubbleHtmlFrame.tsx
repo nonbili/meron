@@ -7,6 +7,7 @@ import { prepareBubbleHtml } from './bubbleHtml'
 const MIN_FRAME_HEIGHT = 80
 const DEFAULT_FRAME_HEIGHT = 120
 const HEIGHT_CHANGE_EPSILON = 1
+const FRAME_OVERSCAN = '150% 0px'
 const measuredHeights = new Map<string, number>()
 
 function cacheKeyForHtml(html: string) {
@@ -30,6 +31,8 @@ export function BubbleHtmlFrame({ html, onLinkHover }: { html: string; onLinkHov
   const cachedHeight = measuredHeights.get(cacheKey)
   const [height, setHeight] = useState(() => cachedHeight ?? DEFAULT_FRAME_HEIGHT)
   const [measured, setMeasured] = useState(() => cachedHeight !== undefined)
+  const [nearViewport, setNearViewport] = useState(() => typeof IntersectionObserver === 'undefined')
+  const hostRef = useRef<HTMLDivElement | null>(null)
   const heightRef = useRef(height)
   const measuredRef = useRef(measured)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
@@ -75,6 +78,22 @@ export function BubbleHtmlFrame({ html, onLinkHover }: { html: string; onLinkHov
     measuredRef.current = cached !== undefined
     setHeight(nextHeight)
     setMeasured(cached !== undefined)
+  }, [cacheKey])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true)
+      return
+    }
+
+    const scrollRoot = host.closest('.message-scroll')
+    const observer = new IntersectionObserver(([entry]) => setNearViewport(entry?.isIntersecting ?? false), {
+      root: scrollRoot,
+      rootMargin: FRAME_OVERSCAN,
+    })
+    observer.observe(host)
+    return () => observer.disconnect()
   }, [cacheKey])
 
   const handleReady = useCallback(
@@ -189,18 +208,22 @@ export function BubbleHtmlFrame({ html, onLinkHover }: { html: string; onLinkHov
 
   return (
     <>
-      <HtmlFrame
-        html={html}
-        prepareHtml={prepareBubbleHtml}
-        title={t('chat.messageHtml')}
-        className="block w-full border-0 bg-transparent"
-        style={{ height, overflow: 'hidden', visibility: measured ? 'visible' : 'hidden' }}
-        scrolling="no"
-        onFrameClick={handleFrameClick}
-        onReady={handleReady}
-        onLinkHover={onLinkHover}
-        forwardContextMenu
-      />
+      <div ref={hostRef} style={{ height }} className="w-full">
+        {nearViewport && (
+          <HtmlFrame
+            html={html}
+            prepareHtml={prepareBubbleHtml}
+            title={t('chat.messageHtml')}
+            className="block w-full border-0 bg-transparent"
+            style={{ height, overflow: 'hidden', visibility: measured ? 'visible' : 'hidden' }}
+            scrolling="no"
+            onFrameClick={handleFrameClick}
+            onReady={handleReady}
+            onLinkHover={onLinkHover}
+            forwardContextMenu
+          />
+        )}
+      </div>
       {galleryIndex !== null && galleryItems[galleryIndex] && (
         <Gallery
           items={galleryItems}

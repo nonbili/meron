@@ -148,6 +148,10 @@ describe('thread read state', () => {
     await loadThread('acc:inbox:thread:1')
     await nextTick()
 
+    expect(calls.find((call) => call.command === 'mail.threadRead')?.payload).toEqual({
+      thread_id: 'acc:inbox:thread:1',
+      limit: 10,
+    })
     expect(mail$.threads.get()[0].unread).toBe(true)
     expect(mail$.threads.get()[0].unread_count).toBe(2)
     expect(mail$.messages.get().map((message) => message.unread)).toEqual([true, true])
