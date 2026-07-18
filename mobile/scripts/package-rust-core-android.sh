@@ -1,9 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET="${TARGET:-aarch64-linux-android}"
-ABI="${ABI:-arm64-v8a}"
+# Space-separated Rust target triples to build. Override TARGETS (or TARGET,
+# for a single triple) to restrict the build.
+TARGETS="${TARGETS:-${TARGET:-aarch64-linux-android armv7-linux-androideabi}}"
 API_LEVEL="${API_LEVEL:-23}"
+
+abi_for_target() {
+  case "$1" in
+    aarch64-linux-android) echo "arm64-v8a" ;;
+    armv7-linux-androideabi) echo "armeabi-v7a" ;;
+    x86_64-linux-android) echo "x86_64" ;;
+    i686-linux-android) echo "x86" ;;
+    *)
+      echo "Unknown Android ABI for Rust target '$1'." >&2
+      exit 1
+      ;;
+  esac
+}
+
+# The NDK clang wrapper for 32-bit ARM is named armv7a-linux-androideabi*, not
+# armv7-linux-androideabi* like the Rust triple.
+clang_prefix_for_target() {
+  case "$1" in
+    armv7-linux-androideabi) echo "armv7a-linux-androideabi" ;;
+    *) echo "$1" ;;
+  esac
+}
 # PROFILE selects the Cargo profile. The default `debug` keeps local dev builds
 # fast; release builds optimize and get stripped (the debug .so ships ~186MB of
 # unstripped debug_info, which is why release APKs must use PROFILE=release).
@@ -12,7 +35,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
 CORE_DIR="$REPO_DIR/meron-core"
-JNI_LIB_DIR="$MOBILE_DIR/android/src/main/jniLibs/$ABI"
 TARGET_DIR="${CARGO_TARGET_DIR:-$CORE_DIR/target}"
 
 if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && command -v nix-shell >/dev/null 2>&1; then
@@ -44,13 +66,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
 fi
 
 TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG"
-CLANG="$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang"
 AR="$TOOLCHAIN/bin/llvm-ar"
-
-if [[ ! -x "$CLANG" ]]; then
-  echo "Missing Android clang at $CLANG" >&2
-  exit 1
-fi
 
 if [[ ! -x "$AR" ]]; then
   echo "Missing llvm-ar at $AR" >&2
@@ -86,19 +102,10 @@ append_rustflag "--remap-path-prefix=$REPO_DIR=/build/meron"
 # The NDK's llvm-ar already writes GNU-format archives, so force AR/RANLIB (in
 # both the unscoped and per-target forms the cc/openssl-src crates consult) to
 # the NDK tools. CC is set the same way so OpenSSL cross-compiles for Android.
-export "CC_${TARGET//-/_}=$CLANG"
-export "AR_${TARGET//-/_}=$AR"
-export "RANLIB_${TARGET//-/_}=$RANLIB"
 # Unscoped AR/RANLIB are what OpenSSL's own Makefile (driven by openssl-src)
 # reads; without these it falls back to the host macOS `ar` (BSD format).
 export AR="$AR"
 export RANLIB="$RANLIB"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$AR"
-
-if command -v rustup >/dev/null 2>&1; then
-  rustup target add "$TARGET" >/dev/null
-fi
 
 CARGO_PROFILE_ARGS=()
 if [[ "$PROFILE" == "release" ]]; then
@@ -108,36 +115,64 @@ elif [[ "$PROFILE" != "debug" ]]; then
   exit 1
 fi
 
-echo "Building meron-core ($PROFILE) for $TARGET using $ANDROID_NDK_HOME"
-if ! cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"; then
-  cat >&2 <<EOF
+build_target() {
+  local target="$1"
+  local abi clang jni_lib_dir target_uc
+  abi="$(abi_for_target "$target")"
+  clang="$TOOLCHAIN/bin/$(clang_prefix_for_target "$target")${API_LEVEL}-clang"
+  jni_lib_dir="$MOBILE_DIR/android/src/main/jniLibs/$abi"
+  target_uc="$(echo "${target//-/_}" | tr '[:lower:]' '[:upper:]')"
 
-Failed to build meron-core for $TARGET.
+  if [[ ! -x "$clang" ]]; then
+    echo "Missing Android clang at $clang" >&2
+    exit 1
+  fi
+
+  export "CC_${target//-/_}=$clang"
+  export "AR_${target//-/_}=$AR"
+  export "RANLIB_${target//-/_}=$RANLIB"
+  export "CARGO_TARGET_${target_uc}_LINKER=$clang"
+  export "CARGO_TARGET_${target_uc}_AR=$AR"
+
+  if command -v rustup >/dev/null 2>&1; then
+    rustup target add "$target" >/dev/null
+  fi
+
+  echo "Building meron-core ($PROFILE) for $target using $ANDROID_NDK_HOME"
+  if ! cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$target" "${CARGO_PROFILE_ARGS[@]}"; then
+    cat >&2 <<EOF
+
+Failed to build meron-core for $target.
 
 This usually means the active Rust toolchain does not include the Android
-standard library for $TARGET. Install a Rust toolchain with that target, for
+standard library for $target. Install a Rust toolchain with that target, for
 example:
 
-  rustup target add $TARGET
+  rustup target add $target
 
 The current Nix-provided Rust toolchain in this workspace does not include
-rustup or the $TARGET stdlib by default.
+rustup or the $target stdlib by default.
 EOF
-  exit 1
-fi
+    exit 1
+  fi
 
-SO_PATH="$TARGET_DIR/$TARGET/$PROFILE/libmeron_core.so"
-if [[ ! -f "$SO_PATH" ]]; then
-  echo "Build completed, but $SO_PATH was not produced." >&2
-  exit 1
-fi
+  local so_path="$TARGET_DIR/$target/$PROFILE/libmeron_core.so"
+  if [[ ! -f "$so_path" ]]; then
+    echo "Build completed, but $so_path was not produced." >&2
+    exit 1
+  fi
 
-mkdir -p "$JNI_LIB_DIR"
-cp "$SO_PATH" "$JNI_LIB_DIR/libmeron_core.so"
+  mkdir -p "$jni_lib_dir"
+  cp "$so_path" "$jni_lib_dir/libmeron_core.so"
 
-# Release builds carry full debug_info (~186MB). Strip it so the packaged .so —
-# and the APK that bundles it — stays small.
-if [[ "$PROFILE" == "release" ]]; then
-  "$STRIP" --strip-unneeded "$JNI_LIB_DIR/libmeron_core.so"
-fi
-echo "Packaged $JNI_LIB_DIR/libmeron_core.so"
+  # Release builds carry full debug_info (~186MB). Strip it so the packaged
+  # .so — and the APK that bundles it — stays small.
+  if [[ "$PROFILE" == "release" ]]; then
+    "$STRIP" --strip-unneeded "$jni_lib_dir/libmeron_core.so"
+  fi
+  echo "Packaged $jni_lib_dir/libmeron_core.so"
+}
+
+for target in $TARGETS; do
+  build_target "$target"
+done

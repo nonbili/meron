@@ -78,12 +78,6 @@ android {
         targetSdk 36
         versionCode releaseVersionCode
         versionName releaseVersionName
-        // The bundled Rust core is built for 64-bit ARM only. Declare that at
-        // package level so Play does not deliver a non-functional APK to
-        // 32-bit-only Android devices.
-        ndk {
-            abiFilters "arm64-v8a"
-        }
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // googleOauthScheme / MERON_GOOGLE_REDIRECT_URI are set per buildType
         // below, since each build type embeds a different Google client id.
@@ -126,6 +120,20 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+        }
+    }
+
+    // Per-ABI APKs keep the sideloaded download small (each carries one Rust
+    // core); the universal APK remains for local installs and users unsure of
+    // their ABI. The AAB is unaffected — Play splits it per-ABI itself. AGP
+    // forbids combining these splits with ndk.abiFilters; the shipped ABI set
+    // is whatever packageRustCoreAndroid puts under jniLibs.
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a"
+            universalApk true
         }
     }
 
@@ -180,6 +188,7 @@ tasks.register("packageRustCoreAndroid", Exec) {
     inputs.file("${rootProject.projectDir}/../meron-core/Cargo.toml")
     inputs.file("${rootProject.projectDir}/../meron-core/Cargo.lock")
     outputs.file("${projectDir}/src/main/jniLibs/arm64-v8a/libmeron_core.so")
+    outputs.file("${projectDir}/src/main/jniLibs/armeabi-v7a/libmeron_core.so")
 
     def releaseRequested = gradle.startParameter.taskNames.any { name ->
         def t = name.toLowerCase()

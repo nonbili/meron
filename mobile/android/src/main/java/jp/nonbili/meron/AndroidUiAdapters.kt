@@ -139,7 +139,7 @@ internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001
 
 /** One-line explanation of why libmeron_core.so failed to load, with the facts
  *  needed to diagnose a bad install from a screenshot: the loader error, the
- *  device's supported ABIs (we only ship arm64-v8a), whether the per-ABI split
+ *  device's supported ABIs (we ship arm64-v8a and armeabi-v7a), whether the per-ABI split
  *  APK made it onto the device (lost when the app is shared/restored instead
  *  of installed from Play), and the installer package. Empty once the core is
  *  loaded. */

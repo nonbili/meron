@@ -28,7 +28,7 @@ jobs:
       - name: install rust
         uses: dtolnay/rust-toolchain@1.96.1
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -87,6 +87,7 @@ jobs:
           set -euo pipefail
           export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/27.3.13750724"
           cargo clean --manifest-path meron-core/Cargo.toml --target aarch64-linux-android --release
+          cargo clean --manifest-path meron-core/Cargo.toml --target armv7-linux-androideabi --release
           mobile/scripts/package-rust-core-android.sh
 
       - name: build release apk
@@ -96,11 +97,13 @@ jobs:
           MERON_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: ./mobile/gradlew -p mobile :android:assembleRelease
 
-      - name: rename apk
+      - name: rename apks
         run: |
           set -euo pipefail
           cd mobile/android/build/outputs/apk/release
-          mv android-release.apk "meron-${MERON_VERSION_NAME}.apk"
+          mv android-universal-release.apk "meron-${MERON_VERSION_NAME}.apk"
+          mv android-arm64-v8a-release.apk "meron-${MERON_VERSION_NAME}-arm64-v8a.apk"
+          mv android-armeabi-v7a-release.apk "meron-${MERON_VERSION_NAME}-armeabi-v7a.apk"
 
       - uses: softprops/action-gh-release@v2
         name: release
