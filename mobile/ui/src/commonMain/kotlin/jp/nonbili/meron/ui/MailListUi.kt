@@ -354,6 +354,7 @@ internal fun StarredItemRow(
 internal fun MailList(
     threads: List<ThreadSummary>,
     accounts: List<AccountSummary>,
+    scrollToTopRequest: Long,
     canLoadMore: Boolean,
     loadingMore: Boolean,
     onOpen: (ThreadSummary) -> Unit,
@@ -372,6 +373,9 @@ internal fun MailList(
     showAccountBadge: Boolean,
 ) {
     val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTopRequest) {
+        if (scrollToTopRequest > 0) listState.scrollToItem(0)
+    }
     var pendingFeedRemoval by remember { mutableStateOf<ThreadSummary?>(null) }
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     // Read the list through rememberUpdatedState so the derivation tracks the

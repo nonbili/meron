@@ -1007,7 +1007,7 @@ internal fun MailRouteContent(
                     }
                     PullToRefreshBox(
                         isRefreshing = syncing && !showingBlockingInboxLoad,
-                        onRefresh = { syncCoreThreads() },
+                        onRefresh = { syncCoreThreads(scrollToTopOnSuccess = true) },
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         when {
@@ -1071,6 +1071,7 @@ internal fun MailRouteContent(
                                 MailList(
                                     threads = coreThreads,
                                     accounts = coreAccounts,
+                                    scrollToTopRequest = mailListScrollToTopRequest,
                                     canLoadMore = pageableCoreAccounts().isNotEmpty(),
                                     loadingMore = loadingMoreThreads,
                                     onOpen = ::readCoreThread,

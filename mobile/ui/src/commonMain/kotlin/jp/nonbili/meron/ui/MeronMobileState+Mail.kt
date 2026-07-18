@@ -319,6 +319,7 @@ internal fun MeronMobileState.syncCoreThreads(
     folderOverride: String? = null,
     syncFirst: Boolean = true,
     successStatus: String? = null,
+    scrollToTopOnSuccess: Boolean = false,
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -440,6 +441,9 @@ internal fun MeronMobileState.syncCoreThreads(
             syncing = false
             initialThreadsLoaded = true
             errorBanner = null
+            if (scrollToTopOnSuccess) {
+                mailListScrollToTopRequest += 1
+            }
             val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
             status = successStatus ?: if (newCount > 0) "$newCount new message(s)" else ""
             Log.i(

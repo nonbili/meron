@@ -107,6 +107,7 @@ internal class MeronMobileState(
     var initialAccountsLoaded by mutableStateOf(false)
     var mailboxCursor by mutableStateOf("")
     var mailboxAccountCursors by mutableStateOf(emptyMap<String, String>())
+    var mailListScrollToTopRequest by mutableStateOf(0L)
     var loadingMoreThreads by mutableStateOf(false)
     var starredItems by mutableStateOf(emptyList<StarredItemSummary>())
     var selectedCoreThread by mutableStateOf<ThreadSummary?>(null)
