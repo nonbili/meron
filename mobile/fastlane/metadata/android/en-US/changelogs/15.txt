@@ -1,0 +1,2 @@
+- Support armeabi-v7a
+- Fix thread list pull to refresh
