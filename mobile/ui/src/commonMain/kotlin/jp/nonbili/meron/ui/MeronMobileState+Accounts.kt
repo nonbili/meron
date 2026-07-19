@@ -1098,12 +1098,22 @@ internal suspend fun MeronMobileState.loadAccountInbox(
             ),
         )
     val page = parseThreadListPage(threadsJson)
+    val foldersWithPageUnread =
+        page.folderUnread?.let { unread ->
+            folders.map { item ->
+                if (item.name.equals(folder, ignoreCase = folder.equals(INBOX_FOLDER, ignoreCase = true))) {
+                    item.copy(unread = unread)
+                } else {
+                    item
+                }
+            }
+        } ?: folders
     Log.i(
         "MailLoad",
         "loadAccountInbox threads account=${account.id} folder=$folder count=${page.threads.size} cursor=${page.nextCursor.isNotBlank()}",
     )
     return MailboxLoadResult(
-        folders = folders,
+        folders = foldersWithPageUnread,
         folder = folder,
         threads = page.threads,
         unreadCount = page.folderUnread,

@@ -1,7 +1,7 @@
 import { invoke } from './bridge'
 import { unifiedAccounts } from '../states/accounts'
 import { getAllKanbanColumns, kanbanColumnKey, kanban$, type KanbanColumn } from '../states/kanban'
-import { mail$ } from '../states/mail'
+import { mail$, updateCachedFolderUnread } from '../states/mail'
 import { showToast } from '../states/ui'
 import { mergeStarredItems } from './starredItems'
 import type { FilterMode } from '../states/ui'
@@ -129,6 +129,7 @@ export function kanbanColumnUnreadCount(
 type ColumnPage = {
   threads: Message[]
   folderUnread?: number
+  folderUnreadByAccount?: Record<string, number>
   // Next-page cursor for a single-account column ("" = no more).
   nextSingle: string
   // Next-page cursors per account for a unified column (absent = that account
@@ -156,6 +157,7 @@ async function fetchColumnThreads(
     return {
       threads: mergeStarredItems(result.items ?? [], trimmedQuery).slice(0, COLUMN_LIMIT),
       folderUnread: undefined,
+      folderUnreadByAccount: undefined,
       nextSingle: '',
       nextUnified: {},
     }
@@ -188,7 +190,12 @@ async function fetchColumnThreads(
     const folderUnread = results.every((result) => typeof result.folder_unread === 'number')
       ? results.reduce((sum, result) => sum + (result.folder_unread ?? 0), 0)
       : undefined
-    return { threads, folderUnread, nextSingle: '', nextUnified }
+    const folderUnreadByAccount = Object.fromEntries(
+      results.flatMap((result, index) =>
+        typeof result.folder_unread === 'number' ? [[accounts[index].id, result.folder_unread] as const] : [],
+      ),
+    )
+    return { threads, folderUnread, folderUnreadByAccount, nextSingle: '', nextUnified }
   }
 
   const result = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>('mail.threadList', {
@@ -203,6 +210,8 @@ async function fetchColumnThreads(
   return {
     threads: result.threads || [],
     folderUnread: result.folder_unread,
+    folderUnreadByAccount:
+      typeof result.folder_unread === 'number' ? { [column.accountId]: result.folder_unread } : undefined,
     nextSingle: result.next_cursor ?? '',
     nextUnified: {},
   }
@@ -234,8 +243,15 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
   columnLoadVersions.set(key, version)
   kanban$.loading[key].set(true)
   try {
-    const { threads, folderUnread, nextSingle, nextUnified } = await fetchColumnThreads(column, refresh, trimmedQuery)
+    const { threads, folderUnread, folderUnreadByAccount, nextSingle, nextUnified } = await fetchColumnThreads(
+      column,
+      refresh,
+      trimmedQuery,
+    )
     if (columnLoadVersions.get(key) !== version) return
+    for (const [accountId, unread] of Object.entries(folderUnreadByAccount ?? {})) {
+      updateCachedFolderUnread(accountId, column.accountId === 'unified' ? 'inbox' : column.folderId, unread)
+    }
     kanban$.threads[key].set(keepReadThreads(column, key, threads))
     if (folderUnread !== undefined) kanban$.unreadCounts[key].set(folderUnread)
     kanban$.cursors[key].set(trimmedQuery ? '' : nextSingle)
@@ -289,13 +305,16 @@ export async function loadMoreKanbanColumn(column: KanbanColumn) {
   if (kanban$.loadingMore[key].get() || !columnHasMore(key, unified)) return
   kanban$.loadingMore[key].set(true)
   try {
-    const { threads, nextSingle, nextUnified } = await fetchColumnThreads(column, false, '', {
+    const { threads, folderUnreadByAccount, nextSingle, nextUnified } = await fetchColumnThreads(column, false, '', {
       single: kanban$.cursors[key].get(),
       unified: kanban$.accountCursors[key].get(),
     })
     const existing = kanban$.threads[key].get() ?? []
     const seen = new Set(existing.map((thread) => thread.thread_id))
     const merged = [...existing, ...threads.filter((thread) => !seen.has(thread.thread_id))]
+    for (const [accountId, unread] of Object.entries(folderUnreadByAccount ?? {})) {
+      updateCachedFolderUnread(accountId, unified ? 'inbox' : column.folderId, unread)
+    }
     if (unified) merged.sort((a, b) => b.date - a.date)
     kanban$.threads[key].set(merged)
     kanban$.cursors[key].set(nextSingle)

@@ -382,6 +382,38 @@ export function folderUnread(folders: Folder[] | undefined, folderId: string): n
   return folder?.unread ?? 0
 }
 
+// Apply an unread total returned with a thread page to the same per-account
+// folder cache used by side-navigation badges. This keeps a freshly loaded
+// mailbox/Kanban column and the navigation chrome on one core-owned value.
+export function updateCachedFolderUnread(accountId: string, folderId: string, unread: number) {
+  if (!accountId || accountId === 'unified' || !folderId || !Number.isFinite(unread)) return
+  const count = Math.max(0, Math.floor(unread))
+  const patch = (folders: Folder[] | undefined): Folder[] => {
+    const current = folders ?? []
+    let matched = false
+    const next = current.map((folder) => {
+      if (!folderMatches(folder, accountId, folderId)) return folder
+      matched = true
+      return folder.unread === count ? folder : { ...folder, unread: count }
+    })
+    if (matched || folderId.toLowerCase() !== 'inbox') return next
+    return [...next, { id: folderId, account_id: accountId, name: 'Inbox', role: 'inbox', unread: count }]
+  }
+
+  const byAccount = mail$.foldersByAccount.get()
+  const nextAccountFolders = patch(byAccount[accountId])
+  const nextByAccount = { ...byAccount, [accountId]: nextAccountFolders }
+  mail$.foldersByAccount.set(nextByAccount)
+
+  const selected = ui$.selectedAccount.get()
+  if (selected === accountId) {
+    mail$.folders.set(patch(mail$.folders.get()))
+  } else if (selected === 'unified') {
+    const total = unifiedAccounts().reduce((sum, account) => sum + inboxUnread(nextByAccount[account.id]), 0)
+    mail$.folders.set([{ id: 'inbox', account_id: 'unified', name: 'Inbox', role: 'inbox', unread: total }])
+  }
+}
+
 function hasOnlyBootstrapInbox(folders: Folder[]) {
   if (folders.length !== 1) return false
   const folder = folders[0]
@@ -474,13 +506,17 @@ export async function loadThreads(refresh = true) {
     const nextCursors: Record<string, string> = {}
     const fetchPromises = accounts.map(async (acc) => {
       try {
-        const res = await invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
-          account_id: acc.id,
-          folder_id: 'inbox',
-          query: q,
-          filter,
-          refresh,
-        })
+        const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+          'mail.threadList',
+          {
+            account_id: acc.id,
+            folder_id: 'inbox',
+            query: q,
+            filter,
+            refresh,
+          },
+        )
+        if (typeof res.folder_unread === 'number') updateCachedFolderUnread(acc.id, 'inbox', res.folder_unread)
         if (res.next_cursor) nextCursors[acc.id] = res.next_cursor
         return res.threads || []
       } catch (err) {
@@ -495,13 +531,19 @@ export async function loadThreads(refresh = true) {
     mail$.threadsCursor.set(Object.keys(nextCursors).length > 0 ? 'unified' : '')
   } else {
     try {
-      const result = await invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
-        account_id: selectedAcc,
-        folder_id: selectedFol,
-        query: q,
-        filter,
-        refresh,
-      })
+      const result = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+        'mail.threadList',
+        {
+          account_id: selectedAcc,
+          folder_id: selectedFol,
+          query: q,
+          filter,
+          refresh,
+        },
+      )
+      if (typeof result.folder_unread === 'number') {
+        updateCachedFolderUnread(selectedAcc, selectedFol, result.folder_unread)
+      }
       allThreads = result.threads || []
       mail$.threadsCursor.set(result.next_cursor ?? '')
       mail$.threadAccountCursors.set({})
@@ -584,14 +626,18 @@ export async function loadMoreThreads() {
       const results = await Promise.all(
         accounts.map(async (acc) => {
           try {
-            const res = await invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
-              account_id: acc.id,
-              folder_id: 'inbox',
-              query: q,
-              filter,
-              before_cursor: cursors[acc.id],
-              refresh: false,
-            })
+            const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+              'mail.threadList',
+              {
+                account_id: acc.id,
+                folder_id: 'inbox',
+                query: q,
+                filter,
+                before_cursor: cursors[acc.id],
+                refresh: false,
+              },
+            )
+            if (typeof res.folder_unread === 'number') updateCachedFolderUnread(acc.id, 'inbox', res.folder_unread)
             if (res.next_cursor) nextCursors[acc.id] = res.next_cursor
             return res.threads || []
           } catch (err) {
@@ -606,14 +652,18 @@ export async function loadMoreThreads() {
     } else {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
-      const res = await invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
-        account_id: selectedAcc,
-        folder_id: selectedFol,
-        query: q,
-        filter,
-        before_cursor: cursor,
-        refresh: false,
-      })
+      const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+        'mail.threadList',
+        {
+          account_id: selectedAcc,
+          folder_id: selectedFol,
+          query: q,
+          filter,
+          before_cursor: cursor,
+          refresh: false,
+        },
+      )
+      if (typeof res.folder_unread === 'number') updateCachedFolderUnread(selectedAcc, selectedFol, res.folder_unread)
       moreThreads = res.threads || []
       mail$.threadsCursor.set(res.next_cursor ?? '')
     }

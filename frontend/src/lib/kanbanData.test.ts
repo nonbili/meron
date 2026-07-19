@@ -44,6 +44,7 @@ beforeEach(() => {
   kanban$.filters.set({})
   kanban$.globalFilter.set('all')
   mail$.readThreads.set({})
+  mail$.foldersByAccount.set({})
   ;(window as any).go = undefined
 })
 
@@ -167,6 +168,7 @@ describe('kanban column loading filters', () => {
     })
     expect(activeKanbanColumnFilter({ accountId: 'acc1', folderId: 'INBOX' })).toBe('unread')
     expect(kanban$.unreadCounts['acc1\nINBOX'].get()).toBe(3)
+    expect(mail$.foldersByAccount.acc1.get()?.[0]?.unread).toBe(3)
   })
 
   it('keeps using the active filter when loading more of a column', async () => {
@@ -223,6 +225,8 @@ describe('kanban column loading filters', () => {
       expect.objectContaining({ account_id: 'acc3', folder_id: 'inbox', filter: 'unread' }),
     ])
     expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(4)
+    expect(mail$.foldersByAccount.acc1.get()?.[0]?.unread).toBe(2)
+    expect(mail$.foldersByAccount.acc3.get()?.[0]?.unread).toBe(2)
   })
 
   it('keeps a just-read thread in an unread column when the reload drops it', async () => {
