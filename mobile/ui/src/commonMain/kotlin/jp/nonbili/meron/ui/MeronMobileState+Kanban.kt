@@ -301,11 +301,21 @@ internal fun MeronMobileState.updateThreadEverywhere(
     update: (ThreadSummary) -> ThreadSummary,
 ) {
     val next = update(thread)
+    val beforeUnread = if (thread.unread) thread.unreadCount.coerceAtLeast(1) else 0
+    val afterUnread = if (next.unread) next.unreadCount.coerceAtLeast(1) else 0
+    val unreadDelta = afterUnread - beforeUnread
     coreThreads = coreThreads.map { if (it.id == thread.id) next else it }
     selectedCoreThread = selectedCoreThread?.let { if (it.id == thread.id) next else it }
     kanbanColumns =
         kanbanColumns.mapValues { (_, state) ->
-            state.copy(threads = state.threads.map { if (it.id == thread.id) next else it })
+            if (state.threads.none { it.id == thread.id }) {
+                state
+            } else {
+                state.copy(
+                    threads = state.threads.map { if (it.id == thread.id) next else it },
+                    unreadCount = state.unreadCount?.let { (it + unreadDelta).coerceAtLeast(0) },
+                )
+            }
         }
 }
 
@@ -362,6 +372,12 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
             folders = results.flatMap { it.second.folders },
             folder = INBOX_FOLDER,
             threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
+            unreadCount =
+                if (results.all { it.second.unreadCount != null }) {
+                    results.sumOf { it.second.unreadCount ?: 0 }
+                } else {
+                    null
+                },
             accountCursors =
                 results
                     .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
@@ -407,6 +423,7 @@ internal fun MeronMobileState.loadKanbanColumn(
             updateKanbanColumn(key) {
                 it.copy(
                     threads = withLocalDraftFlags(withoutLocallyDiscardedThreads(result.threads)),
+                    unreadCount = result.unreadCount,
                     loading = false,
                     loadingMore = false,
                     error = null,

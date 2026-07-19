@@ -84,6 +84,7 @@ function KanbanColumnContent({
   const folders = useValue(mail$.folders)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   const allThreads = useValue(kanban$.threads)
+  const allUnreadCounts = useValue(kanban$.unreadCounts)
   const allLoading = useValue(kanban$.loading)
   const allLoadingMore = useValue(kanban$.loadingMore)
   const allCursors = useValue(kanban$.cursors)
@@ -108,7 +109,7 @@ function KanbanColumnContent({
   // merely because it's the open thread. So switching to Unread/Starred yields a
   // clean filtered list instead of pinning the currently-open conversation.
   const threads = filterThreads(rawThreads, filterMode, undefined, readThreads)
-  const unreadCount = kanbanColumnUnreadCount(column, foldersByAccount, accounts, rawThreads)
+  const unreadCount = kanbanColumnUnreadCount(column, allUnreadCounts[key], rawThreads)
   const hasUnread = unreadCount > 0
   const loading = allLoading[key] ?? false
   const loadingMore = allLoadingMore[key] ?? false

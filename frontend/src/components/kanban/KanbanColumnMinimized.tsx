@@ -38,6 +38,7 @@ export function KanbanColumnMinimized({
   const folders = useValue(mail$.folders)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   const rawThreads = useValue(kanban$.threads)[key] ?? []
+  const unreadCount = useValue(kanban$.unreadCounts)[key]
   const loading = useValue(kanban$.loading)[key] ?? false
   const searchQuery = useValue(kanban$.searchQuery)
   const searchScope = useValue(kanban$.searchScope)
@@ -45,7 +46,7 @@ export function KanbanColumnMinimized({
   const labelFolders = useMemo(() => mergeLabelFolders(folders, foldersByAccount), [folders, foldersByAccount])
   const searchActive = columnSearchActive(key, searchQuery, searchScope)
   const overWallpaper = !!useValue(settings$.kanbanBoards).find((board) => board.id === boardId)?.wallpaper
-  const unreadCount = kanbanColumnUnreadCount(column, foldersByAccount, accounts, rawThreads)
+  const columnUnreadCount = kanbanColumnUnreadCount(column, unreadCount, rawThreads)
   const columnAccount = column.accountId !== 'unified' ? accounts.find((a) => a.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
   const isPaused = !!columnAccount?.paused
@@ -130,9 +131,9 @@ export function KanbanColumnMinimized({
           {label}
         </span>
       </div>
-      {unreadCount > 0 && (
+      {columnUnreadCount > 0 && (
         <div className="h-4.5 min-w-4.5 px-1.5 flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/20 leading-none shrink-0">
-          {unreadCount}
+          {columnUnreadCount}
         </div>
       )}
       {searchActive && loading && <Loader2 size={14} className="animate-spin text-accent" />}

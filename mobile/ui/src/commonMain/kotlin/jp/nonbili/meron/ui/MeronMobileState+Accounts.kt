@@ -1106,6 +1106,7 @@ internal suspend fun MeronMobileState.loadAccountInbox(
         folders = folders,
         folder = folder,
         threads = page.threads,
+        unreadCount = page.folderUnread,
         nextCursor = page.nextCursor,
     )
 }

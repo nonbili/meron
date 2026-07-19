@@ -81,7 +81,10 @@ func threadsJSON(accountID, folder string, raw any) any {
 			RecipientOverflow: uint32(jsonNumber(card["recipient_overflow"])),
 		})
 	}
-	out := map[string]any{"threads": messages}
+	out := map[string]any{
+		"threads":       messages,
+		"folder_unread": uint32(jsonNumber(object["folder_unread"])),
+	}
 	if cursor, _ := object["next_cursor"].(string); cursor != "" {
 		out["next_cursor"] = cursor
 	}

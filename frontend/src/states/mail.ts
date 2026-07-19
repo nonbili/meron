@@ -38,6 +38,8 @@ export const mail$ = observable({
 
 function updateKanbanThread(threadId: string, update: (thread: Message) => Message) {
   const columns = kanban$.threads.get()
+  const unreadCounts = kanban$.unreadCounts.get()
+  const nextUnreadCounts = { ...unreadCounts }
   let changed = false
   const nextColumns = Object.fromEntries(
     Object.entries(columns).map(([key, threads]) => {
@@ -45,13 +47,22 @@ function updateKanbanThread(threadId: string, update: (thread: Message) => Messa
       const nextThreads = threads.map((thread) => {
         if (thread.thread_id !== threadId) return thread
         columnChanged = true
-        return update(thread)
+        const next = update(thread)
+        const beforeUnread = thread.unread ? (thread.unread_count ?? 1) : 0
+        const afterUnread = next.unread ? (next.unread_count ?? 1) : 0
+        if (nextUnreadCounts[key] !== undefined) {
+          nextUnreadCounts[key] = Math.max(0, nextUnreadCounts[key] + afterUnread - beforeUnread)
+        }
+        return next
       })
       if (columnChanged) changed = true
       return [key, columnChanged ? nextThreads : threads]
     }),
   )
-  if (changed) kanban$.threads.set(nextColumns)
+  if (changed) {
+    kanban$.threads.set(nextColumns)
+    kanban$.unreadCounts.set(nextUnreadCounts)
+  }
 }
 
 function folderMatches(folder: Folder, accountId: string | undefined, folderId: string | undefined): boolean {

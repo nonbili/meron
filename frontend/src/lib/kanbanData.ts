@@ -1,7 +1,7 @@
 import { invoke } from './bridge'
 import { unifiedAccounts } from '../states/accounts'
 import { getAllKanbanColumns, kanbanColumnKey, kanban$, type KanbanColumn } from '../states/kanban'
-import { folderUnread, mail$ } from '../states/mail'
+import { mail$ } from '../states/mail'
 import { showToast } from '../states/ui'
 import { mergeStarredItems } from './starredItems'
 import type { FilterMode } from '../states/ui'
@@ -119,25 +119,16 @@ export function loadedUnreadCount(threads: Message[]): number {
 
 export function kanbanColumnUnreadCount(
   column: KanbanColumn,
-  foldersByAccount: Record<string, Folder[]>,
-  accounts: Account[],
+  folderUnread: number | undefined,
   loadedThreads: Message[] = [],
 ): number {
   if (isUnifiedStarredColumn(column)) return loadedUnreadCount(loadedThreads)
-  if (column.accountId === 'unified') {
-    return accounts.reduce(
-      (sum, account) =>
-        account.included_in_unified !== false ? sum + folderUnread(foldersByAccount[account.id], column.folderId) : sum,
-      0,
-    )
-  }
-  const folders = foldersByAccount[column.accountId]
-  if (!folders) return loadedUnreadCount(loadedThreads)
-  return folderUnread(folders, column.folderId)
+  return folderUnread ?? loadedUnreadCount(loadedThreads)
 }
 
 type ColumnPage = {
   threads: Message[]
+  folderUnread?: number
   // Next-page cursor for a single-account column ("" = no more).
   nextSingle: string
   // Next-page cursors per account for a unified column (absent = that account
@@ -164,6 +155,7 @@ async function fetchColumnThreads(
     const result = await invoke<{ items: Message[] }>('mail.starredItems', {})
     return {
       threads: mergeStarredItems(result.items ?? [], trimmedQuery).slice(0, COLUMN_LIMIT),
+      folderUnread: undefined,
       nextSingle: '',
       nextUnified: {},
     }
@@ -176,7 +168,7 @@ async function fetchColumnThreads(
     const nextUnified: Record<string, string> = {}
     const results = await Promise.all(
       accounts.map((account) =>
-        invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
+        invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>('mail.threadList', {
           account_id: account.id,
           folder_id: 'inbox',
           query: trimmedQuery,
@@ -187,16 +179,19 @@ async function fetchColumnThreads(
         })
           .then((result) => {
             if (result.next_cursor) nextUnified[account.id] = result.next_cursor
-            return result.threads || []
+            return result
           })
-          .catch(() => [] as Message[]),
+          .catch(() => ({ threads: [] as Message[] })),
       ),
     )
-    const threads = results.flat().sort((a, b) => b.date - a.date)
-    return { threads, nextSingle: '', nextUnified }
+    const threads = results.flatMap((result) => result.threads || []).sort((a, b) => b.date - a.date)
+    const folderUnread = results.every((result) => typeof result.folder_unread === 'number')
+      ? results.reduce((sum, result) => sum + (result.folder_unread ?? 0), 0)
+      : undefined
+    return { threads, folderUnread, nextSingle: '', nextUnified }
   }
 
-  const result = await invoke<{ threads: Message[]; next_cursor?: string }>('mail.threadList', {
+  const result = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>('mail.threadList', {
     account_id: column.accountId,
     folder_id: column.folderId,
     query: trimmedQuery,
@@ -205,7 +200,12 @@ async function fetchColumnThreads(
     limit: COLUMN_LIMIT,
     before_cursor: before?.single,
   })
-  return { threads: result.threads || [], nextSingle: result.next_cursor ?? '', nextUnified: {} }
+  return {
+    threads: result.threads || [],
+    folderUnread: result.folder_unread,
+    nextSingle: result.next_cursor ?? '',
+    nextUnified: {},
+  }
 }
 
 // Reading a thread marks it read on the backend, which fires `mail.synced` and
@@ -234,9 +234,10 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
   columnLoadVersions.set(key, version)
   kanban$.loading[key].set(true)
   try {
-    const { threads, nextSingle, nextUnified } = await fetchColumnThreads(column, refresh, trimmedQuery)
+    const { threads, folderUnread, nextSingle, nextUnified } = await fetchColumnThreads(column, refresh, trimmedQuery)
     if (columnLoadVersions.get(key) !== version) return
     kanban$.threads[key].set(keepReadThreads(column, key, threads))
+    if (folderUnread !== undefined) kanban$.unreadCounts[key].set(folderUnread)
     kanban$.cursors[key].set(trimmedQuery ? '' : nextSingle)
     kanban$.accountCursors[key].set(trimmedQuery ? {} : nextUnified)
   } finally {

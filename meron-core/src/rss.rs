@@ -707,14 +707,7 @@ pub fn mark_items_starred(
 
 /// The single synthetic Inbox folder for an RSS account, with its unread count.
 pub fn folders(conn: &Connection, account: &str) -> Result<Vec<Value>> {
-    let unread: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM messages WHERE account = ?1 AND seen = 0",
-            params![account],
-            |r| r.get(0),
-        )
-        .optional()?
-        .unwrap_or(0);
+    let unread = unread_count(conn, account)?;
     Ok(vec![json!({
         "id": RSS_FOLDER_ID,
         "account_id": account,
@@ -722,6 +715,17 @@ pub fn folders(conn: &Connection, account: &str) -> Result<Vec<Value>> {
         "role": "inbox",
         "unread": unread,
     })])
+}
+
+pub fn unread_count(conn: &Connection, account: &str) -> Result<i64> {
+    Ok(conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE account = ?1 AND seen = 0",
+            params![account],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(0))
 }
 
 /// Bridge `Account` JSON for an RSS account.

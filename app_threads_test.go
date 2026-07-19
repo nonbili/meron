@@ -97,7 +97,8 @@ func TestThreadsJSONSkipsKeylessCardsAndPassesCursor(t *testing.T) {
 			map[string]any{"subject": "Dropped"}, // no thread_key
 			map[string]any{"thread_key": "k2", "subject": "Kept"},
 		},
-		"next_cursor": "cursor-token",
+		"next_cursor":   "cursor-token",
+		"folder_unread": float64(3),
 	}
 
 	out := threadsJSON("acc", "INBOX", raw)
@@ -107,6 +108,9 @@ func TestThreadsJSONSkipsKeylessCardsAndPassesCursor(t *testing.T) {
 	}
 	if got := out.(map[string]any)["next_cursor"]; got != "cursor-token" {
 		t.Errorf("next_cursor = %v, want cursor-token", got)
+	}
+	if got := out.(map[string]any)["folder_unread"]; got != uint32(3) {
+		t.Errorf("folder_unread = %v, want 3", got)
 	}
 }
 

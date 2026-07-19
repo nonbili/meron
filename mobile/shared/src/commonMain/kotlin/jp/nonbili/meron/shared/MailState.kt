@@ -59,6 +59,7 @@ data class ThreadSummary(
     val sender: String,
     val preview: String = "",
     val unread: Boolean = false,
+    val unreadCount: Int = 0,
     val starred: Boolean = false,
     val hasDraft: Boolean = false,
     val dateEpochSeconds: Long = 0,

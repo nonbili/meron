@@ -104,6 +104,18 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// Authoritative unread-message total for one folder. Thread-list responses
+/// carry this alongside their cards so clients do not have to join a separately
+/// cached folder-list response to the freshly loaded page.
+pub fn get_folder_unread(conn: &Connection, account: &str, folder: &str) -> Result<u32> {
+    let unread = conn.query_row(
+        "SELECT COUNT(*) FROM messages WHERE account = ?1 AND folder = ?2 AND seen = 0",
+        params![account, folder],
+        |row| row.get::<_, i64>(0),
+    )?;
+    Ok(unread as u32)
+}
+
 pub fn classify_folder_role(name: &str, special_use: Option<&str>) -> &'static str {
     match special_use.unwrap_or_default() {
         "inbox" => "inbox",

@@ -137,6 +137,7 @@ internal data class MailboxLoadResult(
     val folders: List<FolderSummary>,
     val folder: String,
     val threads: List<ThreadSummary>,
+    val unreadCount: Int? = null,
     val nextCursor: String = "",
     val accountCursors: Map<String, String> = emptyMap(),
 )
@@ -164,6 +165,7 @@ internal data class KanbanBoardSpec(
 
 internal data class KanbanColumnState(
     val threads: List<ThreadSummary> = emptyList(),
+    val unreadCount: Int? = null,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val error: String? = null,

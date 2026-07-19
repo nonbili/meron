@@ -499,7 +499,9 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         return with_mobile_db(data_dir, |conn| {
             let threads =
                 rss::recent(&conn, &account_id, &query, 50).map_err(|err| format!("{err:#}"))?;
-            Ok(json!({ "threads": threads }))
+            let folder_unread =
+                rss::unread_count(&conn, &account_id).map_err(|err| format!("{err:#}"))?;
+            Ok(json!({ "threads": threads, "folder_unread": folder_unread }))
         });
     }
 
@@ -540,7 +542,9 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
             store::draft_thread_keys(&conn, &account_id).map_err(|err| err.to_string())?;
         let threads =
             thread_cards_json_with_drafts(&account_id, &folder_id, messages, &draft_thread_keys);
-        let mut out = json!({ "threads": threads });
+        let folder_unread = store::get_folder_unread(&conn, &account_id, &folder_id)
+            .map_err(|err| err.to_string())?;
+        let mut out = json!({ "threads": threads, "folder_unread": folder_unread });
         if let Some(cursor) = next_cursor {
             out.as_object_mut()
                 .unwrap()

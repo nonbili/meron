@@ -91,7 +91,7 @@ class MobileResponseParsersTest {
     fun parsesThreadListEnvelope() {
         val threads =
             parseThreadListResponse(
-                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Ada","subject":"Hello","preview":"Snippet","date":1700000000,"unread":true,"starred":true,"has_draft":true,"feed_url":"https://example.com/feed.xml"}]}}""",
+                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Ada","subject":"Hello","preview":"Snippet","date":1700000000,"unread":true,"unread_count":2,"starred":true,"has_draft":true,"feed_url":"https://example.com/feed.xml"}],"folder_unread":3}}""",
             )
 
         assertEquals(1, threads.size)
@@ -103,6 +103,7 @@ class MobileResponseParsersTest {
         assertEquals("Snippet", threads[0].preview)
         assertEquals(1_700_000_000, threads[0].dateEpochSeconds)
         assertTrue(threads[0].unread)
+        assertEquals(2, threads[0].unreadCount)
         assertTrue(threads[0].starred)
         assertTrue(threads[0].hasDraft)
         assertEquals("https://example.com/feed.xml", threads[0].feedUrl)
@@ -112,11 +113,12 @@ class MobileResponseParsersTest {
     fun parsesThreadListNextCursor() {
         val page =
             parseThreadListPage(
-                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","date":1700000000}],"next_cursor":"1700000000:1"}}""",
+                """{"id":2,"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","date":1700000000}],"next_cursor":"1700000000:1","folder_unread":7}}""",
             )
 
         assertEquals(1, page.threads.size)
         assertEquals("1700000000:1", page.nextCursor)
+        assertEquals(7, page.folderUnread)
     }
 
     @Test

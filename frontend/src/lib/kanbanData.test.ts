@@ -36,6 +36,7 @@ const account = (id: string): Account => ({
 beforeEach(() => {
   accounts$.set([])
   kanban$.threads.set({})
+  kanban$.unreadCounts.set({})
   kanban$.loading.set({})
   kanban$.cursors.set({})
   kanban$.accountCursors.set({})
@@ -146,7 +147,7 @@ describe('kanban column loading filters', () => {
         App: {
           Invoke: async (command: string, payload: unknown) => {
             calls.push({ command, payload })
-            return { threads: [], next_cursor: 'uid:10' }
+            return { threads: [], next_cursor: 'uid:10', folder_unread: 3 }
           },
         },
       },
@@ -165,6 +166,7 @@ describe('kanban column loading filters', () => {
       before_cursor: undefined,
     })
     expect(activeKanbanColumnFilter({ accountId: 'acc1', folderId: 'INBOX' })).toBe('unread')
+    expect(kanban$.unreadCounts['acc1\nINBOX'].get()).toBe(3)
   })
 
   it('keeps using the active filter when loading more of a column', async () => {
@@ -174,13 +176,14 @@ describe('kanban column loading filters', () => {
         App: {
           Invoke: async (command: string, payload: unknown) => {
             calls.push({ command, payload })
-            return { threads: [], next_cursor: '' }
+            return { threads: [], next_cursor: '', folder_unread: command === 'mail.threadList' ? 2 : 0 }
           },
         },
       },
     }
     kanban$.globalFilter.set('unread')
     kanban$.cursors['acc1\nINBOX'].set('uid:10')
+    kanban$.unreadCounts['acc1\nINBOX'].set(5)
 
     await loadMoreKanbanColumn({ accountId: 'acc1', folderId: 'INBOX' })
 
@@ -193,6 +196,7 @@ describe('kanban column loading filters', () => {
       refresh: false,
       before_cursor: 'uid:10',
     })
+    expect(kanban$.unreadCounts['acc1\nINBOX'].get()).toBe(5)
   })
 
   it('sends the active filter for each account in a unified column', async () => {
@@ -203,7 +207,7 @@ describe('kanban column loading filters', () => {
         App: {
           Invoke: async (command: string, payload: unknown) => {
             calls.push({ command, payload })
-            return { threads: [], next_cursor: '' }
+            return { threads: [], next_cursor: '', folder_unread: 2 }
           },
         },
       },
@@ -218,6 +222,7 @@ describe('kanban column loading filters', () => {
       expect.objectContaining({ account_id: 'acc1', folder_id: 'inbox', filter: 'unread' }),
       expect.objectContaining({ account_id: 'acc3', folder_id: 'inbox', filter: 'unread' }),
     ])
+    expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(4)
   })
 
   it('keeps a just-read thread in an unread column when the reload drops it', async () => {
@@ -325,64 +330,37 @@ describe('folderMatches', () => {
 })
 
 describe('kanbanColumnUnreadCount', () => {
-  it('uses folder unread totals instead of loaded thread count for a mail column', () => {
-    const foldersByAccount = {
-      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 137 } as Folder],
-    }
-
+  it('uses the unread total returned with a mail column page', () => {
     expect(
-      kanbanColumnUnreadCount(
-        { accountId: 'acc1', folderId: 'inbox' },
-        foldersByAccount,
-        [account('acc1')],
-        [
-          message({ unread: true, unread_count: 1 }),
-          message({ id: 'm2', thread_id: 't2', unread: true, unread_count: 1 }),
-        ],
-      ),
+      kanbanColumnUnreadCount({ accountId: 'acc1', folderId: 'inbox' }, 137, [
+        message({ unread: true, unread_count: 1 }),
+        message({ id: 'm2', thread_id: 't2', unread: true, unread_count: 1 }),
+      ]),
     ).toBe(137)
   })
 
-  it('sums included accounts for the unified inbox', () => {
-    const foldersByAccount = {
-      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 70 } as Folder],
-      acc2: [{ id: 'INBOX', account_id: 'acc2', name: 'Inbox', role: 'inbox', unread: 50 } as Folder],
-    }
-
+  it('trusts a zero total returned with the page', () => {
     expect(
-      kanbanColumnUnreadCount({ accountId: 'unified', folderId: 'inbox' }, foldersByAccount, [
-        account('acc1'),
-        { ...account('acc2'), included_in_unified: false },
+      kanbanColumnUnreadCount({ accountId: 'acc1', folderId: 'inbox' }, 0, [
+        message({ unread: true, unread_count: 1 }),
       ]),
-    ).toBe(70)
-  })
-
-  it('trusts a genuinely-zero folder total instead of a stale loaded thread count', () => {
-    const foldersByAccount = {
-      acc1: [{ id: 'INBOX', account_id: 'acc1', name: 'Inbox', role: 'inbox', unread: 0 } as Folder],
-    }
-
-    expect(
-      kanbanColumnUnreadCount(
-        { accountId: 'acc1', folderId: 'inbox' },
-        foldersByAccount,
-        [account('acc1')],
-        [message({ unread: true, unread_count: 1 })],
-      ),
     ).toBe(0)
   })
 
-  it('falls back to loaded unread message totals when no folder total exists', () => {
+  it('falls back to loaded message totals before the first page returns', () => {
     expect(
-      kanbanColumnUnreadCount(
-        { accountId: 'unified', folderId: 'starred' },
-        {},
-        [],
-        [
-          message({ unread: true, unread_count: 3 }),
-          message({ id: 'm2', thread_id: 't2', unread: false, unread_count: 0 }),
-        ],
-      ),
+      kanbanColumnUnreadCount({ accountId: 'acc1', folderId: 'inbox' }, undefined, [
+        message({ unread: true, unread_count: 3 }),
+      ]),
+    ).toBe(3)
+  })
+
+  it('always derives unified starred from its loaded items', () => {
+    expect(
+      kanbanColumnUnreadCount({ accountId: 'unified', folderId: 'starred' }, 99, [
+        message({ unread: true, unread_count: 3 }),
+        message({ id: 'm2', thread_id: 't2', unread: false, unread_count: 0 }),
+      ]),
     ).toBe(3)
   })
 })

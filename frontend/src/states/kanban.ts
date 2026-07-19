@@ -20,6 +20,8 @@ const DEFAULT_BOARD_NAME = 'Kanban board'
 export const kanban$ = observable({
   activeBoardId: '',
   threads: {} as Record<string, Message[]>,
+  // Authoritative folder unread totals returned with each column's thread page.
+  unreadCounts: {} as Record<string, number>,
   loading: {} as Record<string, boolean>,
   // Pagination cursors per column key. `cursors` holds a single-account folder's
   // opaque next-page cursor; `accountCursors` holds the per-account cursors a
@@ -299,6 +301,7 @@ export async function markColumnAllRead(column: KanbanColumn) {
   kanban$.threads[key].set(
     threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
   )
+  kanban$.unreadCounts[key].set(0)
 
   await Promise.all([
     ...mailAccountIds.map((accountId) =>

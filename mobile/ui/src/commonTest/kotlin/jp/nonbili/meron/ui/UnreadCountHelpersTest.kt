@@ -1,6 +1,5 @@
 package jp.nonbili.meron.ui
 
-import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlin.test.Test
@@ -21,17 +20,11 @@ class UnreadCountHelpersTest {
     }
 
     @Test
-    fun kanbanColumnUnreadUsesFolderTotalForMailColumn() {
-        val foldersByAccount =
-            mapOf(
-                "acc1" to listOf(FolderSummary(accountId = "acc1", name = "INBOX", unread = 137)),
-            )
-
+    fun kanbanColumnUnreadUsesTotalReturnedWithPage() {
         val count =
             kanbanColumnUnreadCount(
                 column = KanbanColumnSpec(accountId = "acc1", folderId = "inbox"),
-                foldersByAccount = foldersByAccount,
-                accounts = listOf(account("acc1")),
+                folderUnread = 137,
                 loadedThreads =
                     listOf(
                         thread("t1", unread = true),
@@ -43,18 +36,11 @@ class UnreadCountHelpersTest {
     }
 
     @Test
-    fun kanbanColumnUnreadSumsIncludedUnifiedAccounts() {
-        val foldersByAccount =
-            mapOf(
-                "acc1" to listOf(FolderSummary(accountId = "acc1", name = "INBOX", unread = 70)),
-                "acc2" to listOf(FolderSummary(accountId = "acc2", name = "INBOX", unread = 50)),
-            )
-
+    fun kanbanColumnUnreadUsesSummedUnifiedTotalReturnedWithPage() {
         val count =
             kanbanColumnUnreadCount(
                 column = KanbanColumnSpec(accountId = UNIFIED_ACCOUNT_ID, folderId = INBOX_FOLDER),
-                foldersByAccount = foldersByAccount,
-                accounts = listOf(account("acc1"), account("acc2", includedInUnified = false)),
+                folderUnread = 70,
             )
 
         assertEquals(70, count)
@@ -62,16 +48,10 @@ class UnreadCountHelpersTest {
 
     @Test
     fun kanbanColumnUnreadTrustsGenuineZeroFolderTotal() {
-        val foldersByAccount =
-            mapOf(
-                "acc1" to listOf(FolderSummary(accountId = "acc1", name = "INBOX", unread = 0)),
-            )
-
         val count =
             kanbanColumnUnreadCount(
                 column = KanbanColumnSpec(accountId = "acc1", folderId = "inbox"),
-                foldersByAccount = foldersByAccount,
-                accounts = listOf(account("acc1")),
+                folderUnread = 0,
                 loadedThreads = listOf(thread("t1", unread = true)),
             )
 
@@ -79,26 +59,21 @@ class UnreadCountHelpersTest {
     }
 
     @Test
-    fun kanbanColumnUnreadFallsBackToLoadedStarredItems() {
+    fun kanbanColumnUnreadFallsBackToLoadedMessageTotals() {
         val count =
             kanbanColumnUnreadCount(
-                column = KanbanColumnSpec(accountId = UNIFIED_ACCOUNT_ID, folderId = STARRED_FOLDER),
-                foldersByAccount = emptyMap(),
-                accounts = emptyList(),
-                loadedThreads = listOf(thread("t1", unread = true), thread("t2", unread = false)),
+                column = KanbanColumnSpec(accountId = "acc1", folderId = INBOX_FOLDER),
+                folderUnread = null,
+                loadedThreads = listOf(thread("t1", unread = true, unreadCount = 2), thread("t2", unread = false)),
             )
 
-        assertEquals(1, count)
+        assertEquals(2, count)
     }
-
-    private fun account(
-        id: String,
-        includedInUnified: Boolean = true,
-    ): AccountSummary = AccountSummary(id = id, email = "$id@example.com", includedInUnified = includedInUnified)
 
     private fun thread(
         id: String,
         unread: Boolean,
+        unreadCount: Int = if (unread) 1 else 0,
     ): ThreadSummary =
         ThreadSummary(
             id = id,
@@ -107,5 +82,6 @@ class UnreadCountHelpersTest {
             subject = "Subject",
             sender = "sender@example.com",
             unread = unread,
+            unreadCount = unreadCount,
         )
 }

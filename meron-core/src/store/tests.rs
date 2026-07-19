@@ -55,6 +55,21 @@ fn folders_round_trip_special_use_and_ensure_folder_keeps_it() {
 }
 
 #[test]
+fn folder_unread_counts_messages_without_requiring_a_folder_row() {
+    let conn = test_conn();
+    insert_message(&conn, 1, "Unread", "Ada", "ada@example.com", None);
+    conn.execute(
+        "UPDATE messages SET seen = 1 WHERE account = 'acct' AND folder = 'INBOX' AND uid = 1",
+        [],
+    )
+    .unwrap();
+    insert_message(&conn, 2, "Unread", "Bea", "bea@example.com", None);
+
+    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 1);
+    assert_eq!(get_folder_unread(&conn, "acct", "Archive").unwrap(), 0);
+}
+
+#[test]
 fn folder_role_assignment_uses_special_use_then_name_fallback() {
     let cases = [
         ("Mail/Entwürfe", Some("drafts"), "drafts"),

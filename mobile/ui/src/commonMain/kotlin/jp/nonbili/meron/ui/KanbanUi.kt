@@ -506,7 +506,7 @@ internal fun KanbanScreen(
                             column = column,
                             accounts = accounts,
                             foldersByAccount = foldersByAccount,
-                            unread = kanbanColumnUnreadCount(column, foldersByAccount, accounts, state.threads),
+                            unread = kanbanColumnUnreadCount(column, state.unreadCount, state.threads),
                             onRestore = { minimizedColumns = minimizedColumns - key },
                         )
                     } else {
@@ -617,7 +617,7 @@ internal fun KanbanColumn(
                 column = column,
                 accounts = accounts,
                 foldersByAccount = foldersByAccount,
-                unread = kanbanColumnUnreadCount(column, foldersByAccount, accounts, state.threads),
+                unread = kanbanColumnUnreadCount(column, state.unreadCount, state.threads),
                 onRefresh = onRefresh,
                 onMarkAllRead = onMarkAllRead,
                 onRemove = onRemove,

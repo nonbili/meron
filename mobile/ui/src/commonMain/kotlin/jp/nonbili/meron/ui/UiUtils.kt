@@ -174,22 +174,15 @@ internal fun folderUnread(
         }?.unread ?: 0
 }
 
-internal fun loadedUnreadCount(threads: List<ThreadSummary>): Int = threads.count { it.unread }
+internal fun loadedUnreadCount(threads: List<ThreadSummary>): Int = threads.sumOf { if (it.unread) it.unreadCount.coerceAtLeast(1) else 0 }
 
 internal fun kanbanColumnUnreadCount(
     column: KanbanColumnSpec,
-    foldersByAccount: Map<String, List<FolderSummary>>,
-    accounts: List<AccountSummary>,
+    folderUnread: Int?,
     loadedThreads: List<ThreadSummary> = emptyList(),
 ): Int {
     if (isUnifiedStarredColumn(column)) return loadedUnreadCount(loadedThreads)
-    if (column.accountId == UNIFIED_ACCOUNT_ID) {
-        return accounts
-            .filter { it.includedInUnified }
-            .sumOf { account -> folderUnread(foldersByAccount[account.id], column.folderId) }
-    }
-    val folders = foldersByAccount[column.accountId] ?: return loadedUnreadCount(loadedThreads)
-    return folderUnread(folders, column.folderId)
+    return folderUnread ?: loadedUnreadCount(loadedThreads)
 }
 
 internal fun columnTitle(

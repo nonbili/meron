@@ -1105,11 +1105,14 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             if is_rss(engine, &account)? {
                 let query = req_str(p, "query").unwrap_or_default();
                 let limit = req_u16(p, "limit").unwrap_or(50) as i64;
-                let threads = rss::recent(&engine.db.lock().unwrap(), &account, &query, limit)?;
+                let db = engine.db.lock().unwrap();
+                let threads = rss::recent(&db, &account, &query, limit)?;
+                let folder_unread = rss::unread_count(&db, &account)?;
+                drop(db);
                 if p.get("refresh").and_then(Value::as_bool).unwrap_or(true) {
                     spawn_rss_sync(engine.clone(), out.clone(), account);
                 }
-                return Ok(json!({ "threads": threads }));
+                return Ok(json!({ "threads": threads, "folder_unread": folder_unread }));
             }
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
@@ -1159,6 +1162,8 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 &folder,
                 &mut messages,
             );
+            let folder_unread =
+                store::get_folder_unread(&engine.db.lock().unwrap(), &account, &folder)?;
             if before_cursor.is_none() && filter != "starred" && query.is_empty() && refresh {
                 spawn_message_sync(
                     engine.clone(),
@@ -1194,9 +1199,9 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                             })
                         })
                         .collect::<Vec<_>>();
-                json!({ "cards": cards })
+                json!({ "cards": cards, "folder_unread": folder_unread })
             } else {
-                json!({ "messages": serde_json::to_value(messages)? })
+                json!({ "messages": serde_json::to_value(messages)?, "folder_unread": folder_unread })
             };
             if let Some(cursor) = next_cursor {
                 out.as_object_mut()

@@ -154,12 +154,17 @@ fun parseAutodiscoverResponse(responseJson: String): DiscoveredAccountSettings {
 data class ThreadListPage(
     val threads: List<ThreadSummary>,
     val nextCursor: String,
+    val folderUnread: Int? = null,
 )
 
 fun parseThreadListPage(responseJson: String): ThreadListPage {
     val threadsJson =
         responseJson.findJsonArrayProperty("threads")
-            ?: return ThreadListPage(threads = emptyList(), nextCursor = "")
+            ?: return ThreadListPage(
+                threads = emptyList(),
+                nextCursor = "",
+                folderUnread = responseJson.findJsonLongProperty("folder_unread")?.toInt(),
+            )
     val threads =
         threadsJson.jsonArrayElements().mapNotNull { item ->
             val id = item.findJsonStringProperty("id").orEmpty()
@@ -172,6 +177,9 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
                 sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
                 preview = item.findJsonStringProperty("preview").orEmpty(),
                 unread = item.findJsonBooleanProperty("unread") ?: false,
+                unreadCount =
+                    item.findJsonLongProperty("unread_count")?.toInt()
+                        ?: if (item.findJsonBooleanProperty("unread") == true) 1 else 0,
                 starred = item.findJsonBooleanProperty("starred") ?: false,
                 hasDraft = item.findJsonBooleanProperty("has_draft") ?: false,
                 dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
@@ -183,6 +191,7 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
         // response (e.g. unified or search listings) would crash composition.
         threads = threads.distinctBy { it.id },
         nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
+        folderUnread = responseJson.findJsonLongProperty("folder_unread")?.toInt(),
     )
 }
 

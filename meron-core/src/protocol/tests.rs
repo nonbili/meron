@@ -1142,6 +1142,7 @@ fn mobile_protocol_lists_threads_from_store() {
         Some(data_dir.to_str().unwrap()),
     );
     assert_eq!(value["id"], 64);
+    assert_eq!(value["result"]["folder_unread"], 1);
     let first = &value["result"]["threads"][0];
     assert_eq!(first["account_id"], "me@example.com");
     assert_eq!(first["folder_id"], "INBOX");
@@ -1798,6 +1799,7 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
         Some(data_dir.to_str().unwrap()),
     );
     assert_eq!(threads["id"], 87);
+    assert_eq!(threads["result"]["folder_unread"], 2);
     let first = &threads["result"]["threads"][0];
     assert_eq!(first["thread_id"], "rss-account#rss#feed-a");
     assert_eq!(first["account_id"], "rss-account");

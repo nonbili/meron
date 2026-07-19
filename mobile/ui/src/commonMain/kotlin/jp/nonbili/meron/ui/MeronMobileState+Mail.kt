@@ -1106,7 +1106,15 @@ internal fun MeronMobileState.runCoreThreadAction(
     val threadsBefore = coreThreads
     val kanbanBefore = kanbanColumns
     coreThreads = update(coreThreads)
-    kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = update(state.threads)) }
+    kanbanColumns =
+        kanbanColumns.mapValues { (_, state) ->
+            val nextThreads = update(state.threads)
+            val unreadDelta = loadedUnreadCount(nextThreads) - loadedUnreadCount(state.threads)
+            state.copy(
+                threads = nextThreads,
+                unreadCount = state.unreadCount?.let { (it + unreadDelta).coerceAtLeast(0) },
+            )
+        }
     // The action commits immediately; Undo issues a compensating action (onUndo).
     // Track the commit so an Undo tap waits for it to finish, and is skipped if
     // the commit itself failed (the UI has already rolled back in that case).
@@ -1480,7 +1488,10 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
     val threadsBefore = coreThreads
     val kanbanBefore = kanbanColumns
     updateKanbanColumn(key) { state ->
-        state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
+        state.copy(
+            threads = state.threads.map { if (it.unread) it.copy(unread = false) else it },
+            unreadCount = 0,
+        )
     }
     coreThreads =
         coreThreads.map { thread ->
