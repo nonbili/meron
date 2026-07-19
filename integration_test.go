@@ -704,7 +704,8 @@ func TestIntegrationMailFlow(t *testing.T) {
 
 	t.Run("grouped thread cards", func(t *testing.T) {
 		// group:true opts into core-side thread grouping: the response carries
-		// ready cards (thread_key, unread counts) instead of raw message rows.
+		// ready thread cards (thread_id, unread counts) instead of raw message
+		// rows.
 		res := callMap(t, sidecar, "messages.recent", map[string]any{
 			"account": "bob",
 			"folder":  "INBOX",
@@ -712,13 +713,13 @@ func TestIntegrationMailFlow(t *testing.T) {
 			"limit":   50,
 			"group":   true,
 		})
-		cards, _ := res["cards"].([]any)
-		if len(cards) == 0 {
-			t.Fatalf("grouped messages.recent returned no cards: %v", res)
+		threads, _ := res["threads"].([]any)
+		if len(threads) == 0 {
+			t.Fatalf("grouped messages.recent returned no threads: %v", res)
 		}
-		card, ok := cards[0].(map[string]any)
-		if !ok || str(card, "thread_key") == "" {
-			t.Fatalf("card missing thread_key: %v", cards[0])
+		card, ok := threads[0].(map[string]any)
+		if !ok || str(card, "thread_id") == "" {
+			t.Fatalf("thread card missing thread_id: %v", threads[0])
 		}
 		if _, hasMessages := res["messages"]; hasMessages {
 			t.Fatalf("grouped response should not also carry raw messages: %v", res)
@@ -883,7 +884,7 @@ func messagesContainSubject(result map[string]any, subject string) bool {
 }
 
 func starredMailContainsSubject(result map[string]any, subject string) bool {
-	rows, _ := result["mail"].([]any)
+	rows, _ := result["items"].([]any)
 	for _, row := range rows {
 		message, ok := row.(map[string]any)
 		if ok && str(message, "subject") == subject {
