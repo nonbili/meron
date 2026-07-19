@@ -3,7 +3,6 @@ import { unifiedAccounts } from '../states/accounts'
 import { getAllKanbanColumns, kanbanColumnKey, kanban$, type KanbanColumn } from '../states/kanban'
 import { mail$, updateCachedFolderUnread } from '../states/mail'
 import { showToast } from '../states/ui'
-import { mergeStarredItems } from './starredItems'
 import type { FilterMode } from '../states/ui'
 import type { Account, Folder, Message } from '../types'
 import type { ThreadContextAction, ThreadContextActionDetail } from '../components/threads/ThreadContextMenu'
@@ -152,12 +151,16 @@ async function fetchColumnThreads(
   const trimmedQuery = query.trim()
   const filter = activeKanbanColumnFilter(column)
   if (isUnifiedStarredColumn(column)) {
-    const result = await invoke<{ items: Message[] }>('mail.starredItems', {})
+    const result = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
+      query: trimmedQuery,
+      limit: COLUMN_LIMIT,
+      before_cursor: before?.single,
+    })
     return {
-      threads: mergeStarredItems(result.items ?? [], trimmedQuery).slice(0, COLUMN_LIMIT),
+      threads: result.items ?? [],
       folderUnread: undefined,
       folderUnreadByAccount: undefined,
-      nextSingle: '',
+      nextSingle: result.next_cursor ?? '',
       nextUnified: {},
     }
   }
@@ -286,7 +289,6 @@ function columnHasMore(key: string, _unified: boolean): boolean {
 export async function loadMoreKanbanColumn(column: KanbanColumn) {
   const key = kanbanColumnKey(column)
   const unified = column.accountId === 'unified'
-  if (isUnifiedStarredColumn(column)) return
   if (kanban$.loadingMore[key].get() || !columnHasMore(key, unified)) return
   kanban$.loadingMore[key].set(true)
   try {

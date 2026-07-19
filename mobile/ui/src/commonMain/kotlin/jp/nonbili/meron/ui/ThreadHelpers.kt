@@ -122,10 +122,13 @@ internal fun threadMessageSearchText(message: MessageBody): String =
         message.attachments.joinToString(" ") { it.filename },
     ).joinToString(" ").lowercase()
 
-internal fun threadDeleteActionLabel(folder: String): String =
+internal fun threadDeleteActionLabel(
+    folder: String,
+    folderRole: String = "folder",
+): String =
     when {
-        folderIsDrafts(folder) -> "Discard draft"
-        folderIsTrash(folder) -> "Delete forever"
+        folderRole == "drafts" || (folderRole == "folder" && folderIsDrafts(folder)) -> "Discard draft"
+        folderRole == "trash" || (folderRole == "folder" && folderIsTrash(folder)) -> "Delete forever"
         else -> "Move to Trash"
     }
 

@@ -414,6 +414,16 @@ export function updateCachedFolderUnread(accountId: string, folderId: string, un
   }
 }
 
+type MutationResult = { folder_unreads?: Record<string, Record<string, number>> }
+
+function applyMutationFolderUnreads(result: MutationResult | undefined) {
+  for (const [accountId, folders] of Object.entries(result?.folder_unreads ?? {})) {
+    for (const [folderId, unread] of Object.entries(folders)) {
+      updateCachedFolderUnread(accountId, folderId, unread)
+    }
+  }
+}
+
 function hasOnlyBootstrapInbox(folders: Folder[]) {
   if (folders.length !== 1) return false
   const folder = folders[0]
@@ -478,11 +488,13 @@ export async function loadThreads(refresh = true) {
   const mergeBackground = !refresh && previousThreads.length > 0
 
   // The starred view is a flat cross-account list of individual starred items
-  // (mail messages + feed items), fetched in one un-paginated call.
+  // (mail messages + feed items), queried and paginated by the core.
   if (selectedAcc === 'starred') {
+    let nextCursor = ''
     try {
-      const res = await invoke<{ items: Message[] }>('mail.starredItems', {})
-      const items = mergeStarredItems(res.items ?? [], q)
+      const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', { query: q, limit: 50 })
+      const items = res.items ?? []
+      nextCursor = res.next_cursor ?? ''
       mail$.threads.set(items)
       // Keep the conversation pane coherent: getActiveThread falls back to the
       // first visible row, so the selection must point at a listed item.
@@ -494,7 +506,7 @@ export async function loadThreads(refresh = true) {
     } catch (err) {
       console.error('Failed to load starred items:', err)
     }
-    mail$.threadsCursor.set('')
+    mail$.threadsCursor.set(nextCursor)
     mail$.threadAccountCursors.set({})
     return
   }
@@ -618,7 +630,16 @@ export async function loadMoreThreads() {
   mail$.threadsLoadingMore.set(true)
   try {
     let moreThreads: Message[] = []
-    if (selectedAcc === 'unified') {
+    if (selectedAcc === 'starred') {
+      const cursor = mail$.threadsCursor.get()
+      if (!cursor) return
+      const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
+        limit: 50,
+        before_cursor: cursor,
+      })
+      moreThreads = res.items || []
+      mail$.threadsCursor.set(res.next_cursor ?? '')
+    } else if (selectedAcc === 'unified') {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
       const res = await invoke<{
@@ -753,7 +774,7 @@ export async function markThreadRead(threadId: string) {
   updateKanbanThread(threadId, (thread) => ({ ...thread, unread: false, unread_count: 0 }))
 
   try {
-    await invoke('mail.markRead', { thread_id: threadId })
+    applyMutationFolderUnreads(await invoke<MutationResult>('mail.markRead', { thread_id: threadId }))
   } catch (error) {
     mail$.readThreads[threadId].set(undefined)
     mail$.threads.set(previousThreads)
@@ -797,7 +818,7 @@ export async function markThreadUnread(threadId: string) {
     unread_count: Math.max(1, thread.unread_count ?? 0),
   }))
 
-  await invoke('mail.markRead', { thread_id: threadId, seen: false })
+  applyMutationFolderUnreads(await invoke<MutationResult>('mail.markRead', { thread_id: threadId, seen: false }))
 
   refreshFoldersAfterFlagChange(findLocalThread(threadId)?.account_id)
 }
@@ -814,7 +835,7 @@ export async function starThread(threadId: string, starred: boolean) {
   )
   updateKanbanThread(threadId, (thread) => ({ ...thread, starred }))
 
-  await invoke('mail.markStarred', { thread_id: threadId, starred })
+  applyMutationFolderUnreads(await invoke<MutationResult>('mail.markStarred', { thread_id: threadId, starred }))
 }
 
 // Flip a thread's star and show an undo toast — used by the keyboard shortcut,
@@ -933,6 +954,7 @@ export async function moveThreadToFolder(threadId: string, targetFolderId: strin
   try {
     const res = await invoke('mail.move', { thread_id: threadId, target_folder_id: targetFolderId })
     assertMoveAffected(res)
+    applyMutationFolderUnreads(res as MutationResult)
     await refreshThreadLocation(sourceThread?.account_id, true)
     if (threadStillListed(threadId)) {
       showToast('Move failed: thread is still in this folder', 'error')
@@ -1014,6 +1036,7 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
       rollbacks.push(removeThreadLocally(item.threadId).rollback)
       const res = await invoke('mail.archive', { thread_id: item.threadId })
       assertMoveAffected(res, 'Archive')
+      applyMutationFolderUnreads(res as MutationResult)
       if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
     }
     await refreshThreadLocation(undefined, true)
@@ -1034,6 +1057,7 @@ export async function bulkMoveSelectedToFolder(items: BulkSelectionItem[], targe
       rollbacks.push(removeThreadLocally(item.threadId).rollback)
       const res = await invoke('mail.move', { thread_id: item.threadId, target_folder_id: targetFolderId })
       assertMoveAffected(res)
+      applyMutationFolderUnreads(res as MutationResult)
     }
     await refreshThreadLocation(targets[0]?.accountId, true)
     clearBulkSelection()
@@ -1097,6 +1121,7 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
         ...(item.folderId ? { folder: item.folderId } : {}),
       })
       assertDeleteAffected(res)
+      applyMutationFolderUnreads(res as MutationResult)
     }
     await refreshThreadLocation(undefined, true)
     clearBulkSelection()
@@ -1113,8 +1138,11 @@ export async function archiveThread(threadId: string) {
   const sourceFolder = sourceThread?.folder_id ?? ''
   const { rollback } = removeThreadLocally(threadId)
   try {
-    const res = await invoke<{ folder?: string; thread_id?: string }>('mail.archive', { thread_id: threadId })
+    const res = await invoke<{ folder?: string; thread_id?: string } & MutationResult>('mail.archive', {
+      thread_id: threadId,
+    })
     assertMoveAffected(res, 'Archive')
+    applyMutationFolderUnreads(res)
     const archivedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.folder)
     await refreshThreadLocation(sourceThread?.account_id, true)
     if (threadStillListed(threadId)) {
@@ -1138,8 +1166,13 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   const sourceFolder = sourceThread?.folder_id ?? ''
   // Drafts are expunged in place by the engine (never moved to Trash), so the
   // delete is permanent there too — but worded as a discard.
-  const isDraft = isDraftFolder(sourceFolder, sourceThread?.account_id)
-  const permanent = options.permanent ?? (isDraft || isTrashFolderId(sourceThread?.account_id ?? '', sourceFolder))
+  const isDraft =
+    sourceThread?.folder_role === 'drafts' ||
+    (!sourceThread?.folder_role && isDraftFolder(sourceFolder, sourceThread?.account_id))
+  const isTrash =
+    sourceThread?.folder_role === 'trash' ||
+    (!sourceThread?.folder_role && isTrashFolderId(sourceThread?.account_id ?? '', sourceFolder))
+  const permanent = options.permanent ?? (isDraft || isTrash)
   if (isDraft || permanent) {
     if (
       !(await confirmAction({
@@ -1158,7 +1191,9 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   const { rollback } = removeThreadLocally(threadId)
 
   try {
-    const res = await invoke<{ deleted?: number; permanent?: boolean; trash?: string; thread_id?: string }>(
+    const res = await invoke<
+      { deleted?: number; permanent?: boolean; trash?: string; thread_id?: string } & MutationResult
+    >(
       'mail.delete',
       {
         thread_id: threadId,
@@ -1166,6 +1201,7 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
       },
     )
     assertDeleteAffected(res)
+    applyMutationFolderUnreads(res)
     const trashedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.trash)
     const canUndoTrashMove = !!(res.thread_id || res.trash)
     await refreshThreadLocation(undefined, true)
@@ -1244,6 +1280,7 @@ export async function discardSavedDraftCopy(draft: {
         folder: draft.folderId,
       })
       if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(res)
+      applyMutationFolderUnreads(res as MutationResult)
     }
     await loadThreads(false)
     if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, mail$.messages.get())
@@ -1305,6 +1342,7 @@ export async function deleteMessage(message: Message) {
       folder: message.folder_id,
     })
     if (!isDraft) assertDeleteAffected(res)
+    applyMutationFolderUnreads(res as MutationResult)
     showToast(isDraft ? 'Draft discarded' : 'Message moved to Trash')
     // No messages left from this thread: drop the now-empty conversation.
     if (!nextMessages.some((item) => item.thread_id === threadId)) {
@@ -1353,10 +1391,10 @@ export async function markAllRead() {
   mail$.messages.set(mail$.messages.get().map((message) => (message.unread ? { ...message, unread: false } : message)))
 
   await Promise.all([
-    ...mailAccountIds.map((accountId) =>
-      invoke('mail.markAllRead', { account_id: accountId, folder_id: folder }).catch((err) =>
-        console.error('markAllRead failed:', err),
-      ),
+    ...(selectedAcc === 'unified' && mailAccountIds.length > 0 ? ['unified'] : mailAccountIds).map((accountId) =>
+      invoke<MutationResult>('mail.markAllRead', { account_id: accountId, folder_id: folder })
+        .then(applyMutationFolderUnreads)
+        .catch((err) => console.error('markAllRead failed:', err)),
     ),
     ...unread
       .filter((thread) =>

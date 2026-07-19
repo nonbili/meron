@@ -43,6 +43,19 @@ fn protocol_invoke_wraps_empty_account_list() {
 }
 
 #[test]
+fn mobile_protocol_allocates_stable_format_message_identity() {
+    let data_dir = unique_data_dir("allocate-identity");
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":44,"method":"mail.allocateIdentity","params":{"account_id":"me@example.com","draft":true}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let id = value["result"]["message_id"].as_str().unwrap();
+    assert!(id.starts_with("meron-draft-"), "{value}");
+    assert!(id.ends_with("@example.com"), "{value}");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_persists_password_account_metadata() {
     let data_dir = unique_data_dir("account");
     let unique = unique_test_suffix();
@@ -1801,8 +1814,14 @@ fn mobile_protocol_lists_starred_items_from_store() {
     assert_eq!(items[0]["account_id"], "a2@example.com");
     assert_eq!(items[0]["folder_id"], "Sent");
     assert_eq!(items[0]["subject"], "Newest starred");
-    assert_eq!(items[0]["thread_id"], "a2@example.com#Sent#t.bmV3ZXI");
-    assert_eq!(items[0]["id"], "a2@example.com#Sent#t.bmV3ZXI#7");
+    assert_eq!(
+        items[0]["thread_id"],
+        "a2@example.com#Sent#t.bmV3ZXIjTmV3ZXN0IHN0YXJyZWQ"
+    );
+    assert_eq!(
+        items[0]["id"],
+        "a2@example.com#Sent#t.bmV3ZXIjTmV3ZXN0IHN0YXJyZWQ#7"
+    );
     assert_eq!(items[0]["unread"], false);
     assert_eq!(items[0]["starred"], true);
     assert_eq!(items[1]["account_id"], "a1@example.com");

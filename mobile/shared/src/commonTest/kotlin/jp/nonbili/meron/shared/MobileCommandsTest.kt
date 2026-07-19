@@ -9,6 +9,24 @@ import kotlin.test.assertTrue
 
 class MobileCommandsTest {
     @Test
+    fun starredAndIdentityCommandsCarryCoreOwnedQueryAndLifecycle() {
+        val core = FakeMeronCore("{}")
+        val client = MobileMailCommandClient(core)
+        runSuspend {
+            client.listStarredItems(StarredItemsParams(query = "design", limit = 25, beforeCursor = "starred:opaque"))
+        }
+        assertEquals(MobileCommand.StarredItems, core.lastCommand)
+        assertEquals(
+            """{"query":"design","limit":25,"before_cursor":"starred:opaque"}""",
+            core.lastPayloadJson,
+        )
+
+        runSuspend { client.allocateIdentity(AllocateIdentityParams("me@example.com", draft = true)) }
+        assertEquals(MobileCommand.AllocateIdentity, core.lastCommand)
+        assertEquals("""{"account_id":"me@example.com","draft":true}""", core.lastPayloadJson)
+    }
+
+    @Test
     fun accountListUsesDesktopBridgeMethodName() {
         assertEquals(
             """{"id":3,"method":"account.list","params":{}}""",
@@ -480,7 +498,7 @@ class MobileCommandsTest {
 
         runSuspend { client.listStarredItems() }
         assertEquals(MobileCommand.StarredItems, core.lastCommand)
-        assertEquals("{}", core.lastPayloadJson)
+        assertEquals("""{"query":"","limit":50}""", core.lastPayloadJson)
 
         runSuspend { client.readThread(ThreadReadParams(threadId = "thread1")) }
         assertEquals(MobileCommand.ThreadRead, core.lastCommand)

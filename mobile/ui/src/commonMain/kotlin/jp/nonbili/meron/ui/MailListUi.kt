@@ -627,7 +627,7 @@ internal fun MailRow(
     val unread = thread.unread
     val chat = LocalChatColors.current
     val senderLabel = thread.sender.ifBlank { thread.accountId }
-    val hasDraft = thread.hasDraft || folderIsDrafts(thread.folder)
+    val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
     val draftBadge = tr("chat.draft")
     val rowSurface = MaterialTheme.colorScheme.surface
     val rowBackground =

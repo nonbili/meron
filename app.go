@@ -205,6 +205,11 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.threadList(payload)
 	case "mail.starredItems":
 		return a.starredItems(payload)
+	case "mail.allocateIdentity":
+		if a.sidecar == nil || !a.sidecar.Started() {
+			return nil, fmt.Errorf("mail engine unavailable")
+		}
+		return a.sidecar.Call("identity.allocate", payload)
 	case "mail.suggestContacts":
 		return a.suggestContacts(payload)
 	case "mail.threadRead":

@@ -26,7 +26,7 @@ use tokio::sync::Mutex;
 use meron_core::engine::*;
 use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
-use meron_core::{changelog, imap, parse, rss, secrets, smtp, store, unified};
+use meron_core::{changelog, imap, mail_model, parse, rss, secrets, smtp, store, unified};
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -1144,7 +1144,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     .map_err(|err| format!("{err:#}"));
                 pages.push((account, result));
             }
-            Ok(unified::merge_pages(pages, "cards"))
+            Ok(unified::merge_pages(pages, "threads"))
         }
 
         // RSS returns final thread Message JSON under "threads"; mail returns raw
@@ -1226,30 +1226,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             // root titles, accumulated unread counts — shared with mobile) and
             // get ready cards; other consumers keep the raw rows.
             let mut out = if p.get("group").and_then(Value::as_bool).unwrap_or(false) {
-                let draft_thread_keys =
-                    store::draft_thread_keys(&engine.db.lock().unwrap(), &account)?;
-                let cards =
-                    store::group_thread_cards_with_drafts(messages, &folder, &draft_thread_keys)
-                        .into_iter()
-                        .map(|card| {
-                            json!({
-                                "account_id": account,
-                                "thread_key": card.thread_key,
-                                "original_thread_key": card.original_thread_key,
-                                "folder": card.header.folder,
-                                "from_name": card.header.from_name,
-                                "from_addr": card.header.from_addr,
-                                "subject": card.header.subject,
-                                "date": card.header.date,
-                                "unread": card.unread_count > 0,
-                                "unread_count": card.unread_count,
-                                "starred": card.header.starred,
-                                "has_draft": card.has_draft,
-                                "recipient_overflow": card.header.recipient_overflow,
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                json!({ "cards": cards, "folder_unread": folder_unread })
+                let db = engine.db.lock().unwrap();
+                let draft_thread_keys = store::draft_thread_keys(&db, &account)?;
+                let threads = mail_model::thread_cards_json(
+                    &db,
+                    &account,
+                    &folder,
+                    messages,
+                    &draft_thread_keys,
+                )?;
+                json!({ "threads": threads, "folder_unread": folder_unread })
             } else {
                 json!({ "messages": serde_json::to_value(messages)?, "folder_unread": folder_unread })
             };
@@ -1263,26 +1249,30 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
 
         // Every starred item across all accounts, local cache only (the
         // IMAP-backed starred filter keeps mail flags fresh; no round-trip
-        // here). Mail returns raw rows the bridge shapes into Messages
-        // (id minting lives there); RSS returns final Message JSON.
+        // here). Core returns one final, searchable, paginated item model for
+        // both mail and RSS so transport adapters do not mint ids or reshape it.
         "starred.items" => {
             let limit = req_u32(p, "limit").unwrap_or(200);
             let db = engine.db.lock().unwrap();
-            let mail = store::get_starred_all_accounts(&db, limit)?
+            let mut items = store::get_starred_all_accounts(&db, 2_000)?
                 .into_iter()
-                .map(|(account, header)| {
-                    // The branch-aware key the item's thread card carries, so
-                    // clicking a starred item opens the matching card.
-                    let card_thread_key = store::card_thread_key(&header);
-                    let mut row = serde_json::to_value(header).unwrap_or_else(|_| json!({}));
-                    row["account"] = Value::String(account);
-                    row["card_thread_key"] = Value::String(card_thread_key);
-                    row
-                })
-                .collect::<Vec<_>>();
-            let rss = rss::starred_items(&db, limit as i64)?;
-            Ok(json!({ "mail": mail, "rss": rss }))
+                .map(|(account, header)| mail_model::starred_item_json(&db, &account, &header))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            items.extend(rss::starred_items(&db, 2_000)?);
+            Ok(mail_model::starred_page(
+                items,
+                &req_str(p, "query").unwrap_or_default(),
+                limit as usize,
+                p.get("before_cursor").and_then(Value::as_str),
+            ))
         }
+
+        "identity.allocate" => Ok(json!({
+            "message_id": mail_model::allocate_message_id(
+                &req_str(p, "account_id").unwrap_or_default(),
+                p.get("draft").and_then(Value::as_bool).unwrap_or(false),
+            )
+        })),
 
         // Recipient autocomplete: distinct correspondents from cached messages,
         // matched against `query` and ranked by frequency/recency.
@@ -1659,7 +1649,27 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     store::update_thread_seen(&db, &account, &folder, &thread_key, seen)?;
                 }
             }
-            Ok(json!({ "ok": true }))
+            let changed_thread_id = if thread_key.is_empty() {
+                uid.map(|uid| format!("{account}#{folder}#{uid}"))
+                    .unwrap_or_default()
+            } else {
+                let key = subject_filter
+                    .as_deref()
+                    .map(|subject| store::branch_compound_key(&thread_key, subject))
+                    .unwrap_or_else(|| thread_key.clone());
+                mail_model::format_thread_id(&account, &folder, &key)
+            };
+            mail_model::mutation_result(
+                json!({ "ok": true }),
+                &engine.db.lock().unwrap(),
+                &account,
+                &changed_thread_id,
+                &folder,
+                None,
+                Some(!seen),
+                None,
+                false,
+            )
         }
 
         "messages.markStarred" => {
@@ -1732,7 +1742,27 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                     store::update_thread_starred(&db, &account, &folder, &thread_key, starred)?;
                 }
             }
-            Ok(json!({ "ok": true }))
+            let changed_thread_id = if thread_key.is_empty() {
+                uid.map(|uid| format!("{account}#{folder}#{uid}"))
+                    .unwrap_or_default()
+            } else {
+                let key = subject_filter
+                    .as_deref()
+                    .map(|subject| store::branch_compound_key(&thread_key, subject))
+                    .unwrap_or_else(|| thread_key.clone());
+                mail_model::format_thread_id(&account, &folder, &key)
+            };
+            mail_model::mutation_result(
+                json!({ "ok": true }),
+                &engine.db.lock().unwrap(),
+                &account,
+                &changed_thread_id,
+                &folder,
+                None,
+                None,
+                Some(starred),
+                false,
+            )
         }
 
         "messages.delete" => {
@@ -1753,6 +1783,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            let changed_thread_id = if thread_key.is_empty() {
+                uid.map(|uid| format!("{account}#{folder}#{uid}"))
+                    .unwrap_or_default()
+            } else {
+                let key = subject_filter
+                    .as_deref()
+                    .map(|subject| store::branch_compound_key(&thread_key, subject))
+                    .unwrap_or_else(|| thread_key.clone());
+                mail_model::format_thread_id(&account, &folder, &key)
+            };
 
             let uids = {
                 let db = engine.db.lock().unwrap();
@@ -1768,7 +1808,17 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             if uids.is_empty() {
-                return Ok(json!({ "ok": true, "deleted": 0 }));
+                return mail_model::mutation_result(
+                    json!({ "ok": true, "deleted": 0 }),
+                    &engine.db.lock().unwrap(),
+                    &account,
+                    &changed_thread_id,
+                    &folder,
+                    None,
+                    None,
+                    None,
+                    false,
+                );
             }
 
             // Mutating, so it never auto-retries.
@@ -1784,10 +1834,21 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 }
                 store::delete_messages_by_uid(&db, &account, &folder, &uids)?
             };
-            match trashed {
-                None => Ok(json!({ "ok": true, "deleted": deleted, "permanent": true })),
-                Some(trash) => Ok(json!({ "ok": true, "deleted": deleted, "trash": trash })),
-            }
+            let result = match trashed.as_deref() {
+                None => json!({ "ok": true, "deleted": deleted, "permanent": true }),
+                Some(trash) => json!({ "ok": true, "deleted": deleted, "trash": trash }),
+            };
+            mail_model::mutation_result(
+                result,
+                &engine.db.lock().unwrap(),
+                &account,
+                &changed_thread_id,
+                &folder,
+                trashed.as_deref(),
+                None,
+                None,
+                true,
+            )
         }
 
         "messages.move" => {
@@ -1809,10 +1870,28 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            let changed_thread_id = if thread_key.is_empty() {
+                uid.map(|uid| format!("{account}#{folder}#{uid}"))
+                    .unwrap_or_default()
+            } else {
+                let key = subject_filter
+                    .as_deref()
+                    .map(|subject| store::branch_compound_key(&thread_key, subject))
+                    .unwrap_or_else(|| thread_key.clone());
+                mail_model::format_thread_id(&account, &folder, &key)
+            };
 
             if folder == target_folder {
-                return Ok(
+                return mail_model::mutation_result(
                     json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
+                    &engine.db.lock().unwrap(),
+                    &account,
+                    &changed_thread_id,
+                    &folder,
+                    Some(&target_folder),
+                    None,
+                    None,
+                    false,
                 );
             }
 
@@ -1830,8 +1909,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             };
 
             if uids.is_empty() {
-                return Ok(
+                return mail_model::mutation_result(
                     json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
+                    &engine.db.lock().unwrap(),
+                    &account,
+                    &changed_thread_id,
+                    &folder,
+                    Some(&target_folder),
+                    None,
+                    None,
+                    false,
                 );
             }
 
@@ -1862,8 +1949,16 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 )?;
                 store::delete_messages_by_uid(&db, &account, &folder, &uids)?
             };
-            Ok(
+            mail_model::mutation_result(
                 json!({ "ok": true, "moved": moved, "source_folder": folder, "target_folder": target_folder }),
+                &engine.db.lock().unwrap(),
+                &account,
+                &changed_thread_id,
+                &folder,
+                Some(&target_folder),
+                None,
+                None,
+                true,
             )
         }
 
@@ -2017,7 +2112,79 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                 let db = engine.db.lock().unwrap();
                 store::mark_folder_seen(&db, &account, &folder, true)?;
             }
-            Ok(json!({ "ok": true }))
+            mail_model::mutation_result(
+                json!({ "ok": true, "updated": uids.len(), "folder": folder }),
+                &engine.db.lock().unwrap(),
+                &account,
+                "",
+                &folder,
+                None,
+                Some(false),
+                None,
+                false,
+            )
+        }
+
+        "messages.markAllReadUnified" => {
+            let folder =
+                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let accounts = store::list_accounts(&engine.db.lock().unwrap())?
+                .into_iter()
+                .filter(|account| {
+                    account
+                        .get("included_in_unified")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true)
+                })
+                .filter(|account| account.get("auth_type").and_then(Value::as_str) != Some("rss"))
+                .filter_map(|account| {
+                    account
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .collect::<Vec<_>>();
+            let mut updated = 0_u64;
+            let mut failures = Vec::new();
+            let mut folder_unreads = serde_json::Map::new();
+            let mut folder_counts = Vec::new();
+            for account in accounts {
+                let request = Request {
+                    id: req.id,
+                    method: "messages.markAllRead".to_string(),
+                    params: json!({ "account": account, "folder": folder }),
+                };
+                match Box::pin(dispatch(engine, &request, out)).await {
+                    Ok(result) => {
+                        updated += result
+                            .get("updated")
+                            .and_then(Value::as_u64)
+                            .unwrap_or_default();
+                        if let Some(counts) = result
+                            .get("folder_unreads")
+                            .and_then(|all| all.get(&account))
+                        {
+                            folder_unreads.insert(account.clone(), counts.clone());
+                        }
+                        folder_counts.extend(
+                            result
+                                .get("folder_counts")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default(),
+                        );
+                    }
+                    Err(err) => failures
+                        .push(json!({ "account_id": account, "message": format!("{err:#}") })),
+                }
+            }
+            Ok(json!({
+                "ok": failures.is_empty(),
+                "updated": updated,
+                "failures": failures,
+                "folder_unreads": folder_unreads,
+                "folder_counts": folder_counts,
+            }))
         }
 
         // Forget an account: drop its in-memory creds, cached state, and the

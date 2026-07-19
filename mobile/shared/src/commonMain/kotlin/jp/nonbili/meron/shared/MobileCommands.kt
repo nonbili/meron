@@ -36,6 +36,7 @@ object MobileCommand {
     const val ContactSuggest = "mail.suggestContacts"
     const val ThreadList = "mail.threadList"
     const val StarredItems = "mail.starredItems"
+    const val AllocateIdentity = "mail.allocateIdentity"
     const val ThreadRead = "mail.threadRead"
     const val AttachmentRead = "mail.attachmentRead"
     const val ChangelogFetch = "changelog.fetch"
@@ -408,6 +409,30 @@ data class ThreadListParams(
             "filter" to filter.jsonString(),
             "before_cursor" to beforeCursor?.jsonString(),
             "refresh" to refresh.toString(),
+        )
+}
+
+data class StarredItemsParams(
+    val query: String = "",
+    val limit: Int = 50,
+    val beforeCursor: String? = null,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "query" to query.jsonString(),
+            "limit" to limit.toString(),
+            "before_cursor" to beforeCursor?.jsonString(),
+        )
+}
+
+data class AllocateIdentityParams(
+    val accountId: String,
+    val draft: Boolean,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "account_id" to accountId.jsonString(),
+            "draft" to draft.toString(),
         )
 }
 
@@ -816,7 +841,11 @@ class MobileMailCommandClient(
 
     suspend fun listThreads(params: ThreadListParams): String = core.invoke(MobileCommand.ThreadList, params.toJson())
 
-    suspend fun listStarredItems(): String = core.invoke(MobileCommand.StarredItems)
+    suspend fun listStarredItems(params: StarredItemsParams = StarredItemsParams()): String =
+        core.invoke(MobileCommand.StarredItems, params.toJson())
+
+    suspend fun allocateIdentity(params: AllocateIdentityParams): String =
+        core.invoke(MobileCommand.AllocateIdentity, params.toJson())
 
     suspend fun readThread(params: ThreadReadParams): String = core.invoke(MobileCommand.ThreadRead, params.toJson())
 

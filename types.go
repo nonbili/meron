@@ -49,6 +49,7 @@ type Message struct {
 	ID         string `json:"id"`
 	AccountID  string `json:"account_id"`
 	FolderID   string `json:"folder_id"`
+	FolderRole string `json:"folder_role,omitempty"`
 	ThreadID   string `json:"thread_id"`
 	FromName   string `json:"from_name"`
 	FromAddr   string `json:"from_addr"`

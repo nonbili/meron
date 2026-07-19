@@ -90,6 +90,7 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "storage.usage" => Ok(json!({ "cacheBytes": 0, "dbBytes": 0 })),
         "storage.clearCache" => Ok(json!({ "cacheBytes": 0, "dbBytes": 0 })),
         "mail.starredItems" => Ok(json!({ "items": [] })),
+        "mail.allocateIdentity" => Ok(json!({ "message_id": "" })),
         "mail.send" => Ok(json!({ "ok": true })),
         "mail.saveDraft" => Ok(json!({ "ok": true })),
         "mail.discardDraft" => Ok(json!({ "ok": true, "deleted": 0, "permanent": true })),
@@ -167,6 +168,19 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "storage.usage" => mobile_storage_usage(data_dir),
         "storage.clearCache" => clear_mobile_storage_cache(data_dir),
         "mail.starredItems" => list_mobile_starred_items(data_dir, &req.params),
+        "mail.allocateIdentity" => {
+            let account_id = req
+                .params
+                .get("account_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let draft = req
+                .params
+                .get("draft")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            Ok(json!({ "message_id": crate::mail_model::allocate_message_id(account_id, draft) }))
+        }
         "mail.sync" | "messages.sync" => sync_mobile_mail(data_dir, &req.params),
         "mail.send" => send_mobile_message(data_dir, &req.params),
         "mail.saveDraft" => save_mobile_draft(data_dir, &req.params),

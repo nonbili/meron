@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -150,9 +151,8 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 	return out, nil
 }
 
-// starredItems returns every starred item across all accounts as a flat list of
-// per-message cards. Mail rows arrive raw and are shaped here (thread/message
-// id minting lives in the bridge); RSS rows arrive final-shaped from the engine.
+// starredItems passes through the core's final cross-account item model. The
+// bridge only decodes it into its typed transport struct.
 func (a *App) starredItems(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return map[string]any{"items": []Message{}}, nil
@@ -162,39 +162,15 @@ func (a *App) starredItems(payload map[string]any) (any, error) {
 		return nil, err
 	}
 	object, _ := res.(map[string]any)
-	mailRows, _ := object["mail"].([]any)
-	rssRows, _ := object["rss"].([]any)
-	items := make([]any, 0, len(mailRows)+len(rssRows))
-	for _, item := range mailRows {
-		msg, _ := item.(map[string]any)
-		uid := jsonNumber(msg["uid"])
-		if uid <= 0 {
-			continue
-		}
-		accountID := jsonString(msg["account"])
-		folder := jsonString(msg["folder"])
-		// The core precomputes the branch-aware card key so this id matches
-		// the thread-list card exactly (grouping semantics live in the core).
-		compoundKey := jsonString(msg["card_thread_key"])
-		if compoundKey == "" {
-			compoundKey = fmt.Sprintf("uid:%d", uid)
-		}
-		threadID := formatImapThreadID(accountID, folder, compoundKey)
-		items = append(items, Message{
-			ID:        fmt.Sprintf("%s#%d", threadID, uid),
-			AccountID: accountID,
-			FolderID:  folder,
-			ThreadID:  threadID,
-			FromName:  jsonString(msg["from_name"]),
-			FromAddr:  jsonString(msg["from_addr"]),
-			Subject:   jsonString(msg["subject"]),
-			Date:      jsonNumber(msg["date"]),
-			Unread:    !jsonBool(msg["seen"]),
-			Starred:   true,
-		})
+	rows, _ := object["items"].([]any)
+	encoded, _ := json.Marshal(rows)
+	items := make([]Message, 0, len(rows))
+	_ = json.Unmarshal(encoded, &items)
+	out := map[string]any{"items": items}
+	if cursor, _ := object["next_cursor"].(string); cursor != "" {
+		out["next_cursor"] = cursor
 	}
-	items = append(items, rssRows...)
-	return map[string]any{"items": items}, nil
+	return out, nil
 }
 
 func (a *App) threadRead(payload map[string]any) (any, error) {
@@ -497,6 +473,9 @@ func (a *App) markAllRead(payload map[string]any) (any, error) {
 	}
 	if isRSSAccountID(accountID) {
 		return map[string]any{"ok": true}, nil
+	}
+	if accountID == "unified" {
+		return a.sidecar.Call("messages.markAllReadUnified", map[string]any{"folder": folderID})
 	}
 	return a.sidecar.Call("messages.markAllRead", map[string]any{
 		"account": accountID,

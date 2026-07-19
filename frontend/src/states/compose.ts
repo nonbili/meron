@@ -22,17 +22,14 @@ import { formatFullTimestamp } from '../components/chat/messageHelpers'
 // Only text fields survive restarts; the user reattaches files if needed.
 const COMPOSE_TABS_KEY = 'meron-compose-tabs'
 
-/** Stable Message-ID for a draft, reused across autosaves so the server-side
- * Drafts copy is replaced rather than duplicated. */
-const newDraftMessageId = () => `meron-draft-${Date.now()}-${Math.random().toString(36).substring(2, 11)}@meron`
+// Local placeholder used until the first save asks meron-core for the stable
+// RFC Message-ID. It is never sent to IMAP/SMTP.
+const newDraftMessageId = () => `local-draft-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 
-/** Message-ID minted on the client for an outgoing send, so the optimistic
- * bubble carries the real id the Sent copy will have. A quick follow-up reply
- * can then thread against it before IMAP syncs the sent message back. The
- * domain mirrors the sender so the id looks native to the account. */
-const newSendMessageId = (fromEmail: string) => {
-  const domain = fromEmail.split('@')[1] || 'meron'
-  return `meron-${Date.now()}-${Math.random().toString(36).substring(2, 11)}@${domain}`
+async function allocateMessageIdentity(accountId: string, draft: boolean): Promise<string> {
+  const result = await invoke<{ message_id: string }>('mail.allocateIdentity', { account_id: accountId, draft })
+  if (!result.message_id) throw new Error('Core did not allocate a message identity')
+  return result.message_id
 }
 
 const newInlineImageId = () => `meron-image-${Date.now()}-${Math.random().toString(36).substring(2, 9)}@meron`
@@ -302,8 +299,9 @@ async function performQuickReplyDraftSave() {
   const draftId = compose$.quickReplyDraftId.peek() || newDraftMessageId()
   compose$.quickReplyDraftId.set(draftId)
 
+  let savedDraftId = draftId
   try {
-    await saveComposedDraft({
+    savedDraftId = await saveComposedDraft({
       accountId: replyAccountId,
       from: fromEmail,
       to,
@@ -316,6 +314,7 @@ async function performQuickReplyDraftSave() {
       draftMessageId: draftId,
       attachments,
     })
+    if (savedDraftId !== draftId) compose$.quickReplyDraftId.set(savedDraftId)
   } catch (error) {
     console.error('Quick reply draft autosave failed:', error)
     return
@@ -327,7 +326,7 @@ async function performQuickReplyDraftSave() {
   // draft we just wrote instead of letting it resurrect on the next thread open.
   const sameThread = ui$.selectedThread.peek() === activeT.thread_id
   if (sameThread && !compose$.composer.peek().trim() && compose$.composerAttachments.peek().length === 0) {
-    if (compose$.quickReplyDraftId.peek() === draftId) {
+    if (compose$.quickReplyDraftId.peek() === savedDraftId) {
       compose$.quickReplyDraftId.set('')
       compose$.quickReplyDraftSaved.set(false)
     }
@@ -336,11 +335,11 @@ async function performQuickReplyDraftSave() {
       messageId: '',
       folderId: '',
       accountId: replyAccountId,
-      draftMessageId: draftId,
+      draftMessageId: savedDraftId,
     })
     return
   }
-  if (sameThread && compose$.quickReplyDraftId.peek() === draftId) {
+  if (sameThread && compose$.quickReplyDraftId.peek() === savedDraftId) {
     compose$.quickReplyDraftSaved.set(true)
   }
 }
@@ -1031,9 +1030,13 @@ export async function saveComposedDraft(args: {
   references?: string
   draftMessageId: string
   attachments: ComposerAttachment[]
-}) {
+}): Promise<string> {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
+  const draftMessageId =
+    !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
+      ? await allocateMessageIdentity(args.accountId, true)
+      : args.draftMessageId
   await invoke('mail.saveDraft', {
     account_id: args.accountId,
     from: args.from ?? '',
@@ -1046,7 +1049,7 @@ export async function saveComposedDraft(args: {
     html,
     in_reply_to: args.inReplyTo ?? '',
     references: args.references ?? '',
-    draft_id: args.draftMessageId,
+    draft_id: draftMessageId,
     attachments: args.attachments.map((a) => ({
       filename: a.filename,
       mime: a.mime,
@@ -1054,6 +1057,7 @@ export async function saveComposedDraft(args: {
       inline_id: a.inlineId ?? '',
     })),
   })
+  return draftMessageId
 }
 
 /** Pick the source message to reply to: the most recent loaded message in the
@@ -1185,7 +1189,7 @@ export async function sendReply() {
   // so sending feels instant. The status starts as "sending" and flips to "sent"
   // or "failed" once the backend responds.
   const tempId = `${LOCAL_SEND_PREFIX}${Date.now()}`
-  const messageId = newSendMessageId(fromEmail || activeAcc?.email || '')
+  const messageId = await allocateMessageIdentity(replyAccountId, false)
   const payload: PendingSend = {
     account_id: replyAccountId,
     to,

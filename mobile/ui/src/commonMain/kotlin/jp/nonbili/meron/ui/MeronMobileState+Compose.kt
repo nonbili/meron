@@ -203,8 +203,10 @@ import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.AllocateIdentityParams
 import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
+import jp.nonbili.meron.shared.parseAllocatedMessageId
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
 import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
@@ -336,12 +338,13 @@ internal fun MeronMobileState.sendMail() {
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
                 val params =
                     draft.toSendMailParams(accountId = accountId, from = identity?.email.orEmpty()).copy(
                         inReplyTo = composeInReplyTo,
                         references = composeReferences,
+                        messageId = allocateCoreMessageId(client = client, accountId = accountId, draft = false),
                     )
-                val client = MobileMailCommandClient(core)
                 withManagedGoogleAuth(client, accountId) { client.send(params) }
             }
         }.onSuccess {
@@ -400,26 +403,29 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
         return false
     }
     val draftId = composeDraftId.ifBlank { newDraftMessageId(accountId) }
-    composeDraftId = draftId
     val previousDraftAccountId = composeDraftAccountId
     if (showStatus) status = "Saving draft..."
     return runCatching {
         withContext(ioDispatcher) {
+            val client = MobileMailCommandClient(core)
+            val resolvedDraftId =
+                if (draftId.startsWith("local-draft-")) allocateCoreMessageId(client, accountId, draft = true) else draftId
             val params =
                 draft
                     .toSaveDraftParams(
                         accountId = accountId,
-                        draftId = draftId,
+                        draftId = resolvedDraftId,
                         from = identity?.email.orEmpty(),
                     ).copy(
                         inReplyTo = composeInReplyTo,
                         references = composeReferences,
                     )
-            val client = MobileMailCommandClient(core)
             withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
+            resolvedDraftId
         }
     }.fold(
-        onSuccess = {
+        onSuccess = { savedDraftId ->
+            composeDraftId = savedDraftId
             composeDraftSaved = true
             composeDraftAccountId = accountId
             // The From identity moved to another account since the last save:
@@ -428,7 +434,7 @@ private suspend fun MeronMobileState.saveComposeDraft(showStatus: Boolean): Bool
                 runCatching {
                     withContext(ioDispatcher) {
                         MobileMailCommandClient(core).discardDraft(
-                            DiscardDraftParams(accountId = previousDraftAccountId, draftId = draftId),
+                            DiscardDraftParams(accountId = previousDraftAccountId, draftId = savedDraftId),
                         )
                     }
                 }
@@ -476,28 +482,31 @@ private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): B
             attachments = quickReplyAttachments,
         )
     val draftId = quickReplyDraftId.ifBlank { newDraftMessageId(accountId) }
-    quickReplyDraftId = draftId
     quickReplyInReplyTo = replyParams.inReplyTo
     quickReplyReferences = replyParams.references
     val draft = ComposeDraft(replyParams.to, replyParams.cc, "", replyParams.subject, quickReplyBody.trim(), quickReplyAttachments)
     if (showStatus) status = "Saving draft..."
     return runCatching {
         withContext(ioDispatcher) {
+            val client = MobileMailCommandClient(core)
+            val resolvedDraftId =
+                if (draftId.startsWith("local-draft-")) allocateCoreMessageId(client, accountId, draft = true) else draftId
             val params =
                 draft
                     .toSaveDraftParams(
                         accountId = accountId,
-                        draftId = draftId,
+                        draftId = resolvedDraftId,
                         from = replyFrom,
                     ).copy(
                         inReplyTo = replyParams.inReplyTo,
                         references = replyParams.references,
                     )
-            val client = MobileMailCommandClient(core)
             withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
+            resolvedDraftId
         }
     }.fold(
-        onSuccess = {
+        onSuccess = { savedDraftId ->
+            quickReplyDraftId = savedDraftId
             quickReplyDraftSaved = true
             markThreadDraftEverywhere(thread.id)
             if (showStatus) status = "Draft saved"
@@ -735,16 +744,14 @@ internal fun MeronMobileState.sendQuickReply() {
     quickReplySendInFlight = true
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = account?.let { detectReplyFromIdentity(parent, it) }.orEmpty()
-    val outboundMessageId = newDraftMessageId(accountId).replace("meron-draft-", "meron-")
-    val params =
-        parent
-            .toReplyMailParams(
-                accountId = accountId,
-                body = sentBody,
-                from = replyFrom,
-                ownAddresses = ownAddressList(coreAccounts),
-                attachments = sentAttachments,
-            ).copy(messageId = outboundMessageId)
+    val baseParams =
+        parent.toReplyMailParams(
+            accountId = accountId,
+            body = sentBody,
+            from = replyFrom,
+            ownAddresses = ownAddressList(coreAccounts),
+            attachments = sentAttachments,
+        )
     // Render the sent bubble optimistically — before the send round-trip — so
     // replying feels instant. The bubble shows a "Sending…" status until the
     // canonical stored message replaces it on re-fetch; on failure it flips to
@@ -754,8 +761,18 @@ internal fun MeronMobileState.sendQuickReply() {
     // A counter suffix keeps ids unique even for two sends in the same
     // millisecond — message ids key the conversation list, duplicates crash.
     val tempId = "local-send-${currentTimeMillis()}-${localSendSequence++}"
-    val optimistic =
-        MessageBody(
+    scope.launch {
+        val outboundMessageId =
+            runCatching {
+                withContext(ioDispatcher) { allocateCoreMessageId(MobileMailCommandClient(core), accountId, draft = false) }
+            }.getOrElse {
+                quickReplySendInFlight = false
+                quickReplyFailure = it.message.orEmpty()
+                status = "Send failed: ${it.message}"
+                return@launch
+            }
+        val params = baseParams.copy(messageId = outboundMessageId)
+        val optimistic = MessageBody(
             id = tempId,
             folderId = parent.folderId,
             from = "You",
@@ -774,9 +791,8 @@ internal fun MeronMobileState.sendQuickReply() {
                 },
             sendStatus = SendStatus.Sending,
         )
-    messages = messages + optimistic
-    status = "Sending reply..."
-    scope.launch {
+        messages = messages + optimistic
+        status = "Sending reply..."
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
@@ -816,6 +832,16 @@ internal fun MeronMobileState.sendQuickReply() {
             messages = messages.map { if (it.id == tempId) it.copy(sendStatus = SendStatus.Failed) else it }
         }
     }
+}
+
+private suspend fun allocateCoreMessageId(
+    client: MobileMailCommandClient,
+    accountId: String,
+    draft: Boolean,
+): String {
+    val id = parseAllocatedMessageId(client.allocateIdentity(AllocateIdentityParams(accountId, draft)))
+    require(id.isNotBlank()) { "Core did not allocate a message identity" }
+    return id
 }
 
 internal fun MeronMobileState.openMessageCompose(

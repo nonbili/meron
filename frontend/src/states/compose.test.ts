@@ -440,6 +440,7 @@ describe('quick reply draft sharing', () => {
         App: {
           Invoke: async (command: string, payload: unknown) => {
             calls.push({ command, payload })
+            if (command === 'mail.allocateIdentity') return { message_id: 'draft-core@example.com' }
             return {}
           },
         },
@@ -464,15 +465,17 @@ describe('quick reply draft sharing', () => {
     await saveQuickReplyDraft()
 
     expect(calls.filter((c) => c.command === 'mail.saveDraft')).toHaveLength(1)
+    expect(calls.filter((c) => c.command === 'mail.allocateIdentity')).toHaveLength(1)
     expect(compose$.quickReplyDraftSaved.get()).toBe(true)
     const firstDraftId = compose$.quickReplyDraftId.get()
-    expect(firstDraftId).toBeTruthy()
+    expect(firstDraftId).toBe('draft-core@example.com')
 
     compose$.composer.set('Hello there, updated')
     await saveQuickReplyDraft()
 
     const saveCalls = calls.filter((c) => c.command === 'mail.saveDraft')
     expect(saveCalls).toHaveLength(2)
+    expect(calls.filter((c) => c.command === 'mail.allocateIdentity')).toHaveLength(1)
     expect(compose$.quickReplyDraftId.get()).toBe(firstDraftId)
     expect((saveCalls[1].payload as { draft_id: string }).draft_id).toBe(firstDraftId)
   })
@@ -541,6 +544,7 @@ describe('quick reply draft sharing', () => {
     let releaseSave!: () => void
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'draft-core@example.com' }
       if (command === 'mail.saveDraft') {
         saveStarted()
         await new Promise<void>((resolve) => (releaseSave = resolve))

@@ -87,6 +87,7 @@ export type Message = {
   id: string
   account_id: string
   folder_id: string
+  folder_role?: Folder['role']
   thread_id: string
   from_name: string
   from_addr: string

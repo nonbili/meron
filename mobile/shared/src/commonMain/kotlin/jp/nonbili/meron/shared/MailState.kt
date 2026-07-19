@@ -49,12 +49,14 @@ data class FolderSummary(
     val accountId: String,
     val name: String,
     val unread: Int = 0,
+    val role: String = "folder",
 )
 
 data class ThreadSummary(
     val id: String,
     val accountId: String,
     val folder: String,
+    val folderRole: String = "folder",
     val subject: String,
     val sender: String,
     val preview: String = "",
@@ -72,6 +74,7 @@ data class StarredItemSummary(
     val threadId: String,
     val accountId: String,
     val folder: String,
+    val folderRole: String = "folder",
     val subject: String,
     val sender: String,
     val preview: String = "",
@@ -182,9 +185,8 @@ data class ReplyRecipients(
 )
 
 fun newDraftMessageId(accountId: String = ""): String {
-    val domain = accountId.substringAfter('@', missingDelimiterValue = "meron").ifBlank { "meron" }
     val suffix = Random.nextLong(0, Long.MAX_VALUE).toString(36)
-    return "meron-draft-$suffix@$domain"
+    return "local-draft-$suffix"
 }
 
 fun folderIsDrafts(folder: String): Boolean {

@@ -543,8 +543,13 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         store::apply_card_identity(&conn, &account_id, &folder_id, &mut messages);
         let draft_thread_keys =
             store::draft_thread_keys(&conn, &account_id).map_err(|err| err.to_string())?;
-        let threads =
-            thread_cards_json_with_drafts(&account_id, &folder_id, messages, &draft_thread_keys);
+        let threads = thread_cards_json_with_drafts(
+            &conn,
+            &account_id,
+            &folder_id,
+            messages,
+            &draft_thread_keys,
+        )?;
         let folder_unread = store::get_folder_unread(&conn, &account_id, &folder_id)
             .map_err(|err| err.to_string())?;
         let mut out = json!({ "threads": threads, "folder_unread": folder_unread });
@@ -832,20 +837,22 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
 pub(crate) fn list_mobile_starred_items(data_dir: &str, params: &Value) -> Result<Value, String> {
     let limit = opt_u32(params, "limit").unwrap_or(200);
     with_mobile_db(data_dir, |conn| {
-        let mut items = store::get_starred_all_accounts(&conn, limit)
+        let mut items = store::get_starred_all_accounts(&conn, 2_000)
             .map_err(|err| err.to_string())?
             .into_iter()
-            .map(|(account, header)| starred_item_json(&account, &header))
-            .collect::<Vec<_>>();
-        items
-            .extend(rss::starred_items(&conn, i64::from(limit)).map_err(|err| format!("{err:#}"))?);
-        items.sort_by(|a, b| {
-            b.get("date")
-                .and_then(Value::as_i64)
-                .cmp(&a.get("date").and_then(Value::as_i64))
-        });
-        items.truncate(limit as usize);
-        Ok(json!({ "items": items }))
+            .map(|(account, header)| crate::mail_model::starred_item_json(&conn, &account, &header))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| err.to_string())?;
+        items.extend(rss::starred_items(&conn, 2_000).map_err(|err| format!("{err:#}"))?);
+        Ok(crate::mail_model::starred_page(
+            items,
+            params
+                .get("query")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+            limit as usize,
+            params.get("before_cursor").and_then(Value::as_str),
+        ))
     })
 }
 
@@ -882,9 +889,33 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
         let deleted = store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids)
             .map_err(|err| err.to_string())?;
         match delete_result {
-            None => Ok(json!({ "ok": true, "deleted": deleted, "permanent": true })),
-            Some(trash) => Ok(json!({ "ok": true, "deleted": deleted, "trash": trash })),
+            None => crate::mail_model::mutation_result(
+                json!({ "ok": true, "deleted": deleted, "permanent": true }),
+                &conn,
+                &parsed.account,
+                &thread_id,
+                &parsed.folder,
+                None,
+                None,
+                None,
+                true,
+            ),
+            Some(trash) => {
+                let moved_thread_id = format_thread_id(&parsed.account, &trash, &parsed.thread_key);
+                crate::mail_model::mutation_result(
+                    json!({ "ok": true, "deleted": deleted, "trash": trash, "thread_id": moved_thread_id }),
+                    &conn,
+                    &parsed.account,
+                    &thread_id,
+                    &parsed.folder,
+                    Some(&trash),
+                    None,
+                    None,
+                    true,
+                )
+            }
         }
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -958,12 +989,23 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
         )
         .map_err(|err| err.to_string())?;
         let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
-        Ok(json!({
-            "ok": true,
-            "moved": moved,
-            "folder": target_folder,
-            "thread_id": moved_thread_id,
-        }))
+        crate::mail_model::mutation_result(
+            json!({
+                "ok": true,
+                "moved": moved,
+                "folder": target_folder,
+                "thread_id": moved_thread_id,
+            }),
+            &conn,
+            &parsed.account,
+            &thread_id,
+            &parsed.folder,
+            Some(&target_folder),
+            None,
+            None,
+            true,
+        )
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -1031,12 +1073,23 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         )
         .map_err(|err| err.to_string())?;
         let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
-        Ok(json!({
-            "ok": true,
-            "moved": moved,
-            "folder": target_folder,
-            "thread_id": moved_thread_id,
-        }))
+        crate::mail_model::mutation_result(
+            json!({
+                "ok": true,
+                "moved": moved,
+                "folder": target_folder,
+                "thread_id": moved_thread_id,
+            }),
+            &conn,
+            &parsed.account,
+            &thread_id,
+            &parsed.folder,
+            Some(&target_folder),
+            None,
+            None,
+            true,
+        )
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -1146,7 +1199,18 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
                 },
             ))?;
         }
-        Ok(json!({ "ok": true }))
+        crate::mail_model::mutation_result(
+            json!({ "ok": true }),
+            &conn,
+            &parsed.account,
+            &thread_id,
+            &parsed.folder,
+            None,
+            Some(!seen),
+            None,
+            false,
+        )
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -1159,6 +1223,70 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         .filter(|value| !value.trim().is_empty())
         .map(canon_folder)
         .unwrap_or_else(|| "INBOX".to_string());
+
+    if account_id == "unified" {
+        let accounts = with_mobile_db(data_dir, |conn| {
+            let accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+            Ok(json!(
+                accounts
+                    .into_iter()
+                    .filter(|account| account
+                        .get("included_in_unified")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true))
+                    .filter(
+                        |account| account.get("auth_type").and_then(Value::as_str) != Some("rss")
+                    )
+                    .filter_map(|account| account
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string))
+                    .collect::<Vec<_>>()
+            ))
+        })?
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+        let mut updated = 0_u64;
+        let mut failures = Vec::new();
+        let mut folder_unreads = serde_json::Map::new();
+        let mut folder_counts = Vec::new();
+        for account in accounts
+            .into_iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+        {
+            let account_params = json!({ "account_id": account, "folder_id": folder });
+            match mark_mobile_folder_all_read(data_dir, &account_params) {
+                Ok(result) => {
+                    updated += result
+                        .get("updated")
+                        .and_then(Value::as_u64)
+                        .unwrap_or_default();
+                    if let Some(counts) = result
+                        .get("folder_unreads")
+                        .and_then(|all| all.get(&account))
+                    {
+                        folder_unreads.insert(account.clone(), counts.clone());
+                    }
+                    folder_counts.extend(
+                        result
+                            .get("folder_counts")
+                            .and_then(Value::as_array)
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
+                }
+                Err(message) => failures.push(json!({ "account_id": account, "message": message })),
+            }
+        }
+        return Ok(json!({
+            "ok": failures.is_empty(),
+            "updated": updated,
+            "failures": failures,
+            "folder_unreads": folder_unreads,
+            "folder_counts": folder_counts,
+        }));
+    }
 
     let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
@@ -1185,7 +1313,18 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         }
         store::mark_folder_seen(&conn, &account_id, &folder, true)
             .map_err(|err| err.to_string())?;
-        Ok(json!({ "ok": true, "updated": updated, "folder": folder }))
+        crate::mail_model::mutation_result(
+            json!({ "ok": true, "updated": updated, "folder": folder }),
+            &conn,
+            &account_id,
+            "",
+            &folder,
+            None,
+            Some(false),
+            None,
+            false,
+        )
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -1240,7 +1379,18 @@ pub(crate) fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Resu
             )
             .map_err(|err| err.to_string())?;
         }
-        Ok(json!({ "ok": true }))
+        crate::mail_model::mutation_result(
+            json!({ "ok": true }),
+            &conn,
+            &parsed.account,
+            &thread_id,
+            &parsed.folder,
+            None,
+            None,
+            Some(starred),
+            false,
+        )
+        .map_err(|err| err.to_string())
     })
 }
 
@@ -1364,50 +1514,18 @@ pub(crate) fn parse_mail_cursor(cursor: &str) -> Option<(i64, u32)> {
 }
 
 pub(crate) fn thread_cards_json_with_drafts(
+    conn: &rusqlite::Connection,
     account_id: &str,
     folder_id: &str,
     messages: Vec<MessageHeader>,
     draft_thread_keys: &std::collections::HashSet<String>,
-) -> Vec<Value> {
-    store::group_thread_cards_with_drafts(messages, folder_id, draft_thread_keys)
-        .into_iter()
-        .map(|card| {
-            let folder = card.header.folder.as_str();
-            let thread_id = format_thread_id(account_id, folder, &card.thread_key);
-            let original_thread_id = card
-                .original_thread_key
-                .as_deref()
-                .map(|key| format_thread_id(account_id, folder, key));
-            json!({
-                "id": thread_id,
-                "account_id": account_id,
-                "folder_id": folder,
-                "thread_id": thread_id,
-                "original_thread_id": original_thread_id,
-                "from_name": card.header.from_name,
-                "from_addr": card.header.from_addr,
-                "to": "",
-                "subject": card.header.subject,
-                "preview": "",
-                "body": "",
-                "date": card.header.date,
-                "unread": card.unread_count > 0,
-                "unread_count": card.unread_count,
-                "starred": card.header.starred,
-                "has_draft": card.has_draft,
-                "has_attachments": false,
-                "recipient_overflow": card.header.recipient_overflow,
-            })
-        })
-        .collect()
+) -> Result<Vec<Value>, String> {
+    crate::mail_model::thread_cards_json(conn, account_id, folder_id, messages, draft_thread_keys)
+        .map_err(|err| err.to_string())
 }
 
 pub(crate) fn format_thread_id(account_id: &str, folder: &str, thread_key: &str) -> String {
-    if let Some(uid) = thread_key.strip_prefix("uid:") {
-        return format!("{account_id}#{}#{uid}", canon_folder(folder));
-    }
-    let encoded = URL_SAFE_NO_PAD.encode(thread_key.as_bytes());
-    format!("{account_id}#{}#t.{encoded}", canon_folder(folder))
+    crate::mail_model::format_thread_id(account_id, folder, thread_key)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1510,43 +1628,6 @@ pub(crate) fn message_json(
         "attachments": cached
             .map(|message| serde_json::to_value(&message.attachments).unwrap_or_else(|_| json!([])))
             .unwrap_or_else(|| json!([])),
-    })
-}
-
-pub(crate) fn starred_item_json(account_id: &str, header: &MessageHeader) -> Value {
-    let folder = if header.folder.is_empty() {
-        "INBOX"
-    } else {
-        header.folder.as_str()
-    };
-    let thread_key = if header.thread_key.is_empty() {
-        format!("uid:{}", header.uid)
-    } else {
-        header.thread_key.clone()
-    };
-    let thread_id = format_thread_id(account_id, folder, &thread_key);
-    json!({
-        "id": format!("{thread_id}#{}", header.uid),
-        "account_id": account_id,
-        "folder_id": folder,
-        "thread_id": thread_id,
-        "from_name": header.from_name.as_str(),
-        "from_addr": header.from_addr.as_str(),
-        "to": "",
-        "reply_to": "",
-        "cc": "",
-        "bcc": "",
-        "message_id": "",
-        "references": "",
-        "subject": header.subject.as_str(),
-        "preview": "",
-        "body": "",
-        "body_html": "",
-        "date": header.date,
-        "unread": !header.seen,
-        "starred": true,
-        "has_attachments": false,
-        "attachments": [],
     })
 }
 

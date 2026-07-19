@@ -147,7 +147,7 @@ internal fun ThreadScreen(
     onViewedToBottom: () -> Unit,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
-    val deleteLabel = thread?.let { threadDeleteActionLabel(it.folder) } ?: "Move to Trash"
+    val deleteLabel = thread?.let { threadDeleteActionLabel(it.folder, it.folderRole) } ?: "Move to Trash"
     val chat = LocalChatColors.current
     val services = LocalPlatformServices.current
     var searchOpen by remember(thread?.id) { mutableStateOf(false) }

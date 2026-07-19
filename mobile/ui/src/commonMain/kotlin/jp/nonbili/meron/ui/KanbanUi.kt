@@ -1094,7 +1094,7 @@ internal fun KanbanThreadActionDialog(
     onCopyFeedUrl: () -> Unit,
     onMove: (KanbanColumnSpec) -> Unit,
 ) {
-    val deleteLabel = threadDeleteActionLabel(thread.folder)
+    val deleteLabel = threadDeleteActionLabel(thread.folder, thread.folderRole)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(thread.subject.ifBlank { tr("threads.noSubject") }, maxLines = 2, overflow = TextOverflow.Ellipsis) },

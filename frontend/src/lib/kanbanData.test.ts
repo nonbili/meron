@@ -307,8 +307,13 @@ describe('kanban column loading filters', () => {
 
     await loadKanbanColumn({ accountId: 'unified', folderId: 'starred' }, true, 'quarterly')
 
-    expect(calls).toEqual([{ command: 'mail.starredItems', payload: {} }])
-    expect(kanban$.threads['unified\nstarred'].get().map((item) => item.id)).toEqual(['new', 'old'])
+    expect(calls).toEqual([
+      {
+        command: 'mail.starredItems',
+        payload: { query: 'quarterly', limit: 50, before_cursor: undefined },
+      },
+    ])
+    expect(kanban$.threads['unified\nstarred'].get().map((item) => item.id)).toEqual(['old', 'new'])
     expect(kanban$.cursors['unified\nstarred'].get()).toBe('')
     expect(kanban$.accountCursors['unified\nstarred'].get()).toEqual({})
   })

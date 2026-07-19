@@ -179,6 +179,7 @@ import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SharedMobileContract
 import jp.nonbili.meron.shared.StarredItemSummary
+import jp.nonbili.meron.shared.StarredItemsParams
 import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadReadParams
@@ -209,7 +210,7 @@ import jp.nonbili.meron.shared.parseMediaFileUrlResponse
 import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
 import jp.nonbili.meron.shared.parseOpmlExportResponse
 import jp.nonbili.meron.shared.parseOpmlImportCountResponse
-import jp.nonbili.meron.shared.parseStarredItemsResponse
+import jp.nonbili.meron.shared.parseStarredItemsPage
 import jp.nonbili.meron.shared.parseStorageUsageResponse
 import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
@@ -264,6 +265,7 @@ internal fun StarredItemSummary.toKanbanThreadSummary(): ThreadSummary =
         threadId = threadId,
         accountId = accountId,
         folder = folder,
+        folderRole = folderRole,
         subject = subject,
         sender = sender,
         preview = preview,
@@ -271,23 +273,6 @@ internal fun StarredItemSummary.toKanbanThreadSummary(): ThreadSummary =
         starred = true,
         dateEpochSeconds = dateEpochSeconds,
     )
-
-internal fun starredItemsMatching(
-    items: List<StarredItemSummary>,
-    query: String,
-): List<StarredItemSummary> {
-    val needle = query.trim().lowercase()
-    val filtered =
-        if (needle.isBlank()) {
-            items
-        } else {
-            items.filter { item ->
-                listOf(item.subject, item.sender, item.preview, item.accountId, item.folder)
-                    .any { it.lowercase().contains(needle) }
-            }
-        }
-    return filtered.sortedByDescending { it.dateEpochSeconds }
-}
 
 internal fun MeronMobileState.updateKanbanColumn(
     key: String,
@@ -340,11 +325,15 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
 ): MailboxLoadResult {
     val columnQuery = kanbanColumnSearchQuery(column)
     if (isUnifiedStarredColumn(column)) {
-        val starred = parseStarredItemsResponse(client.listStarredItems())
+        val page =
+            parseStarredItemsPage(
+                client.listStarredItems(StarredItemsParams(query = columnQuery, beforeCursor = beforeCursor)),
+            )
         return MailboxLoadResult(
             folders = emptyList(),
             folder = STARRED_FOLDER,
-            threads = starredItemsMatching(starred, columnQuery).map { it.toKanbanThreadSummary() },
+            threads = page.items.map { it.toKanbanThreadSummary() },
+            nextCursor = page.nextCursor,
         )
     }
     return if (column.accountId == UNIFIED_ACCOUNT_ID) {

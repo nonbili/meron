@@ -209,6 +209,7 @@ import jp.nonbili.meron.shared.parseAttachmentDataResponse
 import jp.nonbili.meron.shared.parseAutodiscoverResponse
 import jp.nonbili.meron.shared.parseContactSuggestResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
+import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseMailtoUrl
 import jp.nonbili.meron.shared.parseMediaFileUrlResponse
 import jp.nonbili.meron.shared.parseOAuthCallbackUrlForRedirect
@@ -693,7 +694,9 @@ internal fun MeronMobileState.readCoreThread(
     }
     val backendThreadId = thread.backendThreadId()
     val returnScreen = if (screen == Screen.Kanban || screen == Screen.Starred) screen else Screen.Mail
-    val readsDraftThread = !threadIdIsRss(backendThreadId) && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))
+    val readsDraftThread =
+        !threadIdIsRss(backendThreadId) &&
+            (thread.folderRole == "drafts" || (thread.folderRole == "folder" && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))))
     val selectedThread = if (sourceFolder.isNotBlank() && sourceFolder != thread.folder) thread.copy(folder = sourceFolder) else thread
     selectedCoreThread = selectedThread
     messages = emptyList()
@@ -1005,7 +1008,8 @@ internal fun MeronMobileState.runStarredItemAction(
                 val client = MobileMailCommandClient(core)
                 withManagedGoogleAuth(client, item.accountId) { client.action() }
             }
-        }.onSuccess {
+        }.onSuccess { response ->
+            applyCoreFolderUnreadChanges(response)
             starredItems = update(starredItems)
             status = "$label complete"
         }.onFailure {
@@ -1053,7 +1057,7 @@ internal fun MeronMobileState.deleteStarredMailItem(item: StarredItemSummary) {
     }
     runStarredItemAction(
         item = item,
-        label = threadDeleteActionLabel(item.folder),
+        label = threadDeleteActionLabel(item.folder, item.folderRole),
         action = { delete(ThreadActionParams(threadId = item.threadId, folderId = item.folder, messageIds = listOf(item.id))) },
         update = { rows -> rows.filterNot { it.id == item.id } },
     )
@@ -1099,6 +1103,7 @@ internal fun MeronMobileState.runCoreThreadAction(
                 },
             )
         }.onSuccess { response ->
+            applyCoreFolderUnreadChanges(response)
             if (undoMessage == null || onUndo == null) status = "$label complete"
             committed.complete(response)
             afterSuccess?.invoke()
@@ -1127,6 +1132,28 @@ internal fun MeronMobileState.runCoreThreadAction(
             }
         }
     }
+}
+
+private fun MeronMobileState.applyCoreFolderUnreadChanges(response: String) {
+    val changes = parseFolderUnreadChanges(response)
+    if (changes.isEmpty()) return
+    val nextByAccount = foldersByAccount.toMutableMap()
+    changes.groupBy { it.accountId }.forEach { (accountId, accountChanges) ->
+        val counts = accountChanges.associateBy { it.folderId }
+        nextByAccount[accountId] =
+            nextByAccount[accountId].orEmpty().map { folder ->
+                counts.entries.firstOrNull { (folderId, _) -> folder.name.equals(folderId, ignoreCase = folder.role == "inbox") }
+                    ?.value
+                    ?.let { folder.copy(unread = it.unread) } ?: folder
+            }
+    }
+    foldersByAccount = nextByAccount
+    coreFolders =
+        coreFolders.map { folder ->
+            changes.firstOrNull {
+                it.accountId == folder.accountId && folder.name.equals(it.folderId, ignoreCase = folder.role == "inbox")
+            }?.let { folder.copy(unread = it.unread) } ?: folder
+        }
 }
 
 // Moves a thread back to the folder it was in before an archive/delete and
@@ -1407,18 +1434,28 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                mailTargets.forEach { (accountId, folderId) ->
-                    requireCoreOk(
-                        withManagedGoogleAuth(client, accountId) {
-                            client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId))
-                        },
+                val responses = mutableListOf<String>()
+                if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID && mailTargets.isNotEmpty()) {
+                    mailTargets.forEach { (accountId, _) -> withManagedGoogleAuth(client, accountId) { "" } }
+                    responses += requireCoreOk(
+                        client.markAllRead(MarkAllReadParams(accountId = UNIFIED_ACCOUNT_ID, folderId = INBOX_FOLDER)),
                     )
+                } else {
+                    mailTargets.forEach { (accountId, folderId) ->
+                        responses += requireCoreOk(
+                            withManagedGoogleAuth(client, accountId) {
+                                client.markAllRead(MarkAllReadParams(accountId = accountId, folderId = folderId))
+                            },
+                        )
+                    }
                 }
                 rssTargets.forEach { thread ->
                     requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))
                 }
+                responses
             }
-        }.onSuccess {
+        }.onSuccess { responses ->
+            responses.forEach(::applyCoreFolderUnreadChanges)
             status = "Marked ${unread.size} unread item(s) read"
             syncCoreThreads(syncFirst = false)
         }.onFailure {
@@ -1472,23 +1509,32 @@ internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) 
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                mailTargets.forEach { (target, messageIds) ->
-                    if (isUnifiedStarredColumn(column)) {
-                        requireCoreOk(client.markRead(MarkReadParams(threadId = target, messageIds = messageIds)))
-                    } else {
-                        val folderId = if (column.accountId == UNIFIED_ACCOUNT_ID) INBOX_FOLDER else column.folderId
-                        requireCoreOk(
-                            withManagedGoogleAuth(client, target) {
-                                client.markAllRead(MarkAllReadParams(accountId = target, folderId = folderId))
-                            },
-                        )
+                val responses = mutableListOf<String>()
+                if (column.accountId == UNIFIED_ACCOUNT_ID && !isUnifiedStarredColumn(column)) {
+                    mailTargets.forEach { (accountId, _) -> withManagedGoogleAuth(client, accountId) { "" } }
+                    responses += requireCoreOk(
+                        client.markAllRead(MarkAllReadParams(accountId = UNIFIED_ACCOUNT_ID, folderId = INBOX_FOLDER)),
+                    )
+                } else {
+                    mailTargets.forEach { (target, messageIds) ->
+                        if (isUnifiedStarredColumn(column)) {
+                            responses += requireCoreOk(client.markRead(MarkReadParams(threadId = target, messageIds = messageIds)))
+                        } else {
+                            responses += requireCoreOk(
+                                withManagedGoogleAuth(client, target) {
+                                    client.markAllRead(MarkAllReadParams(accountId = target, folderId = column.folderId))
+                                },
+                            )
+                        }
                     }
                 }
                 rssTargets.forEach { thread ->
                     requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = thread.id, seen = true)))
                 }
+                responses
             }
-        }.onSuccess {
+        }.onSuccess { responses ->
+            responses.forEach(::applyCoreFolderUnreadChanges)
             status = "Marked ${unread.size} Kanban card(s) read"
         }.onFailure {
             Log.w("Mail", "kanban mark all read failed", it)
@@ -1534,7 +1580,7 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
     val kanbanSnapshot = kanbanColumns
     runCoreThreadAction(
         thread = thread,
-        label = threadDeleteActionLabel(thread.folder),
+        label = threadDeleteActionLabel(thread.folder, thread.folderRole),
         action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
         update = { threads -> threads.filterNot { it.id == thread.id } },
         undoMessage = "Deleted",

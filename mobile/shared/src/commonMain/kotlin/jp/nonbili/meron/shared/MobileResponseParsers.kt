@@ -50,6 +50,25 @@ fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocatio
         permanent = responseJson.findJsonBooleanProperty("permanent") ?: false,
     )
 
+fun parseAllocatedMessageId(responseJson: String): String = responseJson.findJsonStringProperty("message_id").orEmpty()
+
+data class FolderUnreadChange(
+    val accountId: String,
+    val folderId: String,
+    val unread: Int,
+)
+
+fun parseFolderUnreadChanges(responseJson: String): List<FolderUnreadChange> =
+    responseJson
+        .findJsonArrayProperty("folder_counts")
+        ?.jsonArrayElements()
+        ?.mapNotNull { item ->
+            val accountId = item.findJsonStringProperty("account_id").orEmpty()
+            val folderId = item.findJsonStringProperty("folder_id").orEmpty()
+            val unread = item.findJsonLongProperty("unread")?.toInt() ?: return@mapNotNull null
+            if (accountId.isBlank() || folderId.isBlank()) null else FolderUnreadChange(accountId, folderId, unread)
+        }.orEmpty()
+
 fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
     val accountsJson = responseJson.findJsonArrayProperty("accounts") ?: return emptyList()
     return accountsJson.jsonArrayElements().mapNotNull { item ->
@@ -108,6 +127,7 @@ fun parseFolderListResponse(responseJson: String): List<FolderSummary> {
             accountId = item.findJsonStringProperty("account_id").orEmpty(),
             name = name,
             unread = item.findJsonLongProperty("unread")?.toInt() ?: 0,
+            role = item.findJsonStringProperty("role") ?: "folder",
         )
     }
 }
@@ -173,6 +193,7 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
                 id = id,
                 accountId = item.findJsonStringProperty("account_id").orEmpty(),
                 folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
+                folderRole = item.findJsonStringProperty("folder_role") ?: "folder",
                 subject = item.findJsonStringProperty("subject").orEmpty(),
                 sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
                 preview = item.findJsonStringProperty("preview").orEmpty(),
@@ -202,6 +223,17 @@ data class ThreadReadPage(
     val nextCursor: String,
 )
 
+data class StarredItemsPage(
+    val items: List<StarredItemSummary>,
+    val nextCursor: String,
+)
+
+fun parseStarredItemsPage(responseJson: String): StarredItemsPage =
+    StarredItemsPage(
+        items = parseStarredItemsResponse(responseJson),
+        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
+    )
+
 fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
     val itemsJson = responseJson.findJsonArrayProperty("items") ?: return emptyList()
     return itemsJson
@@ -215,6 +247,7 @@ fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
                 threadId = threadId,
                 accountId = item.findJsonStringProperty("account_id").orEmpty(),
                 folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
+                folderRole = item.findJsonStringProperty("folder_role") ?: "folder",
                 subject = item.findJsonStringProperty("subject").orEmpty(),
                 sender = item.findJsonStringProperty("from_name") ?: item.findJsonStringProperty("from").orEmpty(),
                 preview = item.findJsonStringProperty("preview").orEmpty(),

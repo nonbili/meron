@@ -118,7 +118,7 @@ export function useComposer(tabId: string) {
           content = inlineRichStyles(prepared.html)
           attachments = prepared.attachments
         }
-        await saveComposedDraft({
+        const savedDraftId = await saveComposedDraft({
           accountId: draft.accountId,
           from: draft.fromEmail,
           to: draft.to.trim(),
@@ -133,6 +133,7 @@ export function useComposer(tabId: string) {
           draftMessageId: draft.draftMessageId,
           attachments,
         })
+        if (savedDraftId !== draft.draftMessageId) updateComposeDraft(tabId, { draftMessageId: savedDraftId })
         setSaveStatus('saved')
         setSaveError('')
       } catch (err) {

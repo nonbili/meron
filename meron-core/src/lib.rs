@@ -10,6 +10,7 @@ pub mod engine;
 pub mod ffi;
 pub mod imap;
 pub mod log;
+pub mod mail_model;
 pub mod parse;
 pub mod protocol;
 pub mod rss;

@@ -9,6 +9,33 @@ import kotlin.test.assertTrue
 
 class MobileResponseParsersTest {
     @Test
+    fun parsesStarredPageAndAllocatedIdentity() {
+        val page =
+            parseStarredItemsPage(
+                """{"items":[{"id":"item","thread_id":"thread","account_id":"acc","folder_id":"INBOX","subject":"Design"}],"next_cursor":"starred:opaque"}""",
+            )
+        assertEquals(listOf("item"), page.items.map { it.id })
+        assertEquals("starred:opaque", page.nextCursor)
+        assertEquals("meron-draft-id@example.com", parseAllocatedMessageId("""{"message_id":"meron-draft-id@example.com"}"""))
+    }
+
+    @Test
+    fun parsesAuthoritativeFolderUnreadChanges() {
+        val changes =
+            parseFolderUnreadChanges(
+                """{"folder_counts":[{"account_id":"one","folder_id":"INBOX","unread":3},{"account_id":"two","folder_id":"Archive","unread":0}]}""",
+            )
+
+        assertEquals(
+            listOf(
+                FolderUnreadChange("one", "INBOX", 3),
+                FolderUnreadChange("two", "Archive", 0),
+            ),
+            changes,
+        )
+    }
+
+    @Test
     fun parsesAccountListEnvelope() {
         val accounts =
             parseAccountListResponse(

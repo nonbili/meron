@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -47,6 +48,17 @@ func looksLikeArchiveFolder(name string) bool {
 // into bridge Messages; only thread-id minting happens here.
 func threadsJSON(accountID, folder string, raw any) any {
 	object, _ := raw.(map[string]any)
+	if final, ok := object["threads"].([]any); ok {
+		encoded, _ := json.Marshal(final)
+		messages := make([]Message, 0, len(final))
+		_ = json.Unmarshal(encoded, &messages)
+		out := map[string]any{
+			"threads":       messages,
+			"folder_unread": uint32(jsonNumber(object["folder_unread"])),
+		}
+		copyPageMetadata(object, out)
+		return out
+	}
 	list, _ := object["cards"].([]any)
 	messages := make([]Message, 0, len(list))
 	for _, item := range list {
@@ -89,6 +101,11 @@ func threadsJSON(accountID, folder string, raw any) any {
 		"threads":       messages,
 		"folder_unread": uint32(jsonNumber(object["folder_unread"])),
 	}
+	copyPageMetadata(object, out)
+	return out
+}
+
+func copyPageMetadata(object, out map[string]any) {
 	if folderUnreads, ok := object["folder_unreads"].(map[string]any); ok {
 		out["folder_unreads"] = folderUnreads
 	}
@@ -98,7 +115,6 @@ func threadsJSON(accountID, folder string, raw any) any {
 	if cursor, _ := object["next_cursor"].(string); cursor != "" {
 		out["next_cursor"] = cursor
 	}
-	return out
 }
 
 func threadMessagesJSON(accountID, threadID, folder string, raw any) any {
