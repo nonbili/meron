@@ -106,7 +106,11 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 	if req.Filter == "starred" {
 		a.logf("threadList starred: account=%s folder=%s query=%q refresh=%t", req.AccountID, req.FolderID, req.Query, req.Refresh)
 	}
-	res, err := a.sidecar.Call("messages.recent", map[string]any{
+	method := "messages.recent"
+	if req.AccountID == "unified" {
+		method = "messages.unifiedRecent"
+	}
+	res, err := a.sidecar.Call(method, map[string]any{
 		"account":       req.AccountID,
 		"folder":        req.FolderID,
 		"query":         req.Query,

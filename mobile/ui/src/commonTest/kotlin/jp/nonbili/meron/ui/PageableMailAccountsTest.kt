@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 class PageableMailAccountsTest {
     @Test
-    fun unifiedRequiresIncludedAccountWithCursor() {
+    fun unifiedOpaqueCursorMakesIncludedAccountsPageable() {
         val accounts =
             listOf(
                 account("acc1"),
@@ -19,37 +19,31 @@ class PageableMailAccountsTest {
             pageableMailAccounts(
                 selectedAccountId = UNIFIED_ACCOUNT_ID,
                 accounts = accounts,
-                mailboxCursor = "",
-                accountCursors = mapOf("acc2" to "cursor-2", "acc3" to "cursor-3"),
+                mailboxCursor = "unified:opaque",
             )
 
-        assertEquals(listOf("acc2"), pageable.map { it.id })
+        assertEquals(listOf("acc1", "acc2"), pageable.map { it.id })
     }
 
     @Test
-    fun unifiedWithOnlyExcludedAccountCursorsIsNotPageable() {
-        // Regression: the load-more button used to show whenever any account
-        // cursor existed, while the loader filtered to unified accounts and
-        // silently no-opped.
+    fun unifiedWithOnlyExcludedAccountsIsNotPageable() {
         val pageable =
             pageableMailAccounts(
                 selectedAccountId = UNIFIED_ACCOUNT_ID,
                 accounts = listOf(account("acc1", includedInUnified = false)),
-                mailboxCursor = "",
-                accountCursors = mapOf("acc1" to "cursor-1"),
+                mailboxCursor = "unified:opaque",
             )
 
         assertTrue(pageable.isEmpty())
     }
 
     @Test
-    fun unifiedIgnoresBlankCursors() {
+    fun unifiedRequiresOpaqueCursor() {
         val pageable =
             pageableMailAccounts(
                 selectedAccountId = UNIFIED_ACCOUNT_ID,
                 accounts = listOf(account("acc1")),
                 mailboxCursor = "",
-                accountCursors = mapOf("acc1" to ""),
             )
 
         assertTrue(pageable.isEmpty())
@@ -61,8 +55,7 @@ class PageableMailAccountsTest {
             pageableMailAccounts(
                 selectedAccountId = "",
                 accounts = listOf(account("acc1")),
-                mailboxCursor = "",
-                accountCursors = mapOf("acc1" to "cursor-1"),
+                mailboxCursor = "unified:opaque",
             )
 
         assertEquals(listOf("acc1"), pageable.map { it.id })
@@ -78,7 +71,6 @@ class PageableMailAccountsTest {
                 selectedAccountId = "acc1",
                 accounts = accounts,
                 mailboxCursor = "cursor-1",
-                accountCursors = emptyMap(),
             ).map { it.id },
         )
         assertTrue(
@@ -86,7 +78,6 @@ class PageableMailAccountsTest {
                 selectedAccountId = "acc1",
                 accounts = accounts,
                 mailboxCursor = "",
-                accountCursors = mapOf("acc1" to "stale"),
             ).isEmpty(),
         )
     }
@@ -98,7 +89,6 @@ class PageableMailAccountsTest {
                 selectedAccountId = "gone",
                 accounts = listOf(account("acc1")),
                 mailboxCursor = "cursor-1",
-                accountCursors = emptyMap(),
             ).isEmpty(),
         )
     }

@@ -468,6 +468,9 @@ pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
 
 pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
+    if account_id == "unified" {
+        return list_mobile_unified_threads(data_dir, params);
+    }
     let folder_id = params
         .get("folder_id")
         .and_then(Value::as_str)
@@ -552,6 +555,61 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
         }
         Ok(out)
     })
+}
+
+fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_cursors = params
+        .get("before_cursor")
+        .and_then(Value::as_str)
+        .and_then(crate::unified::decode_cursor)
+        .unwrap_or_default();
+    let accounts = with_mobile_db(data_dir, |conn| {
+        let accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+        Ok(json!(
+            accounts
+                .into_iter()
+                .filter(|account| {
+                    account
+                        .get("included_in_unified")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true)
+                })
+                .filter_map(|account| {
+                    account
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .collect::<Vec<_>>()
+        ))
+    })?
+    .as_array()
+    .cloned()
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|account| account.as_str().map(str::to_string))
+    .filter(|account| account_cursors.is_empty() || account_cursors.contains_key(account))
+    .collect::<Vec<_>>();
+
+    let mut pages = Vec::new();
+    for account_id in accounts {
+        let mut account_params = params.clone();
+        let object = account_params
+            .as_object_mut()
+            .ok_or_else(|| "params must be an object".to_string())?;
+        object.insert("account_id".to_string(), Value::String(account_id.clone()));
+        object.insert("folder_id".to_string(), Value::String("INBOX".to_string()));
+        match account_cursors.get(&account_id) {
+            Some(cursor) => {
+                object.insert("before_cursor".to_string(), Value::String(cursor.clone()));
+            }
+            None => {
+                object.remove("before_cursor");
+            }
+        }
+        pages.push((account_id, list_mobile_threads(data_dir, &account_params)));
+    }
+    Ok(crate::unified::merge_pages(pages, "threads"))
 }
 
 fn open_mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {

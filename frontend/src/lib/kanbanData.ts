@@ -130,10 +130,9 @@ type ColumnPage = {
   threads: Message[]
   folderUnread?: number
   folderUnreadByAccount?: Record<string, number>
-  // Next-page cursor for a single-account column ("" = no more).
+  // Opaque next-page cursor for either a single-account or unified column.
   nextSingle: string
-  // Next-page cursors per account for a unified column (absent = that account
-  // is exhausted).
+  // Legacy per-account cursors retained in state while persisted boards migrate.
   nextUnified: Record<string, string>
 }
 
@@ -163,39 +162,27 @@ async function fetchColumnThreads(
     }
   }
   if (column.accountId === 'unified') {
-    const beforeUnified = before?.unified
-    const accounts = beforeUnified
-      ? unifiedAccounts().filter((account) => !!beforeUnified[account.id])
-      : unifiedAccounts()
-    const nextUnified: Record<string, string> = {}
-    const results = await Promise.all(
-      accounts.map((account) =>
-        invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>('mail.threadList', {
-          account_id: account.id,
-          folder_id: 'inbox',
-          query: trimmedQuery,
-          filter,
-          refresh,
-          limit: COLUMN_LIMIT,
-          before_cursor: beforeUnified?.[account.id],
-        })
-          .then((result) => {
-            if (result.next_cursor) nextUnified[account.id] = result.next_cursor
-            return result
-          })
-          .catch(() => ({ threads: [] as Message[] })),
-      ),
-    )
-    const threads = results.flatMap((result) => result.threads || []).sort((a, b) => b.date - a.date)
-    const folderUnread = results.every((result) => typeof result.folder_unread === 'number')
-      ? results.reduce((sum, result) => sum + (result.folder_unread ?? 0), 0)
-      : undefined
-    const folderUnreadByAccount = Object.fromEntries(
-      results.flatMap((result, index) =>
-        typeof result.folder_unread === 'number' ? [[accounts[index].id, result.folder_unread] as const] : [],
-      ),
-    )
-    return { threads, folderUnread, folderUnreadByAccount, nextSingle: '', nextUnified }
+    const result = await invoke<{
+      threads: Message[]
+      next_cursor?: string
+      folder_unread?: number
+      folder_unreads?: Record<string, number>
+    }>('mail.threadList', {
+      account_id: 'unified',
+      folder_id: 'inbox',
+      query: trimmedQuery,
+      filter,
+      refresh,
+      limit: COLUMN_LIMIT,
+      before_cursor: before?.single,
+    })
+    return {
+      threads: result.threads || [],
+      folderUnread: result.folder_unread,
+      folderUnreadByAccount: result.folder_unreads,
+      nextSingle: result.next_cursor ?? '',
+      nextUnified: {},
+    }
   }
 
   const result = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>('mail.threadList', {
@@ -290,10 +277,8 @@ export async function syncKanbanColumn(column: KanbanColumn) {
   }
 }
 
-function columnHasMore(key: string, unified: boolean): boolean {
-  return unified
-    ? Object.keys(kanban$.accountCursors[key].get() ?? {}).length > 0
-    : !!(kanban$.cursors[key].get() ?? '')
+function columnHasMore(key: string, _unified: boolean): boolean {
+  return !!(kanban$.cursors[key].get() ?? '')
 }
 
 // Append the next page of older threads to a column, de-duping by thread id. The

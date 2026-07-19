@@ -366,27 +366,13 @@ internal fun MeronMobileState.syncCoreThreads(
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 if (accountId == UNIFIED_ACCOUNT_ID) {
-                    val results =
-                        selectedAccounts.map { account ->
-                            account.id to
-                                loadAccountInbox(
-                                    client,
-                                    account,
-                                    INBOX_FOLDER,
-                                    query = query,
-                                    filter = filter,
-                                    syncFirst = syncFirst,
-                                    syncLimit = syncLimit,
-                                )
-                        }
-                    MailboxLoadResult(
-                        folders = results.flatMap { it.second.folders },
-                        folder = INBOX_FOLDER,
-                        threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
-                        accountCursors =
-                            results
-                                .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
-                                .toMap(),
+                    loadUnifiedInbox(
+                        client = client,
+                        accounts = selectedAccounts,
+                        query = query,
+                        filter = filter,
+                        syncFirst = syncFirst,
+                        syncLimit = syncLimit,
                     )
                 } else {
                     loadAccountInbox(
@@ -557,17 +543,16 @@ internal fun pageableMailAccounts(
     selectedAccountId: String,
     accounts: List<AccountSummary>,
     mailboxCursor: String,
-    accountCursors: Map<String, String>,
 ): List<AccountSummary> {
     val accountId = selectedAccountId.ifBlank { UNIFIED_ACCOUNT_ID }
     return if (accountId == UNIFIED_ACCOUNT_ID) {
-        accounts.filter { it.includedInUnified && accountCursors[it.id].orEmpty().isNotBlank() }
+        accounts.filter { it.includedInUnified && mailboxCursor.isNotBlank() }
     } else {
         accounts.filter { it.id == accountId && mailboxCursor.isNotBlank() }
     }
 }
 
-internal fun MeronMobileState.pageableCoreAccounts(): List<AccountSummary> = pageableMailAccounts(selectedCoreAccountId, coreAccounts, mailboxCursor, mailboxAccountCursors)
+internal fun MeronMobileState.pageableCoreAccounts(): List<AccountSummary> = pageableMailAccounts(selectedCoreAccountId, coreAccounts, mailboxCursor)
 
 // `quiet` suppresses the "Loaded N older message(s)" status for auto-fired
 // pagination — store reloads (e.g. after a background sync event) shrink the
@@ -587,27 +572,13 @@ internal fun MeronMobileState.loadMoreCoreThreads(quiet: Boolean = false) {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 if (accountId == UNIFIED_ACCOUNT_ID) {
-                    val results =
-                        selectedAccounts.map { account ->
-                            account.id to
-                                loadAccountInbox(
-                                    client,
-                                    account,
-                                    INBOX_FOLDER,
-                                    query = query,
-                                    filter = filter,
-                                    syncFirst = false,
-                                    beforeCursor = mailboxAccountCursors[account.id],
-                                )
-                        }
-                    MailboxLoadResult(
-                        folders = results.flatMap { it.second.folders },
-                        folder = INBOX_FOLDER,
-                        threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
-                        accountCursors =
-                            results
-                                .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
-                                .toMap(),
+                    loadUnifiedInbox(
+                        client = client,
+                        accounts = selectedAccounts,
+                        query = query,
+                        filter = filter,
+                        syncFirst = false,
+                        beforeCursor = mailboxCursor,
                     )
                 } else {
                     loadAccountInbox(

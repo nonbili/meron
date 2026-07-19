@@ -124,3 +124,25 @@ func TestThreadsJSONOmitsCursorWhenEmpty(t *testing.T) {
 		t.Errorf("next_cursor should be omitted when empty, got %#v", out["next_cursor"])
 	}
 }
+
+func TestThreadsJSONUsesCoreAccountForUnifiedCards(t *testing.T) {
+	raw := map[string]any{
+		"cards": []any{
+			map[string]any{"account_id": "first@example.com", "folder": "INBOX", "thread_key": "one"},
+			map[string]any{"account_id": "second@example.com", "folder": "INBOX", "thread_key": "two"},
+		},
+		"folder_unreads": map[string]any{"first@example.com": float64(1), "second@example.com": float64(2)},
+		"failures":       []any{map[string]any{"account_id": "offline@example.com", "message": "offline"}},
+	}
+	out := threadsJSON("unified", "INBOX", raw).(map[string]any)
+	byID := threadsByID(t, out)
+	for account, key := range map[string]string{"first@example.com": "one", "second@example.com": "two"} {
+		id := formatImapThreadID(account, "INBOX", key)
+		if byID[id].AccountID != account {
+			t.Errorf("thread %q AccountID = %q, want %q", id, byID[id].AccountID, account)
+		}
+	}
+	if out["folder_unreads"] == nil || out["failures"] == nil {
+		t.Fatalf("unified metadata was dropped: %#v", out)
+	}
+}

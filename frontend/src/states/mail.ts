@@ -502,33 +502,33 @@ export async function loadThreads(refresh = true) {
   let allThreads: Message[] = []
 
   if (selectedAcc === 'unified') {
-    const accounts = unifiedAccounts()
-    const nextCursors: Record<string, string> = {}
-    const fetchPromises = accounts.map(async (acc) => {
-      try {
-        const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
-          'mail.threadList',
-          {
-            account_id: acc.id,
-            folder_id: 'inbox',
-            query: q,
-            filter,
-            refresh,
-          },
-        )
-        if (typeof res.folder_unread === 'number') updateCachedFolderUnread(acc.id, 'inbox', res.folder_unread)
-        if (res.next_cursor) nextCursors[acc.id] = res.next_cursor
-        return res.threads || []
-      } catch (err) {
-        console.error(`Failed to load threads for ${acc.email}:`, err)
-        return []
+    try {
+      const result = await invoke<{
+        threads: Message[]
+        next_cursor?: string
+        folder_unreads?: Record<string, number>
+        failures?: Array<{ account_id: string; message: string }>
+      }>('mail.threadList', {
+        account_id: 'unified',
+        folder_id: 'inbox',
+        query: q,
+        filter,
+        refresh,
+      })
+      allThreads = result.threads || []
+      for (const [accountId, unread] of Object.entries(result.folder_unreads ?? {})) {
+        updateCachedFolderUnread(accountId, 'inbox', unread)
       }
-    })
-    const results = await Promise.all(fetchPromises)
-    allThreads = results.flat()
-    allThreads.sort((a, b) => b.date - a.date)
-    mail$.threadAccountCursors.set(nextCursors)
-    mail$.threadsCursor.set(Object.keys(nextCursors).length > 0 ? 'unified' : '')
+      for (const failure of result.failures ?? []) {
+        console.error(`Failed to load threads for ${failure.account_id}: ${failure.message}`)
+      }
+      mail$.threadAccountCursors.set({})
+      mail$.threadsCursor.set(result.next_cursor ?? '')
+    } catch (err) {
+      console.error('Failed to load unified threads:', err)
+      mail$.threadAccountCursors.set({})
+      mail$.threadsCursor.set('')
+    }
   } else {
     try {
       const result = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
@@ -619,36 +619,26 @@ export async function loadMoreThreads() {
   try {
     let moreThreads: Message[] = []
     if (selectedAcc === 'unified') {
-      const cursors = mail$.threadAccountCursors.get()
-      const accounts = unifiedAccounts().filter((account) => !!cursors[account.id])
-      if (accounts.length === 0) return
-      const nextCursors: Record<string, string> = {}
-      const results = await Promise.all(
-        accounts.map(async (acc) => {
-          try {
-            const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
-              'mail.threadList',
-              {
-                account_id: acc.id,
-                folder_id: 'inbox',
-                query: q,
-                filter,
-                before_cursor: cursors[acc.id],
-                refresh: false,
-              },
-            )
-            if (typeof res.folder_unread === 'number') updateCachedFolderUnread(acc.id, 'inbox', res.folder_unread)
-            if (res.next_cursor) nextCursors[acc.id] = res.next_cursor
-            return res.threads || []
-          } catch (err) {
-            console.error(`Failed to load more threads for ${acc.email}:`, err)
-            return []
-          }
-        }),
-      )
-      moreThreads = results.flat()
-      mail$.threadAccountCursors.set(nextCursors)
-      mail$.threadsCursor.set(Object.keys(nextCursors).length > 0 ? 'unified' : '')
+      const cursor = mail$.threadsCursor.get()
+      if (!cursor) return
+      const res = await invoke<{
+        threads: Message[]
+        next_cursor?: string
+        folder_unreads?: Record<string, number>
+      }>('mail.threadList', {
+        account_id: 'unified',
+        folder_id: 'inbox',
+        query: q,
+        filter,
+        before_cursor: cursor,
+        refresh: false,
+      })
+      for (const [accountId, unread] of Object.entries(res.folder_unreads ?? {})) {
+        updateCachedFolderUnread(accountId, 'inbox', unread)
+      }
+      moreThreads = res.threads || []
+      mail$.threadAccountCursors.set({})
+      mail$.threadsCursor.set(res.next_cursor ?? '')
     } else {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return

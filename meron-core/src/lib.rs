@@ -16,3 +16,4 @@ pub mod rss;
 pub mod secrets;
 pub mod smtp;
 pub mod store;
+pub mod unified;

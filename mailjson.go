@@ -51,6 +51,10 @@ func threadsJSON(accountID, folder string, raw any) any {
 	messages := make([]Message, 0, len(list))
 	for _, item := range list {
 		card, _ := item.(map[string]any)
+		cardAccountID := jsonString(card["account_id"])
+		if cardAccountID == "" {
+			cardAccountID = accountID
+		}
 		threadKey := jsonString(card["thread_key"])
 		if threadKey == "" {
 			continue
@@ -59,14 +63,14 @@ func threadsJSON(accountID, folder string, raw any) any {
 		if msgFolder == "" {
 			msgFolder = folder
 		}
-		threadID := formatImapThreadID(accountID, msgFolder, threadKey)
+		threadID := formatImapThreadID(cardAccountID, msgFolder, threadKey)
 		var originalThreadID string
 		if original := jsonString(card["original_thread_key"]); original != "" {
-			originalThreadID = formatImapThreadID(accountID, msgFolder, original)
+			originalThreadID = formatImapThreadID(cardAccountID, msgFolder, original)
 		}
 		messages = append(messages, Message{
 			ID:                threadID,
-			AccountID:         accountID,
+			AccountID:         cardAccountID,
 			FolderID:          msgFolder,
 			ThreadID:          threadID,
 			FromName:          jsonString(card["from_name"]),
@@ -84,6 +88,12 @@ func threadsJSON(accountID, folder string, raw any) any {
 	out := map[string]any{
 		"threads":       messages,
 		"folder_unread": uint32(jsonNumber(object["folder_unread"])),
+	}
+	if folderUnreads, ok := object["folder_unreads"].(map[string]any); ok {
+		out["folder_unreads"] = folderUnreads
+	}
+	if failures, ok := object["failures"].([]any); ok {
+		out["failures"] = failures
 	}
 	if cursor, _ := object["next_cursor"].(string); cursor != "" {
 		out["next_cursor"] = cursor

@@ -26,7 +26,7 @@ use tokio::sync::Mutex;
 use meron_core::engine::*;
 use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
-use meron_core::{changelog, imap, parse, rss, secrets, smtp, store};
+use meron_core::{changelog, imap, parse, rss, secrets, smtp, store, unified};
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -1098,6 +1098,55 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             Ok(json!({ "folders": serde_json::to_value(vec![folder])? }))
         }
 
+        "messages.unifiedRecent" => {
+            let cursors = p
+                .get("before_cursor")
+                .and_then(Value::as_str)
+                .and_then(unified::decode_cursor)
+                .unwrap_or_default();
+            let accounts = store::list_accounts(&engine.db.lock().unwrap())?
+                .into_iter()
+                .filter(|account| {
+                    account
+                        .get("included_in_unified")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true)
+                })
+                .filter_map(|account| {
+                    account
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .filter(|account| cursors.is_empty() || cursors.contains_key(account))
+                .collect::<Vec<_>>();
+            let mut pages = Vec::with_capacity(accounts.len());
+            for account in accounts {
+                let mut params = json!({
+                    "account": account.clone(),
+                    "folder": "INBOX",
+                    "query": req_str(p, "query").unwrap_or_default(),
+                    "filter": req_str(p, "filter").unwrap_or_default(),
+                    "limit": req_u16(p, "limit").unwrap_or(50),
+                    "refresh": p.get("refresh").and_then(Value::as_bool).unwrap_or(true),
+                    "group": true,
+                });
+                if let Some(cursor) = cursors.get(&account) {
+                    params["before_cursor"] = Value::String(cursor.clone());
+                }
+                let request = Request {
+                    id: req.id,
+                    method: "messages.recent".to_string(),
+                    params,
+                };
+                let result = Box::pin(dispatch(engine, &request, out))
+                    .await
+                    .map_err(|err| format!("{err:#}"));
+                pages.push((account, result));
+            }
+            Ok(unified::merge_pages(pages, "cards"))
+        }
+
         // RSS returns final thread Message JSON under "threads"; mail returns raw
         // rows under "messages" the bridge groups into threads.
         "messages.recent" => {
@@ -1184,6 +1233,7 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
                         .into_iter()
                         .map(|card| {
                             json!({
+                                "account_id": account,
                                 "thread_key": card.thread_key,
                                 "original_thread_key": card.original_thread_key,
                                 "folder": card.header.folder,

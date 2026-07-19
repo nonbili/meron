@@ -201,7 +201,7 @@ describe('kanban column loading filters', () => {
     expect(kanban$.unreadCounts['acc1\nINBOX'].get()).toBe(5)
   })
 
-  it('sends the active filter for each account in a unified column', async () => {
+  it('sends one core-owned request for a unified column', async () => {
     const calls: { command: string; payload: unknown }[] = []
     accounts$.set([account('acc1'), { ...account('acc2'), included_in_unified: false }, account('acc3')])
     ;(window as any).go = {
@@ -209,7 +209,7 @@ describe('kanban column loading filters', () => {
         App: {
           Invoke: async (command: string, payload: unknown) => {
             calls.push({ command, payload })
-            return { threads: [], next_cursor: '', folder_unread: 2 }
+            return { threads: [], next_cursor: '', folder_unread: 4, folder_unreads: { acc1: 2, acc3: 2 } }
           },
         },
       },
@@ -219,11 +219,8 @@ describe('kanban column loading filters', () => {
     await loadKanbanColumn({ accountId: 'unified', folderId: 'inbox' }, true)
 
     const threadListCalls = calls.filter((call) => call.command === 'mail.threadList').map((call) => call.payload)
-    expect(threadListCalls).toHaveLength(2)
-    expect(threadListCalls).toEqual([
-      expect.objectContaining({ account_id: 'acc1', folder_id: 'inbox', filter: 'unread' }),
-      expect.objectContaining({ account_id: 'acc3', folder_id: 'inbox', filter: 'unread' }),
-    ])
+    expect(threadListCalls).toHaveLength(1)
+    expect(threadListCalls[0]).toMatchObject({ account_id: 'unified', folder_id: 'inbox', filter: 'unread' })
     expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(4)
     expect(mail$.foldersByAccount.acc1.get()?.[0]?.unread).toBe(2)
     expect(mail$.foldersByAccount.acc3.get()?.[0]?.unread).toBe(2)

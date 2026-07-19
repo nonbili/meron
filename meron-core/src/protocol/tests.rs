@@ -1166,6 +1166,58 @@ fn mobile_protocol_lists_threads_from_store() {
 }
 
 #[test]
+fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
+    let data_dir = unique_data_dir("unified-threads");
+    for account in [
+        "first@example.com",
+        "second@example.com",
+        "excluded@example.com",
+    ] {
+        seed_mobile_account(&data_dir, account);
+    }
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::set_account_pref(&conn, "excluded@example.com", "included_in_unified", false).unwrap();
+    for (account, uid, date, unread) in [
+        ("first@example.com", 7, 100, true),
+        ("second@example.com", 9, 200, true),
+        ("excluded@example.com", 11, 300, true),
+    ] {
+        store::ensure_folder(&conn, account, "INBOX").unwrap();
+        store::upsert_messages(
+            &conn,
+            account,
+            "INBOX",
+            &[MessageHeader {
+                uid,
+                subject: format!("Message from {account}"),
+                from_addr: "sender@example.com".to_string(),
+                date,
+                seen: !unread,
+                thread_key: format!("topic-{uid}"),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    }
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":164,"method":"mail.threadList","params":{"account_id":"unified","folder_id":"inbox","filter":"all"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let threads = value["result"]["threads"].as_array().unwrap();
+    assert_eq!(threads.len(), 2, "{value}");
+    assert_eq!(threads[0]["account_id"], "second@example.com", "{value}");
+    assert_eq!(threads[1]["account_id"], "first@example.com", "{value}");
+    assert_eq!(value["result"]["folder_unread"], 2, "{value}");
+    assert_eq!(value["result"]["folder_unreads"]["first@example.com"], 1);
+    assert_eq!(value["result"]["folder_unreads"]["second@example.com"], 1);
+    assert_eq!(value["result"]["failures"], json!([]));
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
     let data_dir = unique_data_dir("gmail-thread-id");
     seed_mobile_account(&data_dir, "me@example.com");

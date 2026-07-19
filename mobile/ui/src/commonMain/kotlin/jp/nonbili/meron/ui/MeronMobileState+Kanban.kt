@@ -349,39 +349,13 @@ internal suspend fun MeronMobileState.fetchKanbanColumn(
     }
     return if (column.accountId == UNIFIED_ACCOUNT_ID) {
         val unifiedAccounts = coreAccounts.filter { it.includedInUnified }
-        val accounts =
-            if (accountCursors.isEmpty()) {
-                unifiedAccounts
-            } else {
-                unifiedAccounts.filter { accountCursors[it.id].orEmpty().isNotBlank() }
-            }
-        val results =
-            accounts.map { account ->
-                account.id to
-                    loadAccountInbox(
-                        client,
-                        account,
-                        INBOX_FOLDER,
-                        query = columnQuery,
-                        filter = kanbanFilter,
-                        syncFirst = refresh,
-                        beforeCursor = accountCursors[account.id],
-                    )
-            }
-        MailboxLoadResult(
-            folders = results.flatMap { it.second.folders },
-            folder = INBOX_FOLDER,
-            threads = results.flatMap { it.second.threads }.sortedByDescending { it.dateEpochSeconds },
-            unreadCount =
-                if (results.all { it.second.unreadCount != null }) {
-                    results.sumOf { it.second.unreadCount ?: 0 }
-                } else {
-                    null
-                },
-            accountCursors =
-                results
-                    .mapNotNull { (id, result) -> result.nextCursor.takeIf { it.isNotBlank() }?.let { id to it } }
-                    .toMap(),
+        loadUnifiedInbox(
+            client = client,
+            accounts = unifiedAccounts,
+            query = columnQuery,
+            filter = kanbanFilter,
+            syncFirst = refresh,
+            beforeCursor = beforeCursor,
         )
     } else {
         val account =
@@ -442,7 +416,7 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
     if (!coreLoaded || kanbanColumnSearchQuery(column).isNotBlank()) return
     val key = kanbanColumnKey(column)
     val state = kanbanColumns[key] ?: return
-    val hasCursor = if (column.accountId == UNIFIED_ACCOUNT_ID) state.accountCursors.isNotEmpty() else state.nextCursor.isNotBlank()
+    val hasCursor = state.nextCursor.isNotBlank()
     if (state.loadingMore || !hasCursor) return
     updateKanbanColumn(key) { it.copy(loadingMore = true, error = null) }
     scope.launch {

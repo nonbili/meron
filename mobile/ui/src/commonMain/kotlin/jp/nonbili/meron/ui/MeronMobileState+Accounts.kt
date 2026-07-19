@@ -1121,6 +1121,59 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     )
 }
 
+internal suspend fun MeronMobileState.loadUnifiedInbox(
+    client: MobileMailCommandClient,
+    accounts: List<AccountSummary>,
+    query: String = mailSearch,
+    filter: FilterMode = mailFilter,
+    syncFirst: Boolean = true,
+    beforeCursor: String? = null,
+    syncLimit: Int = MAILBOX_SYNC_LIMIT,
+): MailboxLoadResult {
+    if (syncFirst) {
+        accounts.forEach { account ->
+            if (accountSummaryIsRss(account)) {
+                client.syncRss(SyncRssParams(accountId = account.id))
+            } else {
+                withManagedGoogleAuth(client, account.id) {
+                    client.sync(
+                        SyncMailParams(
+                            accountId = account.id,
+                            folderId = INBOX_FOLDER,
+                            limit = syncLimit,
+                            folders = true,
+                            deferTail = true,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+    val folders =
+        accounts.flatMap { account ->
+            parseFolderListResponse(client.listFolders(FolderListParams(accountId = account.id)))
+        }
+    val page =
+        parseThreadListPage(
+            client.listThreads(
+                ThreadListParams(
+                    accountId = UNIFIED_ACCOUNT_ID,
+                    folderId = INBOX_FOLDER,
+                    query = query.trim(),
+                    filter = filter.protocolValue(),
+                    beforeCursor = beforeCursor,
+                ),
+            ),
+        )
+    return MailboxLoadResult(
+        folders = folders,
+        folder = INBOX_FOLDER,
+        threads = page.threads,
+        unreadCount = page.folderUnread,
+        nextCursor = page.nextCursor,
+    )
+}
+
 internal suspend fun MeronMobileState.loadAccountFolders(
     client: MobileMailCommandClient,
     account: AccountSummary,
