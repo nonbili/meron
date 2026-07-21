@@ -1,0 +1,6 @@
+- Paginate conversation messages, auto-load history on scroll, and preserve position
+- Play media panel videos directly in the gallery lightbox
+- Optimize media grid rendering and async thumbnail decoding
+- Apply hover-to-highlight scrollbar globally and fix minimized Kanban column labels
+- Crop message bubble image attachments at the top
+- Keep side navigation and Kanban unread counts in sync
