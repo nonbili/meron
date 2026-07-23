@@ -113,8 +113,11 @@ describe('thread read state', () => {
     calls.length = 0
     mail$.threads.set([thread({ unread: true, unread_count: 2 })])
     mail$.messages.set([])
+    mail$.readThreads.set({})
     mail$.folders.set([{ id: 'inbox', account_id: 'acc', name: 'Inbox', role: 'inbox', unread: 2 }])
     mail$.foldersByAccount.set({})
+    kanban$.threads.set({})
+    kanban$.unreadCounts.set({})
     mail$.threadLoading.set(false)
     mail$.messagesCursor.set('')
     ui$.selectedThread.set('acc:inbox:thread:1')
@@ -215,6 +218,26 @@ describe('thread read state', () => {
     expect(calls.filter((call) => call.command === 'mail.markRead').map((call) => call.payload)).toEqual([
       { thread_id: 'acc:inbox:thread:1', message_ids: ['acc:inbox:thread:1#101'] },
     ])
+  })
+
+  it('updates kanban card and column unread state immediately', async () => {
+    const columnKey = 'acc\u0000inbox'
+    kanban$.threads.set({ [columnKey]: [thread({ unread: true, unread_count: 2 })] })
+    kanban$.unreadCounts.set({ [columnKey]: 2 })
+
+    await loadThread('acc:inbox:thread:1')
+    await markMessagesRead('acc:inbox:thread:1', ['acc:inbox:thread:1#101'])
+
+    expect(kanban$.threads.get()[columnKey][0].unread).toBe(true)
+    expect(kanban$.threads.get()[columnKey][0].unread_count).toBe(1)
+    expect(kanban$.unreadCounts.get()[columnKey]).toBe(1)
+
+    await markMessagesRead('acc:inbox:thread:1', ['acc:inbox:thread:1#102'])
+
+    expect(kanban$.threads.get()[columnKey][0].unread).toBe(false)
+    expect(kanban$.threads.get()[columnKey][0].unread_count).toBe(0)
+    expect(kanban$.unreadCounts.get()[columnKey]).toBe(0)
+    expect(mail$.readThreads.get()['acc:inbox:thread:1']).toBe(true)
   })
 })
 

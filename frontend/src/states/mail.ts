@@ -1423,29 +1423,44 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
   const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)))
   if (!threadId || uniqueIds.length === 0) return
 
+  const previousThreads = mail$.threads.get()
+  const previousMessages = mail$.messages.get()
   const previousFolders = mail$.folders.get()
   const previousFoldersByAccount = mail$.foldersByAccount.get()
+  const previousKanbanThreads = kanban$.threads.get()
+  const previousKanbanUnreadCounts = kanban$.unreadCounts.get()
+  const previousReadThread = mail$.readThreads[threadId].get()
   const unreadIds = new Set(
-    mail$.messages
-      .get()
+    previousMessages
       .filter((message) => message.thread_id === threadId && message.unread && uniqueIds.includes(message.id))
       .map((message) => message.id),
   )
   if (unreadIds.size === 0) return
 
   const localThread = findLocalThread(threadId)
-  const localMessage = mail$.messages.get().find((message) => unreadIds.has(message.id))
+  const localMessage = previousMessages.find((message) => unreadIds.has(message.id))
 
   mail$.messages.set(
-    mail$.messages.get().map((message) => (unreadIds.has(message.id) ? { ...message, unread: false } : message)),
+    previousMessages.map((message) => (unreadIds.has(message.id) ? { ...message, unread: false } : message)),
   )
   mail$.threads.set(
-    mail$.threads.get().map((thread) => {
+    previousThreads.map((thread) => {
       if (thread.thread_id !== threadId) return thread
       const unreadCount = Math.max(0, (thread.unread_count ?? (thread.unread ? 1 : 0)) - unreadIds.size)
       return { ...thread, unread: unreadCount > 0, unread_count: unreadCount }
     }),
   )
+  updateKanbanThread(threadId, (thread) => {
+    const unreadCount = Math.max(0, (thread.unread_count ?? (thread.unread ? 1 : 0)) - unreadIds.size)
+    return { ...thread, unread: unreadCount > 0, unread_count: unreadCount }
+  })
+  const stillUnread =
+    mail$.threads.get().some((thread) => thread.thread_id === threadId && thread.unread) ||
+    mail$.messages.get().some((message) => message.thread_id === threadId && message.unread) ||
+    Object.values(kanban$.threads.get()).some((threads) =>
+      threads.some((thread) => thread.thread_id === threadId && thread.unread),
+    )
+  if (!stillUnread) mail$.readThreads[threadId].set(true)
   decrementFolderUnread(
     localThread?.account_id || localMessage?.account_id,
     localThread?.folder_id || localMessage?.folder_id,
@@ -1456,8 +1471,13 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
   try {
     await invoke('mail.markRead', { thread_id: threadId, message_ids: Array.from(unreadIds) })
   } catch (error) {
+    mail$.threads.set(previousThreads)
+    mail$.messages.set(previousMessages)
     mail$.folders.set(previousFolders)
     mail$.foldersByAccount.set(previousFoldersByAccount)
+    kanban$.threads.set(previousKanbanThreads)
+    kanban$.unreadCounts.set(previousKanbanUnreadCounts)
+    mail$.readThreads[threadId].set(previousReadThread)
     throw error
   } finally {
     refreshFoldersAfterFlagChange(accountId)
