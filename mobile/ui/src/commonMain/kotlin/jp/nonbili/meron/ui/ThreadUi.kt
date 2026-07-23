@@ -572,6 +572,7 @@ internal fun ThreadScreen(
 
         if (detailsOpen) {
             ConversationDetailsScreen(
+                subject = thread?.subject?.takeIf { it.isNotBlank() } ?: tr("threads.noSubject"),
                 messages = messages,
                 mediaItems = mediaItems,
                 loadImageAttachment = loadImageAttachment,
@@ -628,6 +629,7 @@ internal fun ThreadScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun ConversationDetailsScreen(
+    subject: String,
     messages: List<MessageBody>,
     mediaItems: List<ThreadMediaItem>,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
@@ -646,6 +648,7 @@ internal fun ConversationDetailsScreen(
     val attachments = remember(messages) { messages.flatMap { it.attachments }.asReversed() }
     val fileAttachments = remember(attachments) { attachments.filter { !it.mimeType.startsWith("image/") && !it.mimeType.startsWith("video/") } }
     val mediaRows = remember(mediaItems) { mediaItems.chunked(3) }
+    val subjectLabel = tr("composer.fields.subject")
 
     BackHandler(onBack = onBack)
 
@@ -670,7 +673,45 @@ internal fun ConversationDetailsScreen(
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Section 0: Feed URL
+            // Section 0: Subject
+            item {
+                Text(
+                    text = subjectLabel.uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                )
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = subject,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { onCopy(subjectLabel, subject) },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = tr("chat.copySubject"),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                )
+            }
+
+            // Section 1: Feed URL
             if (isRss && feedUrl.isNotBlank()) {
                 item {
                     Text(
@@ -715,7 +756,7 @@ internal fun ConversationDetailsScreen(
                 }
             }
 
-            // Section 1: People
+            // Section 2: People
             if (participants.isNotEmpty()) {
                 item {
                     Text(
@@ -785,7 +826,7 @@ internal fun ConversationDetailsScreen(
                 }
             }
 
-            // Section 2: Media
+            // Section 3: Media
             if (mediaItems.isNotEmpty()) {
                 item {
                     HorizontalDivider(

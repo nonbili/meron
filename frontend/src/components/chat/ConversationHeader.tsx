@@ -29,6 +29,7 @@ import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
+import { ConversationSubject } from './ConversationSubject'
 
 // The conversation header: back/close affordances, sender info, the desktop
 // in-thread search box and the overflow actions menu (view mode, star, archive,
@@ -128,17 +129,11 @@ export function ConversationHeader({
         />
 
         <div className="min-w-0 flex-1">
-          <h2 className="min-w-0">
-            <button
-              type="button"
-              onClick={() => copyHeaderText(activeThread.subject, 'Subject copied')}
-              className="block max-w-full truncate rounded-sm text-left text-[15.5px] font-bold leading-snug tracking-wide text-primary outline-none transition-colors cursor-copy hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/40"
-              title={t('chat.copySubject')}
-              aria-label={t('chat.copySubject')}
-            >
-              {activeThread.subject}
-            </button>
-          </h2>
+          <ConversationSubject
+            subject={activeThread.subject}
+            copyLabel={t('chat.copySubject')}
+            onCopy={() => copyHeaderText(activeThread.subject, 'Subject copied')}
+          />
           {isRSS ? (
             // RSS subject == from_name (both the feed title), so showing the name
             // again would just duplicate the title above. Show the feed host only.
