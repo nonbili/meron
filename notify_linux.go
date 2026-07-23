@@ -3,85 +3,81 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
 	"sync"
 
 	"github.com/gen2brain/beeep"
 	"github.com/godbus/dbus/v5"
+	"github.com/google/uuid"
+)
+
+const (
+	portalNotificationInterface  = "org.freedesktop.portal.Notification"
+	portalNotificationAdd        = portalNotificationInterface + ".AddNotification"
+	portalNotificationAction     = portalNotificationInterface + ".ActionInvoked"
+	portalNotificationOpenAction = "open-thread"
 )
 
 var (
-	dbusConn    *dbus.Conn
-	dbusMu      sync.Mutex
-	dbusTargets = make(map[uint32]notificationTarget)
+	notificationConn    *dbus.Conn
+	notificationSignals chan *dbus.Signal
+	notificationDone    chan struct{}
+	notificationMu      sync.Mutex
 )
 
 type notificationTarget struct {
-	account  string
-	threadID string
+	Account  string `json:"account"`
+	ThreadID string `json:"threadId"`
 }
 
 // setupNotificationListener opens a session-bus connection and watches for the
-// freedesktop ActionInvoked/NotificationClosed signals so a clicked notification
-// can open its thread. Falls back silently (beeep, no click) if the bus is
-// unavailable.
+// notification portal's ActionInvoked signal so a clicked notification can open
+// its thread.
 func (a *App) setupNotificationListener() {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		a.logf("failed to connect to session bus: %v", err)
+		a.logf("failed to connect to notification portal: %v", err)
 		return
 	}
 
-	dbusMu.Lock()
-	dbusConn = conn
-	dbusMu.Unlock()
-
-	err = conn.AddMatchSignal(
-		dbus.WithMatchInterface("org.freedesktop.Notifications"),
+	matchOptions := []dbus.MatchOption{
+		dbus.WithMatchInterface(portalNotificationInterface),
 		dbus.WithMatchMember("ActionInvoked"),
-	)
-	if err != nil {
-		a.logf("failed to add ActionInvoked match rule: %v", err)
+		dbus.WithMatchObjectPath(portalDesktopPath),
+	}
+	if err := conn.AddMatchSignal(matchOptions...); err != nil {
+		_ = conn.Close()
+		a.logf("failed to listen for notification portal actions: %v", err)
 		return
 	}
 
-	err = conn.AddMatchSignal(
-		dbus.WithMatchInterface("org.freedesktop.Notifications"),
-		dbus.WithMatchMember("NotificationClosed"),
-	)
-	if err != nil {
-		a.logf("failed to add NotificationClosed match rule: %v", err)
-		return
-	}
+	signals := make(chan *dbus.Signal, 10)
+	done := make(chan struct{})
+	conn.Signal(signals)
 
-	c := make(chan *dbus.Signal, 10)
-	conn.Signal(c)
+	notificationMu.Lock()
+	notificationConn = conn
+	notificationSignals = signals
+	notificationDone = done
+	notificationMu.Unlock()
 
+	// Portal notification actions include the account/thread payload as their
+	// target, so no process-local notification-id map is needed.
 	go func() {
-		for s := range c {
-			switch s.Name {
-			case "org.freedesktop.Notifications.ActionInvoked":
-				if len(s.Body) >= 2 {
-					id, ok1 := s.Body[0].(uint32)
-					actionKey, ok2 := s.Body[1].(string)
-					if ok1 && ok2 && actionKey == "default" {
-						dbusMu.Lock()
-						target, found := dbusTargets[id]
-						delete(dbusTargets, id)
-						dbusMu.Unlock()
-
-						if found {
-							a.openThreadFromNotification(target.account, target.threadID)
-						}
-					}
+		for {
+			select {
+			case <-done:
+				return
+			case signal, ok := <-signals:
+				if !ok {
+					return
 				}
-			case "org.freedesktop.Notifications.NotificationClosed":
-				if len(s.Body) >= 1 {
-					id, ok := s.Body[0].(uint32)
-					if ok {
-						dbusMu.Lock()
-						delete(dbusTargets, id)
-						dbusMu.Unlock()
-					}
+				if signal.Name != portalNotificationAction {
+					continue
+				}
+				if target, ok := portalNotificationTarget(signal.Body); ok {
+					a.openThreadFromNotification(target.Account, target.ThreadID)
 				}
 			}
 		}
@@ -89,50 +85,112 @@ func (a *App) setupNotificationListener() {
 }
 
 func (a *App) closeNotificationListener() {
-	dbusMu.Lock()
-	if dbusConn != nil {
-		_ = dbusConn.Close()
-		dbusConn = nil
+	notificationMu.Lock()
+	conn := notificationConn
+	signals := notificationSignals
+	done := notificationDone
+	notificationConn = nil
+	notificationSignals = nil
+	notificationDone = nil
+	notificationMu.Unlock()
+
+	if conn == nil {
+		return
 	}
-	dbusMu.Unlock()
+	close(done)
+	conn.RemoveSignal(signals)
+	_ = conn.RemoveMatchSignal(
+		dbus.WithMatchInterface(portalNotificationInterface),
+		dbus.WithMatchMember("ActionInvoked"),
+		dbus.WithMatchObjectPath(portalDesktopPath),
+	)
+	_ = conn.Close()
 }
 
-// deliverNotification raises the notification over the session bus (so we can map
-// the returned id back to a thread on click) and falls back to beeep when the bus
-// is down — in which case the notification still shows but isn't clickable.
+// deliverNotification raises the notification through the desktop portal. The
+// legacy notification service is used only as a fallback outside Flatpak, where
+// no sandbox permission is needed.
 func (a *App) deliverNotification(n notification) {
-	dbusMu.Lock()
-	conn := dbusConn
-	dbusMu.Unlock()
+	notificationMu.Lock()
+	conn := notificationConn
+	notificationMu.Unlock()
 
 	if conn != nil {
-		obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
-		call := obj.Call("org.freedesktop.Notifications.Notify", 0,
-			"Meron",
-			uint32(0),
-			notifyIcon(),
-			n.title,
-			n.body,
-			[]string{"default", ""},
-			map[string]dbus.Variant{},
-			int32(-1),
+		id := "meron-" + uuid.NewString()
+		call := conn.Object(portalDesktopName, portalDesktopPath).Call(
+			portalNotificationAdd,
+			0,
+			id,
+			portalNotificationOptions(n),
 		)
 		if call.Err == nil {
-			var id uint32
-			if err := call.Store(&id); err == nil {
-				if n.threadID != "" {
-					dbusMu.Lock()
-					dbusTargets[id] = notificationTarget{account: n.account, threadID: n.threadID}
-					dbusMu.Unlock()
-				}
-				return
-			}
-		} else {
-			a.logf("dbus notify failed: %v, falling back to beeep", call.Err)
+			return
 		}
+		a.logf("notification portal failed: %v", call.Err)
+	}
+
+	if os.Getenv("FLATPAK_ID") != "" {
+		return
 	}
 
 	if err := beeep.Notify(n.title, n.body, notifyIcon()); err != nil {
 		a.logf("notify new mail failed: %v", err)
 	}
+}
+
+type portalSerializedIcon struct {
+	Type  string
+	Value dbus.Variant
+}
+
+func portalNotificationOptions(n notification) map[string]dbus.Variant {
+	options := map[string]dbus.Variant{
+		"title":    dbus.MakeVariant(n.title),
+		"body":     dbus.MakeVariant(n.body),
+		"priority": dbus.MakeVariant("normal"),
+		"icon": dbus.MakeVariant(portalSerializedIcon{
+			Type:  "themed",
+			Value: dbus.MakeVariant([]string{"jp.nonbili.meron"}),
+		}),
+	}
+
+	if n.account == "" || n.threadID == "" {
+		return options
+	}
+	target, err := json.Marshal(notificationTarget{
+		Account:  n.account,
+		ThreadID: n.threadID,
+	})
+	if err != nil {
+		return options
+	}
+	options["default-action"] = dbus.MakeVariant(portalNotificationOpenAction)
+	options["default-action-target"] = dbus.MakeVariant(string(target))
+	return options
+}
+
+func portalNotificationTarget(body []any) (notificationTarget, bool) {
+	if len(body) < 3 {
+		return notificationTarget{}, false
+	}
+	action, ok := body[1].(string)
+	if !ok || action != portalNotificationOpenAction {
+		return notificationTarget{}, false
+	}
+	parameters, ok := body[2].([]dbus.Variant)
+	if !ok || len(parameters) == 0 {
+		return notificationTarget{}, false
+	}
+	raw, ok := parameters[0].Value().(string)
+	if !ok {
+		return notificationTarget{}, false
+	}
+	var target notificationTarget
+	if err := json.Unmarshal([]byte(raw), &target); err != nil {
+		return notificationTarget{}, false
+	}
+	if target.Account == "" || target.ThreadID == "" {
+		return notificationTarget{}, false
+	}
+	return target, true
 }

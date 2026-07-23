@@ -25,8 +25,8 @@ type notification struct {
 }
 
 // notifyIcon writes the embedded app icon to a stable temp path the first time
-// it is needed and returns that path. Linux/Windows notifications take an icon
-// file path rather than raw bytes; an empty string falls back to no icon.
+// it is needed and returns that path. Windows notifications take an icon file
+// path rather than raw bytes; an empty string falls back to no icon.
 func notifyIcon() string {
 	notifyIconOnce.Do(func() {
 		if len(appIconPNG) == 0 {
