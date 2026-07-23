@@ -30,15 +30,15 @@ Install from Microsoft Store, Snap Store, Google Play, App Store, or download in
 
 | Unified inbox | Kanban board |
 | --- | --- |
-| ![Unified inbox](https://meron.im/screenshots/unified-inbox.png) | ![Kanban board](https://meron.im/screenshots/kanban-board.png) |
+| ![Unified inbox](screenshots/unified-inbox.png) | ![Kanban board](screenshots/kanban-board.png) |
 
 | Media gallery | Media grid |
 | --- | --- |
-| ![Media gallery](https://meron.im/screenshots/media-gallery.png) | ![Media grid](https://meron.im/screenshots/media-grid.png) |
+| ![Media gallery](screenshots/media-gallery.png) | ![Media grid](screenshots/media-grid.png) |
 
 | Themes |
 | --- |
-| ![Themes](https://meron.im/screenshots/themes.png) |
+| ![Themes](screenshots/themes.png) |
 
 ## Features
 
