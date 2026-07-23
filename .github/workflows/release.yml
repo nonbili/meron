@@ -385,8 +385,9 @@ jobs:
         run: |
           set -euo pipefail
           VER=$(jq -r '.info.productVersion' wails.json)
-          sed -i "s/{VER}/$VER/g" changelogs/template.txt
-          cat changelogs/template.txt changelogs/v$VER.txt > note.txt
+          sed "s/{VER}/$VER/g" metadata/changelogs/template.txt > note.txt
+          printf '\n' >> note.txt
+          cat metadata/changelogs/v$VER.txt >> note.txt
 
       - name: publish snap
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

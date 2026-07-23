@@ -1,0 +1,2 @@
+- Add trailing column quick action in Kanban board
+- Polish mail UI feedback and labels
