@@ -1,0 +1,4 @@
+- Sync scroll-read state and track partial read counts
+- Fix foreground mail token refresh
+- Reveal full conversation subjects
+- Centralize mailbox pagination, message operations, and unread counts
