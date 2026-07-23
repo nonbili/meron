@@ -116,9 +116,9 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 	case "system.pickImageFile":
 		return a.pickImageFile(payload)
 	case "system.pickFiles":
-		return a.pickFiles(payload, false)
+		return a.pickFiles(payload, false, true)
 	case "system.pickImageFiles":
-		return a.pickFiles(payload, true)
+		return a.pickFiles(payload, true, true)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
 	case "app.prefsGet":

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 )
 
 func (a *App) pickImageFile(payload map[string]any) (any, error) {
-	res, err := a.pickFiles(payload, true)
+	res, err := a.pickFiles(payload, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +31,7 @@ func (a *App) pickImageFile(payload map[string]any) (any, error) {
 	return files[0], nil
 }
 
-func (a *App) pickFiles(payload map[string]any, imagesOnly bool) (any, error) {
+func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any, error) {
 	title, _ := payload["title"].(string)
 	if title == "" {
 		if imagesOnly {
@@ -61,17 +62,7 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly bool) (any, error) {
 
 	defaultDir = filePickerDefaultDir(defaultDir)
 
-	options := wailsRuntime.OpenDialogOptions{
-		Title:            title,
-		DefaultDirectory: defaultDir,
-	}
-	if imagesOnly {
-		options.Filters = []wailsRuntime.FileFilter{
-			{DisplayName: "Image files (*.png, *.jpg, *.jpeg, *.webp, *.gif)", Pattern: "*.png;*.jpg;*.jpeg;*.webp;*.gif"},
-		}
-	}
-
-	paths, err := wailsRuntime.OpenMultipleFilesDialog(a.ctx, options)
+	paths, usedPortal, err := openFilePicker(a.ctx, title, defaultDir, imagesOnly, multiple)
 	if err != nil {
 		return nil, err
 	}
@@ -96,19 +87,48 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly bool) (any, error) {
 		})
 	}
 
-	a.filePickerMu.Lock()
-	nextDir := filepath.Dir(paths[0])
-	if imagesOnly {
-		a.lastImageDir = nextDir
-	} else {
-		a.lastFileDir = nextDir
+	if !usedPortal {
+		a.filePickerMu.Lock()
+		nextDir := filepath.Dir(paths[0])
+		if imagesOnly {
+			a.lastImageDir = nextDir
+		} else {
+			a.lastFileDir = nextDir
+		}
+		if err := os.MkdirAll(filepath.Dir(lastDirPath), 0o755); err == nil {
+			_ = os.WriteFile(lastDirPath, []byte(nextDir), 0o600)
+		}
+		a.filePickerMu.Unlock()
 	}
-	if err := os.MkdirAll(filepath.Dir(lastDirPath), 0o755); err == nil {
-		_ = os.WriteFile(lastDirPath, []byte(nextDir), 0o600)
-	}
-	a.filePickerMu.Unlock()
 
 	return map[string]any{"files": files}, nil
+}
+
+func openWailsFilePicker(
+	ctx context.Context,
+	title string,
+	defaultDir string,
+	imagesOnly bool,
+	multiple bool,
+) ([]string, error) {
+	options := wailsRuntime.OpenDialogOptions{
+		Title:            title,
+		DefaultDirectory: defaultDir,
+	}
+	if imagesOnly {
+		options.Filters = []wailsRuntime.FileFilter{
+			{DisplayName: "Image files (*.png, *.jpg, *.jpeg, *.webp, *.gif)", Pattern: "*.png;*.jpg;*.jpeg;*.webp;*.gif"},
+		}
+	}
+
+	if multiple {
+		return wailsRuntime.OpenMultipleFilesDialog(ctx, options)
+	}
+	path, err := wailsRuntime.OpenFileDialog(ctx, options)
+	if err != nil || path == "" {
+		return nil, err
+	}
+	return []string{path}, nil
 }
 
 // openComposerAttachment writes an in-memory composer attachment to the app

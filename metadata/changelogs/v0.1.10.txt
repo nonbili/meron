@@ -1,0 +1,1 @@
+- Support XDG FileChooser Portal on Linux and single-file picking options
