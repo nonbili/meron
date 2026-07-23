@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import jp.nonbili.meron.shared.accountSummaryIsRss
+import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.parseAccountListResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,11 @@ class AndroidMailPushService :
                 val detail = envelope.optJSONObject("detail") ?: return
                 AndroidNotificationService.notifyNewMail(this, detail)
             }
+
+            "error" -> {
+                val message = envelope.optJSONObject("detail")?.optString("message").orEmpty()
+                logWarn(this, "core watcher error: $message")
+            }
         }
     }
 
@@ -132,8 +138,12 @@ class AndroidMailPushService :
                 logWarn(this, "not watching ${account.id}: silent token mint failed, reconnect needed")
                 return@forEach
             }
-            watched.add(key)
-            startWatch(account.id, INBOX_FOLDER)
+            val startError = coreErrorMessage(startWatch(account.id, INBOX_FOLDER))
+            if (startError != null) {
+                logWarn(this, "not watching ${account.id}: $startError")
+            } else {
+                watched.add(key)
+            }
         }
     }
 
@@ -236,9 +246,7 @@ class AndroidMailPushService :
         private fun startWatch(
             account: String,
             folder: String,
-        ) {
-            MeronCoreNative.invokeJson(watchJson("watch.start", account, folder))
-        }
+        ): String = MeronCoreNative.invokeJson(watchJson("watch.start", account, folder))
 
         private fun stopWatch(
             account: String,

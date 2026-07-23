@@ -474,15 +474,17 @@ private fun MeronMobileState.deepenMailboxSync(
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 mailAccounts.forEach { account ->
-                    client.sync(
-                        SyncMailParams(
-                            accountId = account.id,
-                            folderId = folder,
-                            limit = MAILBOX_SYNC_LIMIT,
-                            folders = false,
-                            deferTail = true,
-                        ),
-                    )
+                    withManagedGoogleAuth(client, account.id) {
+                        client.sync(
+                            SyncMailParams(
+                                accountId = account.id,
+                                folderId = folder,
+                                limit = MAILBOX_SYNC_LIMIT,
+                                folders = false,
+                                deferTail = true,
+                            ),
+                        )
+                    }
                 }
             }
         }.onSuccess {
@@ -727,7 +729,9 @@ internal fun MeronMobileState.readCoreThread(
                 if (threadIdIsRss(backendThreadId)) {
                     client.readRssThread(RssThreadParams(threadId = backendThreadId))
                 } else {
-                    client.readThread(ThreadReadParams(threadId = backendThreadId))
+                    withManagedGoogleAuth(client, selectedThread.accountId) {
+                        client.readThread(ThreadReadParams(threadId = backendThreadId))
+                    }
                 }
             }
         }.onSuccess {
@@ -813,7 +817,9 @@ internal suspend fun MeronMobileState.reloadCurrentThreadMessages() {
             if (threadIdIsRss(thread.id)) {
                 client.readRssThread(RssThreadParams(threadId = thread.id))
             } else {
-                client.readThread(ThreadReadParams(threadId = thread.id))
+                withManagedGoogleAuth(client, thread.accountId) {
+                    client.readThread(ThreadReadParams(threadId = thread.id))
+                }
             }
         }
     if (selectedCoreThread?.id != thread.id) return
@@ -958,7 +964,9 @@ internal fun MeronMobileState.loadMoreThreadMessages() {
                 if (threadIdIsRss(thread.id)) {
                     client.readRssThread(RssThreadParams(threadId = thread.id, beforeCursor = cursor))
                 } else {
-                    client.readThread(ThreadReadParams(threadId = thread.id, beforeCursor = cursor))
+                    withManagedGoogleAuth(client, thread.accountId) {
+                        client.readThread(ThreadReadParams(threadId = thread.id, beforeCursor = cursor))
+                    }
                 }
             }
         }.onSuccess {
@@ -1763,13 +1771,17 @@ internal fun MeronMobileState.createFolderAndMoveThread(
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                client.createFolder(FolderCreateParams(accountId = thread.accountId, name = trimmed))
+                withManagedGoogleAuth(client, thread.accountId) {
+                    client.createFolder(FolderCreateParams(accountId = thread.accountId, name = trimmed))
+                }
                 val folders = loadAccountFolders(client, account)
                 val created = folders.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }?.name ?: trimmed
                 if (created.equals(thread.folder, ignoreCase = true)) {
                     throw IllegalStateException("Already in $created.")
                 }
-                client.move(MoveThreadParams(threadId = thread.id, targetFolderId = created))
+                withManagedGoogleAuth(client, thread.accountId) {
+                    client.move(MoveThreadParams(threadId = thread.id, targetFolderId = created))
+                }
                 folders to created
             }
         }.onSuccess { (folders, _) ->

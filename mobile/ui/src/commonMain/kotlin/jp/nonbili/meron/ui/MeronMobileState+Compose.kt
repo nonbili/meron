@@ -1306,7 +1306,9 @@ internal fun MeronMobileState.createFolderForKanban(
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                client.createFolder(FolderCreateParams(accountId = account.id, name = trimmed))
+                withManagedGoogleAuth(client, account.id) {
+                    client.createFolder(FolderCreateParams(accountId = account.id, name = trimmed))
+                }
                 loadAccountFolders(client, account)
             }
         }.onSuccess { folders ->

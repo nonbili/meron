@@ -405,6 +405,13 @@ private fun MeronMobileScreenContent(
                                 }
                             }
 
+                            "error" -> {
+                                // Watcher/runtime failures are regular core events,
+                                // not `log` events. Keep them visible in Logcat and
+                                // the redacted on-device diagnostic log.
+                                Log.e("core/event", event.detailJson.jsonStringValue("message"))
+                            }
+
                             "log" -> {
                                 // Surface Rust core logs through the platform logger
                                 // (os_log / Logcat); they'd otherwise be invisible

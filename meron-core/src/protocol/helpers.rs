@@ -145,18 +145,6 @@ pub(crate) fn resolve_mobile_send_from(
     (creds.user.clone(), sender_name)
 }
 
-pub(crate) fn run_mobile_async<F, T>(future: F) -> Result<T, String>
-where
-    F: std::future::Future<Output = anyhow::Result<T>>,
-{
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| format!("tokio runtime: {err}"))?
-        .block_on(future)
-        .map_err(|err| format!("{err:#}"))
-}
-
 pub(crate) fn with_mobile_db<F>(data_dir: &str, f: F) -> Result<Value, String>
 where
     F: FnOnce(rusqlite::Connection) -> Result<Value, String>,

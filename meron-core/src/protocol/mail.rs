@@ -446,6 +446,7 @@ pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
     if name.is_empty() {
         return Err("Folder name is required".to_string());
     }
+    let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("RSS accounts do not support folders".to_string());
@@ -454,13 +455,16 @@ pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
         }
-        let folders = run_mobile_async(async {
-            let mut session = imap::connect(&creds).await?;
-            imap::create_folder(&mut session, &name).await?;
-            let folders = imap::list_folders(&mut session).await?;
-            let _ = session.logout().await;
-            anyhow::Ok(folders)
-        })?;
+        // Go through Engine so browser-flow OAuth is refreshed before opening a
+        // new IMAP connection and the foreground session pool is reused.
+        let folders =
+            crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
+                let name = name.clone();
+                Box::pin(async move {
+                    imap::create_folder(session, &name).await?;
+                    imap::list_folders(session).await
+                })
+            }))?;
         store::upsert_folders(&conn, &account_id, &folders).map_err(|err| err.to_string())?;
         list_mobile_folders(data_dir, params)
     })

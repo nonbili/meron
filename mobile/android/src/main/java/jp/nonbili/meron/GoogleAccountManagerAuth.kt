@@ -180,14 +180,17 @@ object GoogleAccountManagerAuth {
     /**
      * Mint a fresh token for a managed account and push it into meron-core via
      * `account.updateOAuthToken`, so the next IMAP/SMTP login uses it. Shared by
-     * the background sync worker and the live-push service.
+     * the foreground app, background sync worker, and live-push service.
+     * [skipIfFresh] avoids invalidating AccountManager's cached token when the
+     * last token pushed into core is still comfortably before expiry.
      */
     suspend fun mintAndPushToken(
         context: Context,
         accountId: String,
         requestId: Long = 1,
+        skipIfFresh: Boolean = false,
     ): TokenRefresh {
-        val refresh = mintIfNeeded(context, accountId)
+        val refresh = mintIfNeeded(context, accountId, skipIfFresh = skipIfFresh)
         if (refresh is TokenRefresh.Refreshed) {
             val request =
                 JSONObject()

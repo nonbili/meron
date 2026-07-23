@@ -1087,6 +1087,12 @@ internal suspend fun MeronMobileState.loadAccountInbox(
             ?: folders.firstOrNull()?.name
             ?: requestedFolder
     Log.i("MailLoad", "loadAccountInbox folders account=${account.id} count=${folders.size} resolvedFolder=$folder")
+    if (!accountSummaryIsRss(account) && query.isNotBlank()) {
+        // A searched list is a live IMAP operation even when syncFirst is
+        // false. Its core fallback returns cached results on failure, so do
+        // managed-token upkeep before the auth error can be hidden.
+        ensureManagedGoogleToken(client, account.id)
+    }
     val threadsJson =
         client.listThreads(
             ThreadListParams(
@@ -1153,6 +1159,13 @@ internal suspend fun MeronMobileState.loadUnifiedInbox(
         accounts.flatMap { account ->
             parseFolderListResponse(client.listFolders(FolderListParams(accountId = account.id)))
         }
+    if (query.isNotBlank()) {
+        // Unified live search fans out inside one core call and falls back per
+        // account, so refresh all managed mail tokens before issuing it.
+        accounts.filterNot(::accountSummaryIsRss).forEach { account ->
+            ensureManagedGoogleToken(client, account.id)
+        }
+    }
     val page =
         parseThreadListPage(
             client.listThreads(

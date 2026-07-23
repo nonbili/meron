@@ -50,7 +50,7 @@ static ENGINE: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
 /// Long-lived multi-thread tokio runtime that owns the Engine's async work
 /// (pooled session ops and, later, IDLE watcher tasks). Built once, lazily, so
 /// individual FFI calls can `block_on` engine ops without spinning up a runtime
-/// each time (as the stateless `run_mobile_async` path does).
+/// each time.
 static ENGINE_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 /// The Engine's runtime, built on first use. Returns `None` only if the runtime
@@ -664,18 +664,23 @@ async fn mobile_idle_once(
     folder: &str,
     stop: &AtomicBool,
 ) -> anyhow::Result<()> {
-    let creds = {
+    {
         let conn = mobile_db(data_dir).map_err(|err| anyhow::anyhow!(err))?;
         if crate::store::account_paused(&conn, account).unwrap_or(false) {
             return Ok(());
         }
-        let creds =
-            load_mobile_account_creds(&conn, account).map_err(|err| anyhow::anyhow!(err))?;
-        if account_needs_reconnect(&creds) {
-            anyhow::bail!("account needs reconnect: {account}");
-        }
-        creds
-    };
+    }
+    // IDLE used to load the stored credentials directly and authenticate before
+    // entering the normal Engine sync path. An expired browser-flow OAuth token
+    // therefore failed the connection before Engine::ensure_valid_creds could
+    // refresh it. Use the same credential path as every other live IMAP op.
+    // Platform-managed Android Gmail is refreshed by the host before it invokes
+    // engine.foreground/watch.start; ensure_valid_creds then picks up that token.
+    let engine = engine_for(data_dir).map_err(|err| anyhow::anyhow!(err))?;
+    let creds = engine.ensure_valid_creds(account).await?;
+    if account_needs_reconnect(&creds) {
+        anyhow::bail!("account needs reconnect: {account}");
+    }
     let mut session = crate::imap::connect(&creds).await?;
     session.select(folder).await?;
     mobile_sync_and_notify(data_dir, account, folder).await?;

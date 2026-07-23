@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
+import android.util.Log
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -216,6 +217,7 @@ import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
@@ -250,9 +252,15 @@ import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -269,6 +277,12 @@ class ComposeMainActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
     private var incomingNotificationThreadTarget by mutableStateOf<jp.nonbili.meron.ui.NotificationThreadTarget?>(null)
+    private val foregroundEngineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val foregroundEngineMutex = Mutex()
+    private var foregroundEngineJob: Job? = null
+
+    @Volatile
+    private var activityStarted = false
 
     override fun attachBaseContext(newBase: Context) {
         syncAppLanguageFromSystemSetting(newBase)
@@ -371,24 +385,122 @@ class ComposeMainActivity : ComponentActivity() {
     // isn't. Off the main thread since foreground opens the DB and spawns IDLE.
     override fun onStart() {
         super.onStart()
-        engineLifecycle("engine.foreground")
+        activityStarted = true
+        foregroundEngineJob?.cancel()
+        foregroundEngineJob =
+            foregroundEngineScope.launch {
+                refreshForegroundManagedTokens()
+                if (!isActive || !activityStarted) return@launch
+                foregroundEngineMutex.withLock {
+                    if (!isActive || !activityStarted) return@withLock
+                    invokeEngineLifecycle("engine.foreground")
+                }
+                // AccountManager access tokens are short-lived. Keep the stored
+                // token fresh while this activity remains visible so a later
+                // IDLE reconnect does not authenticate with an expired token.
+                while (isActive && activityStarted) {
+                    delay(FOREGROUND_TOKEN_REFRESH_CHECK_INTERVAL_MS)
+                    refreshForegroundManagedTokens()
+                }
+            }
     }
 
     override fun onStop() {
+        activityStarted = false
+        foregroundEngineJob?.cancel()
+        foregroundEngineJob = null
         super.onStop()
-        engineLifecycle("engine.background")
+        foregroundEngineScope.launch {
+            foregroundEngineMutex.withLock {
+                // A newer onStart may have won while this stop was queued.
+                if (!activityStarted) invokeEngineLifecycle("engine.background")
+            }
+        }
     }
 
-    private fun engineLifecycle(method: String) {
+    /** Refresh Android AccountManager-owned Gmail tokens before any foreground
+     *  watcher authenticates. Browser-flow OAuth is refreshed inside Engine. */
+    private suspend fun refreshForegroundManagedTokens() {
         if (!MeronCoreNative.isLoaded()) return
-        Thread {
-            MeronCoreNative.invokeJson("{\"id\":92,\"method\":\"$method\",\"params\":{}}")
-        }.start()
+        val response =
+            runCatching { MeronCoreNative.invokeJson("""{"id":91,"method":"account.list"}""") }
+                .getOrElse { error ->
+                    logForegroundEngineError("account list failed before foreground watch: ${error.message}")
+                    return
+                }
+        coreErrorMessage(response)?.let { message ->
+            logForegroundEngineError("account list failed before foreground watch: $message")
+            return
+        }
+        parseAccountListResponse(response)
+            .filterNot { account -> accountSummaryIsRss(account) || account.paused || account.needsReconnect }
+            .forEach { account ->
+                val refresh =
+                    runCatching {
+                        GoogleAccountManagerAuth.mintAndPushToken(
+                            this,
+                            account.id,
+                            requestId = 91L,
+                            skipIfFresh = true,
+                        )
+                    }.getOrElse { error ->
+                        logForegroundEngineError("token refresh crashed before foreground watch for ${account.id}: ${error.message}")
+                        return@forEach
+                    }
+                when (refresh) {
+                    GoogleAccountManagerAuth.TokenRefresh.Failed -> {
+                        logForegroundEngineError("token refresh failed before foreground watch for ${account.id}")
+                    }
+
+                    GoogleAccountManagerAuth.TokenRefresh.TransientError -> {
+                        logForegroundEngineError("token refresh hit a network error before foreground watch for ${account.id}")
+                    }
+
+                    GoogleAccountManagerAuth.TokenRefresh.NotNeeded,
+                    GoogleAccountManagerAuth.TokenRefresh.StillFresh,
+                    is GoogleAccountManagerAuth.TokenRefresh.Refreshed,
+                    -> {
+                        Unit
+                    }
+                }
+            }
+    }
+
+    private fun invokeEngineLifecycle(method: String) {
+        if (!MeronCoreNative.isLoaded()) {
+            logForegroundEngineError("$method skipped because the Rust core is unavailable")
+            return
+        }
+        val response =
+            runCatching {
+                MeronCoreNative.invokeJson("{\"id\":92,\"method\":\"$method\",\"params\":{}}")
+            }.getOrElse { error ->
+                logForegroundEngineError("$method crashed: ${error.message}")
+                return
+            }
+        coreErrorMessage(response)?.let { message ->
+            logForegroundEngineError("$method failed: $message")
+        }
+        // onStop can race a final non-cancellable JNI foreground call. If that
+        // happened, park the engine once more so no activity-owned watch leaks.
+        if (method == "engine.foreground" && !activityStarted) {
+            invokeEngineLifecycle("engine.background")
+        }
+    }
+
+    private fun logForegroundEngineError(message: String) {
+        Log.e(FOREGROUND_ENGINE_TAG, message)
+        AndroidSyncDiagnosticLog.appendRedacted(this, "$FOREGROUND_ENGINE_TAG: $message")
     }
 
     fun currentMailtoDraftForTesting(): ComposeDraft? = incomingMailtoDraft
 
     fun currentOAuthCallbackUrlForTesting(): String? = incomingOAuthCallbackUrl
+
+    private companion object {
+        const val FOREGROUND_ENGINE_TAG = "MeronForegroundEngine"
+        const val FOREGROUND_TOKEN_REFRESH_CHECK_INTERVAL_MS = 5 * 60 * 1_000L
+    }
 }
 
 private fun Intent.toNotificationThreadTarget(): jp.nonbili.meron.ui.NotificationThreadTarget? {
