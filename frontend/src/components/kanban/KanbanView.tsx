@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
-import { Columns3, Search, SquarePen, X } from 'lucide-react'
+import { Columns3, Plus, Search, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { invoke } from '../../lib/bridge'
@@ -323,6 +323,17 @@ export function KanbanView({ boardId }: { boardId: string }) {
                 ))}
               </SortableContext>
             )}
+            <button
+              type="button"
+              className="group flex h-full w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-chats/45 text-secondary backdrop-blur-sm transition-colors hover:border-accent/50 hover:bg-chats/75 hover:text-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
+              title={t('kanban.actions.addColumn')}
+              aria-label={t('kanban.actions.addColumn')}
+              onClick={() => void openDialog()}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chats/80 shadow-sm transition-colors group-hover:bg-accent/10">
+                <Plus size={16} />
+              </span>
+            </button>
           </div>
         </div>
         <DragOverlay dropAnimation={null}>
