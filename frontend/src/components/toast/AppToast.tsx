@@ -13,6 +13,8 @@ export function AppToast() {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       className={`fixed bottom-6 left-1/2 -translate-x-1/2 animate-slide-up flex items-center gap-2 rounded-full bg-black/80 py-2 pl-4 text-xs font-semibold text-white shadow-xl z-50 ${
         toastUndo ? 'pr-2' : 'pr-4'
       }`}

@@ -12,6 +12,73 @@ export const KANBAN_COLUMN_MINIMIZED_WIDTH = 48
 export const SEARCH_DEBOUNCE_MS = 300
 
 const columnLoadVersions = new Map<string, number>()
+const KANBAN_SYNC_TIMEOUT_MS = 130_000
+
+type MailSyncEvent = {
+  account?: string
+  folder?: string
+  message?: string
+}
+
+function waitForKanbanSync(accountIds: string[], folderId: string) {
+  const eventsOn = (window as any).runtime?.EventsOn
+  if (typeof eventsOn !== 'function') {
+    return {
+      promise: Promise.resolve(),
+      cancel: () => {},
+    }
+  }
+
+  const pending = new Set(accountIds)
+  let settled = false
+  let resolvePromise: () => void
+  let rejectPromise: (error: Error) => void
+  const promise = new Promise<void>((resolve, reject) => {
+    resolvePromise = resolve
+    rejectPromise = reject
+  })
+  const subscriptions: unknown[] = []
+  let timeout: number | undefined
+
+  const cleanup = () => {
+    if (timeout !== undefined) window.clearTimeout(timeout)
+    for (const unsubscribe of subscriptions) {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }
+  const finish = (error?: Error) => {
+    if (settled) return
+    settled = true
+    cleanup()
+    if (error) rejectPromise(error)
+    else resolvePromise()
+  }
+  const matches = (detail: MailSyncEvent) =>
+    !!detail?.account && pending.has(detail.account) && (!detail.folder || folderMatches(folderId, detail.folder))
+  const completeAccount = (detail: MailSyncEvent) => {
+    if (!matches(detail)) return
+    pending.delete(detail.account!)
+    if (pending.size === 0) finish()
+  }
+  const failAccount = (detail: MailSyncEvent) => {
+    if (!detail?.account || !pending.has(detail.account)) return
+    finish(new Error(detail.message || 'Sync failed'))
+  }
+
+  subscriptions.push(eventsOn('mail.synced', completeAccount))
+  subscriptions.push(eventsOn('mail.newMessages', completeAccount))
+  subscriptions.push(eventsOn('mail.syncError', failAccount))
+  timeout = window.setTimeout(() => finish(new Error('Sync timed out')), KANBAN_SYNC_TIMEOUT_MS)
+
+  return {
+    promise,
+    cancel: () => {
+      if (settled) return
+      settled = true
+      cleanup()
+    },
+  }
+}
 
 export function searchScopeColumn(scope: string): KanbanColumn | null {
   if (!scope || scope === 'all') return null
@@ -260,23 +327,33 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
 // remote folder to pull, so it just reloads.
 export async function syncKanbanColumn(column: KanbanColumn) {
   mail$.readThreads.set({})
+  if (isUnifiedStarredColumn(column)) {
+    await loadKanbanColumn(column, false)
+    return
+  }
+
+  const accounts = column.accountId === 'unified' ? unifiedAccounts() : [{ id: column.accountId }]
+  const folderId = column.accountId === 'unified' ? 'inbox' : column.folderId
+  if (accounts.length === 0) {
+    await loadKanbanColumn(column, false)
+    return
+  }
+  const completion = waitForKanbanSync(
+    accounts.map((account) => account.id),
+    folderId,
+  )
   try {
-    if (isUnifiedStarredColumn(column)) {
-      // Aggregated view — nothing to fetch, just refresh from local state.
-    } else if (column.accountId === 'unified') {
-      await Promise.all(
-        unifiedAccounts().map((account) =>
-          invoke('mail.sync', { account_id: account.id, folder: 'inbox' }).catch((err) =>
-            console.error(`Sync failed for ${account.email}:`, err),
-          ),
-        ),
-      )
-    } else {
-      await invoke('mail.sync', { account_id: column.accountId, folder: column.folderId })
-    }
-    await loadKanbanColumn(column, true)
+    const requests = accounts.map((account) =>
+      invoke<{ online?: boolean }>('mail.sync', { account_id: account.id, folder: folderId }).then((result) => {
+        if (result?.online === false) throw new Error('Mail engine unavailable')
+      }),
+    )
+    await Promise.all([Promise.all(requests), completion.promise])
+    await loadKanbanColumn(column, false)
   } catch (error) {
-    showToast(error instanceof Error ? error.message : 'Sync failed', 'error')
+    console.error('Kanban column sync failed:', error)
+  } finally {
+    completion.cancel()
   }
 }
 

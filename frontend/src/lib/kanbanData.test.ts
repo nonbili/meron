@@ -18,6 +18,7 @@ import {
   mergeLabelFolders,
   searchScopeColumn,
   searchTargets,
+  syncKanbanColumn,
 } from './kanbanData'
 
 const account = (id: string): Account => ({
@@ -46,6 +47,7 @@ beforeEach(() => {
   mail$.readThreads.set({})
   mail$.foldersByAccount.set({})
   ;(window as any).go = undefined
+  ;(window as any).runtime = undefined
 })
 
 const message = (overrides: Partial<import('../types').Message>): import('../types').Message => ({
@@ -141,6 +143,82 @@ describe('setGlobalKanbanFilter', () => {
 })
 
 describe('kanban column loading filters', () => {
+  it('keeps a manual column sync pending until its completion event', async () => {
+    const calls: string[] = []
+    const handlers = new Map<string, (detail: unknown) => void>()
+    ;(window as any).runtime = {
+      EventsOn: (name: string, handler: (detail: unknown) => void) => {
+        handlers.set(name, handler)
+        return () => handlers.delete(name)
+      },
+    }
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string) => {
+            calls.push(command)
+            return command === 'mail.threadList' ? { threads: [], next_cursor: '' } : { online: true, queued: true }
+          },
+        },
+      },
+    }
+
+    const sync = syncKanbanColumn({ accountId: 'acc1', folderId: 'INBOX' })
+    let finished = false
+    void sync.then(() => {
+      finished = true
+    })
+    await Promise.resolve()
+
+    expect(finished).toBe(false)
+    expect(calls).toEqual(['mail.sync'])
+
+    handlers.get('mail.synced')?.({ account: 'acc1', folder: 'INBOX' })
+    await sync
+
+    expect(calls).toEqual(['mail.sync', 'mail.threadList'])
+    expect(finished).toBe(true)
+    expect(handlers.size).toBe(0)
+  })
+
+  it('waits for every account in a unified column before finishing sync', async () => {
+    const handlers = new Map<string, (detail: unknown) => void>()
+    ;(window as any).runtime = {
+      EventsOn: (name: string, handler: (detail: unknown) => void) => {
+        handlers.set(name, handler)
+        return () => handlers.delete(name)
+      },
+    }
+    accounts$.set([account('acc1'), account('acc2')])
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string) =>
+            command === 'mail.threadList'
+              ? { threads: [], next_cursor: '', folder_unreads: {} }
+              : { online: true, queued: true },
+        },
+      },
+    }
+
+    const sync = syncKanbanColumn({ accountId: 'unified', folderId: 'inbox' })
+    let finished = false
+    void sync.then(() => {
+      finished = true
+    })
+    await Promise.resolve()
+
+    handlers.get('mail.newMessages')?.({ account: 'acc1', folder: 'inbox' })
+    await Promise.resolve()
+    expect(finished).toBe(false)
+
+    handlers.get('mail.synced')?.({ account: 'acc2', folder: 'INBOX' })
+    await sync
+
+    expect(finished).toBe(true)
+    expect(handlers.size).toBe(0)
+  })
+
   it('sends the active global filter when loading a single-account column', async () => {
     const calls: { command: string; payload: unknown }[] = []
     ;(window as any).go = {

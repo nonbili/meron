@@ -44,8 +44,8 @@ export function AddressRow({ label, rawList }: { label: string; rawList: string 
   const visibleItems = expanded || !showMore ? items : items.slice(0, threshold)
 
   return (
-    <div className="grid grid-cols-[38px_minmax(0,1fr)] items-start gap-2 text-[10.5px]">
-      <span className="mt-1.5 shrink-0 text-[9px] font-semibold uppercase tracking-wider text-secondary/70">
+    <div className="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-2 text-[10.5px]">
+      <span className="mt-1.5 shrink-0 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wider text-secondary/70">
         {label}:
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
