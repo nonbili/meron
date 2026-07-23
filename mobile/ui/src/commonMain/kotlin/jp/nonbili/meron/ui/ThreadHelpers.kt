@@ -7,6 +7,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
 
@@ -108,6 +109,19 @@ internal fun listViewedToBottom(
     val last = visible.lastOrNull() ?: return false
     if (last.index != totalItemCount - 1) return false
     return last.offset + last.size <= viewportEndOffset + bottomSlackPx
+}
+
+// Apply a partial scroll-driven read locally. Thread summaries carry the
+// authoritative unread-message count, including messages on older pages that
+// are not loaded in the conversation, so derive the remaining thread state
+// from that count rather than only from the currently rendered messages.
+internal fun threadAfterMessagesRead(
+    thread: ThreadSummary,
+    readCount: Int,
+): ThreadSummary {
+    if (!thread.unread || readCount <= 0) return thread
+    val remaining = (thread.unreadCount.coerceAtLeast(1) - readCount).coerceAtLeast(0)
+    return thread.copy(unread = remaining > 0, unreadCount = remaining)
 }
 
 internal fun threadMessageSearchText(message: MessageBody): String =

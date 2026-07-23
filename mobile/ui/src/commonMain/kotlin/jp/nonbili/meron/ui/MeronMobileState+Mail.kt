@@ -1295,13 +1295,10 @@ internal fun MeronMobileState.toggleMessageRead(message: MessageBody) {
 internal fun MeronMobileState.markMessagesReadOnScroll(messageIds: List<String>) {
     val thread = selectedCoreThread ?: return
     val backendThreadId = thread.backendThreadId()
-    val ids = messageIds.filter { id -> messages.any { it.id == id && it.unread } }
+    val ids = messageIds.distinct().filter { id -> messages.any { it.id == id && it.unread } }
     if (ids.isEmpty()) return
     messages = messages.map { if (it.id in ids) it.copy(unread = false) else it }
-    val updatedUnread = messages.any { it.unread }
-    if (thread.unread && !updatedUnread) {
-        updateThreadEverywhere(thread) { it.copy(unread = false) }
-    }
+    updateThreadEverywhere(thread) { threadAfterMessagesRead(it, ids.size) }
     scope.launch {
         runCatching {
             requireCoreOk(
@@ -1316,6 +1313,8 @@ internal fun MeronMobileState.markMessagesReadOnScroll(messageIds: List<String>)
                     }
                 },
             )
+        }.onSuccess { response ->
+            applyCoreFolderUnreadChanges(response)
         }.onFailure {
             Log.w("Mail", "scroll mark read failed", it)
         }
@@ -1329,7 +1328,7 @@ internal fun MeronMobileState.markThreadReadOnScroll() {
     val backendThreadId = thread.backendThreadId()
     if (!thread.unread && messages.none { it.unread }) return
     messages = messages.map { if (it.unread) it.copy(unread = false) else it }
-    updateThreadEverywhere(thread) { it.copy(unread = false) }
+    updateThreadEverywhere(thread) { it.copy(unread = false, unreadCount = 0) }
     scope.launch {
         runCatching {
             requireCoreOk(
@@ -1344,6 +1343,8 @@ internal fun MeronMobileState.markThreadReadOnScroll() {
                     }
                 },
             )
+        }.onSuccess { response ->
+            applyCoreFolderUnreadChanges(response)
         }.onFailure {
             Log.w("Mail", "thread mark read failed", it)
         }

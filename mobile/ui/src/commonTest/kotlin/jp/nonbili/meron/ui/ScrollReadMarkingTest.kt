@@ -1,5 +1,6 @@
 package jp.nonbili.meron.ui
 
+import jp.nonbili.meron.shared.ThreadSummary
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -95,4 +96,39 @@ class ScrollReadMarkingTest {
 
         assertTrue(listViewedToBottom(visible, totalItemCount = 2, viewportEndOffset = 800, bottomSlackPx = 160))
     }
+
+    @Test
+    fun partialReadDecrementsThreadUnreadCount() {
+        val updated = threadAfterMessagesRead(thread(unreadCount = 3), readCount = 1)
+
+        assertTrue(updated.unread)
+        assertEquals(2, updated.unreadCount)
+    }
+
+    @Test
+    fun readingLastUnreadMessageClearsThreadState() {
+        val updated = threadAfterMessagesRead(thread(unreadCount = 1), readCount = 1)
+
+        assertFalse(updated.unread)
+        assertEquals(0, updated.unreadCount)
+    }
+
+    @Test
+    fun partialReadKeepsUnreadMessagesFromOlderPages() {
+        val updated = threadAfterMessagesRead(thread(unreadCount = 4), readCount = 2)
+
+        assertTrue(updated.unread)
+        assertEquals(2, updated.unreadCount)
+    }
+
+    private fun thread(unreadCount: Int) =
+        ThreadSummary(
+            id = "acc#INBOX#thread",
+            accountId = "acc",
+            folder = "INBOX",
+            subject = "Subject",
+            sender = "Sender",
+            unread = true,
+            unreadCount = unreadCount,
+        )
 }
