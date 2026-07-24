@@ -43,6 +43,9 @@ url = "2.5.8"
 uuid = { version = "1.23.1", features = ["v4"] }
 hickory-resolver = { version = "0.26.1", features = ["system-config"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+oo7 = { version = "0.6.0", default-features = false, features = ["tokio", "native_crypto"] }
+
 # Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
 [patch.crates-io]
 async-imap = { git = "https://github.com/nonbili/async-imap.git", rev = "d04be74" }

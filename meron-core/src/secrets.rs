@@ -1,9 +1,10 @@
 //! OS keychain storage for per-account secrets (IMAP password + OAuth tokens).
 //!
 //! Secrets live in the platform keychain — Keychain on macOS, Credential Manager
-//! on Windows, the Secret Service (D-Bus, e.g. gnome-keyring) on Linux — instead
-//! of plaintext in the SQLite store. One keychain entry per account holds a JSON
-//! blob; non-secret connection metadata (host, port, user, ...) stays in SQLite.
+//! on Windows, and the Secret Service (D-Bus, e.g. gnome-keyring) on native Linux.
+//! Inside Flatpak, oo7 uses the Secret portal to encrypt an app-private keyring.
+//! One entry per account holds a JSON blob; non-secret connection metadata (host,
+//! port, user, ...) stays in SQLite.
 
 use anyhow::{Context, Result};
 use keyring::Entry;
@@ -64,12 +65,35 @@ fn entry(account: &str) -> Result<Entry> {
     Entry::new(SERVICE, account).with_context(|| format!("open keychain entry for {account}"))
 }
 
+#[cfg(target_os = "linux")]
+fn use_portal_keyring() -> bool {
+    flatpak_detected(
+        std::env::var_os("FLATPAK_ID").as_deref(),
+        std::path::Path::new("/.flatpak-info").exists(),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn flatpak_detected(flatpak_id: Option<&std::ffi::OsStr>, marker_exists: bool) -> bool {
+    flatpak_id.is_some_and(|id| !id.is_empty()) || marker_exists
+}
+
+#[cfg(not(target_os = "linux"))]
+fn use_portal_keyring() -> bool {
+    false
+}
+
 /// Store (or replace) an account's secrets in the OS keychain.
 pub fn store(account: &str, secrets: &Secrets) -> Result<()> {
     if keyring_disabled() {
         return Ok(());
     }
     let blob = serde_json::to_string(secrets)?;
+    #[cfg(target_os = "linux")]
+    if use_portal_keyring() {
+        return crate::secrets_portal::store(account, &blob)
+            .with_context(|| format!("write portal keyring entry for {account}"));
+    }
     entry(account)?
         .set_password(&blob)
         .with_context(|| format!("write keychain entry for {account}"))
@@ -79,6 +103,15 @@ pub fn store(account: &str, secrets: &Secrets) -> Result<()> {
 pub fn load(account: &str) -> Result<Secrets> {
     if keyring_disabled() {
         return Ok(Secrets::default());
+    }
+    #[cfg(target_os = "linux")]
+    if use_portal_keyring() {
+        return match crate::secrets_portal::load(account)
+            .with_context(|| format!("read portal keyring entry for {account}"))?
+        {
+            Some(blob) => Ok(serde_json::from_str(&blob).unwrap_or_default()),
+            None => Ok(Secrets::default()),
+        };
     }
     match entry(account)?.get_password() {
         Ok(blob) => Ok(serde_json::from_str(&blob).unwrap_or_default()),
@@ -95,6 +128,20 @@ pub fn load(account: &str) -> Result<Secrets> {
 pub fn db_key() -> Result<Option<String>> {
     if keyring_disabled() {
         return Ok(None);
+    }
+    #[cfg(target_os = "linux")]
+    if use_portal_keyring() {
+        return match crate::secrets_portal::load(DB_KEY_ACCOUNT)
+            .context("read db key from portal keyring")?
+        {
+            Some(key) if is_hex_key(&key) => Ok(Some(key)),
+            Some(_) | None => {
+                let key = generate_db_key();
+                crate::secrets_portal::store(DB_KEY_ACCOUNT, &key)
+                    .context("store db key in portal keyring")?;
+                Ok(Some(key))
+            }
+        };
     }
     let entry = entry(DB_KEY_ACCOUNT)?;
     match entry.get_password() {
@@ -132,8 +179,30 @@ pub fn delete(account: &str) -> Result<()> {
     if keyring_disabled() {
         return Ok(());
     }
+    #[cfg(target_os = "linux")]
+    if use_portal_keyring() {
+        return crate::secrets_portal::delete(account)
+            .with_context(|| format!("delete portal keyring entry for {account}"));
+    }
     match entry(account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e).with_context(|| format!("delete keychain entry for {account}")),
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::flatpak_detected;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn flatpak_detection_does_not_match_native_linux() {
+        assert!(!flatpak_detected(None, false));
+        assert!(!flatpak_detected(Some(OsStr::new("")), false));
+        assert!(flatpak_detected(
+            Some(OsStr::new("jp.nonbili.meron")),
+            false
+        ));
+        assert!(flatpak_detected(None, true));
     }
 }

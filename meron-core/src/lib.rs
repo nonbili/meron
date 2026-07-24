@@ -15,6 +15,8 @@ pub mod parse;
 pub mod protocol;
 pub mod rss;
 pub mod secrets;
+#[cfg(target_os = "linux")]
+mod secrets_portal;
 pub mod smtp;
 pub mod store;
 pub mod thread_read;
