@@ -347,10 +347,12 @@ extension ThreadSummary {
             id: id,
             accountId: accountId,
             folder: folder,
+            folderRole: folderRole,
             subject: subject,
             sender: sender,
             preview: preview,
             unread: unread,
+            unreadCount: unread ? max(unreadCount, 1) : 0,
             starred: starred,
             hasDraft: hasDraft,
             dateEpochSeconds: dateEpochSeconds,
@@ -360,14 +362,17 @@ extension ThreadSummary {
     }
 
     func withFlags(unread nextUnread: Bool? = nil, starred nextStarred: Bool? = nil) -> ThreadSummary {
-        ThreadSummary(
+        let updatedUnread = nextUnread ?? unread
+        return ThreadSummary(
             id: id,
             accountId: accountId,
             folder: folder,
+            folderRole: folderRole,
             subject: subject,
             sender: sender,
             preview: preview,
-            unread: nextUnread ?? unread,
+            unread: updatedUnread,
+            unreadCount: updatedUnread ? max(unreadCount, 1) : 0,
             starred: nextStarred ?? starred,
             hasDraft: hasDraft,
             dateEpochSeconds: dateEpochSeconds,

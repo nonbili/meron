@@ -1,0 +1,3 @@
+- Hide autosaved draft after sending quick reply
+- Centralize thread reading logic in shared core
+- Sync folder roles and unread counts across views
