@@ -369,6 +369,22 @@ export async function discardQuickReplyDraftIfEmpty() {
   })
 }
 
+// Hide the saved draft currently hydrated into the quick-reply editor. The
+// optimistic sent bubble is appended after the draft, so matching only the
+// conversation tail would briefly reveal the draft again while sending.
+// Other drafts in the thread remain visible.
+export function withoutHydratedQuickReplyDraft(
+  messages: Message[],
+  draftMessageId: string,
+  draftSaved: boolean,
+): Message[] {
+  if (!draftSaved || !draftMessageId) return messages
+  return messages.filter(
+    (message) =>
+      !((message.message_id || message.id) === draftMessageId && isDraftFolder(message.folder_id, message.account_id)),
+  )
+}
+
 let quickReplyDraftSaveTimer: ReturnType<typeof setTimeout> | null = null
 const QUICK_REPLY_DRAFT_SAVE_DELAY_MS = 1200
 

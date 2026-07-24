@@ -519,15 +519,15 @@ private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): B
     )
 }
 
-// Hides the tail draft message from the rendered conversation once quick
-// reply has hydrated its content for inline editing — otherwise the same
-// draft text would appear twice (as a bubble and pre-filled in the reply bar).
-// Older draft messages elsewhere in the thread's history are left visible.
+// Hides the draft hydrated into quick reply wherever it sits in the loaded
+// conversation. An optimistic sent bubble is appended after it, so tail-only
+// matching would reveal the draft again while sending.
 internal fun MeronMobileState.visibleThreadMessages(): List<MessageBody> {
     if (quickReplyDraftId.isBlank()) return messages
     val normalizedDraftId = quickReplyDraftId.normalizedComposeDraftId()
-    val tail = messages.lastOrNull() ?: return messages
-    return if (tail.messageId.normalizedComposeDraftId() == normalizedDraftId) messages.dropLast(1) else messages
+    return messages.filterNot {
+        folderIsDrafts(it.folderId) && it.messageId.normalizedComposeDraftId() == normalizedDraftId
+    }
 }
 
 internal fun MeronMobileState.autoSaveQuickReplyDraft() {
@@ -707,7 +707,7 @@ internal fun MeronMobileState.discardComposeDraft() {
     }
 }
 
-private fun MeronMobileState.removeDiscardedDraftFromOpenThread(draftId: String?) {
+internal fun MeronMobileState.removeDiscardedDraftFromOpenThread(draftId: String?) {
     val normalizedDraftId = draftId?.normalizedComposeDraftId().orEmpty()
     if (normalizedDraftId.isBlank()) return
     messages =
@@ -810,6 +810,7 @@ internal fun MeronMobileState.sendQuickReply() {
                         )
                     }
                 }
+                removeDiscardedDraftFromOpenThread(draftId)
             }
             quickReplySendInFlight = false
             quickReplyFailure = ""

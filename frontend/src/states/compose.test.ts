@@ -13,6 +13,7 @@ import {
   openThreadTab,
   openThreadTabById,
   saveQuickReplyDraft,
+  withoutHydratedQuickReplyDraft,
 } from './compose'
 import { accounts$ } from './accounts'
 import { ui$ } from './ui'
@@ -598,6 +599,28 @@ describe('quick reply draft sharing', () => {
     expect(compose$.composer.get()).toBe('saved draft body')
     expect(compose$.quickReplyDraftId.get()).toBe('draft-1@example.com')
     expect(compose$.quickReplyDraftSaved.get()).toBe(true)
+  })
+
+  it('keeps the hydrated draft hidden after an optimistic sent bubble is appended', () => {
+    const ancestor = message({ id: 'm1', folder_id: 'INBOX', message_id: 'root@example.com' })
+    const draft = message({
+      id: 'd1',
+      folder_id: 'Drafts',
+      message_id: 'draft-1@example.com',
+    })
+    const sending = message({ id: 'local-send-1', folder_id: 'INBOX', send_status: 'sending' })
+
+    expect(withoutHydratedQuickReplyDraft([ancestor, draft, sending], 'draft-1@example.com', true)).toEqual([
+      ancestor,
+      sending,
+    ])
+  })
+
+  it('keeps unrelated older drafts visible', () => {
+    const olderDraft = message({ id: 'd0', folder_id: 'Drafts', message_id: 'draft-0@example.com' })
+    const activeDraft = message({ id: 'd1', folder_id: 'Drafts', message_id: 'draft-1@example.com' })
+
+    expect(withoutHydratedQuickReplyDraft([olderDraft, activeDraft], 'draft-1@example.com', true)).toEqual([olderDraft])
   })
 
   it('does not hydrate when the tail message is not a draft', () => {

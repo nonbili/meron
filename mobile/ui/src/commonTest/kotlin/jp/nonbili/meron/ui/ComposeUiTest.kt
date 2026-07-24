@@ -235,7 +235,7 @@ class ComposeUiTest {
     }
 
     @Test
-    fun visibleThreadMessagesKeepsNonTailDraftVisible() {
+    fun visibleThreadMessagesHidesHydratedDraftBeforeOptimisticSend() {
         val state = testState()
         state.messages =
             listOf(
@@ -246,7 +246,37 @@ class ComposeUiTest {
 
         val visible = state.visibleThreadMessages()
 
-        assertEquals(listOf("d1", "m2"), visible.map { it.id })
+        assertEquals(listOf("m2"), visible.map { it.id })
+    }
+
+    @Test
+    fun visibleThreadMessagesKeepsUnrelatedOlderDraftVisible() {
+        val state = testState()
+        state.messages =
+            listOf(
+                messageBody(id = "d0", folderId = "Drafts", messageId = "draft-0"),
+                messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1"),
+            )
+        state.quickReplyDraftId = "draft-1"
+
+        val visible = state.visibleThreadMessages()
+
+        assertEquals(listOf("d0"), visible.map { it.id })
+    }
+
+    @Test
+    fun removeDiscardedDraftFromOpenThreadDropsCachedDraftAfterSend() {
+        val state = testState()
+        state.messages =
+            listOf(
+                messageBody(id = "m1", folderId = "INBOX"),
+                messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1"),
+                messageBody(id = "local-send-1", folderId = "INBOX"),
+            )
+
+        state.removeDiscardedDraftFromOpenThread("draft-1")
+
+        assertEquals(listOf("m1", "local-send-1"), state.messages.map { it.id })
     }
 
     @Test

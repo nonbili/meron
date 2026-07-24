@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { compose$, openComposeTab } from '../../states/compose'
+import { compose$, openComposeTab, withoutHydratedQuickReplyDraft } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 import { mail$, getActiveThread, loadThread } from '../../states/mail'
 import { accounts$ } from '../../states/accounts'
@@ -95,17 +95,12 @@ export function MessagePane() {
     if (activeThreadId) void loadThread(activeThreadId).catch(console.error)
   }, [activeThreadId])
   const unreadKey = messages.map((message) => `${message.id}:${message.unread ? '1' : '0'}`).join('|')
-  // Hide the tail draft message from the rendered conversation once quick
-  // reply has hydrated its content for inline editing — otherwise the same
-  // draft text would appear twice (as a bubble and pre-filled in the reply
-  // bar). Older draft messages elsewhere in the thread's history stay visible.
-  const displayMessages = useMemo(() => {
-    if (!quickReplyDraftSaved || !quickReplyDraftId) return messages
-    const tail = messages[messages.length - 1]
-    if (!tail) return messages
-    const tailId = tail.message_id || tail.id
-    return tailId === quickReplyDraftId ? messages.slice(0, -1) : messages
-  }, [messages, quickReplyDraftId, quickReplyDraftSaved])
+  // Keep the draft hydrated into the quick-reply bar out of the conversation,
+  // including while an optimistic sending bubble follows it.
+  const displayMessages = useMemo(
+    () => withoutHydratedQuickReplyDraft(messages, quickReplyDraftId, quickReplyDraftSaved),
+    [messages, quickReplyDraftId, quickReplyDraftSaved],
+  )
 
   const accountConversationMode: ConversationMode = (activeAccount?.conversation_html ?? true) ? 'html' : 'plain'
   const conversationMode: ConversationMode = activeAccount
