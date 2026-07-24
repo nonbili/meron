@@ -1,0 +1,3 @@
+- Support Desktop Notification Portal on Linux
+- Support Secret Portal for password storage in Linux Flatpak builds
+- Centralize thread reading logic in the shared core
