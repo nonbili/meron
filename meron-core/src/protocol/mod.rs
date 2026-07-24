@@ -1,5 +1,4 @@
 pub(crate) use crate::imap::{self, Creds, MessageHeader};
-pub(crate) use crate::parse::Message;
 pub(crate) use crate::rss;
 pub(crate) use crate::secrets::Secrets;
 pub(crate) use crate::smtp::{self, AttachmentInput};

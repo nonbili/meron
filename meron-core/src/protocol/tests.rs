@@ -1,5 +1,6 @@
 use super::*;
 use crate::imap::{Folder, MessageHeader, Recipient};
+use crate::parse::Message;
 use crate::store::{RssItemExtra, RssMedia};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::sync::atomic::{AtomicU64, Ordering};

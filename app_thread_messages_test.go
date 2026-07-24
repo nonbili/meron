@@ -5,7 +5,9 @@ import (
 	"testing"
 )
 
-// messagesOf pulls the []Message out of a threadMessagesJSON/messageJSON result.
+// messagesOf pulls the []Message out of a messageJSON result. (Thread reads
+// are shaped in the sidecar's shared thread_read module and pass through the
+// bridge untouched.)
 func messagesOf(t *testing.T, out any) []Message {
 	t.Helper()
 	obj, ok := out.(map[string]any)
@@ -17,75 +19,6 @@ func messagesOf(t *testing.T, out any) []Message {
 		t.Fatalf("messages field is %T, want []Message", obj["messages"])
 	}
 	return list
-}
-
-func entry(uid int, folder string, message map[string]any) map[string]any {
-	e := map[string]any{"uid": float64(uid), "message": message}
-	if folder != "" {
-		e["folder"] = folder
-	}
-	return e
-}
-
-// Branch filtering happens in the sidecar (messages.thread scopes to the
-// subject branch itself); the bridge maps every returned message.
-func TestThreadMessagesJSONKeepsAllReturnedMessages(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			entry(10, "", map[string]any{"subject": "A"}),
-			entry(11, "", map[string]any{"subject": "B"}),
-		},
-	}
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
-	if len(got) != 2 {
-		t.Fatalf("got %d messages, want 2", len(got))
-	}
-}
-
-func TestThreadMessagesJSONPerMessageFolderAndFields(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			entry(10, "Sent", map[string]any{
-				"subject":     "Hi",
-				"from_addr":   "me@x.com",
-				"attachments": []any{map[string]any{"name": "a.pdf"}},
-			}),
-			entry(11, "", map[string]any{"subject": "Hi"}), // no folder -> nominal folder
-		},
-	}
-
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
-	if got[0].FolderID != "Sent" {
-		t.Errorf("message 0 folder = %q, want Sent (per-message source folder)", got[0].FolderID)
-	}
-	if got[1].FolderID != "INBOX" {
-		t.Errorf("message 1 folder = %q, want INBOX (fallback to nominal folder)", got[1].FolderID)
-	}
-	if got[0].ID != "tid#10" {
-		t.Errorf("message id = %q, want tid#10", got[0].ID)
-	}
-	if !got[0].HasAttachments {
-		t.Error("message 0 should report HasAttachments")
-	}
-	if got[1].HasAttachments {
-		t.Error("message 1 has no attachments")
-	}
-}
-
-func TestThreadMessagesJSONUnreadFromSeenFlag(t *testing.T) {
-	raw := map[string]any{
-		"messages": []any{
-			func() map[string]any { e := entry(10, "", map[string]any{"subject": "x"}); e["seen"] = false; return e }(),
-			func() map[string]any { e := entry(11, "", map[string]any{"subject": "x"}); e["seen"] = true; return e }(),
-		},
-	}
-	got := messagesOf(t, threadMessagesJSON("acc", "tid", "INBOX", raw))
-	if !got[0].Unread {
-		t.Error("message with seen=false should be Unread")
-	}
-	if got[1].Unread {
-		t.Error("message with seen=true should not be Unread")
-	}
 }
 
 func TestMessageJSONShapesSingleMessage(t *testing.T) {

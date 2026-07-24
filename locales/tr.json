@@ -150,6 +150,7 @@
   "chat.showDetails": "Detayları göster",
   "chat.showImages": "{count, plural, one {Resmi göster} other {{count} resmi göster}}",
   "chat.star": "Yıldızla",
+  "chat.threadLoadFailed": "Bu konuşma yüklenemedi.",
   "chat.unstar": "Yıldızı kaldır",
   "chat.viewAsHtml": "HTML olarak görüntüle",
   "chat.viewAsPlainText": "Düz metin olarak görüntüle",

@@ -33,6 +33,10 @@ export const mail$ = observable({
   // is set and the loaded messages don't yet belong to the active thread —
   // notably during the on-demand ancestor fetch, which adds a network round-trip.
   threadLoading: false,
+  // Thread id whose last threadRead failed (backend timeout, network down).
+  // The reader shows an error + retry instead of a silent blank pane; cleared
+  // on the next load attempt for that thread.
+  threadErrorId: '',
   readThreads: {} as Record<string, boolean>,
 })
 
@@ -695,6 +699,7 @@ export async function loadMoreThreads() {
 
 export async function loadThread(threadId: string) {
   mail$.threadLoading.set(true)
+  if (mail$.threadErrorId.get() === threadId) mail$.threadErrorId.set('')
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
       thread_id: threadId,
@@ -704,10 +709,22 @@ export async function loadThread(threadId: string) {
     // this was in flight (e.g. during the ancestor fetch). Don't overwrite the
     // newer thread's messages — and let that newer load own the loading flag.
     if (ui$.selectedThread.get() !== threadId) return
-    mail$.messages.set(result.messages)
+    // Bodies still filling in the background arrive via the `mail.synced`
+    // re-read; until then hide their placeholders rather than render empty
+    // bubbles.
+    const messages = result.messages.filter((message) => !message.body_missing)
+    mail$.messages.set(messages)
     mail$.messagesCursor.set(result.next_cursor ?? '')
     mail$.messagesLoadingMore.set(false)
+    // Reconcile against the unfiltered page: a hidden placeholder can still be
+    // unread, and dropping it must not mark the thread read early.
     reconcileThreadUnreadFromLoadedMessages(threadId, result.messages, result.next_cursor)
+  } catch (err) {
+    // Without this the failure is silent: the finally below clears the
+    // spinner and the reader sits blank. Flag the thread so the pane can
+    // offer a retry; keep it only if the user is still looking at it.
+    console.error('threadRead failed', err)
+    if (ui$.selectedThread.get() === threadId) mail$.threadErrorId.set(threadId)
   } finally {
     if (ui$.selectedThread.get() === threadId) {
       mail$.threadLoading.set(false)
@@ -731,7 +748,7 @@ export async function loadMoreMessages(threadId: string) {
     // Prepend the older page; engine returns ascending order within the page.
     const existing = mail$.messages.get()
     const seen = new Set(existing.map((m) => m.id))
-    const merged = [...result.messages.filter((m) => !seen.has(m.id)), ...existing]
+    const merged = [...result.messages.filter((m) => !seen.has(m.id) && !m.body_missing), ...existing]
     mail$.messages.set(merged)
     mail$.messagesCursor.set(result.next_cursor ?? '')
   } finally {
@@ -1193,13 +1210,10 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   try {
     const res = await invoke<
       { deleted?: number; permanent?: boolean; trash?: string; thread_id?: string } & MutationResult
-    >(
-      'mail.delete',
-      {
-        thread_id: threadId,
-        ...(sourceFolder ? { folder: sourceFolder } : {}),
-      },
-    )
+    >('mail.delete', {
+      thread_id: threadId,
+      ...(sourceFolder ? { folder: sourceFolder } : {}),
+    })
     assertDeleteAffected(res)
     applyMutationFolderUnreads(res)
     const trashedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.trash)

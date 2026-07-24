@@ -15,7 +15,6 @@
 
 use anyhow::Context as _;
 use serde_json::{Value, json};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
@@ -26,7 +25,9 @@ use tokio::sync::Mutex;
 use meron_core::engine::*;
 use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
-use meron_core::{changelog, imap, mail_model, parse, rss, secrets, smtp, store, unified};
+use meron_core::{
+    changelog, imap, mail_model, parse, rss, secrets, smtp, store, thread_read, unified,
+};
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
 type Writer = Arc<Mutex<Stdout>>;
@@ -1444,119 +1445,57 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             // Pagination is opt-in: callers that don't pass `limit` get the
             // full thread (preserves the markRead full-scan path in app.go).
             let limit = p.get("limit").and_then(Value::as_u64).map(|n| n as u32);
-            let before_cursor = p
-                .get("before_cursor")
-                .and_then(Value::as_str)
-                .and_then(|s| s.strip_prefix("uid:"))
-                .and_then(|s| s.parse::<u32>().ok());
+            let before_cursor = p.get("before_cursor").and_then(Value::as_str);
+            // The bridge passes the frontend's exact thread id so message ids
+            // match what the UI keys on; direct callers (tests) may omit it.
+            let thread_id = req_str(p, "thread_id")
+                .unwrap_or_else(|_| mail_model::format_thread_id(&account, &folder, &thread_key));
 
-            // Thread view spans folders within the account so the user's own
-            // Sent replies appear alongside the inbox messages they thread with.
-            // Each header carries its source `folder` for the body fetch.
-            //
-            // Exception: a synthetic `uid:N` key (a message with no real
-            // threading headers — e.g. a freshly-saved draft) is folder-local,
-            // because UIDs are folder-scoped. Spanning folders would match an
-            // unrelated message that happens to share UID N elsewhere and render
-            // the wrong thread, so keep these scoped to the requested folder.
-            let headers = if thread_key.starts_with("uid:") {
-                let db = engine.db.lock().unwrap();
-                store::get_thread_headers(&db, &account, &folder, &thread_key)?
-            } else {
-                // For UI reads (limit present), pull in any referenced ancestor
-                // messages missing from the local cache so the reader shows the
-                // full conversation instead of just the synced tail or a lone
-                // draft. This runs in the background — the gap fill opens an IMAP
-                // connection, which used to block the read and made opening any
-                // thread with missing ancestors slow. We return the cached thread
-                // immediately; if the fill finds anything it emits `mail.synced`
-                // and the reader re-reads. The markRead full-scan path (no limit)
-                // skips this entirely.
-                if limit.is_some() {
-                    maybe_spawn_fill_thread_gaps(engine, out, &account, &thread_key);
-                }
-                let db = engine.db.lock().unwrap();
-                store::get_thread_headers_all_folders(&db, &account, &thread_key)?
-            };
-            let headers = match subject_filter.as_deref() {
-                Some(filter) => headers
-                    .into_iter()
-                    .filter(|header| store::thread_grouping_subject(&header.subject) == filter)
-                    .collect(),
-                None => headers,
-            };
-            let headers = {
-                let db = engine.db.lock().unwrap();
-                store::collapse_thread_draft_headers(&db, &account, &folder, headers)?
-            };
-
-            // `before_cursor` / `limit` are honored as a date-ordered slice so
-            // the cross-folder query stays consistent with the old per-folder
-            // pagination contract. The cursor format ("uid:N") is retained for
-            // backwards compatibility but now indexes into the cross-folder
-            // result list rather than a per-folder UID space.
-            let (headers, next_cursor) = if let Some(limit) = limit {
-                let mut headers = headers;
-                if let Some(cursor) = before_cursor
-                    && let Some(idx) = headers.iter().position(|h| h.uid == cursor)
-                {
-                    headers.truncate(idx);
-                }
-                let total = headers.len();
-                let limit_usize = limit as usize;
-                let start = total.saturating_sub(limit_usize);
-                let page = headers[start..].to_vec();
-                let next_cursor = if start > 0 {
-                    page.first().map(|h| format!("uid:{}", h.uid))
-                } else {
-                    None
-                };
-                (page, next_cursor)
-            } else {
-                (headers, None)
-            };
-
-            let mut messages = Vec::with_capacity(headers.len());
-            let mut seen_message_ids = HashSet::new();
-            let mine = store::self_addrs(&engine.db.lock().unwrap(), &account);
-            for header in headers {
-                // Use the header's folder when present (cross-folder query
-                // populates it); fall back to the requested folder otherwise.
-                let msg_folder = if header.folder.is_empty() {
-                    folder.as_str()
-                } else {
-                    header.folder.as_str()
-                };
-                let message =
-                    read_cached_or_fetch(engine, &account, msg_folder, header.uid).await?;
-                // Newly synced envelope rows do not have json.message_id yet, so
-                // the SQL-level cross-folder dedupe cannot collapse a
-                // self-addressed Sent/Inbox pair on the first thread read. Once
-                // read_cached_or_fetch has fetched and cached the full message,
-                // collapse later copies before returning the response.
-                let message_id_key = message.message_id.trim().to_ascii_lowercase();
-                if !message_id_key.is_empty() && !seen_message_ids.insert(message_id_key) {
-                    continue;
-                }
-                messages.push(json!({
-                    "uid": header.uid,
-                    "seen": header.seen,
-                    "starred": header.starred,
-                    "folder": msg_folder,
-                    // Classified in the core (own address *or* Sent-folder
-                    // provenance) so both frontends render alias-sent mail as
-                    // outgoing without knowing the account's aliases.
-                    "outgoing": store::is_outgoing(&mine, msg_folder, &message.from_addr),
-                    "message": serde_json::to_value(message)?,
-                }));
+            // For UI reads (limit present), pull in any referenced ancestor
+            // messages missing from the local cache so the reader shows the
+            // full conversation instead of just the synced tail or a lone
+            // draft. Runs in the background; if the fill finds anything it
+            // emits `mail.synced` and the reader re-reads. The markRead
+            // full-scan path (no limit) skips this entirely.
+            if limit.is_some() {
+                maybe_spawn_fill_thread_gaps(engine, out, &account, &thread_key);
             }
-            let mut out = json!({ "messages": messages });
-            if let Some(cursor) = next_cursor {
-                out.as_object_mut()
-                    .unwrap()
-                    .insert("next_cursor".into(), Value::String(cursor));
-            }
-            Ok(out)
+
+            // The background body fill announces itself with `mail.synced`,
+            // which the desktop frontend already answers by re-reading the
+            // open thread.
+            let on_bodies_fetched: thread_read::BodiesFetchedHook = {
+                let out = out.clone();
+                let account = account.clone();
+                Box::new(move || {
+                    let out = out.clone();
+                    let account = account.clone();
+                    tokio::spawn(async move {
+                        emit(
+                            &out,
+                            "mail.synced",
+                            json!({ "account": account, "folder": "inbox", "synced": 0 }),
+                        )
+                        .await;
+                    });
+                })
+            };
+            thread_read::read_thread_page(
+                engine,
+                thread_read::ThreadReadArgs {
+                    account: &account,
+                    folder: &folder,
+                    thread_id: &thread_id,
+                    thread_key: &thread_key,
+                    subject_filter: subject_filter.as_deref(),
+                    limit,
+                    before_cursor,
+                    media_root: parse::media_root(),
+                    bake_html_policy: true,
+                },
+                Some(on_bodies_fetched),
+            )
+            .await
         }
 
         "messages.threadHeaders" => {

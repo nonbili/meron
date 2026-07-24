@@ -150,6 +150,7 @@
   "chat.showDetails": "Εμφάνιση λεπτομερειών",
   "chat.showImages": "{count, plural, one {Εμφάνιση εικόνας} other {Εμφάνιση {count} εικόνων}}",
   "chat.star": "Προσθήκη αστεριού",
+  "chat.threadLoadFailed": "Δεν ήταν δυνατή η φόρτωση αυτής της συνομιλίας.",
   "chat.unstar": "Κατάργηση αστεριού",
   "chat.viewAsHtml": "Προβολή ως HTML",
   "chat.viewAsPlainText": "Προβολή ως απλό κείμενο",

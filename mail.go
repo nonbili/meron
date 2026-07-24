@@ -207,6 +207,9 @@ func (a *App) threadRead(payload map[string]any) (any, error) {
 			params = map[string]any{"account": ids.Account, "folder": ids.Folder, "uid": ids.UID}
 		}
 		if method == "messages.thread" {
+			// The sidecar shapes final bridge-ready message JSON and needs the
+			// frontend's exact thread id for the messages' id/thread_id fields.
+			params["thread_id"] = threadID
 			if hasLimit {
 				params["limit"] = limit
 			}
@@ -219,7 +222,9 @@ func (a *App) threadRead(payload map[string]any) (any, error) {
 			return nil, err
 		}
 		if method == "messages.thread" {
-			return threadMessagesJSON(ids.Account, threadID, ids.Folder, res), nil
+			// Already final bridge-shaped Message JSON (same contract as
+			// rss.thread above).
+			return res, nil
 		}
 		return messageJSON(ids.Account, threadID, ids.Folder, res), nil
 	}

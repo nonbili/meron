@@ -3,7 +3,7 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { compose$, openComposeTab } from '../../states/compose'
 import { ui$ } from '../../states/ui'
-import { mail$, getActiveThread } from '../../states/mail'
+import { mail$, getActiveThread, loadThread } from '../../states/mail'
 import { accounts$ } from '../../states/accounts'
 import { resetThreadView, thread$, type ConversationMode } from '../../states/thread'
 import { Gallery } from './Gallery'
@@ -50,6 +50,7 @@ export function MessagePane() {
   const messagesCursor = useValue(mail$.messagesCursor)
   const messagesLoadingMore = useValue(mail$.messagesLoadingMore)
   const threadLoading = useValue(mail$.threadLoading)
+  const threadErrorId = useValue(mail$.threadErrorId)
   const accounts = useValue(accounts$)
   const mobilePane = useValue(ui$.mobilePane)
   const selectedAccountId = useValue(ui$.selectedAccount)
@@ -84,6 +85,15 @@ export function MessagePane() {
   // selected thread loads. Suppressed once any loaded message belongs to the
   // active thread, so re-reads of the open thread (sync refresh) don't flash.
   const showThreadLoading = threadLoading && !messages.some((message) => message.thread_id === activeThreadId)
+  // The load failed and there's nothing of this thread to show — offer a retry
+  // instead of a blank pane. Suppressed while a (re)load is in flight.
+  const showThreadError =
+    !showThreadLoading &&
+    threadErrorId === activeThreadId &&
+    !messages.some((message) => message.thread_id === activeThreadId)
+  const retryThreadLoad = useCallback(() => {
+    if (activeThreadId) void loadThread(activeThreadId).catch(console.error)
+  }, [activeThreadId])
   const unreadKey = messages.map((message) => `${message.id}:${message.unread ? '1' : '0'}`).join('|')
   // Hide the tail draft message from the rendered conversation once quick
   // reply has hydrated its content for inline editing — otherwise the same
@@ -246,6 +256,8 @@ export function MessagePane() {
       <ConversationMessageList
         messages={displayMessages}
         showThreadLoading={showThreadLoading}
+        showThreadError={showThreadError}
+        onRetryThreadLoad={retryThreadLoad}
         messagesCursor={messagesCursor}
         messagesLoadingMore={messagesLoadingMore}
         activeThreadId={activeThreadId}

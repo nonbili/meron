@@ -150,6 +150,7 @@
   "chat.showDetails": "Pokaż szczegóły",
   "chat.showImages": "{count, plural, one {Pokaż obraz} other {Pokaż obrazy ({count})}}",
   "chat.star": "Dodaj gwiazdkę",
+  "chat.threadLoadFailed": "Nie udało się wczytać tej rozmowy.",
   "chat.unstar": "Usuń gwiazdkę",
   "chat.viewAsHtml": "Wyświetl jako HTML",
   "chat.viewAsPlainText": "Wyświetl jako zwykły tekst",

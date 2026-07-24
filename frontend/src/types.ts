@@ -108,6 +108,9 @@ export type Message = {
   body: string
   /** Iframe-ready original email HTML for "HTML mode"; absent for plain-text messages. */
   body_html?: string
+  /** True when the body isn't cached yet — the on-demand fetch failed or is
+   * still filling in the background (a `mail.synced` re-read delivers it). */
+  body_missing?: boolean
   /** Send time as Unix epoch seconds (0 when unknown). Format via lib/date helpers. */
   date: number
   /** Sent by this account, classified by the core (own address or Sent-folder

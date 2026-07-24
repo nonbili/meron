@@ -150,6 +150,7 @@
   "chat.showDetails": "詳細を表示",
   "chat.showImages": "{count, plural, one {画像を表示} other {{count}枚の画像を表示}}",
   "chat.star": "スター",
+  "chat.threadLoadFailed": "この会話を読み込めませんでした。",
   "chat.unstar": "スターを外す",
   "chat.viewAsHtml": "HTMLで表示",
   "chat.viewAsPlainText": "プレーンテキストで表示",

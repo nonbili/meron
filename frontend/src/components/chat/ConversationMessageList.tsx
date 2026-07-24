@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslation } from '../../lib/i18n'
 import { loadMoreMessages } from '../../states/mail'
 import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
@@ -21,6 +22,8 @@ function hasSelectedText(): boolean {
 export function ConversationMessageList({
   messages,
   showThreadLoading,
+  showThreadError,
+  onRetryThreadLoad,
   messagesCursor,
   messagesLoadingMore,
   activeThreadId,
@@ -37,6 +40,8 @@ export function ConversationMessageList({
 }: {
   messages: Message[]
   showThreadLoading: boolean
+  showThreadError: boolean
+  onRetryThreadLoad: () => void
   messagesCursor: string
   messagesLoadingMore: boolean
   activeThreadId: string
@@ -51,6 +56,7 @@ export function ConversationMessageList({
   onScroll: () => void
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
+  const { t } = useTranslation()
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const autoLoadInFlightRef = useRef(false)
   const activeThreadIdRef = useRef(activeThreadId)
@@ -106,6 +112,18 @@ export function ConversationMessageList({
         {showThreadLoading && (
           <div className="flex h-full items-center justify-center">
             <Loader2 size={28} className="animate-spin text-secondary/70" />
+          </div>
+        )}
+        {showThreadError && (
+          <div className="flex h-full flex-col items-center justify-center gap-3">
+            <p className="text-sm text-secondary">{t('chat.threadLoadFailed')}</p>
+            <button
+              type="button"
+              onClick={onRetryThreadLoad}
+              className="rounded-full bg-active border border-border/30 px-4 py-1 text-xs font-medium text-secondary hover:bg-active cursor-pointer"
+            >
+              {t('chat.retry')}
+            </button>
           </div>
         )}
         {!showThreadLoading && messagesCursor && (

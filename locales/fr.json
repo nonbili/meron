@@ -150,6 +150,7 @@
   "chat.showDetails": "Afficher les détails",
   "chat.showImages": "{count, plural, one {Afficher l'image} other {Afficher {count} images}}",
   "chat.star": "Suivre",
+  "chat.threadLoadFailed": "Impossible de charger cette conversation.",
   "chat.unstar": "Ne plus suivre",
   "chat.viewAsHtml": "Afficher en HTML",
   "chat.viewAsPlainText": "Afficher en texte brut",

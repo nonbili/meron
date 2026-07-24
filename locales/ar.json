@@ -150,6 +150,7 @@
   "chat.showDetails": "إظهار التفاصيل",
   "chat.showImages": "{count, plural, one {إظهار الصورة} other {إظهار {count} صور}}",
   "chat.star": "تمييز بنجمة",
+  "chat.threadLoadFailed": "تعذّر تحميل هذه المحادثة.",
   "chat.unstar": "إزالة النجمة",
   "chat.viewAsHtml": "عرض كـ HTML",
   "chat.viewAsPlainText": "عرض كنص عادي",

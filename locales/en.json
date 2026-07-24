@@ -146,6 +146,7 @@
   "chat.showDetails": "Show details",
   "chat.showImages": "{count, plural, one {Show image} other {Show {count} images}}",
   "chat.star": "Star",
+  "chat.threadLoadFailed": "Couldn't load this conversation.",
   "chat.unstar": "Unstar",
   "chat.viewAsHtml": "View as HTML",
   "chat.viewAsPlainText": "View as plain text",

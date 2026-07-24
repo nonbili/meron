@@ -150,6 +150,7 @@
   "chat.showDetails": "세부 정보 표시",
   "chat.showImages": "{count, plural, one {이미지 표시} other {이미지 {count}개 표시}}",
   "chat.star": "별표 표시",
+  "chat.threadLoadFailed": "이 대화를 불러오지 못했습니다.",
   "chat.unstar": "별표 제거",
   "chat.viewAsHtml": "HTML로 보기",
   "chat.viewAsPlainText": "일반 텍스트로 보기",

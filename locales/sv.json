@@ -150,6 +150,7 @@
   "chat.showDetails": "Visa detaljer",
   "chat.showImages": "{count, plural, one {Visa bild} other {Visa {count} bilder}}",
   "chat.star": "Stjärnmärk",
+  "chat.threadLoadFailed": "Det gick inte att läsa in den här konversationen.",
   "chat.unstar": "Ta bort stjärnmarkering",
   "chat.viewAsHtml": "Visa som HTML",
   "chat.viewAsPlainText": "Visa som vanlig text",

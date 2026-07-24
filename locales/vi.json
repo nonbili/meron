@@ -150,6 +150,7 @@
   "chat.showDetails": "Hiển thị chi tiết",
   "chat.showImages": "{count, plural, one {Hiển thị ảnh} other {Hiển thị {count} ảnh}}",
   "chat.star": "Gắn sao",
+  "chat.threadLoadFailed": "Không thể tải cuộc trò chuyện này.",
   "chat.unstar": "Bỏ gắn sao",
   "chat.viewAsHtml": "Xem dạng HTML",
   "chat.viewAsPlainText": "Xem dạng văn bản thuần túy",

@@ -150,6 +150,7 @@
   "chat.showDetails": "顯示詳細資訊",
   "chat.showImages": "{count, plural, one {顯示圖片} other {顯示 {count} 張圖片}}",
   "chat.star": "加星號",
+  "chat.threadLoadFailed": "無法載入此對話。",
   "chat.unstar": "取消星號",
   "chat.viewAsHtml": "以 HTML 檢視",
   "chat.viewAsPlainText": "以純文字檢視",

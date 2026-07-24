@@ -60,6 +60,10 @@ pub struct Engine {
     /// open would re-open an IMAP connection to re-search for them. Cleared on
     /// restart, which lets a genuinely-late ancestor be retried.
     pub gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
+    /// Threads with an in-flight background body fetch, keyed by
+    /// `account|thread_key`, so re-opening a thread while its missing bodies
+    /// are still downloading doesn't spawn a duplicate IMAP fetch run.
+    pub body_fetches: std::sync::Mutex<HashSet<String>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -178,6 +182,15 @@ pub const MAX_POOLED: usize = 3;
 /// session is almost always still alive.
 pub const MAX_IDLE: Duration = Duration::from_secs(120);
 
+/// Cap on a single command run against a *pooled* session in a retryable
+/// (read-only) op. A pooled connection the server or a NAT silently dropped
+/// doesn't error — it hangs until TCP keepalive gives up (60s+), well past the
+/// desktop bridge's 30s call timeout, so the user sees a dead UI. Failing the
+/// reuse attempt at 10s leaves room for the stale-retry fresh connection to
+/// still answer within the bridge budget. Write ops are exempt: cutting off a
+/// slow but progressing APPEND/SEND mid-command is worse than waiting.
+pub const POOLED_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl Engine {
     pub fn new(host: Box<dyn EngineHost>) -> anyhow::Result<Self> {
         let conn = host.open_db()?;
@@ -196,6 +209,7 @@ impl Engine {
             watched: std::sync::Mutex::new(HashSet::new()),
             syncing: std::sync::Mutex::new(HashSet::new()),
             gap_attempts: std::sync::Mutex::new(HashMap::new()),
+            body_fetches: std::sync::Mutex::new(HashSet::new()),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
@@ -410,7 +424,22 @@ impl Engine {
         T: Send,
     {
         if let Some(mut session) = self.take_pooled(account) {
-            match f(&mut session).await {
+            // Retryable (read-only) ops get a bounded reuse attempt so a dead
+            // pooled connection fails over to the fresh-connect path below
+            // instead of hanging until TCP keepalive notices; see
+            // POOLED_READ_TIMEOUT. Writes must not be interrupted mid-command.
+            let result = if retry {
+                match tokio::time::timeout(POOLED_READ_TIMEOUT, f(&mut session)).await {
+                    Ok(result) => result,
+                    Err(_) => Err(anyhow::anyhow!(
+                        "pooled session command timed out after {}s",
+                        POOLED_READ_TIMEOUT.as_secs()
+                    )),
+                }
+            } else {
+                f(&mut session).await
+            };
+            match result {
                 Ok(val) => {
                     pool_debug(account, "reuse");
                     self.return_pooled(account, session);
@@ -1335,12 +1364,17 @@ pub async fn fill_thread_gaps(
         .await
 }
 
-pub async fn read_cached_or_fetch(
+/// Cached-only variant of [`read_cached_or_fetch`]: returns the message when
+/// the local cache can serve it in full — body row present, threading headers
+/// extracted, inline media on disk — and `None` otherwise. Never touches the
+/// network, so the thread view can answer instantly from cache and leave
+/// misses to a background fetch.
+pub fn read_cached(
     engine: &Arc<Engine>,
     account: &str,
     folder: &str,
     uid: u32,
-) -> anyhow::Result<parse::Message> {
+) -> Option<parse::Message> {
     let media_root = parse::media_root();
     let (cached, load_remote_images) = {
         let db = engine.db.lock().unwrap();
@@ -1348,18 +1382,32 @@ pub async fn read_cached_or_fetch(
         let load_remote = store::load_remote_images(&db, account).unwrap_or(false);
         (cached, load_remote)
     };
-
-    if let Ok(Some(mut msg)) = cached {
-        // Rows cached before the threading-header extraction landed have an
-        // empty `message_id`; refetch them so reply_to/cc/references populate.
-        // Real-world mail almost always carries a Message-ID, so emptiness is a
-        // reliable "pre-extraction cache" signal.
-        let needs_header_refetch = msg.message_id.is_empty();
-        if !needs_header_refetch && parse::cached_media_available(&media_root, &msg) {
-            attach_html(&mut msg, load_remote_images);
-            return Ok(msg);
-        }
+    let mut msg = cached.ok().flatten()?;
+    // Rows cached before the threading-header extraction landed have an
+    // empty `message_id`; refetch them so reply_to/cc/references populate.
+    // Real-world mail almost always carries a Message-ID, so emptiness is a
+    // reliable "pre-extraction cache" signal.
+    if msg.message_id.is_empty() || !parse::cached_media_available(&media_root, &msg) {
+        return None;
     }
+    attach_html(&mut msg, load_remote_images);
+    Some(msg)
+}
+
+pub async fn read_cached_or_fetch(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uid: u32,
+) -> anyhow::Result<parse::Message> {
+    if let Some(msg) = read_cached(engine, account, folder, uid) {
+        return Ok(msg);
+    }
+    let media_root = parse::media_root();
+    let load_remote_images = {
+        let db = engine.db.lock().unwrap();
+        store::load_remote_images(&db, account).unwrap_or(false)
+    };
 
     let mut message = engine
         .with_read_session(account, |session| {

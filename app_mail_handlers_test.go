@@ -95,19 +95,19 @@ func uint32sFromRPCParam(t *testing.T, value any) []uint32 {
 	}
 }
 
-// The sidecar splits branch-compound keys and filters the thread to the
-// subject branch itself; the bridge passes the key through and maps every
-// returned message.
+// The sidecar splits branch-compound keys, filters the thread to the subject
+// branch itself, and shapes final bridge-ready message JSON; the bridge passes
+// the key (and the exact thread id, for the messages' id fields) through and
+// returns the response untouched.
 func TestThreadReadPassesBranchKeyThrough(t *testing.T) {
 	threadID := formatImapThreadID("acc", "INBOX", "k1#Todo")
 	app, writer := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{
 		"messages": []any{
 			map[string]any{
-				"uid": float64(11),
-				"message": map[string]any{
-					"subject":   "Re: Todo",
-					"from_name": "Ann",
-				},
+				"id":        threadID + "#11",
+				"thread_id": threadID,
+				"subject":   "Re: Todo",
+				"from_name": "Ann",
 			},
 		},
 	}})
@@ -123,16 +123,18 @@ func TestThreadReadPassesBranchKeyThrough(t *testing.T) {
 		"account":       "acc",
 		"folder":        "INBOX",
 		"thread_key":    "k1#Todo",
+		"thread_id":     threadID,
 		"limit":         float64(20),
 		"before_cursor": "c1",
 	})
 
-	messages := out.(map[string]any)["messages"].([]Message)
+	messages, _ := out.(map[string]any)["messages"].([]any)
 	if len(messages) != 1 {
 		t.Fatalf("messages = %#v, want the sidecar's rows unmodified", messages)
 	}
-	if messages[0].ID != threadID+"#11" || messages[0].FromName != "Ann" {
-		t.Fatalf("mapped message = %#v", messages[0])
+	first, _ := messages[0].(map[string]any)
+	if first["id"] != threadID+"#11" || first["from_name"] != "Ann" {
+		t.Fatalf("passed-through message = %#v", first)
 	}
 }
 

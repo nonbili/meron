@@ -17,4 +17,5 @@ pub mod rss;
 pub mod secrets;
 pub mod smtp;
 pub mod store;
+pub mod thread_read;
 pub mod unified;

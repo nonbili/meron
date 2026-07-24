@@ -150,6 +150,7 @@
   "chat.showDetails": "显示详情",
   "chat.showImages": "{count, plural, one {显示图片} other {显示 {count} 张图片}}",
   "chat.star": "星标",
+  "chat.threadLoadFailed": "无法加载此会话。",
   "chat.unstar": "取消星标",
   "chat.viewAsHtml": "查看 HTML",
   "chat.viewAsPlainText": "查看纯文本",

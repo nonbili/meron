@@ -150,6 +150,7 @@
   "chat.showDetails": "Mostrar detalhes",
   "chat.showImages": "{count, plural, one {Mostrar imagem} other {Mostrar {count} imagens}}",
   "chat.star": "Marcar com estrela",
+  "chat.threadLoadFailed": "Não foi possível carregar esta conversa.",
   "chat.unstar": "Remover estrela",
   "chat.viewAsHtml": "Ver como HTML",
   "chat.viewAsPlainText": "Ver como texto simples",

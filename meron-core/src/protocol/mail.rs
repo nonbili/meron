@@ -698,144 +698,45 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
-        let headers = if let Some(uid) = parsed.uid {
-            let header = store::get_thread_headers(
-                &conn,
-                &parsed.account,
-                &parsed.folder,
-                &format!("uid:{uid}"),
-            )
-            .map_err(|err| err.to_string())?
-            .into_iter()
-            .find(|header| header.uid == uid);
-            match header {
-                Some(header) => vec![header],
-                None => {
-                    let cached =
-                        store::get_cached_message(&conn, &parsed.account, &parsed.folder, uid)
-                            .map_err(|err| err.to_string())?;
-                    if cached.is_some() {
-                        vec![MessageHeader {
-                            uid,
-                            folder: parsed.folder.clone(),
-                            thread_key: format!("uid:{uid}"),
-                            ..Default::default()
-                        }]
-                    } else {
-                        Vec::new()
-                    }
-                }
-            }
-        } else {
-            let mut headers =
-                store::get_thread_headers_all_folders(&conn, &parsed.account, &parsed.thread_key)
-                    .map_err(|err| err.to_string())?;
-            if let Some(subject_filter) = parsed.subject_filter.as_deref() {
-                headers.retain(|header| {
-                    store::thread_grouping_subject(&header.subject) == subject_filter
-                });
-            }
-            headers = store::collapse_thread_draft_headers(
-                &conn,
-                &parsed.account,
-                &parsed.folder,
-                headers,
-            )
-            .map_err(|err| err.to_string())?;
-            headers
-        };
-        // Mobile sync stores headers only, so the first time a thread is opened
-        // its message bodies aren't cached yet. Fetch them on demand from IMAP
-        // (grouped by folder), cache them, then render. Best-effort: a fetch
-        // failure still renders whatever is cached.
-        let mut missing: std::collections::BTreeMap<String, Vec<u32>> =
-            std::collections::BTreeMap::new();
-        for header in &headers {
-            if header.uid == 0 {
-                continue;
-            }
-            let folder = if header.folder.is_empty() {
-                parsed.folder.clone()
-            } else {
-                header.folder.clone()
-            };
-            let cached = store::has_cached_body(&conn, &parsed.account, &folder, header.uid)
-                .unwrap_or(false);
-            if !cached {
-                missing.entry(folder).or_default().push(header.uid);
-            }
-        }
-        if !missing.is_empty() {
-            // Fetch missing bodies through the Engine's warm session pool (with
-            // in-core OAuth refresh + stale-retry). Best-effort: a fetch failure
-            // still renders whatever is cached.
-            let media_root = std::path::PathBuf::from(data_dir).join("attachments");
-            let account = parsed.account.clone();
-            let fetched = crate::ffi::engine_block_on(engine.with_read_session(
-                &parsed.account,
-                move |session| {
-                    let missing = missing.clone();
-                    let media_root = media_root.clone();
-                    let account = account.clone();
-                    Box::pin(async move {
-                        let mut all = Vec::new();
-                        for (folder, uids) in &missing {
-                            let bodies = imap::fetch_bodies(
-                                session,
-                                folder,
-                                uids,
-                                media_root.clone(),
-                                &account,
-                            )
-                            .await?;
-                            for (uid, message) in bodies {
-                                all.push((folder.clone(), uid, message));
-                            }
-                        }
-                        anyhow::Ok(all)
-                    })
-                },
-            ));
-            if let Ok(fetched) = fetched {
-                for (folder, uid, message) in fetched {
-                    let _ =
-                        store::save_cached_message(&conn, &parsed.account, &folder, uid, &message);
-                }
-            }
-        }
-
-        let mine = store::self_addrs(&conn, &parsed.account);
-        let mut seen_message_ids = std::collections::HashSet::new();
-        let messages = headers
-            .into_iter()
-            .filter_map(|header| {
-                let folder = if header.folder.is_empty() {
-                    parsed.folder.as_str()
-                } else {
-                    header.folder.as_str()
-                };
-                let cached =
-                    store::get_cached_message(&conn, &parsed.account, folder, header.uid).ok()?;
-                let message_id_key = cached
-                    .as_ref()
-                    .map(|message| message.message_id.trim().to_ascii_lowercase())
-                    .unwrap_or_default();
-                if !message_id_key.is_empty() && !seen_message_ids.insert(message_id_key) {
-                    return None;
-                }
-                Some(message_json(
-                    &parsed.account,
-                    &thread_id,
-                    folder,
-                    &header,
-                    cached.as_ref(),
-                    &mine,
-                ))
-            })
-            .collect::<Vec<_>>();
-        Ok(json!({ "messages": messages }))
-    })
+    // Mobile sync stores headers only, so opening a thread routinely finds
+    // uncached bodies; the shared reader pulls the newest one inline and fills
+    // the rest in the background. `mail.tailSynced` is the body-only refresh
+    // signal: the mobile UI answers it by re-reading just the open thread.
+    let thread_key = match parsed.uid {
+        Some(uid) => format!("uid:{uid}"),
+        None => parsed.thread_key.clone(),
+    };
+    let limit = opt_u32(params, "limit");
+    let before_cursor = params
+        .get("before_cursor")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let on_bodies_fetched: crate::thread_read::BodiesFetchedHook = {
+        let account = parsed.account.clone();
+        Box::new(move || {
+            let _ = crate::ffi::emit_event(
+                "mail.tailSynced",
+                serde_json::json!({ "account": account }),
+            );
+        })
+    };
+    crate::ffi::engine_block_on(crate::thread_read::read_thread_page(
+        &engine,
+        crate::thread_read::ThreadReadArgs {
+            account: &parsed.account,
+            folder: &parsed.folder,
+            thread_id: &thread_id,
+            thread_key: &thread_key,
+            subject_filter: parsed.subject_filter.as_deref(),
+            limit,
+            before_cursor: before_cursor.as_deref(),
+            media_root: std::path::PathBuf::from(data_dir).join("attachments"),
+            // The mobile WebView applies the remote-image policy at render
+            // time and wants the raw stored HTML.
+            bake_html_policy: false,
+        },
+        Some(on_bodies_fetched),
+    ))
 }
 
 pub(crate) fn list_mobile_starred_items(data_dir: &str, params: &Value) -> Result<Value, String> {
@@ -1586,53 +1487,6 @@ pub(crate) fn parse_thread_id_with_request_folder(
         parsed.folder = folder.to_string();
     }
     Some(parsed)
-}
-
-pub(crate) fn message_json(
-    account_id: &str,
-    thread_id: &str,
-    folder: &str,
-    header: &MessageHeader,
-    cached: Option<&Message>,
-    mine: &std::collections::HashSet<String>,
-) -> Value {
-    let id = format!("{thread_id}#{}", header.uid);
-    let from_addr = cached
-        .map(|message| message.from_addr.as_str())
-        .unwrap_or(header.from_addr.as_str());
-    json!({
-        "id": id,
-        "account_id": account_id,
-        "folder_id": folder,
-        "thread_id": thread_id,
-        // Classified in the core (own address *or* Sent-folder provenance) so
-        // both frontends render alias-sent mail as outgoing without knowing
-        // the account's aliases.
-        "outgoing": store::is_outgoing(mine, folder, from_addr),
-        "from_name": cached.map(|message| message.from_name.as_str()).unwrap_or(header.from_name.as_str()),
-        "from_addr": cached.map(|message| message.from_addr.as_str()).unwrap_or(header.from_addr.as_str()),
-        "to": cached.map(|message| message.to.as_str()).unwrap_or(""),
-        "reply_to": cached.map(|message| message.reply_to.as_str()).unwrap_or(""),
-        "cc": cached.map(|message| message.cc.as_str()).unwrap_or(""),
-        "bcc": cached.map(|message| message.bcc.as_str()).unwrap_or(""),
-        "message_id": cached.map(|message| message.message_id.as_str()).unwrap_or(""),
-        "in_reply_to": header.in_reply_to,
-        "references": cached.map(|message| message.references.as_str()).unwrap_or(""),
-        "subject": cached.map(|message| message.subject.as_str()).unwrap_or(header.subject.as_str()),
-        "preview": cached.map(|message| message.preview.as_str()).unwrap_or(""),
-        "body": cached.map(|message| message.body.as_str()).unwrap_or(""),
-        "body_html": cached.and_then(|message| message.body_html.as_deref()).unwrap_or(""),
-        // No cached body means the on-demand IMAP fetch failed (auth/network),
-        // not that the message is empty — the client offers a retry for these.
-        "body_missing": cached.is_none(),
-        "date": cached.map(|message| message.date).unwrap_or(header.date),
-        "unread": !header.seen,
-        "starred": header.starred,
-        "has_attachments": cached.map(|message| !message.attachments.is_empty()).unwrap_or(false),
-        "attachments": cached
-            .map(|message| serde_json::to_value(&message.attachments).unwrap_or_else(|_| json!([])))
-            .unwrap_or_else(|| json!([])),
-    })
 }
 
 #[cfg(test)]

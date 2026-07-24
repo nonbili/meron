@@ -117,56 +117,6 @@ func copyPageMetadata(object, out map[string]any) {
 	}
 }
 
-func threadMessagesJSON(accountID, threadID, folder string, raw any) any {
-	object, _ := raw.(map[string]any)
-	list, _ := object["messages"].([]any)
-	messages := make([]Message, 0, len(list))
-	for _, item := range list {
-		entry, _ := item.(map[string]any)
-		msg, _ := entry["message"].(map[string]any)
-		uid := jsonNumber(entry["uid"])
-		attachments := msg["attachments"]
-		attachmentList, _ := attachments.([]any)
-		messageID := fmt.Sprintf("%s#%d", threadID, uid)
-		// The thread spans folders; each message keeps its own source folder so
-		// per-message actions (e.g. single-message delete) target the right
-		// mailbox rather than the thread's nominal folder.
-		msgFolder := jsonString(entry["folder"])
-		if msgFolder == "" {
-			msgFolder = folder
-		}
-		messages = append(messages, Message{
-			ID:             messageID,
-			AccountID:      accountID,
-			FolderID:       msgFolder,
-			ThreadID:       threadID,
-			Outgoing:       jsonBool(entry["outgoing"]),
-			FromName:       jsonString(msg["from_name"]),
-			FromAddr:       jsonString(msg["from_addr"]),
-			To:             jsonString(msg["to"]),
-			ReplyTo:        jsonString(msg["reply_to"]),
-			Cc:             jsonString(msg["cc"]),
-			Bcc:            jsonString(msg["bcc"]),
-			MessageID:      jsonString(msg["message_id"]),
-			References:     jsonString(msg["references"]),
-			Subject:        jsonString(msg["subject"]),
-			Preview:        jsonString(msg["preview"]),
-			Body:           jsonString(msg["body"]),
-			BodyHTML:       jsonString(msg["body_html"]),
-			Date:           jsonNumber(msg["date"]),
-			Unread:         !jsonBool(entry["seen"]),
-			Starred:        jsonBool(entry["starred"]),
-			HasAttachments: len(attachmentList) > 0,
-			Attachments:    attachmentList,
-		})
-	}
-	out := map[string]any{"messages": messages}
-	if cursor, _ := object["next_cursor"].(string); cursor != "" {
-		out["next_cursor"] = cursor
-	}
-	return out
-}
-
 func messageJSON(accountID, threadID, folder string, raw any) any {
 	object, _ := raw.(map[string]any)
 	msg, _ := object["message"].(map[string]any)

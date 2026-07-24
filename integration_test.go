@@ -781,16 +781,15 @@ func TestIntegrationMailFlow(t *testing.T) {
 		})
 		entries, _ := thread["messages"].([]any)
 		for _, item := range entries {
-			entry, ok := item.(map[string]any)
+			message, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
-			message, _ := entry["message"].(map[string]any)
 			if str(message, "subject") != externalSubject {
 				continue
 			}
-			if !boolValue(entry, "outgoing") {
-				t.Fatalf("alias-sent Sent copy not classified outgoing: %v", entry)
+			if !boolValue(message, "outgoing") {
+				t.Fatalf("alias-sent Sent copy not classified outgoing: %v", message)
 			}
 			return
 		}
@@ -855,21 +854,8 @@ func threadLength(result map[string]any) int {
 	return len(messages)
 }
 
-// messages.thread rows are wrappers ({folder, uid, message: {...}}), unlike the
-// flat rows messages.recent returns.
 func threadContainsSubject(result map[string]any, subject string) bool {
-	rows, _ := result["messages"].([]any)
-	for _, row := range rows {
-		wrapper, ok := row.(map[string]any)
-		if !ok {
-			continue
-		}
-		message, ok := wrapper["message"].(map[string]any)
-		if ok && str(message, "subject") == subject {
-			return true
-		}
-	}
-	return false
+	return messagesContainSubject(result, subject)
 }
 
 func messagesContainSubject(result map[string]any, subject string) bool {
@@ -900,13 +886,9 @@ func firstThreadMessage(t *testing.T, result map[string]any) map[string]any {
 	if len(rows) == 0 {
 		t.Fatalf("thread has no messages: %v", result)
 	}
-	row, ok := rows[0].(map[string]any)
+	message, ok := rows[0].(map[string]any)
 	if !ok {
 		t.Fatalf("thread row has type %T", rows[0])
-	}
-	message, ok := row["message"].(map[string]any)
-	if !ok {
-		t.Fatalf("thread row message has type %T: %v", row["message"], row)
 	}
 	return message
 }
