@@ -20,6 +20,7 @@ import {
   BellOff,
   ScrollText,
   RefreshCw,
+  MessagesSquare,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -32,6 +33,7 @@ import {
   KANBAN_COLUMN_MIN_WIDTH,
   sendShortcutLabel,
   setUnifiedInboxSideNavVisible,
+  type ConversationLayout,
   type KanbanBoard,
   type SendShortcut,
 } from '../../states/settings'
@@ -63,6 +65,13 @@ const SECTIONS: { id: 'general'; label: string; icon: LucideIcon }[] = [
 const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
   { value: 'enter', label: sendShortcutLabel('enter') },
   { value: 'mod_enter', label: sendShortcutLabel('mod_enter') },
+]
+
+const CONVERSATION_LAYOUT_OPTIONS = (
+  t: ReturnType<typeof useTranslation>['t'],
+): { value: ConversationLayout; label: string }[] => [
+  { value: 'chat', label: t('settings.appearance.conversationLayoutChat') },
+  { value: 'traditional', label: t('settings.appearance.conversationLayoutTraditional') },
 ]
 
 function isRssAccount(account: Account) {
@@ -335,6 +344,7 @@ function GeneralSection() {
   const { t } = useTranslation()
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
+  const conversationLayout = useValue(settings$.conversationLayout)
   const sendShortcut = useValue(settings$.sendShortcut)
   const spellCheck = useValue(settings$.spellCheck)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
@@ -358,6 +368,14 @@ function GeneralSection() {
           hint={t('settings.appearance.showUnreadAccountBadgeHint')}
           checked={showUnreadAccountBadge}
           onChange={() => settings$.showUnreadAccountBadge.set(!showUnreadAccountBadge)}
+        />
+        <SegmentedRow
+          icon={<MessagesSquare size={15} />}
+          title={t('settings.appearance.conversationLayout')}
+          hint={t('settings.appearance.conversationLayoutHint')}
+          value={conversationLayout}
+          options={CONVERSATION_LAYOUT_OPTIONS(t)}
+          onChange={(value) => settings$.conversationLayout.set(value)}
         />
       </SettingsGroup>
 

@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { loadMoreMessages } from '../../states/mail'
+import { settings$ } from '../../states/settings'
 import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
+import { MessageRow } from './MessageRow'
 import { formatDateDivider } from './messageHelpers'
 import type { MessageContextMenuState } from './MessageContextMenu'
 
@@ -57,10 +60,32 @@ export function ConversationMessageList({
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
   const { t } = useTranslation()
+  const traditional = useValue(settings$.conversationLayout) === 'traditional'
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
+  // Traditional layout only: message ids the user has explicitly expanded or
+  // collapsed, overriding the default below. Cleared when the thread changes.
+  const [expandOverrides, setExpandOverrides] = useState<Record<string, boolean>>({})
   const autoLoadInFlightRef = useRef(false)
   const activeThreadIdRef = useRef(activeThreadId)
   activeThreadIdRef.current = activeThreadId
+
+  useEffect(() => {
+    setExpandOverrides({})
+  }, [activeThreadId])
+
+  // Mail-client default: the newest message is open, along with anything unread
+  // or matched by the in-thread search; everything older collapses to a summary
+  // line until the user clicks it.
+  const searchMatchSet = useMemo(() => new Set(searchMatches), [searchMatches])
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : ''
+  const isExpanded = (message: Message) => {
+    const override = expandOverrides[message.id]
+    if (override !== undefined) return override
+    return message.id === lastMessageId || message.unread || searchMatchSet.has(message.id)
+  }
+  const setExpanded = (messageId: string, expanded: boolean) => {
+    setExpandOverrides((current) => ({ ...current, [messageId]: expanded }))
+  }
 
   const loadEarlier = useCallback(() => {
     if (!messagesCursor || messagesLoadingMore || autoLoadInFlightRef.current) return
@@ -138,12 +163,13 @@ export function ConversationMessageList({
             </button>
           </div>
         )}
-        <div ref={messagesWrapperRef} className="space-y-4">
+        <div ref={messagesWrapperRef} className={traditional ? 'space-y-2' : 'space-y-4'}>
           {!showThreadLoading &&
             messages.map((message, index) => {
               const label = formatDateDivider(message.date)
               const previousLabel = index > 0 ? formatDateDivider(messages[index - 1].date) : ''
               const isSearchMatch = searchMatches.includes(message.id)
+              const expanded = isExpanded(message)
               return (
                 <div
                   key={message.id}
@@ -174,23 +200,36 @@ export function ConversationMessageList({
                     }
                     onOpenContextMenu({ x: event.clientX, y: event.clientY, message, linkUrl })
                   }}
-                  className={`space-y-4 rounded-2xl transition-shadow ${
+                  className={`rounded-2xl transition-shadow ${traditional ? 'space-y-2' : 'space-y-4'} ${
                     activeSearchId === message.id
                       ? 'ring-2 ring-amber-300/80 ring-offset-2 ring-offset-transparent'
                       : ''
                   }`}
                 >
-                  {label && label !== previousLabel && (
+                  {/* The traditional layout carries a date on every message
+                      header, so it needs no dividers. */}
+                  {!traditional && label && label !== previousLabel && (
                     <div className="mx-auto w-max select-none rounded-full bg-active border border-border/30 px-3 py-1.2 text-center text-[11px] font-semibold uppercase tracking-wider text-secondary">
                       {label}
                     </div>
                   )}
-                  <MessageBubble
-                    message={message}
-                    galleryOffset={galleryOffsets.get(message.id) ?? 0}
-                    onOpenContextMenu={onOpenContextMenu}
-                    onLinkHover={setHoveredLink}
-                  />
+                  {traditional ? (
+                    <MessageRow
+                      message={message}
+                      galleryOffset={galleryOffsets.get(message.id) ?? 0}
+                      expanded={expanded}
+                      onToggleExpanded={() => setExpanded(message.id, !expanded)}
+                      onOpenContextMenu={onOpenContextMenu}
+                      onLinkHover={setHoveredLink}
+                    />
+                  ) : (
+                    <MessageBubble
+                      message={message}
+                      galleryOffset={galleryOffsets.get(message.id) ?? 0}
+                      onOpenContextMenu={onOpenContextMenu}
+                      onLinkHover={setHoveredLink}
+                    />
+                  )}
                 </div>
               )
             })}

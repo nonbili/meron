@@ -20,18 +20,24 @@ export function MessageBubbleBody({
   useHtmlBody,
   normalizedSearchQuery,
   activeSearchMatch,
+  fullHeight = false,
   onLinkHover,
 }: {
   message: Message
   useHtmlBody: boolean
   normalizedSearchQuery: string
   activeSearchMatch: boolean
+  /** Grow to fit the content instead of scrolling inside a capped box — the
+   *  traditional layout lets the conversation itself do the scrolling. */
+  fullHeight?: boolean
   onLinkHover?: (url: string | null) => void
 }) {
   const { t } = useTranslation()
+  const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
+  const boxClass = fullHeight ? 'relative' : 'relative overflow-y-auto'
   if (useHtmlBody) {
     return (
-      <div className="relative overflow-y-auto -mr-3.5 pr-3.5" style={{ maxHeight: MESSAGE_BODY_MAX_HEIGHT }}>
+      <div className={`${boxClass} -mr-3.5 pr-3.5`} style={boxStyle}>
         <BubbleHtmlFrame html={message.body_html!} onLinkHover={onLinkHover} />
       </div>
     )
@@ -95,8 +101,8 @@ export function MessageBubbleBody({
 
   return (
     <div
-      className="relative overflow-y-auto -mr-3.5 pr-3.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap select-text font-normal tracking-[0.01em]"
-      style={{ maxHeight: MESSAGE_BODY_MAX_HEIGHT }}
+      className={`${boxClass} -mr-3.5 pr-3.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap select-text font-normal tracking-[0.01em]`}
+      style={boxStyle}
     >
       {blocks.map((block, blockIndex) => {
         if (block.type === 'code') {

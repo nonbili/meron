@@ -20,6 +20,14 @@ import { normalizeI18nLanguage, resolveI18nLanguageFromWebLocale, type Supported
 
 /** How the quick reply composer sends: bare Enter, or Cmd/Ctrl+Enter. */
 export type SendShortcut = 'enter' | 'mod_enter'
+
+/**
+ * How a thread's messages are laid out.
+ * 'chat': left/right chat bubbles, every message expanded.
+ * 'traditional': full-width stacked messages, collapsed to a one-line summary
+ * except the newest and the unread ones (the classic mail-client reading view).
+ */
+export type ConversationLayout = 'chat' | 'traditional'
 export type KanbanBoardColumn = {
   accountId: string
   folderId: string
@@ -67,6 +75,8 @@ export type Settings = {
   /** Whether to overlay an inbox unread-count badge on side navigation account avatars. */
   showUnreadAccountBadge: boolean
   sendShortcut: SendShortcut
+  /** Chat bubbles or the traditional stacked reading view (desktop only). */
+  conversationLayout: ConversationLayout
   /** Whether native spell checking is requested in composer prose fields. */
   spellCheck: boolean
   /** Ordered user-created kanban boards. */
@@ -105,6 +115,7 @@ const DB_KEY = {
   showRealAvatars: 'show_real_avatars',
   showUnreadAccountBadge: 'show_unread_account_badge',
   sendShortcut: 'send_shortcut',
+  conversationLayout: 'conversation_layout',
   spellCheck: 'spell_check',
   kanbanBoards: 'kanban_boards',
   threadListWidth: 'thread_list_width',
@@ -202,6 +213,7 @@ export const settings$ = observable<Settings>({
   showRealAvatars: false,
   showUnreadAccountBadge: false,
   sendShortcut: 'mod_enter',
+  conversationLayout: 'chat',
   spellCheck: true,
   kanbanBoards: [],
   threadListWidth: 350,
@@ -420,6 +432,11 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const sendShortcut = prefs[DB_KEY.sendShortcut]
     if (sendShortcut === 'enter' || sendShortcut === 'mod_enter') {
       settings$.sendShortcut.set(sendShortcut)
+    }
+
+    const conversationLayout = prefs[DB_KEY.conversationLayout]
+    if (conversationLayout === 'chat' || conversationLayout === 'traditional') {
+      settings$.conversationLayout.set(conversationLayout)
     }
 
     if (typeof prefs[DB_KEY.spellCheck] === 'boolean') {

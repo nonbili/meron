@@ -1,39 +1,14 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
-import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  Download,
-  ExternalLink,
-  Image,
-  Loader2,
-  MoreHorizontal,
-  Star,
-} from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, ExternalLink, Loader2, MoreHorizontal, Star } from 'lucide-react'
 
-import { openExternal } from '../../lib/native'
-import { downloadAttachment, getActiveThread, isDraftFolder } from '../../states/mail'
 import { openDraftCompose, openMessageTab, retrySend } from '../../states/compose'
-import { accountIdentities, accounts$ } from '../../states/accounts'
 import type { Message } from '../../types'
-import { revealRemote, thread$ } from '../../states/thread'
-import {
-  extractAddr,
-  fileIconFor,
-  formatFileSize,
-  formatFullTimestamp,
-  formatMessageStamp,
-  formatRecipientSummary,
-  getVisibleMedia,
-  htmlReferencesMedia,
-  mediaSrc,
-} from './messageHelpers'
+import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
-import { MessageBubbleBody } from './MessageBubbleBody'
-import { VideoAttachment } from './VideoAttachment'
+import { MessageContent } from './MessageContent'
+import { useMessageView } from './useMessageView'
 import type { MessageContextMenuState } from './MessageContextMenu'
 
 interface MessageBubbleProps {
@@ -47,51 +22,20 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLinkHover }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
-  const accounts = useValue(accounts$)
-  const search = useValue(thread$.search)
-  const activeSearchId = useValue(thread$.activeSearchId)
-  const activeThread = useValue(getActiveThread)
-  const revealedMap = useValue(thread$.revealedRemote)
-  const revealed = !!revealedMap[message.id]
-  const modeOverrides = useValue(thread$.conversationModeOverrides)
+  const view = useMessageView(message)
+  const {
+    outgoing,
+    isDraft,
+    useHtmlBody,
+    recipientSummary,
+    fromRaw,
+    toRaw,
+    ccRaw,
+    bccRaw,
+    replyToRaw,
+    replyToDiffers,
+  } = view
 
-  const account = accounts.find((acc) => acc.id === message.account_id)
-  const fromEmail = message.from_addr.trim().toLowerCase()
-  const outgoing =
-    !!message.send_status ||
-    message.outgoing === true ||
-    (!!account && accountIdentities(account).some((identity) => identity.email.trim().toLowerCase() === fromEmail))
-  const isDraft = isDraftFolder(message.folder_id, message.account_id)
-  const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null
-  const isRSS = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
-  const showOriginalDate = isRSS
-  const accountConversationMode = (activeAccount?.conversation_html ?? true) ? 'html' : 'plain'
-  const conversationMode = activeAccount ? (modeOverrides[activeAccount.id] ?? accountConversationMode) : 'plain'
-
-  const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(message, account, revealed)
-  const normalizedSearchQuery = search.trim()
-  const useHtmlBody = conversationMode === 'html' && !!message.body_html && !normalizedSearchQuery
-  const showAttachmentImages =
-    attachmentImages.length > 0 &&
-    (!useHtmlBody || (outgoing && attachmentImages.some((image) => !htmlReferencesMedia(message.body_html, image))))
-  const activeSearchMatch = activeSearchId === message.id
-
-  const replyToRaw = message.reply_to?.trim()
-  const ccRaw = message.cc?.trim()
-  const toRaw = message.to?.trim()
-  const replyToDiffers =
-    !outgoing && !!replyToRaw && extractAddr(replyToRaw).toLowerCase() !== message.from_addr.toLowerCase()
-  // Outgoing bubbles have no sender name to show, and without recipients a reply
-  // and a forward of the same text are indistinguishable — so they take the
-  // sender slot, the way Gmail's "to …" line does.
-  const bccRaw = message.bcc?.trim()
-  const recipientSummary = outgoing ? formatRecipientSummary(toRaw, ccRaw) : ''
-  // The header shows names, not addresses, so every bubble has something to
-  // reveal — the panel always leads with From. Gating the chevron on Cc or a
-  // wider To list made it blink in and out between messages of one thread.
-  const fromRaw = message.from_name ? `${message.from_name} <${message.from_addr}>` : message.from_addr
-
-  const onOpenImage = (idx: number) => thread$.galleryIndex.set(idx)
   const openActionsMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     onOpenContextMenu({ x: rect.right, y: rect.bottom + 4, message, hideOpenInNewTab: true })
@@ -169,7 +113,9 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
               </span>
             )}
             {message.starred && <Star size={11} className="fill-amber-500 text-amber-500" />}
-            <span title={formatFullTimestamp(message.date)}>{formatMessageStamp(message.date, showOriginalDate)}</span>
+            <span title={formatFullTimestamp(message.date)}>
+              {formatMessageStamp(message.date, view.showOriginalDate)}
+            </span>
             {outgoing &&
               !isDraft &&
               (message.send_status === 'sending' ? (
@@ -210,117 +156,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
           )}
         </div>
 
-        {/* Image attachments */}
-        {showAttachmentImages &&
-          (() => {
-            const count = attachmentImages.length
-            let gridClass = 'grid-cols-2 max-w-[320px]'
-            let btnClass = 'h-40'
-
-            if (count === 1) {
-              gridClass = 'grid-cols-1 max-w-[380px]'
-              btnClass = 'h-56'
-            } else if (count === 2) {
-              gridClass = 'grid-cols-2 max-w-[480px]'
-              btnClass = 'h-40'
-            } else if (count === 3) {
-              gridClass = 'grid-cols-3 max-w-[540px]'
-              btnClass = 'h-32'
-            } else if (count >= 4) {
-              gridClass = 'grid-cols-4 max-w-[640px]'
-              btnClass = 'h-28'
-            }
-
-            return (
-              <div className={`mb-2 grid gap-1.5 rounded-lg overflow-hidden border border-border/20 ${gridClass}`}>
-                {attachmentImages.map((image, idx) => {
-                  const src = mediaSrc(image)
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => onOpenImage(galleryOffset + idx)}
-                      className={`block w-full overflow-hidden hover:opacity-90 cursor-pointer ${btnClass}`}
-                      title={image.filename}
-                    >
-                      <img
-                        src={src}
-                        alt={image.filename}
-                        loading="lazy"
-                        className="w-full h-full object-cover object-top"
-                      />
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })()}
-
-        {/* Video attachments: rendered with native controls, played from disk
-            (cached) or straight from the remote URL. The corner button opens the
-            source in the system player as a fallback when the in-app webview
-            can't decode the codec (common on Linux/WebKitGTK). */}
-        {videos.length > 0 && (
-          <div className="mb-2 flex flex-col gap-1.5">
-            {videos.map((video, idx) => (
-              <VideoAttachment
-                key={idx}
-                src={mediaSrc(video)}
-                externalUrl={video.url ?? mediaSrc(video)}
-                externalLabel={t('chat.openExternalPlayer')}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Hidden remote images: let the user reveal them for this message */}
-        {hiddenRemoteCount > 0 && (
-          <button
-            onClick={() => revealRemote(message.id)}
-            className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 bg-black/[0.02] dark:bg-white/[0.02] py-2 text-[11px] font-semibold text-secondary hover:text-accent hover:border-accent/40 cursor-pointer transition-colors"
-          >
-            <Image size={13} />
-            {t('chat.showImages', { count: hiddenRemoteCount })}
-          </button>
-        )}
-
-        <MessageBubbleBody
-          message={message}
-          useHtmlBody={useHtmlBody}
-          normalizedSearchQuery={normalizedSearchQuery}
-          activeSearchMatch={activeSearchMatch}
-          onLinkHover={onLinkHover}
-        />
-
-        {/* File attachments — click to save via native dialog (when on disk) */}
-        {files.map((file, idx) => {
-          const downloadable = !!file.key
-          const FileIcon = fileIconFor(file.filename, file.mime)
-          return (
-            <button
-              key={idx}
-              type="button"
-              disabled={!downloadable}
-              onClick={() => downloadAttachment(file)}
-              title={downloadable ? t('chat.saveFile', { filename: file.filename }) : file.filename}
-              className={`group mt-2.5 flex w-full items-center gap-2 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] p-2 text-xs font-semibold border border-border/20 text-left ${
-                downloadable ? 'hover:bg-black/[0.06] dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'
-              }`}
-            >
-              <FileIcon size={15} className="text-accent shrink-0" />
-              <span className="truncate">{file.filename}</span>
-              <span className="text-[9.5px] text-secondary ml-auto shrink-0 font-normal">
-                {formatFileSize(file.size)}
-              </span>
-              {downloadable && (
-                <Download
-                  size={13}
-                  className="text-secondary shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                />
-              )}
-            </button>
-          )
-        })}
+        <MessageContent message={message} view={view} galleryOffset={galleryOffset} onLinkHover={onLinkHover} />
       </div>
     </div>
   )
