@@ -25,6 +25,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -353,6 +354,26 @@ internal fun SendShortcutMode.next(): SendShortcutMode =
     when (this) {
         SendShortcutMode.Enter -> SendShortcutMode.ModEnter
         SendShortcutMode.ModEnter -> SendShortcutMode.Enter
+    }
+
+@Composable
+@ReadOnlyComposable
+internal fun ConversationLayout.label(): String =
+    when (this) {
+        ConversationLayout.Chat -> tr("settings.appearance.conversationLayoutChat")
+        ConversationLayout.Traditional -> tr("settings.appearance.conversationLayoutTraditional")
+    }
+
+internal fun ConversationLayout.storageValue(): String =
+    when (this) {
+        ConversationLayout.Chat -> "chat"
+        ConversationLayout.Traditional -> "traditional"
+    }
+
+internal fun ConversationLayout.next(): ConversationLayout =
+    when (this) {
+        ConversationLayout.Chat -> ConversationLayout.Traditional
+        ConversationLayout.Traditional -> ConversationLayout.Chat
     }
 
 internal fun shouldSendFromEditor(

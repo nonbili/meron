@@ -96,6 +96,17 @@ internal fun saveSendShortcutMode(
     mode: SendShortcutMode,
 ) = prefs.putString(SEND_SHORTCUT_PREF, mode.storageValue())
 
+internal fun loadConversationLayout(prefs: AppPreferences): ConversationLayout =
+    when (prefs.getString(CONVERSATION_LAYOUT_PREF, "chat")) {
+        "traditional" -> ConversationLayout.Traditional
+        else -> ConversationLayout.Chat
+    }
+
+internal fun saveConversationLayout(
+    prefs: AppPreferences,
+    layout: ConversationLayout,
+) = prefs.putString(CONVERSATION_LAYOUT_PREF, layout.storageValue())
+
 internal fun loadAppLanguageTag(prefs: AppPreferences): String =
     prefs
         .getString(APP_LANGUAGE_PREF, "")

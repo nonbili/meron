@@ -211,6 +211,7 @@ internal class MeronMobileState(
         coercePollIntervalMinutes(loadAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, 15)),
     )
     var sendShortcutMode by mutableStateOf(loadSendShortcutMode(prefs))
+    var conversationLayout by mutableStateOf(loadConversationLayout(prefs))
     var kanbanColumnWidth by mutableStateOf(
         loadAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)
             .coerceIn(KANBAN_COLUMN_MIN_WIDTH, KANBAN_COLUMN_MAX_WIDTH),

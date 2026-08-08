@@ -85,6 +85,14 @@ internal enum class FilterMode { All, Unread, Starred }
 
 internal enum class SendShortcutMode { Enter, ModEnter }
 
+/**
+ * How a thread's messages are laid out.
+ * [Chat]: left/right chat bubbles, every message expanded.
+ * [Traditional]: full-width stacked messages, collapsed to a one-line summary
+ * except the newest and the unread ones (the classic mail-client reading view).
+ */
+internal enum class ConversationLayout { Chat, Traditional }
+
 internal const val UNIFIED_ACCOUNT_ID = "unified"
 internal const val INBOX_FOLDER = "inbox"
 internal const val STARRED_FOLDER = "starred"
@@ -104,6 +112,7 @@ internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
 internal const val POLL_INTERVAL_MINUTES_PREF = "poll_interval_minutes_v1"
 internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
+internal const val CONVERSATION_LAYOUT_PREF = "conversation_layout_v1"
 internal const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val HIDDEN_NAV_ACCOUNTS_PREF = "hidden_navigation_accounts_v1"
 internal const val KANBAN_COLUMN_WIDTH_PREF = "kanban_column_width_v1"

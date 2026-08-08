@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -213,84 +214,18 @@ internal fun MessageBubble(
                         tint = textColor.copy(alpha = 0.55f),
                     )
                 }
-                Box {
-                    val messageTextLabel = tr("chat.messageText")
-                    val subjectLabel = tr("composer.fields.subject")
-                    val messageIdLabel = tr("chat.messageId")
-                    val noSubjectLabel = tr("threads.noSubject")
-                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = tr("chat.moreMessageActions"),
-                            modifier = Modifier.size(16.dp),
-                            tint = textColor.copy(alpha = 0.55f),
-                        )
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(tr("chat.copyMessageText")) },
-                            onClick = {
-                                menuOpen = false
-                                onCopyMessageText(messageTextLabel, messagePlainText(message))
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(tr("chat.copySubject")) },
-                            onClick = {
-                                menuOpen = false
-                                onCopyMessageText(subjectLabel, message.subject.ifBlank { noSubjectLabel })
-                            },
-                        )
-                        if (message.messageId.isNotBlank()) {
-                            DropdownMenuItem(
-                                text = { Text(tr("chat.copyMessageId")) },
-                                onClick = {
-                                    menuOpen = false
-                                    onCopyMessageText(messageIdLabel, message.messageId)
-                                },
-                            )
-                        }
-                        if (itemActionsEnabled) {
-                            DropdownMenuItem(
-                                text = { Text(if (message.unread) tr("threads.actions.markAsRead") else tr("threads.actions.markAsUnread")) },
-                                onClick = {
-                                    menuOpen = false
-                                    onToggleRead(message)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (message.starred) tr("chat.unstar") else tr("chat.star")) },
-                                onClick = {
-                                    menuOpen = false
-                                    onToggleStarred(message)
-                                },
-                            )
-                        }
-                        if (actionsEnabled) {
-                            DropdownMenuItem(
-                                text = { Text(tr("chat.actions.forward")) },
-                                onClick = {
-                                    menuOpen = false
-                                    onForward(message)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(tr("chat.actions.editAsNewMessage")) },
-                                onClick = {
-                                    menuOpen = false
-                                    onEditAsNew(message)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(tr("chat.actions.deleteMessage"), color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    menuOpen = false
-                                    onDelete(message)
-                                },
-                            )
-                        }
-                    }
-                }
+                MessageActionsButton(
+                    message = message,
+                    tint = textColor.copy(alpha = 0.55f),
+                    actionsEnabled = actionsEnabled,
+                    itemActionsEnabled = itemActionsEnabled,
+                    onForward = onForward,
+                    onEditAsNew = onEditAsNew,
+                    onToggleRead = onToggleRead,
+                    onToggleStarred = onToggleStarred,
+                    onDelete = onDelete,
+                    onCopyMessageText = onCopyMessageText,
+                )
             }
             if (addressesOpen) {
                 MessageAddressDetails(
@@ -301,108 +236,256 @@ internal fun MessageBubble(
                     modifier = Modifier.padding(bottom = 2.dp),
                 )
             }
-            if (showSubject && message.subject.isNotBlank()) {
-                Text(
-                    text = highlightedMessageText(message.subject, searchQuery, activeSearchMatch),
-                    color = textColor,
-                    fontSize = 16.sp,
-                    lineHeight = 21.sp,
-                    fontWeight = FontWeight.SemiBold,
+            MessageBodyContent(
+                message = message,
+                textColor = textColor,
+                preferHtml = preferHtml,
+                searchQuery = searchQuery,
+                activeSearchMatch = activeSearchMatch,
+                showSubject = showSubject,
+                bodyMaxHeight = bodyMaxHeight,
+                onOpenAttachment = onOpenAttachment,
+                onSaveAttachment = onSaveAttachment,
+                loadImageAttachment = loadImageAttachment,
+                onOpenImageAttachment = onOpenImageAttachment,
+                onOpenHtmlImage = onOpenHtmlImage,
+                onOpenUrl = onOpenUrl,
+                onRetryLoad = onRetryLoad,
+            )
+        }
+    }
+}
+
+/** The overflow menu shared by both conversation layouts: copy actions plus the
+ *  per-message read/star and mail actions the caller enables. */
+@Composable
+internal fun MessageActionsButton(
+    message: MessageBody,
+    tint: Color,
+    actionsEnabled: Boolean,
+    itemActionsEnabled: Boolean,
+    onForward: (MessageBody) -> Unit,
+    onEditAsNew: (MessageBody) -> Unit,
+    onToggleRead: (MessageBody) -> Unit,
+    onToggleStarred: (MessageBody) -> Unit,
+    onDelete: (MessageBody) -> Unit,
+    onCopyMessageText: (String, String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        val messageTextLabel = tr("chat.messageText")
+        val subjectLabel = tr("composer.fields.subject")
+        val messageIdLabel = tr("chat.messageId")
+        val noSubjectLabel = tr("threads.noSubject")
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = tr("chat.moreMessageActions"),
+                modifier = Modifier.size(16.dp),
+                tint = tint,
+            )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(tr("chat.copyMessageText")) },
+                onClick = {
+                    menuOpen = false
+                    onCopyMessageText(messageTextLabel, messagePlainText(message))
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(tr("chat.copySubject")) },
+                onClick = {
+                    menuOpen = false
+                    onCopyMessageText(subjectLabel, message.subject.ifBlank { noSubjectLabel })
+                },
+            )
+            if (message.messageId.isNotBlank()) {
+                DropdownMenuItem(
+                    text = { Text(tr("chat.copyMessageId")) },
+                    onClick = {
+                        menuOpen = false
+                        onCopyMessageText(messageIdLabel, message.messageId)
+                    },
                 )
             }
-            if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
-                HtmlMessageBody(
-                    html = message.bodyHtml,
-                    maxHeight = bodyMaxHeight,
-                    onOpenUrl = onOpenUrl,
-                    onOpenImage = onOpenHtmlImage,
+            if (itemActionsEnabled) {
+                DropdownMenuItem(
+                    text = { Text(if (message.unread) tr("threads.actions.markAsRead") else tr("threads.actions.markAsUnread")) },
+                    onClick = {
+                        menuOpen = false
+                        onToggleRead(message)
+                    },
                 )
-            } else if (message.bodyMissing) {
-                // The core has no cached body (the on-demand fetch failed) — a
-                // different state from a genuinely empty message, so offer a retry
-                // instead of "(no content)".
-                Column {
-                    Text(
-                        tr("chat.messageLoadFailed"),
-                        color = textColor.copy(alpha = 0.6f),
+                DropdownMenuItem(
+                    text = { Text(if (message.starred) tr("chat.unstar") else tr("chat.star")) },
+                    onClick = {
+                        menuOpen = false
+                        onToggleStarred(message)
+                    },
+                )
+            }
+            if (actionsEnabled) {
+                DropdownMenuItem(
+                    text = { Text(tr("chat.actions.forward")) },
+                    onClick = {
+                        menuOpen = false
+                        onForward(message)
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(tr("chat.actions.editAsNewMessage")) },
+                    onClick = {
+                        menuOpen = false
+                        onEditAsNew(message)
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(tr("chat.actions.deleteMessage"), color = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        menuOpen = false
+                        onDelete(message)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Everything below a message's header: the optional subject, the body (HTML or
+ * plain), standalone attachments, and the send-status line. MessageBubble (chat)
+ * and MessageRow (traditional) each wrap it in their own chrome, so the two
+ * layouts differ only in the frame around this.
+ */
+@Composable
+internal fun ColumnScope.MessageBodyContent(
+    message: MessageBody,
+    textColor: Color,
+    preferHtml: Boolean,
+    searchQuery: String,
+    activeSearchMatch: Boolean,
+    showSubject: Boolean,
+    bodyMaxHeight: Dp,
+    onOpenAttachment: (MessageAttachment) -> Unit,
+    onSaveAttachment: (MessageAttachment) -> Unit,
+    loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    onOpenImageAttachment: (MessageAttachment) -> Unit,
+    onOpenHtmlImage: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onRetryLoad: () -> Unit,
+) {
+    if (showSubject && message.subject.isNotBlank()) {
+        Text(
+            text = highlightedMessageText(message.subject, searchQuery, activeSearchMatch),
+            color = textColor,
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    if (preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()) {
+        HtmlMessageBody(
+            html = message.bodyHtml,
+            maxHeight = bodyMaxHeight,
+            onOpenUrl = onOpenUrl,
+            onOpenImage = onOpenHtmlImage,
+        )
+    } else if (message.bodyMissing) {
+        // The core has no cached body (the on-demand fetch failed) — a
+        // different state from a genuinely empty message, so offer a retry
+        // instead of "(no content)".
+        Column {
+            Text(
+                tr("chat.messageLoadFailed"),
+                color = textColor.copy(alpha = 0.6f),
+                fontSize = 15.5.sp,
+                lineHeight = 21.sp,
+            )
+            TextButton(onClick = onRetryLoad, modifier = Modifier.align(Alignment.End)) {
+                Text(tr("chat.retry"))
+            }
+        }
+    } else {
+        // Subject is the conversation title (top bar); the body shows the
+        // message text, matching the desktop chat reader.
+        val bodyText: @Composable () -> Unit = {
+            SelectableMessageText(
+                text = message.body.ifBlank { "(no content)" },
+                onOpenUrl = onOpenUrl,
+                searchQuery = searchQuery,
+                activeSearchMatch = activeSearchMatch,
+                color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
+                style =
+                    MaterialTheme.typography.bodyLarge.copy(
                         fontSize = 15.5.sp,
                         lineHeight = 21.sp,
-                    )
-                    TextButton(onClick = onRetryLoad, modifier = Modifier.align(Alignment.End)) {
-                        Text(tr("chat.retry"))
-                    }
-                }
-            } else {
-                // Subject is the conversation title (top bar); the bubble shows the
-                // message body, matching the desktop chat reader.
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = bodyMaxHeight)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    SelectableMessageText(
-                        text = message.body.ifBlank { "(no content)" },
-                        onOpenUrl = onOpenUrl,
-                        searchQuery = searchQuery,
-                        activeSearchMatch = activeSearchMatch,
-                        color = if (message.body.isBlank()) textColor.copy(alpha = 0.6f) else textColor,
-                        style =
-                            MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = 15.5.sp,
-                                lineHeight = 21.sp,
-                            ),
-                    )
-                }
+                    ),
+            )
+        }
+        if (bodyMaxHeight == Dp.Unspecified) {
+            // Uncapped (the traditional layout): the message is as tall as it
+            // needs to be and the conversation list scrolls it. A nested
+            // scroller here would be measured with an infinite height by the
+            // lazy list and throw.
+            bodyText()
+        } else {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = bodyMaxHeight)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                bodyText()
             }
-            val standaloneAttachmentsForMessage = standaloneAttachments(message)
-            if (standaloneAttachmentsForMessage.isNotEmpty()) {
-                val (imageAttachments, otherAttachments) =
-                    standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (imageAttachments.isNotEmpty()) {
-                        AttachmentImageGrid(
-                            images = imageAttachments,
-                            loadImageAttachment = loadImageAttachment,
-                            onOpen = onOpenImageAttachment,
-                        )
-                    }
-                    otherAttachments.forEach { attachment ->
-                        AttachmentRow(
-                            attachment = attachment,
-                            textColor = textColor,
-                            onOpen = { onOpenAttachment(attachment) },
-                            onSave = { onSaveAttachment(attachment) },
-                        )
-                    }
-                }
+        }
+    }
+    val standaloneAttachmentsForMessage = standaloneAttachments(message)
+    if (standaloneAttachmentsForMessage.isNotEmpty()) {
+        val (imageAttachments, otherAttachments) =
+            standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (imageAttachments.isNotEmpty()) {
+                AttachmentImageGrid(
+                    images = imageAttachments,
+                    loadImageAttachment = loadImageAttachment,
+                    onOpen = onOpenImageAttachment,
+                )
             }
-            // Send lifecycle for an optimistically inserted reply: shown until the
-            // canonical sent message replaces it on re-fetch (which clears the
-            // status). On failure the bubble stays visible so the reply isn't lost.
-            when (message.sendStatus) {
-                SendStatus.Sending -> {
-                    Text(
-                        "Sending…",
-                        modifier = Modifier.align(Alignment.End),
-                        fontSize = 10.5.sp,
-                        color = textColor.copy(alpha = 0.55f),
-                    )
-                }
+            otherAttachments.forEach { attachment ->
+                AttachmentRow(
+                    attachment = attachment,
+                    textColor = textColor,
+                    onOpen = { onOpenAttachment(attachment) },
+                    onSave = { onSaveAttachment(attachment) },
+                )
+            }
+        }
+    }
+    // Send lifecycle for an optimistically inserted reply: shown until the
+    // canonical sent message replaces it on re-fetch (which clears the
+    // status). On failure the bubble stays visible so the reply isn't lost.
+    when (message.sendStatus) {
+        SendStatus.Sending -> {
+            Text(
+                "Sending…",
+                modifier = Modifier.align(Alignment.End),
+                fontSize = 10.5.sp,
+                color = textColor.copy(alpha = 0.55f),
+            )
+        }
 
-                SendStatus.Failed -> {
-                    Text(
-                        "Failed to send",
-                        modifier = Modifier.align(Alignment.End),
-                        fontSize = 10.5.sp,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+        SendStatus.Failed -> {
+            Text(
+                "Failed to send",
+                modifier = Modifier.align(Alignment.End),
+                fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
-                SendStatus.None -> {
-                    Unit
-                }
-            }
+        SendStatus.None -> {
+            Unit
         }
     }
 }

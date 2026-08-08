@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
@@ -130,6 +131,8 @@ internal fun SettingsScreen(
     onToggleUnifiedInboxNav: () -> Unit,
     sendShortcutMode: SendShortcutMode,
     onToggleSendShortcut: () -> Unit,
+    conversationLayout: ConversationLayout,
+    onToggleConversationLayout: () -> Unit,
     appProxy: ProxySpec,
     onSaveAppProxy: (ProxySpec) -> Unit,
     onSaveAccountProxy: (AccountSummary, ProxySpec) -> Unit,
@@ -281,6 +284,8 @@ internal fun SettingsScreen(
                     onCycleKanbanColumnWidth = onCycleKanbanColumnWidth,
                     sendShortcutMode = sendShortcutMode,
                     onToggleSendShortcut = onToggleSendShortcut,
+                    conversationLayout = conversationLayout,
+                    onToggleConversationLayout = onToggleConversationLayout,
                     appProxy = appProxy,
                     onSaveAppProxy = onSaveAppProxy,
                     notificationsNeedPermission = notificationsNeedPermission,
@@ -612,6 +617,8 @@ internal fun SettingsGeneralPage(
     onCycleKanbanColumnWidth: () -> Unit,
     sendShortcutMode: SendShortcutMode,
     onToggleSendShortcut: () -> Unit,
+    conversationLayout: ConversationLayout,
+    onToggleConversationLayout: () -> Unit,
     appProxy: ProxySpec,
     onSaveAppProxy: (ProxySpec) -> Unit,
     notificationsNeedPermission: Boolean,
@@ -672,6 +679,15 @@ internal fun SettingsGeneralPage(
                 subtitle = tr("settings.appearance.showSenderImagesHint"),
                 checked = showSenderImages,
                 onToggle = onToggleSenderImages,
+            )
+        }
+        item {
+            SettingsRow(
+                icon = Icons.AutoMirrored.Filled.Chat,
+                title = tr("settings.appearance.conversationLayout"),
+                subtitle = tr("settings.appearance.conversationLayoutHint"),
+                onClick = onToggleConversationLayout,
+                trailing = { Text(conversationLayout.label(), color = MaterialTheme.colorScheme.primary) },
             )
         }
         item {

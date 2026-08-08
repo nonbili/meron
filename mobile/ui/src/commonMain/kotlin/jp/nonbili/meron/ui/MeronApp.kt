@@ -830,6 +830,7 @@ private fun MeronMobileScreenContent(
                     quickReplyFailure = quickReplyFailure,
                     quickReplySending = quickReplySendInFlight,
                     sendShortcutMode = sendShortcutMode,
+                    conversationLayout = conversationLayout,
                     onQuickReplyAttach = {
                         pickAttachmentInto { picked ->
                             quickReplyAttachments = quickReplyAttachments + picked
@@ -1127,6 +1128,12 @@ private fun MeronMobileScreenContent(
                         val next = sendShortcutMode.next()
                         sendShortcutMode = next
                         saveSendShortcutMode(prefs, next)
+                    },
+                    conversationLayout = conversationLayout,
+                    onToggleConversationLayout = {
+                        val next = conversationLayout.next()
+                        conversationLayout = next
+                        saveConversationLayout(prefs, next)
                     },
                     appProxy = appProxy,
                     onSaveAppProxy = ::saveAppProxy,

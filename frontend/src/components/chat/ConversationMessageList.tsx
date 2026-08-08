@@ -69,9 +69,21 @@ export function ConversationMessageList({
   const activeThreadIdRef = useRef(activeThreadId)
   activeThreadIdRef.current = activeThreadId
 
+  // Which messages were unread when they first rendered. Scroll-driven read
+  // marking clears the flag while the user reads, so a default derived from the
+  // live one would collapse an open message out from under them — and reaching
+  // the bottom, which marks the whole thread read, would collapse every one of
+  // them at once.
+  const unreadOnArrivalRef = useRef<Set<string>>(new Set())
+
   useEffect(() => {
     setExpandOverrides({})
+    unreadOnArrivalRef.current = new Set()
   }, [activeThreadId])
+
+  for (const message of messages) {
+    if (message.unread) unreadOnArrivalRef.current.add(message.id)
+  }
 
   // Mail-client default: the newest message is open, along with anything unread
   // or matched by the in-thread search; everything older collapses to a summary
@@ -79,9 +91,12 @@ export function ConversationMessageList({
   const searchMatchSet = useMemo(() => new Set(searchMatches), [searchMatches])
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : ''
   const isExpanded = (message: Message) => {
+    // The match the user navigated to always shows its body: landing on a
+    // collapsed summary would hide the very text that was searched for.
+    if (message.id === activeSearchId) return true
     const override = expandOverrides[message.id]
     if (override !== undefined) return override
-    return message.id === lastMessageId || message.unread || searchMatchSet.has(message.id)
+    return message.id === lastMessageId || unreadOnArrivalRef.current.has(message.id) || searchMatchSet.has(message.id)
   }
   const setExpanded = (messageId: string, expanded: boolean) => {
     setExpandOverrides((current) => ({ ...current, [messageId]: expanded }))

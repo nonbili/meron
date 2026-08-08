@@ -131,6 +131,7 @@ internal fun ThreadScreen(
     quickReplyFailure: String,
     quickReplySending: Boolean = false,
     sendShortcutMode: SendShortcutMode,
+    conversationLayout: ConversationLayout,
     onQuickReplyAttach: () -> Unit,
     onRemoveQuickReplyAttachment: (DraftAttachment) -> Unit,
     onOpenFullReply: () -> Unit,
@@ -202,6 +203,28 @@ internal fun ThreadScreen(
             }
         }
     val activeSearchId = searchMatches.getOrNull(activeSearchIndex).orEmpty()
+    // Traditional layout only: message ids the user has explicitly expanded or
+    // collapsed, overriding the default below. Reset when the thread changes.
+    var expandOverrides by remember(thread?.id) { mutableStateOf(emptyMap<String, Boolean>()) }
+    // Which messages were unread when they first appeared. Scroll-driven read
+    // marking clears `unread` while the user reads, so a default derived from
+    // the live flag would collapse an open message out from under them — and
+    // reaching the bottom, which marks the whole thread read, would collapse
+    // every one of them at once.
+    val unreadOnArrival = remember(thread?.id) { mutableSetOf<String>() }
+    messages.forEach { if (it.unread) unreadOnArrival += it.id }
+    // Mail-client default: the newest message is open, along with anything
+    // unread or matched by the in-thread search; everything older collapses to
+    // a summary line until the user taps it.
+    val lastMessageId = messages.lastOrNull()?.id.orEmpty()
+
+    fun isMessageExpanded(message: MessageBody): Boolean {
+        // The match the user navigated to always shows its body: landing on a
+        // collapsed summary would hide the very text that was searched for.
+        if (message.id == activeSearchId) return true
+        return expandOverrides[message.id]
+            ?: (message.id == lastMessageId || message.id in unreadOnArrival || searchMatches.contains(message.id))
+    }
     val listState = rememberLazyListState()
     BackHandler(
         enabled = searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null,
@@ -519,11 +542,16 @@ internal fun ThreadScreen(
                             CircularProgressIndicator()
                         }
                     } else {
+                        val traditional = conversationLayout == ConversationLayout.Traditional
                         LazyColumn(
                             Modifier.fillMaxSize(),
                             state = listState,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding =
+                                PaddingValues(
+                                    horizontal = if (traditional) 8.dp else 12.dp,
+                                    vertical = if (traditional) 8.dp else 16.dp,
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(if (traditional) 6.dp else 10.dp),
                         ) {
                             if (canLoadOlder || loadingOlder) {
                                 item {
@@ -540,33 +568,65 @@ internal fun ThreadScreen(
                             }
                             items(messages, key = { it.id }) { message ->
                                 val outgoing = isOutgoing(message, accountEmail)
-                                MessageBubble(
-                                    message = message,
-                                    outgoing = outgoing,
-                                    chat = chat,
-                                    preferHtml = preferHtml,
-                                    searchQuery = normalizedSearch,
-                                    activeSearchMatch = message.id == activeSearchId,
-                                    actionsEnabled = !isRss,
-                                    itemActionsEnabled = true,
-                                    showSubject = isRss,
-                                    onForward = onForward,
-                                    onEditAsNew = onEditAsNew,
-                                    onOpenDraft = onOpenDraft,
-                                    onToggleRead = onToggleMessageRead,
-                                    onToggleStarred = onToggleMessageStarred,
-                                    onDelete = onDeleteMessage,
-                                    onOpenAttachment = onOpenAttachment,
-                                    onSaveAttachment = onSaveAttachment,
-                                    loadImageAttachment = loadImageAttachment,
-                                    onOpenImageAttachment = ::openGalleryForAttachment,
-                                    onOpenHtmlImage = ::openGalleryForHtmlSrc,
-                                    onCopyMessageText = onCopyMessageText,
-                                    onComposeTo = onComposeTo,
-                                    onOpenMessage = { readerMessage = it },
-                                    onOpenUrl = services::openUrl,
-                                    onRetryLoad = onRetryLoadMessages,
-                                )
+                                if (conversationLayout == ConversationLayout.Traditional) {
+                                    val expanded = isMessageExpanded(message)
+                                    MessageRow(
+                                        message = message,
+                                        outgoing = outgoing,
+                                        preferHtml = preferHtml,
+                                        searchQuery = normalizedSearch,
+                                        activeSearchMatch = message.id == activeSearchId,
+                                        expanded = expanded,
+                                        onToggleExpanded = { expandOverrides = expandOverrides + (message.id to !expanded) },
+                                        actionsEnabled = !isRss,
+                                        itemActionsEnabled = true,
+                                        showSubject = isRss,
+                                        onForward = onForward,
+                                        onEditAsNew = onEditAsNew,
+                                        onOpenDraft = onOpenDraft,
+                                        onToggleRead = onToggleMessageRead,
+                                        onToggleStarred = onToggleMessageStarred,
+                                        onDelete = onDeleteMessage,
+                                        onOpenAttachment = onOpenAttachment,
+                                        onSaveAttachment = onSaveAttachment,
+                                        loadImageAttachment = loadImageAttachment,
+                                        onOpenImageAttachment = ::openGalleryForAttachment,
+                                        onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                                        onCopyMessageText = onCopyMessageText,
+                                        onComposeTo = onComposeTo,
+                                        onOpenMessage = { readerMessage = it },
+                                        onOpenUrl = services::openUrl,
+                                        onRetryLoad = onRetryLoadMessages,
+                                    )
+                                } else {
+                                    MessageBubble(
+                                        message = message,
+                                        outgoing = outgoing,
+                                        chat = chat,
+                                        preferHtml = preferHtml,
+                                        searchQuery = normalizedSearch,
+                                        activeSearchMatch = message.id == activeSearchId,
+                                        actionsEnabled = !isRss,
+                                        itemActionsEnabled = true,
+                                        showSubject = isRss,
+                                        onForward = onForward,
+                                        onEditAsNew = onEditAsNew,
+                                        onOpenDraft = onOpenDraft,
+                                        onToggleRead = onToggleMessageRead,
+                                        onToggleStarred = onToggleMessageStarred,
+                                        onDelete = onDeleteMessage,
+                                        onOpenAttachment = onOpenAttachment,
+                                        onSaveAttachment = onSaveAttachment,
+                                        loadImageAttachment = loadImageAttachment,
+                                        onOpenImageAttachment = ::openGalleryForAttachment,
+                                        onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                                        onCopyMessageText = onCopyMessageText,
+                                        onComposeTo = onComposeTo,
+                                        onOpenMessage = { readerMessage = it },
+                                        onOpenUrl = services::openUrl,
+                                        onRetryLoad = onRetryLoadMessages,
+                                    )
+                                }
                             }
                         }
                     }
