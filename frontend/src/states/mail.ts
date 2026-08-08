@@ -4,7 +4,7 @@ import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
-import { kanban$, removeKanbanColumnsForFolder } from './kanban'
+import { kanban$, forgetDeletedMailViewFolder, removeKanbanColumnsForFolder } from './kanban'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { isUnifiedStarred, unifiedFolderRole, unifiedFolders } from '../lib/unifiedFolders'
 import { isLocalSendId, discardPendingSend } from './pendingSends'
@@ -370,8 +370,12 @@ export async function deleteFolder(accountId: string, folderId: string, name?: s
     if (openThread?.account_id === accountId && removed.includes(openThread?.folder_id ?? '')) {
       ui$.selectedThread.set('')
     }
-    if (ui$.selectedAccount.get() === accountId && removed.includes(ui$.selectedFolder.get())) {
-      ui$.selectedFolder.set('inbox')
+    if (ui$.selectedAccount.get() === accountId) {
+      if (removed.includes(ui$.selectedFolder.get())) ui$.selectedFolder.set('inbox')
+      // While a board is open the visible folder is the open card's, not the
+      // mail view's — that one is stashed for the board's close, so it needs
+      // the same check.
+      forgetDeletedMailViewFolder(removed)
     }
     if (res?.warning) {
       showToast(res.warning, 'error')
@@ -705,6 +709,18 @@ export function requestThreadReselect() {
 type ThreadSearchStage = 'auto' | 'cache' | 'live'
 
 export async function loadThreads(refresh = true, searchStage: ThreadSearchStage = 'auto') {
+  // A Kanban card temporarily points selectedFolder at the card's real mailbox
+  // so thread actions have the right context. The normal mail list is hidden,
+  // and treating that account-specific id as a unified role falls back to Inbox,
+  // replacing the rows that should still be waiting for the mail view.
+  if (kanban$.activeBoardId.peek()) {
+    // A reselect request belongs to the load that was asked for, which is this
+    // one; dropping it here keeps it from arming a later load in the mail view,
+    // where it would open (and mark read) an unrelated conversation.
+    reselectAfterThreadLoad = false
+    return
+  }
+
   const initialAccount = ui$.selectedAccount.get()
   const initialFolder = ui$.selectedFolder.get()
   const initialQuery = ui$.query.get()

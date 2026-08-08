@@ -6,7 +6,7 @@ import { ui$, showToast } from './states/ui'
 import { mail$, loadFolders, loadThreads, loadThread, findLocalThread, refreshAccountFoldersCache } from './states/mail'
 import { openMailtoCompose, openThreadTabById } from './states/compose'
 import { accounts$ } from './states/accounts'
-import { closeKanbanBoard, kanban$ } from './states/kanban'
+import { kanban$ } from './states/kanban'
 import { setSyncError, clearSyncErrorFor } from './states/connectivity'
 import { settings$, applyDocumentLanguage } from './states/settings'
 import { applyUpdateStatus, loadUpdateStatus, runUpdateCheck } from './states/update'
@@ -35,6 +35,7 @@ export function useAppEffects() {
   const selectedThread = useValue(ui$.selectedThread)
   const query = useValue(ui$.query)
   const filterMode = useValue(ui$.filterMode)
+  const activeBoardId = useValue(kanban$.activeBoardId)
   const startupSyncDone = useRef(false)
   const language = useValue(settings$.language)
   const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
@@ -221,8 +222,12 @@ export function useAppEffects() {
     void loadFolders(selectedAccount)
   }, [selectedAccount])
 
+  // Also keyed on the open board: loads are skipped while one is up (the mail
+  // list is off screen and its rows wait for the board to close), so closing it
+  // has to reload — otherwise a board visit that never touched a card leaves the
+  // selection unchanged, and the list stays as stale as the visit was long.
   useEffect(() => {
-    if (!selectedAccount || !selectedFolder) return
+    if (!selectedAccount || !selectedFolder || activeBoardId) return
     if (!query.trim()) {
       void loadThreads()
       return
@@ -231,7 +236,7 @@ export function useAppEffects() {
       void loadThreads()
     }, SEARCH_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [selectedAccount, selectedFolder, query, filterMode])
+  }, [selectedAccount, selectedFolder, query, filterMode, activeBoardId])
 
   useEffect(() => {
     if (!selectedThread) return

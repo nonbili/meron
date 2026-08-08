@@ -9,7 +9,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { accounts$, reorderAccountIds } from '../../states/accounts'
 import { moveFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
-import { closeKanbanBoard, kanban$, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
+import { kanban$, openMailAccount, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
 import { mail$, inboxUnread } from '../../states/mail'
 import { settings$, setUnifiedInboxSideNavVisible } from '../../states/settings'
 import { ui$ } from '../../states/ui'
@@ -123,11 +123,7 @@ export function SideNav() {
     }
   }
 
-  const selectAccount = (id: string, folderId = 'inbox') => {
-    closeKanbanBoard()
-    ui$.selectedAccount.set(id)
-    ui$.selectedFolder.set(folderId)
-  }
+  const selectAccount = (id: string, folderId = 'inbox') => openMailAccount(id, folderId)
 
   return (
     <aside

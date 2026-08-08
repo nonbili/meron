@@ -236,8 +236,27 @@ function persistNav(key: string, value: string) {
   if (restoringNav) return
   void invoke('app.prefsSet', { key, value }).catch(() => {})
 }
+
+// An open Kanban card retargets `selectedFolder` to the card's own folder while
+// the mail view's folder waits (stashed in states/kanban) for the board to
+// close. `session_folder` describes where the mail view resumes, so those
+// transient card folders are held back from it — see pauseMailFolderPersist.
+let mailFolderPersistPaused = false
+
+/** Suspend/resume `session_folder` writes while a board owns the selection. */
+export function pauseMailFolderPersist(paused: boolean) {
+  mailFolderPersistPaused = paused
+}
+
+/** Record the mail view's folder while its own writes are paused. */
+export function persistMailFolder(folderId: string) {
+  persistNav('session_folder', folderId)
+}
+
 ui$.selectedAccount.onChange(({ value }) => persistNav('session_account', value))
-ui$.selectedFolder.onChange(({ value }) => persistNav('session_folder', value))
+ui$.selectedFolder.onChange(({ value }) => {
+  if (!mailFolderPersistPaused) persistNav('session_folder', value)
+})
 ui$.selectedAccount.onChange(() => clearBulkSelection())
 ui$.selectedFolder.onChange(() => clearBulkSelection())
 ui$.query.onChange(() => clearBulkSelection())

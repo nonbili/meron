@@ -33,6 +33,7 @@ import {
   closeKanbanBoard,
   createKanbanBoard,
   kanban$,
+  openMailAccount,
   selectKanbanBoard,
   setGlobalKanbanFilter,
 } from '../../states/kanban'
@@ -276,11 +277,7 @@ export function useCommandList(): Command[] {
         keywords: 'all accounts switch',
         shortcut: railShortcut(1),
         active: !activeBoardId && selectedAccount === 'unified',
-        run: run(() => {
-          closeKanbanBoard()
-          ui$.selectedAccount.set('unified')
-          ui$.selectedFolder.set('inbox')
-        }),
+        run: run(() => openMailAccount('unified')),
       })
     }
     for (const [accountIndex, account] of accounts.entries()) {
@@ -291,11 +288,7 @@ export function useCommandList(): Command[] {
         keywords: `account switch ${account.email}`,
         shortcut: railShortcut(boards.length + accountIndex + 2),
         active: !activeBoardId && selectedAccount === account.id,
-        run: run(() => {
-          closeKanbanBoard()
-          ui$.selectedAccount.set(account.id)
-          ui$.selectedFolder.set('inbox')
-        }),
+        run: run(() => openMailAccount(account.id)),
       })
     }
 

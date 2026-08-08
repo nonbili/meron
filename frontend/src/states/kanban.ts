@@ -1,6 +1,6 @@
 import { observable } from '@legendapp/state'
 import type { ChatWallpaper, Message } from '../types'
-import { isFilterMode, ui$, type FilterMode } from './ui'
+import { isFilterMode, pauseMailFolderPersist, persistMailFolder, ui$, type FilterMode } from './ui'
 import { mail$, refreshAccountFoldersCache } from './mail'
 import { accounts$ } from './accounts'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
@@ -82,7 +82,61 @@ export function closeKanbanPane() {
   ui$.mobilePane.set('threads')
 }
 
+// Opening a card retargets ui$.selectedFolder to that thread's own folder so
+// thread actions resolve against it. Stash the folder the mail view was on the
+// first time that happens per board visit, so closing the board goes back there
+// instead of stranding the mail view on the last card's folder.
+let mailViewFolder: string | null = null
+
+/** Point the selection at a card's folder, remembering the mail view's own. */
+export function focusKanbanThreadFolder(folderId: string) {
+  if (mailViewFolder === null) mailViewFolder = ui$.selectedFolder.peek()
+  // The stash is in-memory only, so the session pref keeps describing the mail
+  // view; a restart with the board still open resumes there, not on the card.
+  pauseMailFolderPersist(true)
+  ui$.selectedFolder.set(folderId)
+}
+
+/**
+ * Drop the stashed folder if deleting `folderIds` removed it, so closing the
+ * board can't restore the mail view onto a folder that no longer exists.
+ */
+export function forgetDeletedMailViewFolder(folderIds: string[]) {
+  if (mailViewFolder === null || !folderIds.includes(mailViewFolder)) return
+  mailViewFolder = 'inbox'
+  persistMailFolder(mailViewFolder)
+}
+
+/**
+ * Leave any open board and show `accountId`'s mail. Coming back to the account
+ * the mail view is already on is a view switch, not a navigation: it keeps that
+ * view's folder (e.g. Unified starred) instead of snapping back to `folderId`.
+ */
+export function openMailAccount(accountId: string, folderId = 'inbox') {
+  const resumesMailView = !!kanban$.activeBoardId.peek() && ui$.selectedAccount.peek() === accountId
+  if (!resumesMailView) {
+    // Going somewhere else: drop the stash unused, so closing the board doesn't
+    // also write the old folder — two prefs writes for one key can land out of
+    // order, and only the destination folder below should survive.
+    mailViewFolder = null
+    pauseMailFolderPersist(false)
+  }
+  closeKanbanBoard()
+  ui$.selectedAccount.set(accountId)
+  if (resumesMailView) return
+  ui$.selectedFolder.set(folderId)
+  // The card may already have had the selection on `folderId`, in which case the
+  // set above changes nothing and the persist listener never fires — while the
+  // pref still holds the folder the paused mail view was on. Write it directly.
+  persistMailFolder(folderId)
+}
+
 export function closeKanbanBoard() {
+  pauseMailFolderPersist(false)
+  if (mailViewFolder !== null) {
+    ui$.selectedFolder.set(mailViewFolder)
+    mailViewFolder = null
+  }
   kanban$.activeBoardId.set('')
   kanban$.paneThreadId.set('')
   kanban$.paneColumnKey.set('')
@@ -434,7 +488,7 @@ export function selectAdjacentKanbanThread(delta: number) {
     const target = list[next]
     if (!target || target.thread_id === selected) return
 
-    ui$.selectedFolder.set(target.folder_id)
+    focusKanbanThreadFolder(target.folder_id)
     ui$.selectedThread.set(target.thread_id)
     kanban$.paneThreadId.set(target.thread_id)
     kanban$.paneColumnKey.set(boardKey)
@@ -443,7 +497,7 @@ export function selectAdjacentKanbanThread(delta: number) {
   }
 
   if (fallback) {
-    ui$.selectedFolder.set(fallback.thread.folder_id)
+    focusKanbanThreadFolder(fallback.thread.folder_id)
     ui$.selectedThread.set(fallback.thread.thread_id)
     kanban$.paneThreadId.set(fallback.thread.thread_id)
     kanban$.paneColumnKey.set(fallback.key)

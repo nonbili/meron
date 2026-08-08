@@ -4,7 +4,7 @@ import { invoke } from '../../lib/bridge'
 import { boot } from '../../boot'
 import { ui$, type SetupMode } from '../../states/ui'
 import { accounts$ } from '../../states/accounts'
-import { closeKanbanBoard } from '../../states/kanban'
+import { openMailAccount } from '../../states/kanban'
 import { nextRssAccountDisplayName } from '../../states/feeds'
 import { errorMessage } from '../../lib/errors'
 
@@ -61,9 +61,7 @@ export function useAccountDialog() {
     const created =
       (createdId ? accounts.find((acc) => acc.id === createdId) : null) ?? accounts.find((acc) => !before.has(acc.id))
     if (!created) return null
-    closeKanbanBoard()
-    ui$.selectedAccount.set(created.id)
-    ui$.selectedFolder.set('inbox')
+    openMailAccount(created.id)
     ui$.selectedThread.set('')
     return created
   }

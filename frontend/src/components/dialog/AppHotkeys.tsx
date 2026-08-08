@@ -15,6 +15,7 @@ import {
   selectAdjacentKanbanThread,
   selectKanbanBoard,
   closeKanbanBoard,
+  openMailAccount,
   closeKanbanPane,
 } from '../../states/kanban'
 import { thread$ } from '../../states/thread'
@@ -145,9 +146,7 @@ function handleRailShortcut(action: ShortcutId): boolean {
   let target = slot
   if (settings$.showUnifiedInboxInSideNav.peek()) {
     if (target === 0) {
-      closeKanbanBoard()
-      ui$.selectedAccount.set('unified')
-      ui$.selectedFolder.set('inbox')
+      openMailAccount('unified')
       return true
     }
     target -= 1
@@ -163,9 +162,7 @@ function handleRailShortcut(action: ShortcutId): boolean {
 
   const account = visibleSideNavAccounts(accounts$.peek())[target]
   if (!account) return false
-  closeKanbanBoard()
-  ui$.selectedAccount.set(account.id)
-  ui$.selectedFolder.set('inbox')
+  openMailAccount(account.id)
   return true
 }
 

@@ -19,6 +19,7 @@ import {
   mail$,
   markAllRead,
   markMessagesRead,
+  requestThreadReselect,
   moveThreadToFolder,
 } from './mail'
 import { settings$ } from './settings'
@@ -178,6 +179,10 @@ describe('thread selection on load', () => {
     }
   })
 
+  afterEach(() => {
+    kanban$.activeBoardId.set('')
+  })
+
   it('leaves the conversation pane closed when a view is opened', async () => {
     await loadThreads()
 
@@ -213,6 +218,37 @@ describe('thread selection on load', () => {
     await loadThreads()
 
     expect(ui$.selectedThread.get()).toBe('acc:inbox:thread:top')
+  })
+
+  it('does not replace the waiting mail list while a kanban card owns the folder selection', async () => {
+    const sent = thread({ folder_id: 'sent', subject: 'Unified sent' })
+    let calls = 0
+    mail$.threads.set([sent])
+    ui$.selectedFolder.set('[Gmail]/Sent Mail')
+    kanban$.activeBoardId.set('board-1')
+    ;(window as any).go.main.App.Invoke = async () => {
+      calls += 1
+      return { threads: [thread({ subject: 'Unified inbox' })] }
+    }
+
+    await loadThreads()
+
+    expect(calls).toBe(0)
+    expect(mail$.threads.get()).toEqual([sent])
+  })
+
+  it('drops a reselect request the skipped kanban load was meant to answer', async () => {
+    kanban$.activeBoardId.set('board-1')
+    // Deleting the last card of a column clears the pane and asks the load that
+    // follows to pick the replacement — a load that never runs behind a board.
+    requestThreadReselect()
+
+    await loadThreads()
+
+    kanban$.activeBoardId.set('')
+    await loadThreads()
+
+    expect(ui$.selectedThread.get()).toBe('')
   })
 })
 

@@ -7,7 +7,7 @@ import { toggleBulkSelection, ui$, type BulkSelectionItem } from '../../states/u
 import { compose$, openMessageTab, openDraftConversationOrCompose } from '../../states/compose'
 import { isDraftFolder } from '../../states/mail'
 import { thread$ } from '../../states/thread'
-import { kanbanBoardColumnKey, kanban$, type KanbanColumn } from '../../states/kanban'
+import { focusKanbanThreadFolder, kanbanBoardColumnKey, kanban$, type KanbanColumn } from '../../states/kanban'
 import { isUnifiedStarredColumn } from '../../lib/kanbanData'
 import { isRssAccount } from '../../lib/threadActions'
 import type { Message } from '../../types'
@@ -116,7 +116,7 @@ export function KanbanThreadCard({
               return
             }
           }
-          ui$.selectedFolder.set(thread.folder_id)
+          focusKanbanThreadFolder(thread.folder_id)
           // Leave any open compose/reader/thread tab first so the selectedThread
           // retarget is recorded as the Current tab's thread (conversationThread).
           compose$.activeTab.set('')
