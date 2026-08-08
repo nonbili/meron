@@ -24,6 +24,15 @@ export const mail$ = observable({
   threadsCursor: '',
   threadAccountCursors: {} as Record<string, string>,
   threadsLoadingMore: false,
+  // The view (`threadListViewKey`) whose threads are the ones in `threads`. An
+  // empty list means "nothing here" only once this matches the view on screen:
+  // before that the rows simply have not arrived, and saying the folder is empty
+  // — at startup, or for the second or two a folder load takes — is wrong, then
+  // wrong again when they land. Deliberately not a boolean set by `loadThreads`:
+  // a selection or filter change repaints the list *before* the effect that
+  // starts the load runs, and the client-side filter empties it on that very
+  // render, so a flag set inside the load turns on a frame too late.
+  threadsLoadedKey: '',
   messages: [] as Message[],
   // Opaque pagination cursor for older messages in the current thread; "" = no more.
   messagesCursor: '',
@@ -699,6 +708,12 @@ let threadLoadVersion = 0
 // slot to the replacement thread; every other load leaves it alone.
 let reselectAfterThreadLoad = false
 
+// View key of the refresh:true load currently out to the server, '' when none.
+// Read only by the background-refresh guard below. It goes stale after a load it
+// named is superseded, which is harmless: the next foreground load overwrites it,
+// and every view change brings one.
+let pendingRefreshKey = ''
+
 // Called by flows that clear `selectedThread` because the open conversation is
 // leaving the list (delete, move, discard draft) and want the next load to open
 // whatever takes its place. One-shot: consumed by the next `loadThreads`.
@@ -707,6 +722,15 @@ export function requestThreadReselect() {
 }
 
 type ThreadSearchStage = 'auto' | 'cache' | 'live'
+
+// Identity of a thread-list view: the four inputs `loadThreads` reads and
+// `superseded` watches, newline-joined like `kanbanColumnKey` (neither a folder
+// id nor a single-line search box carries one). Both the loader and the list
+// build the key from the same fields, so the list can tell "these rows are for
+// what I'm showing" from "these rows are the previous view's".
+export function threadListViewKey(account: string, folder: string, query: string, filter: string) {
+  return [account, folder, query, filter].join('\n')
+}
 
 export async function loadThreads(refresh = true, searchStage: ThreadSearchStage = 'auto') {
   // A Kanban card temporarily points selectedFolder at the card's real mailbox
@@ -748,11 +772,22 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
     return
   }
 
-  const version = (threadLoadVersion += 1)
   const selectedAcc = ui$.selectedAccount.get()
   const selectedFol = ui$.selectedFolder.get()
   const q = ui$.query.get()
   const filter = ui$.filterMode.get()
+  const viewKey = threadListViewKey(selectedAcc, selectedFol, q, filter)
+
+  // A background refresh steps aside for a server-bound load already running for
+  // the same view. Taking the version from it would throw away the fresher rows
+  // it is about to return, and — since a background load never settles a view —
+  // would strand the list on the spinner: the foreground load loses `superseded`
+  // when it lands, and nothing else is scheduled to try again. Nothing is lost by
+  // skipping; the load in flight is asking the server the same question.
+  if (!refresh && searchStage !== 'cache' && pendingRefreshKey === viewKey) return
+
+  const version = (threadLoadVersion += 1)
+  if (refresh) pendingRefreshKey = viewKey
   const superseded = () =>
     threadLoadVersion !== version ||
     ui$.selectedAccount.get() !== selectedAcc ||
@@ -882,6 +917,25 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
   }
 
   mail$.threads.set(allThreads)
+  // These rows now stand for this view — but only a load that went to the server
+  // for them may say so, which is what `refresh` marks. The two cache-only kinds
+  // both answer from the local index, so an empty result from either means "not
+  // found *yet*", and settling the view on one puts "No matching mail" on screen
+  // while the real answer is still coming:
+  //   - the cache stage of a search, whose live IMAP half is the slow one, and
+  //     the one that finds mail the index has not got;
+  //   - a background refresh (sync event, feed edit), which fires on its own
+  //     schedule and so can land in the gap between a keystroke and the
+  //     debounced search, or between a folder switch and its own load.
+  // Every view reaches the screen through an effect that loads it with
+  // refresh:true, including the ones answered locally (Starred, RSS), so none
+  // depends on a cache-only load to settle.
+  // Only a load that got past `superseded` reaches here, so the captured fields
+  // are still the ones on screen.
+  if (refresh) {
+    mail$.threadsLoadedKey.set(viewKey)
+    if (pendingRefreshKey === viewKey) pendingRefreshKey = ''
+  }
 
   const filtered = getFilteredThreads()
   // Consume the reselect request here rather than at the top of the load: a

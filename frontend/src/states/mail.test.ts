@@ -20,6 +20,7 @@ import {
   markAllRead,
   markMessagesRead,
   requestThreadReselect,
+  threadListViewKey,
   moveThreadToFolder,
 } from './mail'
 import { settings$ } from './settings'
@@ -1386,5 +1387,135 @@ describe('ensureAccountFolders', () => {
 
     expect(folders.map((folder) => folder.id)).toEqual(['INBOX', 'Work'])
     expect(calls).toEqual([{ command: 'mail.folderList', payload: { account_id: 'acc', refresh: true } }])
+  })
+})
+
+describe('thread list view identity', () => {
+  const currentKey = () =>
+    threadListViewKey(ui$.selectedAccount.get(), ui$.selectedFolder.get(), ui$.query.get(), ui$.filterMode.get())
+
+  beforeEach(() => {
+    mail$.threads.set([])
+    mail$.threadsLoadedKey.set('')
+    mail$.threadsCursor.set('')
+    mail$.threadAccountCursors.set({})
+    ui$.selectedAccount.set('acc')
+    ui$.selectedFolder.set('inbox')
+    ui$.selectedThread.set('')
+    ui$.query.set('')
+    ui$.filterMode.set('all')
+    ;(window as any).go = {
+      main: { App: { Invoke: async () => ({ threads: [], next_cursor: '' }) } },
+    }
+  })
+
+  afterEach(() => {
+    ui$.query.set('')
+    ui$.filterMode.set('all')
+    mail$.threadsLoadedKey.set('')
+  })
+
+  it('does not call a folder loaded until its load lands', async () => {
+    expect(mail$.threadsLoadedKey.get()).not.toBe(currentKey())
+
+    await loadThreads()
+
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+  })
+
+  // The flash this guards against: the list repaints on the navigation itself,
+  // a frame or more before the effect that calls loadThreads runs, so a flag
+  // the loader sets would still be off for that paint.
+  it('stops matching the moment the folder or filter changes, before any load runs', async () => {
+    await loadThreads()
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+
+    ui$.selectedFolder.set('archive')
+    expect(mail$.threadsLoadedKey.get()).not.toBe(currentKey())
+
+    await loadThreads()
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+
+    ui$.filterMode.set('unread')
+    expect(mail$.threadsLoadedKey.get()).not.toBe(currentKey())
+  })
+
+  // A sync event or feed edit refreshes the list on its own schedule. Landing in
+  // the gap between a keystroke and the debounced search, it would otherwise
+  // settle the pending query on cache-only rows.
+  it('is not settled by a background refresh that lands mid-navigation', async () => {
+    await loadThreads()
+
+    ui$.selectedFolder.set('archive')
+    await loadThreads(false)
+
+    expect(mail$.threadsLoadedKey.get()).not.toBe(currentKey())
+
+    await loadThreads()
+
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+  })
+
+  // The overlap: a sync event fires while the view's own load is still out. If
+  // the background call took the version, the foreground one would lose
+  // `superseded` on arrival, and with no load left to settle the view the list
+  // would spin for good.
+  it('settles when a sync event fires while the view load is still in flight', async () => {
+    let resolveForeground!: (value: unknown) => void
+    const foregroundPage = new Promise((resolve) => {
+      resolveForeground = resolve
+    })
+    const refreshes: boolean[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (_command: string, payload: { refresh?: boolean }) => {
+            refreshes.push(payload.refresh ?? true)
+            if (payload.refresh) return foregroundPage
+            return { threads: [], next_cursor: '' }
+          },
+        },
+      },
+    }
+
+    const foreground = loadThreads()
+    await nextTick()
+    // The sync event, mid-flight.
+    await loadThreads(false)
+
+    expect(refreshes).toEqual([true])
+
+    resolveForeground({ threads: [], next_cursor: '' })
+    await foreground
+
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+  })
+
+  // A search paints local hits first, then the live IMAP results. An empty cache
+  // stage must not claim the search is answered while the live half is still out.
+  it('waits for the live stage of a search, not the cache stage', async () => {
+    let resolveLive!: (value: unknown) => void
+    const livePage = new Promise((resolve) => {
+      resolveLive = resolve
+    })
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (_command: string, payload: { refresh?: boolean }) =>
+            payload.refresh ? livePage : { threads: [], next_cursor: '' },
+        },
+      },
+    }
+
+    ui$.query.set('deploy')
+    const loading = loadThreads()
+    await nextTick()
+
+    expect(mail$.threadsLoadedKey.get()).not.toBe(currentKey())
+
+    resolveLive({ threads: [], next_cursor: '' })
+    await loading
+
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
   })
 })

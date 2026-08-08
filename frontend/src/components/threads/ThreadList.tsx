@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, PointerEventHandler } from 'react'
-import { Search, X, Plus, SquarePen, MoreHorizontal } from 'lucide-react'
+import { Search, X, Plus, SquarePen, MoreHorizontal, Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { openAddFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
@@ -35,6 +35,7 @@ import {
   deletableFolder,
   deleteFolder,
   loadThreads,
+  threadListViewKey,
 } from '../../states/mail'
 import { clsx } from '../../lib/utils'
 import { isRssAccount } from '../../lib/threadActions'
@@ -70,6 +71,12 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const filterMode = useValue(ui$.filterMode)
   const threadsCursor = useValue(mail$.threadsCursor)
   const threadsLoadingMore = useValue(mail$.threadsLoadingMore)
+  // The rows on hand belong to the view they were loaded for. Until that is the
+  // view being rendered, an empty list is a pending one, not an empty folder —
+  // true from the first paint of a navigation, which is a frame or more before
+  // the effect that starts the load.
+  const threadsLoadedKey = useValue(mail$.threadsLoadedKey)
+  const threadsLoading = threadsLoadedKey !== threadListViewKey(selectedAccount, selectedFolder, query, filterMode)
   const threadMenu = useThreadContextMenu(accounts)
   // Starred is a folder of the unified view whose rows span every account. It
   // lists ordinary threads, so it shares this list's selection, context menu and
@@ -399,7 +406,15 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         {accounts.length === 0 ? (
           <EmptyState title={t('empty.welcomeTitle')} text={t('empty.mailSetupText')} />
         ) : filteredThreads.length === 0 ? (
-          isStarredView ? (
+          // An empty list mid-load is "not here yet", not "nothing here": telling
+          // the user their folder is empty and then filling it a moment later is
+          // the wrong answer twice. Spin until the load lands, same as the
+          // conversation pane does while a thread is being fetched.
+          threadsLoading ? (
+            <div className="flex h-full items-center justify-center" role="status" aria-label={t('common.loading')}>
+              <Loader2 size={28} className="animate-spin text-secondary/70" />
+            </div>
+          ) : isStarredView ? (
             <EmptyState title={t('empty.noStarredItems')} text={t('empty.noStarredItemsText')} />
           ) : (
             <EmptyState title={emptyStateTitle} text={emptyStateText} />
