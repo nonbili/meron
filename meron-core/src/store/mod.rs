@@ -987,24 +987,78 @@ pub fn get_starred(
     Ok(out)
 }
 
-/// Every starred mail message across all accounts and folders, newest first.
+/// What makes two cached rows the same starred conversation.
+///
+/// A Message-ID or `gmthrid:` thread key names the conversation itself and
+/// holds wherever the server files it, so those dedupe across folders. `uid:`
+/// is the reserved key [`crate::store::card_thread_key`] mints for a message
+/// that arrived with no threading headers at all, and an IMAP UID means nothing
+/// outside its own mailbox — `uid:1` in Inbox and `uid:1` in Archive are
+/// ordinarily two unrelated messages, so those stay scoped to their folder.
+///
+/// Both the query budget below and the card-level dedupe in
+/// `mail_model::starred_thread_cards` key on this, so a row that survives the
+/// budget as its own conversation cannot then be swallowed as a copy of
+/// another, or vice versa.
+pub fn starred_thread_identity(folder: &str, thread_key: &str) -> String {
+    if thread_key.starts_with("uid:") {
+        format!("{folder}\u{0}{thread_key}")
+    } else {
+        thread_key.to_string()
+    }
+}
+
+/// Every starred mail message across all accounts and folders, newest first,
+/// for the newest `max_threads` distinct conversations.
+///
+/// The budget counts conversations rather than rows because the caller renders
+/// one card per conversation: an account whose server files each message under
+/// several folders (Gmail's All Mail beside the Inbox copy, plus every label)
+/// would otherwise spend the whole budget on copies of the same few threads and
+/// silently drop older ones off the end of the list.
+///
+/// A conversation past the budget is skipped rather than ending the scan, since
+/// its rows carry no signal about where the remaining copies of the admitted
+/// ones are: two folders' copies of one message can hold different cached dates,
+/// which puts them arbitrarily far apart in this ordering. Stopping at the first
+/// over-budget row would drop those stragglers, and the caller picks which
+/// folder's copy to show from exactly this set — losing the Inbox copy would put
+/// the thread under All Mail instead.
+///
 /// RSS rows carry `uid = 0` and are excluded; `rss::starred_items` covers them.
 pub fn get_starred_all_accounts(
     conn: &Connection,
-    limit: u32,
+    max_threads: u32,
 ) -> Result<Vec<(String, MessageHeader)>> {
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.to'), account, folder FROM messages
          WHERE starred <> 0 AND uid <> 0
-         ORDER BY date DESC, uid DESC LIMIT ?1",
+         ORDER BY date DESC, uid DESC",
     )?;
-    let rows = stmt.query_map(params![limit], |row| {
+    let mut rows = stmt.query([])?;
+    let mut out = Vec::new();
+    let mut threads: HashSet<(String, String)> = HashSet::new();
+    while let Some(row) = rows.next()? {
         let mut header = message_header_from_row(row)?;
         header.folder = row.get(10)?;
-        Ok((row.get::<_, String>(9)?, header))
-    })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        let account: String = row.get(9)?;
+        // The branch-aware key, not the stored root: one root split by subject
+        // becomes one card per branch, and a budget counting the root would let
+        // a heavily branched conversation return far more cards than it allows.
+        let thread = (
+            account,
+            starred_thread_identity(&header.folder, &card_thread_key(&header)),
+        );
+        if !threads.contains(&thread) {
+            if threads.len() as u32 >= max_threads {
+                continue;
+            }
+            threads.insert(thread.clone());
+        }
+        out.push((thread.0, header));
+    }
+    Ok(out)
 }
 
 pub fn get_thread_headers(

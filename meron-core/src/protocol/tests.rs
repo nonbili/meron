@@ -1350,7 +1350,7 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
 }
 
 #[test]
-fn starred_rows_group_into_threads_without_merging_across_folders() {
+fn starred_rows_group_into_threads_across_folders() {
     let data_dir = unique_data_dir("starred-threads");
     seed_mobile_account(&data_dir, "me@example.com");
     let conn = store::open_at(data_dir.join("meron.db")).unwrap();
@@ -1396,8 +1396,9 @@ fn starred_rows_group_into_threads_without_merging_across_folders() {
         ],
     )
     .unwrap();
-    // ...but the same thread starred in Archive stays its own row, since a card
-    // addresses one mailbox and collapsing them would strand one folder's copy.
+    // ...and so does the same thread starred in Archive: it is one conversation
+    // to the reader however many folders the server files it under, and it is
+    // listed in the more specific of them.
     store::upsert_messages(
         &conn,
         "me@example.com",
@@ -1420,20 +1421,10 @@ fn starred_rows_group_into_threads_without_merging_across_folders() {
         Some(data_dir.to_str().unwrap()),
     );
     let items = value["result"]["items"].as_array().unwrap();
-    assert_eq!(items.len(), 2, "{value}");
-    for item in items {
-        assert_eq!(item["id"], item["thread_id"], "{value}");
-    }
-    let folders = items
-        .iter()
-        .map(|item| item["folder_id"].as_str().unwrap_or_default())
-        .collect::<Vec<_>>();
-    assert!(folders.contains(&"INBOX"), "{value}");
-    assert!(folders.contains(&"Archive"), "{value}");
-    let inbox = items
-        .iter()
-        .find(|item| item["folder_id"] == "INBOX")
-        .unwrap();
+    assert_eq!(items.len(), 1, "{value}");
+    let inbox = &items[0];
+    assert_eq!(inbox["id"], inbox["thread_id"], "{value}");
+    assert_eq!(inbox["folder_id"], "INBOX", "{value}");
     assert_eq!(inbox["date"], 200, "{value}");
     assert_eq!(inbox["unread"], true, "{value}");
     assert_eq!(inbox["unread_count"], 1, "{value}");
@@ -2139,6 +2130,119 @@ fn mobile_protocol_lists_starred_items_from_store() {
     assert_eq!(unread_items.len(), 1);
     assert_eq!(unread_items[0]["subject"], "Older starred");
     assert!(unread["result"].get("next_cursor").is_none());
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn starred_lists_a_thread_once_when_several_folders_cache_it() {
+    // Gmail files every message in All Mail as well as its Inbox/label copy, so
+    // the same starred thread is cached under several folders. It is one thread
+    // and gets one row, in the most specific folder holding it.
+    let data_dir = unique_data_dir("starred-cross-folder");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::upsert_folders(
+        &conn,
+        "me@example.com",
+        &[
+            Folder {
+                name: "INBOX".to_string(),
+                ..Default::default()
+            },
+            Folder {
+                name: "Receipts".to_string(),
+                ..Default::default()
+            },
+            Folder {
+                name: "[Gmail]/All Mail".to_string(),
+                special_use: Some("all".to_string()),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    let header = MessageHeader {
+        uid: 5,
+        subject: "Your update is live".to_string(),
+        from_name: "Google Play Console".to_string(),
+        from_addr: "noreply@google.com".to_string(),
+        date: 400,
+        seen: true,
+        starred: true,
+        thread_key: "play-update@google.com".to_string(),
+        ..Default::default()
+    };
+    for folder in ["INBOX", "Receipts", "[Gmail]/All Mail"] {
+        store::upsert_messages(&conn, "me@example.com", folder, &[header.clone()]).unwrap();
+    }
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":76,"method":"mail.starredItems","params":{"limit":10}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let items = value["result"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["folder_id"], "INBOX");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn starred_keeps_unthreaded_messages_that_share_a_uid_apart() {
+    // A message with no threading headers falls back to a "uid:<uid>" key, and
+    // IMAP UIDs only mean anything inside their own mailbox. Two unrelated
+    // starred messages that happen to be uid 1 in different folders are not one
+    // conversation and neither may swallow the other.
+    let data_dir = unique_data_dir("starred-uid-keys");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    for folder in ["INBOX", "Archive"] {
+        store::ensure_folder(&conn, "me@example.com", folder).unwrap();
+    }
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 1,
+            subject: "Inbox note".to_string(),
+            from_addr: "ana@example.com".to_string(),
+            date: 100,
+            starred: true,
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "Archive",
+        &[MessageHeader {
+            uid: 1,
+            subject: "Archived note".to_string(),
+            from_addr: "bob@example.com".to_string(),
+            date: 200,
+            starred: true,
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":77,"method":"mail.starredItems","params":{"limit":10}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    let items = value["result"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{value}");
+    let subjects = items
+        .iter()
+        .map(|item| item["subject"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert!(subjects.contains(&"Inbox note"), "{value}");
+    assert!(subjects.contains(&"Archived note"), "{value}");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

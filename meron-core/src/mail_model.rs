@@ -3,6 +3,7 @@ use crate::store;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rusqlite::Connection;
 use serde_json::{Value, json};
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub fn canon_folder(folder: &str) -> String {
@@ -71,6 +72,24 @@ pub fn thread_cards_json(
     messages: Vec<MessageHeader>,
     draft_thread_keys: &HashSet<String>,
 ) -> anyhow::Result<Vec<Value>> {
+    Ok(
+        thread_cards_json_keyed(conn, account_id, folder_id, messages, draft_thread_keys)?
+            .into_iter()
+            .map(|(_, card)| card)
+            .collect(),
+    )
+}
+
+/// [`thread_cards_json`] with each card paired to its thread key. The key is
+/// folder-independent, so callers that span folders (the starred view) can tell
+/// two copies of one thread apart from two different threads.
+fn thread_cards_json_keyed(
+    conn: &Connection,
+    account_id: &str,
+    folder_id: &str,
+    messages: Vec<MessageHeader>,
+    draft_thread_keys: &HashSet<String>,
+) -> anyhow::Result<Vec<(String, Value)>> {
     store::group_thread_cards_with_drafts(messages, folder_id, draft_thread_keys)
         .into_iter()
         .map(|card| {
@@ -81,7 +100,9 @@ pub fn thread_cards_json(
                 .original_thread_key
                 .as_deref()
                 .map(|key| format_thread_id(account_id, folder, key));
-            Ok(json!({
+            Ok((
+                card.thread_key.clone(),
+                json!({
                 "id": thread_id,
                 "account_id": account_id,
                 "folder_id": folder,
@@ -101,7 +122,8 @@ pub fn thread_cards_json(
                 "has_draft": card.has_draft,
                 "has_attachments": false,
                 "recipient_overflow": card.header.recipient_overflow,
-            }))
+                }),
+            ))
         })
         .collect()
 }
@@ -118,15 +140,31 @@ pub fn thread_cards_json(
 /// Cards are grouped per (account, folder) rather than in one pass, because
 /// [`store::group_thread_cards_with_drafts`] keys on the thread key alone. A
 /// single pass would merge a thread starred in both Inbox and Archive into one
-/// card and pin it to whichever folder happened to sort first.
-pub fn starred_thread_cards(conn: &Connection, limit: u32) -> anyhow::Result<Vec<Value>> {
+/// card and pin it to whichever folder happened to sort first. The per-folder
+/// pass is then collapsed back to one card per thread by
+/// [`starred_folder_rank`], so a thread the server files under several folders
+/// is listed once, in its most specific one.
+///
+/// `max_threads` bounds the conversations read, not the rows: the cards are
+/// what [`starred_page`] then searches, sorts and pages through, so a budget
+/// spent on duplicate folder copies would cut the list short with no cursor
+/// left to reach what it dropped.
+pub fn starred_thread_cards(conn: &Connection, max_threads: u32) -> anyhow::Result<Vec<Value>> {
     let mut by_location: BTreeMap<(String, String), Vec<MessageHeader>> = BTreeMap::new();
-    for (account, header) in store::get_starred_all_accounts(conn, limit)? {
+    // The conversations the budget let through. Expanding a starred hit below
+    // re-reads its whole root thread, which can carry subject branches the
+    // budget stopped short of; those are a later page's rows, not this set's.
+    let mut admitted: HashSet<(String, String)> = HashSet::new();
+    for (account, header) in store::get_starred_all_accounts(conn, max_threads)? {
         let folder = if header.folder.is_empty() {
             "INBOX".to_string()
         } else {
             header.folder.clone()
         };
+        admitted.insert((
+            account.clone(),
+            store::starred_thread_identity(&folder, &store::card_thread_key(&header)),
+        ));
         by_location
             .entry((account, folder))
             .or_default()
@@ -134,7 +172,10 @@ pub fn starred_thread_cards(conn: &Connection, limit: u32) -> anyhow::Result<Vec
     }
 
     let mut draft_keys_by_account: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut cards = Vec::new();
+    let mut cards: Vec<Value> = Vec::new();
+    // Where each (account, thread key) already landed, so a second folder
+    // holding the same thread replaces that card instead of adding a row.
+    let mut card_slots: HashMap<(String, String), usize> = HashMap::new();
     for ((account, folder), starred_headers) in by_location {
         // A starred hit admits its whole thread into the view. Build the card
         // from every cached message in that thread so its date, unread count and
@@ -143,11 +184,9 @@ pub fn starred_thread_cards(conn: &Connection, limit: u32) -> anyhow::Result<Vec
         let mut headers = Vec::new();
         let mut seen_thread_keys = HashSet::new();
         for header in starred_headers {
-            let thread_key = if header.thread_key.is_empty() {
-                format!("uid:{}", header.uid)
-            } else {
-                header.thread_key
-            };
+            // Already the `uid:<uid>` fallback when the message carried no
+            // threading headers — the cache read fills that in.
+            let thread_key = header.thread_key;
             if seen_thread_keys.insert(thread_key.clone()) {
                 headers.extend(store::get_thread_headers(
                     conn,
@@ -168,15 +207,59 @@ pub fn starred_thread_cards(conn: &Connection, limit: u32) -> anyhow::Result<Vec
                 draft_keys_by_account.entry(account.clone()).or_insert(keys)
             }
         };
-        cards.extend(
-            thread_cards_json(conn, &account, &folder, headers, draft_thread_keys)?
-                .into_iter()
-                // Branching can split one root thread by subject. Only branches that
-                // actually contain a starred message belong in the starred view.
-                .filter(|card| card["starred"].as_bool().unwrap_or(false)),
-        );
+        for (thread_key, card) in
+            thread_cards_json_keyed(conn, &account, &folder, headers, draft_thread_keys)?
+        {
+            // Branching can split one root thread by subject. Only branches that
+            // actually contain a starred message belong in the starred view.
+            if !card["starred"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let identity = (
+                account.clone(),
+                store::starred_thread_identity(&folder, &thread_key),
+            );
+            if !admitted.contains(&identity) {
+                continue;
+            }
+            match card_slots.entry(identity) {
+                Entry::Occupied(slot) => {
+                    let kept = &mut cards[*slot.get()];
+                    if card_rank(&card) < card_rank(kept) {
+                        *kept = card;
+                    }
+                }
+                Entry::Vacant(slot) => {
+                    slot.insert(cards.len());
+                    cards.push(card);
+                }
+            }
+        }
     }
     Ok(cards)
+}
+
+fn card_rank(card: &Value) -> u8 {
+    starred_folder_rank(card["folder_role"].as_str().unwrap_or("folder"))
+}
+
+/// Which folder's copy of a thread the starred view shows when the account
+/// caches the same thread in more than one — Gmail keeps every message in All
+/// Mail alongside its Inbox or label copy, which would otherwise put one
+/// identical row per folder in the list. Lowest rank wins: the copy in a real
+/// mailbox beats the catch-all archive, and a still-inboxed thread is listed
+/// where the user would look for it.
+fn starred_folder_rank(role: &str) -> u8 {
+    match role {
+        "inbox" => 0,
+        "folder" => 1,
+        "sent" => 2,
+        "drafts" => 3,
+        "archive" => 4,
+        "junk" => 5,
+        "trash" => 6,
+        _ => 7,
+    }
 }
 
 pub fn allocate_message_id(account_id: &str, draft: bool) -> String {
@@ -328,6 +411,48 @@ mod tests {
         assert!(draft.ends_with("@example.com"));
         assert!(outgoing.ends_with("@example.com"));
         assert_ne!(draft, outgoing);
+    }
+
+    #[test]
+    fn starred_cards_stop_at_the_budget_even_within_one_root_thread() {
+        // Expanding a starred hit re-reads its whole root thread, so a root that
+        // branched by subject hands back branches the budget never admitted.
+        // Those must not ride along: the budget is what bounds both the work
+        // here and the list the caller then pages through.
+        let conn = Connection::open_in_memory().unwrap();
+        store::run_migrations(&conn).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[
+                MessageHeader {
+                    uid: 1,
+                    subject: "Sprint planning".to_string(),
+                    date: 300,
+                    starred: true,
+                    thread_key: "root@example.com".to_string(),
+                    ..Default::default()
+                },
+                MessageHeader {
+                    uid: 2,
+                    subject: "Lunch orders".to_string(),
+                    date: 200,
+                    starred: true,
+                    thread_key: "root@example.com".to_string(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+
+        let one = starred_thread_cards(&conn, 1).unwrap();
+        assert_eq!(one.len(), 1, "{one:?}");
+        assert_eq!(one[0]["subject"], "Sprint planning");
+
+        let both = starred_thread_cards(&conn, 2).unwrap();
+        assert_eq!(both.len(), 2, "{both:?}");
     }
 
     #[test]
