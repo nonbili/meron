@@ -42,6 +42,26 @@ class NotificationThreadIdsTest {
     }
 
     @Test
+    fun feedKeysUseTheRssThreadIdCoreMints() {
+        // A feed's thread id names its subscription, not a folder — the id
+        // `rss.recent` puts on the feed row, which is what a tap has to match.
+        assertEquals(
+            "rss-8f2a#rss#sub-1",
+            notificationThreadId("rss-8f2a", "inbox", "sub-1"),
+        )
+        // The folder the notification carried plays no part in it.
+        assertEquals(
+            notificationThreadId("rss-8f2a", "inbox", "sub-1"),
+            notificationThreadId("rss-8f2a", "", "sub-1"),
+        )
+        // A mail account whose address merely starts with "rss" is not one.
+        assertEquals(
+            "rssfeeds@example.com#INBOX#t.dG9waWM",
+            notificationThreadId("rssfeeds@example.com", "INBOX", "topic"),
+        )
+    }
+
+    @Test
     fun onlyHeaderDerivedKeysSurviveAMove() {
         // A uid names a different message in the target mailbox, so an undo
         // keyed on it would move whatever now holds that uid.

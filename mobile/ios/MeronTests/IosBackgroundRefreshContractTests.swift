@@ -77,4 +77,55 @@ final class IosBackgroundRefreshContractTests: XCTestCase {
             )
         )
     }
+
+    func testFeedArrivalsBecomeANotifiableBatch() throws {
+        // What `rss.sync` returns under `new_messages`: the feed is the sender
+        // and its subscription is the thread key a tap opens.
+        let batch = try XCTUnwrap(
+            iosNewMailBatch([
+                "account": "rss-8f2a",
+                "accountName": "My Feeds",
+                "folder": "inbox",
+                "count": 1,
+                "muted": false,
+                "from": "JavaScript Weekly",
+                "subject": "Bun 1.4 is finally fresh",
+                "preview": "This week in JavaScript",
+                "threadKey": "sub-1",
+            ])
+        )
+
+        XCTAssertEqual(
+            batch,
+            IosNewMailBatch(
+                accountId: "rss-8f2a",
+                accountName: "My Feeds",
+                folder: "inbox",
+                from: "JavaScript Weekly",
+                subject: "Bun 1.4 is finally fresh",
+                count: 1,
+                threadKey: "sub-1"
+            )
+        )
+    }
+
+    func testMutedAccountsSyncButStaySilent() {
+        XCTAssertNil(
+            iosNewMailBatch([
+                "account": "rss-8f2a",
+                "accountName": "My Feeds",
+                "folder": "inbox",
+                "count": 3,
+                "muted": true,
+                "from": "JavaScript Weekly",
+                "subject": "Bun 1.4 is finally fresh",
+                "threadKey": "sub-1",
+            ])
+        )
+    }
+
+    func testPayloadNamingNoArrivalsPostsNothing() {
+        XCTAssertNil(iosNewMailBatch(["account": "rss-8f2a", "count": 0]))
+        XCTAssertNil(iosNewMailBatch(["account": "rss-8f2a"]))
+    }
 }

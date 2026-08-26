@@ -11,7 +11,16 @@ class AndroidNewMailNotificationTest {
         subject: String = "",
         preview: String = "",
         threadKey: String = "",
-    ) = NewMailItem(uid = uid, from = from, subject = subject, preview = preview, threadKey = threadKey, date = 0)
+        itemKey: String = "",
+    ) = NewMailItem(
+        uid = uid,
+        from = from,
+        subject = subject,
+        preview = preview,
+        threadKey = threadKey,
+        date = 0,
+        itemKey = itemKey,
+    )
 
     @Test
     fun childTextShowsSubjectAndBodySnippet() {
@@ -40,6 +49,46 @@ class AndroidNewMailNotificationTest {
         assertEquals("Aki", newMailChildTitle("Aki", "me@example.com"))
         assertEquals("me@example.com", newMailChildTitle("  ", "me@example.com"))
         assertEquals("New mail", newMailChildTitle("", ""))
+    }
+
+    @Test
+    fun feedEntriesSharingATitleKeepSeparateNotifications() {
+        // A feed is one thread, so two entries of it share a thread key; keying
+        // on thread + subject would let the second replace the first in the
+        // shade. The entry's own key is what tells them apart.
+        val monday = item(subject = "Daily digest", threadKey = "sub-1", itemKey = "key-monday")
+        val tuesday = item(subject = "Daily digest", threadKey = "sub-1", itemKey = "key-tuesday")
+        assertNotEquals(
+            newMailNotificationId("rss-8f2a", monday),
+            newMailNotificationId("rss-8f2a", tuesday),
+        )
+        // The same entry re-posted (a manual refresh racing the periodic one)
+        // still updates its own notification rather than stacking a duplicate.
+        assertEquals(
+            newMailNotificationId("rss-8f2a", monday),
+            newMailNotificationId("rss-8f2a", monday.copy(subject = "Daily digest (updated)")),
+        )
+    }
+
+    @Test
+    fun feedEntriesAreIdentifiedWithinTheirOwnFeed() {
+        // An entry key is a hash of the GUID and is unique only inside one
+        // subscription — core scopes the stored row by feed too. Two feeds
+        // carrying the same post (a site feed and its category feed) must not
+        // knock each other out of the shade.
+        assertNotEquals(
+            newMailNotificationId("rss-8f2a", item(threadKey = "sub-1", itemKey = "shared-guid")),
+            newMailNotificationId("rss-8f2a", item(threadKey = "sub-2", itemKey = "shared-guid")),
+        )
+    }
+
+    @Test
+    fun feedArrivalsOfferNoArchiveButton() {
+        // `mail.archive` does not route feed threads and an RSS account has no
+        // archive folder, so the button could only fail — after the receiver had
+        // already cleared the row and offered an undo.
+        assertEquals(false, newMailSupportsArchive("rss-8f2a"))
+        assertEquals(true, newMailSupportsArchive("me@example.com"))
     }
 
     @Test

@@ -31,8 +31,22 @@ func iosNotificationThreadTarget(userInfo: [AnyHashable: Any]) -> IosNotificatio
     return IosNotificationThreadTarget(accountId: accountId, folder: folder, threadKey: threadKey, subject: subject)
 }
 
+/// The payload a tapped notification is republished with, keyed the same way a
+/// notification's own userInfo is so [iosNotificationThreadTarget] reads both.
+func iosNotificationThreadTargetUserInfo(_ target: IosNotificationThreadTarget) -> [String: Any] {
+    [
+        IosNotificationPayloadKey.accountId: target.accountId,
+        IosNotificationPayloadKey.folder: target.folder,
+        IosNotificationPayloadKey.threadKey: target.threadKey,
+        IosNotificationPayloadKey.subject: target.subject,
+    ]
+}
+
 func iosNotificationThreadId(_ target: IosNotificationThreadTarget) -> String {
-    if target.accountId.contains(":") {
+    // A feed is a thread, keyed by its subscription rather than by folder. Core
+    // mints RSS account ids as "rss-<uuid>", the same prefix the desktop bridge
+    // and the Android client route on.
+    if target.accountId.hasPrefix("rss-") {
         return "\(target.accountId)#rss#\(target.threadKey)"
     }
     let folder = target.folder.caseInsensitiveCompare("inbox") == .orderedSame ? "INBOX" : target.folder
@@ -88,12 +102,7 @@ final class IosNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
             NotificationCenter.default.post(
                 name: .iosNotificationThreadTargetOpened,
                 object: nil,
-                userInfo: [
-                    IosNotificationPayloadKey.accountId: target.accountId,
-                    IosNotificationPayloadKey.folder: target.folder,
-                    IosNotificationPayloadKey.threadKey: target.threadKey,
-                    IosNotificationPayloadKey.subject: target.subject,
-                ]
+                userInfo: iosNotificationThreadTargetUserInfo(target)
             )
         }
         completionHandler()
@@ -380,6 +389,21 @@ enum IosBackgroundRefresh {
                 failed += 1
             } else {
                 refreshed += 1
+                // Arrivals ride back on the sync response: this runs with no live
+                // event listener, and a feed refresh raises no event at all.
+                if let result = response["result"] as? [String: Any],
+                   let detail = result["new_messages"] as? [String: Any],
+                   let batch = iosNewMailBatch(detail) {
+                    IosNotificationService.notifyNewMail(
+                        accountName: batch.accountName,
+                        from: batch.from,
+                        subject: batch.subject,
+                        count: batch.count,
+                        accountId: batch.accountId,
+                        folder: batch.folder,
+                        threadKey: batch.threadKey
+                    )
+                }
             }
         }
 
@@ -423,6 +447,40 @@ enum IosBackgroundRefresh {
             )
         }
     }
+}
+
+/// What a `mail.newMessages` detail says a notification should show. Both
+/// `mail.sync` and `rss.sync` return one under `new_messages` when a refresh
+/// found arrivals; a feed's "sender" is the feed title and its thread key is the
+/// subscription.
+struct IosNewMailBatch: Equatable {
+    let accountId: String
+    let accountName: String
+    let folder: String
+    let from: String
+    let subject: String
+    let count: Int
+    let threadKey: String
+}
+
+/// Read a `new_messages` detail into a batch worth notifying about, or nil when
+/// there is nothing to post: a muted account (it still syncs, it just stays
+/// quiet) or a payload naming no arrivals.
+func iosNewMailBatch(_ detail: [String: Any]) -> IosNewMailBatch? {
+    if detail["muted"] as? Bool == true {
+        return nil
+    }
+    let count = detail["count"] as? Int ?? 0
+    guard count > 0 else { return nil }
+    return IosNewMailBatch(
+        accountId: detail["account"] as? String ?? "",
+        accountName: detail["accountName"] as? String ?? "",
+        folder: detail["folder"] as? String ?? "",
+        from: detail["from"] as? String ?? "",
+        subject: detail["subject"] as? String ?? "",
+        count: count,
+        threadKey: detail["threadKey"] as? String ?? ""
+    )
 }
 
 struct IosRefreshSyncRequest {

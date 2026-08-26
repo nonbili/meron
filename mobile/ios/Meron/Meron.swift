@@ -46,7 +46,10 @@ struct Meron: App {
             .ignoresSafeArea()
             .onOpenURL(perform: handleOpenUrl)
             .onReceive(NotificationCenter.default.publisher(for: .iosNotificationThreadTargetOpened)) { notification in
-                guard let target = notification.object as? IosNotificationThreadTarget else { return }
+                // The payload rides in userInfo, keyed exactly as a notification's
+                // own userInfo is, so one parser reads both.
+                guard let target = iosNotificationThreadTarget(userInfo: notification.userInfo ?? [:])
+                else { return }
                 incomingNotificationThreadTarget =
                     NotificationThreadTarget(
                         accountId: target.accountId,

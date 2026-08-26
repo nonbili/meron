@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import jp.nonbili.meron.shared.accountIdIsRss
 import org.json.JSONObject
 import java.util.Locale
 
@@ -22,6 +23,9 @@ data class NewMailItem(
     val preview: String,
     val threadKey: String,
     val date: Long,
+    /** A feed entry's stable key, empty for mail (which has a uid instead).
+     *  A feed is one thread, so this is all that tells its entries apart. */
+    val itemKey: String = "",
 )
 
 /** A batch of arrivals for one account: one notification per item, under a
@@ -194,21 +198,24 @@ object AndroidNotificationService {
             // Archive and mark-as-read only; a reply needs a send queue that
             // survives being offline, which does not exist yet. Both address the
             // thread by id, so a payload missing any part of it gets no buttons
-            // rather than buttons that quietly do nothing.
+            // rather than buttons that quietly do nothing. A feed arrival drops
+            // Archive, see [newMailSupportsArchive].
             .apply {
                 if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
                     val id = newMailNotificationId(batch.accountId, item)
-                    addAction(
-                        archiveAction(
-                            context,
-                            accountId = batch.accountId,
-                            folder = batch.folder,
-                            threadKey = item.threadKey,
-                            accountName = batch.accountName,
-                            title = title,
-                            notificationId = id,
-                        ),
-                    )
+                    if (newMailSupportsArchive(batch.accountId)) {
+                        addAction(
+                            archiveAction(
+                                context,
+                                accountId = batch.accountId,
+                                folder = batch.folder,
+                                threadKey = item.threadKey,
+                                accountName = batch.accountName,
+                                title = title,
+                                notificationId = id,
+                            ),
+                        )
+                    }
                     addAction(
                         markReadAction(
                             context,
@@ -517,8 +524,8 @@ const val NEW_MAIL_SUMMARY_LINES = 6
 
 /** Read a `mail.newMessages` detail into a batch.
  *
- *  `messages` carries one entry per arrival. RSS arrivals — and any core older
- *  than the per-message payload — send only the top-level summary fields, which
+ *  `messages` carries one entry per arrival, mail and feed alike. A core older
+ *  than the per-message payload sends only the top-level summary fields, which
  *  degrade to a single notification for the batch. */
 fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
     val accountId = detail.optString("account")
@@ -529,6 +536,7 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                 listed.optJSONObject(index)?.let { entry ->
                     NewMailItem(
                         uid = entry.optLong("uid"),
+                        itemKey = entry.optString("itemKey"),
                         from = entry.optString("from"),
                         subject = entry.optString("subject"),
                         preview = entry.optString("preview"),
@@ -564,13 +572,19 @@ fun newMailGroupKey(accountId: String): String = "jp.nonbili.meron.NEW_MAIL:$acc
 
 /** Stable per-message id: re-posting the same mail (a retried sync, a push and
  *  a periodic refresh racing) updates its notification instead of stacking a
- *  duplicate. Falls back to the thread key for payloads without a UID. */
+ *  duplicate. A feed entry has no UID but carries its own key, scoped by its
+ *  feed the way core scopes the stored row — an entry key is a hash of the
+ *  GUID, unique only within one subscription, and two feeds can syndicate the
+ *  same post. Only a payload with neither falls back to the thread key, which
+ *  cannot separate two same-titled entries of one feed. */
 fun newMailNotificationId(
     accountId: String,
     item: NewMailItem,
 ): Int =
     if (item.uid > 0) {
         "$accountId#uid:${item.uid}".hashCode()
+    } else if (item.itemKey.isNotBlank()) {
+        "$accountId#item:${item.threadKey}#${item.itemKey}".hashCode()
     } else {
         "$accountId#thread:${item.threadKey}#${item.subject}".hashCode()
     }
@@ -605,6 +619,12 @@ fun newMailChildBigText(
     val parts = listOf(subject, preview).map { it.trim() }.filter { it.isNotEmpty() }
     return parts.joinToString("\n").ifBlank { fallback }
 }
+
+/** Whether a new-mail row offers Archive. A feed item has nowhere to be filed —
+ *  core keeps no archive folder for an RSS account, and `mail.archive` does not
+ *  route feed threads — so feeds get Mark as read alone. Matches the mail list,
+ *  where an RSS row cannot be archive-swiped either. */
+fun newMailSupportsArchive(accountId: String): Boolean = !accountIdIsRss(accountId)
 
 /** One summary row: who wrote, and about what. */
 fun newMailInboxLine(

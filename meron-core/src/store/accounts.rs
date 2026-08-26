@@ -900,6 +900,31 @@ pub fn load_remote_images(conn: &Connection, id: &str) -> Result<bool> {
     })
 }
 
+/// Friendly display name for an account in user-facing notifications: its email
+/// address, else its display name, else the bare id for an account row that is
+/// missing or carries neither (RSS accounts have no email, so they show their
+/// display name).
+pub fn account_label(conn: &Connection, id: &str) -> String {
+    conn.query_row(
+        "SELECT display_name, email FROM accounts WHERE id = ?1",
+        params![id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )
+    .ok()
+    .and_then(|(display_name, email)| {
+        let email = email.trim();
+        if !email.is_empty() {
+            return Some(email.to_string());
+        }
+        let display_name = display_name.trim();
+        if !display_name.is_empty() {
+            return Some(display_name.to_string());
+        }
+        None
+    })
+    .unwrap_or_else(|| id.to_string())
+}
+
 /// Whether desktop notifications are suppressed for an account (default false).
 /// Unknown accounts return false.
 pub fn account_muted(conn: &Connection, id: &str) -> Result<bool> {

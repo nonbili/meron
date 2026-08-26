@@ -2451,7 +2451,7 @@ pub fn upsert_rss_item(
 /// Best available timestamp for an RSS item as epoch seconds (0 when none),
 /// preferring published > updated > fetched. Stored in the `date` column so RSS
 /// rows sort alongside mail.
-fn item_date_epoch(published: i64, updated: i64, fetched: i64) -> i64 {
+pub(crate) fn item_date_epoch(published: i64, updated: i64, fetched: i64) -> i64 {
     if published != 0 {
         published
     } else if updated != 0 {

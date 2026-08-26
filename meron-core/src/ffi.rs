@@ -834,21 +834,7 @@ fn mobile_account_label(data_dir: &str, account: &str) -> String {
     let Ok(conn) = mobile_db(data_dir) else {
         return account.to_string();
     };
-    conn.query_row(
-        "SELECT display_name, email FROM accounts WHERE id = ?1",
-        rusqlite::params![account],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-    )
-    .map(|(display_name, email)| {
-        if !email.trim().is_empty() {
-            email
-        } else if !display_name.trim().is_empty() {
-            display_name
-        } else {
-            account.to_string()
-        }
-    })
-    .unwrap_or_else(|_| account.to_string())
+    crate::store::account_label(&conn, account)
 }
 
 fn mobile_account_muted(data_dir: &str, account: &str) -> bool {

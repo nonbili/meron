@@ -62,14 +62,26 @@ pub(crate) fn sync_mobile_rss_with_conn(
     if !is_rss_account(&conn, &account_id)? {
         return Err(format!("account is not RSS: {account_id}"));
     }
+    // Read the notification's account fields before the connection moves into the
+    // sync mutex.
+    let account_name = crate::store::account_label(&conn, &account_id);
+    let muted = crate::store::account_muted(&conn, &account_id).unwrap_or(false);
     let db = Mutex::new(conn);
-    let synced = rss::sync_account(&db, &account_id).map_err(|err| format!("{err:#}"))?;
-    Ok(json!({
+    let new_items = rss::sync_account(&db, &account_id).map_err(|err| format!("{err:#}"))?;
+    let mut response = json!({
         "ok": true,
         "account": account_id,
-        "synced": synced,
+        "synced": new_items.len(),
         "rss": true,
-    }))
+    });
+    // Same `new_messages` shape `mail.sync` returns, so a background worker can
+    // notify for feed arrivals from the sync response alone — it has no live
+    // event listener, and periodic refresh is the only thing that syncs feeds on
+    // mobile (an RSS account has nothing to IDLE on).
+    if let Some(detail) = rss::new_items_detail(&account_id, &account_name, muted, &new_items) {
+        response["new_messages"] = detail;
+    }
+    Ok(response)
 }
 
 pub(crate) fn read_mobile_rss_thread(data_dir: &str, params: &Value) -> Result<Value, String> {

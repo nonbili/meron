@@ -967,8 +967,319 @@ fn add_fetches_parses_and_syncs_over_http() {
 
     // A re-sync of the unchanged feed finds no new items (guids dedupe).
     let new_items = sync_account(&db, &account_id).unwrap();
-    assert_eq!(
-        new_items, 0,
+    assert!(
+        new_items.is_empty(),
         "unchanged feed yields no new items on re-sync"
+    );
+}
+
+/// Spawn a throwaway HTTP/1.1 server that serves `bodies` in order, one per
+/// request, repeating the last body once the list runs out. Lets a test fetch a
+/// feed, then re-fetch it after a new entry appeared.
+fn serve_feed_sequence(bodies: Vec<&'static str>) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let mut served = 0usize;
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf); // drain the request line/headers
+            let body = bodies[served.min(bodies.len() - 1)];
+            served += 1;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(resp.as_bytes());
+        }
+    });
+    format!("http://{addr}/feed.xml")
+}
+
+/// A feed whose only entry is dated *later* than the arrival the other feed
+/// publishes below, so it wins any "newest stored item" ordering.
+const LATE_DATED_RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Late Dated Feed</title>
+    <link>https://late.example.com</link>
+    <item>
+      <title>Published yesterday</title>
+      <link>https://late.example.com/1</link>
+      <guid>late-1</guid>
+      <pubDate>Tue, 25 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Already seen, already read.</description>
+    </item>
+  </channel>
+</rss>"#;
+
+const SLOW_FEED_BEFORE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Slow Feed</title>
+    <link>https://slow.example.com</link>
+    <item>
+      <title>An older post</title>
+      <link>https://slow.example.com/1</link>
+      <guid>slow-1</guid>
+      <pubDate>Thu, 20 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Nothing new here.</description>
+    </item>
+  </channel>
+</rss>"#;
+
+/// The same feed after publishing an entry dated *before* the other feed's
+/// entry — the arrival a notification must name.
+const SLOW_FEED_AFTER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Slow Feed</title>
+    <link>https://slow.example.com</link>
+    <item>
+      <title>The actual arrival</title>
+      <link>https://slow.example.com/2</link>
+      <guid>slow-2</guid>
+      <pubDate>Mon, 24 Aug 2026 12:00:00 GMT</pubDate>
+      <description>This is what just landed.</description>
+    </item>
+    <item>
+      <title>An older post</title>
+      <link>https://slow.example.com/1</link>
+      <guid>slow-1</guid>
+      <pubDate>Thu, 20 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Nothing new here.</description>
+    </item>
+  </channel>
+</rss>"#;
+
+/// A sync reports the entries that actually arrived, not the account's
+/// newest-dated stored row. The two differ whenever a feed publishes with a
+/// timestamp older than something another feed already stored, which used to
+/// make the notification name the wrong feed and open the wrong thread.
+#[test]
+fn sync_reports_arrivals_not_the_newest_stored_item() {
+    let media = std::env::temp_dir().join(format!("meron-rss-arrivals-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let late_url = serve_feed(LATE_DATED_RSS);
+    let slow_url = serve_feed_sequence(vec![SLOW_FEED_BEFORE, SLOW_FEED_AFTER]);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+
+    let account = add(&db, &late_url, "Feeds").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+    add_feed(&db, &account_id, &slow_url).unwrap();
+
+    // Both feeds are re-fetched; only the slow feed gained an entry, and its
+    // date sorts below the late feed's already-stored (and read) entry.
+    let new_items = sync_account(&db, &account_id).unwrap();
+    assert_eq!(new_items.len(), 1, "one genuine arrival");
+    assert_eq!(new_items[0].title, "The actual arrival");
+    assert_eq!(new_items[0].feed_title, "Slow Feed");
+    assert_eq!(new_items[0].preview, "This is what just landed.");
+    assert_eq!(
+        new_items[0].subscription_id,
+        rss_subscription_id(&normalize_feed_url(&slow_url).unwrap()),
+        "tapping the notification opens the feed the entry landed in"
+    );
+
+    // The trap: the account's newest-dated row belongs to the *other* feed, so
+    // anything that picks the notification's subject by date lands on it.
+    let newest_stored: String = {
+        let conn = db.lock().unwrap();
+        conn.query_row(
+            "SELECT subject FROM messages WHERE account = ?1 ORDER BY date DESC, id DESC LIMIT 1",
+            params![account_id],
+            |row| row.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(newest_stored, "Published yesterday");
+
+    let stored_key: String = {
+        let conn = db.lock().unwrap();
+        conn.query_row(
+            "SELECT msg_id FROM messages WHERE account = ?1 AND subject = ?2",
+            params![account_id, "The actual arrival"],
+            |row| row.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        new_items[0].item_key, stored_key,
+        "the arrival carries the key its stored row is identified by"
+    );
+
+    let detail = new_items_detail(&account_id, "Feeds", false, &new_items).unwrap();
+    assert_eq!(detail["from"], "Slow Feed");
+    assert_eq!(detail["subject"], "The actual arrival");
+    assert_eq!(detail["count"], 1);
+    assert_eq!(detail["threadKey"], new_items[0].subscription_id);
+}
+
+fn new_item(feed: &str, title: &str, date: i64) -> NewItem {
+    NewItem {
+        subscription_id: format!("sub-{feed}"),
+        item_key: format!("key-{feed}-{title}"),
+        feed_title: feed.to_string(),
+        title: title.to_string(),
+        preview: format!("{title} preview"),
+        date,
+    }
+}
+
+/// The detail describes the newest arrival at the top level (what the desktop
+/// bridge reads) and every arrival in `messages` (what per-message clients read).
+#[test]
+fn new_items_detail_describes_every_arrival() {
+    let items = vec![
+        new_item("Feed A", "Newest", 300),
+        new_item("Feed B", "Middle", 200),
+        new_item("Feed A", "Oldest", 100),
+    ];
+    let detail = new_items_detail("rss-1", "My Feeds", false, &items).unwrap();
+
+    assert_eq!(detail["account"], "rss-1");
+    assert_eq!(detail["accountName"], "My Feeds");
+    assert_eq!(detail["folder"], "inbox");
+    assert_eq!(detail["count"], 3);
+    assert_eq!(detail["muted"], false);
+    assert_eq!(detail["from"], "Feed A");
+    assert_eq!(detail["subject"], "Newest");
+    assert_eq!(detail["preview"], "Newest preview");
+    assert_eq!(detail["threadKey"], "sub-Feed A");
+
+    let messages = detail["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 3);
+    assert_eq!(messages[1]["from"], "Feed B");
+    assert_eq!(messages[1]["subject"], "Middle");
+    assert_eq!(messages[1]["preview"], "Middle preview");
+    assert_eq!(messages[1]["threadKey"], "sub-Feed B");
+    assert_eq!(messages[1]["date"], 200);
+    assert_eq!(messages[1]["itemKey"], "key-Feed B-Middle");
+}
+
+/// Two entries of one feed that happen to share a title are still told apart.
+/// A feed is a single thread, so the thread key cannot separate them, and a
+/// client keying a notification on thread + subject would have the second
+/// arrival silently replace the first.
+#[test]
+fn new_items_detail_identifies_same_titled_arrivals_separately() {
+    let mut first = new_item("Feed A", "Daily digest", 200);
+    first.item_key = "key-monday".to_string();
+    let mut second = new_item("Feed A", "Daily digest", 100);
+    second.item_key = "key-tuesday".to_string();
+    let detail = new_items_detail("rss-1", "My Feeds", false, &[first, second]).unwrap();
+
+    let messages = detail["messages"].as_array().unwrap();
+    assert_eq!(messages[0]["subject"], messages[1]["subject"]);
+    assert_eq!(messages[0]["threadKey"], messages[1]["threadKey"]);
+    assert_eq!(messages[0]["itemKey"], "key-monday");
+    assert_eq!(messages[1]["itemKey"], "key-tuesday");
+}
+
+/// A batch bigger than the per-message cap still reports its true size, and the
+/// muted flag rides along so the bridge can suppress the OS notification.
+#[test]
+fn new_items_detail_caps_listed_messages_and_carries_muted() {
+    let items: Vec<NewItem> = (0..crate::mail_model::NEW_MESSAGES_DETAIL_MAX + 3)
+        .map(|i| new_item("Feed", &format!("Item {i}"), 1000 - i as i64))
+        .collect();
+    let detail = new_items_detail("rss-1", "My Feeds", true, &items).unwrap();
+
+    assert_eq!(detail["count"], items.len());
+    assert_eq!(
+        detail["messages"].as_array().unwrap().len(),
+        crate::mail_model::NEW_MESSAGES_DETAIL_MAX
+    );
+    assert_eq!(detail["muted"], true);
+}
+
+/// No arrivals means no notification at all — the caller falls back to a silent
+/// `mail.synced` refresh.
+#[test]
+fn new_items_detail_is_none_without_arrivals() {
+    assert!(new_items_detail("rss-1", "My Feeds", false, &[]).is_none());
+}
+
+/// The mobile `rss.sync` response carries the same `new_messages` detail
+/// `mail.sync` does. Android's periodic worker notifies from the response alone
+/// — it has no live event listener, and periodic refresh is the only thing that
+/// syncs feeds in the background (an RSS account has nothing to IDLE on), so
+/// without this feeds refreshed silently and never raised a notification.
+#[test]
+fn mobile_rss_sync_response_carries_new_arrivals() {
+    let media = std::env::temp_dir().join(format!("meron-rss-mobile-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed_sequence(vec![SLOW_FEED_BEFORE, SLOW_FEED_AFTER]);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "My Feeds").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+
+    let conn = db.into_inner().unwrap();
+    let response = crate::protocol::sync_mobile_rss_with_conn(conn, account_id.clone()).unwrap();
+
+    assert_eq!(response["synced"], 1);
+    let detail = &response["new_messages"];
+    assert_eq!(detail["account"], account_id.as_str());
+    // An RSS account has no email address, so the label is its display name.
+    assert_eq!(detail["accountName"], "My Feeds");
+    assert_eq!(detail["from"], "Slow Feed");
+    assert_eq!(detail["subject"], "The actual arrival");
+    assert_eq!(detail["count"], 1);
+    assert_eq!(detail["muted"], false);
+    assert_eq!(detail["messages"].as_array().unwrap().len(), 1);
+}
+
+/// A muted RSS account still syncs — the feed list refreshes — it just carries
+/// the flag the clients read to skip the OS notification.
+#[test]
+fn mobile_rss_sync_marks_a_muted_account() {
+    let media = std::env::temp_dir().join(format!("meron-rss-muted-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed_sequence(vec![SLOW_FEED_BEFORE, SLOW_FEED_AFTER]);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "My Feeds").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+
+    let conn = db.into_inner().unwrap();
+    crate::store::set_account_pref(&conn, &account_id, "muted", true).unwrap();
+    let response = crate::protocol::sync_mobile_rss_with_conn(conn, account_id).unwrap();
+
+    assert_eq!(response["synced"], 1);
+    assert_eq!(response["new_messages"]["muted"], true);
+}
+
+/// Nothing new means no `new_messages` at all, so a background refresh over
+/// unchanged feeds stays silent.
+#[test]
+fn mobile_rss_sync_omits_new_messages_without_arrivals() {
+    let media = std::env::temp_dir().join(format!("meron-rss-quiet-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed(SLOW_FEED_BEFORE);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "My Feeds").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+
+    let conn = db.into_inner().unwrap();
+    let response = crate::protocol::sync_mobile_rss_with_conn(conn, account_id).unwrap();
+
+    assert_eq!(response["synced"], 0);
+    assert!(
+        response.get("new_messages").is_none(),
+        "an unchanged feed raises no notification"
     );
 }

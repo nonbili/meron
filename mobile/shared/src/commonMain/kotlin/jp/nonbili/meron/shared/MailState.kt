@@ -301,6 +301,12 @@ fun accountSummaryIsRss(account: AccountSummary): Boolean = account.engine == "r
 
 fun threadIdIsRss(threadId: String): Boolean = threadId.contains("#rss#")
 
+/** Whether an account id names an RSS account. Core mints them as "rss-<uuid>"
+ *  and the desktop bridge routes on the same prefix. Unlike
+ *  [accountSummaryIsRss] this needs no account row, so it works in a background
+ *  receiver that has only the ids a notification carried. */
+fun accountIdIsRss(accountId: String): Boolean = accountId.startsWith("rss-")
+
 /**
  * The mailbox a mail thread id names, or "" when [threadId] carries none (an
  * RSS thread, or an id the core did not mint). Mail ids are

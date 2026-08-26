@@ -47,6 +47,27 @@ struct ParsedItem {
     extra: RssItemExtra,
 }
 
+/// A feed entry that landed in the store for the first time during a sync.
+/// Carries everything a "new items" notification needs, so callers never have to
+/// guess from the store which item triggered the sync — an item's `date` is its
+/// *published* date, so the newest arrival is often not the newest-dated row.
+pub struct NewItem {
+    /// Subscription id, which is both the item's `folder` and the feed thread's
+    /// key (`<account>#rss#<sub>`) that a notification tap should open.
+    pub subscription_id: String,
+    /// The entry's stable key (its guid/link hash). A feed is one thread, so the
+    /// subscription id does not tell two of its entries apart — this does, and
+    /// it is what keeps two same-titled arrivals from sharing a notification.
+    pub item_key: String,
+    /// The feed's display title, used as the notification's "sender".
+    pub feed_title: String,
+    pub title: String,
+    /// Body snippet for the notification, empty when the entry carried no text.
+    pub preview: String,
+    /// Item date as epoch seconds, matching the stored `date` column.
+    pub date: i64,
+}
+
 // ---- Public API -------------------------------------------------------------
 
 /// Create a new RSS account (fresh stable id) and, if a feed URL is supplied,
@@ -305,17 +326,18 @@ fn store_parsed_feed(tx: &Connection, account: &str, parsed: &FetchedParsed) -> 
 
 /// Re-fetch every enabled subscription of an account (conditional GET via
 /// stored ETag / Last-Modified), upserting new items and refreshing sub state.
-/// Returns the number of genuinely new items stored across all of the account's
-/// feeds, so the caller can decide whether to raise a "new items" notification.
-pub fn sync_account(db: &Mutex<Connection>, account: &str) -> Result<u32> {
+/// Returns the genuinely new items stored across all of the account's feeds,
+/// newest first, so the caller can raise a "new items" notification that names
+/// the entries that actually arrived.
+pub fn sync_account(db: &Mutex<Connection>, account: &str) -> Result<Vec<NewItem>> {
     let subs = {
         let conn = db.lock().unwrap();
         load_subscriptions(&conn, account)?
     };
-    let mut new_items = 0u32;
+    let mut new_items: Vec<NewItem> = Vec::new();
     for sub in subs {
         match sync_subscription(db, &sub) {
-            Ok(count) => new_items += count,
+            Ok(items) => new_items.extend(items),
             Err(e) => {
                 let conn = db.lock().unwrap();
                 let _ = conn.execute(
@@ -326,7 +348,63 @@ pub fn sync_account(db: &Mutex<Connection>, account: &str) -> Result<u32> {
         }
     }
     prune_feed_media(&crate::parse::media_root());
+    new_items.sort_by_key(|item| std::cmp::Reverse(item.date));
     Ok(new_items)
+}
+
+/// The `mail.newMessages` payload for a batch of feed arrivals, shaped exactly
+/// like the mail one ([`crate::mail_model::new_messages_detail`]): the top-level
+/// `from`/`subject`/`preview`/`threadKey` describe the newest arrival for
+/// single-notification clients (desktop), and `messages` carries one entry per
+/// arrival for clients that post a notification each. `items` must be newest
+/// first, as [`sync_account`] returns them.
+pub fn new_items_detail(
+    account: &str,
+    account_name: &str,
+    muted: bool,
+    items: &[NewItem],
+) -> Option<Value> {
+    let latest = items.first()?;
+    let messages: Vec<Value> = items
+        .iter()
+        .take(crate::mail_model::NEW_MESSAGES_DETAIL_MAX)
+        .map(|item| {
+            json!({
+                // RSS rows carry no IMAP uid; `itemKey` is what identifies one,
+                // since a feed's entries all share its thread key.
+                "uid": 0,
+                "itemKey": item.item_key,
+                "from": item.feed_title,
+                "subject": item.title,
+                "preview": item.preview,
+                "threadKey": item.subscription_id,
+                "date": item.date,
+            })
+        })
+        .collect();
+    Some(json!({
+        "account": account,
+        "accountName": account_name,
+        "folder": RSS_FOLDER_ID,
+        "count": items.len(),
+        "muted": muted,
+        "from": latest.feed_title,
+        "subject": latest.title,
+        "preview": latest.preview,
+        // The subscription id: a feed is one thread, so this opens the feed the
+        // newest arrival landed in.
+        "threadKey": latest.subscription_id,
+        "messages": messages,
+    }))
+}
+
+/// Notification snippet for an item: its summary, else its content body.
+fn item_preview(extra: &RssItemExtra) -> String {
+    if !extra.summary.trim().is_empty() {
+        first_line(&extra.summary)
+    } else {
+        first_line(&extra.content)
+    }
 }
 
 /// Read an account's resolved "load remote images" preference under a short lock.
@@ -335,7 +413,7 @@ fn db_load_remote_images(db: &Mutex<Connection>, account: &str) -> bool {
     store::load_remote_images(&conn, account).unwrap_or(false)
 }
 
-fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> {
+fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<Vec<NewItem>> {
     let now = now_unix();
     let fetched = fetch_feed(&sub.url, &sub.etag, &sub.last_modified)?;
     if fetched.not_modified {
@@ -344,7 +422,7 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
             "UPDATE subscriptions SET last_sync_at = ?2, last_error = '', updated_at = ?2 WHERE id = ?1",
             params![sub.id, now],
         )?;
-        return Ok(0);
+        return Ok(Vec::new());
     }
     let feed = fetched
         .feed
@@ -374,7 +452,7 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
 
     let conn = db.lock().unwrap();
     let tx = conn.unchecked_transaction()?;
-    let mut new_items = 0u32;
+    let mut new_items = Vec::new();
     for item in &items {
         if store::upsert_rss_item(
             &tx,
@@ -386,7 +464,20 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<u32> 
             item.content_html.as_deref(),
             &item.extra,
         )? {
-            new_items += 1;
+            new_items.push(NewItem {
+                subscription_id: sub.id.clone(),
+                item_key: item.item_key.clone(),
+                // The user's own title for the feed when they renamed it, so the
+                // notification matches the thread row they will land on.
+                feed_title: title.clone(),
+                title: item.title.clone(),
+                preview: item_preview(&item.extra),
+                date: store::item_date_epoch(
+                    item.extra.published_at,
+                    item.extra.updated_at,
+                    item.extra.fetched_at,
+                ),
+            });
         }
     }
     tx.execute(

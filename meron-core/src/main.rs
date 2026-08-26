@@ -508,32 +508,18 @@ fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
         engine.syncing.lock().unwrap().remove(&key);
         match result {
             Ok(Ok(Ok(new_items))) => {
-                if new_items > 0 {
-                    // New feed entries: notify like fresh mail (toast + reload + OS
-                    // notification) instead of a silent refresh.
-                    let (from, subject, thread_key) = latest_rss_header(&engine, &account)
-                        .unwrap_or_else(|| {
-                            (
-                                "RSS Feed".to_string(),
-                                "New feed entry".to_string(),
-                                String::new(),
-                            )
-                        });
-                    emit(
-                        &out,
-                        "mail.newMessages",
-                        json!({
-                            "account": account,
-                            "accountName": account_label(&engine, &account),
-                            "folder": "inbox",
-                            "count": new_items,
-                            "muted": engine.is_muted(&account),
-                            "from": from,
-                            "subject": subject,
-                            "threadKey": thread_key,
-                        }),
-                    )
-                    .await
+                // New feed entries: notify like fresh mail (toast + reload + OS
+                // notification) instead of a silent refresh. The detail names the
+                // entries that actually arrived — not the account's newest-dated
+                // stored row, which is a different item whenever a feed publishes
+                // with a timestamp older than something already stored.
+                if let Some(detail) = rss::new_items_detail(
+                    &account,
+                    &account_label(&engine, &account),
+                    engine.is_muted(&account),
+                    &new_items,
+                ) {
+                    emit(&out, "mail.newMessages", detail).await
                 } else {
                     emit(
                         &out,
@@ -656,56 +642,10 @@ async fn new_messages_detail(
     mail_model::new_messages_detail(&db, account, &account_name, muted, headers)
 }
 
-/// Newest stored RSS item for an account, or None if the store is empty
-/// or the query fails. Used to enrich `mail.newMessages` with the latest
-/// sender/subject so OS notifications can show something more useful than a
-/// bare count.
-fn latest_rss_header(engine: &Arc<Engine>, account: &str) -> Option<(String, String, String)> {
-    let db = engine.db.lock().unwrap();
-    let mut stmt = db
-        .prepare(
-            "SELECT
-                COALESCE(m.subject, '(no subject)'),
-                COALESCE(NULLIF(s.title, ''), NULLIF(m.from_name, ''), 'RSS Feed') AS feed_title,
-                COALESCE(m.folder, '')
-             FROM messages m
-             LEFT JOIN subscriptions s ON m.account = s.account AND m.folder = s.id
-             WHERE m.account = ?1
-             ORDER BY m.date DESC, m.id DESC
-             LIMIT 1",
-        )
-        .ok()?;
-    stmt.query_row(rusqlite::params![account], |row| {
-        Ok((
-            row.get::<_, String>(1)?, // from (feed_title)
-            row.get::<_, String>(0)?, // subject
-            row.get::<_, String>(2)?, // thread_key (folder / subscription_id)
-        ))
-    })
-    .ok()
-}
-
 /// Friendly display name or email address of an account for user-facing notifications.
 fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     let db = engine.db.lock().unwrap();
-    let stmt = db
-        .prepare("SELECT display_name, email FROM accounts WHERE id = ?1")
-        .ok();
-    if let Some(mut s) = stmt
-        && let Ok((display_name, email)) = s.query_row(rusqlite::params![account], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-    {
-        let mail = email.trim();
-        if !mail.is_empty() {
-            return mail.to_string();
-        }
-        let label = display_name.trim();
-        if !label.is_empty() {
-            return label.to_string();
-        }
-    }
-    account.to_string()
+    store::account_label(&db, account)
 }
 
 /// Cached UIDNEXT for an account's INBOX (0 if unknown). Used to detect whether

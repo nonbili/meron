@@ -24,6 +24,12 @@ fun notificationThreadId(
     folder: String,
     threadKey: String,
 ): String {
+    // A feed is a thread, keyed by its subscription rather than by folder: the
+    // same "<account>#rss#<subscription>" id `rss.recent` mints for the feed row
+    // and every `mail.*` method routes on. Folder plays no part.
+    if (accountIdIsRss(accountId)) {
+        return "$accountId#rss#$threadKey"
+    }
     val coreFolder = if (folder.equals(CORE_INBOX_FOLDER, ignoreCase = true)) CORE_INBOX_FOLDER else folder
     threadKey.removePrefix("uid:").takeIf { threadKey.startsWith("uid:") }?.let { uid ->
         return "$accountId#$coreFolder#$uid"
