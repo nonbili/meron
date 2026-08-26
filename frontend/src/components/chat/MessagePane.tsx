@@ -5,6 +5,7 @@ import { compose$, openComposeTab, withoutHydratedQuickReplyDraft } from '../../
 import { ui$ } from '../../states/ui'
 import { mail$, getActiveThread, loadThread } from '../../states/mail'
 import { accounts$ } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import { resetThreadView, thread$, type ConversationMode } from '../../states/thread'
 import { Gallery } from './Gallery'
 import { ConversationDetailsPanel } from './ConversationDetailsPanel'
@@ -57,6 +58,7 @@ export function MessagePane() {
   const selectedAccountId = useValue(ui$.selectedAccount)
   const selectedThreadId = useValue(ui$.selectedThread)
   const revealedRemote = useValue(thread$.revealedRemote)
+  const allowedSenders = useValue(settings$.remoteImageSenders)
   const galleryIndex = useValue(thread$.galleryIndex)
   const mediaOpen = useValue(thread$.mediaOpen)
   const modeOverrides = useValue(thread$.conversationModeOverrides)
@@ -116,12 +118,12 @@ export function MessagePane() {
   )
 
   const { galleryItems, galleryOffsets } = useMemo(
-    () => buildGalleryItems(displayMessages, accounts, revealedRemote),
-    [displayMessages, accounts, revealedRemote],
+    () => buildGalleryItems(displayMessages, accounts, revealedRemote, allowedSenders),
+    [displayMessages, accounts, revealedRemote, allowedSenders],
   )
   const { mediaItems, fileItems } = useMemo(
-    () => buildThreadMedia(displayMessages, accounts, revealedRemote),
-    [displayMessages, accounts, revealedRemote],
+    () => buildThreadMedia(displayMessages, accounts, revealedRemote, allowedSenders),
+    [displayMessages, accounts, revealedRemote, allowedSenders],
   )
   const participants = useMemo(
     () => buildParticipants(displayMessages, accounts, isRSS),

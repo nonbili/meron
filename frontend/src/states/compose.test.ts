@@ -10,6 +10,7 @@ import {
   openDraftCompose,
   openDraftConversationOrCompose,
   openMessageTab,
+  revealMessageRemote,
   openReplyInFullEditor,
   openComposeTab,
   openThreadTab,
@@ -28,6 +29,7 @@ import { accounts$ } from './accounts'
 import { settings$ } from './settings'
 import { ui$ } from './ui'
 import { mail$ } from './mail'
+import { resetThreadView, thread$ } from './thread'
 
 const message = (overrides: Partial<Message> = {}): Message => ({
   id: 'm1',
@@ -1424,5 +1426,31 @@ describe('signature in the quick reply', () => {
     settings$.signature.set('<p>different</p>')
 
     expect(compose$.composer.get()).toBe('t2\n\nfrom u2')
+  })
+})
+
+describe('revealMessageRemote', () => {
+  beforeEach(() => {
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    resetThreadView()
+  })
+
+  it('marks an open reader tab so a thread switch cannot re-block it', () => {
+    openMessageTab(message({ id: 'm1', body_html: '<p>hi</p>' }))
+    openMessageTab(message({ id: 'm2', body_html: '<p>other</p>' }))
+    // Reading the conversation, not the tab: the inactive tab is unmounted, so
+    // it cannot copy the reveal itself.
+    compose$.activeTab.set('')
+
+    revealMessageRemote('m1')
+    expect(thread$.revealedRemote.get().m1).toBe(true)
+
+    // The thread switch clears the conversation's reveal map; the tab keeps its
+    // own copy, and the message that was never revealed keeps none.
+    resetThreadView()
+    const tabs = compose$.tabs.get()
+    expect(tabs.find((tab) => tab.messageId === 'm1')?.revealRemote).toBe(true)
+    expect(tabs.find((tab) => tab.messageId === 'm2')?.revealRemote).toBe(false)
   })
 })

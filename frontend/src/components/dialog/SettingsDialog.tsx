@@ -61,6 +61,7 @@ import { AccountTogglesSection } from './AccountTogglesSection'
 import { AccountWallpaperCard } from './AccountWallpaperCard'
 import { AvatarCropDialog } from './AvatarCropDialog'
 import { BoardPanel } from './BoardSettingsPanel'
+import { RemoteSendersDialog } from './RemoteSendersDialog'
 import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 
@@ -356,6 +357,8 @@ function BoardGroup({
 
 function GeneralSection() {
   const { t } = useTranslation()
+  const [remoteSendersOpen, setRemoteSendersOpen] = useState(false)
+  const remoteImageSenders = useValue(settings$.remoteImageSenders)
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const conversationLayout = useValue(settings$.conversationLayout)
@@ -424,6 +427,24 @@ function GeneralSection() {
           onChange={() => setUnifiedInboxSideNavVisible(!showUnifiedInbox)}
         />
       </SettingsGroup>
+
+      <SettingsGroup title={t('settings.sections.privacy')}>
+        <SettingRow
+          title={t('settings.privacy.remoteSenders')}
+          hint={t('settings.privacy.remoteSendersHint')}
+          control={
+            <button
+              onClick={() => setRemoteSendersOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[0.625rem] cursor-pointer transition-colors"
+            >
+              {remoteImageSenders.length > 0
+                ? t('settings.privacy.remoteSendersCount', { count: remoteImageSenders.length })
+                : t('settings.privacy.remoteSendersNone')}
+            </button>
+          }
+        />
+      </SettingsGroup>
+      {remoteSendersOpen && <RemoteSendersDialog onClose={() => setRemoteSendersOpen(false)} />}
 
       <ProxySettingsSection />
 

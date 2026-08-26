@@ -3,8 +3,9 @@ import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
 import { LinkHoverPreview } from './LinkHoverPreview'
-import { htmlReferencesMedia, isImage, mediaSrc } from './messageHelpers'
+import { mediaSrc, readerAttachmentImages } from './messageHelpers'
 import { applyReaderFont, applyReaderLayout, stripTrackingPixels } from './readerHtml'
+import { applyRemoteContentPolicy } from './remoteContentCsp'
 import { useMessageFrameFont } from './useMessageFrameFont'
 
 const readerScrollPositions = new Map<string, number>()
@@ -19,6 +20,10 @@ interface HtmlMessageViewProps {
   /** Attachments snapshotted with the reader tab; used for plain/image-only messages. */
   attachments?: Attachment[]
   viewMode: 'html' | 'plain'
+  /** Whether this message's remote content may load right now. The body was
+   *  baked with the policy in force when the thread was read, so a reveal or a
+   *  withdrawn allowance since then has to be applied to its CSP here. */
+  allowRemote?: boolean
 }
 
 // Renders a single message either as its original email HTML (in a sandboxed
@@ -30,7 +35,15 @@ interface HtmlMessageViewProps {
 // nothing from the message executes. `allow-same-origin` lets us read the
 // document to route link clicks to the system browser and open images in the
 // shared gallery lightbox.
-export function HtmlMessageView({ scrollKey, title, html, text, attachments, viewMode }: HtmlMessageViewProps) {
+export function HtmlMessageView({
+  scrollKey,
+  title,
+  html,
+  text,
+  attachments,
+  viewMode,
+  allowRemote = false,
+}: HtmlMessageViewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const textRef = useRef<HTMLDivElement | null>(null)
   const messageFont = useMessageFrameFont()
@@ -39,12 +52,8 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
   const positionKey = `${scrollKey}:${viewMode}`
   const attachmentImages = useMemo(
-    () =>
-      (attachments ?? []).filter((attachment) => {
-        if (!isImage(attachment) || (!attachment.key && !attachment.url)) return false
-        return !htmlReferencesMedia(html, attachment)
-      }),
-    [attachments, html],
+    () => readerAttachmentImages(attachments, html, allowRemote),
+    [attachments, html, allowRemote],
   )
 
   const openAttachmentImage = useCallback(
@@ -92,7 +101,10 @@ export function HtmlMessageView({ scrollKey, title, html, text, attachments, vie
     return saveScrollPosition
   }, [saveScrollPosition])
 
-  const sanitizedHtml = useMemo(() => (html ? stripTrackingPixels(html) : html), [html])
+  const sanitizedHtml = useMemo(
+    () => (html ? applyRemoteContentPolicy(stripTrackingPixels(html), allowRemote) : html),
+    [html, allowRemote],
+  )
 
   useEffect(() => {
     setHoveredLink(null)

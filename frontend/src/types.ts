@@ -246,6 +246,10 @@ export type MessageTab = {
   bodyHtml?: string
   attachments?: Attachment[]
   viewMode: 'html' | 'plain'
+  /** Whether the user revealed this message's remote content. Kept on the tab
+   *  because the conversation's reveal map is cleared when the thread changes,
+   *  while the tab stays open. Reader tabs only. */
+  revealRemote?: boolean
   /** Present only when kind === "compose". */
   compose?: ComposeDraft
 }

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { Account, Attachment, Message } from '../../types'
+import { normalizeSenderAddr } from '../../states/settings'
 import { PdfIcon, type IconProps } from '../icons/Icons'
 
 /** Any icon usable in attachment rows: a lucide icon or our custom SVGs. */
@@ -123,21 +124,71 @@ export function isVideo(a: Attachment): boolean {
   return (a.mime ?? '').toLowerCase().startsWith('video/')
 }
 
+/** Whether an attachment renders without a remote fetch: a cached `/media/<key>`
+ *  file, or a `data:` URL (used by optimistic sent-message previews). Anything
+ *  else is fetched from the network, so the remote-content policy gates it. */
+export function isInlineMedia(a: Attachment): boolean {
+  return !!a.key || !!a.url?.startsWith('data:')
+}
+
 export function isImage(a: Attachment): boolean {
   return (a.mime ?? '').toLowerCase().startsWith('image/')
 }
 
-export function getVisibleMedia(message: Message, account: Account | undefined, revealed: boolean) {
+// Remote references the sidecar's CSP blocks when the account (or sender) is not
+// trusted: an absolute or protocol-relative `src`/`srcset`/`background`/`poster`
+// (a video poster is fetched under `img-src`, so it is blocked like any image),
+// and CSS `url(...)` references. Inline images are `/media/<key>` or `data:`, so
+// they never match.
+const REMOTE_MEDIA_REF =
+  /<[^>]+\s(?:src|srcset|background|poster)\s*=\s*["']?\s*(?:https?:)?\/\/|url\(\s*["']?\s*(?:https?:)?\/\//i
+
+/** Whether an HTML body references remote media that the CSP is holding back. */
+export function htmlHasRemoteMedia(html: string | undefined): boolean {
+  return !!html && REMOTE_MEDIA_REF.test(html)
+}
+
+/** Whether a message's remote content may load without the user revealing it:
+ *  the account-wide setting, or the sender being on the app-wide allowlist
+ *  (`settings$.remoteImageSenders`, passed in so callers stay reactive). */
+export function remoteContentAllowed(
+  message: Message,
+  account: Account | undefined,
+  allowedSenders: string[],
+): boolean {
+  if (account?.load_remote_images ?? false) return true
+  const sender = normalizeSenderAddr(message.from_addr)
+  return !!sender && allowedSenders.includes(sender)
+}
+
+/** The images a reader view shows beside the body: those the HTML does not
+ *  already reference, minus the remote ones while remote content is blocked —
+ *  they render outside the iframe, so the body's CSP does not cover them. */
+export function readerAttachmentImages(
+  attachments: Attachment[] | undefined,
+  html: string | undefined,
+  allowRemote: boolean,
+): Attachment[] {
+  return (attachments ?? []).filter((attachment) => {
+    if (!isImage(attachment) || (!attachment.key && !attachment.url)) return false
+    if (!allowRemote && !isInlineMedia(attachment)) return false
+    return !htmlReferencesMedia(html, attachment)
+  })
+}
+
+export function getVisibleMedia(
+  message: Message,
+  account: Account | undefined,
+  revealed: boolean,
+  allowedSenders: string[],
+) {
   const attachments = message.attachments ?? []
-  // `data:` URLs (used by optimistic sent-message previews) are local — they
-  // need no remote fetch — so they render unconditionally alongside keyed media.
-  const isInline = (a: Attachment) => !!a.key || !!a.url?.startsWith('data:')
-  const localImages = attachments.filter((a) => isInline(a) && isImage(a))
-  const remoteImages = attachments.filter((a) => !isInline(a) && a.url && isImage(a))
-  const localVideos = attachments.filter((a) => isInline(a) && isVideo(a))
-  const remoteVideos = attachments.filter((a) => !isInline(a) && a.url && isVideo(a))
+  const localImages = attachments.filter((a) => isInlineMedia(a) && isImage(a))
+  const remoteImages = attachments.filter((a) => !isInlineMedia(a) && a.url && isImage(a))
+  const localVideos = attachments.filter((a) => isInlineMedia(a) && isVideo(a))
+  const remoteVideos = attachments.filter((a) => !isInlineMedia(a) && a.url && isVideo(a))
   const files = attachments.filter((a) => !isImage(a) && !isVideo(a))
-  const remoteVisible = (account?.load_remote_images ?? false) || revealed
+  const remoteVisible = remoteContentAllowed(message, account, allowedSenders) || revealed
   const attachmentImages = remoteVisible ? [...localImages, ...remoteImages] : localImages
   const videos = remoteVisible ? [...localVideos, ...remoteVideos] : localVideos
   const hiddenRemoteCount = remoteVisible ? 0 : remoteImages.length + remoteVideos.length

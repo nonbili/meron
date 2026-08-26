@@ -18,6 +18,7 @@ import { BubbleHtmlFrame } from './BubbleHtmlFrame'
 export function MessageBubbleBody({
   message,
   useHtmlBody,
+  allowRemote = false,
   normalizedSearchQuery,
   activeSearchMatch,
   fullHeight = false,
@@ -26,6 +27,9 @@ export function MessageBubbleBody({
 }: {
   message: Message
   useHtmlBody: boolean
+  /** Whether this message's remote content may load (account setting, allowed
+   *  sender, or a reveal the user just made). */
+  allowRemote?: boolean
   normalizedSearchQuery: string
   activeSearchMatch: boolean
   /** Grow to fit the content instead of scrolling inside a capped box — the
@@ -42,6 +46,7 @@ export function MessageBubbleBody({
       <div className={`${boxClass} -mr-3.5 pr-3.5`} style={boxStyle}>
         <BubbleHtmlFrame
           html={message.body_html!}
+          allowRemote={allowRemote}
           searchQuery={normalizedSearchQuery}
           activeSearchMatch={activeSearchMatch}
           onLinkHover={onLinkHover}

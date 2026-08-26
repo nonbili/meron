@@ -110,6 +110,12 @@ export type Settings = {
    * Empty means "no signature".
    */
   signature: string
+  /**
+   * Sender addresses (bare, lowercased) whose remote content always loads,
+   * whatever an account's own "load remote images" toggle says. Grown from the
+   * "Always allow from …" action on a message with blocked remote content.
+   */
+  remoteImageSenders: string[]
   /** Ordered user-created kanban boards. */
   kanbanBoards: KanbanBoard[]
   threadListWidth: number
@@ -155,6 +161,7 @@ const DB_KEY = {
   conversationLayout: 'conversation_layout',
   spellCheck: 'spell_check',
   signature: 'signature',
+  remoteImageSenders: 'remote_image_senders',
   kanbanBoards: 'kanban_boards',
   threadListWidth: 'thread_list_width',
   kanbanPaneWidth: 'kanban_pane_width',
@@ -320,6 +327,7 @@ export const settings$ = observable<Settings>({
   conversationLayout: 'chat',
   spellCheck: true,
   signature: '',
+  remoteImageSenders: [],
   kanbanBoards: [],
   threadListWidth: 350,
   kanbanPaneWidth: 33,
@@ -362,6 +370,28 @@ settings$.messageFontScale.onChange(syncFonts)
 // doesn't immediately echo them back.
 let hydrating = false
 
+// The sequence stamp of the last write sent for each DB key. The sidecar runs
+// each request on its own task, so two writes to one row can land out of order —
+// a whole-value row (the remote-content allowlist, the board list) would then
+// resurrect the value the user just replaced. Stamping instead of queueing keeps
+// every write on the wire immediately, so nothing is left pending behind a slow
+// call: the sidecar applies the newest stamp and drops the straggler.
+const writeSeq = new Map<string, number>()
+
+// These counters restart at 1 whenever this module is re-evaluated — a WebView
+// reload, which the sidecar outlives — so each session labels its writes, and
+// boot hands this label to the sidecar with its prefs read (`app.prefsGet`) to
+// take over write ordering from the session before it. Without that, a reloaded
+// window's edits would be dropped as stragglers, or a request left over from
+// before the reload could overwrite them.
+export const WRITE_SESSION = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+
+function persistSetting(key: string, value: unknown) {
+  const seq = (writeSeq.get(key) ?? 0) + 1
+  writeSeq.set(key, seq)
+  void invoke('app.prefsSet', { key, value, seq, session: WRITE_SESSION }).catch(() => {})
+}
+
 // The single persistence path: when a field changes, write just that field to
 // its row. Replaces the old per-field onChange handlers scattered across states.
 settings$.onChange(({ changes }) => {
@@ -371,7 +401,7 @@ settings$.onChange(({ changes }) => {
     const field = change.path[0] as keyof Settings | undefined
     if (!field || seen.has(field) || !(field in DB_KEY)) continue
     seen.add(field)
-    void invoke('app.prefsSet', { key: DB_KEY[field], value: settings$[field].get() }).catch(() => {})
+    persistSetting(DB_KEY[field], settings$[field].get())
   }
 })
 
@@ -519,6 +549,26 @@ function sanitizeStringArray(raw: unknown): string[] | null {
   return out
 }
 
+// The form the allowlist stores and compares: bare address, lowercased. Mirrors
+// `normalize_sender` in the sidecar so both ends agree on membership.
+export function normalizeSenderAddr(addr: string): string {
+  const trimmed = addr.trim()
+  const open = trimmed.lastIndexOf('<')
+  const close = trimmed.lastIndexOf('>')
+  const bare = open >= 0 && close > open ? trimmed.slice(open + 1, close) : trimmed
+  return bare.trim().toLowerCase()
+}
+
+// Allow (or stop allowing) remote content from one sender address. Unlike an
+// account's "load remote images" toggle this is additive and app-wide: mail
+// from `addr` loads its remote content in every account.
+export function setRemoteImageSender(addr: string, allowed: boolean) {
+  const address = normalizeSenderAddr(addr)
+  if (!address) return
+  const senders = settings$.remoteImageSenders.peek().filter((sender) => sender !== address)
+  settings$.remoteImageSenders.set(allowed ? [...senders, address] : senders)
+}
+
 export function isAccountHiddenFromSideNav(accountId: string): boolean {
   return settings$.hiddenSideNavAccounts.peek().includes(accountId)
 }
@@ -606,6 +656,17 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     if (typeof prefs[DB_KEY.signature] === 'string') {
       settings$.signature.set(prefs[DB_KEY.signature] as string)
     }
+
+    // Normalize before deduping: "News <News@example.com>" and
+    // "news@example.com" are one sender to the core, so they must be one row
+    // here too — duplicates would also collide as React keys in the list.
+    const storedSenders = prefs[DB_KEY.remoteImageSenders]
+    const remoteImageSenders = sanitizeStringArray(
+      Array.isArray(storedSenders)
+        ? storedSenders.map((addr) => (typeof addr === 'string' ? normalizeSenderAddr(addr) : addr))
+        : storedSenders,
+    )
+    if (remoteImageSenders) settings$.remoteImageSenders.set(remoteImageSenders)
 
     const boards = sanitizeKanbanBoards(prefs[DB_KEY.kanbanBoards])
     if (boards) settings$.kanbanBoards.set(boards)

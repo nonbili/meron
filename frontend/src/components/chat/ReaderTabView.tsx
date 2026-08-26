@@ -1,6 +1,10 @@
 import { Code, FileText, X } from 'lucide-react'
+import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
+import { accounts$ } from '../../states/accounts'
 import { closeMessageTab, setTabViewMode } from '../../states/compose'
+import { normalizeSenderAddr, settings$ } from '../../states/settings'
+import { thread$ } from '../../states/thread'
 import type { MessageTab } from '../../types'
 import { Composer } from '../composer/Composer'
 import { HtmlMessageView } from './HtmlMessageView'
@@ -11,6 +15,9 @@ import { extractAddr, formatFullTimestamp } from './messageHelpers'
 // reader tab shows the message header, address rows and the HTML/plain body.
 export function ReaderTabView({ tab }: { tab: MessageTab }) {
   const { t } = useTranslation()
+  const accounts = useValue(accounts$)
+  const allowedSenders = useValue(settings$.remoteImageSenders)
+  const revealedRemote = useValue(thread$.revealedRemote)
   if (tab.kind === 'compose') {
     return <Composer key={tab.id} tabId={tab.id} />
   }
@@ -21,6 +28,19 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
   const replyToDiffers =
     !!tab.replyTo && extractAddr(tab.replyTo).toLowerCase() !== extractAddr(tab.fromRaw ?? '').toLowerCase()
   const hasAddresses = tab.fromRaw || tab.to || tab.cc || tab.bcc || replyToDiffers
+
+  // The body was baked when the thread was read, so the tab has to re-apply the
+  // decision as it stands now: the account toggle, the sender allowlist, or a
+  // reveal the user made on this message in the conversation.
+  const account = accounts.find((acc) => acc.id === tab.accountId)
+  const sender = normalizeSenderAddr(tab.fromRaw ?? '')
+  const allowRemote =
+    (account?.load_remote_images ?? false) ||
+    (!!sender && allowedSenders.includes(sender)) ||
+    // `revealMessageRemote` copies a reveal onto the tab as it happens; the
+    // live map still counts for a tab opened before this thread was switched.
+    !!revealedRemote[tab.messageId] ||
+    !!tab.revealRemote
 
   return (
     <>
@@ -79,6 +99,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         text={tab.body}
         attachments={tab.attachments}
         viewMode={tab.viewMode}
+        allowRemote={allowRemote}
       />
     </>
   )

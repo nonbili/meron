@@ -1,9 +1,17 @@
 import { useValue } from '@legendapp/state/react'
 import { accountIdentities, accounts$ } from '../../states/accounts'
 import { getActiveThread, isDraftFolder } from '../../states/mail'
+import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
 import type { Account, Message } from '../../types'
-import { extractAddr, formatRecipientSummary, getVisibleMedia, standaloneAttachmentImages } from './messageHelpers'
+import {
+  extractAddr,
+  formatRecipientSummary,
+  getVisibleMedia,
+  htmlHasRemoteMedia,
+  remoteContentAllowed,
+  standaloneAttachmentImages,
+} from './messageHelpers'
 
 export type MessageView = ReturnType<typeof useMessageView>
 
@@ -20,6 +28,7 @@ export function useMessageView(message: Message) {
   const activeThread = useValue(getActiveThread)
   const revealedMap = useValue(thread$.revealedRemote)
   const modeOverrides = useValue(thread$.conversationModeOverrides)
+  const allowedSenders = useValue(settings$.remoteImageSenders)
 
   const account: Account | undefined = accounts.find((acc) => acc.id === message.account_id)
   const fromEmail = message.from_addr.trim().toLowerCase()
@@ -34,12 +43,23 @@ export function useMessageView(message: Message) {
   const conversationMode = activeAccount ? (modeOverrides[activeAccount.id] ?? accountConversationMode) : 'plain'
 
   const revealed = !!revealedMap[message.id]
-  const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(message, account, revealed)
+  const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(
+    message,
+    account,
+    revealed,
+    allowedSenders,
+  )
+  const remoteVisible = remoteContentAllowed(message, account, allowedSenders) || revealed
   const normalizedSearchQuery = search.trim()
   // A search must not change how a message reads: HTML bodies stay HTML and
   // highlight their matches inside the frame (BubbleHtmlFrame), rather than
   // falling back to the plain-text renderer for the duration of the search.
   const useHtmlBody = conversationMode === 'html' && !!message.body_html
+  // A newsletter's remote images live in the HTML body, not in the attachment
+  // list, so the reveal affordance has to look at the body too — otherwise the
+  // most common blocked message offers no way to show its content.
+  const blockedRemote =
+    !remoteVisible && (hiddenRemoteCount > 0 || (useHtmlBody && htmlHasRemoteMedia(message.body_html)))
   const bubbleAttachmentImages = standaloneAttachmentImages(attachmentImages, useHtmlBody, message.body_html)
 
   const replyToRaw = message.reply_to?.trim()
@@ -58,6 +78,12 @@ export function useMessageView(message: Message) {
     /** RSS items show their published date rather than a relative stamp. */
     showOriginalDate: isRSS,
     revealed,
+    /** Whether this message's remote content is currently allowed to load. */
+    remoteVisible,
+    /** Whether remote content is being held back and can be revealed. */
+    blockedRemote,
+    /** Bare From address, the key the sender allowlist is stored under. */
+    senderAddress: fromEmail,
     attachmentImages,
     bubbleAttachmentImages,
     videos,

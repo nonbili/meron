@@ -251,11 +251,11 @@ pub async fn read_thread_page(
         }
     }
 
-    let (mine, load_remote_images) = {
+    let (mine, remote_policy) = {
         let db = engine.db.lock().unwrap();
         (
             store::self_addrs(&db, account),
-            bake_html_policy && store::load_remote_images(&db, account).unwrap_or(false),
+            store::remote_image_policy(&db, account).unwrap_or_default(),
         )
     };
     let mut seen_message_ids = HashSet::new();
@@ -263,7 +263,7 @@ pub async fn read_thread_page(
     for (header, slot) in headers.iter().zip(slots) {
         let mut cached = slot.cached;
         if bake_html_policy && let Some(message) = cached.as_mut() {
-            attach_html(message, load_remote_images);
+            attach_html(message, &remote_policy);
         }
         // Newly synced envelope rows do not have json.message_id yet, so the
         // SQL-level cross-folder dedupe cannot collapse a self-addressed

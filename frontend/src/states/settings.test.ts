@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { EMPTY_PROXY, hydrateSettings, isProxyUsable, sanitizeKanbanBoards, sanitizeProxy, settings$ } from './settings'
+import {
+  EMPTY_PROXY,
+  hydrateSettings,
+  isProxyUsable,
+  normalizeSenderAddr,
+  sanitizeKanbanBoards,
+  sanitizeProxy,
+  setRemoteImageSender,
+  settings$,
+  WRITE_SESSION,
+} from './settings'
 
 const baseBoard = {
   id: 'kb-1',
@@ -103,5 +113,83 @@ describe('proxy setting', () => {
     expect(isProxyUsable({ mode: 'http', host: '', port: 8080, username: '', password: '' })).toBe(false)
     expect(isProxyUsable({ mode: 'http', host: 'h', port: 0, username: '', password: '' })).toBe(false)
     expect(isProxyUsable({ mode: 'http', host: 'h', port: 8080, username: '', password: '' })).toBe(true)
+  })
+})
+
+describe('remote content allowlist', () => {
+  afterEach(() => {
+    settings$.remoteImageSenders.set([])
+  })
+
+  it('stores the bare lowercased address', () => {
+    expect(normalizeSenderAddr(' News <News@Example.COM> ')).toBe('news@example.com')
+    expect(normalizeSenderAddr('  ')).toBe('')
+  })
+
+  it('allows a sender once, and takes the allowance back', () => {
+    setRemoteImageSender('News <News@Example.com>', true)
+    setRemoteImageSender('news@example.com', true)
+    expect(settings$.remoteImageSenders.get()).toEqual(['news@example.com'])
+
+    setRemoteImageSender('NEWS@example.com', false)
+    expect(settings$.remoteImageSenders.get()).toEqual([])
+  })
+
+  it('ignores an address that normalizes to nothing', () => {
+    setRemoteImageSender('  ', true)
+    expect(settings$.remoteImageSenders.get()).toEqual([])
+  })
+
+  it('survives a malformed persisted value', () => {
+    settings$.remoteImageSenders.set(['news@example.com'])
+    for (const remote_image_senders of [{}, true, 'news@example.com', 7, null]) {
+      expect(() => hydrateSettings({ remote_image_senders })).not.toThrow()
+      // A row we cannot read leaves the in-memory list as it was.
+      expect(settings$.remoteImageSenders.get()).toEqual(['news@example.com'])
+    }
+  })
+
+  it('normalizes persisted senders before deduping them', () => {
+    hydrateSettings({
+      remote_image_senders: ['News <News@Example.com>', 'news@example.com', '', 7, 'other@example.test'],
+    })
+    expect(settings$.remoteImageSenders.get()).toEqual(['news@example.com', 'other@example.test'])
+  })
+})
+
+describe('settings persistence', () => {
+  it('stamps each write so a straggler cannot overwrite the newest value', async () => {
+    const wails = (window as any).go
+    const calls: any[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: (_command: string, payload: any) => {
+            calls.push(payload)
+            // The first write hangs: a later one must not wait behind it.
+            return calls.length === 1 ? new Promise<void>(() => {}) : Promise.resolve()
+          },
+        },
+      },
+    }
+
+    try {
+      settings$.remoteImageSenders.set(['news@example.com'])
+      settings$.remoteImageSenders.set([])
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(calls.map((call) => call.value)).toEqual([['news@example.com'], []])
+      // Rising per key, so the sidecar can drop whichever lands late.
+      expect(calls[1].seq).toBe(calls[0].seq + 1)
+      expect(calls.every((call) => call.key === 'remote_image_senders')).toBe(true)
+      // Every write carries the label boot hands to the sidecar, so a reload's
+      // restarted counters are not compared against the stamps recorded before
+      // it — and its stragglers cannot overwrite what this session writes.
+      expect(WRITE_SESSION).toBeTruthy()
+      expect(calls.map((call) => call.session)).toEqual([WRITE_SESSION, WRITE_SESSION])
+    } finally {
+      ;(window as any).go = wails
+      settings$.remoteImageSenders.set([])
+    }
   })
 })

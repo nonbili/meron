@@ -133,7 +133,7 @@ class ComposeSaveLifecycleTest {
             core.releaseFirstSave.complete(Unit)
             core.sendFinished.await()
             core.discardFinished.await()
-            yield()
+            awaitState { !state.composeSendInFlight && state.composeDraftId.isEmpty() }
 
             assertEquals("", state.composeDraftId)
             assertEquals(false, state.composeDraftSaved)
@@ -343,6 +343,7 @@ class ComposeSaveLifecycleTest {
             assertEquals(0, core.discardPayloads.size)
             core.releaseFirstSave.complete(Unit)
             core.discardFinished.await()
+            awaitState { state.composeDraftId.isEmpty() && !state.composeDraftSaved }
 
             assertEquals("", state.composeDraftId)
             assertEquals(false, state.composeDraftSaved)
@@ -376,7 +377,7 @@ class ComposeSaveLifecycleTest {
             state.autoSaveComposeDraft()
             core.secondSaveFinished.await()
             core.discardFinished.await()
-            yield()
+            awaitState { state.composeDraftId == "draft-2@example.com" && state.composeDraftAccountId == "b" }
 
             assertEquals("draft-2@example.com", state.composeDraftId)
             assertEquals("b", state.composeDraftAccountId)
@@ -432,6 +433,19 @@ class ComposeSaveLifecycleTest {
             assertEquals("new", state.coreAccounts.single().id)
             assertEquals(ProxySpec("http", "new.proxy", 8080), state.appProxy)
         }
+
+    /**
+     * Wait for composer state the core call writes *after* it returns. The
+     * `CompletableDeferred`s in [SaveCore] are completed inside the call, which
+     * runs on [ioDispatcher], so awaiting one can resume this test before the
+     * caller's `withContext` return is even queued on the `runBlocking` loop —
+     * a single `yield()` is not a barrier across that.
+     */
+    private suspend fun awaitState(settled: () -> Boolean) {
+        withTimeout(1_000) {
+            while (!settled()) yield()
+        }
+    }
 
     private fun state(
         core: MeronCore,

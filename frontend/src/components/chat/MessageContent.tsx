@@ -1,7 +1,9 @@
 import { Download, Image } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
+import { revealMessageRemote } from '../../states/compose'
+import { setRemoteImageSender } from '../../states/settings'
 import { downloadAttachment } from '../../states/mail'
-import { revealRemote, thread$ } from '../../states/thread'
+import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 import { fileIconFor, formatFileSize, mediaSrc } from './messageHelpers'
 import { MessageBubbleBody } from './MessageBubbleBody'
@@ -94,20 +96,35 @@ export function MessageContent({
         </div>
       )}
 
-      {/* Hidden remote images: let the user reveal them for this message */}
-      {hiddenRemoteCount > 0 && (
-        <button
-          onClick={() => revealRemote(message.id)}
-          className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 bg-black/[0.02] dark:bg-white/[0.02] py-2 text-[0.6875rem] font-semibold text-secondary hover:text-accent hover:border-accent/40 cursor-pointer transition-colors"
-        >
-          <Image size={13} />
-          {t('chat.showImages', { count: hiddenRemoteCount })}
-        </button>
+      {/* Blocked remote content: reveal it once, or trust the sender for good */}
+      {view.blockedRemote && (
+        <div className="mb-2 flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-lg border border-dashed border-border/50 bg-black/[0.02] dark:bg-white/[0.02] px-2 py-2 text-[0.6875rem] text-secondary">
+          <span className="flex items-center gap-1.5">
+            <Image size={13} />
+            {t('chat.remoteBlocked')}
+          </span>
+          <button
+            onClick={() => revealMessageRemote(message.id)}
+            className="rounded-md border border-border/60 bg-raised px-2 py-0.5 font-semibold hover:text-accent hover:border-accent/50 cursor-pointer transition-colors"
+          >
+            {hiddenRemoteCount > 0 ? t('chat.showImages', { count: hiddenRemoteCount }) : t('chat.showRemoteContent')}
+          </button>
+          {!view.outgoing && !!view.senderAddress && (
+            <button
+              onClick={() => setRemoteImageSender(view.senderAddress, true)}
+              className="max-w-full truncate rounded-md border border-border/60 bg-raised px-2 py-0.5 font-semibold hover:text-accent hover:border-accent/50 cursor-pointer transition-colors"
+              title={t('chat.allowRemoteFromHint')}
+            >
+              {t('chat.allowRemoteFrom', { sender: view.senderAddress })}
+            </button>
+          )}
+        </div>
       )}
 
       <MessageBubbleBody
         message={message}
         useHtmlBody={view.useHtmlBody}
+        allowRemote={view.remoteVisible}
         normalizedSearchQuery={view.normalizedSearchQuery}
         activeSearchMatch={view.activeSearchMatch}
         fullHeight={fullHeight}

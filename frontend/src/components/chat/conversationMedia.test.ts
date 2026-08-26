@@ -35,7 +35,7 @@ describe('buildThreadMedia', () => {
       ]),
     ]
 
-    const { mediaItems, fileItems } = buildThreadMedia(messages, [], {})
+    const { mediaItems, fileItems } = buildThreadMedia(messages, [], {}, [])
 
     expect(mediaItems.map(({ filename, messageId, galleryIndex }) => ({ filename, messageId, galleryIndex }))).toEqual([
       { filename: 'newer.mp4', messageId: 'newer-message', galleryIndex: 1 },

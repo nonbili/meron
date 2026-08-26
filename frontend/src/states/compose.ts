@@ -22,6 +22,7 @@ import {
   type SignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
+import { revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import { closeComposeSession, forgetComposeSession, pruneComposeSessions } from './composeSessions'
 import { offerCertificateTrust } from './certificateTrust'
@@ -645,6 +646,9 @@ export function openMessageTab(message: Message) {
     kind: 'reader',
     messageId: message.id,
     threadId: message.thread_id,
+    // Carried so the tab can resolve this message's remote-content policy.
+    accountId: message.account_id,
+    revealRemote: !!thread$.revealedRemote.peek()[message.id],
     subject: message.subject || '(no subject)',
     from: message.from_name || message.from_addr,
     fromRaw: message.from_name ? `${message.from_name} <${message.from_addr}>` : message.from_addr,
@@ -1209,6 +1213,19 @@ export async function closeMessageTab(id: string) {
       finishClosingMessageTab(id)
     }
   })
+}
+
+// Reveal a message's remote content in the conversation and on any reader tab
+// already open for it. The tab needs its own copy because `resetThreadView`
+// clears the conversation's reveal map on the next thread switch while the tab
+// stays open — and an inactive tab is unmounted, so it cannot copy this itself.
+export function revealMessageRemote(messageId: string) {
+  revealRemote(messageId)
+  compose$.tabs.set(
+    compose$.tabs
+      .get()
+      .map((tab) => (tab.kind === 'reader' && tab.messageId === messageId ? { ...tab, revealRemote: true } : tab)),
+  )
 }
 
 export function setTabViewMode(id: string, mode: 'html' | 'plain') {

@@ -7,13 +7,18 @@ import { getVisibleMedia, mediaSrc, normalizeBodyText, parseAddressList } from '
 // starting index for each message so a bubble can map its local image index to
 // the global one. Images are pushed before videos within each message so those
 // bubble-local image indices stay valid.
-export function buildGalleryItems(messages: Message[], accounts: Account[], revealedRemote: Record<string, boolean>) {
+export function buildGalleryItems(
+  messages: Message[],
+  accounts: Account[],
+  revealedRemote: Record<string, boolean>,
+  allowedSenders: string[],
+) {
   const items: GalleryItem[] = []
   const offsets = new Map<string, number>()
   for (const message of messages) {
     offsets.set(message.id, items.length)
     const account = accounts.find((acc) => acc.id === message.account_id)
-    const { attachmentImages, videos } = getVisibleMedia(message, account, !!revealedRemote[message.id])
+    const { attachmentImages, videos } = getVisibleMedia(message, account, !!revealedRemote[message.id], allowedSenders)
     const caption = normalizeBodyText(message.body).replace(/\s+/g, ' ').trim()
     for (const image of attachmentImages) {
       items.push({ type: 'image', src: mediaSrc(image), filename: image.filename, caption })
@@ -32,7 +37,12 @@ export function buildGalleryItems(messages: Message[], accounts: Account[], reve
 }
 
 // Thread-wide media (images + videos) and files for the shared-media panel.
-export function buildThreadMedia(messages: Message[], accounts: Account[], revealedRemote: Record<string, boolean>) {
+export function buildThreadMedia(
+  messages: Message[],
+  accounts: Account[],
+  revealedRemote: Record<string, boolean>,
+  allowedSenders: string[],
+) {
   const media: ConversationMediaItem[] = []
   const files: ConversationFileItem[] = []
   // Must count media in the exact order buildGalleryItems pushes them (images
@@ -44,7 +54,7 @@ export function buildThreadMedia(messages: Message[], accounts: Account[], revea
       attachmentImages,
       videos,
       files: msgFiles,
-    } = getVisibleMedia(message, account, !!revealedRemote[message.id])
+    } = getVisibleMedia(message, account, !!revealedRemote[message.id], allowedSenders)
     for (const image of attachmentImages) {
       media.push({ type: 'image', src: mediaSrc(image), filename: image.filename, galleryIndex, messageId: message.id })
       galleryIndex++

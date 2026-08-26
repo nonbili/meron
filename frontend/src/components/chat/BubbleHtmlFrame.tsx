@@ -25,12 +25,15 @@ function cacheKeyForHtml(html: string) {
 // the frame grows to fit while the bubble wrapper owns scrolling.
 export function BubbleHtmlFrame({
   html,
+  allowRemote = false,
   searchQuery = '',
   activeSearchMatch = false,
   onLinkHover,
   onUserScrollIntent,
 }: {
   html: string
+  /** Loosen the baked CSP so this message's remote content loads. */
+  allowRemote?: boolean
   /** In-thread search query; matches are marked inside the frame document. */
   searchQuery?: string
   activeSearchMatch?: boolean
@@ -40,12 +43,17 @@ export function BubbleHtmlFrame({
   const { t } = useTranslation()
   const messageFont = useMessageFrameFont()
   // Re-preparing the document is what re-renders the frame with new typography.
-  const prepareHtml = useCallback((raw: string) => prepareBubbleHtml(raw, messageFont), [messageFont])
+  const prepareHtml = useCallback(
+    (raw: string) => prepareBubbleHtml(raw, messageFont, allowRemote),
+    [messageFont, allowRemote],
+  )
   // Typography is part of the key: the same HTML measures to a different height
   // once the message font or text size changes.
   const cacheKey = useMemo(
-    () => `${messageFont.family ?? ''}:${messageFont.zoom}:${cacheKeyForHtml(html)}`,
-    [html, messageFont],
+    // Remote content is part of the key too: revealing it usually makes the
+    // document taller, so a cached height from the blocked render is stale.
+    () => `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${cacheKeyForHtml(html)}`,
+    [html, messageFont, allowRemote],
   )
   const cachedHeight = measuredHeights.get(cacheKey)
   const [height, setHeight] = useState(() => cachedHeight ?? DEFAULT_FRAME_HEIGHT)

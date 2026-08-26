@@ -1,4 +1,5 @@
 import { BUBBLE_CODE_BASE_PX, BUBBLE_HTML_BASE_PX, type MessageFrameFont } from '../../lib/fonts'
+import { allowRemoteContent, blockRemoteContent } from './remoteContentCsp'
 
 const DEFAULT_MESSAGE_FRAME_FONT: MessageFrameFont = {
   family: null,
@@ -14,26 +15,46 @@ const DEFAULT_MESSAGE_FRAME_FONT: MessageFrameFont = {
 // CSS vars or root font size, so the family is baked into the stylesheet and the
 // text size arrives as a body `zoom` — a baked font-size would only move the
 // bodies that don't set their own, which most HTML mail does (see lib/fonts).
-export function prepareBubbleHtml(html: string, font: MessageFrameFont = DEFAULT_MESSAGE_FRAME_FONT) {
+export function prepareBubbleHtml(
+  html: string,
+  font: MessageFrameFont = DEFAULT_MESSAGE_FRAME_FONT,
+  allowRemote = false,
+) {
   try {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
 
     // The iframe runs with `allow-scripts` (so our link-click handler fires),
     // so we must block the email's own JS here. `default-src 'none'` denies
-    // scripts, `javascript:` URLs, and inline `on*` handlers; images/styles/
-    // fonts stay permissive to match the bubble's prior no-CSP rendering.
+    // scripts, `javascript:` URLs, and inline `on*` handlers; styles and fonts
+    // stay permissive to match the bubble's prior no-CSP rendering.
     const csp = doc.createElement('meta')
     csp.setAttribute('http-equiv', 'Content-Security-Policy')
+    // Media follows the caller: `*` while remote content is allowed, otherwise
+    // the same same-origin/inline sources the sidecar bakes into a blocked body
+    // (the frame runs with `allow-same-origin`, so `'self'` still resolves the
+    // `/media` attachments). This meta is enforced alongside the baked one, so
+    // it must block on its own — a body baked while its sender was allowed
+    // carries a permissive policy until the thread is read again.
+    const media = allowRemote
+      ? 'img-src * data: blob:; media-src * data: blob:'
+      : "img-src 'self' data:; media-src 'self' data: blob:"
     // `script-src`/`object-src`/`frame-src 'none'` are explicit for robustness
     // (they inherit from `default-src`); `base-uri` and `form-action` do NOT fall
     // back to `default-src`, so they're set to block a `<base>` hijack or a form
     // posting out of the frame.
     csp.setAttribute(
       'content',
-      "default-src 'none'; script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; img-src * data: blob:; media-src * data: blob:; style-src 'unsafe-inline'; font-src * data:;",
+      `default-src 'none'; script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; ${media}; style-src 'unsafe-inline'; font-src * data:;`,
     )
     doc.head.insertBefore(csp, doc.head.firstChild)
+
+    // The body arrives with the sidecar's own CSP meta, baked from the policy in
+    // force when it was read. Rewrite it in place so a decision made since then
+    // takes effect without a refetch: loosen it once the user reveals this
+    // message (or allows its sender), tighten it once that trust is withdrawn.
+    if (allowRemote) allowRemoteContent(doc)
+    else blockRemoteContent(doc)
 
     const style = doc.createElement('style')
     style.textContent = `

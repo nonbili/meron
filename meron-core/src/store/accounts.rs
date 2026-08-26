@@ -883,6 +883,47 @@ pub fn reorder_accounts(conn: &Connection, ids: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// A sender address as the allowlist stores and compares it: trimmed, unwrapped
+/// from any `Name <addr>` form, lowercased.
+pub fn normalize_sender(addr: &str) -> String {
+    let addr = addr.trim();
+    let addr = match (addr.rfind('<'), addr.rfind('>')) {
+        (Some(open), Some(close)) if close > open => &addr[open + 1..close],
+        _ => addr,
+    };
+    addr.trim().to_ascii_lowercase()
+}
+
+/// The effective remote-content rule for reading an account: its own toggle
+/// plus the app-wide sender allowlist. Resolved once per read so baking a whole
+/// thread needs a single database round trip.
+#[derive(Debug, Default, Clone)]
+pub struct RemoteImagePolicy {
+    /// The account-wide "load remote images" toggle.
+    pub all: bool,
+    /// App-wide allowed senders, normalized by [`normalize_sender`].
+    pub senders: Vec<String>,
+}
+
+impl RemoteImagePolicy {
+    /// Whether a message from `from_addr` may load its remote content.
+    pub fn allows(&self, from_addr: &str) -> bool {
+        self.all || {
+            let addr = normalize_sender(from_addr);
+            !addr.is_empty() && self.senders.contains(&addr)
+        }
+    }
+}
+
+/// The resolved remote-content policy for an account: its own toggle plus the
+/// app-wide allowlist. Unknown accounts deny, but still carry the allowlist.
+pub fn remote_image_policy(conn: &Connection, id: &str) -> Result<RemoteImagePolicy> {
+    Ok(RemoteImagePolicy {
+        all: load_remote_images(conn, id)?,
+        senders: super::remote_image_senders(conn)?,
+    })
+}
+
 /// The resolved "load remote images" preference for an account: the stored
 /// explicit value, or the engine default (RSS on, mail off) when unset. Unknown
 /// accounts return false.

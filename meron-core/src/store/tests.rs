@@ -1818,6 +1818,51 @@ fn prefs_resolve_engine_default_and_persist_without_clobbering() {
 }
 
 #[test]
+fn allowed_senders_load_remote_images_while_the_account_toggle_stays_off() {
+    let conn = test_conn();
+    for id in ["mail-1", "mail-2"] {
+        conn.execute(
+            "INSERT INTO accounts(id, engine) VALUES(?1, 'mail')",
+            params![id],
+        )
+        .unwrap();
+    }
+
+    let policy = remote_image_policy(&conn, "mail-1").unwrap();
+    assert!(!policy.all);
+    assert!(!policy.allows("news@example.com"));
+
+    // The allowlist is app-wide: one entry lifts the block in every account,
+    // while each account's own toggle stays off. Stored forms are normalized on
+    // read, so a "Name <addr>" entry and casing still match.
+    setting_set(
+        &conn,
+        REMOTE_IMAGE_SENDERS_KEY,
+        &json!(["News <News@Example.com>", "news@example.com", ""]),
+    )
+    .unwrap();
+    assert_eq!(
+        remote_image_senders(&conn).unwrap(),
+        vec!["news@example.com".to_string()]
+    );
+    for id in ["mail-1", "mail-2"] {
+        let policy = remote_image_policy(&conn, id).unwrap();
+        assert!(!policy.all);
+        assert!(policy.allows("News@Example.COM"));
+        assert!(!policy.allows("someone@else.test"));
+        assert!(!policy.allows(""));
+    }
+
+    // The account-wide toggle still allows every sender on its own.
+    set_load_remote_images(&conn, "mail-1", true).unwrap();
+    assert!(
+        remote_image_policy(&conn, "mail-1")
+            .unwrap()
+            .allows("anyone@example.com")
+    );
+}
+
+#[test]
 fn conversation_html_defaults_on_and_respects_explicit_overrides() {
     let conn = Connection::open_in_memory().unwrap();
     db::run_migrations(&conn).unwrap();

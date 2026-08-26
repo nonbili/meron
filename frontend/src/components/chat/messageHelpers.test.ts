@@ -7,6 +7,7 @@ import {
   formatRecipientSummary,
   getShortenedLinkText,
   getVisibleMedia,
+  htmlHasRemoteMedia,
   htmlReferencesMedia,
   isImage,
   isVideo,
@@ -14,6 +15,7 @@ import {
   messageSearchText,
   normalizeBodyText,
   normalizeUrl,
+  readerAttachmentImages,
   parseAddressList,
   parseInlineMessageContent,
   standaloneAttachmentImages,
@@ -83,6 +85,7 @@ describe('messageHelpers file and media helpers', () => {
 
   it('hides remote media until account settings or reveal allow them', () => {
     const message = {
+      from_addr: 'news@example.com',
       attachments: [
         { key: 'local.png', mime: 'image/png' },
         { url: 'data:image/png;base64,abc', mime: 'image/png' },
@@ -93,20 +96,37 @@ describe('messageHelpers file and media helpers', () => {
       ],
     } as any
 
-    const hidden = getVisibleMedia(message, { load_remote_images: false } as any, false)
+    const hidden = getVisibleMedia(message, { load_remote_images: false } as any, false, [])
     expect(hidden.attachmentImages).toHaveLength(2)
     expect(hidden.videos).toHaveLength(1)
     expect(hidden.hiddenRemoteCount).toBe(2)
     expect(hidden.files).toHaveLength(1)
 
-    const revealed = getVisibleMedia(message, { load_remote_images: false } as any, true)
+    const revealed = getVisibleMedia(message, { load_remote_images: false } as any, true, [])
     expect(revealed.attachmentImages).toHaveLength(3)
     expect(revealed.videos).toHaveLength(2)
     expect(revealed.hiddenRemoteCount).toBe(0)
 
-    const accountAllowed = getVisibleMedia(message, { load_remote_images: true } as any, false)
+    const accountAllowed = getVisibleMedia(message, { load_remote_images: true } as any, false, [])
     expect(accountAllowed.attachmentImages).toHaveLength(3)
     expect(accountAllowed.videos).toHaveLength(2)
+
+    // An allowed sender lifts the block for that sender only.
+    const senderAllowed = getVisibleMedia(message, { load_remote_images: false } as any, false, ['news@example.com'])
+    expect(senderAllowed.attachmentImages).toHaveLength(3)
+    expect(senderAllowed.hiddenRemoteCount).toBe(0)
+    const otherSender = getVisibleMedia(message, { load_remote_images: false } as any, false, ['someone@else.test'])
+    expect(otherSender.hiddenRemoteCount).toBe(2)
+  })
+
+  it('spots remote references in an HTML body', () => {
+    expect(htmlHasRemoteMedia('<img src="https://tracker.example/pixel.gif">')).toBe(true)
+    expect(htmlHasRemoteMedia('<td background="//cdn.example/bg.png">')).toBe(true)
+    expect(htmlHasRemoteMedia('<div style="background:url(http://cdn.example/bg.png)">')).toBe(true)
+    // A poster is fetched under `img-src`, so it is blocked and needs a reveal.
+    expect(htmlHasRemoteMedia('<video poster="https://cdn.example/poster.jpg" src="/media/abc"></video>')).toBe(true)
+    expect(htmlHasRemoteMedia('<img src="/media/abc123"><a href="https://example.com">link</a>')).toBe(false)
+    expect(htmlHasRemoteMedia(undefined)).toBe(false)
   })
 })
 
@@ -199,5 +219,35 @@ describe('messageHelpers recipient summary', () => {
     expect(formatRecipientSummary('ada@example.com, "Ada" <ada@example.com>')).toBe('ada')
     expect(formatRecipientSummary('Alice <alice@example.com>, Bob Jones <bob@example.com>')).toBe('Alice, Bob Jones')
     expect(formatRecipientSummary('', null)).toBe('')
+  })
+})
+
+describe('readerAttachmentImages', () => {
+  const attachments = [
+    { key: 'inline.png', mime: 'image/png', filename: 'inline.png' },
+    { url: 'data:image/png;base64,abc', mime: 'image/png', filename: 'pasted.png' },
+    { url: 'https://tracking.example/pixel.png', mime: 'image/png', filename: 'pixel.png' },
+    { key: 'doc.pdf', mime: 'application/pdf', filename: 'doc.pdf' },
+  ] as any[]
+
+  it('holds remote images back while remote content is blocked', () => {
+    // They render outside the iframe, so the body's CSP does not cover them.
+    expect(readerAttachmentImages(attachments, undefined, false).map((a) => a.filename)).toEqual([
+      'inline.png',
+      'pasted.png',
+    ])
+  })
+
+  it('shows them once remote content is allowed', () => {
+    expect(readerAttachmentImages(attachments, undefined, true).map((a) => a.filename)).toEqual([
+      'inline.png',
+      'pasted.png',
+      'pixel.png',
+    ])
+  })
+
+  it('skips images the body already renders', () => {
+    const html = '<img src="/media/inline.png">'
+    expect(readerAttachmentImages(attachments, html, true).map((a) => a.filename)).toEqual(['pasted.png', 'pixel.png'])
   })
 })

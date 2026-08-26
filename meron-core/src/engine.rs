@@ -2058,11 +2058,11 @@ pub fn read_cached(
     uid: u32,
 ) -> Option<parse::Message> {
     let media_root = parse::media_root();
-    let (cached, load_remote_images) = {
+    let (cached, remote_policy) = {
         let db = engine.db.lock().unwrap();
         let cached = store::get_cached_message(&db, account, folder, uid);
-        let load_remote = store::load_remote_images(&db, account).unwrap_or(false);
-        (cached, load_remote)
+        let policy = store::remote_image_policy(&db, account).unwrap_or_default();
+        (cached, policy)
     };
     let mut msg = cached.ok().flatten()?;
     // Rows cached before the threading-header extraction landed have an
@@ -2072,7 +2072,7 @@ pub fn read_cached(
     if msg.message_id.is_empty() || !parse::cached_media_available(&media_root, &msg) {
         return None;
     }
-    attach_html(&mut msg, load_remote_images);
+    attach_html(&mut msg, &remote_policy);
     Some(msg)
 }
 
@@ -2086,9 +2086,9 @@ pub async fn read_cached_or_fetch(
         return Ok(msg);
     }
     let media_root = parse::media_root();
-    let load_remote_images = {
+    let remote_policy = {
         let db = engine.db.lock().unwrap();
-        store::load_remote_images(&db, account).unwrap_or(false)
+        store::remote_image_policy(&db, account).unwrap_or_default()
     };
 
     let mut message = engine
@@ -2113,16 +2113,18 @@ pub async fn read_cached_or_fetch(
         let _ = store::save_cached_message(&db, account, folder, uid, &message);
     }
 
-    attach_html(&mut message, load_remote_images);
+    attach_html(&mut message, &remote_policy);
     Ok(message)
 }
 
 /// Turn the stored HTML source into the iframe-ready `body_html` the reader's HTML
-/// mode renders: inject the remote-image CSP gated on the account setting. Plain
-/// messages have no HTML source, so this is a no-op for them.
-pub fn attach_html(message: &mut parse::Message, load_remote_images: bool) {
+/// mode renders: inject the remote-image CSP, allowed when the account loads
+/// remote content or the user allowed this message's sender. Plain messages have
+/// no HTML source, so this is a no-op for them.
+pub fn attach_html(message: &mut parse::Message, policy: &store::RemoteImagePolicy) {
+    let allowed = policy.allows(&message.from_addr);
     if let Some(html) = message.body_html.take() {
-        message.body_html = Some(parse::prepare_html(&html, load_remote_images));
+        message.body_html = Some(parse::prepare_html(&html, allowed));
     }
 }
 
