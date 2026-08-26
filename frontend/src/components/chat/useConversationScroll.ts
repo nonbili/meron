@@ -121,6 +121,23 @@ export function useConversationScroll(
 
   useEffect(() => () => window.clearTimeout(pinReleaseTimerRef.current), [])
 
+  /** Brings a message's header to the top of the viewport, pinned so a body
+   *  still growing from its placeholder height doesn't push it back out of
+   *  view. Used when the reader expands a collapsed message: expanding in place
+   *  leaves the body wherever the click happened to be, when the point of the
+   *  click is to read it from its beginning. */
+  const scrollMessageToTop = useCallback(
+    (messageId: string) => {
+      const container = scrollRef.current
+      if (!container) return
+      const target = container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
+      if (!target) return
+      pinMessage(messageId)
+      applyScrollTop(container, anchorScrollTop(target.offsetTop, container.offsetTop))
+    },
+    [applyScrollTop, pinMessage],
+  )
+
   const pendingScrollMessageId = useValue(thread$.pendingScrollMessageId)
 
   // Messages the reader turned unread by hand while the thread was open, and the
@@ -345,5 +362,13 @@ export function useConversationScroll(
     applyScrollTop,
   ])
 
-  return { scrollRef, bottomAnchorRef, messagesWrapperRef, handleConversationScroll, maybeMarkRead, setScrollTop }
+  return {
+    scrollRef,
+    bottomAnchorRef,
+    messagesWrapperRef,
+    handleConversationScroll,
+    maybeMarkRead,
+    setScrollTop,
+    scrollMessageToTop,
+  }
 }

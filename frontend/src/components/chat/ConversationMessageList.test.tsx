@@ -56,6 +56,7 @@ describe('ConversationMessageList direct jumps', () => {
       wallpaperClassName: '',
       onScroll: () => undefined,
       onSetScrollTop: () => undefined,
+      onScrollMessageToTop: () => undefined,
       onOpenContextMenu: () => undefined,
     }
 

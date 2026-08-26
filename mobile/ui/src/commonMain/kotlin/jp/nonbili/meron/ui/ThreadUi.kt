@@ -232,6 +232,64 @@ internal fun ThreadScreen(
             ?: (message.id == lastMessageId || message.id in unreadOnArrival || searchMatches.contains(message.id))
     }
     val listState = rememberLazyListState()
+    // Message the reader just expanded by tapping its summary. Expanding in
+    // place leaves the body wherever the tap happened to be; bring its header
+    // to the top of the viewport so the message reads from its beginning.
+    var scrollToExpandedId by remember(thread?.id) { mutableStateOf<String?>(null) }
+    // The one list item the conversation holds at the top of the viewport, and
+    // the sole owner of the scroll while it does. Both the open positioning and
+    // an expanded message publish their target here rather than driving the
+    // list themselves: a single slot means expanding a message during the open
+    // settle window supersedes that positioning — cancelling it outright —
+    // instead of the two pulling the list in different directions on every
+    // layout change. Cleared once the anchor is released.
+    var anchorItem by remember(thread?.id) { mutableStateOf<ThreadListAnchor?>(null) }
+    val currentMessages by rememberUpdatedState(messages)
+    val currentHeaderItemCount by rememberUpdatedState(threadHeaderItemCount(canLoadOlder || loadingOlder))
+    LaunchedEffect(anchorItem) {
+        val anchorTo = anchorItem ?: return@LaunchedEffect
+        // Resolved fresh on every scroll rather than captured once: loading an
+        // older page prepends messages and can drop the load-older row, which
+        // shifts every list index. A held index would anchor whichever message
+        // slid into that slot.
+
+        fun targetIndex(): Int? =
+            currentMessages
+                .indexOfFirst { it.id == anchorTo.messageId }
+                .takeIf { it >= 0 }
+                ?.plus(currentHeaderItemCount)
+        try {
+            val target = targetIndex()
+            if (target != null) {
+                if (anchorTo.animated) listState.animateScrollToItem(target) else listState.scrollToItem(target)
+            }
+            // HTML bubbles measure their bodies asynchronously in a WebView, so
+            // at this point the list may still be the height it had before and
+            // the scroll above silently clamps against its end. Keep
+            // re-anchoring while item sizes settle (desktop does the same with
+            // a ResizeObserver); stop as soon as the user drags, or after the
+            // settle window.
+            withTimeoutOrNull(THREAD_OPEN_ANCHOR_WINDOW_MS) {
+                coroutineScope {
+                    val anchor =
+                        launch {
+                            snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index to it.size } }
+                                .distinctUntilChanged()
+                                .collect { targetIndex()?.let { listState.scrollToItem(it) } }
+                        }
+                    listState.interactionSource.interactions.first { it is DragInteraction.Start }
+                    anchor.cancel()
+                }
+            }
+        } finally {
+            // In `finally` because a drag arriving mid-animation cancels the
+            // scroll with a CancellationException, and an anchor left set with
+            // nothing driving it would block the auto-load arming below
+            // forever. Only ever releases its own anchor: a newer one cancelled
+            // this effect precisely to take the list over.
+            if (anchorItem == anchorTo) anchorItem = null
+        }
+    }
     BackHandler(
         enabled = searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null,
         onBack = closeSearch,
@@ -244,28 +302,16 @@ internal fun ThreadScreen(
         if (openScrollPositioned || messages.isEmpty()) return@LaunchedEffect
         openScrollPositioned = true
         val target = threadOpenScrollIndex(messages, hasLoadOlderRow = canLoadOlder || loadingOlder)
-        if (target == null) {
+        val targetId = target?.let { messages.getOrNull(it - threadHeaderItemCount(canLoadOlder || loadingOlder))?.id }
+        if (targetId == null) {
             autoLoadOlderArmed = true
             return@LaunchedEffect
         }
-        listState.scrollToItem(target)
-        // HTML bubbles measure their bodies asynchronously in a WebView, so at
-        // this point the list may still fit the viewport and the scroll above
-        // silently clamps to the top. Keep re-anchoring to the target while
-        // item sizes settle (desktop does the same with a ResizeObserver);
-        // stop as soon as the user drags, or after the settle window.
-        withTimeoutOrNull(THREAD_OPEN_ANCHOR_WINDOW_MS) {
-            coroutineScope {
-                val anchor =
-                    launch {
-                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index to it.size } }
-                            .distinctUntilChanged()
-                            .collect { listState.scrollToItem(target) }
-                    }
-                listState.interactionSource.interactions.first { it is DragInteraction.Start }
-                anchor.cancel()
-            }
-        }
+        anchorItem = ThreadListAnchor(targetId, animated = false)
+        // Scrolling near the top is what asks for the older page, so hold that
+        // off until the anchoring has finished moving the list — including when
+        // an expanded message took the anchor over in the meantime.
+        snapshotFlow { anchorItem }.first { it == null }
         autoLoadOlderArmed = true
     }
     val currentOnLoadOlder by rememberUpdatedState(onLoadOlder)
@@ -280,8 +326,6 @@ internal fun ThreadScreen(
     // and the whole thread once the view reaches the bottom — desktop's
     // scroll-driven read marking (useConversationScroll.ts) on mobile. Marked
     // ids are remembered per open so each is sent at most once.
-    val currentMessages by rememberUpdatedState(messages)
-    val currentHeaderItemCount by rememberUpdatedState(threadHeaderItemCount(canLoadOlder || loadingOlder))
     val currentOnMessagesRead by rememberUpdatedState(onMessagesRead)
     val currentOnViewedToBottom by rememberUpdatedState(onViewedToBottom)
     if (thread != null) {
@@ -365,6 +409,14 @@ internal fun ThreadScreen(
     }
     LaunchedEffect(searchMatches.size, activeSearchIndex) {
         if (activeSearchIndex >= searchMatches.size) activeSearchIndex = 0
+    }
+    LaunchedEffect(scrollToExpandedId, canLoadOlder, loadingOlder) {
+        val id = scrollToExpandedId ?: return@LaunchedEffect
+        scrollToExpandedId = null
+        // The body the tap just revealed has not been measured yet, so the
+        // anchor above — not a one-off scroll here — is what gets the header to
+        // the top and keeps it there while the body grows into place.
+        anchorItem = ThreadListAnchor(id, animated = true)
     }
     LaunchedEffect(activeSearchId, canLoadOlder, loadingOlder) {
         if (activeSearchId.isBlank()) return@LaunchedEffect
@@ -624,7 +676,10 @@ internal fun ThreadScreen(
                                         searchQuery = normalizedSearch,
                                         activeSearchMatch = message.id == activeSearchId,
                                         expanded = expanded,
-                                        onToggleExpanded = { expandOverrides = expandOverrides + (message.id to !expanded) },
+                                        onToggleExpanded = {
+                                            expandOverrides = expandOverrides + (message.id to !expanded)
+                                            if (!expanded) scrollToExpandedId = message.id
+                                        },
                                         actionsEnabled = !isRss,
                                         itemActionsEnabled = true,
                                         showSubject = isRss,

@@ -27,6 +27,16 @@ internal fun threadHeaderSubtitle(
 // asynchronously measured bubbles (HTML bodies in WebViews) settle.
 internal const val THREAD_OPEN_ANCHOR_WINDOW_MS = 2_000L
 
+// A message to hold at the top of the conversation viewport while item sizes
+// settle, held by id because list indices shift when an older page loads.
+// `animated` distinguishes a move the reader asked for by tapping a message
+// open, which reads better as a scroll, from the silent positioning done when a
+// thread opens.
+internal data class ThreadListAnchor(
+    val messageId: String,
+    val animated: Boolean,
+)
+
 // List index to land on when a thread opens: the first unread message, or the
 // newest message when everything is read. The subject header is always item 0,
 // followed by the load-older row when there is an older page. Returns null when

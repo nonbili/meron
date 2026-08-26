@@ -41,6 +41,7 @@ export function ConversationMessageList({
   wallpaperStyle,
   onScroll,
   onSetScrollTop,
+  onScrollMessageToTop,
   onOpenContextMenu,
 }: {
   messages: Message[]
@@ -65,6 +66,9 @@ export function ConversationMessageList({
   /** Repositions the container through useConversationScroll's bookkeeping, so
    *  the move is not mistaken for the reader scrolling. */
   onSetScrollTop: (scrollTop: number) => void
+  /** Brings a message's header to the top of the viewport, pinned while its
+   *  body grows. Used when the reader expands a collapsed message. */
+  onScrollMessageToTop: (messageId: string) => void
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
   const { t } = useTranslation()
@@ -113,6 +117,10 @@ export function ConversationMessageList({
   }
   const setExpanded = (messageId: string, expanded: boolean) => {
     setExpandOverrides((current) => ({ ...current, [messageId]: expanded }))
+    // Expanding is a "let me read this" click, so bring the message to the top
+    // rather than opening its body wherever it happens to sit. Collapsing is
+    // "I'm done" and leaves the view alone.
+    if (expanded) onScrollMessageToTop(messageId)
   }
 
   const loadEarlier = useCallback(() => {
