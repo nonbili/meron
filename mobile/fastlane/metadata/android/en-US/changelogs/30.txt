@@ -1,0 +1,5 @@
+- Prompt to inspect and pin mail server certificates that fail validation
+- Edit incoming and outgoing server settings in account settings
+- Send notifications for newly arrived RSS feed items
+- Pin expanded message headers and scroll messages to the top when opened
+- Keep sent quick replies visible in conversation history
