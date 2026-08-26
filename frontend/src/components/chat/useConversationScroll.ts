@@ -299,6 +299,8 @@ export function useConversationScroll(
 
     const hasUnread = messages.some((message) => message.unread)
     const firstUnread = hasUnread ? container.querySelector<HTMLElement>('[data-unread="true"]') : null
+    const messageElements = container.querySelectorAll<HTMLElement>('[data-message-id]')
+    const lastMessage = messageElements.item(messageElements.length - 1)
 
     const plan = resolveOpenScroll({
       isNewThread,
@@ -308,6 +310,7 @@ export function useConversationScroll(
       containerOffsetTop: container.offsetTop,
       hasUnread,
       firstUnreadOffsetTop: firstUnread ? firstUnread.offsetTop : null,
+      lastMessageOffsetTop: lastMessage ? lastMessage.offsetTop : null,
     })
     // Only a pass that actually positioned counts as done. Bailing out because
     // the unread message is not in the DOM yet must leave the thread open for
@@ -317,6 +320,8 @@ export function useConversationScroll(
     }
     if (plan.pin === 'unread' && firstUnread?.dataset.messageId) {
       pinMessage(firstUnread.dataset.messageId)
+    } else if (plan.pin === 'last' && lastMessage?.dataset.messageId) {
+      pinMessage(lastMessage.dataset.messageId)
     } else if (plan.pin === 'restore' && savedAnchor) {
       pinMessage(savedAnchor.messageId, savedAnchor.offset)
     }

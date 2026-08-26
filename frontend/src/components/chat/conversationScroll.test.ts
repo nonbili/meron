@@ -60,6 +60,7 @@ describe('resolveOpenScroll on a fresh open', () => {
       containerOffsetTop: CONTAINER_TOP,
       hasUnread: false,
       firstUnreadOffsetTop: null,
+      lastMessageOffsetTop: null,
       ...over,
     })
 
@@ -79,7 +80,14 @@ describe('resolveOpenScroll on a fresh open', () => {
     expect(plan.scrollTop).toBe(1900 - CONTAINER_TOP - ANCHOR_GAP_PX)
   })
 
-  it('lands on the newest message when the thread is fully read', () => {
+  it('lands on the top of the newest message when the thread is fully read', () => {
+    expect(open({ metrics: metrics(0, 2000), lastMessageOffsetTop: 1600 })).toEqual({
+      scrollTop: 1600 - CONTAINER_TOP - ANCHOR_GAP_PX,
+      pin: 'last',
+    })
+  })
+
+  it('falls back to the bottom when no message is rendered to anchor to', () => {
     expect(open({ metrics: metrics(0, 2000) })).toEqual({ scrollTop: 2000, pin: null })
   })
 
@@ -98,6 +106,7 @@ describe('resolveOpenScroll on an already-open thread', () => {
       containerOffsetTop: CONTAINER_TOP,
       hasUnread: false,
       firstUnreadOffsetTop: null,
+      lastMessageOffsetTop: null,
       ...over,
     })
 

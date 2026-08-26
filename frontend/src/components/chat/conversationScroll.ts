@@ -136,14 +136,16 @@ export type OpenScrollPlan = {
   /** Target scroll position, or null to leave the view where it is. */
   scrollTop: number | null
   /** Which anchor to hold against resizes for the settle window, if any: the
-   *  first unread message, or the saved anchor a restore landed on. */
-  pin: 'unread' | 'restore' | null
+   *  first unread message, the newest one, or the saved anchor a restore
+   *  landed on. */
+  pin: 'unread' | 'last' | 'restore' | null
 }
 
 /**
  * Where the view belongs when a thread renders: a restored position when
- * returning to a thread, the first unread on a fresh open, the newest message
- * when everything is read, and nothing at all when messages merely re-render.
+ * returning to a thread, the first unread on a fresh open, the top of the
+ * newest message when everything is read, and nothing at all when messages
+ * merely re-render.
  */
 export function resolveOpenScroll({
   isNewThread,
@@ -153,6 +155,7 @@ export function resolveOpenScroll({
   containerOffsetTop,
   hasUnread,
   firstUnreadOffsetTop,
+  lastMessageOffsetTop,
 }: {
   isNewThread: boolean
   /** Whether the message count grew since the last positioning. */
@@ -164,6 +167,8 @@ export function resolveOpenScroll({
   hasUnread: boolean
   /** offsetTop of the first unread message, or null when none is rendered. */
   firstUnreadOffsetTop: number | null
+  /** offsetTop of the newest message, or null when none is rendered. */
+  lastMessageOffsetTop: number | null
 }): OpenScrollPlan {
   const unreadAnchor = firstUnreadOffsetTop === null ? null : anchorScrollTop(firstUnreadOffsetTop, containerOffsetTop)
 
@@ -194,7 +199,14 @@ export function resolveOpenScroll({
     // loading): leave the view alone rather than jumping to the bottom of a
     // list that is about to change under it.
     if (hasUnread) return { scrollTop: null, pin: null }
-    return { scrollTop: metrics.scrollHeight, pin: null }
+    if (lastMessageOffsetTop === null) return { scrollTop: metrics.scrollHeight, pin: null }
+    // A fully read thread opens at the *top* of its newest message, not at the
+    // bottom of the thread: scrolling to the end lands the reader in the
+    // footer of a long message and makes them scroll up to read it. Pinned for
+    // the same reason the unread anchor is — bodies grow from their
+    // placeholder height afterwards. The browser clamps this for a message
+    // shorter than the viewport, which then simply sits at the bottom.
+    return { scrollTop: anchorScrollTop(lastMessageOffsetTop, containerOffsetTop), pin: 'last' }
   }
   // Bodies still carry their placeholder height here, so the first expansion
   // would otherwise look like "content grew under the fold" and snap the view
