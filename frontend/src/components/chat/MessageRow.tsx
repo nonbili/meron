@@ -32,6 +32,7 @@ export function MessageRow({
   onToggleExpanded,
   onOpenContextMenu,
   onLinkHover,
+  onUserScrollIntent,
 }: {
   message: Message
   galleryOffset: number
@@ -39,6 +40,7 @@ export function MessageRow({
   onToggleExpanded: () => void
   onOpenContextMenu: (state: MessageContextMenuState) => void
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
 }) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
@@ -73,6 +75,17 @@ export function MessageRow({
       return
     }
     openMessageTab(message)
+  }
+
+  // The whole header collapses the message: a mail row is mostly blank space,
+  // and having only the name line react reads as broken. Its own controls stop
+  // their clicks from getting here; the details panel hangs inside the header,
+  // so it is excluded by hand — as is the click that ends a text selection.
+  const collapseFromHeader = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as Element | null
+    if (target?.closest?.('[data-header-panel]')) return
+    if (window.getSelection()?.toString().trim()) return
+    onToggleExpanded()
   }
 
   // Only in-flight and failed sends earn a marker here: unlike the chat layout,
@@ -136,10 +149,33 @@ export function MessageRow({
   }
 
   return (
-    <div className="group/message-row w-full rounded-xl border border-border/40 bg-chats px-4 py-3 shadow-sm">
+    <div className="group/message-row w-full rounded-xl border border-border/40 bg-chats shadow-sm">
       {/* The header sticks to the top of the scroller while a long message
-          scrolls past, so the collapse toggle stays within reach. */}
-      <div className="sticky top-0 z-20 -mx-4 -mt-3 flex items-start gap-2.5 rounded-t-xl bg-chats px-4 pb-2 pt-3">
+          scrolls past, so the collapse toggle stays within reach. The card
+          carries no padding of its own: the header has to be a flush child so
+          it pins to the very top, and its own border and shadow keep it apart
+          from the body sliding underneath. The negative offset cancels the
+          scroller's py-6: a sticky box pins to the scroller's content box, so
+          top-0 would park the header a padding's width down the viewport and
+          let the body scroll past above it. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={collapseFromHeader}
+        onKeyDown={(event) => {
+          // Only the header itself: Enter and Space on a control inside it
+          // (details, open in a tab, the actions menu) bubble up here, and
+          // collapsing the message out from under the key that just activated
+          // one of them is not what the reader asked for.
+          if (event.target !== event.currentTarget) return
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onToggleExpanded()
+          }
+        }}
+        title={t('chat.collapseMessage')}
+        className="sticky -top-6 z-20 flex cursor-pointer items-start gap-2.5 rounded-t-xl border-b border-border/40 bg-chats px-4 py-2.5 shadow-[0_2px_4px_-2px_rgba(15,23,42,0.12)]"
+      >
         <Avatar
           name={view.avatarName}
           email={view.avatarEmail}
@@ -148,19 +184,7 @@ export function MessageRow({
           className="mt-0.5 shrink-0"
         />
         <div className="min-w-0 flex-1">
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={onToggleExpanded}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                onToggleExpanded()
-              }
-            }}
-            title={t('chat.collapseMessage')}
-            className="flex cursor-pointer items-baseline gap-1.5"
-          >
+          <div className="flex items-baseline gap-1.5">
             <span className="truncate text-[0.84375rem] font-semibold text-primary">{senderName}</span>
             <span className="truncate text-[0.71875rem] text-secondary/80">{message.from_addr}</span>
           </div>
@@ -180,7 +204,10 @@ export function MessageRow({
             {!isRSS && (
               <button
                 type="button"
-                onClick={() => setMetaOpen((open) => !open)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMetaOpen((open) => !open)
+                }}
                 title={metaOpen ? t('chat.hideDetails') : t('chat.showDetails')}
                 className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-secondary hover:bg-black/[0.05] hover:text-primary dark:hover:bg-white/[0.08] cursor-pointer transition-colors"
               >
@@ -215,8 +242,17 @@ export function MessageRow({
         </div>
         {metaOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setMetaOpen(false)} />
-            <div className="absolute left-0 top-full z-50 mt-1 max-h-[260px] w-[460px] max-w-[calc(100vw-48px)] space-y-2 overflow-y-auto rounded-lg border border-border bg-chats p-3 text-secondary shadow-xl select-text">
+            <div
+              className="fixed inset-0 z-40"
+              onClick={(event) => {
+                event.stopPropagation()
+                setMetaOpen(false)
+              }}
+            />
+            <div
+              data-header-panel
+              className="absolute left-0 top-full z-50 mt-1 max-h-[260px] w-[460px] max-w-[calc(100vw-48px)] space-y-2 overflow-y-auto rounded-lg border border-border bg-chats p-3 text-secondary shadow-xl select-text"
+            >
               <AddressRow label={t('composer.fields.from')} rawList={fromRaw} />
               {toRaw && <AddressRow label={t('composer.fields.to')} rawList={toRaw} />}
               {ccRaw && <AddressRow label={t('composer.fields.cc')} rawList={ccRaw} />}
@@ -227,13 +263,14 @@ export function MessageRow({
         )}
       </div>
 
-      <div className="mt-0.5">
+      <div className="px-4 pb-3 pt-2.5">
         <MessageContent
           message={message}
           view={view}
           galleryOffset={galleryOffset}
           fullHeight
           onLinkHover={onLinkHover}
+          onUserScrollIntent={onUserScrollIntent}
         />
       </div>
     </div>

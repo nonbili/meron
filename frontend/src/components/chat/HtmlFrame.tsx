@@ -19,6 +19,7 @@ interface HtmlFrameProps {
   onFrameClick?: FrameClickHandler
   onReady?: FrameReadyHandler
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
   onScroll?: () => void
   // When set, right-clicks inside the frame are blocked from showing WebKit's
   // native menu and re-dispatched as a `contextmenu` event on the iframe
@@ -100,6 +101,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     onFrameClick,
     onReady,
     onLinkHover,
+    onUserScrollIntent,
     onScroll,
     forwardContextMenu,
   }: HtmlFrameProps,
@@ -119,6 +121,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   const onReadyRef = useRef(onReady)
   const onLinkHoverRef = useRef(onLinkHover)
   const onScrollRef = useRef(onScroll)
+  const onUserScrollIntentRef = useRef(onUserScrollIntent)
   const forwardContextMenuRef = useRef(forwardContextMenu)
 
   useEffect(() => {
@@ -126,8 +129,9 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     onReadyRef.current = onReady
     onLinkHoverRef.current = onLinkHover
     onScrollRef.current = onScroll
+    onUserScrollIntentRef.current = onUserScrollIntent
     forwardContextMenuRef.current = forwardContextMenu
-  }, [onFrameClick, onReady, onLinkHover, onScroll, forwardContextMenu])
+  }, [onFrameClick, onReady, onLinkHover, onScroll, onUserScrollIntent, forwardContextMenu])
 
   const wire = useCallback(() => {
     const iframe = iframeRef.current
@@ -139,6 +143,17 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
     docRef.current = doc
     winRef.current = win
+
+    if (!doc.documentElement.dataset.meronFrameScrollIntentWired) {
+      doc.documentElement.dataset.meronFrameScrollIntentWired = '1'
+      doc.addEventListener('wheel', () => onUserScrollIntentRef.current?.(), { passive: true })
+      doc.addEventListener('touchmove', () => onUserScrollIntentRef.current?.(), { passive: true })
+      doc.addEventListener('keydown', (event) => {
+        if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+          onUserScrollIntentRef.current?.()
+        }
+      })
+    }
 
     // Clean up previous ready hook if any
     cleanupReadyRef.current?.()

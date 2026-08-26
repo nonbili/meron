@@ -17,6 +17,7 @@ export function MessageContent({
   galleryOffset,
   fullHeight = false,
   onLinkHover,
+  onUserScrollIntent,
 }: {
   message: Message
   view: MessageView
@@ -25,6 +26,7 @@ export function MessageContent({
   /** Let the body grow instead of scrolling inside its own box. */
   fullHeight?: boolean
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
 }) {
   const { t } = useTranslation()
   const { attachmentImages, bubbleAttachmentImages, videos, hiddenRemoteCount, files } = view
@@ -110,6 +112,7 @@ export function MessageContent({
         activeSearchMatch={view.activeSearchMatch}
         fullHeight={fullHeight}
         onLinkHover={onLinkHover}
+        onUserScrollIntent={onUserScrollIntent}
       />
 
       {/* File attachments — click to save via native dialog (when on disk) */}

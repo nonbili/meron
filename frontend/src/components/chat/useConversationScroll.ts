@@ -17,6 +17,11 @@ import {
   type ScrollMetrics,
 } from './conversationScroll'
 
+/** How long an assignment of ours waits for its scroll event before we stop
+ *  expecting one. Long enough to outlast a frame, short enough that a reader
+ *  scrolling right after is not mistaken for it. */
+const OWN_SCROLL_WINDOW_MS = 150
+
 /** The message at the top of the viewport and how far into it the view has
  *  scrolled — a position that survives bodies growing from placeholder size. */
 function readScrollAnchor(container: HTMLElement): ScrollAnchor | null {
@@ -70,22 +75,47 @@ export function useConversationScroll(
   // arrived" apart from "read state changed" so we don't yank the user's scroll.
   const positionedThreadRef = useRef('')
   const messageCountRef = useRef(0)
-  // Message the last positioning landed on — a starred-list jump, or the first
-  // unread on open. While set, the ResizeObserver below re-anchors to it (instead
-  // of snapping to the bottom) so bodies growing from their placeholder height
-  // don't push it out of view; released shortly after the jump.
-  const pinnedRef = useRef<ScrollAnchor | null>(null)
+  // Message the last positioning landed on. While set, the ResizeObserver below
+  // re-anchors to it (instead of snapping to the bottom) so bodies growing from
+  // their placeholder height don't push it out of view. Thread-open and direct-
+  // jump pins expire after settling; an explicitly expanded message stays pinned
+  // until the reader scrolls because its frame and images can finish much later.
+  const pinnedRef = useRef<(ScrollAnchor & { persistent: boolean }) | null>(null)
   const pinReleaseTimerRef = useRef(0)
 
   // Last position we assigned ourselves, so scroll events we caused can be told
   // apart from the reader's — see isUserScroll.
   const expectedScrollTopRef = useRef<number | null>(null)
+  // Whether an assignment of ours is still waiting for its scroll event. The
+  // position check above is not enough on its own: a container still settling
+  // (a body growing behind the assignment) can report a position we never set,
+  // which reads as the reader moving the view and drops the pin — after which
+  // the next resize parks the thread at the bottom. A flag rather than a count
+  // of outstanding assignments: the browser coalesces several assignments made
+  // in one frame into a single scroll event, and a count would then carry the
+  // surplus over onto the reader's own scrolling. At most the first event after
+  // an assignment is taken as ours, and the timer drops even that when the
+  // assignment fired no event at all (setting the position the container
+  // already had).
+  const ownScrollPendingRef = useRef(false)
+  const ownScrollForgetTimerRef = useRef(0)
 
   const applyScrollTop = useCallback((container: HTMLElement, scrollTop: number) => {
+    const previousScrollTop = container.scrollTop
     container.scrollTop = scrollTop
     // Read it back: the browser clamps to the scrollable range, and the clamped
     // value is what the scroll event will report.
     expectedScrollTopRef.current = container.scrollTop
+    // Assigning the current (or effectively identical) position fires no event.
+    // Do not repeatedly extend the ownership window while a pinned resize keeps
+    // resolving to the same place, or the reader's first scroll can be swallowed.
+    if (isUserScroll(container.scrollTop, previousScrollTop)) {
+      ownScrollPendingRef.current = true
+      window.clearTimeout(ownScrollForgetTimerRef.current)
+      ownScrollForgetTimerRef.current = window.setTimeout(() => {
+        ownScrollPendingRef.current = false
+      }, OWN_SCROLL_WINDOW_MS)
+    }
   }, [])
 
   // Same bookkeeping for the message list's own repositioning (holding the view
@@ -99,6 +129,22 @@ export function useConversationScroll(
     [applyScrollTop],
   )
 
+  // Browser scroll anchoring is set up to hold the bottom of the thread (see
+  // .message-scroll-anchor), which is the opposite of what a pin wants: a body
+  // growing above that anchor drags the view down, and the scroll event the
+  // browser produces looks exactly like the reader moving the view, so the pin
+  // is dropped and the next resize parks the thread at the bottom. While a pin
+  // is in force our own re-anchoring is the only positioning allowed.
+  const releasePin = useCallback(() => {
+    pinnedRef.current = null
+    const container = scrollRef.current
+    if (container) container.style.overflowAnchor = ''
+  }, [])
+
+  const releasePinForUserScroll = useCallback(() => {
+    if (pinnedRef.current) releasePin()
+  }, [releasePin])
+
   // The settle window runs from the last time the anchor was applied, not from
   // the first: a body that is still growing keeps it alive. Otherwise the pin
   // can expire mid-expansion — and while the target is out of reach the view
@@ -106,20 +152,27 @@ export function useConversationScroll(
   // reader is at the bottom" and keeps it there.
   const armPinRelease = useCallback(() => {
     window.clearTimeout(pinReleaseTimerRef.current)
-    pinReleaseTimerRef.current = window.setTimeout(() => {
-      pinnedRef.current = null
-    }, OPEN_ANCHOR_WINDOW_MS)
-  }, [])
+    pinReleaseTimerRef.current = window.setTimeout(releasePin, OPEN_ANCHOR_WINDOW_MS)
+  }, [releasePin])
 
   const pinMessage = useCallback(
-    (messageId: string, offset = -ANCHOR_GAP_PX) => {
-      pinnedRef.current = { messageId, offset }
-      armPinRelease()
+    (messageId: string, offset = -ANCHOR_GAP_PX, persistent = false) => {
+      pinnedRef.current = { messageId, offset, persistent }
+      const container = scrollRef.current
+      if (container) container.style.overflowAnchor = 'none'
+      window.clearTimeout(pinReleaseTimerRef.current)
+      if (!persistent) armPinRelease()
     },
     [armPinRelease],
   )
 
-  useEffect(() => () => window.clearTimeout(pinReleaseTimerRef.current), [])
+  useEffect(
+    () => () => {
+      window.clearTimeout(pinReleaseTimerRef.current)
+      window.clearTimeout(ownScrollForgetTimerRef.current)
+    },
+    [],
+  )
 
   /** Brings a message's header to the top of the viewport, pinned so a body
    *  still growing from its placeholder height doesn't push it back out of
@@ -132,7 +185,10 @@ export function useConversationScroll(
       if (!container) return
       const target = container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
       if (!target) return
-      pinMessage(messageId)
+      // An explicitly expanded message remains authoritative until the reader
+      // scrolls. HTML frames and remote images can change height well after the
+      // normal thread-open settle window has elapsed.
+      pinMessage(messageId, -ANCHOR_GAP_PX, true)
       applyScrollTop(container, anchorScrollTop(target.offsetTop, container.offsetTop))
     },
     [applyScrollTop, pinMessage],
@@ -216,14 +272,22 @@ export function useConversationScroll(
 
   const handleConversationScroll = useCallback(() => {
     const container = scrollRef.current
+    const ours = ownScrollPendingRef.current
+    ownScrollPendingRef.current = false
     // The reader moving the view — including by dragging the scrollbar, which
     // dispatches no mouse events here — outranks the settle-window anchor.
-    if (container && pinnedRef.current && isUserScroll(container.scrollTop, expectedScrollTopRef.current)) {
-      pinnedRef.current = null
+    if (
+      container &&
+      pinnedRef.current &&
+      !pinnedRef.current.persistent &&
+      !ours &&
+      isUserScroll(container.scrollTop, expectedScrollTopRef.current)
+    ) {
+      releasePin()
     }
     saveConversationScroll()
     maybeMarkRead()
-  }, [maybeMarkRead, saveConversationScroll])
+  }, [maybeMarkRead, releasePin, saveConversationScroll])
 
   useLayoutEffect(() => {
     return () => {
@@ -262,7 +326,7 @@ export function useConversationScroll(
       if (scrollTop !== null) {
         applyScrollTop(container, scrollTop)
       }
-      if (pinned) armPinRelease()
+      if (pinned && !pin?.persistent) armPinRelease()
       lastScrollHeightRef.current = container.scrollHeight
       maybeMarkRead()
     })
@@ -370,5 +434,6 @@ export function useConversationScroll(
     maybeMarkRead,
     setScrollTop,
     scrollMessageToTop,
+    releasePinForUserScroll,
   }
 }

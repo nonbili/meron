@@ -22,6 +22,7 @@ export function MessageBubbleBody({
   activeSearchMatch,
   fullHeight = false,
   onLinkHover,
+  onUserScrollIntent,
 }: {
   message: Message
   useHtmlBody: boolean
@@ -31,6 +32,7 @@ export function MessageBubbleBody({
    *  traditional layout lets the conversation itself do the scrolling. */
   fullHeight?: boolean
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
 }) {
   const { t } = useTranslation()
   const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
@@ -43,6 +45,7 @@ export function MessageBubbleBody({
           searchQuery={normalizedSearchQuery}
           activeSearchMatch={activeSearchMatch}
           onLinkHover={onLinkHover}
+          onUserScrollIntent={onUserScrollIntent}
         />
       </div>
     )

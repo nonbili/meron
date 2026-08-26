@@ -42,6 +42,7 @@ export function ConversationMessageList({
   onScroll,
   onSetScrollTop,
   onScrollMessageToTop,
+  onUserScrollIntent,
   onOpenContextMenu,
 }: {
   messages: Message[]
@@ -69,6 +70,8 @@ export function ConversationMessageList({
   /** Brings a message's header to the top of the viewport, pinned while its
    *  body grows. Used when the reader expands a collapsed message. */
   onScrollMessageToTop: (messageId: string) => void
+  /** Releases expansion anchoring before input that intentionally moves the view. */
+  onUserScrollIntent: () => void
   onOpenContextMenu: (state: MessageContextMenuState) => void
 }) {
   const { t } = useTranslation()
@@ -77,6 +80,7 @@ export function ConversationMessageList({
   // Traditional layout only: message ids the user has explicitly expanded or
   // collapsed, overriding the default below. Cleared when the thread changes.
   const [expandOverrides, setExpandOverrides] = useState<Record<string, boolean>>({})
+  const pendingExpandedMessageIdRef = useRef('')
   const autoLoadInFlightRef = useRef(false)
   const activeThreadIdRef = useRef(activeThreadId)
   activeThreadIdRef.current = activeThreadId
@@ -98,6 +102,16 @@ export function ConversationMessageList({
     setExpandOverrides((current) => (current[jumpMessageId] === true ? current : { ...current, [jumpMessageId]: true }))
   }, [jumpMessageId])
 
+  useLayoutEffect(() => {
+    const messageId = pendingExpandedMessageIdRef.current
+    if (!messageId || expandOverrides[messageId] !== true) return
+    pendingExpandedMessageIdRef.current = ''
+    // Position only after React has replaced the collapsed summary with the
+    // expanded row. Scrolling against the old, short layout can be clamped to
+    // the bottom before the body and its asynchronously measured frame appear.
+    onScrollMessageToTop(messageId)
+  }, [expandOverrides, onScrollMessageToTop])
+
   for (const message of messages) {
     if (message.unread) unreadOnArrivalRef.current.add(message.id)
   }
@@ -116,11 +130,8 @@ export function ConversationMessageList({
     return message.id === lastMessageId || unreadOnArrivalRef.current.has(message.id) || searchMatchSet.has(message.id)
   }
   const setExpanded = (messageId: string, expanded: boolean) => {
+    pendingExpandedMessageIdRef.current = expanded ? messageId : ''
     setExpandOverrides((current) => ({ ...current, [messageId]: expanded }))
-    // Expanding is a "let me read this" click, so bring the message to the top
-    // rather than opening its body wherever it happens to sit. Collapsing is
-    // "I'm done" and leaves the view alone.
-    if (expanded) onScrollMessageToTop(messageId)
   }
 
   const loadEarlier = useCallback(() => {
@@ -168,6 +179,22 @@ export function ConversationMessageList({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        onWheel={onUserScrollIntent}
+        onTouchMove={onUserScrollIntent}
+        onKeyDownCapture={(event) => {
+          if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+            onUserScrollIntent()
+          }
+        }}
+        onPointerDown={(event) => {
+          const container = event.currentTarget
+          const scrollbarWidth = container.offsetWidth - container.clientWidth
+          if (scrollbarWidth > 0 && event.clientX >= container.getBoundingClientRect().right - scrollbarWidth) {
+            onUserScrollIntent()
+          }
+        }}
+        // MessageRow's pinned header offsets itself against this py-6; keep
+        // the two in step.
         className="message-scroll flex-1 overflow-y-auto px-4 py-6 space-y-4 z-10 relative"
       >
         {showThreadLoading && (
@@ -257,6 +284,7 @@ export function ConversationMessageList({
                       onToggleExpanded={() => setExpanded(message.id, !expanded)}
                       onOpenContextMenu={onOpenContextMenu}
                       onLinkHover={setHoveredLink}
+                      onUserScrollIntent={onUserScrollIntent}
                     />
                   ) : (
                     <MessageBubble

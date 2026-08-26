@@ -28,12 +28,14 @@ export function BubbleHtmlFrame({
   searchQuery = '',
   activeSearchMatch = false,
   onLinkHover,
+  onUserScrollIntent,
 }: {
   html: string
   /** In-thread search query; matches are marked inside the frame document. */
   searchQuery?: string
   activeSearchMatch?: boolean
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
 }) {
   const { t } = useTranslation()
   const messageFont = useMessageFrameFont()
@@ -271,6 +273,7 @@ export function BubbleHtmlFrame({
             onFrameClick={handleFrameClick}
             onReady={handleReady}
             onLinkHover={onLinkHover}
+            onUserScrollIntent={onUserScrollIntent}
             forwardContextMenu
           />
         )}
