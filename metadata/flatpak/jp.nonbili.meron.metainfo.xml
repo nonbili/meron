@@ -63,6 +63,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.2" date="2026-08-26">
+      <description>
+        <ul>
+          <li>Notify for the feed items that actually arrived</li>
+          <li>Open a read thread at the top of its newest message</li>
+          <li>Pin an expanded message's header flush to the top and collapse from anywhere on it</li>
+          <li>Avoid false connection failures during slow sync</li>
+          <li>Show remote content per message or per allowed sender</li>
+          <li>Tint the native window chrome to match the app theme</li>
+          <li>Add a board scroll lock</li>
+          <li>Put column width in the board menu alongside the scroll lock</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-08-25">
       <description>
         <ul>

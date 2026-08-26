@@ -1,0 +1,8 @@
+- Notify for the feed items that actually arrived
+- Open a read thread at the top of its newest message
+- Pin an expanded message's header flush to the top and collapse from anywhere on it
+- Avoid false connection failures during slow sync
+- Show remote content per message or per allowed sender
+- Tint the native window chrome to match the app theme
+- Add a board scroll lock
+- Put column width in the board menu alongside the scroll lock
