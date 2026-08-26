@@ -438,6 +438,10 @@ function applyActiveTheme() {
       customThemes: settings$.customThemes.peek(),
     }),
   )
+
+  // The webview doesn't paint the native title bar, so hand the appearance to
+  // the backend as well and let it tint the window chrome to match.
+  void invoke('window.setAppearance', { dark: def.appearance === 'dark' }).catch(() => {})
 }
 applyActiveTheme()
 settings$.themeId.onChange(applyActiveTheme)
@@ -716,4 +720,8 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
   } finally {
     hydrating = false
   }
+  // Re-apply once the stored theme is in: the module-load apply above ran
+  // before the Wails bindings existed, so its window.setAppearance was lost,
+  // and hydrating a theme identical to the current one fires no onChange.
+  applyActiveTheme()
 }
