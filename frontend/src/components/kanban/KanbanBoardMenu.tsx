@@ -1,13 +1,36 @@
 import { useRef, useState } from 'react'
-import { Check, Inbox, Lock, Mail, MoreVertical, Plus, Settings, Star } from 'lucide-react'
+import { Check, Columns3, Inbox, Lock, Mail, Minus, MoreVertical, Plus, Settings, Star } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { type FilterMode, ui$ } from '../../states/ui'
-import { settings$ } from '../../states/settings'
+import {
+  clampKanbanColumnWidth,
+  KANBAN_COLUMN_MAX_WIDTH,
+  KANBAN_COLUMN_MIN_WIDTH,
+  settings$,
+} from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MenuItem } from '../menu/MenuItem'
 import { menuItemBase } from '../menu/menuStyles'
+
+// Deliberately coarser than the settings dialog's 10px: this is a
+// click-at-a-time stepper for eyeballing density against the board. Settings
+// keeps the number field for an exact width.
+const COLUMN_WIDTH_STEP = 20
+
+// Built per-state rather than with disabled:/hover: variants: the enabled and
+// disabled rules touch the same utilities, and variant order would decide the
+// winner instead of this call site.
+const stepperButton = (disabled: boolean) =>
+  `flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+    disabled ? 'cursor-default text-secondary/40' : 'cursor-pointer text-secondary hover:bg-hover hover:text-primary'
+  }`
+
+// menuItemBase minus its cursor-pointer: this row is a label with controls, not
+// a clickable item.
+const stepperRow =
+  'flex h-8 w-full items-center gap-2 whitespace-nowrap rounded-lg px-2 text-left text-[0.8125rem] font-normal leading-normal text-primary'
 
 // Inline board-wide filter, shown in the header only when there's room. On narrow
 // widths it's hidden (@min-[640px]) and the same options live inside BoardMenu.
@@ -37,8 +60,9 @@ export function FilterSwitch({ value, onChange }: { value: FilterMode; onChange:
   )
 }
 
-// Board overflow menu in the kanban header: the Add Column action, shortcuts to
-// the board's settings, plus the board-wide filter options — but the filter
+// Board overflow menu in the kanban header: the Add Column action, the board
+// layout controls (column width, drag scroll lock), shortcuts to the board's
+// settings, plus the board-wide filter options — but the filter
 // section only renders on narrow widths (@min-[640px]:hidden), where the inline
 // FilterSwitch is hidden.
 export function BoardMenu({
@@ -56,6 +80,7 @@ export function BoardMenu({
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const lockScroll = useValue(settings$.kanbanLockScroll)
+  const columnWidth = useValue(settings$.kanbanColumnWidth)
 
   useDismissOnOutside(
     open,
@@ -64,6 +89,9 @@ export function BoardMenu({
   )
 
   const filterActive = filterMode !== 'all'
+
+  const stepColumnWidth = (delta: number) =>
+    settings$.kanbanColumnWidth.set(clampKanbanColumnWidth(columnWidth + delta))
 
   const filterItem = (mode: FilterMode, label: string, icon: React.ReactNode) => (
     <button
@@ -116,8 +144,36 @@ export function BoardMenu({
             }}
           />
           <div className="my-1 border-t border-border" />
-          {/* The scroll lock lives here as well as in Settings: it is a
-              drag-time behaviour, so it belongs within reach of the board. */}
+          {/* Board layout lives here as well as in Settings: column width and the
+              drag-time scroll lock are both judged by looking at the board, so
+              they belong within reach of it. */}
+          <div className={stepperRow}>
+            <Columns3 size={13} className="shrink-0 text-secondary" />
+            <span className="min-w-0 flex-1 whitespace-nowrap text-left">{t('settings.kanban.columnWidth')}</span>
+            <span className="flex shrink-0 items-center gap-0.5">
+              <button
+                className={stepperButton(columnWidth <= KANBAN_COLUMN_MIN_WIDTH)}
+                disabled={columnWidth <= KANBAN_COLUMN_MIN_WIDTH}
+                aria-label={t('kanban.actions.narrowColumns')}
+                title={t('kanban.actions.narrowColumns')}
+                onClick={() => stepColumnWidth(-COLUMN_WIDTH_STEP)}
+              >
+                <Minus size={12} />
+              </button>
+              <span className="w-12 text-center text-xs font-semibold tabular-nums text-secondary">
+                {columnWidth}px
+              </span>
+              <button
+                className={stepperButton(columnWidth >= KANBAN_COLUMN_MAX_WIDTH)}
+                disabled={columnWidth >= KANBAN_COLUMN_MAX_WIDTH}
+                aria-label={t('kanban.actions.widenColumns')}
+                title={t('kanban.actions.widenColumns')}
+                onClick={() => stepColumnWidth(COLUMN_WIDTH_STEP)}
+              >
+                <Plus size={12} />
+              </button>
+            </span>
+          </div>
           <button
             className={`${menuItemBase} flex-nowrap ${
               lockScroll ? 'bg-accent/10 dark:bg-accent/15 text-accent' : 'text-primary hover:bg-hover'
