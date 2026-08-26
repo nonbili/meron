@@ -118,6 +118,30 @@ internal fun readMessageIndices(
     return read
 }
 
+// Index (into the message list) of the message whose header the conversation
+// should pin at the top of the viewport: the expanded message the reader is in
+// the middle of, i.e. the one whose card straddles the top edge. Reading a
+// message taller than the screen otherwise hides the header that collapses it.
+// `minRemainingPx` keeps the pin off a card that is all but scrolled away —
+// pinning a header over the message below it would only mislead.
+internal fun pinnedHeaderMessageIndex(
+    visible: List<ListItemGeometry>,
+    headerItemCount: Int,
+    messageCount: Int,
+    viewportStartOffset: Int,
+    minRemainingPx: Int,
+    expanded: (Int) -> Boolean,
+): Int? {
+    for (geometry in visible) {
+        val messageIndex = geometry.index - headerItemCount
+        if (messageIndex < 0 || messageIndex >= messageCount) continue
+        if (geometry.offset >= viewportStartOffset) continue
+        if (geometry.offset + geometry.size < viewportStartOffset + minRemainingPx) continue
+        return if (expanded(messageIndex)) messageIndex else null
+    }
+    return null
+}
+
 // True when the last list item is visible with its bottom within
 // `bottomSlackPx` of the viewport end — desktop's "remaining <= 160" rule for
 // marking the whole thread read.

@@ -81,18 +81,11 @@ internal fun MessageRow(
     onOpenUrl: (String) -> Unit,
     onRetryLoad: () -> Unit,
 ) {
-    var addressesOpen by remember(message.id) { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
     val textColor = MaterialTheme.colorScheme.onSurface
     val mutedColor = textColor.copy(alpha = 0.6f)
     val isDraft = folderIsDrafts(message.folderId)
-    val senderLabel =
-        if (outgoing) {
-            val recipients = remember(message.to, message.cc) { formatRecipientSummary(message.to, message.cc) }
-            if (recipients.isBlank()) message.from.ifBlank { message.fromAddr } else tr("chat.toRecipients", mapOf("recipients" to recipients))
-        } else {
-            message.from.ifBlank { message.fromAddr }
-        }
+    val senderLabel = messageSenderLabel(message, outgoing)
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = shape,
@@ -122,94 +115,27 @@ internal fun MessageRow(
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    // Tapping the header collapses the message again; the
-                    // chevron beside the sender opens the full addresses, as it
-                    // does on a chat bubble.
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable(onClick = onToggleExpanded)
-                            .padding(vertical = 2.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                senderLabel,
-                                modifier = Modifier.weight(1f, fill = false),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = textColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            // A feed item has no recipients, so its details
-                            // could only repeat the feed name above.
-                            if (!isRss) {
-                                Icon(
-                                    if (addressesOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    contentDescription =
-                                        if (addressesOpen) tr("chat.hideDetails") else tr("chat.showDetails"),
-                                    modifier =
-                                        Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable { addressesOpen = !addressesOpen }
-                                            .size(16.dp),
-                                    tint = mutedColor,
-                                )
-                            }
-                        }
-                        if (!outgoing && message.fromAddr.isNotBlank()) {
-                            Text(
-                                message.fromAddr,
-                                fontSize = 11.sp,
-                                color = mutedColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
-                    IconButton(
-                        onClick = { if (isDraft) onOpenDraft(message) else onOpenMessage(message) },
-                        modifier = Modifier.size(24.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (isDraft) Icons.Filled.Edit else Icons.Filled.OpenInFull,
-                            contentDescription = if (isDraft) tr("chat.draft") else tr("threads.actions.openInNewTab"),
-                            modifier = Modifier.size(15.dp),
-                            tint = mutedColor,
-                        )
-                    }
-                    MessageActionsButton(
-                        message = message,
-                        tint = mutedColor,
-                        actionsEnabled = actionsEnabled,
-                        itemActionsEnabled = itemActionsEnabled,
-                        onForward = onForward,
-                        onEditAsNew = onEditAsNew,
-                        onToggleRead = onToggleRead,
-                        onToggleStarred = onToggleStarred,
-                        onDelete = onDelete,
-                        onCopyMessageText = onCopyMessageText,
-                    )
-                }
-                if (addressesOpen) {
-                    MessageAddressDetails(
-                        message = message,
-                        onCopy = onCopyMessageText,
-                        onComposeTo = onComposeTo,
-                        textColor = textColor,
-                        modifier = Modifier.padding(bottom = 2.dp),
-                    )
-                }
+                MessageRowHeader(
+                    message = message,
+                    senderLabel = senderLabel,
+                    outgoing = outgoing,
+                    isDraft = isDraft,
+                    isRss = isRss,
+                    textColor = textColor,
+                    mutedColor = mutedColor,
+                    actionsEnabled = actionsEnabled,
+                    itemActionsEnabled = itemActionsEnabled,
+                    onToggleExpanded = onToggleExpanded,
+                    onForward = onForward,
+                    onEditAsNew = onEditAsNew,
+                    onOpenDraft = onOpenDraft,
+                    onToggleRead = onToggleRead,
+                    onToggleStarred = onToggleStarred,
+                    onDelete = onDelete,
+                    onCopyMessageText = onCopyMessageText,
+                    onComposeTo = onComposeTo,
+                    onOpenMessage = onOpenMessage,
+                )
                 MessageBodyContent(
                     message = message,
                     textColor = textColor,
@@ -329,3 +255,139 @@ private fun MessageRowBadges(
         )
     }
 }
+
+/**
+ * The header of an expanded [MessageRow]: sender, badges and the row's actions.
+ * The conversation pins a copy of this over the list while a long message
+ * scrolls past (see [pinnedHeaderMessageIndex]), so it lives on its own and
+ * keeps no state the card below needs to share.
+ */
+@Composable
+internal fun MessageRowHeader(
+    message: MessageBody,
+    senderLabel: String,
+    outgoing: Boolean,
+    isDraft: Boolean,
+    isRss: Boolean,
+    textColor: Color,
+    mutedColor: Color,
+    actionsEnabled: Boolean,
+    itemActionsEnabled: Boolean,
+    onToggleExpanded: () -> Unit,
+    onForward: (MessageBody) -> Unit,
+    onEditAsNew: (MessageBody) -> Unit,
+    onOpenDraft: (MessageBody) -> Unit,
+    onToggleRead: (MessageBody) -> Unit,
+    onToggleStarred: (MessageBody) -> Unit,
+    onDelete: (MessageBody) -> Unit,
+    onCopyMessageText: (String, String) -> Unit,
+    onComposeTo: (String) -> Unit,
+    onOpenMessage: (MessageBody) -> Unit,
+) {
+    var addressesOpen by remember(message.id) { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // Tapping the header collapses the message again; the
+        // chevron beside the sender opens the full addresses, as it
+        // does on a chat bubble.
+        Column(
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(4.dp))
+                .clickable(onClick = onToggleExpanded)
+                .padding(vertical = 2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    senderLabel,
+                    modifier = Modifier.weight(1f, fill = false),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // A feed item has no recipients, so its details
+                // could only repeat the feed name above.
+                if (!isRss) {
+                    Icon(
+                        if (addressesOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription =
+                            if (addressesOpen) tr("chat.hideDetails") else tr("chat.showDetails"),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { addressesOpen = !addressesOpen }
+                                .size(16.dp),
+                        tint = mutedColor,
+                    )
+                }
+            }
+            if (!outgoing && message.fromAddr.isNotBlank()) {
+                Text(
+                    message.fromAddr,
+                    fontSize = 11.sp,
+                    color = mutedColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
+        IconButton(
+            onClick = { if (isDraft) onOpenDraft(message) else onOpenMessage(message) },
+            modifier = Modifier.size(24.dp),
+        ) {
+            Icon(
+                imageVector = if (isDraft) Icons.Filled.Edit else Icons.Filled.OpenInFull,
+                contentDescription = if (isDraft) tr("chat.draft") else tr("threads.actions.openInNewTab"),
+                modifier = Modifier.size(15.dp),
+                tint = mutedColor,
+            )
+        }
+        MessageActionsButton(
+            message = message,
+            tint = mutedColor,
+            actionsEnabled = actionsEnabled,
+            itemActionsEnabled = itemActionsEnabled,
+            onForward = onForward,
+            onEditAsNew = onEditAsNew,
+            onToggleRead = onToggleRead,
+            onToggleStarred = onToggleStarred,
+            onDelete = onDelete,
+            onCopyMessageText = onCopyMessageText,
+        )
+    }
+    if (addressesOpen) {
+        MessageAddressDetails(
+            message = message,
+            onCopy = onCopyMessageText,
+            onComposeTo = onComposeTo,
+            textColor = textColor,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
+    }
+}
+
+/** "To: …" for a message the account sent, the sender's name otherwise. */
+@Composable
+internal fun messageSenderLabel(
+    message: MessageBody,
+    outgoing: Boolean,
+): String =
+    if (outgoing) {
+        val recipients = remember(message.to, message.cc) { formatRecipientSummary(message.to, message.cc) }
+        if (recipients.isBlank()) {
+            message.from.ifBlank { message.fromAddr }
+        } else {
+            tr("chat.toRecipients", mapOf("recipients" to recipients))
+        }
+    } else {
+        message.from.ifBlank { message.fromAddr }
+    }

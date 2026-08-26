@@ -137,7 +137,9 @@ export function MessageRow({
 
   return (
     <div className="group/message-row w-full rounded-xl border border-border/40 bg-chats px-4 py-3 shadow-sm">
-      <div className="relative flex items-start gap-2.5">
+      {/* The header sticks to the top of the scroller while a long message
+          scrolls past, so the collapse toggle stays within reach. */}
+      <div className="sticky top-0 z-20 -mx-4 -mt-3 flex items-start gap-2.5 rounded-t-xl bg-chats px-4 pb-2 pt-3">
         <Avatar
           name={view.avatarName}
           email={view.avatarEmail}
@@ -225,7 +227,7 @@ export function MessageRow({
         )}
       </div>
 
-      <div className="mt-2.5">
+      <div className="mt-0.5">
         <MessageContent
           message={message}
           view={view}

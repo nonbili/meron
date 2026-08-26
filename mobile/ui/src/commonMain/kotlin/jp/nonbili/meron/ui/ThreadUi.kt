@@ -66,6 +66,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +96,7 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.attachmentMediaRef
 import jp.nonbili.meron.shared.buildThreadGalleryImages
 import jp.nonbili.meron.shared.buildThreadMediaItems
+import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.coroutineScope
@@ -673,6 +675,68 @@ internal fun ThreadScreen(
                                         onOpenUrl = services::openUrl,
                                         onRetryLoad = onRetryLoadMessages,
                                     )
+                                }
+                            }
+                        }
+                        // Reading a message taller than the screen scrolls its
+                        // header away, and with it the tap target that collapses
+                        // the message again. Float a copy of that header at the
+                        // top for as long as the message is the one being read.
+                        if (traditional) {
+                            val density = LocalDensity.current
+                            val minRemainingPx = with(density) { 72.dp.roundToPx() }
+                            val headerItemCount = threadHeaderItemCount(canLoadOlder || loadingOlder)
+                            // Recomputed on every recomposition so the derived
+                            // state below never reads a stale expansion map.
+                            val expandedFlags by rememberUpdatedState(messages.map(::isMessageExpanded))
+                            val pinnedIndex by remember(headerItemCount, messages.size) {
+                                derivedStateOf {
+                                    val info = listState.layoutInfo
+                                    pinnedHeaderMessageIndex(
+                                        visible = info.visibleItemsInfo.map { ListItemGeometry(it.index, it.offset, it.size) },
+                                        headerItemCount = headerItemCount,
+                                        messageCount = expandedFlags.size,
+                                        viewportStartOffset = info.viewportStartOffset,
+                                        minRemainingPx = minRemainingPx,
+                                        expanded = { index -> expandedFlags.getOrElse(index) { false } },
+                                    )
+                                }
+                            }
+                            val pinnedMessage = pinnedIndex?.let { messages.getOrNull(it) }
+                            pinnedMessage?.let { message ->
+                                val outgoing = isOutgoing(message, accountEmail)
+                                val textColor = MaterialTheme.colorScheme.onSurface
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                                    shadowElevation = 3.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                ) {
+                                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        MessageRowHeader(
+                                            message = message,
+                                            senderLabel = messageSenderLabel(message, outgoing),
+                                            outgoing = outgoing,
+                                            isDraft = folderIsDrafts(message.folderId),
+                                            isRss = isRss,
+                                            textColor = textColor,
+                                            mutedColor = textColor.copy(alpha = 0.6f),
+                                            actionsEnabled = !isRss,
+                                            itemActionsEnabled = true,
+                                            onToggleExpanded = {
+                                                expandOverrides = expandOverrides + (message.id to false)
+                                            },
+                                            onForward = onForward,
+                                            onEditAsNew = onEditAsNew,
+                                            onOpenDraft = onOpenDraft,
+                                            onToggleRead = onToggleMessageRead,
+                                            onToggleStarred = onToggleMessageStarred,
+                                            onDelete = onDeleteMessage,
+                                            onCopyMessageText = onCopyMessageText,
+                                            onComposeTo = onComposeTo,
+                                            onOpenMessage = { readerMessage = it },
+                                        )
+                                    }
                                 }
                             }
                         }
