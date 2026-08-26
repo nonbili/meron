@@ -22,6 +22,7 @@ import type { UpdateStatus } from './lib/update'
 import { useFoldersByAccount } from './lib/kanbanData'
 import { setTrayUnread } from './lib/trayUnread'
 import i18n, { resolveI18nLanguageFromWebLocale, t, translationTemplate } from './lib/i18n'
+import { isConnectivitySyncError } from './components/banner/connectivityBannerHelpers'
 
 const SEARCH_DEBOUNCE_MS = 300
 const DEFAULT_RSS_SYNC_INTERVAL_MINUTES = 60
@@ -300,9 +301,13 @@ export function useAppEffects() {
     // Mail sync/folder fetch failed (network down, bad creds, timeout) — surface a
     // persistent banner that clears on the next good sync. Scoped to mail only;
     // RSS/store errors use the generic `error` event and don't raise this banner.
-    const offError = eventsOn('mail.syncError', (detail: { account?: string; message?: string }) => {
-      setSyncError(detail?.account ?? null, detail?.message ?? 'sync failed')
-    })
+    const offError = eventsOn(
+      'mail.syncError',
+      (detail: { account?: string; message?: string; outer_timeout?: boolean }) => {
+        const message = detail?.message ?? 'sync failed'
+        if (isConnectivitySyncError(detail?.outer_timeout)) setSyncError(detail?.account ?? null, message)
+      },
+    )
 
     const offNew = eventsOn('mail.newMessages', (detail: { account?: string; folder?: string; count?: number }) => {
       // A successful fetch proves connectivity is back for this account.

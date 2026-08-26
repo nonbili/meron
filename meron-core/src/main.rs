@@ -114,6 +114,17 @@ impl std::fmt::Display for BackgroundSyncCancelled {
 
 impl std::error::Error for BackgroundSyncCancelled {}
 
+#[derive(Debug)]
+struct BackgroundSyncTimedOut(u64);
+
+impl std::fmt::Display for BackgroundSyncTimedOut {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "timed out after {}s", self.0)
+    }
+}
+
+impl std::error::Error for BackgroundSyncTimedOut {}
+
 /// Retry a background read once when it fails for a recognizable transport
 /// reason. Both attempts share the configured per-folder ceiling so a stuck
 /// sync does not hold its dedup key indefinitely.
@@ -137,7 +148,11 @@ where
         Ok(Ok(value)) => return Ok(value),
         Ok(Err(error)) if is_transient_sync_error(&error) => error,
         Ok(Err(error)) => return Err(error),
-        Err(_) => anyhow::bail!("timed out after {}s", sync_timeout.as_secs()),
+        Err(_) => {
+            return Err(anyhow::Error::new(BackgroundSyncTimedOut(
+                sync_timeout.as_secs(),
+            )));
+        }
     };
 
     eprintln!("meron-core: {label} failed, retrying: {first_error:#}");
@@ -145,10 +160,15 @@ where
         .await
         .is_err()
     {
-        return Err(first_error.context(format!(
-            "retry budget exhausted after {}s",
-            sync_timeout.as_secs()
-        )));
+        // Keep the first attempt's cause as context: the budget expiring says
+        // only that time ran out, and without this the caller (and the log) get
+        // a bare "timed out" with no diagnosis. `Error::is` still finds the
+        // typed error through the context chain, so the outer_timeout
+        // classification is unaffected.
+        return Err(
+            anyhow::Error::new(BackgroundSyncTimedOut(sync_timeout.as_secs()))
+                .context(format!("first attempt failed: {first_error:#}")),
+        );
     }
     if !can_attempt() {
         return Err(anyhow::Error::new(BackgroundSyncCancelled));
@@ -159,10 +179,10 @@ where
         Ok(Err(retry_error)) => Err(anyhow::anyhow!(
             "retry failed: {retry_error:#}; first attempt: {first_error:#}"
         )),
-        Err(_) => Err(first_error.context(format!(
-            "retry timed out within the {}s sync budget",
-            sync_timeout.as_secs()
-        ))),
+        Err(_) => Err(
+            anyhow::Error::new(BackgroundSyncTimedOut(sync_timeout.as_secs()))
+                .context(format!("first attempt failed: {first_error:#}")),
+        ),
     }
 }
 
@@ -480,7 +500,11 @@ fn spawn_message_sync(
                 emit(
                     &out,
                     "mail.syncError",
-                    json!({ "account": account, "message": format!("sync {folder}: {e:#}") }),
+                    json!({
+                        "account": account,
+                        "message": format!("sync {folder}: {e:#}"),
+                        "outer_timeout": e.is::<BackgroundSyncTimedOut>(),
+                    }),
                 )
                 .await
             }
@@ -580,7 +604,11 @@ fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
                 emit(
                     &out,
                     "mail.syncError",
-                    json!({ "account": account, "message": format!("folders sync: {e:#}") }),
+                    json!({
+                        "account": account,
+                        "message": format!("folders sync: {e:#}"),
+                        "outer_timeout": e.is::<BackgroundSyncTimedOut>(),
+                    }),
                 )
                 .await
             }

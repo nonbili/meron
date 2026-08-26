@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import { connectivityAccountLabel, proxyEndpointFromSyncError } from './connectivityBannerHelpers'
+import {
+  connectivityAccountLabel,
+  isConnectivitySyncError,
+  proxyEndpointFromSyncError,
+} from './connectivityBannerHelpers'
 
 const accounts = [
   { id: 'one', display_name: 'Ping Chen', email: 'ping.one@example.com' },
@@ -35,5 +39,16 @@ describe('proxyEndpointFromSyncError', () => {
 
   it('does not misclassify a mail-server failure', () => {
     expect(proxyEndpointFromSyncError('sync inbox: connect imap.example:993: timed out')).toBeNull()
+  })
+})
+
+describe('isConnectivitySyncError', () => {
+  it('ignores a marked outer background-sync budget expiry', () => {
+    expect(isConnectivitySyncError(true)).toBe(false)
+  })
+
+  it('keeps every unmarked failure visible', () => {
+    expect(isConnectivitySyncError()).toBe(true)
+    expect(isConnectivitySyncError(false)).toBe(true)
   })
 })

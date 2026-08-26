@@ -78,6 +78,10 @@ function waitForKanbanSync(
   }
   const failAccount = (detail: MailSyncEvent) => {
     if (!detail?.account || !pending.has(detail.account)) return
+    // Reject even on a bare budget expiry: the core has already dropped this
+    // folder's sync future by the time it emits, so no mail.synced for this
+    // mailbox can follow; waiting would only stall until our own
+    // timeoutMs. Whether the banner shows the error is a separate question.
     finish(new Error(detail.message || 'Sync failed'))
   }
 

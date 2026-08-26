@@ -35,3 +35,11 @@ export function proxyEndpointFromSyncError(error: string): string | null {
     null
   )
 }
+
+// The outer background-sync deadline says only that the whole operation did not
+// finish in budget. It can expire while another authenticated task for the same
+// account is still completing, so it is not proof that the server is unreachable.
+// Concrete DNS/TCP/TLS/auth errors remain banner-worthy.
+export function isConnectivitySyncError(outerTimeout = false): boolean {
+  return !outerTimeout
+}

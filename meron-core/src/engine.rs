@@ -78,6 +78,14 @@ pub struct Engine {
     /// (reuse the hottest session first). IDLE watcher connections are *not*
     /// pooled — they have a different, long-lived lifecycle. See `with_session`.
     pub pool: std::sync::Mutex<HashMap<String, Vec<Pooled<imap::Session>>>>,
+    /// Serialize fresh connection setup per account. Without this, startup's
+    /// folder, inbox, companion and body tasks can all observe an empty pool and
+    /// perform concurrent TLS and authentication handshakes. The lock covers the
+    /// handshake only and is dropped before the caller's IMAP operation runs, so
+    /// a long prefetch cannot block interactive work behind it — and the wait
+    /// for the lock is itself bounded (see `connect_coordination_timeout`), so
+    /// the worst an interactive fresh connect pays is that bound.
+    connect_locks: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Platform integration: opens the SQLite store and loads/stores per-account
     /// secrets (OS keychain on desktop, the keyed DB on mobile).
     pub host: Box<dyn EngineHost>,
@@ -191,6 +199,19 @@ pub const MAX_IDLE: Duration = Duration::from_secs(120);
 /// still answer within the bridge budget. Write ops are exempt: cutting off a
 /// slow but progressing APPEND/SEND mid-command is worse than waiting.
 pub const POOLED_READ_TIMEOUT: Duration = Duration::from_secs(10);
+/// Do not let a wedged fresh handshake make every later operation wait for the
+/// per-account connection coordinator indefinitely. Normal startup handshakes
+/// serialize; after this, availability wins and the caller connects independently.
+/// The bound is deliberately short: a handshake slower than this is exactly the
+/// case where an interactive open must not queue behind background prefetch, so
+/// coordination is traded away rather than latency. Waiters re-check the pool
+/// after the wait, so a leader that finished in time is still reused.
+fn connect_coordination_timeout() -> Duration {
+    std::cmp::min(
+        Duration::from_secs(2),
+        background_sync_timeout().mul_f32(0.1),
+    )
+}
 
 impl Engine {
     pub fn new(host: Box<dyn EngineHost>) -> anyhow::Result<Self> {
@@ -218,6 +239,7 @@ impl Engine {
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
+            connect_locks: std::sync::Mutex::new(HashMap::new()),
             host,
         })
     }
@@ -416,6 +438,15 @@ impl Engine {
         self.pool.lock().unwrap().clear();
     }
 
+    fn connect_lock(&self, account: &str) -> Arc<Mutex<()>> {
+        self.connect_locks
+            .lock()
+            .unwrap()
+            .entry(account.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+
     /// Run `f` against a warm pooled session when one is available, otherwise a
     /// freshly connected one. On success the session is returned to the pool.
     ///
@@ -472,6 +503,52 @@ impl Engine {
         }
 
         pool_debug(account, "fresh-connect");
+        let connect_lock = self.connect_lock(account);
+        let mut connect_guard =
+            tokio::time::timeout(connect_coordination_timeout(), connect_lock.lock())
+                .await
+                .ok();
+        if connect_guard.is_none() {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "net",
+                "fresh-connect coordination timed out for {account}; connecting independently"
+            );
+        }
+        // The task ahead of us may have completed its operation and returned the
+        // session while we waited for its handshake coordinator.
+        let pooled_after_wait = self.take_pooled(account);
+        if let Some(mut session) = pooled_after_wait {
+            drop(connect_guard.take());
+            let result = if retry {
+                match tokio::time::timeout(POOLED_READ_TIMEOUT, f(&mut session)).await {
+                    Ok(result) => result,
+                    Err(_) => Err(anyhow::anyhow!(
+                        "pooled session command timed out after {}s",
+                        POOLED_READ_TIMEOUT.as_secs()
+                    )),
+                }
+            } else {
+                f(&mut session).await
+            };
+            match result {
+                Ok(value) => {
+                    self.return_pooled(account, session);
+                    return Ok(value);
+                }
+                Err(error) => {
+                    drop(session);
+                    if !retry {
+                        return Err(error);
+                    }
+                    pool_debug(account, "stale-retry");
+                    connect_guard =
+                        tokio::time::timeout(connect_coordination_timeout(), connect_lock.lock())
+                            .await
+                            .ok();
+                }
+            }
+        }
         let creds = self.ensure_valid_creds(account).await?;
         let connect_started = std::time::Instant::now();
         let mut session = imap::connect(&creds).await?;
@@ -483,6 +560,7 @@ impl Engine {
                 "slow IMAP connect for {account}: {connect_ms}ms"
             );
         }
+        drop(connect_guard);
         match f(&mut session).await {
             Ok(val) => {
                 self.return_pooled(account, session);
@@ -568,6 +646,50 @@ impl Engine {
         }
 
         pool_debug(account, "fresh-connect");
+        let connect_lock = self.connect_lock(account);
+        let mut connect_guard =
+            tokio::time::timeout(connect_coordination_timeout(), connect_lock.lock())
+                .await
+                .ok();
+        if connect_guard.is_none() {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "net",
+                "fresh-connect coordination timed out for {account}; connecting independently"
+            );
+        }
+        let pooled_after_wait = self.take_pooled(account);
+        if let Some(mut session) = pooled_after_wait {
+            drop(connect_guard.take());
+            let ready =
+                match tokio::time::timeout(POOLED_READ_TIMEOUT, preflight(&mut session)).await {
+                    Ok(result) => result,
+                    Err(_) => Err(anyhow::anyhow!(
+                        "pooled session preflight timed out after {}s",
+                        POOLED_READ_TIMEOUT.as_secs()
+                    )),
+                };
+            match ready {
+                Ok(()) => {
+                    let result = f(&mut session).await;
+                    match result {
+                        Ok(value) => {
+                            self.return_pooled(account, session);
+                            return Ok(value);
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+                Err(_) => {
+                    drop(session);
+                    pool_debug(account, "stale-retry");
+                    connect_guard =
+                        tokio::time::timeout(connect_coordination_timeout(), connect_lock.lock())
+                            .await
+                            .ok();
+                }
+            }
+        }
         let creds = self.ensure_valid_creds(account).await?;
         let connect_started = std::time::Instant::now();
         let mut session = imap::connect(&creds).await?;
@@ -579,6 +701,7 @@ impl Engine {
                 "slow IMAP connect for {account}: {connect_ms}ms"
             );
         }
+        drop(connect_guard);
         preflight(&mut session).await?;
         match f(&mut session).await {
             Ok(val) => {
