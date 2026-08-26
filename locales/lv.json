@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Noņemiet šo Kanban dēli",
   "settings.kanban.deleteBoardText": "Vai dzēst %1$s?",
+  "settings.kanban.lockScroll": "Fiksēt ritināšanu vilkšanas laikā",
+  "settings.kanban.lockScrollHint": "Kolonnas paliek savā vietā, kamēr velc kartīti",
   "settings.kanban.newBoard": "Jauns Kanban dēlis",
   "settings.kanban.newBoardHint": "Izveidojiet dēli no norēķinu kontiem",
   "settings.label": "Iestatījumi",

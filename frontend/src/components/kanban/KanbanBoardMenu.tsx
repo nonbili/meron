@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import { Inbox, Mail, MoreVertical, Plus, Star } from 'lucide-react'
+import { Check, Inbox, Lock, Mail, MoreVertical, Plus, Settings, Star } from 'lucide-react'
+import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import type { FilterMode } from '../../states/ui'
+import { type FilterMode, ui$ } from '../../states/ui'
+import { settings$ } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MenuItem } from '../menu/MenuItem'
@@ -35,14 +37,17 @@ export function FilterSwitch({ value, onChange }: { value: FilterMode; onChange:
   )
 }
 
-// Board overflow menu in the kanban header: the Add Column action, plus the
-// board-wide filter options — but the filter section only renders on narrow
-// widths (@min-[640px]:hidden), where the inline FilterSwitch is hidden.
+// Board overflow menu in the kanban header: the Add Column action, shortcuts to
+// the board's settings, plus the board-wide filter options — but the filter
+// section only renders on narrow widths (@min-[640px]:hidden), where the inline
+// FilterSwitch is hidden.
 export function BoardMenu({
+  boardId,
   filterMode,
   onFilterChange,
   onAddColumn,
 }: {
+  boardId: string
   filterMode: FilterMode
   onFilterChange: (mode: FilterMode) => void
   onAddColumn: () => void
@@ -50,6 +55,7 @@ export function BoardMenu({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const lockScroll = useValue(settings$.kanbanLockScroll)
 
   useDismissOnOutside(
     open,
@@ -106,6 +112,29 @@ export function BoardMenu({
             label={<span className="whitespace-nowrap shrink-0">{t('kanban.actions.addColumn')}</span>}
             onClick={() => {
               onAddColumn()
+              setOpen(false)
+            }}
+          />
+          <div className="my-1 border-t border-border" />
+          {/* The scroll lock lives here as well as in Settings: it is a
+              drag-time behaviour, so it belongs within reach of the board. */}
+          <button
+            className={`${menuItemBase} flex-nowrap ${
+              lockScroll ? 'bg-accent/10 dark:bg-accent/15 text-accent' : 'text-primary hover:bg-hover'
+            }`}
+            onClick={() => settings$.kanbanLockScroll.set(!lockScroll)}
+          >
+            <Lock size={13} className={`shrink-0 ${lockScroll ? 'text-accent' : 'text-secondary'}`} />
+            <span className="min-w-0 flex-1 whitespace-nowrap text-left">{t('settings.kanban.lockScroll')}</span>
+            {lockScroll && <Check size={13} className="shrink-0 text-accent" />}
+          </button>
+          <MenuItem
+            className="flex-nowrap"
+            icon={<Settings size={13} className="text-secondary shrink-0" />}
+            label={<span className="whitespace-nowrap shrink-0">{t('kanban.board.settings')}</span>}
+            onClick={() => {
+              ui$.accountSettingsId.set(boardId)
+              ui$.settingsOpen.set(true)
               setOpen(false)
             }}
           />

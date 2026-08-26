@@ -81,6 +81,26 @@ describe('spellCheck setting', () => {
   })
 })
 
+describe('kanban scroll lock setting', () => {
+  afterEach(() => {
+    settings$.kanbanLockScroll.set(false)
+  })
+
+  it('leaves the board free to auto-scroll by default', () => {
+    expect(settings$.kanbanLockScroll.get()).toBe(false)
+  })
+
+  it('hydrates a persisted lock', () => {
+    hydrateSettings({ kanban_lock_scroll: true })
+    expect(settings$.kanbanLockScroll.get()).toBe(true)
+  })
+
+  it('ignores invalid persisted lock values', () => {
+    hydrateSettings({ kanban_lock_scroll: 'true' })
+    expect(settings$.kanbanLockScroll.get()).toBe(false)
+  })
+})
+
 describe('proxy setting', () => {
   afterEach(() => {
     settings$.proxy.set(EMPTY_PROXY)

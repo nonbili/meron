@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Usuń tę tablicę Kanban",
   "settings.kanban.deleteBoardText": "Usunąć %1$s?",
+  "settings.kanban.lockScroll": "Zablokuj przewijanie podczas przeciągania",
+  "settings.kanban.lockScrollHint": "Kolumny pozostają na miejscu podczas przeciągania karty",
   "settings.kanban.newBoard": "Nowa tablica Kanban",
   "settings.kanban.newBoardHint": "Utwórz tablicę z rachunków bieżących",
   "settings.label": "Ustawienia",

@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Bu Kanban panosunu kaldır",
   "settings.kanban.deleteBoardText": "%1$s silinsin mi?",
+  "settings.kanban.lockScroll": "Sürüklerken kaydırmayı kilitle",
+  "settings.kanban.lockScrollHint": "Bir kartı sürüklerken sütunlar yerinde kalır",
   "settings.kanban.newBoard": "Yeni Kanban panosu",
   "settings.kanban.newBoardHint": "Cari hesaplardan pano oluşturma",
   "settings.label": "Ayarlar",

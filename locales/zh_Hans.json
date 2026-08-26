@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "删除此看板",
   "settings.kanban.deleteBoardText": "删除%1$s？",
+  "settings.kanban.lockScroll": "拖动时锁定滚动",
+  "settings.kanban.lockScrollHint": "拖动卡片时列的位置保持不变",
   "settings.kanban.newBoard": "新看板",
   "settings.kanban.newBoardHint": "从经常账户创建董事会",
   "settings.label": "设置",

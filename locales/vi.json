@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Xóa bảng Kanban này",
   "settings.kanban.deleteBoardText": "Xóa %1$s?",
+  "settings.kanban.lockScroll": "Khóa cuộn khi kéo thả",
+  "settings.kanban.lockScrollHint": "Các cột giữ nguyên vị trí khi bạn kéo thẻ",
   "settings.kanban.newBoard": "Bảng Kanban mới",
   "settings.kanban.newBoardHint": "Tạo bảng từ tài khoản hiện tại",
   "settings.label": "Thiết lập",

@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Rimuovi questa scheda Kanban",
   "settings.kanban.deleteBoardText": "Eliminare %1$s?",
+  "settings.kanban.lockScroll": "Blocca lo scorrimento durante il trascinamento",
+  "settings.kanban.lockScrollHint": "Le colonne restano al loro posto mentre trascini una scheda",
   "settings.kanban.newBoard": "Nuova bacheca Kanban",
   "settings.kanban.newBoardHint": "Creare una bacheca dai conti correnti",
   "settings.label": "Impostazioni",

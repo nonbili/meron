@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Remover este quadro Kanban",
   "settings.kanban.deleteBoardText": "Excluir %1$s?",
+  "settings.kanban.lockScroll": "Bloquear o deslocamento ao arrastar",
+  "settings.kanban.lockScrollHint": "As colunas ficam no lugar enquanto arrasta um cartão",
   "settings.kanban.newBoard": "Novo quadro Kanban",
   "settings.kanban.newBoardHint": "Crie um quadro a partir de contas correntes",
   "settings.label": "Configurações",

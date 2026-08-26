@@ -122,6 +122,11 @@ export type Settings = {
   kanbanPaneWidth: number
   /** Pixel width used by every expanded kanban column. */
   kanbanColumnWidth: number
+  /**
+   * Whether the board keeps its horizontal scroll position while a card or
+   * column is being dragged, instead of auto-scrolling toward the pointer.
+   */
+  kanbanLockScroll: boolean
   /** kanbanColumnKey -> whether the column is collapsed to a vertical bar. */
   kanbanMinimizedColumns: Record<string, boolean>
   /** Account ids hidden from the desktop side navigation. */
@@ -166,6 +171,7 @@ const DB_KEY = {
   threadListWidth: 'thread_list_width',
   kanbanPaneWidth: 'kanban_pane_width',
   kanbanColumnWidth: 'kanban_column_width',
+  kanbanLockScroll: 'kanban_lock_scroll',
   kanbanMinimizedColumns: 'kanban_minimized_columns',
   hiddenSideNavAccounts: 'hidden_sidenav_accounts',
   showUnifiedInboxInSideNav: 'show_unified_inbox_in_sidenav',
@@ -332,6 +338,7 @@ export const settings$ = observable<Settings>({
   threadListWidth: 350,
   kanbanPaneWidth: 33,
   kanbanColumnWidth: KANBAN_COLUMN_DEFAULT_WIDTH,
+  kanbanLockScroll: false,
   kanbanMinimizedColumns: {},
   hiddenSideNavAccounts: [],
   showUnifiedInboxInSideNav: true,
@@ -688,6 +695,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const columnWidth = prefs[DB_KEY.kanbanColumnWidth]
     if (typeof columnWidth === 'number' && Number.isFinite(columnWidth)) {
       settings$.kanbanColumnWidth.set(clampKanbanColumnWidth(columnWidth))
+    }
+
+    if (typeof prefs[DB_KEY.kanbanLockScroll] === 'boolean') {
+      settings$.kanbanLockScroll.set(prefs[DB_KEY.kanbanLockScroll] as boolean)
     }
 
     const minimizedColumns = sanitizeBooleanMap(prefs[DB_KEY.kanbanMinimizedColumns])

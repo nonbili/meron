@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Ta bort denna Kanban-bräda",
   "settings.kanban.deleteBoardText": "Ta bort %1$s?",
+  "settings.kanban.lockScroll": "Lås rullningen när du drar",
+  "settings.kanban.lockScrollHint": "Kolumnerna stannar på plats medan du drar ett kort",
   "settings.kanban.newBoard": "Ny Kanban-bräda",
   "settings.kanban.newBoardHint": "Skapa en styrelse från löpande konton",
   "settings.label": "Inställningar",

@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Entfernen Sie dieses Kanban-Board",
   "settings.kanban.deleteBoardText": "%1$s löschen?",
+  "settings.kanban.lockScroll": "Scrollen beim Ziehen sperren",
+  "settings.kanban.lockScrollHint": "Spalten bleiben an ihrem Platz, während du eine Karte ziehst",
   "settings.kanban.newBoard": "Neues Kanban-Board",
   "settings.kanban.newBoardHint": "Erstellen Sie ein Board aus Girokonten",
   "settings.label": "Einstellungen",

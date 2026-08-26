@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Καταργήστε αυτόν τον πίνακα Kanban",
   "settings.kanban.deleteBoardText": "Διαγραφή %1$s;",
+  "settings.kanban.lockScroll": "Κλείδωμα κύλισης κατά τη μεταφορά",
+  "settings.kanban.lockScrollHint": "Οι στήλες μένουν στη θέση τους όσο σύρετε μια κάρτα",
   "settings.kanban.newBoard": "Νέα πλακέτα Kanban",
   "settings.kanban.newBoardHint": "Δημιουργήστε έναν πίνακα από τρεχούμενους λογαριασμούς",
   "settings.label": "Ρυθμίσεις",

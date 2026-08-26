@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "قم بإزالة لوحة كانبان هذه",
   "settings.kanban.deleteBoardText": "هل تريد حذف %1$s؟",
+  "settings.kanban.lockScroll": "تثبيت التمرير أثناء السحب",
+  "settings.kanban.lockScrollHint": "تبقى الأعمدة في مكانها أثناء سحب البطاقة",
   "settings.kanban.newBoard": "لوحة كانبان الجديدة",
   "settings.kanban.newBoardHint": "إنشاء مجلس من الحسابات الجارية",
   "settings.label": "الإعدادات",

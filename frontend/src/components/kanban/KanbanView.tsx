@@ -38,6 +38,7 @@ export function KanbanView({ boardId }: { boardId: string }) {
   const accounts = useValue(accounts$)
   const foldersByAccount = useFoldersByAccount()
   const boards = useValue(settings$.kanbanBoards)
+  const lockScroll = useValue(settings$.kanbanLockScroll)
   const globalFilter = useValue(kanban$.globalFilter)
   const searchQuery = useValue(kanban$.searchQuery)
   const searchScope = useValue(kanban$.searchScope)
@@ -278,7 +279,12 @@ export function KanbanView({ boardId }: { boardId: string }) {
             }}
           />
         )}
-        <BoardMenu filterMode={globalFilter} onFilterChange={setGlobalKanbanFilter} onAddColumn={openDialog} />
+        <BoardMenu
+          boardId={boardId}
+          filterMode={globalFilter}
+          onFilterChange={setGlobalKanbanFilter}
+          onAddColumn={openDialog}
+        />
       </div>
       {dialogOpen && (
         <AddColumnDialog
@@ -302,6 +308,10 @@ export function KanbanView({ boardId }: { boardId: string }) {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        // Locked boards stay put: a drag never scrolls the columns out from
+        // under the pointer, so a curated set of visible columns keeps its
+        // place. Off-screen columns are still reachable via "Move to…".
+        autoScroll={!lockScroll}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={() => setDragPreview(null)}

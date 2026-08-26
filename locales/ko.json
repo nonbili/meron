@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "이 Kanban 보드 제거",
   "settings.kanban.deleteBoardText": "%1$s을(를) 삭제하시겠습니까?",
+  "settings.kanban.lockScroll": "드래그 중 스크롤 잠금",
+  "settings.kanban.lockScrollHint": "카드를 드래그해도 열이 제자리에 유지됩니다",
   "settings.kanban.newBoard": "새로운 칸반 보드",
   "settings.kanban.newBoardHint": "현재 계정에서 보드 만들기",
   "settings.label": "설정",

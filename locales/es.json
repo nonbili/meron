@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Eliminar este tablero Kanban",
   "settings.kanban.deleteBoardText": "¿Eliminar %1$s?",
+  "settings.kanban.lockScroll": "Bloquear el desplazamiento al arrastrar",
+  "settings.kanban.lockScrollHint": "Las columnas se quedan en su sitio mientras arrastras una tarjeta",
   "settings.kanban.newBoard": "Nuevo tablero Kanban",
   "settings.kanban.newBoardHint": "Crear un tablero a partir de cuentas corrientes",
   "settings.label": "Ajustes",

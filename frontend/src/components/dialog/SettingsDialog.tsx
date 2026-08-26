@@ -14,6 +14,7 @@ import {
   Trash2,
   Camera,
   Columns3,
+  Lock,
   Globe,
   KeyRound,
   SpellCheck,
@@ -366,6 +367,7 @@ function GeneralSection() {
   const spellCheck = useValue(settings$.spellCheck)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
+  const kanbanLockScroll = useValue(settings$.kanbanLockScroll)
   const language = useValue(settings$.language)
 
   return (
@@ -461,6 +463,13 @@ function GeneralSection() {
             const width = Number(value)
             if (Number.isFinite(width)) settings$.kanbanColumnWidth.set(clampKanbanColumnWidth(width))
           }}
+        />
+        <ToggleRow
+          icon={<Lock size={15} />}
+          title={t('settings.kanban.lockScroll')}
+          hint={t('settings.kanban.lockScrollHint')}
+          checked={kanbanLockScroll}
+          onChange={() => settings$.kanbanLockScroll.set(!kanbanLockScroll)}
         />
       </SettingsGroup>
 

@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Supprimer ce tableau Kanban",
   "settings.kanban.deleteBoardText": "Supprimer %1$s ?",
+  "settings.kanban.lockScroll": "Verrouiller le défilement pendant le glisser-déposer",
+  "settings.kanban.lockScrollHint": "Les colonnes restent en place pendant que vous faites glisser une carte",
   "settings.kanban.newBoard": "Nouveau tableau Kanban",
   "settings.kanban.newBoardHint": "Créer un tableau à partir de comptes courants",
   "settings.label": "Paramètres",

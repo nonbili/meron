@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "このカンバンボードを削除します",
   "settings.kanban.deleteBoardText": "%1$s を削除しますか?",
+  "settings.kanban.lockScroll": "ドラッグ中のスクロールを固定",
+  "settings.kanban.lockScrollHint": "カードをドラッグしても列の位置は変わりません",
   "settings.kanban.newBoard": "新しいカンバンボード",
   "settings.kanban.newBoardHint": "現在の口座からボードを作成する",
   "settings.label": "設定",

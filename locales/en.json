@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Remove this Kanban board",
   "settings.kanban.deleteBoardText": "Delete %1$s?",
+  "settings.kanban.lockScroll": "Lock scroll while dragging",
+  "settings.kanban.lockScrollHint": "Columns stay put while you drag a card",
   "settings.kanban.newBoard": "New Kanban board",
   "settings.kanban.newBoardHint": "Create a board from current accounts",
   "settings.label": "Settings",

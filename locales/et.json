@@ -653,6 +653,8 @@
   "settings.kanban.columnWidthValue": "%1$ddp",
   "settings.kanban.deleteBoardHint": "Eemaldage see Kanbani tahvel",
   "settings.kanban.deleteBoardText": "Kas kustutada %1$s?",
+  "settings.kanban.lockScroll": "Lukusta kerimine lohistamise ajal",
+  "settings.kanban.lockScrollHint": "Veerud püsivad paigal, kui kaarti lohistad",
   "settings.kanban.newBoard": "Uus Kanbani tahvel",
   "settings.kanban.newBoardHint": "Looge arvelduskontodest tahvel",
   "settings.label": "Seaded",
