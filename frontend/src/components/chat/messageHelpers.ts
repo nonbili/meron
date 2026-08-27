@@ -286,8 +286,14 @@ export function normalizeBodyText(text: string) {
   )
 }
 
-export function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** Cheap content key for work cached per message body: two bodies of the same
+ *  length that differ still get different keys, which a length alone would not. */
+export function bodyContentKey(body: string): string {
+  let hash = 0
+  for (let index = 0; index < body.length; index += 1) {
+    hash = (Math.imul(hash, 31) + body.charCodeAt(index)) | 0
+  }
+  return `${body.length}:${hash}`
 }
 
 export type MessageInlinePart = { type: 'text' | 'link'; content: string; label?: string }
@@ -353,6 +359,53 @@ export function parseInlineMessageContent(text: string): MessageInlinePart[] {
   }
 
   return elements
+}
+
+/** The blocks a normalized plain body renders as: fenced code split out, the
+ *  rest parsed into inline text and links. */
+export function messageContentBlocks(bodyText: string): MessageContentBlock[] {
+  const hasCodeFence = bodyText.split('\n').some((line) => line.trimStart().startsWith('```'))
+  return hasCodeFence
+    ? splitFencedCodeBlocks(bodyText)
+    : [{ type: 'inline', parts: parseInlineMessageContent(bodyText) }]
+}
+
+export type InlineMarkupChunk = { type: 'plain' | 'bold' | 'italic' | 'code'; text: string }
+
+/** Split a run of body text into its inline markup chunks, with the markers
+ *  stripped: the renderer wraps each in its element, and the search counter
+ *  reads the same texts, so the two agree on what is highlightable. */
+export function splitInlineMarkup(content: string): InlineMarkupChunk[] {
+  return content.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*\n]+\*)/g).map((chunk): InlineMarkupChunk => {
+    const bold = chunk.match(/^\*\*([^*]+)\*\*$/)
+    if (bold) return { type: 'bold', text: bold[1] }
+    const italic = chunk.match(/^\*([^*\n]+)\*$/)
+    if (italic) return { type: 'italic', text: italic[1] }
+    const inlineCode = chunk.match(/^`([^`\n]+)`$/)
+    if (inlineCode) return { type: 'code', text: inlineCode[1] }
+    return { type: 'plain', text: chunk }
+  })
+}
+
+/**
+ * Every string the plain-text body renderer can highlight, in render order.
+ * Fenced code blocks and shortened link URLs are rendered as-is and never
+ * marked, so they are left out — counting them would make the search bar
+ * promise matches no <mark> ever lands on.
+ */
+export function plainHighlightTexts(body: string): string[] {
+  const blocks = messageContentBlocks(normalizeBodyText(body))
+
+  const texts: string[] = []
+  for (const block of blocks) {
+    if (block.type === 'code') continue
+    for (const part of block.parts) {
+      const content = part.type === 'link' ? part.label : part.content
+      if (!content) continue
+      for (const chunk of splitInlineMarkup(content)) texts.push(chunk.text)
+    }
+  }
+  return texts
 }
 
 /** Extract the bare email address from a single "Name <addr>" entry,

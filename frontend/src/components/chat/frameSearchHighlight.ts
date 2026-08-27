@@ -7,6 +7,10 @@ const HIT_CLASS = 'meron-search-hit'
 const ACTIVE_CLASS = 'meron-search-hit-active'
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA'])
 
+/** A slice of one text to wrap: [from, to) of that text, and which hit it is
+ *  part of, counting from 0 in document order. */
+export type MatchRange = [number, number, number]
+
 /** Undo a previous highlight pass, restitching the text nodes it split. */
 export function clearFrameHighlights(doc: Document) {
   const marks = doc.querySelectorAll<HTMLElement>(`mark.${HIT_CLASS}`)
@@ -20,7 +24,7 @@ export function clearFrameHighlights(doc: Document) {
 }
 
 /** Every rendered text node in document order, skipping non-content elements. */
-function collectTextNodes(doc: Document): Text[] {
+export function collectTextNodes(doc: Document): Text[] {
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement
@@ -85,14 +89,14 @@ function foldWithSourceMap(texts: string[]): { folded: string; sourceStart: numb
 /**
  * Locate `needle` in the concatenation of `texts`, case-insensitively, and cut
  * each match back into per-text ranges: `ranges` maps a text's index to the
- * [from, to) slices of it to wrap, in order. Split out from the DOM work so the
+ * [from, to, hit) slices of it to wrap, in order, where `hit` is the match's
+ * position in the document — a match spanning markup yields one slice per text
+ * it covers, all carrying the same hit number, so the search bar can count and
+ * navigate occurrences rather than messages. Split out from the DOM work so the
  * offset arithmetic — which is what makes a match span markup — is testable.
  */
-export function matchRanges(
-  texts: string[],
-  rawNeedle: string,
-): { hits: number; ranges: Map<number, Array<[number, number]>> } {
-  const ranges = new Map<number, Array<[number, number]>>()
+export function matchRanges(texts: string[], rawNeedle: string): { hits: number; ranges: Map<number, MatchRange[]> } {
+  const ranges = new Map<number, MatchRange[]>()
   const needle = foldQuery(rawNeedle)
   if (!needle) return { hits: 0, ranges }
 
@@ -127,8 +131,8 @@ export function matchRanges(
       const to = Math.min(matchEnd, end) - start
       if (to > from) {
         const list = ranges.get(index)
-        if (list) list.push([from, to])
-        else ranges.set(index, [[from, to]])
+        if (list) list.push([from, to, hits - 1])
+        else ranges.set(index, [[from, to, hits - 1]])
       }
       cursor = index
     }
@@ -138,50 +142,58 @@ export function matchRanges(
 }
 
 /**
- * Wrap every case-insensitive occurrence of `query` in a <mark>. `active` marks
- * the message the search is currently parked on, matching the plain renderer's
- * stronger highlight.
+ * Wrap every case-insensitive occurrence of `query` in a <mark>. `activeHit` is
+ * the index of the occurrence the search is currently parked on within this
+ * document (-1 when the search is parked elsewhere); it gets the stronger
+ * highlight, matching the plain renderer.
  *
  * Matching runs over the concatenation of the body's text nodes rather than
  * each node on its own, so a query spanning markup ("hello world" across
  * `<span>Hello</span> <strong>world</strong>") still highlights — it is cut back
- * into one <mark> per node the match covers. Returns the number of hits.
+ * into one <mark> per node the match covers. Returns the number of hits and the
+ * first <mark> of the active one, which the caller scrolls to.
  */
-export function applyFrameHighlights(doc: Document, query: string, active: boolean): number {
+export function applyFrameHighlights(
+  doc: Document,
+  query: string,
+  activeHit: number,
+): { hits: number; activeMark: HTMLElement | null } {
   clearFrameHighlights(doc)
   // matchRanges folds the case of both sides itself, so the query goes in raw.
   const needle = query.trim()
-  if (!needle || !doc.body) return 0
+  if (!needle || !doc.body) return { hits: 0, activeMark: null }
 
   const nodes = collectTextNodes(doc)
-  if (nodes.length === 0) return 0
+  if (nodes.length === 0) return { hits: 0, activeMark: null }
 
   const { hits, ranges } = matchRanges(
     nodes.map((node) => node.nodeValue ?? ''),
     needle,
   )
 
-  const className = active ? `${HIT_CLASS} ${ACTIVE_CLASS}` : HIT_CLASS
+  let activeMark: HTMLElement | null = null
   for (const [index, list] of ranges) {
     const node = nodes[index]
     const text = node.nodeValue ?? ''
     const fragment = doc.createDocumentFragment()
     let cursor = 0
-    for (const [from, to] of list) {
+    for (const [from, to, hit] of list) {
       // Ranges arrive in order; a rewind would mean two matches landed on the
       // same character, which must not duplicate the text around it.
       if (to <= cursor) continue
       const start = Math.max(from, cursor)
       if (start > cursor) fragment.appendChild(doc.createTextNode(text.slice(cursor, start)))
       const mark = doc.createElement('mark')
-      mark.className = className
+      const active = hit === activeHit
+      mark.className = active ? `${HIT_CLASS} ${ACTIVE_CLASS}` : HIT_CLASS
       mark.textContent = text.slice(start, to)
       fragment.appendChild(mark)
+      if (active && !activeMark) activeMark = mark
       cursor = to
     }
     if (cursor < text.length) fragment.appendChild(doc.createTextNode(text.slice(cursor)))
     node.parentNode?.replaceChild(fragment, node)
   }
 
-  return hits
+  return { hits, activeMark }
 }

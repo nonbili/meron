@@ -11,10 +11,15 @@ export const thread$ = observable({
   // Bumped to pull focus into the thread search input, e.g. when ⌘/Ctrl+F is
   // pressed while the bar is already open (opening it alone focuses it).
   searchFocus: 0,
+  // Index of the focused match among every occurrence in the thread — not among
+  // matching messages: one message can hold several.
   activeSearchIndex: 0,
   // Message id of the currently-focused search match; written by MessagePane
   // when search/index change, read by MessageBubble for highlight styling.
   activeSearchId: '',
+  // Which occurrence within that message is focused (-1 when the message
+  // matches only in its subject or sender, so no <mark> is the active one).
+  activeSearchOffset: -1,
   // Message id to scroll to when its thread next renders — set by direct-jump
   // actions such as starred items and shared media, consumed once by
   // useConversationScroll.
@@ -43,6 +48,8 @@ export function resetThreadView() {
   thread$.search.set('')
   thread$.searchOpen.set(false)
   thread$.activeSearchIndex.set(0)
+  thread$.activeSearchId.set('')
+  thread$.activeSearchOffset.set(-1)
   // pendingScrollMessageId deliberately survives: it's set just before the
   // thread switch that triggers this reset.
   thread$.flashMessageId.set('')

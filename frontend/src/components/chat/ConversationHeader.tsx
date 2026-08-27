@@ -39,7 +39,7 @@ export function ConversationHeader({
   isRSS,
   conversationMode,
   setQuickConversationMode,
-  searchMatches,
+  matchCount,
   activeSearchIndex,
   goToSearchMatch,
   desktopSearchInputRef,
@@ -48,7 +48,8 @@ export function ConversationHeader({
   isRSS: boolean
   conversationMode: ConversationMode
   setQuickConversationMode: (mode: ConversationMode) => void
-  searchMatches: string[]
+  /** Total occurrences in the thread, not matching messages. */
+  matchCount: number
   activeSearchIndex: number
   goToSearchMatch: (direction: -1 | 1) => void
   desktopSearchInputRef: RefObject<HTMLInputElement | null>
@@ -194,13 +195,11 @@ export function ConversationHeader({
                 <X size={12} />
               </button>
               <span className="w-10 text-center text-[0.625rem] font-semibold text-secondary">
-                {normalizedThreadSearch
-                  ? `${searchMatches.length ? activeSearchIndex + 1 : 0}/${searchMatches.length}`
-                  : ''}
+                {normalizedThreadSearch ? `${matchCount ? activeSearchIndex + 1 : 0}/${matchCount}` : ''}
               </span>
               <button
                 onClick={() => goToSearchMatch(-1)}
-                disabled={searchMatches.length === 0}
+                disabled={matchCount === 0}
                 className="flex h-6 w-6 items-center justify-center rounded-lg text-secondary hover:bg-active disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                 title={t('chat.previousMatch')}
               >
@@ -208,7 +207,7 @@ export function ConversationHeader({
               </button>
               <button
                 onClick={() => goToSearchMatch(1)}
-                disabled={searchMatches.length === 0}
+                disabled={matchCount === 0}
                 className="flex h-6 w-6 items-center justify-center rounded-lg text-secondary hover:bg-active disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                 title={t('chat.nextMatch')}
               >

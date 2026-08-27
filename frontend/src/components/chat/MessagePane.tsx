@@ -133,7 +133,7 @@ export function MessagePane() {
   const threadSearchFocus = useValue(thread$.searchFocus)
   const desktopThreadSearchInputRef = useRef<HTMLInputElement | null>(null)
   const mobileThreadSearchInputRef = useRef<HTMLInputElement | null>(null)
-  const { threadSearchOpen, searchMatches, activeSearchIndex, activeSearchId, goToSearchMatch } =
+  const { threadSearchOpen, searchMatches, matchCount, activeSearchIndex, activeSearchId, goToSearchMatch } =
     useThreadSearch(displayMessages)
   const {
     scrollRef,
@@ -225,6 +225,10 @@ export function MessagePane() {
     return () => window.cancelAnimationFrame(frame)
   }, [threadSearchOpen, threadSearchFocus])
 
+  // Bring the message holding the active match into view — which also mounts an
+  // HTML body's frame. Each body then scrolls to the exact <mark> it rendered,
+  // including when the search moves between two matches in the same message,
+  // which is why the offset is deliberately not a dependency here.
   useEffect(() => {
     if (!activeSearchId) return
     const container = scrollRef.current
@@ -239,7 +243,7 @@ export function MessagePane() {
         isRSS={isRSS}
         conversationMode={conversationMode}
         setQuickConversationMode={setQuickConversationMode}
-        searchMatches={searchMatches}
+        matchCount={matchCount}
         activeSearchIndex={activeSearchIndex}
         goToSearchMatch={goToSearchMatch}
         desktopSearchInputRef={desktopThreadSearchInputRef}
@@ -260,7 +264,7 @@ export function MessagePane() {
 
       {threadSearchOpen && (
         <ThreadSearchBarMobile
-          searchMatches={searchMatches}
+          matchCount={matchCount}
           activeSearchIndex={activeSearchIndex}
           goToSearchMatch={goToSearchMatch}
           inputRef={mobileThreadSearchInputRef}

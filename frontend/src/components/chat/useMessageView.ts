@@ -3,6 +3,7 @@ import { accountIdentities, accounts$ } from '../../states/accounts'
 import { getActiveThread, isDraftFolder } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
+import type { ConversationMode } from '../../states/thread'
 import type { Account, Message } from '../../types'
 import {
   extractAddr,
@@ -15,6 +16,17 @@ import {
 
 export type MessageView = ReturnType<typeof useMessageView>
 
+/** The render mode the open thread's account is on: the session override when
+ *  the user flipped it in the header, otherwise the account setting. */
+export function useConversationMode(): ConversationMode {
+  const accounts = useValue(accounts$)
+  const activeThread = useValue(getActiveThread)
+  const modeOverrides = useValue(thread$.conversationModeOverrides)
+  const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null
+  if (!activeAccount) return 'plain'
+  return modeOverrides[activeAccount.id] ?? ((activeAccount.conversation_html ?? true) ? 'html' : 'plain')
+}
+
 /**
  * Everything both conversation layouts derive from a message: who sent it, which
  * body renderer applies, and the media split. MessageBubble (chat) and
@@ -25,9 +37,10 @@ export function useMessageView(message: Message) {
   const accounts = useValue(accounts$)
   const search = useValue(thread$.search)
   const activeSearchId = useValue(thread$.activeSearchId)
+  const activeSearchOffset = useValue(thread$.activeSearchOffset)
   const activeThread = useValue(getActiveThread)
   const revealedMap = useValue(thread$.revealedRemote)
-  const modeOverrides = useValue(thread$.conversationModeOverrides)
+  const conversationMode = useConversationMode()
   const allowedSenders = useValue(settings$.remoteImageSenders)
 
   const account: Account | undefined = accounts.find((acc) => acc.id === message.account_id)
@@ -39,8 +52,6 @@ export function useMessageView(message: Message) {
   const isDraft = isDraftFolder(message.folder_id, message.account_id)
   const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null
   const isRSS = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
-  const accountConversationMode = (activeAccount?.conversation_html ?? true) ? 'html' : 'plain'
-  const conversationMode = activeAccount ? (modeOverrides[activeAccount.id] ?? accountConversationMode) : 'plain'
 
   const revealed = !!revealedMap[message.id]
   const { attachmentImages, videos, hiddenRemoteCount, files } = getVisibleMedia(
@@ -92,6 +103,9 @@ export function useMessageView(message: Message) {
     useHtmlBody,
     normalizedSearchQuery,
     activeSearchMatch: activeSearchId === message.id,
+    /** Which occurrence inside this message the search is parked on, -1 when
+     *  it's parked on another message (or on a subject-only match). */
+    activeSearchOffset: activeSearchId === message.id ? activeSearchOffset : -1,
     // Outgoing messages have no sender name worth showing, and without
     // recipients a reply and a forward of the same text are indistinguishable —
     // so recipients take the sender slot, the way Gmail's "to …" line does.

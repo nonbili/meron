@@ -3,6 +3,7 @@ import { useTranslation } from '../../lib/i18n'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
 import { prepareBubbleHtml } from './bubbleHtml'
+import { bodyContentKey } from './messageHelpers'
 import { applyFrameHighlights, clearFrameHighlights } from './frameSearchHighlight'
 import { frameMetrics, measureFrameHeight } from './frameHeight'
 import { useMessageFrameFont } from './useMessageFrameFont'
@@ -12,14 +13,6 @@ const HEIGHT_CHANGE_EPSILON = 1
 const FRAME_OVERSCAN = '150% 0px'
 const measuredHeights = new Map<string, number>()
 
-function cacheKeyForHtml(html: string) {
-  let hash = 0
-  for (let index = 0; index < html.length; index += 1) {
-    hash = (Math.imul(hash, 31) + html.charCodeAt(index)) | 0
-  }
-  return `${html.length}:${hash}`
-}
-
 // Renders an email's HTML body in a self-sizing sandboxed iframe, wraps each
 // standalone <pre> in a copy-code affordance and tracks the content height so
 // the frame grows to fit while the bubble wrapper owns scrolling.
@@ -27,7 +20,7 @@ export function BubbleHtmlFrame({
   html,
   allowRemote = false,
   searchQuery = '',
-  activeSearchMatch = false,
+  activeSearchOffset = -1,
   onLinkHover,
   onUserScrollIntent,
 }: {
@@ -36,7 +29,8 @@ export function BubbleHtmlFrame({
   allowRemote?: boolean
   /** In-thread search query; matches are marked inside the frame document. */
   searchQuery?: string
-  activeSearchMatch?: boolean
+  /** Which of this frame's matches the search is parked on, -1 for none. */
+  activeSearchOffset?: number
   onLinkHover?: (url: string | null) => void
   onUserScrollIntent?: () => void
 }) {
@@ -52,7 +46,7 @@ export function BubbleHtmlFrame({
   const cacheKey = useMemo(
     // Remote content is part of the key too: revealing it usually makes the
     // document taller, so a cached height from the blocked render is stale.
-    () => `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${cacheKeyForHtml(html)}`,
+    () => `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${bodyContentKey(html)}`,
     [html, messageFont, allowRemote],
   )
   const cachedHeight = measuredHeights.get(cacheKey)
@@ -260,12 +254,16 @@ export function BubbleHtmlFrame({
   // that outlives the search free of stale marks.
   useEffect(() => {
     if (!frameDoc) return
-    applyFrameHighlights(frameDoc, searchQuery, activeSearchMatch)
+    const { activeMark } = applyFrameHighlights(frameDoc, searchQuery, activeSearchOffset)
+    // The frame doesn't scroll (it's sized to its content), so scrolling the
+    // mark into view moves the conversation container around it — which is how
+    // stepping between two hits inside one long message goes anywhere.
+    activeMark?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     return () => {
       // The document is gone once the frame reloads; ignore that case.
       if (frameDoc.defaultView) clearFrameHighlights(frameDoc)
     }
-  }, [frameDoc, searchQuery, activeSearchMatch])
+  }, [frameDoc, searchQuery, activeSearchOffset])
 
   return (
     <>

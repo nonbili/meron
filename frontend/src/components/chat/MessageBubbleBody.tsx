@@ -1,16 +1,18 @@
+import { useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { Copy } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import type { Message } from '../../types'
 import {
   MESSAGE_BODY_MAX_HEIGHT,
-  escapeRegExp,
   getShortenedLinkText,
+  messageContentBlocks,
   normalizeBodyText,
-  parseInlineMessageContent,
-  splitFencedCodeBlocks,
+  splitInlineMarkup,
 } from './messageHelpers'
 import { BubbleHtmlFrame } from './BubbleHtmlFrame'
+import { matchRanges } from './frameSearchHighlight'
 
 // The message body: the sandboxed HTML view, or the plain/markdown renderer with
 // inline bold/italic/code, fenced code blocks (with copy buttons) and links,
@@ -20,7 +22,7 @@ export function MessageBubbleBody({
   useHtmlBody,
   allowRemote = false,
   normalizedSearchQuery,
-  activeSearchMatch,
+  activeSearchOffset,
   fullHeight = false,
   onLinkHover,
   onUserScrollIntent,
@@ -31,7 +33,9 @@ export function MessageBubbleBody({
    *  sender, or a reveal the user just made). */
   allowRemote?: boolean
   normalizedSearchQuery: string
-  activeSearchMatch: boolean
+  /** Which of this message's matches the search is parked on, -1 for none:
+   *  that one gets the stronger highlight and is what the pane scrolls to. */
+  activeSearchOffset: number
   /** Grow to fit the content instead of scrolling inside a capped box — the
    *  traditional layout lets the conversation itself do the scrolling. */
   fullHeight?: boolean
@@ -39,6 +43,17 @@ export function MessageBubbleBody({
   onUserScrollIntent?: () => void
 }) {
   const { t } = useTranslation()
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  // The active <mark> is scrolled to from here, where it is rendered — the pane
+  // only knows which message to bring into view, and its own effect runs a
+  // render before this body has moved its highlight. (The HTML frame does the
+  // same for the marks it places inside its document.)
+  useEffect(() => {
+    if (activeSearchOffset < 0) return
+    const mark = bodyRef.current?.querySelector<HTMLElement>('[data-search-active="true"]')
+    mark?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [activeSearchOffset, normalizedSearchQuery, message.id])
+
   const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
   const boxClass = fullHeight ? 'relative' : 'relative overflow-y-auto'
   if (useHtmlBody) {
@@ -48,7 +63,7 @@ export function MessageBubbleBody({
           html={message.body_html!}
           allowRemote={allowRemote}
           searchQuery={normalizedSearchQuery}
-          activeSearchMatch={activeSearchMatch}
+          activeSearchOffset={activeSearchOffset}
           onLinkHover={onLinkHover}
           onUserScrollIntent={onUserScrollIntent}
         />
@@ -57,63 +72,78 @@ export function MessageBubbleBody({
   }
 
   const bodyText = normalizeBodyText(message.body)
-  const hasCodeFence = bodyText.split('\n').some((line) => line.trimStart().startsWith('```'))
-  const blocks = hasCodeFence
-    ? splitFencedCodeBlocks(bodyText)
-    : [{ type: 'inline' as const, parts: parseInlineMessageContent(bodyText) }]
+  const blocks = messageContentBlocks(bodyText)
+  // Matches are numbered as they are rendered, in the same order the search bar
+  // counted them (plainHighlightTexts walks these blocks), so occurrence n here
+  // is occurrence n there. Reset on every render pass.
+  let matchOrdinal = 0
 
-  function renderHighlightedPlainText(content: string, keyPrefix: string) {
+  // matchRanges is the matcher the search bar counted with (and the one the HTML
+  // frame marks with), so every match it counted gets a <mark> here — a private
+  // regex would disagree with it over case folding: /i/i does not match "İ".
+  function renderHighlightedPlainText(content: string, keyPrefix: string): ReactNode {
     if (!normalizedSearchQuery) return content
-    const regex = new RegExp(`(${escapeRegExp(normalizedSearchQuery)})`, 'ig')
-    return content.split(regex).map((chunk, index) => {
-      if (chunk.toLowerCase() !== normalizedSearchQuery.toLowerCase()) return chunk
-      return (
+    const hits = matchRanges([content], normalizedSearchQuery).ranges.get(0)
+    if (!hits) return content
+
+    const nodes: ReactNode[] = []
+    let cursor = 0
+    for (const [from, to] of hits) {
+      if (to <= cursor) continue
+      const start = Math.max(from, cursor)
+      if (start > cursor) nodes.push(content.slice(cursor, start))
+      const active = matchOrdinal === activeSearchOffset
+      matchOrdinal += 1
+      nodes.push(
         <mark
-          key={`${keyPrefix}-match-${index}`}
+          key={`${keyPrefix}-match-${start}`}
+          data-search-active={active ? 'true' : undefined}
           className={`rounded px-0.5 ${
-            activeSearchMatch ? 'bg-amber-300 text-black' : 'bg-amber-200/70 text-inherit dark:bg-amber-400/35'
+            active ? 'bg-amber-300 text-black' : 'bg-amber-200/70 text-inherit dark:bg-amber-400/35'
           }`}
         >
-          {chunk}
-        </mark>
+          {content.slice(start, to)}
+        </mark>,
       )
-    })
+      cursor = to
+    }
+    if (cursor < content.length) nodes.push(content.slice(cursor))
+    return nodes
   }
 
   function renderText(content: string, keyPrefix: string) {
-    const chunks = content.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*\n]+\*)/g)
-    return chunks.map((chunk, index) => {
-      const bold = chunk.match(/^\*\*([^*]+)\*\*$/)
-      if (bold) {
+    return splitInlineMarkup(content).map((chunk, index) => {
+      if (chunk.type === 'bold') {
         return (
           <strong key={`${keyPrefix}-${index}`} className="font-semibold">
-            {renderHighlightedPlainText(bold[1], `${keyPrefix}-bold-${index}`)}
+            {renderHighlightedPlainText(chunk.text, `${keyPrefix}-bold-${index}`)}
           </strong>
         )
       }
-      const italic = chunk.match(/^\*([^*\n]+)\*$/)
-      if (italic) {
+      if (chunk.type === 'italic') {
         return (
-          <em key={`${keyPrefix}-${index}`}>{renderHighlightedPlainText(italic[1], `${keyPrefix}-italic-${index}`)}</em>
+          <em key={`${keyPrefix}-${index}`}>
+            {renderHighlightedPlainText(chunk.text, `${keyPrefix}-italic-${index}`)}
+          </em>
         )
       }
-      const inlineCode = chunk.match(/^`([^`\n]+)`$/)
-      if (inlineCode) {
+      if (chunk.type === 'code') {
         return (
           <code
             key={`${keyPrefix}-${index}`}
             className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.9em] text-primary dark:bg-white/10"
           >
-            {renderHighlightedPlainText(inlineCode[1], `${keyPrefix}-code-${index}`)}
+            {renderHighlightedPlainText(chunk.text, `${keyPrefix}-code-${index}`)}
           </code>
         )
       }
-      return renderHighlightedPlainText(chunk, `${keyPrefix}-${index}`)
+      return renderHighlightedPlainText(chunk.text, `${keyPrefix}-${index}`)
     })
   }
 
   return (
     <div
+      ref={bodyRef}
       className={`${boxClass} -mr-3.5 pr-3.5 font-message text-[calc(0.9375rem*var(--me-message-scale))] leading-relaxed break-words whitespace-pre-wrap select-text font-normal tracking-[0.01em]`}
       style={boxStyle}
     >

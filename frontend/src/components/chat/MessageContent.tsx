@@ -126,7 +126,7 @@ export function MessageContent({
         useHtmlBody={view.useHtmlBody}
         allowRemote={view.remoteVisible}
         normalizedSearchQuery={view.normalizedSearchQuery}
-        activeSearchMatch={view.activeSearchMatch}
+        activeSearchOffset={view.activeSearchOffset}
         fullHeight={fullHeight}
         onLinkHover={onLinkHover}
         onUserScrollIntent={onUserScrollIntent}

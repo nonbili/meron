@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test'
 import {
-  escapeRegExp,
+  bodyContentKey,
   extractAddr,
   formatFileSize,
   formatMessageStamp,
@@ -142,9 +142,13 @@ describe('messageHelpers text and link helpers', () => {
     expect(getShortenedLinkText('not a url that is long enough to shorten')).toBe('not a url that is long enough …')
   })
 
-  it('normalizes body text and escapes regular expression syntax', () => {
+  it('normalizes body text', () => {
     expect(normalizeBodyText('\n- one\n* two\n+ three\n\n\n')).toBe('• one\n• two\n• three')
-    expect(escapeRegExp('[a+b].*')).toBe('\\[a\\+b\\]\\.\\*')
+  })
+
+  it('keys body content by more than its length', () => {
+    expect(bodyContentKey('abc')).toBe(bodyContentKey('abc'))
+    expect(bodyContentKey('abc')).not.toBe(bodyContentKey('abd'))
   })
 
   it('parses inline links and markdown links', () => {
