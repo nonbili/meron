@@ -426,6 +426,24 @@ function refreshFoldersAfterFlagChange(accountId: string | undefined) {
   }
 }
 
+// Click-to-open an attachment: the bridge hands it to the OS default
+// application. Types off its allowlist (executables, macro-capable documents,
+// archives — anything a default handler could turn into code execution) come
+// back `opened: false` and fall through to the save dialog, which stays the
+// behaviour for everything we won't open.
+export async function openAttachment(att: { key: string | null; filename: string }) {
+  if (!att.key) return
+  try {
+    const res = await invoke<{ opened: boolean; path?: string }>('mail.openAttachment', {
+      key: att.key,
+      filename: att.filename,
+    })
+    if (!res?.opened) await downloadAttachment(att)
+  } catch {
+    showToast(t('chat.couldNotOpenAttachment', { filename: att.filename }))
+  }
+}
+
 // Save a local attachment to disk via the native save dialog. The bytes already
 // live in the media cache (keyed); the bridge copies them to the chosen path.
 export async function downloadAttachment(att: { key: string | null; filename: string }) {

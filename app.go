@@ -301,6 +301,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.mailCopy(payload)
 	case "mail.saveAttachment":
 		return a.saveAttachment(payload)
+	case "mail.openAttachment":
+		return a.openAttachment(payload)
 	case "mail.saveEml":
 		return a.saveMessageEml(payload)
 	case "mail.copyImage":

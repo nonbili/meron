@@ -17,7 +17,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { openExternal } from '../../lib/native'
-import { downloadAttachment } from '../../states/mail'
+import { downloadAttachment, openAttachment } from '../../states/mail'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
@@ -224,8 +224,8 @@ export function ConversationDetailsPanel({
                     <button
                       type="button"
                       disabled={!downloadable}
-                      onClick={() => downloadAttachment(file)}
-                      title={downloadable ? t('chat.saveFile', { filename: file.filename }) : file.filename}
+                      onClick={() => openAttachment(file)}
+                      title={downloadable ? t('chat.openFile', { filename: file.filename }) : file.filename}
                       className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-l-xl p-2.5 text-left ${
                         downloadable
                           ? 'hover:bg-black/[0.05] dark:hover:bg-white/[0.05] cursor-pointer'
@@ -239,13 +239,18 @@ export function ConversationDetailsPanel({
                         <p className="truncate text-xs font-semibold text-primary">{file.filename}</p>
                         <p className="text-[0.625rem] text-secondary">{formatFileSize(file.size)}</p>
                       </div>
-                      {downloadable && (
-                        <Download
-                          size={15}
-                          className="shrink-0 text-secondary opacity-0 group-hover:opacity-100 transition-opacity"
-                        />
-                      )}
                     </button>
+                    {downloadable && (
+                      <button
+                        type="button"
+                        onClick={() => downloadAttachment(file)}
+                        title={t('chat.saveFile', { filename: file.filename })}
+                        aria-label={t('chat.saveFile', { filename: file.filename })}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-secondary opacity-0 transition group-hover:opacity-100 hover:bg-black/[0.06] hover:text-primary dark:hover:bg-white/[0.08] cursor-pointer focus-visible:opacity-100"
+                      >
+                        <Download size={15} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onShowInConversation(file.messageId)}

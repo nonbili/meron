@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -423,5 +424,47 @@ func TestMessageEmlSourceUsesUIDAndCurrentFolder(t *testing.T) {
 	}
 	if params["account"] != "acc" || params["folder"] != "Archive" || params["uid"] != uint32(42) {
 		t.Fatalf("source params = %#v", params)
+	}
+}
+
+func TestAttachmentOpenableAllowsViewersAndBlocksExecutables(t *testing.T) {
+	openable := []string{"report.pdf", "Photo.JPEG", "notes.md", "deck.pptx", "clip.mp4", "0.pdf"}
+	for _, name := range openable {
+		if !attachmentOpenable(name) {
+			t.Fatalf("expected %q to be openable", name)
+		}
+	}
+
+	// Double extensions are judged by the last one, and anything that can carry
+	// code stays behind the save dialog.
+	blocked := []string{"invoice.pdf.exe", "setup.msi", "run.sh", "launcher.desktop", "budget.xlsm", "old.doc", "report.odt", "sheet.ods", "files.zip", "noext"}
+	for _, name := range blocked {
+		if attachmentOpenable(name) {
+			t.Fatalf("expected %q not to be openable", name)
+		}
+	}
+}
+
+func TestOpenAttachmentRefusesTraversalAndUnlistedTypes(t *testing.T) {
+	if _, err := mediaFilePath(""); err == nil {
+		t.Fatal("expected an empty key to be rejected")
+	}
+	// A traversing key is neutralised rather than escaping the media root.
+	escaped, err := mediaFilePath("../../etc/passwd")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(escaped, mediaDir()+string(os.PathSeparator)) {
+		t.Fatalf("key escaped the media root: %s", escaped)
+	}
+
+	app := &App{}
+
+	res, err := app.openAttachment(map[string]any{"key": "acc/INBOX/1/0.exe", "filename": "invoice.exe"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opened, _ := res.(map[string]any)["opened"].(bool); opened {
+		t.Fatal("expected an unlisted type not to be opened")
 	}
 }

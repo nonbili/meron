@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -571,21 +572,30 @@ func (a *App) emptyFolder(payload map[string]any) (any, error) {
 	})
 }
 
-// saveAttachment copies an attachment the sidecar already wrote under the media
-// dir (served at /media/<key>) to a user-chosen path via a native save dialog.
-// The key is path-cleaned and confined to the media root to block traversal.
-func (a *App) saveAttachment(payload map[string]any) (any, error) {
-	key, _ := payload["key"].(string)
-	filename, _ := payload["filename"].(string)
+// mediaFilePath resolves an attachment key the sidecar wrote under the media dir
+// (served at /media/<key>) to an absolute path. The key is path-cleaned and
+// confined to the media root to block traversal.
+func mediaFilePath(key string) (string, error) {
 	if key == "" {
-		return nil, errors.New("missing attachment key")
+		return "", errors.New("missing attachment key")
 	}
-
 	root := mediaDir()
 	// Cleaning a rooted "/"+key strips any "..", then Join confines it to root.
 	src := filepath.Join(root, filepath.Clean("/"+key))
 	if rel, err := filepath.Rel(root, src); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return nil, errors.New("invalid attachment key")
+		return "", errors.New("invalid attachment key")
+	}
+	return src, nil
+}
+
+// saveAttachment copies an attachment the sidecar already wrote under the media
+// dir to a user-chosen path via a native save dialog.
+func (a *App) saveAttachment(payload map[string]any) (any, error) {
+	key, _ := payload["key"].(string)
+	filename, _ := payload["filename"].(string)
+	src, err := mediaFilePath(key)
+	if err != nil {
+		return nil, err
 	}
 	if filename == "" {
 		filename = filepath.Base(src)
@@ -603,23 +613,121 @@ func (a *App) saveAttachment(payload map[string]any) (any, error) {
 		return map[string]any{"saved": false}, nil // user cancelled
 	}
 
+	if err := copyFileTo(src, dest, 0o666); err != nil {
+		return nil, err
+	}
+	return map[string]any{"saved": true, "path": dest}, nil
+}
+
+// openableAttachmentExts is the allowlist of attachment types click-to-open
+// hands to the OS. Handing an arbitrary emailed file to the default handler is
+// how an .exe, a .desktop launcher or a macro-bearing document ends up one
+// click from running, so anything not listed here falls back to the save
+// dialog. Only formats whose extension itself rules macros out are listed:
+// .docx/.xlsx/.pptx cannot hold them (that needs .docm and friends), while
+// legacy .doc/.xls/.ppt and the whole ODF family can carry Basic macros inside
+// the package with no distinct extension to filter on, so they stay out.
+var openableAttachmentExts = map[string]bool{
+	// Documents
+	".pdf": true, ".txt": true, ".md": true, ".csv": true, ".log": true,
+	".json": true, ".xml": true, ".ics": true, ".vcf": true,
+	".docx": true, ".xlsx": true, ".pptx": true,
+	// Images
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".bmp": true, ".tif": true, ".tiff": true, ".heic": true, ".avif": true,
+	// Audio / video
+	".mp3": true, ".m4a": true, ".wav": true, ".flac": true, ".ogg": true,
+	".opus": true, ".aac": true,
+	".mp4": true, ".m4v": true, ".mov": true, ".webm": true, ".mkv": true,
+}
+
+// attachmentOpenable reports whether a name's extension is on the click-to-open
+// allowlist. Only the final extension counts, so "invoice.pdf.exe" is judged as
+// .exe.
+func attachmentOpenable(name string) bool {
+	return openableAttachmentExts[strings.ToLower(filepath.Ext(name))]
+}
+
+const attachmentOpenDirName = "attachment-open"
+
+// attachmentOpenTTL is how long a copy handed to an external viewer is kept.
+// The viewer can still hold the file open long after the click, so the sweep
+// runs on the next open and only on stale entries.
+const attachmentOpenTTL = 24 * time.Hour
+
+// openAttachment hands an attachment to the OS default application. The cached
+// bytes live under the media dir named "<index>.<ext>", which is what a viewer
+// would put in its title bar, so they are copied into a per-open cache
+// directory under the real filename first. A type off the allowlist is not
+// opened at all: the caller falls back to the save dialog on {"opened": false}.
+func (a *App) openAttachment(payload map[string]any) (any, error) {
+	key, _ := payload["key"].(string)
+	filename, _ := payload["filename"].(string)
+	src, err := mediaFilePath(key)
+	if err != nil {
+		return nil, err
+	}
+	if filename == "" {
+		filename = filepath.Base(src)
+	}
+	// Both names matter: the key's extension is the one the sidecar derived
+	// from the original filename, and the copy's is what picks the handler.
+	name := safeFilename(filename)
+	if !attachmentOpenable(src) || !attachmentOpenable(name) {
+		return map[string]any{"opened": false}, nil
+	}
+
+	root := filepath.Join(appCacheDir(), attachmentOpenDirName)
+	pruneAttachmentOpenDir(root)
+	dir := filepath.Join(root, randomBase64URL(8))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	dest := filepath.Join(dir, name)
+	if err := copyFileTo(src, dest, 0o600); err != nil {
+		return nil, err
+	}
+	if err := openSystemFile(dest); err != nil {
+		return nil, err
+	}
+	return map[string]any{"opened": true, "path": dest}, nil
+}
+
+// pruneAttachmentOpenDir removes copies older than attachmentOpenTTL.
+func pruneAttachmentOpenDir(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-attachmentOpenTTL)
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(dir, entry.Name()))
+	}
+}
+
+// copyFileTo copies src over dest, creating dest with the given permissions.
+func copyFileTo(src, dest string, perm os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return nil, fmt.Errorf("open attachment: %w", err)
+		return fmt.Errorf("open attachment: %w", err)
 	}
 	defer in.Close()
-	out, err := os.Create(dest)
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, perm)
 	if err != nil {
-		return nil, fmt.Errorf("create destination: %w", err)
+		return fmt.Errorf("create destination: %w", err)
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
-		return nil, fmt.Errorf("write attachment: %w", err)
+		return fmt.Errorf("write attachment: %w", err)
 	}
 	if err := out.Close(); err != nil {
-		return nil, fmt.Errorf("write attachment: %w", err)
+		return fmt.Errorf("write attachment: %w", err)
 	}
-	return map[string]any{"saved": true, "path": dest}, nil
+	return nil
 }
 
 // emlFilename turns a subject into a safe ".eml" default filename for the save
@@ -718,20 +826,13 @@ func (a *App) saveMessageEml(payload map[string]any) (any, error) {
 }
 
 // readAttachment reads an attachment the sidecar already wrote under the media
-// dir (served at /media/<key>) and returns it base64-encoded, for pulling a
-// stored attachment back into the composer (e.g. "Edit as New Message"). The key
-// is path-cleaned and confined to the media root to block traversal.
+// dir and returns it base64-encoded, for pulling a stored attachment back into
+// the composer (e.g. "Edit as New Message").
 func (a *App) readAttachment(payload map[string]any) (any, error) {
 	key, _ := payload["key"].(string)
-	if key == "" {
-		return nil, errors.New("missing attachment key")
-	}
-
-	root := mediaDir()
-	// Cleaning a rooted "/"+key strips any "..", then Join confines it to root.
-	src := filepath.Join(root, filepath.Clean("/"+key))
-	if rel, err := filepath.Rel(root, src); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return nil, errors.New("invalid attachment key")
+	src, err := mediaFilePath(key)
+	if err != nil {
+		return nil, err
 	}
 
 	data, err := os.ReadFile(src)

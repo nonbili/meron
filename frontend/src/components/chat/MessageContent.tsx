@@ -2,7 +2,7 @@ import { Download, Image } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { revealMessageRemote } from '../../states/compose'
 import { setRemoteImageSender } from '../../states/settings'
-import { downloadAttachment } from '../../states/mail'
+import { downloadAttachment, openAttachment } from '../../states/mail'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 import { fileIconFor, formatFileSize, mediaSrc } from './messageHelpers'
@@ -132,33 +132,45 @@ export function MessageContent({
         onUserScrollIntent={onUserScrollIntent}
       />
 
-      {/* File attachments — click to save via native dialog (when on disk) */}
+      {/* File attachments — click opens in the default app, the icon saves via
+          the native dialog (both only when the bytes are on disk) */}
       {files.map((file, idx) => {
         const downloadable = !!file.key
         const FileIcon = fileIconFor(file.filename, file.mime)
         return (
-          <button
+          <div
             key={idx}
-            type="button"
-            disabled={!downloadable}
-            onClick={() => downloadAttachment(file)}
-            title={downloadable ? t('chat.saveFile', { filename: file.filename }) : file.filename}
-            className={`group mt-2.5 flex w-full items-center gap-2 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] p-2 text-xs font-semibold border border-border/20 text-left ${
-              downloadable ? 'hover:bg-black/[0.06] dark:hover:bg-white/[0.06] cursor-pointer' : 'cursor-default'
+            className={`group mt-2.5 flex w-full items-center rounded-xl bg-black/[0.03] dark:bg-white/[0.03] text-xs font-semibold border border-border/20 ${
+              downloadable ? 'hover:bg-black/[0.06] dark:hover:bg-white/[0.06]' : ''
             }`}
           >
-            <FileIcon size={15} className="text-accent shrink-0" />
-            <span className="truncate">{file.filename}</span>
-            <span className="text-[0.59375rem] text-secondary ml-auto shrink-0 font-normal">
-              {formatFileSize(file.size)}
-            </span>
+            <button
+              type="button"
+              disabled={!downloadable}
+              onClick={() => openAttachment(file)}
+              title={downloadable ? t('chat.openFile', { filename: file.filename }) : file.filename}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-l-xl p-2 text-left ${
+                downloadable ? 'cursor-pointer' : 'cursor-default'
+              }`}
+            >
+              <FileIcon size={15} className="text-accent shrink-0" />
+              <span className="truncate">{file.filename}</span>
+              <span className="text-[0.59375rem] text-secondary ml-auto shrink-0 font-normal">
+                {formatFileSize(file.size)}
+              </span>
+            </button>
             {downloadable && (
-              <Download
-                size={13}
-                className="text-secondary shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              />
+              <button
+                type="button"
+                onClick={() => downloadAttachment(file)}
+                title={t('chat.saveFile', { filename: file.filename })}
+                aria-label={t('chat.saveFile', { filename: file.filename })}
+                className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary opacity-0 transition group-hover:opacity-100 hover:bg-black/[0.06] hover:text-primary dark:hover:bg-white/[0.08] cursor-pointer focus-visible:opacity-100"
+              >
+                <Download size={13} />
+              </button>
             )}
-          </button>
+          </div>
         )
       })}
     </>
