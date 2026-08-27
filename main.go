@@ -42,7 +42,7 @@ func main() {
 		Title:                    "Meron",
 		Width:                    1200,
 		Height:                   800,
-		WindowStartState:         options.Maximised,
+		WindowStartState:         startWindowState(),
 		HideWindowOnClose:        true,
 		EnableDefaultContextMenu: true,
 		AssetServer: &assetserver.Options{
@@ -67,6 +67,7 @@ func main() {
 			},
 		},
 		OnStartup:  app.Startup,
+		OnDomReady: maximiseOnDomReady,
 		OnShutdown: app.Shutdown,
 		Bind: []interface{}{
 			app,
