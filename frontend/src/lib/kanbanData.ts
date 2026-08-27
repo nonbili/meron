@@ -187,6 +187,15 @@ export function searchColumnLabel(
   return `${accountLabel(column.accountId, accounts)} / ${folderLabel(column, folders, accounts)}`
 }
 
+/// Every column an account-wide cache change can touch. `mail.sentCopyCached`
+/// names no folder — the reply that landed sits in whichever mailbox holds its
+/// conversation — so folder matching has nothing to work with and each of the
+/// account's columns has to re-read. Unified columns match any account, exactly
+/// as `kanbanColumnMatchesMailEvent` assumes for its own event.
+export function kanbanColumnCoversAccount(column: KanbanColumn, accountId: string): boolean {
+  return column.accountId === 'unified' || column.accountId === accountId
+}
+
 export function kanbanColumnMatchesMailEvent(
   column: KanbanColumn,
   accountId: string,
@@ -221,7 +230,7 @@ export function subscribeKanbanMailReloads(eventsOn: EventsOn): () => void {
       void loadKanbanColumn(job.column, false, job.query)
     }
   }
-  const reload = (detail: { account?: string; folder?: string }) => {
+  const reload = (detail: { account?: string; folder?: string }, accountWide = false) => {
     const account = detail?.account
     if (!account) return
     const query = kanban$.searchQuery.peek().trim()
@@ -234,7 +243,10 @@ export function subscribeKanbanMailReloads(eventsOn: EventsOn): () => void {
     for (const column of getKanbanColumns(kanban$.activeBoardId.peek())) {
       const key = kanbanColumnKey(column)
       const columnQuery = query && (scope === 'all' || scope === key) ? query : ''
-      if (kanbanColumnMatchesMailEvent(column, account, detail?.folder, folders)) {
+      const matches = accountWide
+        ? kanbanColumnCoversAccount(column, account)
+        : kanbanColumnMatchesMailEvent(column, account, detail?.folder, folders)
+      if (matches) {
         pending.set(key, { column, query: columnQuery })
       }
     }
@@ -246,10 +258,12 @@ export function subscribeKanbanMailReloads(eventsOn: EventsOn): () => void {
   }
   const offSynced = eventsOn('mail.synced', reload)
   const offNew = eventsOn('mail.newMessages', reload)
+  const offSentCopy = eventsOn('mail.sentCopyCached', (detail) => reload(detail, true))
   return () => {
     if (flushTimer !== undefined) window.clearTimeout(flushTimer)
     if (typeof offSynced === 'function') offSynced()
     if (typeof offNew === 'function') offNew()
+    if (typeof offSentCopy === 'function') offSentCopy()
   }
 }
 

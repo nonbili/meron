@@ -458,6 +458,22 @@ private fun MeronMobileScreenContent(
                                 }
                             }
 
+                            // A Sent copy the provider filed seconds after SMTP
+                            // returned, too late for the reload the send itself
+                            // ran. It adds a message to its conversation, so the
+                            // row's count (which spans folders) is one short. It
+                            // names no folder: the row sits in whichever mailbox
+                            // holds the conversation, so every column of the
+                            // account re-reads.
+                            "mail.sentCopyCached" -> {
+                                val eventAccount = event.detailJson.jsonStringValue("account")
+                                scope.launch {
+                                    reloadVisibleMailboxFor(eventAccount, "")
+                                    refreshKanbanColumnsForAccount(eventAccount)
+                                    refreshOpenThreadFor(eventAccount)
+                                }
+                            }
+
                             // The deferred sync tail (body prefetch, Sent/Drafts
                             // headers) never changes the open folder's thread
                             // list, so only the open thread needs a refresh —

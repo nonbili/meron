@@ -735,6 +735,39 @@ describe('subscribeKanbanMailReloads', () => {
     }
   })
 
+  it("reloads the account's columns for a sent copy, which names no folder", async () => {
+    const { calls, cleanup, handlers } = setup()
+    try {
+      handlers.get('mail.sentCopyCached')?.({ account: 'acc1' })
+      await Bun.sleep(275)
+
+      expect(calls.filter((call) => call.command === 'mail.threadList').map((call) => call.payload)).toEqual([
+        {
+          account_id: 'acc1',
+          folder_id: 'INBOX',
+          query: '',
+          filter: 'all',
+          refresh: false,
+          limit: 50,
+        },
+      ])
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('leaves other accounts alone when a sent copy is cached', async () => {
+    const { calls, cleanup, handlers } = setup()
+    try {
+      handlers.get('mail.sentCopyCached')?.({ account: 'acc2' })
+      await Bun.sleep(275)
+
+      expect(calls.filter((call) => call.command === 'mail.threadList')).toEqual([])
+    } finally {
+      cleanup()
+    }
+  })
+
   it('resolves the active board and folder roles when each event arrives', async () => {
     const { calls, cleanup, handlers } = setup()
     try {

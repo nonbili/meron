@@ -169,6 +169,32 @@ fn run_mobile_sync_tail(
     });
 }
 
+/// Wait out a Sent copy the provider has not exposed yet, off the send call, and
+/// tell the UI once it is cached — the thread card's message count is a message
+/// short until then. Its own thread for the same reason the sync tail uses one:
+/// the send has to return now, and this can take seconds.
+fn watch_for_sent_copy(
+    engine: &std::sync::Arc<crate::engine::Engine>,
+    account_id: &str,
+    copy: crate::engine::SentCopy,
+) {
+    let engine = engine.clone();
+    let account_id = account_id.to_string();
+    std::thread::spawn(move || {
+        let account = account_id.clone();
+        let observed = crate::ffi::engine_block_on(async move {
+            anyhow::Ok(crate::engine::await_sent_copy(&engine, &account, &copy).await)
+        })
+        .unwrap_or(false);
+        if observed {
+            crate::ffi::emit_event(
+                "mail.sentCopyCached",
+                crate::engine::sent_copy_cached_detail(&account_id),
+            );
+        }
+    });
+}
+
 pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let to = req_str(params, "to")?;
@@ -214,14 +240,29 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
         &message_id,
     ))?;
     let sent_bytes = raw.len();
-    if let Err(err) =
-        crate::ffi::engine_block_on(crate::engine::append_to_sent(&engine, &account_id, &raw))
-    {
-        crate::mlog!(
-            crate::log::Level::Warn,
-            "mail.send",
-            "APPEND to Sent failed for {account_id}: {err}"
-        );
+    match crate::ffi::engine_block_on(crate::engine::append_to_sent(&engine, &account_id, &raw)) {
+        // Announced either way. The reload the send itself runs covers the
+        // mailbox and the open thread, but not the Kanban board's columns, so a
+        // copy already cached still leaves counts there a message short. One
+        // the provider has not filed yet lands after that reload entirely, so
+        // it is waited for first.
+        Ok(copy) => {
+            if copy.worth_awaiting() {
+                watch_for_sent_copy(&engine, &account_id, copy);
+            } else {
+                crate::ffi::emit_event(
+                    "mail.sentCopyCached",
+                    crate::engine::sent_copy_cached_detail(&account_id),
+                );
+            }
+        }
+        Err(err) => {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.send",
+                "APPEND to Sent failed for {account_id}: {err}"
+            );
+        }
     }
     Ok(json!({ "ok": true, "sent_bytes": sent_bytes }))
 }

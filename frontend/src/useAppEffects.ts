@@ -348,10 +348,22 @@ export function useAppEffects() {
       void refreshCurrentMailbox().catch(console.error)
     })
 
+    // The Sent copy of a message the user just sent is now cached. That adds a
+    // message to its conversation — the thread card's count spans folders — so
+    // the list and the open thread have to re-read. It is not a folder sync, so
+    // it touches neither the folder caches nor the unread badges: sending
+    // changes no unread count.
+    const offSentCopy = eventsOn('mail.sentCopyCached', (detail: { account?: string }) => {
+      refreshOpenThread(detail?.account)
+      if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
+      void refreshCurrentMailbox().catch(console.error)
+    })
+
     return () => {
       if (typeof offError === 'function') offError()
       if (typeof offNew === 'function') offNew()
       if (typeof offSynced === 'function') offSynced()
+      if (typeof offSentCopy === 'function') offSentCopy()
     }
   }, [selectedAccount, selectedFolder, query])
 }

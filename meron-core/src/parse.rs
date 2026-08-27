@@ -54,6 +54,77 @@ pub fn parse_date_to_epoch(raw: &str) -> i64 {
     0
 }
 
+/// The envelope of an outgoing message, as much of it as identifies the copy
+/// the server files in Sent. Headers only: the body — and the megabytes of
+/// attachments behind it — is never parsed.
+///
+/// It exists because the `Message-ID` we sent is not always the one that comes
+/// back (Proton Bridge replaces it with an id of its own,
+/// `@protonmail.internalid`), so recognising our own copy has to fall back to
+/// what the provider does keep: same sender, same subject, same recipients,
+/// sent at about the same moment. The reader pairs optimistic bubbles to server
+/// copies by the same rule.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct SentEnvelope {
+    /// Normalized `Message-ID`, blank when it could not be read.
+    pub message_id: String,
+    pub subject: String,
+    pub from_addr: String,
+    /// Bare `To` + `Cc` addresses, lowercased and sorted so comparison does not
+    /// depend on header order. `Bcc` is deliberately absent: the sending server
+    /// strips it, so the copy that comes back need not carry it.
+    pub recipients: Vec<String>,
+    /// `Date` as Unix epoch seconds, 0 when unreadable.
+    pub date: i64,
+}
+
+/// Read the [`SentEnvelope`] of a raw outgoing message.
+pub fn sent_envelope_of(raw: &[u8]) -> SentEnvelope {
+    let Ok((headers, _)) = mailparse::parse_headers(raw) else {
+        return SentEnvelope::default();
+    };
+    let (_, from_addr) = split_address(&headers.get_first_value("From").unwrap_or_default());
+    let mut recipients = bare_addresses(&headers.get_all_values("To"));
+    recipients.extend(bare_addresses(&headers.get_all_values("Cc")));
+    SentEnvelope {
+        message_id: normalize_msgid(&headers.get_first_value("Message-ID").unwrap_or_default()),
+        subject: headers.get_first_value("Subject").unwrap_or_default(),
+        from_addr,
+        recipients: normalize_addresses(recipients),
+        date: parse_date_to_epoch(&headers.get_first_value("Date").unwrap_or_default()),
+    }
+}
+
+/// Lowercase, de-duplicate and sort a set of addresses so two spellings of the
+/// same recipient list compare equal.
+pub fn normalize_addresses(addrs: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = addrs
+        .into_iter()
+        .map(|addr| addr.trim().to_lowercase())
+        .filter(|addr| !addr.is_empty())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The bare addresses of one address-header's values, groups expanded.
+fn bare_addresses(values: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let Ok(list) = addrparse(value) else { continue };
+        for addr in list.iter() {
+            match addr {
+                mailparse::MailAddr::Single(info) => out.push(info.addr.clone()),
+                mailparse::MailAddr::Group(group) => {
+                    out.extend(group.addrs.iter().map(|info| info.addr.clone()))
+                }
+            }
+        }
+    }
+    out
+}
+
 /// A single message rendered for the conversation/reader view.
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Message {
@@ -147,6 +218,17 @@ pub fn split_address(raw: &str) -> (String, String) {
         return (name, info.addr.clone());
     }
     (String::new(), raw.to_string())
+}
+
+/// The Message-ID of a raw message, headers only — the body (and any megabyte
+/// of attachments behind it) is never parsed.
+pub fn message_id_of(raw: &[u8]) -> String {
+    match mailparse::parse_headers(raw) {
+        Ok((headers, _)) => {
+            normalize_msgid(&headers.get_first_value("Message-ID").unwrap_or_default())
+        }
+        Err(_) => String::new(),
+    }
 }
 
 /// Parse a full RFC822 message into a reader-view summary. Inline images are
@@ -1138,6 +1220,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn message_id_reads_the_header_without_the_body() {
+        // What waiting for a Sent copy matches on: the angle brackets come off,
+        // a folded header still reads, and a message without the header (or one
+        // that is not a message at all) yields nothing rather than a guess.
+        let raw = b"From: a@example.com\r\nMessage-ID:\r\n <reply-1@meron>\r\nSubject: Re: Lunch\r\n\r\nbody\r\n";
+        assert_eq!(message_id_of(raw), "reply-1@meron");
+        assert_eq!(message_id_of(b"From: a@example.com\r\n\r\nbody\r\n"), "");
+        assert_eq!(message_id_of(b""), "");
+    }
+
+    #[test]
     fn preview_drops_markup_noise() {
         // Gmail's text/plain conventions, as sent by the Play Console.
         let body = "Your update is live\n\n[image: Google Play Console Logo] <https://play.google.com/console/>\n\nHello, Your update to Meron is live in the store.\n\n[image: Icon of your app Meron] *Meron*";
@@ -1523,5 +1616,43 @@ Content-Type: text/html; charset=utf-8\r\n\
         let html = r#"<p><a href="https://facebook.com/airwallex"><img alt="" src="https://example.com/Facebook.png"></a></p>"#;
         let text = html_to_text(html);
         assert_eq!(text, "");
+    }
+
+    #[test]
+    fn reads_the_envelope_of_an_outgoing_message() {
+        let raw = concat!(
+            "From: Me <Me@Example.com>\r\n",
+            "To: \"B\" <b@example.com>, c@example.com\r\n",
+            "Cc: A@Example.com\r\n",
+            "Bcc: hidden@example.com\r\n",
+            "Subject: =?utf-8?q?Re=3A_lunch?=\r\n",
+            "Message-ID: <reply-1@meron>\r\n",
+            "Date: Tue, 14 Nov 2023 22:13:20 +0000\r\n",
+            "\r\n",
+            "body\r\n",
+        );
+        let envelope = sent_envelope_of(raw.as_bytes());
+        assert_eq!(envelope.message_id, "reply-1@meron");
+        assert_eq!(envelope.subject, "Re: lunch");
+        assert_eq!(envelope.from_addr, "Me@Example.com");
+        // To + Cc, lowercased and sorted; Bcc stays out — the sending server
+        // strips it, so the copy that comes back never carries it.
+        assert_eq!(
+            envelope.recipients,
+            vec![
+                "a@example.com".to_string(),
+                "b@example.com".to_string(),
+                "c@example.com".to_string()
+            ]
+        );
+        assert_eq!(envelope.date, 1_700_000_000);
+    }
+
+    #[test]
+    fn an_unparseable_message_has_a_blank_envelope() {
+        assert_eq!(
+            sent_envelope_of(b"\x00not a message"),
+            SentEnvelope::default()
+        );
     }
 }

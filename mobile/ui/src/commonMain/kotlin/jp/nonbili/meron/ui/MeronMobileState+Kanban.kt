@@ -461,6 +461,24 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
     }
 }
 
+// Every column an account-wide cache change can touch. A change that names no
+// folder (a late Sent copy) has nothing for folder matching to work with — the
+// conversation it belongs to sits in whichever mailbox holds it — so each of
+// the account's columns re-reads. Unified columns only count when the account
+// is part of Unified, as elsewhere in this file.
+internal fun MeronMobileState.refreshKanbanColumnsForAccount(accountId: String) {
+    if (accountId.isBlank()) return
+    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    val accountIncludedInUnified =
+        coreAccounts.firstOrNull { it.id == accountId }?.includedInUnified == true
+    board.columns
+        .filter { column ->
+            column.accountId == accountId ||
+                (column.accountId == UNIFIED_ACCOUNT_ID && accountIncludedInUnified)
+        }.distinctBy(::kanbanColumnKey)
+        .forEach { column -> loadKanbanColumn(column, refresh = false) }
+}
+
 internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
     accountId: String,
     folderId: String,
