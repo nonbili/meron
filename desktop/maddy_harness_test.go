@@ -4,7 +4,7 @@ package main
 
 // Test harness that runs a real mail server (maddy, via Docker) and the Rust
 // sidecar so the integration tests can exercise the full IMAP/SMTP/store path.
-// Build the sidecar first: `cargo build --manifest-path meron-core/Cargo.toml`,
+// Build the sidecar first: `cargo build --manifest-path ../meron-core/Cargo.toml`,
 // then run with `go test -tags integration .`.
 
 import (
@@ -179,9 +179,9 @@ func restartMaddy(t *testing.T, server *maddyServer) {
 // server — a cold store whose contents can only have come from IMAP.
 func startSidecar(t *testing.T) (*Sidecar, *eventLog) {
 	t.Helper()
-	bin := "meron-core/target/debug/meron-core"
+	bin := "../meron-core/target/debug/meron-core"
 	if _, err := os.Stat(bin); err != nil {
-		t.Fatalf("sidecar binary missing at %s — run `cargo build --manifest-path meron-core/Cargo.toml` first", bin)
+		t.Fatalf("sidecar binary missing at %s — run `cargo build --manifest-path ../meron-core/Cargo.toml` first", bin)
 	}
 
 	profile := t.TempDir()

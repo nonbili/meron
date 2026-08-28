@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 
 // Mini app mock (side navigation / mail list / bubbles) painted with a theme's
 // OWN colors, so every swatch previews its theme regardless of the active one.
-// Mirrors frontend/src/components/dialog/ThemeSwatch.tsx.
+// Mirrors desktop/frontend/src/components/dialog/ThemeSwatch.tsx.
 
 @Composable
 internal fun ThemePreviewMock(

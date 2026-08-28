@@ -30,9 +30,9 @@ if [ -n "$rust_files" ] && command -v rustfmt >/dev/null 2>&1; then
 fi
 
 # Frontend (TS/TSX/CSS/JSON)
-frontend_files=$(staged_files 'frontend/src/*.ts' 'frontend/src/*.tsx' 'frontend/src/*.css' 'frontend/src/*.json')
-if [ -n "$frontend_files" ] && [ -x frontend/node_modules/.bin/prettier ]; then
-    echo "$frontend_files" | xargs frontend/node_modules/.bin/prettier --write
+frontend_files=$(staged_files 'desktop/frontend/src/*.ts' 'desktop/frontend/src/*.tsx' 'desktop/frontend/src/*.css' 'desktop/frontend/src/*.json')
+if [ -n "$frontend_files" ] && [ -x desktop/frontend/node_modules/.bin/prettier ]; then
+    echo "$frontend_files" | xargs desktop/frontend/node_modules/.bin/prettier --write
     restage $frontend_files
 fi
 

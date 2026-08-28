@@ -6,7 +6,7 @@ package jp.nonbili.meron.shared
  * self-signed CA certificate as its leaf. The core tags those failures; the app
  * fetches the certificate that was rejected and lets the user pin it.
  *
- * Mirrors frontend/src/components/dialog/certificateTrust.ts on desktop.
+ * Mirrors desktop/frontend/src/components/dialog/certificateTrust.ts.
  *
  * The markers must match meron-core/src/tls.rs. The SMTP one contains the
  * general one, so an untrusted certificate matches whichever check runs first.

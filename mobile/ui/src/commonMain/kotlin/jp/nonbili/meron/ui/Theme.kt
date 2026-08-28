@@ -60,7 +60,7 @@ private data class MobileThemeSpec(
     val bubbleOutText: Color,
 )
 
-// Built-in palettes mirror frontend/src/lib/themes.ts names and primary roles.
+// Built-in palettes mirror desktop/frontend/src/lib/themes.ts names and primary roles.
 private val IndigoLight =
     MobileThemeSpec(
         false,

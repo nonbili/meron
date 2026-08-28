@@ -14,10 +14,10 @@ echo "==> Building Rust core engine sidecar (release)"
 cargo build --release --manifest-path meron-core/Cargo.toml
 
 echo "==> Staging sidecar for embedding"
-mkdir -p build/sidecar
-cp meron-core/target/release/meron-core build/sidecar/meron-core
+mkdir -p desktop/build/sidecar
+cp meron-core/target/release/meron-core desktop/build/sidecar/meron-core
 
 echo "==> Building Wails app with embedded sidecar"
-wails build -tags embed_sidecar "$@"
+(cd desktop && wails build -tags embed_sidecar "$@")
 
-echo "==> Done: build/bin/meron"
+echo "==> Done: desktop/build/bin/meron"

@@ -1,17 +1,18 @@
 # Wails build outputs and generated frontend bindings.
-/build/bin/
+/desktop/build/bin/
 # Sidecar staged for embedding by scripts/build.sh.
-/build/sidecar/
-# Defaults wails regenerates on every Windows build (icon from build/appicon.png,
-# info.json from wails.json). Not build/windows itself: appx/ is hand-maintained.
-/build/windows/icon.ico
-/build/windows/info.json
-/build/windows/wails.exe.manifest
-/frontend/wailsjs/
-/frontend/package.json.md5
+/desktop/build/sidecar/
+# Defaults Wails regenerates on every Windows build (icon from
+# desktop/build/appicon.png, info.json from desktop/wails.json). Not
+# desktop/build/windows itself: appx/ is hand-maintained.
+/desktop/build/windows/icon.ico
+/desktop/build/windows/info.json
+/desktop/build/windows/wails.exe.manifest
+/desktop/frontend/wailsjs/
+/desktop/frontend/package.json.md5
 
 # Generated localization artifacts (source of truth: locales/*.json, see scripts/i18n/catalog.ts).
-/frontend/src/generated/locales.ts
+/desktop/frontend/src/generated/locales.ts
 /mobile/android/src/main/res/values/strings.xml
 /mobile/android/src/main/res/values-*/strings.xml
 /mobile/android/src/main/java/jp/nonbili/meron/GeneratedIcuStrings.kt
@@ -20,6 +21,7 @@
 
 # Local binaries produced by ad-hoc `go build`.
 /meron
+/desktop/meron
 
 # Release workflow staging/outputs.
 /snap/local/
@@ -28,8 +30,8 @@
 /*.AppImage
 
 # Dependencies and build caches.
-/frontend/node_modules/
-/frontend/dist/
+/desktop/frontend/node_modules/
+/desktop/frontend/dist/
 /node_modules/
 /meron-core/target/
 

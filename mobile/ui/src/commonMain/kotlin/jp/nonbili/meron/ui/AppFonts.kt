@@ -11,7 +11,7 @@ import kotlin.math.round
 
 // How large message text is drawn.
 //
-// Desktop (frontend/src/lib/fonts.ts) also picks font families and scales the
+// Desktop (desktop/frontend/src/lib/fonts.ts) also picks font families and scales the
 // whole app. Neither ports. There is no installed-font list here, and the
 // families Compose offers without bundling one are the platform's own generics,
 // so a family setting could only trade the system font for its serif or

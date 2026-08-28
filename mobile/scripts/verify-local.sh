@@ -68,7 +68,7 @@ if [[ "$RUN_DESKTOP" -eq 1 ]]; then
   run cargo test --manifest-path "$REPO_DIR/meron-core/Cargo.toml"
   run bun run test
   if [[ "$RUN_WAILS" -eq 1 ]]; then
-    run wails build -clean
+    (cd "$REPO_DIR/desktop" && run wails build -clean)
   fi
 fi
 

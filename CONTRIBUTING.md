@@ -22,7 +22,8 @@ Build the Rust core (rebuilds automatically on change):
 bun run dev:core      # cargo watch on meron-core
 ```
 
-Run the desktop app in dev mode (Vite HMR for the frontend):
+Run the desktop app in dev mode (Vite HMR for the frontend). The root command
+enters [`desktop/`](desktop/) for you:
 
 ```sh
 bun run dev           # wails dev

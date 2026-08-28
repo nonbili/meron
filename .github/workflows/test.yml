@@ -12,13 +12,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: desktop/go.mod
       # Wails (package main) links against GTK/WebKitGTK via cgo.
       - name: Install GTK/WebKitGTK headers
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
-      - name: Create frontend/dist placeholder
-        run: mkdir -p frontend/dist && touch frontend/dist/placeholder
+      - name: Create desktop/frontend/dist placeholder
+        run: mkdir -p desktop/frontend/dist && touch desktop/frontend/dist/placeholder
       - run: go test -tags webkit2_41 ./...
+        working-directory: desktop
 
   rust:
     runs-on: ubuntu-latest
@@ -41,13 +42,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-        working-directory: frontend
+        working-directory: desktop/frontend
       - name: Generate localization catalogs
         run: bun scripts/i18n/catalog.ts generate
       - run: bun run typecheck
-        working-directory: frontend
+        working-directory: desktop/frontend
       - run: bun test
-        working-directory: frontend
+        working-directory: desktop/frontend
 
   mobile:
     runs-on: ubuntu-latest
@@ -69,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: desktop/go.mod
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -79,11 +80,12 @@ jobs:
         # bundled-sqlcipher-vendored-openssl feature) — its Configure script
         # needs core modules like FindBin, IPC::Cmd and Time::Piece.
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev perl
-      - name: Create frontend/dist placeholder
-        run: mkdir -p frontend/dist && touch frontend/dist/placeholder
+      - name: Create desktop/frontend/dist placeholder
+        run: mkdir -p desktop/frontend/dist && touch desktop/frontend/dist/placeholder
       - run: docker pull foxcpp/maddy:0.8
       - run: cargo build --manifest-path meron-core/Cargo.toml
       - run: go test -tags 'integration webkit2_41' -v -timeout 10m .
+        working-directory: desktop
         env:
           # No Secret Service on CI runners; the sidecar's keyring no-op mode.
           MERON_KEYRING: 'off'

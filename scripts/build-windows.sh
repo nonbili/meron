@@ -24,12 +24,15 @@ echo "==> Building Rust core engine sidecar ($TARGET)"
 cargo build --release --manifest-path meron-core/Cargo.toml --target "$TARGET"
 
 echo "==> Staging sidecar for embedding"
-mkdir -p build/sidecar
-# go:embed expects build/sidecar/meron-core with no extension on every platform;
+mkdir -p desktop/build/sidecar
+# go:embed expects desktop/build/sidecar/meron-core with no extension on every platform;
 # the app appends .exe when it extracts on Windows.
-cp "meron-core/target/$TARGET/release/meron-core.exe" build/sidecar/meron-core
+cp "meron-core/target/$TARGET/release/meron-core.exe" desktop/build/sidecar/meron-core
 
 echo "==> Building Wails app for windows/amd64"
-CGO_ENABLED=0 wails build -clean -platform windows/amd64 -tags embed_sidecar
+(
+  cd desktop
+  CGO_ENABLED=0 wails build -clean -platform windows/amd64 -tags embed_sidecar
+)
 
-echo "==> Done: build/bin/meron.exe"
+echo "==> Done: desktop/build/bin/meron.exe"

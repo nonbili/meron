@@ -53,7 +53,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 // Gradient pairs mirror the desktop avatar palette in
-// frontend/src/components/avatar/Avatar.tsx (Tailwind 400 -> 500 shades).
+// desktop/frontend/src/components/avatar/Avatar.tsx (Tailwind 400 -> 500 shades).
 internal val avatarGradients =
     listOf(
         Color(0xFF818CF8) to Color(0xFF6366F1), // indigo

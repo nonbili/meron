@@ -28,7 +28,7 @@ const [pkgArg] = Bun.argv.slice(2)
 
 // wails.json is the source of truth for the desktop version, the way
 // Version.xcconfig is for iOS.
-const wails = await Bun.file(resolve(repoRoot, 'wails.json')).json()
+const wails = await Bun.file(resolve(repoRoot, 'desktop/wails.json')).json()
 const version: string = wails.info.productVersion
 
 // Whatever scripts/build-mas.sh writes; only meaningful to override alongside
@@ -52,7 +52,7 @@ const automaticRelease = envFlag('MAC_AUTOMATIC_RELEASE', true)
 // Info.plist template that already owns the key — not in wails.json, which the
 // wails CLI rewrites from a Go struct that has no field for it. It is handed to
 // the build below so the package and this upload cannot disagree about it.
-const infoPlistPath = resolve(repoRoot, 'build/darwin/Info.plist')
+const infoPlistPath = resolve(repoRoot, 'desktop/build/darwin/Info.plist')
 const infoPlist = await Bun.file(infoPlistPath).text()
 const buildNumberMatch = infoPlist.match(
   /<key>CFBundleVersion<\/key>\s*<string>([^<]+)<\/string>/,

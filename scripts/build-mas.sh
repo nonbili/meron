@@ -26,9 +26,9 @@
 #   MAS_APP_IDENTITY        overrides "Apple Distribution: ... (TEAM)"
 #   MAS_INSTALLER_IDENTITY  overrides "3rd Party Mac Developer Installer: ... (TEAM)"
 #   MAS_BUILD_NUMBER        overrides the CFBundleVersion in
-#                           build/darwin/Info.plist for this upload; every upload
+#                           desktop/build/darwin/Info.plist for this upload; every upload
 #                           of a given version needs a higher one than the last
-#   MAS_SKIP_BUILD=1        re-sign and re-package the app already in build/bin
+#   MAS_SKIP_BUILD=1        re-sign and re-package the app already in desktop/build/bin
 #                           instead of rebuilding it
 #   MAS_ARCHS               universal (default), arm64 or amd64. Building
 #                           universal needs both Rust targets installed, which
@@ -42,7 +42,7 @@ APP_NAME="Meron"
 BUNDLE_ID="jp.nonbili.meron"
 # Wails names the bundle after outputfilename ("meron"); the shipped app is
 # "Meron.app", the same rename the DMG job does with ditto.
-BUILT_APP="build/bin/meron.app"
+BUILT_APP="desktop/build/bin/meron.app"
 STAGE_DIR="dist/mas"
 APP_PATH="${STAGE_DIR}/${APP_NAME}.app"
 PKG_PATH="dist/${APP_NAME}-mas.pkg"
@@ -115,8 +115,8 @@ profile_certificate_sha="$(plutil -extract DeveloperCertificates.0 raw -o - "$pr
 command -v wails >/dev/null || die "wails not found; go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0"
 command -v cargo >/dev/null || die "cargo not found"
 
-VERSION="$(/usr/bin/plutil -extract info.productVersion raw wails.json 2>/dev/null \
-  || python3 -c 'import json;print(json.load(open("wails.json"))["info"]["productVersion"])')"
+VERSION="$(/usr/bin/plutil -extract info.productVersion raw desktop/wails.json 2>/dev/null \
+  || python3 -c 'import json;print(json.load(open("desktop/wails.json"))["info"]["productVersion"])')"
 
 # The build number is tracked separately from the marketing version, the way
 # CURRENT_PROJECT_VERSION is on iOS, and lives in the Info.plist template that
@@ -126,9 +126,9 @@ VERSION="$(/usr/bin/plutil -extract info.productVersion raw wails.json 2>/dev/nu
 default_build_number="$(awk '
   /<key>CFBundleVersion<\/key>/ { found = 1; next }
   found { gsub(/^[[:space:]]*<string>|<\/string>[[:space:]]*$/, ""); print; exit }
-' build/darwin/Info.plist)"
+' desktop/build/darwin/Info.plist)"
 case "${default_build_number:-}" in
-  ''|*'{{'*) die "build/darwin/Info.plist has no literal CFBundleVersion to use as the
+  ''|*'{{'*) die "desktop/build/darwin/Info.plist has no literal CFBundleVersion to use as the
        build number; set one (or pass MAS_BUILD_NUMBER)" ;;
 esac
 BUILD_NUMBER="${MAS_BUILD_NUMBER:-$default_build_number}"
@@ -158,8 +158,8 @@ for target in $rust_targets; do
        Note that an arm64-only package cannot be installed on Intel Macs."
 done
 
-mkdir -p build/sidecar
-sidecar_out="build/sidecar/meron-core-mas"
+mkdir -p desktop/build/sidecar
+sidecar_out="desktop/build/sidecar/meron-core-mas"
 # shellcheck disable=SC2086 # word splitting is how the target list is iterated
 set -- $rust_targets
 if [ $# -eq 2 ]; then
@@ -179,7 +179,7 @@ if [ "${MAS_SKIP_BUILD:-0}" = "1" ]; then
   echo "==> Reusing the existing $BUILT_APP (MAS_SKIP_BUILD=1)"
 else
   echo "==> Building the Wails app ($MAS_ARCHS)"
-  wails build -clean -platform "$wails_platform"
+  (cd desktop && wails build -clean -platform "$wails_platform")
 fi
 
 [ -d "$BUILT_APP" ] || die "wails did not produce $BUILT_APP"
@@ -230,7 +230,7 @@ sign_awake() { /usr/bin/caffeinate -u -i "$@"; }
 # requirement, and the App Store neither wants nor needs it.
 echo "==> Signing"
 sign_awake codesign --force --timestamp \
-  --entitlements build/darwin/EntitlementsMASHelper.plist \
+  --entitlements desktop/build/darwin/EntitlementsMASHelper.plist \
   --sign "$APP_IDENTITY" \
   "$APP_PATH/Contents/MacOS/meron-core"
 
@@ -242,7 +242,7 @@ sign_awake codesign --force --timestamp \
 # because it embeds the team ID, which is configurable.
 app_entitlements="$(/usr/bin/mktemp -t meron-mas-entitlements)"
 trap 'rm -f "$profile_plist" "$app_entitlements"' EXIT
-cp build/darwin/EntitlementsMAS.plist "$app_entitlements"
+cp desktop/build/darwin/EntitlementsMAS.plist "$app_entitlements"
 plist_put() {
   /usr/libexec/PlistBuddy -c "Set :$1 $2" "$app_entitlements" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$app_entitlements"

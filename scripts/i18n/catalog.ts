@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const canonicalLocalesDir = path.join(root, 'locales')
-const desktopOutput = path.join(root, 'frontend', 'src', 'generated', 'locales.ts')
+const desktopOutput = path.join(root, 'desktop', 'frontend', 'src', 'generated', 'locales.ts')
 const androidResDir = path.join(root, 'mobile', 'android', 'src', 'main', 'res')
 const androidHelperOutput = path.join(
   root,

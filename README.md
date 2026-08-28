@@ -1,7 +1,7 @@
 <h1 align="center">Meron</h1>
 <div align="center">
   <p>Messages that spark joy</p>
-  <img src="build/appicon.png" width="128" alt="Meron">
+  <img src="desktop/build/appicon.png" width="128" alt="Meron">
 </div>
 
 Meron is a fast and secure email app with chat and kanban views.
@@ -73,8 +73,8 @@ updater works as well and always fetches the full image.
 | Component | Stack | Location |
 | --- | --- | --- |
 | Core engine | Rust | [`meron-core/`](meron-core/) |
-| Desktop app | Go + Wails | root (`*.go`) |
-| Desktop UI | React + TypeScript + Tailwind | [`frontend/`](frontend/) |
+| Desktop app | Go + Wails | [`desktop/`](desktop/) |
+| Desktop UI | React + TypeScript + Tailwind | [`desktop/frontend/`](desktop/frontend/) |
 | Mobile apps | Kotlin Multiplatform (Android/iOS) | [`mobile/`](mobile/) |
 
 The Rust core runs as a sidecar process on desktop (driven over JSON-lines

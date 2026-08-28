@@ -212,7 +212,7 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 //     ship it inside the bundle because a sandboxed app may not exec a binary it
 //     wrote outside its own bundle)
 //  3. the embedded sidecar, extracted to the cache dir (release builds)
-//  4. the freshly built debug binary relative to the repo root (plain `wails dev`)
+//  4. the freshly built debug binary in the sibling Rust project (plain `wails dev`)
 //
 // Resolving relative to the working directory was the cause of the release
 // binary showing the setup screen: launched outside the repo, it never found
@@ -258,7 +258,19 @@ func resolveMailServerPath() string {
 			fmt.Fprintf(os.Stderr, "meron: failed to extract embedded sidecar: %v\n", err)
 		}
 	}
-	return filepath.Join("meron-core", "target", "debug", sidecarBinaryName)
+	// Wails runs with desktop/ as its working directory, while developers may
+	// invoke a locally built binary from the repository root. Accept both without
+	// making production releases working-directory-dependent: those use one of
+	// the bundled or embedded paths above.
+	for _, path := range []string{
+		filepath.Join("..", "meron-core", "target", "debug", sidecarBinaryName),
+		filepath.Join("meron-core", "target", "debug", sidecarBinaryName),
+	} {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return filepath.Join("..", "meron-core", "target", "debug", sidecarBinaryName)
 }
 
 // bundledSidecarPath returns the sidecar shipped next to the running executable,

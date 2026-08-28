@@ -66,7 +66,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
-// Mirrors frontend/src/lib/wallpapers.ts WALLPAPER_PRESETS. Photographic
+// Mirrors desktop/frontend/src/lib/wallpapers.ts WALLPAPER_PRESETS. Photographic
 // presets resolve to bundled drawables (see wallpaperImageRes); the rest are
 // drawn as approximations.
 private val wallpaperPresets =

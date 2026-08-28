@@ -8,7 +8,7 @@ type PackageInfo = {
   buildNumber: string
 }
 
-// mobile/ holds the fastlane setup (incl. the shared changelogs); the repo root holds wails.json.
+// mobile/ holds the fastlane setup (incl. the shared changelogs); desktop/ holds wails.json.
 export const mobileDir = resolve(import.meta.dir, '..')
 export const repoRoot = resolve(mobileDir, '..')
 

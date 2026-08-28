@@ -1,21 +1,21 @@
 {
   "scripts": {
     "predev": "git config core.hooksPath .githooks",
-    "dev": "wails dev",
+    "dev": "cd desktop && wails dev",
     "dev:core": "cargo watch -w meron-core/src -x \"build --manifest-path meron-core/Cargo.toml\"",
     "build:core": "cargo build --manifest-path meron-core/Cargo.toml",
     "prebuild": "git config core.hooksPath .githooks",
-    "build": "wails build",
+    "build": "cd desktop && wails build",
     "build:release": "./scripts/build.sh",
-    "generate": "wails generate module",
+    "generate": "cd desktop && wails generate module",
     "i18n:validate": "bun scripts/i18n/catalog.ts validate",
     "i18n:generate": "bun scripts/i18n/catalog.ts generate",
     "test": "bun run test:go && bun run test:rust && bun run test:i18n && bun run test:frontend",
-    "test:go": "go test ./...",
+    "test:go": "cd desktop && go test ./...",
     "test:rust": "cargo test --manifest-path meron-core/Cargo.toml",
     "test:i18n": "bun test scripts/i18n/catalog.test.ts",
-    "test:frontend": "cd frontend && bun run typecheck && bun test",
-    "test:integration": "cargo build --manifest-path meron-core/Cargo.toml && go test -tags integration -v -timeout 10m ."
+    "test:frontend": "cd desktop/frontend && bun run typecheck && bun test",
+    "test:integration": "cargo build --manifest-path meron-core/Cargo.toml && cd desktop && go test -tags integration -v -timeout 10m ."
   },
   "dependencies": {}
 }

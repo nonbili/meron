@@ -47,6 +47,7 @@ jobs:
         with:
           go-version: '1.23.x'
           cache: true
+          cache-dependency-path: desktop/go.sum
 
       - uses: oven-sh/setup-bun@v2
 
@@ -94,15 +95,15 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release --manifest-path meron-core/Cargo.toml --target ${{ matrix.target }}
-          mkdir -p build/sidecar
+          mkdir -p desktop/build/sidecar
           SRC="meron-core/target/${{ matrix.target }}/release/meron-core"
           if [ -f "$SRC.exe" ]; then SRC="$SRC.exe"; fi
           if [[ "${{ matrix.os }}" == ubuntu* ]]; then
             strip --strip-unneeded "$SRC"
           fi
-          # The go:embed directive expects build/sidecar/meron-core (no extension)
+          # The go:embed directive expects desktop/build/sidecar/meron-core (no extension)
           # on every platform; extension handling is the app's concern at runtime.
-          cp "$SRC" build/sidecar/meron-core
+          cp "$SRC" desktop/build/sidecar/meron-core
 
       # ---------------------------------------------------------------- macOS
       - name: import mac signing cert
@@ -155,6 +156,7 @@ jobs:
           # exe; it is only valid on Windows.
           extra=""
           if [[ "${{ matrix.os }}" == windows* ]]; then extra="-nsis"; fi
+          cd desktop
           wails build -clean -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}" $extra
 
       - name: package macOS dmg
@@ -165,7 +167,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           set -euo pipefail
-          APP_PATH="build/bin/meron.app"
+          APP_PATH="desktop/build/bin/meron.app"
           DMG_ROOT="$RUNNER_TEMP/dmg-root"
           DMG_PATH="dist/${{ matrix.artifact }}.dmg"
           mkdir -p dist
@@ -174,7 +176,7 @@ jobs:
           if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${TEAM_ID:-}" ]; then
             SIGNING_IDENTITY="Developer ID Application: Nonbili Inc. ($TEAM_ID)"
             codesign --force --options runtime --timestamp --deep \
-              --entitlements build/darwin/Entitlements.plist \
+              --entitlements desktop/build/darwin/Entitlements.plist \
               --keychain "$KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" "$APP_PATH"
             codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           else
@@ -205,12 +207,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          tar -C build/bin -czf "dist/${{ matrix.artifact }}.tar.gz" meron
+          tar -C desktop/build/bin -czf "dist/${{ matrix.artifact }}.tar.gz" meron
 
       - name: resize appicon for Linux
         if: startsWith(matrix.os, 'ubuntu')
         run: |
-          convert build/appicon.png -resize 512x512 build/appicon_512.png
+          convert desktop/build/appicon.png -resize 512x512 desktop/build/appicon_512.png
 
       - name: package linux AppImage
         if: startsWith(matrix.os, 'ubuntu')
@@ -234,11 +236,11 @@ jobs:
           chmod +x linuxdeploy linuxdeploy-plugin-appimage
 
           rm -rf AppDir && mkdir -p AppDir/usr/bin
-          cp build/bin/meron AppDir/usr/bin/meron
+          cp desktop/build/bin/meron AppDir/usr/bin/meron
           ./linuxdeploy --appdir AppDir \
             --executable AppDir/usr/bin/meron \
-            --desktop-file build/linux/meron.desktop \
-            --icon-file build/appicon_512.png \
+            --desktop-file desktop/build/linux/meron.desktop \
+            --icon-file desktop/build/appicon_512.png \
             --icon-filename meron
 
           # Ship no libraries: the app uses the host's GTK and WebKit.
@@ -279,9 +281,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p snap/local
-          cp build/bin/meron snap/local/meron
-          cp build/linux/meron.desktop snap/local/meron.desktop
-          cp build/appicon_512.png snap/local/meron.png
+          cp desktop/build/bin/meron snap/local/meron
+          cp desktop/build/linux/meron.desktop snap/local/meron.desktop
+          cp desktop/build/appicon_512.png snap/local/meron.png
 
       - name: package linux snap
         if: startsWith(matrix.os, 'ubuntu')
@@ -304,7 +306,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          7z a "dist/${{ matrix.artifact }}-portable.zip" ./build/bin/meron.exe
+          7z a "dist/${{ matrix.artifact }}-portable.zip" ./desktop/build/bin/meron.exe
 
       - name: stage windows installer
         if: startsWith(matrix.os, 'windows')
@@ -312,8 +314,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          # wails -nsis emits build/bin/<name>-<arch>-installer.exe
-          installer=$(ls build/bin/*installer.exe)
+          # wails -nsis emits desktop/build/bin/<name>-<arch>-installer.exe
+          installer=$(ls desktop/build/bin/*installer.exe)
           cp "$installer" "dist/${{ matrix.artifact }}.exe"
 
       - name: package windows appx
@@ -326,7 +328,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
-          $version = (Get-Content wails.json -Raw | ConvertFrom-Json).info.productVersion
+          $version = (Get-Content desktop/wails.json -Raw | ConvertFrom-Json).info.productVersion
           $appxVersion = "$version.0"
 
           # Stage the package payload.
@@ -334,7 +336,7 @@ jobs:
           $assets = Join-Path $stage 'Assets'
           Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $assets | Out-Null
-          Copy-Item build/bin/meron.exe (Join-Path $stage 'meron.exe')
+          Copy-Item desktop/build/bin/meron.exe (Join-Path $stage 'meron.exe')
 
           # Generate the tile/logo assets from the 1024px app icon.
           choco install imagemagick.app --no-progress -y | Out-Null
@@ -347,15 +349,15 @@ jobs:
             'StoreLogo.png'         = '50x50';
           }
           foreach ($name in $sizes.Keys) {
-            & $magick build/appicon.png -resize $sizes[$name] (Join-Path $assets $name)
+            & $magick desktop/build/appicon.png -resize $sizes[$name] (Join-Path $assets $name)
           }
           # Wide tile: fit the icon centered on a transparent 310x150 canvas.
-          & $magick build/appicon.png -resize 150x150 -background none -gravity center -extent 310x150 (Join-Path $assets 'Wide310x150Logo.png')
+          & $magick desktop/build/appicon.png -resize 150x150 -background none -gravity center -extent 310x150 (Join-Path $assets 'Wide310x150Logo.png')
 
           # Stamp the version into the manifest (Publisher must match the signing
-          # cert subject; override it in build/windows/appx/AppxManifest.xml or via
+          # cert subject; override it in desktop/build/windows/appx/AppxManifest.xml or via
           # signtool's cert when signing for a real Store/sideload identity).
-          [xml]$m = Get-Content build/windows/appx/AppxManifest.xml
+          [xml]$m = Get-Content desktop/build/windows/appx/AppxManifest.xml
           $m.Package.Identity.Version = $appxVersion
           $m.Save((Join-Path $stage 'AppxManifest.xml'))
 
@@ -405,13 +407,13 @@ jobs:
       - name: resolve tag
         run: |
           set -euo pipefail
-          VER=$(jq -r '.info.productVersion' wails.json)
+          VER=$(jq -r '.info.productVersion' desktop/wails.json)
           WAILS_TAG="v$VER"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "TAG=$WAILS_TAG" >> "$GITHUB_ENV"
           else
             if [ "$GITHUB_REF_NAME" != "$WAILS_TAG" ]; then
-              echo "Tag $GITHUB_REF_NAME does not match wails.json version $WAILS_TAG."
+              echo "Tag $GITHUB_REF_NAME does not match desktop/wails.json version $WAILS_TAG."
               exit 1
             fi
             echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
@@ -420,7 +422,7 @@ jobs:
       - name: prepare release note
         run: |
           set -euo pipefail
-          VER=$(jq -r '.info.productVersion' wails.json)
+          VER=$(jq -r '.info.productVersion' desktop/wails.json)
           sed "s/{VER}/$VER/g" metadata/changelogs/template.txt > note.txt
           printf '\n' >> note.txt
           cat metadata/changelogs/v$VER.txt >> note.txt
@@ -431,7 +433,7 @@ jobs:
       - name: generate update manifest
         run: |
           set -euo pipefail
-          VER=$(jq -r '.info.productVersion' wails.json)
+          VER=$(jq -r '.info.productVersion' desktop/wails.json)
           scripts/gen-latest-json.sh "$VER" \
             "https://github.com/${{ github.repository }}/releases/download/v$VER" \
             dist > dist/latest.json
