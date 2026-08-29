@@ -47,6 +47,23 @@ internal data class KanbanBoardMediaTarget(
     val wallpaper: Boolean,
 )
 
+/**
+ * One message's remote-content state, as the conversation resolves it: the
+ * account's "load remote images" toggle, the app-wide sender allowlist, and any
+ * reveal the reader has made while the thread is open (see [RemoteContentPolicy]).
+ */
+internal data class MessageRemoteContent(
+    /** Whether this message's remote content may load right now. */
+    val allowRemote: Boolean,
+    /** Bare sender address, or empty where trusting the sender is not offered:
+     *  the user's own outgoing mail, or a message with no From address. */
+    val senderAddress: String = "",
+    /** Show this message's remote content, for as long as the thread is open. */
+    val onReveal: () -> Unit = {},
+    /** Add [senderAddress] to the app-wide allowlist. */
+    val onAllowSender: () -> Unit = {},
+)
+
 /** A decoded image ready to preview, share, or save. Carries raw bytes so the
  *  share/save platform services can write the original file. */
 internal data class ImagePreview(

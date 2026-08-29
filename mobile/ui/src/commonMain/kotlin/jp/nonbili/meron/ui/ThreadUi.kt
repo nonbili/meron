@@ -90,6 +90,7 @@ import jp.nonbili.meron.shared.DraftAttachment
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.RemoteContentPolicy
 import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.ThreadMediaItem
 import jp.nonbili.meron.shared.ThreadSummary
@@ -98,6 +99,7 @@ import jp.nonbili.meron.shared.buildThreadGalleryImages
 import jp.nonbili.meron.shared.buildThreadMediaItems
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.formatSendIdentity
+import jp.nonbili.meron.shared.normalizeSenderAddr
 import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -156,6 +158,11 @@ internal fun ThreadScreen(
     onShareImageAttachment: (MessageAttachment) -> Unit,
     onCopyImageAttachment: (MessageAttachment) -> Unit,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
+    // Whose remote content may load in this conversation: the account's own
+    // toggle plus the app-wide sender allowlist. A reveal made here is kept
+    // below, for as long as the thread is open.
+    remoteContentPolicy: RemoteContentPolicy,
+    onAllowRemoteSender: (String) -> Unit,
     onComposeTo: (String) -> Unit,
     onCopyMessageText: (String, String) -> Unit,
     onRetryLoadMessages: () -> Unit,
@@ -172,6 +179,10 @@ internal fun ThreadScreen(
     var activeSearchIndex by remember(thread?.id) { mutableStateOf(0) }
     var detailsOpen by remember(thread?.id) { mutableStateOf(false) }
     var readerMessage by remember(thread?.id) { mutableStateOf<MessageBody?>(null) }
+    // Messages whose remote content the reader revealed by hand. Scoped to the
+    // open thread: a reveal is for this reading of this message, where trusting
+    // the sender is the decision that outlives it.
+    var revealedRemote by remember(thread?.id) { mutableStateOf(emptySet<String>()) }
     var galleryIndex by remember(thread?.id) { mutableStateOf<Int?>(null) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
@@ -183,8 +194,15 @@ internal fun ThreadScreen(
     val normalizedSearch = threadSearch.trim().lowercase()
     val currentThreadAccountId = thread?.accountId.orEmpty()
     val currentThreadFolder = thread?.folder.orEmpty()
-    val galleryImages = remember(messages) { buildThreadGalleryImages(messages) }
-    val mediaItems = remember(messages) { buildThreadMediaItems(messages) }
+    // The gallery and the shared-media panel follow the same policy the bodies
+    // do, so a blocked image has no tile to open and no slide to land on.
+    val remoteAllowed: (MessageBody) -> Boolean = { message ->
+        remoteContentPolicy.allows(message.fromAddr.ifBlank { message.from }) || message.id in revealedRemote
+    }
+    val galleryImages =
+        remember(messages, remoteContentPolicy, revealedRemote) { buildThreadGalleryImages(messages, remoteAllowed) }
+    val mediaItems =
+        remember(messages, remoteContentPolicy, revealedRemote) { buildThreadMediaItems(messages, remoteAllowed) }
     val targetMoveFolders =
         remember(currentThreadFolder, moveFolders) {
             moveFolders.filterNot { folder -> folder.name.equals(currentThreadFolder, ignoreCase = true) }
@@ -437,6 +455,18 @@ internal fun ThreadScreen(
             }
     }
 
+    fun remoteContentFor(message: MessageBody): MessageRemoteContent {
+        val sender = normalizeSenderAddr(message.fromAddr.ifBlank { message.from })
+        return MessageRemoteContent(
+            allowRemote = remoteAllowed(message),
+            // Trusting the sender of the user's own mail would be a no-op that
+            // still grew the allowlist, so outgoing messages only offer a reveal.
+            senderAddress = if (isOutgoing(message, accountEmail)) "" else sender,
+            onReveal = { revealedRemote = revealedRemote + message.id },
+            onAllowSender = { onAllowRemoteSender(sender) },
+        )
+    }
+
     fun galleryIndexForAttachment(attachment: MessageAttachment): Int? {
         val ref = attachmentMediaRef(attachment)
         return galleryImages
@@ -684,6 +714,7 @@ internal fun ThreadScreen(
                                         itemActionsEnabled = true,
                                         showSubject = isRss,
                                         isRss = isRss,
+                                        remoteContent = remoteContentFor(message),
                                         onForward = onForward,
                                         onEditAsNew = onEditAsNew,
                                         onOpenDraft = onOpenDraft,
@@ -713,6 +744,7 @@ internal fun ThreadScreen(
                                         itemActionsEnabled = true,
                                         showSubject = isRss,
                                         isRss = isRss,
+                                        remoteContent = remoteContentFor(message),
                                         onForward = onForward,
                                         onEditAsNew = onEditAsNew,
                                         onOpenDraft = onOpenDraft,
@@ -849,6 +881,7 @@ internal fun ThreadScreen(
                 message = reader,
                 preferHtml = preferHtml,
                 actionsEnabled = !isRss,
+                remoteContent = remoteContentFor(reader),
                 onBack = { readerMessage = null },
                 onCopy = { label, value -> services.copyText(label, value) },
                 onComposeTo = { email ->

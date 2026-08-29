@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.DropdownMenu
@@ -52,9 +54,14 @@ import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.SendStatus
+import jp.nonbili.meron.shared.applyRemoteContentPolicy
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.formatRecipientSummary
+import jp.nonbili.meron.shared.htmlHasRemoteMedia
+import jp.nonbili.meron.shared.mailBodyCsp
 import jp.nonbili.meron.shared.standaloneAttachments
+import jp.nonbili.meron.shared.visibleImageAttachments
+import kotlin.random.Random
 
 /** Bubble inner padding; capped bodies offset their scrollbar back over it. */
 private val BubbleHorizontalPadding = 14.dp
@@ -88,6 +95,7 @@ internal fun MessageBubble(
     itemActionsEnabled: Boolean,
     showSubject: Boolean,
     isRss: Boolean,
+    remoteContent: MessageRemoteContent,
     onForward: (MessageBody) -> Unit,
     onEditAsNew: (MessageBody) -> Unit,
     onOpenDraft: (MessageBody) -> Unit,
@@ -275,6 +283,7 @@ internal fun MessageBubble(
                 showSubject = showSubject,
                 bodyMaxHeight = bodyMaxHeight,
                 chromeInset = chromeInset,
+                remoteContent = remoteContent,
                 onOpenAttachment = onOpenAttachment,
                 onSaveAttachment = onSaveAttachment,
                 loadImageAttachment = loadImageAttachment,
@@ -402,6 +411,9 @@ internal fun ColumnScope.MessageBodyContent(
     // its own padding for HTML mail (see [HtmlBubbleHorizontalPadding]) and pads
     // the rest of the message back to where it sits in every other bubble.
     chromeInset: Dp = 0.dp,
+    // Whether this message's remote content may load, and the two ways the
+    // reader can change that (see [MessageRemoteContent]).
+    remoteContent: MessageRemoteContent,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
@@ -420,9 +432,21 @@ internal fun ColumnScope.MessageBodyContent(
             fontWeight = FontWeight.SemiBold,
         )
     }
-    if (usesHtmlBody(message, preferHtml, searchQuery)) {
+    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
+    val standaloneAttachmentsForMessage = standaloneAttachments(message)
+    val (imageAttachments, otherAttachments) =
+        standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
+    val visibleImages = visibleImageAttachments(imageAttachments, remoteContent.allowRemote)
+    RemoteContentNotice(
+        remoteContent = remoteContent,
+        hiddenImageCount = imageAttachments.size - visibleImages.size,
+        bodyHasRemoteMedia = htmlBody && htmlHasRemoteMedia(message.bodyHtml),
+        modifier = Modifier.padding(horizontal = chromeInset),
+    )
+    if (htmlBody) {
         HtmlMessageBody(
             html = message.bodyHtml,
+            allowRemote = remoteContent.allowRemote,
             maxHeight = bodyMaxHeight,
             onOpenUrl = onOpenUrl,
             onOpenImage = onOpenHtmlImage,
@@ -484,17 +508,14 @@ internal fun ColumnScope.MessageBodyContent(
             }
         }
     }
-    val standaloneAttachmentsForMessage = standaloneAttachments(message)
-    if (standaloneAttachmentsForMessage.isNotEmpty()) {
-        val (imageAttachments, otherAttachments) =
-            standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
+    if (visibleImages.isNotEmpty() || otherAttachments.isNotEmpty()) {
         Column(
             Modifier.padding(horizontal = chromeInset),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (imageAttachments.isNotEmpty()) {
+            if (visibleImages.isNotEmpty()) {
                 AttachmentImageGrid(
-                    images = imageAttachments,
+                    images = visibleImages,
                     loadImageAttachment = loadImageAttachment,
                     onOpen = onOpenImageAttachment,
                 )
@@ -537,6 +558,77 @@ internal fun ColumnScope.MessageBodyContent(
     }
 }
 
+/**
+ * The "remote content blocked" strip above a message body: reveal this message's
+ * remote content once, or trust its sender for good. Renders nothing when the
+ * content is already allowed, or when the message has no remote content to hold
+ * back — a plain note from a colleague must not grow a banner it has no use for.
+ */
+@Composable
+internal fun RemoteContentNotice(
+    remoteContent: MessageRemoteContent,
+    hiddenImageCount: Int,
+    bodyHasRemoteMedia: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (remoteContent.allowRemote) return
+    if (hiddenImageCount == 0 && !bodyHasRemoteMedia) return
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.Filled.HideImage,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = muted,
+            )
+            Text(
+                tr("chat.remoteBlocked"),
+                modifier = Modifier.weight(1f),
+                color = muted,
+                fontSize = 11.5.sp,
+            )
+            TextButton(onClick = remoteContent.onReveal, contentPadding = RemoteNoticeButtonPadding) {
+                Text(
+                    if (hiddenImageCount > 0) {
+                        tr("chat.showImages", mapOf("count" to hiddenImageCount))
+                    } else {
+                        tr("chat.showRemoteContent")
+                    },
+                    fontSize = 11.5.sp,
+                )
+            }
+        }
+        // Trusting the sender is app-wide and outlives the thread, so it is the
+        // quieter of the two actions rather than a second peer button.
+        if (remoteContent.senderAddress.isNotEmpty()) {
+            TextButton(
+                onClick = remoteContent.onAllowSender,
+                contentPadding = RemoteNoticeButtonPadding,
+            ) {
+                Text(
+                    tr("chat.allowRemoteFrom", mapOf("sender" to remoteContent.senderAddress)),
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private val RemoteNoticeButtonPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+
 // Compose Constraints packs sizes into bit fields and cannot represent
 // dimensions past ~262k px; sizing the WebView to an unclamped page height
 // (a very tall newsletter, or a bogus negative report from the JS bridge)
@@ -545,9 +637,18 @@ internal val MailBodyMaxReportedHeight = 20_000.dp
 
 internal fun clampMailBodyHeight(reported: Dp): Dp = reported.coerceIn(0.dp, MailBodyMaxReportedHeight)
 
+/** A one-off token for the viewer's `script-src`. Only has to be unguessable by
+ *  the mail rendered beside it, which never sees this process. */
+private fun randomScriptNonce(): String = buildString { repeat(4) { append(Random.nextInt(1, Int.MAX_VALUE).toString(36)) } }
+
 @Composable
 internal fun HtmlMessageBody(
     html: String,
+    // Whether this message's remote content may load. The mail is spliced into
+    // the document below, so its own baked CSP meta ends up outside that
+    // document's head, where a meta policy is ignored: the head built here is
+    // what actually enforces the decision on both platforms.
+    allowRemote: Boolean,
     maxHeight: Dp = Dp.Unspecified,
     onOpenUrl: (String) -> Unit,
     onOpenImage: (String) -> Unit = {},
@@ -569,8 +670,13 @@ internal fun HtmlMessageBody(
     // fold it in here so an HTML mail and a text one stay the same size.
     val systemFontScale = if (MailWebViewFollowsSystemFontScale) 1f else LocalDensity.current.fontScale
     val bodyFontSize = scaledCssPx(MESSAGE_HTML_BASE_PX * systemFontScale, LocalMessageFontScale.current)
+    // A fresh nonce per document admits the measurement script below and nothing
+    // else: the mail is spliced into this page, so a script of its own that
+    // survived the core's sanitiser would still have no way to name the token.
+    val scriptNonce = remember(html, allowRemote) { randomScriptNonce() }
     val mobileHtml =
-        remember(html, fitWideContent, bodyFontSize) {
+        remember(html, allowRemote, scriptNonce, fitWideContent, bodyFontSize) {
+            val body = applyRemoteContentPolicy(html, allowRemote)
             """
             <!doctype html>
             <!-- The self-sizing WebView needs its document boxes to follow the
@@ -583,6 +689,7 @@ internal fun HtmlMessageBody(
                  importance wherever the sender's <style> sits. -->
             <html style="height: auto !important; min-height: 0 !important;">
             <head>
+              <meta http-equiv="Content-Security-Policy" content="${mailBodyCsp(allowRemote, scriptNonce)}">
               <meta id="meron-viewport" name="viewport" content="width=device-width, initial-scale=1.0">
               <style>
                 html, body {
@@ -666,8 +773,8 @@ internal fun HtmlMessageBody(
                 }
               </style>
             </head>
-            <body style="height: auto !important; min-height: 0 !important;">$html
-              <script>
+            <body style="height: auto !important; min-height: 0 !important;">$body
+              <script nonce="$scriptNonce">
                 (function () {
                   // Feed/newsletter HTML often lists photos as a bare run of
                   // sibling `<img>` (or single-image `<p>`/`<div>`) elements,

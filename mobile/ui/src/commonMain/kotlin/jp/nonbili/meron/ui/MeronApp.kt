@@ -136,6 +136,7 @@ import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.OAuthAuthorizationRequest
+import jp.nonbili.meron.shared.RemoteContentPolicy
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
@@ -791,6 +792,7 @@ private fun MeronMobileScreenContent(
             // The proxy lives in the core store, so it needs a read of its own.
             loadAppProxy()
             loadAppSignature()
+            loadRemoteImageSenders()
         }
 
         // Once accounts are known, surface whatever the local store already holds so
@@ -988,6 +990,15 @@ private fun MeronMobileScreenContent(
                             }
                         }
                     },
+                    remoteContentPolicy =
+                        RemoteContentPolicy(
+                            // Feed accounts load remote content by definition —
+                            // a feed item is little else — which is what the
+                            // core defaults them to (see `load_remote_images`).
+                            accountAllows = selectedThreadAccount?.loadRemoteImages ?: false,
+                            allowedSenders = remoteImageSenders,
+                        ),
+                    onAllowRemoteSender = { addr -> setRemoteImageSender(addr, true) },
                     onComposeTo = { email ->
                         openComposeTo(email, selectedCoreThread?.accountId ?: selectedCoreAccountId)
                     },
@@ -1261,6 +1272,8 @@ private fun MeronMobileScreenContent(
                     onSaveAppProxy = ::saveAppProxy,
                     appSignatureHtml = appSignatureHtml,
                     onSaveAppSignature = ::saveAppSignature,
+                    remoteImageSenders = remoteImageSenders,
+                    onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
                     onSaveAccountSignature = ::saveAccountSignature,
                     onSaveAccountProxy = ::saveAccountProxy,
                     onSaveAccountServerSettings = ::saveAccountServerSettings,

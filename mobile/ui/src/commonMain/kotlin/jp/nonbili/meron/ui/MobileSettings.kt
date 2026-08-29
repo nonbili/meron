@@ -89,6 +89,15 @@ internal const val PENDING_SETTINGS_PREF = "pending_settings_v1"
  */
 internal const val APP_SIGNATURE_SETTING_KEY = "signature"
 
+/**
+ * Core `settings` row holding the app-wide remote-content sender allowlist.
+ *
+ * Shared with desktop and read by the core itself (it resolves the allowlist
+ * when it bakes a message body), so it is neither namespaced under `mobile.`
+ * nor a registry entry: nothing needs it before the core is up.
+ */
+internal const val REMOTE_IMAGE_SENDERS_SETTING_KEY = "remote_image_senders"
+
 private val settingsByPrefKey = mobileSettings.associateBy { it.store to it.key }
 private val settingsBySettingKey = mobileSettings.associateBy { it.settingKey }
 

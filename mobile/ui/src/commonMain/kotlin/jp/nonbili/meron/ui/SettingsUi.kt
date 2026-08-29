@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -152,6 +153,8 @@ internal fun SettingsScreen(
     onSaveAppProxy: (ProxySpec) -> Unit,
     appSignatureHtml: String,
     onSaveAppSignature: (String) -> Unit,
+    remoteImageSenders: List<String>,
+    onRemoveRemoteImageSender: (String) -> Unit,
     onSaveAccountSignature: (AccountSummary, SignatureSpec) -> Unit,
     onSaveAccountProxy: (AccountSummary, ProxySpec) -> Unit,
     onSaveAccountServerSettings: (AccountSummary, ServerSettingsDraft) -> Unit,
@@ -195,6 +198,7 @@ internal fun SettingsScreen(
             SettingsRoutes.KanbanBoard -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardDetail(it) } ?: SettingsPage.Root
             SettingsRoutes.KanbanBoardWallpaper -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardWallpaper(it) } ?: SettingsPage.Root
             SettingsRoutes.SyncLog -> SettingsPage.SyncLog
+            SettingsRoutes.RemoteSenders -> SettingsPage.RemoteSenders
             else -> SettingsPage.Root
         }
     LaunchedEffect(initialGeneral) {
@@ -270,6 +274,7 @@ internal fun SettingsScreen(
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
                             is SettingsPage.KanbanBoardWallpaper -> tr("settings.account.chatBackground")
                             SettingsPage.SyncLog -> tr("settings.viewSyncLog")
+                            SettingsPage.RemoteSenders -> tr("settings.privacy.remoteSenders")
                         },
                     )
                 },
@@ -322,6 +327,8 @@ internal fun SettingsScreen(
                     onSaveAppProxy = onSaveAppProxy,
                     appSignatureHtml = appSignatureHtml,
                     onSaveAppSignature = onSaveAppSignature,
+                    remoteImageSenderCount = remoteImageSenders.size,
+                    onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
                     notificationsNeedPermission = notificationsNeedPermission,
                     onEnableNotifications = onEnableNotifications,
                     supportsBackgroundPush = supportsBackgroundPush,
@@ -342,6 +349,14 @@ internal fun SettingsScreen(
                     onRestoreBackup = onRestoreBackup,
                     backupBusy = backupBusy,
                     focusProxy = directOpenRoute == SettingsRoutes.General,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            composable(SettingsRoutes.RemoteSenders) {
+                RemoteSendersPage(
+                    senders = remoteImageSenders,
+                    onRemoveSender = onRemoveRemoteImageSender,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -610,6 +625,8 @@ private sealed class SettingsPage {
 
     data object General : SettingsPage()
 
+    data object RemoteSenders : SettingsPage()
+
     data class AccountDetail(
         val accountId: String,
     ) : SettingsPage()
@@ -637,6 +654,7 @@ private object SettingsRoutes {
     const val KanbanBoard = "settings/kanban-board"
     const val KanbanBoardWallpaper = "settings/kanban-board-wallpaper"
     const val SyncLog = "settings/sync-log"
+    const val RemoteSenders = "settings/remote-senders"
 }
 
 // Combines the desktop "General" section: Appearance, Sidebar, Kanban,
@@ -665,6 +683,8 @@ internal fun SettingsGeneralPage(
     onSaveAppProxy: (ProxySpec) -> Unit,
     appSignatureHtml: String,
     onSaveAppSignature: (String) -> Unit,
+    remoteImageSenderCount: Int,
+    onOpenRemoteSenders: () -> Unit,
     notificationsNeedPermission: Boolean,
     onEnableNotifications: () -> Unit,
     supportsBackgroundPush: Boolean,
@@ -805,6 +825,26 @@ internal fun SettingsGeneralPage(
             SettingsSignatureRow(
                 html = appSignatureHtml,
                 onSave = onSaveAppSignature,
+            )
+        }
+
+        item { SettingsSectionLabel(tr("settings.sections.privacy")) }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.HideImage,
+                title = tr("settings.privacy.remoteSenders"),
+                hint = tr("settings.privacy.remoteSendersHint"),
+                onClick = onOpenRemoteSenders,
+                trailing = {
+                    Text(
+                        if (remoteImageSenderCount == 0) {
+                            tr("settings.privacy.remoteSendersNone")
+                        } else {
+                            tr("settings.privacy.remoteSendersCount", mapOf("count" to remoteImageSenderCount))
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
             )
         }
 

@@ -49,7 +49,9 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.htmlHasRemoteMedia
 import jp.nonbili.meron.shared.standaloneAttachments
+import jp.nonbili.meron.shared.visibleImageAttachments
 import kotlinx.coroutines.launch
 
 // Full-screen reader for a single message — the mobile equivalent of the desktop
@@ -60,6 +62,7 @@ internal fun MessageReaderScreen(
     message: MessageBody,
     preferHtml: Boolean,
     actionsEnabled: Boolean,
+    remoteContent: MessageRemoteContent,
     onBack: () -> Unit,
     onCopy: (String, String) -> Unit,
     onComposeTo: (String) -> Unit,
@@ -304,12 +307,23 @@ internal fun MessageReaderScreen(
                     )
                 }
                 HorizontalDivider()
-                if (preferHtml && message.bodyHtml.isNotBlank()) {
+                val htmlBody = preferHtml && message.bodyHtml.isNotBlank()
+                val standaloneAttachmentsForMessage = standaloneAttachments(message)
+                val (imageAttachments, otherAttachments) =
+                    standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
+                val visibleImages = visibleImageAttachments(imageAttachments, remoteContent.allowRemote)
+                RemoteContentNotice(
+                    remoteContent = remoteContent,
+                    hiddenImageCount = imageAttachments.size - visibleImages.size,
+                    bodyHasRemoteMedia = htmlBody && htmlHasRemoteMedia(message.bodyHtml),
+                )
+                if (htmlBody) {
                     // Only the reader shrinks over-wide mail to fit: it has the
                     // full screen to scale into, where a bubble would render the
                     // same mail as an unreadable thumbnail.
                     HtmlMessageBody(
                         html = message.bodyHtml,
+                        allowRemote = remoteContent.allowRemote,
                         onOpenUrl = onOpenUrl,
                         onOpenImage = onOpenHtmlImage,
                         fitWideContent = true,
@@ -324,14 +338,11 @@ internal fun MessageReaderScreen(
                         style = messageBodyTextStyle(MaterialTheme.typography.bodyLarge),
                     )
                 }
-                val standaloneAttachmentsForMessage = standaloneAttachments(message)
-                if (standaloneAttachmentsForMessage.isNotEmpty()) {
+                if (visibleImages.isNotEmpty() || otherAttachments.isNotEmpty()) {
                     HorizontalDivider()
-                    val (imageAttachments, otherAttachments) =
-                        standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
-                    if (imageAttachments.isNotEmpty()) {
+                    if (visibleImages.isNotEmpty()) {
                         AttachmentImageGrid(
-                            images = imageAttachments,
+                            images = visibleImages,
                             loadImageAttachment = loadImageAttachment,
                             onOpen = onOpenImageAttachment,
                         )

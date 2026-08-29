@@ -241,17 +241,20 @@ import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
 import jp.nonbili.meron.shared.requireCoreOk
+import jp.nonbili.meron.shared.sanitizeRemoteSenders
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
 import jp.nonbili.meron.shared.untrustedCertificateProtocol
+import jp.nonbili.meron.shared.withRemoteSender
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.uuid.ExperimentalUuidApi
@@ -432,10 +435,94 @@ internal fun MeronMobileState.loadAppSignature(): Job? {
     }
 }
 
+/**
+ * Read the app-wide remote-content sender allowlist from the core store. Like
+ * the signature it shares the desktop row rather than a `mobile.*` one — and
+ * unlike the signature nothing waits on it: a thread read before it lands shows
+ * the account's own policy, and the reveal affordance with it.
+ */
+internal fun MeronMobileState.loadRemoteImageSenders(): Job? {
+    if (!coreLoaded) return null
+    val generation = ++remoteImageSendersLoadGeneration
+    return scope.launch {
+        runCatching { withContext(ioDispatcher) { readRemoteImageSenders() } }
+            .onSuccess { stored ->
+                // A write that landed while this read was in flight bumped the
+                // generation: it already read the row itself, so this snapshot
+                // is the older one and must not take the edit back off screen.
+                if (generation == remoteImageSendersLoadGeneration) remoteImageSenders = stored
+            }
+    }
+}
+
+/** The allowlist as the core store holds it, normalized. Runs on [ioDispatcher]. */
+private suspend fun MeronMobileState.readRemoteImageSenders(): List<String> {
+    val response =
+        requireCoreOk(
+            MobileMailCommandClient(core).getPrefs(AppPrefsGetParams(listOf(REMOTE_IMAGE_SENDERS_SETTING_KEY))),
+        )
+    val stored = parseAppPrefsResponse(response)[REMOTE_IMAGE_SENDERS_SETTING_KEY]
+    return sanitizeRemoteSenders((stored as? List<*>).orEmpty().filterIsInstance<String>())
+}
+
+/**
+ * Allow (or stop allowing) remote content from one sender. Unlike an account's
+ * "load remote images" toggle this is additive and app-wide: mail from [addr]
+ * loads its remote content in every account.
+ *
+ * The core resolves the allowlist as it bakes a body, so messages already on
+ * screen are re-gated by the reader rather than by a re-read of the thread.
+ */
+internal fun MeronMobileState.setRemoteImageSender(
+    addr: String,
+    allowed: Boolean,
+) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val optimistic = withRemoteSender(remoteImageSenders, addr, allowed)
+    if (optimistic == remoteImageSenders) return
+    // Show the change at once; the write below decides what it really becomes.
+    remoteImageSenders = optimistic
+    scope.launch {
+        // The row holds the whole list, so the edit is applied to what the store
+        // actually has rather than to the snapshot this state happened to be
+        // showing: a startup read that has not landed yet would otherwise write
+        // an allowlist with every stored sender missing from it, and two edits
+        // in quick succession would each drop the other's. The lock keeps the
+        // read and the write it feeds one step, so those cases serialize.
+        remoteImageSendersWrites.withLock {
+            runCatching {
+                withContext(ioDispatcher) {
+                    val updated = withRemoteSender(readRemoteImageSenders(), addr, allowed)
+                    requireCoreOk(
+                        MobileMailCommandClient(core).setPref(
+                            AppPrefsSetParams(REMOTE_IMAGE_SENDERS_SETTING_KEY, encodeAppPrefValue(updated)),
+                        ),
+                    )
+                    updated
+                }
+            }.onSuccess { updated ->
+                // Retire any read still in flight: this write knows the row.
+                ++remoteImageSendersLoadGeneration
+                remoteImageSenders = updated
+            }.onFailure {
+                // Undo this edit alone, against the list as it stands now — a
+                // blanket restore of the pre-edit snapshot would take back the
+                // edits that succeeded in between.
+                remoteImageSenders = withRemoteSender(remoteImageSenders, addr, !allowed)
+                status = "Remote content update failed: ${it.message}"
+            }
+        }
+    }
+}
+
 internal fun MeronMobileState.invalidateBackupReloads() {
     ++accountLoadGeneration
     ++proxyLoadGeneration
     ++appSignatureLoadGeneration
+    ++remoteImageSendersLoadGeneration
     accountsLoading = false
     appSignatureLoaded = false
     appSignatureLoadCompletion.complete(Unit)

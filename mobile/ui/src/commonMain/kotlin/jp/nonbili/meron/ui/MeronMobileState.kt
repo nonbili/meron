@@ -373,6 +373,22 @@ internal class MeronMobileState(
     // (see AccountSummary.signature).
     var appSignatureHtml by mutableStateOf("")
 
+    // Senders whose remote content always loads, whatever an account's own
+    // "load remote images" toggle says. Lives in the same core `settings` row
+    // desktop writes, and the core applies it when it bakes a message body —
+    // this copy is what the reader shows and edits.
+    var remoteImageSenders by mutableStateOf<List<String>>(emptyList())
+
+    // Bumped by each allowlist read *and* by each write that lands, so neither a
+    // slow earlier read nor the startup read can answer over a fresher value —
+    // a reload (a backup restore) or an edit made while the read was in flight.
+    var remoteImageSendersLoadGeneration = 0
+
+    // The allowlist is stored as one whole-list row, so two edits racing would
+    // each write a list the other's change is missing from. Every write takes
+    // this first and re-reads the row inside it, making the pair one step.
+    val remoteImageSendersWrites = Mutex()
+
     // What the compose body knows about the signature in it, so changing the From
     // identity can swap it for the new account's. Null means unmanaged — a body
     // this app did not compose (see SignatureTracking).

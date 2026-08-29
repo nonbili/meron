@@ -64,6 +64,7 @@ internal fun MessageRow(
     itemActionsEnabled: Boolean,
     showSubject: Boolean,
     isRss: Boolean,
+    remoteContent: MessageRemoteContent,
     onForward: (MessageBody) -> Unit,
     onEditAsNew: (MessageBody) -> Unit,
     onOpenDraft: (MessageBody) -> Unit,
@@ -146,6 +147,7 @@ internal fun MessageRow(
                     // Uncapped: a full-width reading view shows the whole
                     // message and the conversation list does the scrolling.
                     bodyMaxHeight = Dp.Unspecified,
+                    remoteContent = remoteContent,
                     onOpenAttachment = onOpenAttachment,
                     onSaveAttachment = onSaveAttachment,
                     loadImageAttachment = loadImageAttachment,

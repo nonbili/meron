@@ -653,10 +653,21 @@ fun attachmentMediaRef(attachment: MessageAttachment): String {
     return attachment.url.trim()
 }
 
-fun buildThreadGalleryImages(messages: List<MessageBody>): List<ThreadGalleryImage> =
+/**
+ * Every image in a thread, in reading order, for the swipeable gallery.
+ *
+ * [allowRemote] answers the remote-content policy per message (see
+ * [RemoteContentPolicy]): an image the reader is holding back has no tile to be
+ * opened from, and sliding onto it would fetch exactly what the policy blocks.
+ */
+fun buildThreadGalleryImages(
+    messages: List<MessageBody>,
+    allowRemote: (MessageBody) -> Boolean,
+): List<ThreadGalleryImage> =
     messages.flatMap { message ->
+        val remoteAllowed = allowRemote(message)
         message.attachments
-            .filter { it.mimeType.startsWith("image/") }
+            .filter { it.mimeType.startsWith("image/") && (remoteAllowed || isInlineMedia(it)) }
             .mapNotNull { attachment ->
                 val ref = attachmentMediaRef(attachment)
                 if (ref.isBlank()) {
@@ -672,11 +683,19 @@ fun buildThreadGalleryImages(messages: List<MessageBody>): List<ThreadGalleryIma
             }
     }
 
-fun buildThreadMediaItems(messages: List<MessageBody>): List<ThreadMediaItem> {
+/** Thread-wide media for the shared-media panel, newest first. Gated by
+ *  [allowRemote] the same way [buildThreadGalleryImages] is, so the two agree on
+ *  what exists — `galleryIndex` points into that list. */
+fun buildThreadMediaItems(
+    messages: List<MessageBody>,
+    allowRemote: (MessageBody) -> Boolean,
+): List<ThreadMediaItem> {
     var imageIndex = 0
     val items =
         messages.flatMap { message ->
+            val remoteAllowed = allowRemote(message)
             message.attachments.mapNotNull { attachment ->
+                if (!remoteAllowed && !isInlineMedia(attachment)) return@mapNotNull null
                 val mime = attachment.mimeType
                 val type =
                     when {
