@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -32,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
@@ -49,7 +51,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
-import jp.nonbili.meron.shared.htmlHasRemoteMedia
 import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.visibleImageAttachments
 import kotlinx.coroutines.launch
@@ -300,11 +301,19 @@ internal fun MessageReaderScreen(
                         onComposeTo = onComposeTo,
                         textColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(
-                        formatMessageFullTimestamp(message.dateEpochSeconds),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            formatMessageFullTimestamp(message.dateEpochSeconds),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        BlockedRemoteButton(
+                            message = message,
+                            remoteContent = remoteContent,
+                            preferHtml = preferHtml,
+                            searchQuery = "",
+                        )
+                    }
                 }
                 HorizontalDivider()
                 val htmlBody = preferHtml && message.bodyHtml.isNotBlank()
@@ -312,11 +321,6 @@ internal fun MessageReaderScreen(
                 val (imageAttachments, otherAttachments) =
                     standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
                 val visibleImages = visibleImageAttachments(imageAttachments, remoteContent.allowRemote)
-                RemoteContentNotice(
-                    remoteContent = remoteContent,
-                    hiddenImageCount = imageAttachments.size - visibleImages.size,
-                    bodyHasRemoteMedia = htmlBody && htmlHasRemoteMedia(message.bodyHtml),
-                )
                 if (htmlBody) {
                     // Only the reader shrinks over-wide mail to fit: it has the
                     // full screen to scale into, where a bubble would render the

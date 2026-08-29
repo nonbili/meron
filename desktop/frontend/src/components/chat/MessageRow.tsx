@@ -7,6 +7,7 @@ import { openDraftCompose, openMessageTab, retrySend } from '../../states/compos
 import type { Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { AddressRow } from './AddressList'
+import { BlockedRemoteButton } from './BlockedRemoteButton'
 import { MessageContent } from './MessageContent'
 import { formatFullTimestamp, formatMessageStamp, normalizeBodyText } from './messageHelpers'
 import { useMessageView } from './useMessageView'
@@ -123,6 +124,11 @@ export function MessageRow({
         tabIndex={0}
         onClick={onToggleExpanded}
         onKeyDown={(event) => {
+          // Only the row itself: Enter/Space on a control inside it (the
+          // blocked-remote button) bubbles up here, and expanding the message
+          // out from under the key that just activated one is not what the
+          // reader asked for — the same guard the expanded header uses.
+          if (event.target !== event.currentTarget) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             onToggleExpanded()
@@ -142,6 +148,13 @@ export function MessageRow({
           {draftBadge}
           {message.has_attachments && <Paperclip size={12} />}
           {message.starred && <Star size={12} className="fill-amber-500 text-amber-500" />}
+          <BlockedRemoteButton
+            messageId={message.id}
+            blocked={view.blockedRemote}
+            hiddenRemoteCount={view.hiddenRemoteCount}
+            senderAddress={view.outgoing ? '' : view.senderAddress}
+            size={15}
+          />
           <span title={fullStamp}>{stamp}</span>
         </div>
       </div>
@@ -219,6 +232,13 @@ export function MessageRow({
         <div className="flex shrink-0 items-center gap-1.5 text-[0.65625rem] text-secondary/80">
           {draftBadge}
           {message.starred && <Star size={12} className="fill-amber-500 text-amber-500" />}
+          <BlockedRemoteButton
+            messageId={message.id}
+            blocked={view.blockedRemote}
+            hiddenRemoteCount={view.hiddenRemoteCount}
+            senderAddress={view.outgoing ? '' : view.senderAddress}
+            size={15}
+          />
           <span title={fullStamp}>{stamp}</span>
           {statusIcon}
           <button

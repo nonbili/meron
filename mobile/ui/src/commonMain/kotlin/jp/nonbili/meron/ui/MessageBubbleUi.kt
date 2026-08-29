@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -229,6 +228,12 @@ internal fun MessageBubble(
                         )
                     }
                 }
+                BlockedRemoteButton(
+                    message = message,
+                    remoteContent = remoteContent,
+                    preferHtml = preferHtml,
+                    searchQuery = searchQuery,
+                )
                 Text(
                     formatInboxTimestamp(message.dateEpochSeconds),
                     fontSize = 10.5.sp,
@@ -437,12 +442,6 @@ internal fun ColumnScope.MessageBodyContent(
     val (imageAttachments, otherAttachments) =
         standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
     val visibleImages = visibleImageAttachments(imageAttachments, remoteContent.allowRemote)
-    RemoteContentNotice(
-        remoteContent = remoteContent,
-        hiddenImageCount = imageAttachments.size - visibleImages.size,
-        bodyHasRemoteMedia = htmlBody && htmlHasRemoteMedia(message.bodyHtml),
-        modifier = Modifier.padding(horizontal = chromeInset),
-    )
     if (htmlBody) {
         HtmlMessageBody(
             html = message.bodyHtml,
@@ -559,75 +558,94 @@ internal fun ColumnScope.MessageBodyContent(
 }
 
 /**
- * The "remote content blocked" strip above a message body: reveal this message's
- * remote content once, or trust its sender for good. Renders nothing when the
- * content is already allowed, or when the message has no remote content to hold
- * back — a plain note from a colleague must not grow a banner it has no use for.
+ * Whether a message is holding remote content back, and so has something for
+ * [BlockedRemoteButton] to offer: blocked attachment images, or a body that
+ * references remote media (a newsletter keeps its images there, not in the
+ * attachment list).
+ */
+internal fun blockedRemoteImageCount(
+    message: MessageBody,
+    remoteContent: MessageRemoteContent,
+    preferHtml: Boolean,
+    searchQuery: String,
+): Int? {
+    if (remoteContent.allowRemote) return null
+    val images = standaloneAttachments(message).filter { it.mimeType.startsWith("image/") }
+    val hidden = images.size - visibleImageAttachments(images, false).size
+    if (hidden > 0) return hidden
+    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
+    return if (htmlBody && htmlHasRemoteMedia(message.bodyHtml)) 0 else null
+}
+
+/**
+ * The whole blocked-remote-content affordance for one message: a tinted icon in
+ * the header that opens the two reveal actions — show this message's remote
+ * content once, or trust its sender for good. It replaces the strip that used
+ * to sit above every body: on a newsletter-heavy mailbox that strip showed on
+ * nearly every message.
+ *
+ * Renders nothing when the content is already allowed, or when the message has
+ * no remote content to hold back.
  */
 @Composable
-internal fun RemoteContentNotice(
+internal fun BlockedRemoteButton(
+    message: MessageBody,
     remoteContent: MessageRemoteContent,
-    hiddenImageCount: Int,
-    bodyHasRemoteMedia: Boolean,
+    preferHtml: Boolean,
+    searchQuery: String,
     modifier: Modifier = Modifier,
+    iconSize: Dp = 15.dp,
 ) {
-    if (remoteContent.allowRemote) return
-    if (hiddenImageCount == 0 && !bodyHasRemoteMedia) return
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+    val hiddenImageCount = blockedRemoteImageCount(message, remoteContent, preferHtml, searchQuery) ?: return
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
             Icon(
                 Icons.Filled.HideImage,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = muted,
+                contentDescription = tr("chat.remoteBlocked"),
+                modifier = Modifier.size(iconSize),
+                // The theme's accent, softened: muted grey among the other
+                // header icons reads as decoration, and this is the only sign
+                // that part of the message is missing.
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
             )
-            Text(
-                tr("chat.remoteBlocked"),
-                modifier = Modifier.weight(1f),
-                color = muted,
-                fontSize = 11.5.sp,
-            )
-            TextButton(onClick = remoteContent.onReveal, contentPadding = RemoteNoticeButtonPadding) {
-                Text(
-                    if (hiddenImageCount > 0) {
-                        tr("chat.showImages", mapOf("count" to hiddenImageCount))
-                    } else {
-                        tr("chat.showRemoteContent")
-                    },
-                    fontSize = 11.5.sp,
-                )
-            }
         }
-        // Trusting the sender is app-wide and outlives the thread, so it is the
-        // quieter of the two actions rather than a second peer button.
-        if (remoteContent.senderAddress.isNotEmpty()) {
-            TextButton(
-                onClick = remoteContent.onAllowSender,
-                contentPadding = RemoteNoticeButtonPadding,
-            ) {
-                Text(
-                    tr("chat.allowRemoteFrom", mapOf("sender" to remoteContent.senderAddress)),
-                    fontSize = 11.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        if (hiddenImageCount > 0) {
+                            tr("chat.showImages", mapOf("count" to hiddenImageCount))
+                        } else {
+                            tr("chat.showRemoteContent")
+                        },
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    remoteContent.onReveal()
+                },
+            )
+            // Trusting the sender is app-wide and outlives the thread, so it
+            // trails the one-off reveal.
+            if (remoteContent.senderAddress.isNotEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            tr("chat.allowRemoteFrom", mapOf("sender" to remoteContent.senderAddress)),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        remoteContent.onAllowSender()
+                    },
                 )
             }
         }
     }
 }
-
-private val RemoteNoticeButtonPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
 
 // Compose Constraints packs sizes into bit fields and cannot represent
 // dimensions past ~262k px; sizing the WebView to an unclamped page height

@@ -808,6 +808,9 @@ internal fun ThreadScreen(
                                             isRss = isRss,
                                             textColor = textColor,
                                             mutedColor = textColor.copy(alpha = 0.6f),
+                                            remoteContent = remoteContentFor(message),
+                                            preferHtml = preferHtml,
+                                            searchQuery = normalizedSearch,
                                             actionsEnabled = !isRss,
                                             itemActionsEnabled = true,
                                             onToggleExpanded = {

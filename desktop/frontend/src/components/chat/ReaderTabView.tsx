@@ -9,7 +9,8 @@ import type { MessageTab } from '../../types'
 import { Composer } from '../composer/Composer'
 import { HtmlMessageView } from './HtmlMessageView'
 import { AddressRow } from './AddressList'
-import { extractAddr, formatFullTimestamp } from './messageHelpers'
+import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { extractAddr, formatFullTimestamp, htmlHasRemoteMedia, isImage, isInlineMedia, isVideo } from './messageHelpers'
 
 // Renders the active reader/compose tab: a compose tab shows the Composer, a
 // reader tab shows the message header, address rows and the HTML/plain body.
@@ -41,6 +42,15 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
     // live map still counts for a tab opened before this thread was switched.
     !!revealedRemote[tab.messageId] ||
     !!tab.revealRemote
+  // The same affordance the conversation offers, on the tab's own header: a tab
+  // outlives the thread it was opened from, so it has to be able to reveal the
+  // content itself.
+  const remoteAttachments = (tab.attachments ?? []).filter(
+    (a) => !isInlineMedia(a) && a.url && (isImage(a) || isVideo(a)),
+  )
+  const hiddenRemoteCount = allowRemote ? 0 : remoteAttachments.length
+  const blockedRemote =
+    !allowRemote && (hiddenRemoteCount > 0 || (tab.viewMode === 'html' && htmlHasRemoteMedia(tab.bodyHtml)))
 
   return (
     <>
@@ -75,6 +85,15 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
             <FileText size={13} /> {t('settings.account.conversationPlain')}
           </button>
         </div>
+        <BlockedRemoteButton
+          messageId={tab.messageId}
+          blocked={blockedRemote}
+          hiddenRemoteCount={hiddenRemoteCount}
+          // Trusting the sender of the user's own mail would be a no-op that
+          // still grew the allowlist, so it only offers a reveal.
+          senderAddress={tab.outgoing ? '' : sender}
+          size={16}
+        />
         <button
           onClick={() => void closeMessageTab(tab.id)}
           className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-hover text-secondary cursor-pointer"

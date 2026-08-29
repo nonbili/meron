@@ -649,6 +649,16 @@ export function openMessageTab(message: Message) {
     // Carried so the tab can resolve this message's remote-content policy.
     accountId: message.account_id,
     revealRemote: !!thread$.revealedRemote.peek()[message.id],
+    // Snapshotted rather than re-derived: the tab keeps no Message, and the
+    // From address alone misses an alias or a send still in flight (the same
+    // rule useMessageView applies in the conversation).
+    outgoing:
+      !!message.send_status ||
+      message.outgoing === true ||
+      (!!account &&
+        accountIdentities(account).some(
+          (identity) => identity.email.trim().toLowerCase() === message.from_addr.trim().toLowerCase(),
+        )),
     subject: message.subject || '(no subject)',
     from: message.from_name || message.from_addr,
     fromRaw: message.from_name ? `${message.from_name} <${message.from_addr}>` : message.from_addr,

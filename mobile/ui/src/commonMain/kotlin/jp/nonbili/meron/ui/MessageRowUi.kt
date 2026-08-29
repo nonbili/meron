@@ -109,6 +109,9 @@ internal fun MessageRow(
                 isDraft = isDraft,
                 textColor = textColor,
                 mutedColor = mutedColor,
+                remoteContent = remoteContent,
+                preferHtml = preferHtml,
+                searchQuery = searchQuery,
                 onClick = onToggleExpanded,
             )
         } else {
@@ -124,6 +127,9 @@ internal fun MessageRow(
                     isRss = isRss,
                     textColor = textColor,
                     mutedColor = mutedColor,
+                    remoteContent = remoteContent,
+                    preferHtml = preferHtml,
+                    searchQuery = searchQuery,
                     actionsEnabled = actionsEnabled,
                     itemActionsEnabled = itemActionsEnabled,
                     onToggleExpanded = onToggleExpanded,
@@ -168,6 +174,11 @@ private fun CollapsedMessageRow(
     isDraft: Boolean,
     textColor: Color,
     mutedColor: Color,
+    // A collapsed row shows the blocked-content marker too: it is what tells the
+    // reader the message is holding something back before they open it.
+    remoteContent: MessageRemoteContent,
+    preferHtml: Boolean,
+    searchQuery: String,
     onClick: () -> Unit,
 ) {
     val preview =
@@ -197,6 +208,12 @@ private fun CollapsedMessageRow(
                 color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+            BlockedRemoteButton(
+                message = message,
+                remoteContent = remoteContent,
+                preferHtml = preferHtml,
+                searchQuery = searchQuery,
             )
             MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
         }
@@ -273,6 +290,11 @@ internal fun MessageRowHeader(
     isRss: Boolean,
     textColor: Color,
     mutedColor: Color,
+    // Whether this message's remote content may load, for the header's reveal
+    // affordance (see [BlockedRemoteButton]).
+    remoteContent: MessageRemoteContent,
+    preferHtml: Boolean,
+    searchQuery: String,
     actionsEnabled: Boolean,
     itemActionsEnabled: Boolean,
     onToggleExpanded: () -> Unit,
@@ -341,6 +363,12 @@ internal fun MessageRowHeader(
                 )
             }
         }
+        BlockedRemoteButton(
+            message = message,
+            remoteContent = remoteContent,
+            preferHtml = preferHtml,
+            searchQuery = searchQuery,
+        )
         MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
         IconButton(
             onClick = { if (isDraft) onOpenDraft(message) else onOpenMessage(message) },

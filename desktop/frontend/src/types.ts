@@ -250,6 +250,11 @@ export type MessageTab = {
    *  because the conversation's reveal map is cleared when the thread changes,
    *  while the tab stays open. Reader tabs only. */
   revealRemote?: boolean
+  /** Whether the message is the user's own (an identity of its account sent it),
+   *  snapshotted at open time: the tab has no Message to re-derive it from, and
+   *  trusting your own address is a no-op that still grows the allowlist.
+   *  Reader tabs only. */
+  outgoing?: boolean
   /** Present only when kind === "compose". */
   compose?: ComposeDraft
 }

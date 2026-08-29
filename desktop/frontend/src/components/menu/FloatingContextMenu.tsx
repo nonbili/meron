@@ -55,9 +55,16 @@ export function FloatingContextMenu({
       {overlay && onClose && (
         <div
           className={overlayClassName}
-          onClick={onClose}
+          // Portals bubble events through the React tree, not the DOM one: a
+          // menu rendered from inside a clickable row (a message header) would
+          // otherwise hand that row the dismissing click as well.
+          onClick={(event) => {
+            event.stopPropagation()
+            onClose()
+          }}
           onContextMenu={(event) => {
             event.preventDefault()
+            event.stopPropagation()
             onClose()
           }}
         />

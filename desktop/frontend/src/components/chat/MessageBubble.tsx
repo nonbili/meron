@@ -7,6 +7,7 @@ import { openDraftCompose, openMessageTab, retrySend } from '../../states/compos
 import type { Message } from '../../types'
 import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
+import { BlockedRemoteButton } from './BlockedRemoteButton'
 import { MessageContent } from './MessageContent'
 import { useMessageView } from './useMessageView'
 import type { MessageContextMenuState } from './MessageContextMenu'
@@ -118,6 +119,13 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
               </span>
             )}
             {message.starred && <Star size={11} className="fill-amber-500 text-amber-500" />}
+            <BlockedRemoteButton
+              messageId={message.id}
+              blocked={view.blockedRemote}
+              hiddenRemoteCount={view.hiddenRemoteCount}
+              senderAddress={view.outgoing ? '' : view.senderAddress}
+              size={14}
+            />
             <span title={formatFullTimestamp(message.date)}>
               {formatMessageStamp(message.date, view.showOriginalDate)}
             </span>
