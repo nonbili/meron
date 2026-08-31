@@ -157,7 +157,27 @@ fn thread_cards_json_keyed(
     messages: Vec<MessageHeader>,
     draft_thread_keys: &HashSet<String>,
 ) -> anyhow::Result<Vec<(String, Value)>> {
-    let cards = store::group_thread_cards_with_drafts(messages, folder_id, draft_thread_keys);
+    let mut cards = store::group_thread_cards_with_drafts(messages, folder_id, draft_thread_keys);
+
+    // Grouping pins a card to the mailbox being read when the page holds a copy
+    // there, so a Sent reply landing on top does not mint a second id for a
+    // thread the list already shows (see `group_thread_cards_with_drafts`). The
+    // page is a slice, though: the mailbox's own copy of an old thread can sit
+    // below it, leaving the card on the folder its newest hit came from. The
+    // cache has the whole mailbox, so it settles those.
+    let strays: Vec<String> = cards
+        .iter()
+        .filter(|card| !card.header.folder.eq_ignore_ascii_case(folder_id))
+        .map(|card| card.thread_key.clone())
+        .collect();
+    if !strays.is_empty() {
+        let here = store::card_keys_in_folder(conn, account_id, folder_id, &strays)?;
+        for card in &mut cards {
+            if here.contains(&card.thread_key) {
+                card.header.folder = folder_id.to_string();
+            }
+        }
+    }
 
     // The page these cards were grouped from is a filtered, cursor-paged slice
     // of messages, so its per-card tally is not the thread size. Re-count from
@@ -545,6 +565,56 @@ mod tests {
 
         let both = starred_thread_cards(&conn, 2).unwrap();
         assert_eq!(both.len(), 2, "{both:?}");
+    }
+
+    // A search page is a slice of the merged mailbox+Sent results. When the
+    // thread's copy in the searched mailbox sits below the page — an old hit,
+    // pushed down by the reply that was just sent — the page alone would leave
+    // the card on Sent, minting a second id for a thread the list already shows
+    // under the mailbox's.
+    #[test]
+    fn a_search_card_keeps_the_searched_mailbox_even_when_its_copy_paged_out() {
+        let conn = Connection::open_in_memory().unwrap();
+        store::run_migrations(&conn).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::ensure_folder(&conn, "me@example.com", "Sent").unwrap();
+        let inbox_copy = MessageHeader {
+            uid: 1,
+            folder: "INBOX".to_string(),
+            subject: "Topic".to_string(),
+            date: 100,
+            thread_key: "root@example.com".to_string(),
+            ..Default::default()
+        };
+        let sent_reply = MessageHeader {
+            uid: 9,
+            folder: "Sent".to_string(),
+            subject: "Re: Topic".to_string(),
+            date: 300,
+            thread_key: "root@example.com".to_string(),
+            ..Default::default()
+        };
+        store::upsert_messages(&conn, "me@example.com", "INBOX", &[inbox_copy]).unwrap();
+        store::upsert_messages(&conn, "me@example.com", "Sent", &[sent_reply.clone()]).unwrap();
+
+        // Only the reply made the page.
+        let cards = thread_cards_json(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            vec![sent_reply],
+            &HashSet::new(),
+        )
+        .unwrap();
+
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0]["folder_id"], "INBOX");
+        assert_eq!(
+            cards[0]["thread_id"],
+            format_thread_id("me@example.com", "INBOX", "root@example.com#Topic")
+        );
+        // Both copies are one thread, page or no page.
+        assert_eq!(cards[0]["message_count"], 2);
     }
 
     #[test]

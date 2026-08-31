@@ -1165,12 +1165,17 @@ pub fn newest_thread_uids(
     Ok(newest.map(|header| header.uid).into_iter().collect())
 }
 
+/// Which of the account's threads have a draft waiting in them — the keys the
+/// list's Draft badge is decided by. Only real thread keys: a draft with no
+/// threading headers falls back to `uid:<its own uid>`, which says nothing about
+/// any thread and would collide with an unrelated message that happens to hold
+/// that UID in another mailbox (UIDs are unique only within one).
 pub fn draft_thread_keys(conn: &Connection, account: &str) -> Result<HashSet<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid), m.folder, f.special_use
+        "SELECT DISTINCT m.thread_key, m.folder, f.special_use
            FROM messages m
            LEFT JOIN folders f ON f.account = m.account AND f.name = m.folder
-          WHERE m.account = ?1 AND m.uid <> 0",
+          WHERE m.account = ?1 AND m.uid <> 0 AND m.thread_key <> ''",
     )?;
     let rows = stmt.query_map(params![account], |row| {
         Ok((
@@ -1242,12 +1247,29 @@ pub fn group_thread_cards_with_drafts(
         uid: u32,
     }
 
+    // What one card collects. A real thread key is the same thread wherever its
+    // copies sit, but a `uid:` key names a message by (folder, uid) — the fallback
+    // for one with no threading headers — so on a page that spans folders (search
+    // covers the mailbox plus Sent) two unrelated messages that happen to share a
+    // UID carry the same key. Qualifying those with the folder keeps them apart.
+    let group_key = |message: &MessageHeader, key: &str| -> String {
+        if !key.starts_with("uid:") {
+            return key.to_string();
+        }
+        let folder = if message.folder.is_empty() {
+            default_folder
+        } else {
+            message.folder.as_str()
+        };
+        format!("{folder}\u{1}{key}")
+    };
+
     let mut roots: HashMap<String, RootSubject> = HashMap::new();
     for message in &messages {
         if message.uid == 0 {
             continue;
         }
-        let thread_key = effective_thread_key(message);
+        let thread_key = group_key(message, &effective_thread_key(message));
         let entry = roots.entry(thread_key).or_default();
         if entry.uid == 0 || message.uid < entry.uid {
             entry.uid = message.uid;
@@ -1270,9 +1292,10 @@ pub fn group_thread_cards_with_drafts(
             String::new()
         };
         let compound_key = card_thread_key(&message);
-        let card = groups.entry(compound_key.clone()).or_insert_with(|| {
-            order.push(compound_key.clone());
-            let root = roots.get(&base_key);
+        let slot = group_key(&message, &compound_key);
+        let card = groups.entry(slot.clone()).or_insert_with(|| {
+            order.push(slot);
+            let root = roots.get(&group_key(&message, &base_key));
             let mut header = message.clone();
             if header.folder.is_empty() {
                 header.folder = default_folder.to_string();
@@ -1300,6 +1323,22 @@ pub fn group_thread_cards_with_drafts(
                 has_draft: draft_thread_keys.contains(&base_key),
             }
         });
+        // A page can span folders — search covers the mailbox plus Sent — and the
+        // card above took its folder, and so its thread id, from whichever copy
+        // came first (newest). Sending a reply makes the Sent copy the newest one,
+        // which would mint a second id for the same thread: the list shows the
+        // card twice, and every id-keyed update (the draft badge a post-send
+        // discard clears, unread reconciliation) misses the row it means. The
+        // searched mailbox wins whenever it holds a copy of the thread, so the id
+        // is the one that mailbox's own list would give. Not for `uid:` keys:
+        // those name a single message by (folder, uid), so the folder cannot move
+        // without pointing at a different message.
+        if !base_key.starts_with("uid:")
+            && !card.header.folder.eq_ignore_ascii_case(default_folder)
+            && message.folder.eq_ignore_ascii_case(default_folder)
+        {
+            card.header.folder = message.folder.clone();
+        }
         card.message_count += 1;
         if !message.seen {
             card.unread_count += 1;
@@ -1314,6 +1353,57 @@ pub fn group_thread_cards_with_drafts(
         .into_iter()
         .filter_map(|key| groups.remove(&key))
         .collect()
+}
+
+/// Which of `card_keys` the cache holds a copy of in `folder`, as card keys.
+///
+/// A folder-spanning page (search reads the mailbox plus Sent) sees only its own
+/// slice, so the copy that decides a card's identity — see
+/// [`group_thread_cards_with_drafts`] — may have paged out below it. The cache
+/// has the whole mailbox, so it answers for the ones the page cannot.
+///
+/// `uid:` keys are folder-scoped by construction and never move, so they are not
+/// asked about.
+pub fn card_keys_in_folder(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    card_keys: &[String],
+) -> Result<HashSet<String>> {
+    let mut roots: Vec<String> = card_keys
+        .iter()
+        .map(|key| split_thread_key(key).0)
+        .filter(|root| !root.starts_with("uid:"))
+        .collect();
+    roots.sort();
+    roots.dedup();
+
+    let mut present = HashSet::new();
+    for chunk in roots.chunks(100) {
+        let placeholders = (3..3 + chunk.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut stmt = conn.prepare(&format!(
+            "SELECT thread_key, subject FROM messages
+             WHERE account = ?1 AND folder = ?2 AND uid <> 0
+               AND thread_key IN ({placeholders})"
+        ))?;
+        let mut args: Vec<&str> = vec![account, folder];
+        args.extend(chunk.iter().map(String::as_str));
+        let rows = stmt.query_map(params_from_iter(args), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (root, subject) = row?;
+            present.insert(if should_branch_thread_by_subject(&root) {
+                branch_compound_key(&root, &thread_grouping_subject(&subject))
+            } else {
+                root
+            });
+        }
+    }
+    Ok(present)
 }
 
 /// Total cached messages behind each of `card_keys`, keyed by card key.

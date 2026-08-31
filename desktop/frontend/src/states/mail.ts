@@ -727,11 +727,11 @@ let threadLoadVersion = 0
 // slot to the replacement thread; every other load leaves it alone.
 let reselectAfterThreadLoad = false
 
-// View key of the refresh:true load currently out to the server, '' when none.
-// Read only by the background-refresh guard below. It goes stale after a load it
-// named is superseded, which is harmless: the next foreground load overwrites it,
-// and every view change brings one.
+// View key of the refresh:true load currently out to the server, '' when none,
+// tagged with the `threadLoadVersion` of the load holding it so only that load
+// releases it. Read by the background-refresh guard below.
 let pendingRefreshKey = ''
+let pendingRefreshVersion = 0
 
 // Called by flows that clear `selectedThread` because the open conversation is
 // leaving the list (delete, move, discard draft) and want the next load to open
@@ -803,16 +803,48 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
   // would strand the list on the spinner: the foreground load loses `superseded`
   // when it lands, and nothing else is scheduled to try again. Nothing is lost by
   // skipping; the load in flight is asking the server the same question.
-  if (!refresh && searchStage !== 'cache' && pendingRefreshKey === viewKey) return
+  // Only while the claiming load is still the newest one. A load another has
+  // overtaken will drop its results, and it releases the claim on its own only
+  // when its request finally lands — a slow or wedged search would keep every
+  // background refresh of the view out until then.
+  if (
+    !refresh &&
+    searchStage !== 'cache' &&
+    pendingRefreshKey === viewKey &&
+    pendingRefreshVersion === threadLoadVersion
+  ) {
+    return
+  }
 
   const version = (threadLoadVersion += 1)
-  if (refresh) pendingRefreshKey = viewKey
-  const superseded = () =>
-    threadLoadVersion !== version ||
-    ui$.selectedAccount.get() !== selectedAcc ||
-    ui$.selectedFolder.get() !== selectedFol ||
-    ui$.query.get() !== q ||
-    ui$.filterMode.get() !== filter
+  if (refresh) {
+    pendingRefreshKey = viewKey
+    pendingRefreshVersion = version
+  }
+  // Hand the claim above back the moment this load stops being the one that will
+  // write. Every background refresh of this view steps aside while it stands, so
+  // a claim left behind by a load that gave up silences them all for as long as
+  // the view is on screen — that is how a reply sent from a search left the
+  // thread's card showing a Draft badge and a message count that still counted
+  // the draft: the refresh the post-send discard runs was skipped for a search
+  // load the next keystroke had already superseded.
+  const releasePendingRefresh = () => {
+    if (pendingRefreshVersion !== version) return
+    pendingRefreshKey = ''
+    pendingRefreshVersion = 0
+  }
+  // Asked at every point this load would drop its results, so it is also where
+  // the claim is released.
+  const superseded = () => {
+    const stale =
+      threadLoadVersion !== version ||
+      ui$.selectedAccount.get() !== selectedAcc ||
+      ui$.selectedFolder.get() !== selectedFol ||
+      ui$.query.get() !== q ||
+      ui$.filterMode.get() !== filter
+    if (stale) releasePendingRefresh()
+    return stale
+  }
   const previousThreads = mail$.threads.get()
   const currentSelected = ui$.selectedThread.get()
   const previousThreadsCursor = mail$.threadsCursor.get()
@@ -953,7 +985,7 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
   // are still the ones on screen.
   if (refresh) {
     mail$.threadsLoadedKey.set(viewKey)
-    if (pendingRefreshKey === viewKey) pendingRefreshKey = ''
+    releasePendingRefresh()
   }
 
   const filtered = getFilteredThreads()

@@ -1741,6 +1741,82 @@ describe('thread list view identity', () => {
     expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
   })
 
+  // Stepping aside for the load in flight is only right while that load is still
+  // going to write. A search superseded by the next keystroke used to hold the
+  // claim for good, so every later background refresh of that view was skipped —
+  // including the one a post-send draft discard runs, leaving the card's Draft
+  // badge and message count stuck at what they were before the send.
+  it('refreshes in the background again after a superseded search load', async () => {
+    let resolveLive!: (value: unknown) => void
+    const livePage = new Promise((resolve) => {
+      resolveLive = resolve
+    })
+    const refreshes: boolean[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (_command: string, payload: { refresh?: boolean }) => {
+            refreshes.push(payload.refresh ?? true)
+            return payload.refresh ? livePage : { threads: [], next_cursor: '' }
+          },
+        },
+      },
+    }
+
+    ui$.query.set('0821')
+    const stale = loadThreads()
+    await nextTick()
+    // The next keystroke, then a correction back to the same query: the load
+    // above lands with nothing left to write.
+    ui$.query.set('0821 ')
+    resolveLive({ threads: [], next_cursor: '' })
+    await stale
+    ui$.query.set('0821')
+
+    refreshes.length = 0
+    await loadThreads(false)
+
+    expect(refreshes).toEqual([false])
+  })
+
+  // Same claim, still out on the wire: a search another load has overtaken will
+  // drop whatever it returns, so waiting for it — a slow one can take the whole
+  // 15s timeout — buys nothing and costs every background refresh in between.
+  it('refreshes in the background while a superseded search load is still out', async () => {
+    let resolveLive!: (value: unknown) => void
+    const livePage = new Promise((resolve) => {
+      resolveLive = resolve
+    })
+    const refreshes: boolean[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (_command: string, payload: { refresh?: boolean }) => {
+            refreshes.push(payload.refresh ?? true)
+            return payload.refresh ? livePage : { threads: [], next_cursor: '' }
+          },
+        },
+      },
+    }
+
+    ui$.query.set('0821')
+    const stale = loadThreads()
+    await nextTick()
+    // The next keystroke paints its own cache hits, then the user deletes it
+    // again — the search above is now writing for nobody, still on the wire.
+    ui$.query.set('0821 ')
+    await loadThreads(false, 'cache')
+    ui$.query.set('0821')
+
+    refreshes.length = 0
+    await loadThreads(false)
+
+    expect(refreshes).toEqual([false])
+
+    resolveLive({ threads: [], next_cursor: '' })
+    await stale
+  })
+
   // A search paints local hits first, then the live IMAP results. An empty cache
   // stage must not claim the search is answered while the live half is still out.
   it('waits for the live stage of a search, not the cache stage', async () => {

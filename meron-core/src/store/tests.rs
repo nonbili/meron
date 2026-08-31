@@ -199,7 +199,8 @@ fn draft_thread_keys_detects_special_use_and_name_fallback() {
         "INSERT INTO messages(account, folder, msg_id, uid, subject, thread_key)
          VALUES('acct', 'Mail/Entwürfe', '1', 1, 'draft', 'root@h'),
                ('acct', '[Gmail]/Drafts', '2', 2, 'draft', 'other@h'),
-               ('acct', 'INBOX', '3', 3, 'not draft', 'inbox@h')",
+               ('acct', 'INBOX', '3', 3, 'not draft', 'inbox@h'),
+               ('acct', 'Mail/Entwürfe', '4', 7, 'unthreaded draft', '')",
         [],
     )
     .unwrap();
@@ -208,6 +209,11 @@ fn draft_thread_keys_detects_special_use_and_name_fallback() {
     assert!(keys.contains("root@h"));
     assert!(keys.contains("other@h"));
     assert!(!keys.contains("inbox@h"));
+    // A draft with no threading headers falls back to its own UID, which is only
+    // unique within its mailbox — badging every `uid:7` card in the account with
+    // it would mark unrelated mail as having a draft.
+    assert!(!keys.contains("uid:7"));
+    assert!(!keys.contains(""));
 }
 
 #[test]
@@ -1359,6 +1365,82 @@ fn group_thread_cards_marks_groups_with_cached_drafts() {
         .unwrap();
     assert!(marked.has_draft);
     assert!(!unmarked.has_draft);
+}
+
+#[test]
+fn group_thread_cards_keep_the_searched_folder_when_a_page_spans_folders() {
+    use crate::imap::MessageHeader;
+    // A search page merges the mailbox with Sent, newest first. Replying puts
+    // the Sent copy on top, and the card must still be the searched mailbox's
+    // one: its thread id is what the list already has the thread under.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 7,
+                folder: "Sent".to_string(),
+                subject: "Re: Topic".to_string(),
+                date: 300,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 2,
+                folder: "INBOX".to_string(),
+                subject: "Topic".to_string(),
+                date: 100,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.folder, "INBOX");
+    // Only the identity moves: the card still shows the newest message.
+    assert_eq!(cards[0].header.date, 300);
+    assert_eq!(cards[0].message_count, 2);
+
+    // A thread the searched mailbox has no copy of stays where it was found.
+    let sent_only = group_thread_cards(
+        vec![MessageHeader {
+            uid: 7,
+            folder: "Sent".to_string(),
+            subject: "Topic".to_string(),
+            thread_key: "refs-root".to_string(),
+            ..Default::default()
+        }],
+        "INBOX",
+    );
+    assert_eq!(sent_only[0].header.folder, "Sent");
+
+    // `uid:` keys name one message by (folder, uid). Two mailboxes reuse UIDs, so
+    // such a key is only unique within its own folder: unrelated messages that
+    // share one stay separate cards, and neither card's folder may move.
+    let uid_keyed = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 7,
+                folder: "Sent".to_string(),
+                subject: "Reply to somebody".to_string(),
+                thread_key: "uid:7".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 7,
+                folder: "INBOX".to_string(),
+                subject: "Unrelated mail".to_string(),
+                seen: false,
+                thread_key: "uid:7".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(uid_keyed.len(), 2);
+    assert_eq!(uid_keyed[0].header.folder, "Sent");
+    assert_eq!(uid_keyed[0].message_count, 1);
+    assert_eq!(uid_keyed[1].header.folder, "INBOX");
+    assert_eq!(uid_keyed[1].unread_count, 1);
 }
 
 #[test]
