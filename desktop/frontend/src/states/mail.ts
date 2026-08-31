@@ -1266,7 +1266,10 @@ function recipientKey(message: Message): string {
     .join(',')
 }
 
-function normalizeMessageId(value: string | undefined): string {
+// The sidecar accepts RFC Message-IDs both with and without their header angle
+// brackets. Cached messages retain the spelling returned by the mail server,
+// so every frontend identity comparison uses this same equivalence.
+export function normalizeMessageId(value: string | undefined): string {
   return (value ?? '').trim().replace(/^<|>$/g, '').toLowerCase()
 }
 
@@ -1817,17 +1820,20 @@ export async function discardSavedDraftCopy(
 
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
-  const nextMessages = previousMessages.filter((message) => {
-    if (draft.messageId && message.id === draft.messageId) return false
-    if (
-      draft.draftMessageId &&
-      message.message_id === draft.draftMessageId &&
-      isDraftFolder(message.folder_id, message.account_id)
-    ) {
-      return false
-    }
-    return true
-  })
+  const discardedDraftMessageId = normalizeMessageId(draft.draftMessageId)
+  const withoutDiscardedDraft = (messages: Message[]) =>
+    messages.filter((message) => {
+      if (draft.messageId && message.id === draft.messageId) return false
+      if (
+        discardedDraftMessageId &&
+        normalizeMessageId(message.message_id) === discardedDraftMessageId &&
+        isDraftFolder(message.folder_id, message.account_id)
+      ) {
+        return false
+      }
+      return true
+    })
+  const nextMessages = withoutDiscardedDraft(previousMessages)
   const selectedThread = ui$.selectedThread.get()
   const removeThread = !!draft.threadId && !nextMessages.some((message) => message.thread_id === draft.threadId)
 
@@ -1860,7 +1866,13 @@ export async function discardSavedDraftCopy(
       applyMutationFolderUnreads(res as MutationResult)
     }
     await loadThreads(false)
-    if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, mail$.messages.get())
+    // A mail.synced thread refresh can land while the server discard is on the
+    // wire and reinsert the stale draft row after the optimistic removal above.
+    // The discard has now succeeded, so remove that copy again before deriving
+    // the conversation and thread-card draft state.
+    const reconciledMessages = withoutDiscardedDraft(mail$.messages.get())
+    if (reconciledMessages.length !== mail$.messages.get().length) mail$.messages.set(reconciledMessages)
+    if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, reconciledMessages)
     const selectedAcc = ui$.selectedAccount.get()
     if (selectedAcc) void loadFolders(selectedAcc, false)
     if (draft.accountId && draft.accountId !== selectedAcc) void loadFolders(draft.accountId, false)

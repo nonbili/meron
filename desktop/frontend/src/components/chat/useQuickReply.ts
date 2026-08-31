@@ -3,18 +3,20 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import {
   cancelQuickReplyDraftSave,
+  clearQuickReplyDraftOwnership,
   compose$,
   discardQuickReplyDraftIfEmpty,
   isQuickReplyBlank,
   quickReplyCaretOffset,
+  quickReplyDraftBelongsToThread,
   saveQuickReplyDraft,
   scheduleQuickReplyDraftSave,
   seedQuickReplySignature,
   sendReply,
 } from '../../states/compose'
-import { getActiveThread } from '../../states/mail'
 import { showToast, ui$ } from '../../states/ui'
 import { settings$, isSendKey } from '../../states/settings'
+import type { ComposerAttachment } from '../../types'
 import { pickFiles } from '../../lib/nativeFilePicker'
 import {
   extractClipboardImages,
@@ -30,6 +32,25 @@ const QUICK_REPLY_VERTICAL_PADDING_PX = 14
 const QUICK_REPLY_MAX_HEIGHT_PX =
   QUICK_REPLY_MAX_VISIBLE_LINES * QUICK_REPLY_LINE_HEIGHT_PX + QUICK_REPLY_VERTICAL_PADDING_PX
 
+function sameAttachmentContent(left: readonly ComposerAttachment[], right: readonly ComposerAttachment[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (attachment, index) =>
+        attachment.id === right[index].id &&
+        attachment.filename === right[index].filename &&
+        attachment.mime === right[index].mime &&
+        attachment.size === right[index].size &&
+        attachment.data === right[index].data &&
+        attachment.inlineId === right[index].inlineId,
+    )
+  )
+}
+
+function attachmentSnapshot(attachments: readonly ComposerAttachment[]): ComposerAttachment[] {
+  return attachments.map((attachment) => ({ ...attachment }))
+}
+
 // State and behaviour for the quick-reply box: per-thread draft hydration and
 // autosave, attachment handling (file picker + sync/async/native paste), the
 // auto-growing textarea, the reply-focus shortcut and send. The component renders
@@ -39,14 +60,14 @@ export function useQuickReply() {
   const composer = useValue(compose$.composer)
   const composerAttachments = useValue(compose$.composerAttachments)
   const sendShortcut = useValue(settings$.sendShortcut)
-  const activeThread = useValue(getActiveThread)
-  const activeThreadId = activeThread?.thread_id ?? ''
+  const selectedThreadId = useValue(ui$.selectedThread)
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const replyFocus = useValue(ui$.replyFocus)
   const lastImagePasteAtRef = useRef(0)
   const lastHydratedThreadRef = useRef('')
   const suppressNextDraftSaveRef = useRef(false)
+  const previousAttachmentsRef = useRef(attachmentSnapshot(composerAttachments))
   const [sendingReply, setSendingReply] = useState(false)
 
   const handleSendReply = useCallback(async () => {
@@ -85,20 +106,31 @@ export function useQuickReply() {
   // once its messages load.
   useEffect(() => {
     const previous = lastHydratedThreadRef.current
-    if (previous === activeThreadId) return
+    if (previous === selectedThreadId) return
     cancelQuickReplyDraftSave()
-    lastHydratedThreadRef.current = activeThreadId
+    lastHydratedThreadRef.current = selectedThreadId
     suppressNextDraftSaveRef.current = true
-    compose$.quickReplyDraftId.set('')
-    compose$.quickReplyDraftSaved.set(false)
+    // The composer effect normally consumes this suppression during the same
+    // effect flush. If its dependency value did not change, disarm it after the
+    // flush so the user's next real edit still autosaves.
+    queueMicrotask(() => {
+      if (lastHydratedThreadRef.current === selectedThreadId) suppressNextDraftSaveRef.current = false
+    })
+    // A fast conversation read can hydrate its tail draft before this passive
+    // effect runs (notably when opening a draft-backed conversation). That
+    // state already belongs to the new thread; clearing it here loses ownership
+    // of the server copy, so sending later deletes only a newly-created draft
+    // and leaves the original bubble and list badge behind.
+    if (quickReplyDraftBelongsToThread(selectedThreadId)) return
+    clearQuickReplyDraftOwnership()
     compose$.quickReplyFrom.set('')
     // Starts the new thread's box on the replying account's signature rather
     // than blank — the box is what gets sent, so it shows what will go out.
     seedQuickReplySignature()
-  }, [activeThreadId])
+  }, [selectedThreadId])
 
   // Save or discard the current quick reply after text changes. Keyed on
-  // `composer` only (not `activeThreadId`), and scheduled against
+  // `composer` only (not `selectedThreadId`), and scheduled against
   // `lastHydratedThreadRef.current`, so thread-switch resets do not autosave.
   useEffect(() => {
     const owner = lastHydratedThreadRef.current
@@ -113,12 +145,14 @@ export function useQuickReply() {
     } else {
       scheduleQuickReplyDraftSave()
     }
-  }, [composer, composerAttachments.length])
+  }, [composer])
 
   // Attachments are a discrete action rather than a keystroke stream, so save
   // (or discard, if that was the last thing keeping the draft non-empty)
   // immediately instead of waiting out the debounce.
   useEffect(() => {
+    if (sameAttachmentContent(previousAttachmentsRef.current, composerAttachments)) return
+    previousAttachmentsRef.current = attachmentSnapshot(composerAttachments)
     const owner = lastHydratedThreadRef.current
     if (!owner) return
     cancelQuickReplyDraftSave()

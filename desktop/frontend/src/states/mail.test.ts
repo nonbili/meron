@@ -996,7 +996,9 @@ describe('deleteThread', () => {
     const draftMessage = thread({
       id: 'acc:Drafts:thread:1#201',
       folder_id: 'Drafts',
-      message_id: 'draft-id@example.com',
+      // IMAP commonly returns the header form while the identity allocated for
+      // save/discard is bare. They identify the same draft.
+      message_id: '<DRAFT-ID@example.com>',
       body: 'test',
     })
     mail$.threads.set([inboxThread])

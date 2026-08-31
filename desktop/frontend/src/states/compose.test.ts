@@ -19,6 +19,7 @@ import {
   openThreadTabById,
   quickReplyCaretOffset,
   quickReplyFromState,
+  quickReplyDraftBelongsToThread,
   pickReplyTarget,
   resolveQuickReplyFrom,
   retrySend,
@@ -219,7 +220,13 @@ describe('openThreadTabById', () => {
 
     await openDraftCompose(draft)
     const firstTabId = compose$.activeTab.get()
-    await openDraftCompose(draft)
+    await openDraftCompose({
+      ...draft,
+      id: 'acc-notification#DRAFTS#42#100',
+      folder_id: 'DRAFTS',
+      thread_id: 'acc-notification#DRAFTS#42',
+      message_id: '<DRAFT-ID@example.com>',
+    })
 
     expect(compose$.tabs.get()).toHaveLength(1)
     expect(compose$.activeTab.get()).toBe(firstTabId)
@@ -434,6 +441,7 @@ describe('quick reply draft sharing', () => {
     compose$.composerAttachments.set([])
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
+    compose$.quickReplyDraftThreadId.set('')
     compose$.quickReplyFrom.set('')
     mail$.messages.set([])
     mail$.threads.set([])
@@ -500,6 +508,53 @@ describe('quick reply draft sharing', () => {
     expect(calls.filter((c) => c.command === 'mail.allocateIdentity')).toHaveLength(1)
     expect(compose$.quickReplyDraftId.get()).toBe(firstDraftId)
     expect((saveCalls[1].payload as { draft_id: string }).draft_id).toBe(firstDraftId)
+  })
+
+  it('marks a newly minted draft unsaved when the hydrated draft is claimed by an editor', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Updated reply')
+    compose$.quickReplyDraftId.set('hydrated-draft@example.com')
+    compose$.quickReplyDraftSaved.set(true)
+    compose$.quickReplyDraftThreadId.set('t-1')
+    openComposeTab({
+      accountId: 'acc-1',
+      draftMessageId: 'hydrated-draft@example.com',
+      title: 'Claimed draft',
+    })
+
+    let saveStarted!: () => void
+    const started = new Promise<void>((resolve) => (saveStarted = resolve))
+    let releaseSave!: () => void
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'replacement-draft@example.com' }
+      if (command === 'mail.saveDraft') {
+        saveStarted()
+        await new Promise<void>((resolve) => (releaseSave = resolve))
+      }
+      return {}
+    }
+
+    const saving = saveQuickReplyDraft()
+    await started
+
+    expect(compose$.quickReplyDraftId.get()).not.toBe('hydrated-draft@example.com')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+
+    releaseSave()
+    await saving
+    expect(compose$.quickReplyDraftId.get()).toBe('replacement-draft@example.com')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
   })
 
   it('does nothing when there is no active thread or the composer is empty', async () => {
@@ -624,6 +679,18 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyFrom.get()).toBe('me@example.com')
   })
 
+  it('recognizes a draft hydrated before the quick-reply component mounts', () => {
+    compose$.composer.set('Already hydrated')
+    compose$.quickReplyDraftId.set('draft-1@example.com')
+    compose$.quickReplyDraftSaved.set(true)
+    compose$.quickReplyDraftThreadId.set('t-1')
+
+    expect(quickReplyDraftBelongsToThread('t-1')).toBe(true)
+    expect(quickReplyDraftBelongsToThread('t-2')).toBe(false)
+    compose$.quickReplyDraftSaved.set(false)
+    expect(quickReplyDraftBelongsToThread('t-1')).toBe(true)
+  })
+
   it('keeps the hydrated draft hidden after an optimistic sent bubble is appended', () => {
     const ancestor = message({ id: 'm1', folder_id: 'INBOX', message_id: 'root@example.com' })
     const draft = message({
@@ -685,6 +752,49 @@ describe('quick reply draft sharing', () => {
     expect(compose$.composer.get()).toBe('')
     expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+  })
+
+  it('discards a matching loaded draft when its quick-reply ownership was lost', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+      has_draft: true,
+    })
+    const draft = message({
+      id: 'draft-row',
+      account_id: 'acc-1',
+      folder_id: 'Drafts',
+      thread_id: 't-1',
+      from_addr: 'me@example.com',
+      message_id: 'reply-draft@example.com',
+      body: 'Reply that was sent',
+      date: 2000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread, draft])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Reply that was sent')
+    compose$.quickReplyDraftId.set('')
+    compose$.quickReplyDraftSaved.set(false)
+    compose$.quickReplyDraftThreadId.set('')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+
+    await sendReply()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(calls.find((call) => call.command === 'mail.discardDraft')?.payload).toMatchObject({
+      account_id: 'acc-1',
+      draft_id: 'reply-draft@example.com',
+      thread_id: 't-1',
+    })
+    expect(mail$.messages.get().some((item) => item.id === 'draft-row')).toBe(false)
+    expect(mail$.threads.get().find((item) => item.thread_id === 't-1')?.has_draft).toBe(false)
   })
 
   it('keeps the consumed draft guarded while the post-send discard is still in flight', async () => {
@@ -749,6 +859,8 @@ describe('quick reply draft sharing', () => {
 
     releaseDiscard()
     await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mail$.messages.get().some((message) => message.id === 'draft-row')).toBe(false)
   })
 
   it('allows a different draft to hydrate after the sent draft cleanup settles', async () => {
@@ -1202,6 +1314,11 @@ describe('quick reply draft sharing', () => {
     await allocating
     releaseSave()
     await save
+    // The late save belongs to the send now, not to the box. A remount in this
+    // allocation window must not preserve the id the send will discard.
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+    expect(compose$.quickReplyDraftThreadId.get()).toBe('')
+    expect(quickReplyDraftBelongsToThread('t-1')).toBe(false)
     releaseIdentity()
     await send
 
@@ -1226,6 +1343,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Reply text')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
+    compose$.quickReplyDraftThreadId.set('t-1')
     compose$.quickReplySignature.set(null)
     settings$.signature.set('')
 
@@ -1629,6 +1747,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
+    compose$.quickReplyDraftThreadId.set('t-1')
     compose$.quickReplySignature.set(null)
     settings$.signature.set('')
 
@@ -1654,6 +1773,7 @@ describe('quick reply draft sharing', () => {
     // pointing at it while the user carries on typing.
     expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+    expect(compose$.quickReplyDraftThreadId.get()).toBe('')
 
     releaseIdentity()
     await send
@@ -2270,6 +2390,7 @@ describe('quick reply draft sharing', () => {
     // a second copy under it and cleanup could only ever delete one of the two.
     expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+    expect(compose$.quickReplyDraftThreadId.get()).toBe('')
 
     // The thread read back-fills the header; then it hydrates as normal.
     mail$.messages.set([thread, { ...envelopeOnly, message_id: 'now-known@example.com', body: 'Half-written answer' }])
@@ -2483,6 +2604,7 @@ describe('quick reply draft sharing', () => {
     expect(compose$.tabs.get()[0].compose?.draftMessageId).toBe(draftId)
     expect(compose$.quickReplyDraftId.get()).toBe('')
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+    expect(compose$.quickReplyDraftThreadId.get()).toBe('')
   })
 })
 

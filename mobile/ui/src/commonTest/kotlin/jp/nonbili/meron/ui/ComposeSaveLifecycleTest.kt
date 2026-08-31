@@ -351,6 +351,7 @@ class ComposeSaveLifecycleTest {
             withTimeout(1_000) {
                 while (state.quickReplySendInFlight) yield()
             }
+            assertTrue(state.messages.none { it.id == "draft-row" })
         }
 
     @Test
