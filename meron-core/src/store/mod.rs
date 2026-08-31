@@ -649,7 +649,8 @@ pub fn search_messages(
     let cursor_folder = before_cursor.map(|cursor| cursor.folder.as_str());
     let mut stmt = conn.prepare(
         "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
-                m.thread_key, json_extract(m.json, '$.to')
+                m.thread_key, json_extract(m.json, '$.to'),
+                COALESCE(json_extract(m.json, '$.message_id'), '')
          FROM messages m
          WHERE m.id IN (
                  SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?1
@@ -673,7 +674,7 @@ pub fn search_messages(
             cursor_uid,
             cursor_folder
         ],
-        message_header_from_row,
+        search_header_from_row,
     )?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -694,7 +695,8 @@ fn search_messages_like(
     let cursor_folder = before_cursor.map(|cursor| cursor.folder.as_str());
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
+                json_extract(json, '$.to'),
+                COALESCE(json_extract(json, '$.message_id'), '') FROM messages
          WHERE account = ?1 AND folder = ?2 AND uid <> 0
            AND (
              lower(COALESCE(subject, '')) LIKE ?3 ESCAPE '\\'
@@ -719,7 +721,7 @@ fn search_messages_like(
             cursor_uid,
             cursor_folder
         ],
-        message_header_from_row,
+        search_header_from_row,
     )?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -865,7 +867,8 @@ pub fn get_search_snapshot_page(
     let fetch_limit = limit.saturating_add(1);
     let mut stmt = conn.prepare(
         "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
-                m.thread_key, json_extract(m.json, '$.to'), h.folder, h.position
+                m.thread_key, json_extract(m.json, '$.to'), h.folder, h.position,
+                COALESCE(json_extract(m.json, '$.message_id'), '')
          FROM mail_search_hits h
          JOIN messages m
            ON m.account = h.account AND m.folder = h.folder AND m.uid = h.uid
@@ -879,6 +882,7 @@ pub fn get_search_snapshot_page(
         |row| {
             let mut message = message_header_from_row(row)?;
             message.folder = row.get(9)?;
+            message.message_id = row.get(11)?;
             Ok((message, row.get::<_, u32>(10)?))
         },
     )?;
@@ -1280,6 +1284,14 @@ pub fn group_thread_cards_with_drafts(
 
     let mut groups: HashMap<String, ThreadCard> = HashMap::new();
     let mut order = Vec::new();
+    // One message can reach a folder-spanning page twice: search reads the
+    // mailbox plus Sent, and a self-sent message is cached in both. The cached
+    // tally this page's is floored against folds those copies by Message-ID (see
+    // `card_message_counts`), so fold them here too, or the card claims a message
+    // more than the mailbox's own list gives it. A row with no Message-ID cannot
+    // be matched to a copy and counts on its own. The value is whether a copy has
+    // already been counted as unread.
+    let mut folded: HashMap<(String, String), bool> = HashMap::new();
     for message in messages {
         if message.uid == 0 {
             continue;
@@ -1293,6 +1305,21 @@ pub fn group_thread_cards_with_drafts(
         };
         let compound_key = card_thread_key(&message);
         let slot = group_key(&message, &compound_key);
+        let fold_key =
+            (!message.message_id.is_empty()).then(|| (slot.clone(), message.message_id.clone()));
+        let first_copy = fold_key
+            .as_ref()
+            .is_none_or(|key| !folded.contains_key(key));
+        // Copies can disagree on the read flag — the mailbox's copy unread, the
+        // Sent one not — and the message is unread if any of them is, whichever
+        // order the page happens to put them in.
+        let counts_unread = !message.seen
+            && fold_key
+                .as_ref()
+                .is_none_or(|key| !folded.get(key).copied().unwrap_or(false));
+        if let Some(key) = fold_key {
+            *folded.entry(key).or_insert(false) |= !message.seen;
+        }
         let card = groups.entry(slot.clone()).or_insert_with(|| {
             order.push(slot);
             let root = roots.get(&group_key(&message, &base_key));
@@ -1339,9 +1366,13 @@ pub fn group_thread_cards_with_drafts(
         {
             card.header.folder = message.folder.clone();
         }
-        card.message_count += 1;
-        if !message.seen {
+        if first_copy {
+            card.message_count += 1;
+        }
+        if counts_unread {
             card.unread_count += 1;
+        }
+        if !message.seen {
             card.header.seen = false;
         }
         if message.starred {
@@ -1797,6 +1828,16 @@ fn message_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageH
         folder: String::new(),
         ..Default::default()
     })
+}
+
+/// [`message_header_from_row`] for the cached search reads, which select the
+/// Message-ID as a tenth column. A search page spans folders, so the grouping
+/// that turns it into cards needs the id to see the two copies of a self-sent
+/// message as one message rather than two.
+fn search_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageHeader> {
+    let mut header = message_header_from_row(row)?;
+    header.message_id = row.get(9)?;
+    Ok(header)
 }
 
 /// Parse a cached `$.to` JSON array into recipients, tolerating null/garbage.

@@ -242,6 +242,45 @@ fn search_messages_matches_subject_sender_and_body_case_insensitively() {
 }
 
 #[test]
+fn cached_search_reads_carry_the_message_id() {
+    use crate::imap::MessageHeader;
+    // Search pages span folders, and the grouping that turns them into cards
+    // folds a self-sent message's two copies by Message-ID. A cache-answered
+    // search (offline, or the first page before the live results land) must
+    // carry the id too, or its cards count that message twice.
+    let conn = test_conn();
+    let copy = |folder: &str, uid: u32| MessageHeader {
+        uid,
+        folder: folder.to_string(),
+        subject: "Quarterly Plan".to_string(),
+        date: 100,
+        thread_key: "root@example.com".to_string(),
+        message_id: "<self@example.com>".to_string(),
+        ..Default::default()
+    };
+    ensure_folder(&conn, "acct", "INBOX").unwrap();
+    ensure_folder(&conn, "acct", "Sent").unwrap();
+    upsert_messages(&conn, "acct", "INBOX", &[copy("INBOX", 1)]).unwrap();
+    upsert_messages(&conn, "acct", "Sent", &[copy("Sent", 9)]).unwrap();
+
+    let folders = vec!["INBOX".to_string(), "Sent".to_string()];
+    // Both reads: the trigram index answers queries of three codepoints or
+    // more, the LIKE scan the shorter ones.
+    for query in ["quarterly", "an"] {
+        let hits = search_messages_in_folders(&conn, "acct", &folders, query, 10, None).unwrap();
+        assert_eq!(hits.len(), 2, "{query}");
+        assert!(
+            hits.iter()
+                .all(|hit| hit.message_id == "<self@example.com>"),
+            "{query}"
+        );
+        let cards = group_thread_cards(hits, "INBOX");
+        assert_eq!(cards.len(), 1, "{query}");
+        assert_eq!(cards[0].message_count, 1, "{query}");
+    }
+}
+
+#[test]
 fn search_messages_matches_substrings_including_cjk() {
     let conn = test_conn();
     insert_message(
@@ -1365,6 +1404,78 @@ fn group_thread_cards_marks_groups_with_cached_drafts() {
         .unwrap();
     assert!(marked.has_draft);
     assert!(!unmarked.has_draft);
+}
+
+#[test]
+fn group_thread_cards_count_a_self_sent_copy_once() {
+    use crate::imap::MessageHeader;
+    // A message the user sent to themselves is cached in both Sent and Inbox,
+    // and a search page reads both. It is one message in the thread: the tally
+    // the card carries — a floor under the cached count, which folds copies by
+    // Message-ID — must not count it twice, or the search list shows a longer
+    // thread than the mailbox's own list does.
+    let copy = |folder: &str, uid: u32| MessageHeader {
+        uid,
+        folder: folder.to_string(),
+        subject: "Re: Topic".to_string(),
+        date: 300,
+        seen: false,
+        thread_key: "refs-root".to_string(),
+        message_id: "<reply@example.com>".to_string(),
+        ..Default::default()
+    };
+    let cards = group_thread_cards(
+        vec![
+            copy("Sent", 7),
+            copy("INBOX", 9),
+            MessageHeader {
+                uid: 2,
+                folder: "INBOX".to_string(),
+                subject: "Topic".to_string(),
+                date: 100,
+                seen: true,
+                thread_key: "refs-root".to_string(),
+                message_id: "<root@example.com>".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].message_count, 2);
+    assert_eq!(cards[0].unread_count, 1);
+    assert!(!cards[0].header.seen);
+
+    // The copies can disagree on the read flag: Sent's is read, the mailbox's is
+    // not. The message is unread whichever copy the page lists first.
+    for order in [
+        [("Sent", 7, true), ("INBOX", 9, false)],
+        [("INBOX", 9, false), ("Sent", 7, true)],
+    ] {
+        let page = order
+            .into_iter()
+            .map(|(folder, uid, seen)| MessageHeader {
+                seen,
+                ..copy(folder, uid)
+            })
+            .collect::<Vec<_>>();
+        let cards = group_thread_cards(page, "INBOX");
+        assert_eq!(cards[0].message_count, 1);
+        assert_eq!(cards[0].unread_count, 1);
+        assert!(!cards[0].header.seen);
+    }
+
+    // Without a Message-ID there is nothing to match a copy on, so each row
+    // still counts for itself.
+    let anonymous = |folder: &str, uid: u32| MessageHeader {
+        uid,
+        folder: folder.to_string(),
+        subject: "Topic".to_string(),
+        thread_key: "refs-root".to_string(),
+        ..Default::default()
+    };
+    let cards = group_thread_cards(vec![anonymous("Sent", 7), anonymous("INBOX", 9)], "INBOX");
+    assert_eq!(cards[0].message_count, 2);
 }
 
 #[test]
