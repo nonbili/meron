@@ -63,6 +63,17 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.3" date="2026-09-01">
+      <description>
+        <ul>
+          <li>Open attachments in the default app on click, save from the hover icon</li>
+          <li>Count in-thread search matches per occurrence, not per message</li>
+          <li>Maximise after the window maps on Linux so unmaximising keeps the title bar visible</li>
+          <li>Replace the blocked remote content banner with a header icon menu</li>
+          <li>Clear draft after sending</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.2" date="2026-08-26">
       <description>
         <ul>

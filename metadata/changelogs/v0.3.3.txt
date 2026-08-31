@@ -1,0 +1,5 @@
+- Open attachments in the default app on click, save from the hover icon
+- Count in-thread search matches per occurrence, not per message
+- Maximise after the window maps on Linux so unmaximising keeps the title bar visible
+- Replace the blocked remote content banner with a header icon menu
+- Clear draft after sending

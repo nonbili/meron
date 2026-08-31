@@ -16,7 +16,7 @@
              wails.json: the wails CLI rewrites that file from a Go struct with no
              field for it (`wails dev`), which would drop it without a word. -->
         <key>CFBundleVersion</key>
-        <string>14</string>
+        <string>15</string>
         <key>CFBundleGetInfoString</key>
         <string>{{.Info.Comments}}</string>
         <key>CFBundleShortVersionString</key>
