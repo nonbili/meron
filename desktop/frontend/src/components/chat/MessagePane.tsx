@@ -67,6 +67,7 @@ export function MessagePane() {
   const flashMessageId = useValue(thread$.flashMessageId)
   const quickReplyDraftId = useValue(compose$.quickReplyDraftId)
   const quickReplyDraftSaved = useValue(compose$.quickReplyDraftSaved)
+  const sendingDraftIds = useValue(compose$.sendingDraftIds)
   const tabs = useValue(compose$.tabs)
   const activeTab = useValue(compose$.activeTab)
   const activeTabData = tabs.find((tab) => tab.id === activeTab) ?? null
@@ -98,10 +99,12 @@ export function MessagePane() {
     if (activeThreadId) void loadThread(activeThreadId).catch(console.error)
   }, [activeThreadId])
   // Keep the draft hydrated into the quick-reply bar out of the conversation,
-  // including while an optimistic sending bubble follows it.
+  // including while an optimistic sending bubble follows it. Drafts a send has
+  // already taken over stay hidden too, until the post-send discard settles —
+  // the quick reply has let go of them by then, so nothing else would.
   const displayMessages = useMemo(
-    () => withoutHydratedQuickReplyDraft(messages, quickReplyDraftId, quickReplyDraftSaved),
-    [messages, quickReplyDraftId, quickReplyDraftSaved],
+    () => withoutHydratedQuickReplyDraft(messages, quickReplyDraftId, quickReplyDraftSaved, sendingDraftIds),
+    [messages, quickReplyDraftId, quickReplyDraftSaved, sendingDraftIds],
   )
   const unreadKey = displayMessages.map((message) => `${message.id}:${message.unread ? '1' : '0'}`).join('|')
 

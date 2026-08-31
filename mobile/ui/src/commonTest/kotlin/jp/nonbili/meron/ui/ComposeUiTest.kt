@@ -619,6 +619,47 @@ class ComposeUiTest {
             threadId = threadId,
         )
 
+    @Test
+    fun quickReplyDoesNotTakeADraftRowWithoutAMessageId() {
+        val state = testState()
+        state.coreAccounts = listOf(aliasAccount())
+        state.selectedCoreThread = threadSummary(id = "t1")
+        state.quickReplyThreadId = "t1"
+        val parent = messageBody(id = "m1", folderId = "INBOX")
+        // Synced from its envelope: no Message-ID, so nothing on the server this
+        // bar could later save over or discard.
+        val envelopeOnly = messageBody(id = "d1", folderId = "Drafts", fromAddr = "me@example.com")
+
+        state.hydrateQuickReplyFromTailDraft("t1", listOf(parent, envelopeOnly))
+
+        assertEquals("", state.quickReplyDraftId)
+        assertFalse(state.quickReplyDraftSaved)
+
+        // Once the read fills the header in, it hydrates as normal.
+        state.hydrateQuickReplyFromTailDraft("t1", listOf(parent, envelopeOnly.copy(messageId = "now-known@example.com")))
+
+        assertEquals("now-known@example.com", state.quickReplyDraftId)
+        assertTrue(state.quickReplyDraftSaved)
+    }
+
+    @Test
+    fun quickReplyHydrationLeavesAReplyInProgressAlone() {
+        val state = testState()
+        state.coreAccounts = listOf(aliasAccount())
+        state.selectedCoreThread = threadSummary(id = "t1")
+        state.quickReplyThreadId = "t1"
+        val parent = messageBody(id = "m1", folderId = "INBOX")
+        val draft = messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1", fromAddr = "me@example.com")
+        // The bar is visible as soon as the thread opens, so the user can be
+        // typing before the read that carries this draft comes back.
+        state.quickReplyBody = "A reply typed while the read was out"
+
+        state.hydrateQuickReplyFromTailDraft("t1", listOf(parent, draft))
+
+        assertEquals("A reply typed while the read was out", state.quickReplyBody)
+        assertEquals("", state.quickReplyDraftId)
+    }
+
     private fun messageBody(
         id: String,
         folderId: String,

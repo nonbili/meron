@@ -1015,6 +1015,12 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
                 // The save still belongs to the editor that started it. Keep its
                 // remote draft, but do not let its completion mutate another
                 // thread or a newer version of this reply.
+                //
+                // A send is waiting on this save's lock and cannot read the id
+                // off the bar — the bar has moved on, or never held it — so hand
+                // it over directly. Without this the copy just written is the one
+                // left in Drafts beside the reply that send is about to deliver.
+                if (quickReplySendInFlight) quickReplySendDraftHandover = thread.id to savedDraftId
                 true
             } else {
                 quickReplyDraftId = savedDraftId
@@ -1035,10 +1041,14 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
 // conversation. An optimistic sent bubble is appended after it, so tail-only
 // matching would reveal the draft again while sending.
 internal fun MeronMobileState.visibleThreadMessages(): List<MessageBody> {
-    if (quickReplyDraftId.isBlank()) return messages
-    val normalizedDraftId = quickReplyDraftId.normalizedComposeDraftId()
+    // Drafts a send has taken over are hidden too, until their discard comes
+    // back: navigating away clears the bar's id, so reopening the conversation
+    // mid-send would otherwise show the draft beside the reply it was sent as.
+    val hidden = quickReplyConsumedDraftIds.toMutableSet()
+    if (quickReplyDraftId.isNotBlank()) hidden += quickReplyDraftId.normalizedComposeDraftId()
+    if (hidden.isEmpty()) return messages
     return messages.filterNot {
-        folderIsDrafts(it.folderId) && it.messageId.normalizedComposeDraftId() == normalizedDraftId
+        folderIsDrafts(it.folderId) && it.messageId.normalizedComposeDraftId() in hidden
     }
 }
 
@@ -1348,6 +1358,19 @@ internal fun MeronMobileState.sendQuickReply() {
     pendingCertificateRetry = null
     pendingQuickReplySend = null
     val generation = quickReplyGeneration
+    // The bar's draft as it stood at the click. Read here rather than in the
+    // coroutine below, which starts a turn later: a tap that leaves the
+    // conversation in between would clear the bar, and this send would have no
+    // owner to discard.
+    val claimedDraftOwner =
+        quickReplyDraftId
+            .takeIf { quickReplyDraftSaved && it.isNotBlank() }
+            ?.let { ComposeDraftOwner(accountId, it, thread.id) }
+    // Hold it from the click too. The allocation below is long enough to leave
+    // the conversation and come back, and the draft rehydrated in between holds
+    // the text being sent — indistinguishable, by the time the send settles,
+    // from a newer reply the user has started.
+    claimedDraftOwner?.let { quickReplyConsumedDraftIds += it.draftId.normalizedComposeDraftId() }
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = resolveQuickReplyFrom(parent, account)
     val baseParams =
@@ -1370,11 +1393,32 @@ internal fun MeronMobileState.sendQuickReply() {
     scope.launch {
         val pending =
             quickReplySaveMutex.withLock {
+                // Settle who owns the draft this reply consumed *before* the
+                // identity allocation below: that is a round trip, and until the
+                // owner is resolved and held, reopening the conversation can
+                // hydrate the very draft being sent, and a failed allocation can
+                // leave a handover behind for some later send to act on.
+                //
+                // Any autosave from before the click has finished by now — it
+                // held this same lock — so whatever it handed over is here.
+                val resolvedOwner =
+                    claimedDraftOwner
+                        ?: quickReplyDraftId
+                            .takeIf { quickReplyDraftSaved && it.isNotBlank() && quickReplyThreadId == thread.id }
+                            ?.let { ComposeDraftOwner(accountId, it, thread.id) }
+                        ?: quickReplySendDraftHandover
+                            ?.takeIf { it.first == thread.id }
+                            ?.let { ComposeDraftOwner(accountId, it.second, thread.id) }
+                quickReplySendDraftHandover = null
+                resolvedOwner?.let { quickReplyConsumedDraftIds += it.draftId.normalizedComposeDraftId() }
                 val outboundMessageId =
                     runCatching {
                         withContext(ioDispatcher) { allocateCoreMessageId(MobileMailCommandClient(core), accountId, draft = false) }
                     }.getOrElse {
                         quickReplySendInFlight = false
+                        resolvedOwner?.let { owner ->
+                            quickReplyConsumedDraftIds -= owner.draftId.normalizedComposeDraftId()
+                        }
                         quickReplyFailure = it.message.orEmpty()
                         status = "Send failed: ${it.message}"
                         return@launch
@@ -1406,10 +1450,7 @@ internal fun MeronMobileState.sendQuickReply() {
                     params = params,
                     tempMessageId = tempId,
                     threadId = thread.id,
-                    draftOwner =
-                        quickReplyDraftId
-                            .takeIf { quickReplyDraftSaved && it.isNotBlank() }
-                            ?.let { ComposeDraftOwner(accountId, it, thread.id) },
+                    draftOwner = resolvedOwner,
                     quickReplyGeneration = generation,
                 )
             }
@@ -1452,7 +1493,18 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         }
     }.onSuccess {
         val sameEditorGeneration = quickReplyGeneration == pending.quickReplyGeneration
-        pending.draftOwner?.takeIf { sameEditorGeneration }?.let { owner ->
+        // The bar has carried on writing into this same draft — it moved on but
+        // kept the id — so it holds the user's next reply now, not the text that
+        // just went out, and the autosave following this send will write theirs
+        // over it. That is the one case where the draft stays.
+        val barKeptTheDraft =
+            !sameEditorGeneration &&
+                quickReplyThreadId == pending.draftOwner?.threadId &&
+                quickReplyDraftId.normalizedComposeDraftId() == pending.draftOwner?.draftId?.normalizedComposeDraftId()
+        // Everything else — the bar untouched, or moved to another thread or
+        // another draft — leaves nobody pointing at the consumed copy, and not
+        // discarding it is what strands it in Drafts beside the sent reply.
+        pending.draftOwner?.takeIf { !barKeptTheDraft }?.let { owner ->
             val discarded =
                 runCatching {
                     withContext(ioDispatcher) {

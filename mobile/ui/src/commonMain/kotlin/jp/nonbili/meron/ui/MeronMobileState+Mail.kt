@@ -862,12 +862,15 @@ internal fun MeronMobileState.openDraftCompose(
             composeForwardInlineAttachments = inlineAttachments
             composeFromAccountId = thread.accountId
             composeFromEmail = ""
-            composeDraftId =
-                message.messageId
-                    .trim()
-                    .trim('<', '>')
-                    .ifBlank { newDraftMessageId(thread.accountId) }
-            composeDraftSaved = true
+            // A draft with no Message-ID of its own — imported, or written by
+            // something that omitted the header — cannot be addressed on the
+            // server: a discard would search for a header that isn't there. The
+            // composer takes an id of its own and treats it as unsaved, so its
+            // first save creates that draft properly instead of claiming one
+            // that was never written.
+            val openedDraftId = message.messageId.trim().trim('<', '>')
+            composeDraftId = openedDraftId.ifBlank { newDraftMessageId(thread.accountId) }
+            composeDraftSaved = openedDraftId.isNotBlank()
             composeDraftAccountId = thread.accountId
             composeInReplyTo = message.inReplyTo
             composeReferences = message.references
@@ -987,13 +990,20 @@ internal fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     // holds the text we just sent, not a reply left unfinished.
     if (normalizedTailId.isNotBlank() && normalizedTailId in quickReplyConsumedDraftIds) return
     if (quickReplyDraftId.isNotBlank() && quickReplyDraftId.normalizedComposeDraftId() == normalizedTailId) return
+    // Only a draft we can address on the server. A row synced from its envelope
+    // carries no Message-ID yet — and no body either — so taking it would put an
+    // empty bar in front of the user calling itself their saved draft, under an
+    // id that names nothing: the next save would append a second copy and leave
+    // this one stranded. Reading the thread back-fills the header.
+    val tailDraftId = tail.messageId.trim().trim('<', '>')
+    if (tailDraftId.isBlank()) return
+    // Only into a bar that is free. Hydration fills an empty reply from a saved
+    // draft; it is not entitled to replace a reply the user began before this
+    // read came back, nor to drop the id that reply is already saved under.
+    if (!quickReplyIsBlank() || quickReplyDraftId.isNotBlank()) return
     quickReplyBody = tail.body
     ++quickReplyGeneration
-    quickReplyDraftId =
-        tail.messageId
-            .trim()
-            .trim('<', '>')
-            .ifBlank { newDraftMessageId() }
+    quickReplyDraftId = tailDraftId
     quickReplyDraftSaved = true
     quickReplyInReplyTo = tail.inReplyTo
     quickReplyReferences = tail.references

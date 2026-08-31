@@ -294,6 +294,204 @@ class ComposeSaveLifecycleTest {
         }
 
     @Test
+    fun leavingTheThreadDuringTheSendStillDiscardsTheDraftItConsumed() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.quickReplyDraftId = "reply-draft@example.com"
+            state.quickReplyDraftSaved = true
+            state.onQuickReplyBodyChange("Reply")
+
+            state.sendQuickReply()
+            // The user opens another conversation while the send is out, which
+            // resets the bar and moves the editor generation on.
+            state.quickReplyThreadId = "other"
+            state.quickReplyDraftId = ""
+            state.quickReplyDraftSaved = false
+            ++state.quickReplyGeneration
+            withTimeout(5_000) {
+                core.sendFinished.await()
+                core.discardFinished.await()
+            }
+
+            // Nothing points at that draft any more; leaving it is what puts it
+            // in Drafts next to the reply it was sent as.
+            assertTrue(core.discardPayloads.single().contains("reply-draft@example.com"))
+        }
+
+    @Test
+    fun aConsumedDraftStaysOutOfTheConversationAfterReopening() =
+        runBlocking {
+            val core = SaveCore().apply { holdDiscard = CompletableDeferred() }
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.quickReplyDraftId = "reply-draft@example.com"
+            state.quickReplyDraftSaved = true
+            state.onQuickReplyBodyChange("Reply")
+
+            state.sendQuickReply()
+            withTimeout(5_000) {
+                core.sendFinished.await()
+                core.discardFinished.await()
+            }
+
+            // Reopening clears the bar's id, so only the send's own hold is left
+            // to keep the draft it consumed out of the conversation.
+            state.quickReplyThreadId = "other"
+            state.quickReplyBody = ""
+            state.quickReplyDraftId = ""
+            state.quickReplyDraftSaved = false
+            state.quickReplyThreadId = "thread"
+            state.messages = state.messages + consumedDraft()
+
+            assertTrue(state.visibleThreadMessages().none { it.id == "draft-row" })
+
+            core.holdDiscard!!.complete(Unit)
+            withTimeout(1_000) {
+                while (state.quickReplySendInFlight) yield()
+            }
+        }
+
+    @Test
+    fun openingADraftWithoutAMessageIdDoesNotClaimItAsSaved() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            val thread =
+                ThreadSummary(id = "thread", accountId = "a", folder = "Drafts", subject = "Subject", sender = "a@example.com")
+            val draft =
+                MessageBody(
+                    id = "draft-row",
+                    folderId = "Drafts",
+                    from = "A",
+                    fromAddr = "a@example.com",
+                    to = "you@example.com",
+                    subject = "Subject",
+                    body = "Half written",
+                    messageId = "",
+                )
+
+            state.openDraftCompose(draft, thread)
+            withTimeout(5_000) { while (state.screen != Screen.Compose) yield() }
+
+            // Nothing on the server answers to this id, so a discard would find
+            // nothing and a save must create the draft rather than replace one.
+            assertEquals(false, state.composeDraftSaved)
+            assertTrue(state.composeDraftId.startsWith("local-draft-"))
+
+            state.openDraftCompose(draft.copy(messageId = "real-draft@example.com"), thread)
+            withTimeout(5_000) { while (state.composeDraftId != "real-draft@example.com") yield() }
+
+            assertTrue(state.composeDraftSaved)
+        }
+
+    @Test
+    fun aSendNeverAdoptsTheDraftOfAThreadOpenedWhileItWasOut() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.onQuickReplyBodyChange("Reply")
+
+            // Nothing saved yet, so the send has no draft of its own to claim.
+            state.sendQuickReply()
+            // Another conversation opens while the send is out and hydrates its
+            // own saved draft into the bar.
+            state.quickReplyThreadId = "other-thread"
+            state.quickReplyDraftId = "someone-elses-draft@example.com"
+            state.quickReplyDraftSaved = true
+            ++state.quickReplyGeneration
+            withTimeout(5_000) { core.sendFinished.await() }
+            withTimeout(5_000) {
+                while (state.quickReplySendInFlight) yield()
+            }
+
+            // That draft belongs to a thread this send never touched.
+            assertTrue(core.discardPayloads.isEmpty())
+            assertEquals("someone-elses-draft@example.com", state.quickReplyDraftId)
+        }
+
+    @Test
+    fun aDraftRehydratedDuringTheSendIsStillDiscarded() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.quickReplyDraftId = "reply-draft@example.com"
+            state.quickReplyDraftSaved = true
+            state.onQuickReplyBodyChange("Reply")
+
+            state.sendQuickReply()
+            // Leaving and reopening the conversation during the send: the read
+            // still returns the consumed draft as the tail.
+            state.quickReplyThreadId = "other"
+            state.quickReplyBody = ""
+            state.quickReplyDraftId = ""
+            state.quickReplyDraftSaved = false
+            state.quickReplyThreadId = "thread"
+            state.hydrateQuickReplyFromTailDraft("thread", state.messages + consumedDraft())
+
+            // The hold runs from the click, so the sent text cannot come back
+            // into the bar and be mistaken for a newer reply.
+            assertEquals("", state.quickReplyDraftId)
+            withTimeout(5_000) {
+                core.sendFinished.await()
+                core.discardFinished.await()
+            }
+            assertTrue(core.discardPayloads.single().contains("reply-draft@example.com"))
+        }
+
+    @Test
+    fun aHandedOverDraftIsHeldAndSettledBeforeTheIdentityAllocation() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.onQuickReplyBodyChange("Reply")
+            // An autosave from before the click landed while the bar had already
+            // moved on, so it handed its id to the send rather than the bar.
+            state.quickReplySendDraftHandover = "thread" to "handed-over@example.com"
+
+            state.sendQuickReply()
+            // Reopening the conversation while the send is still allocating must
+            // not pull the text being sent back into the bar.
+            state.hydrateQuickReplyFromTailDraft(
+                "thread",
+                state.messages + consumedDraft().copy(messageId = "handed-over@example.com"),
+            )
+            assertEquals("", state.quickReplyDraftId)
+
+            withTimeout(5_000) {
+                core.sendFinished.await()
+                core.discardFinished.await()
+            }
+            assertTrue(core.discardPayloads.single().contains("handed-over@example.com"))
+            assertEquals(null, state.quickReplySendDraftHandover)
+        }
+
+    @Test
+    fun aFailedAllocationDoesNotLeaveAHandoverForTheNextSend() =
+        runBlocking {
+            val core = SaveCore().apply { allocationFails = true }
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.onQuickReplyBodyChange("Reply")
+            state.quickReplySendDraftHandover = "thread" to "handed-over@example.com"
+
+            state.sendQuickReply()
+            withTimeout(5_000) {
+                while (state.quickReplySendInFlight) yield()
+            }
+
+            // Left behind, a later send in this thread would consume it and
+            // delete the safety copy of a reply that never went out.
+            assertEquals(null, state.quickReplySendDraftHandover)
+            assertTrue(state.quickReplyConsumedDraftIds.isEmpty())
+            assertTrue(core.discardPayloads.isEmpty())
+        }
+
+    @Test
     fun aFailedSendLeavesItsDraftReachableAgain() =
         runBlocking {
             val core = SaveCore().apply { sendFails = true }
@@ -523,6 +721,7 @@ class ComposeSaveLifecycleTest {
         var saveCalls = 0
         var sendCalls = 0
         var discardFails = false
+        var allocationFails = false
         var sendFails = false
         var holdDiscard: CompletableDeferred<Unit>? = null
         var allocationCalls = 0
@@ -534,6 +733,7 @@ class ComposeSaveLifecycleTest {
             when (command) {
                 MobileCommand.AllocateIdentity -> {
                     allocationCalls++
+                    if (allocationFails) throw RuntimeException("allocation failed")
                     """{"message_id":"draft-$allocationCalls@example.com"}"""
                 }
 

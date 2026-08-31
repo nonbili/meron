@@ -272,6 +272,11 @@ internal class MeronMobileState(
     // genuinely failed leaves its draft reachable again. Not UI state, so a
     // plain set rather than mutableStateOf.
     val quickReplyConsumedDraftIds = mutableSetOf<String>()
+
+    /** Thread id and draft id an autosave landed for a send that was waiting on
+     * the save lock, where the reply bar had already moved on and could not
+     * carry the id across. Consumed by that send when it takes the lock. */
+    var quickReplySendDraftHandover: Pair<String, String>? = null
     var status by mutableStateOf("")
     var syncing by mutableStateOf(false)
     var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))
