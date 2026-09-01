@@ -1,4 +1,15 @@
 import { type MessageFrameFont } from '../../lib/fonts'
+import {
+  DEFAULT_READER_THEME,
+  LIGHT_ON_DARK_TEXT,
+  disownStyleElements,
+  frameCanvas,
+  frameVar,
+  frameVarPrefix,
+  isOwnStyleElement,
+  ownStyleElement,
+  type ReaderTheme,
+} from './frameTheme'
 
 const READER_STYLE_ID = 'meron-reader-style'
 const READER_FONT_STYLE_ID = 'meron-reader-font'
@@ -8,16 +19,16 @@ export const DEFAULT_READER_FONT: MessageFrameFont = {
   zoom: 1,
 }
 
-const READER_CSS = `
+const readerCss = (v: (name: string) => string) => `
   html {
-    background: #f8fafc;
+    background: var(${v('page-bg')}, #f8fafc);
   }
   body {
     box-sizing: border-box;
     max-width: 760px;
     margin: 0 auto !important;
     padding: 24px 20px 40px !important;
-    color: #0f172a;
+    color: var(${v('text')}, #0f172a);
     overflow-wrap: anywhere;
   }
   *, *::before, *::after {
@@ -52,10 +63,10 @@ const READER_CSS = `
     overflow-x: auto;
     margin: 16px 0 !important;
     padding: 14px 48px 10px 16px !important;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(${v('border')}, #e2e8f0);
     border-radius: 8px;
-    background: #f1f5f9;
-    color: #1e293b;
+    background: var(${v('surface')}, #f1f5f9);
+    color: var(${v('text')}, #1e293b);
     font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     white-space: pre;
     overflow-y: hidden;
@@ -71,10 +82,10 @@ const READER_CSS = `
     border: 3px solid transparent;
     background-clip: padding-box;
     border-radius: 999px;
-    background-color: #cbd5e1;
+    background-color: var(${v('muted')}, #cbd5e1);
   }
   pre::-webkit-scrollbar-thumb:hover {
-    background-color: #94a3b8;
+    background-color: var(${v('muted-strong')}, #94a3b8);
     border: 2px solid transparent;
   }
   pre code {
@@ -103,7 +114,7 @@ const READER_CSS = `
   }
   code {
     border-radius: 4px;
-    background: #eef2f7;
+    background: var(${v('surface')}, #eef2f7);
     padding: 0.12em 0.32em;
     font: 0.92em ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   }
@@ -121,10 +132,10 @@ const READER_CSS = `
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(${v('border')}, #cbd5e1);
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.92);
-    color: #64748b;
+    background: var(${v('raised')}, rgba(255, 255, 255, 0.92));
+    color: var(${v('muted-strong')}, #64748b);
     opacity: 0;
     cursor: pointer;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
@@ -135,14 +146,75 @@ const READER_CSS = `
     opacity: 1;
   }
   .meron-copy-code:hover {
-    background: #ffffff;
-    color: #0f172a;
+    background: var(${v('raised-hover')}, #ffffff);
+    color: var(${v('text')}, #0f172a);
   }
   .meron-copy-code svg {
     width: 15px;
     height: 15px;
   }
 `
+
+/**
+ * Paint the frame with the active theme. The gutter always follows it; the
+ * message body only goes dark when it brings no colors of its own, and one that
+ * does is given the canvas those colors were authored for (see
+ * `frameCanvasBackground`) — light, or its own declared page color.
+ */
+export function applyReaderTheme(doc: Document, theme: ReaderTheme) {
+  // Anything that arrived claiming to be a frame stylesheet isn't one: the
+  // reader's own are the ones it injected itself.
+  disownStyleElements(doc)
+  const style = doc.documentElement.style
+  const v = (name: string) => frameVar(frameVarPrefix(doc), name)
+  // The canvas itself is painted on the body by `frameCanvas`; what is left for
+  // the frame here is the gutter around it and the palette on top of it.
+  const { background: canvas, text: canvasText } = frameCanvas(doc, theme.appearance, LIGHT_ON_DARK_TEXT)
+
+  // In a light appearance the message's own page color simply takes over the
+  // whole frame, the way the sender meant it — a themed gutter would only put a
+  // seam around the body. In a dark one the gutter stays dark and the canvas is
+  // confined to the reader column, so the message reads as a card on it.
+  style.setProperty(v('page-bg'), canvas && theme.appearance === 'light' ? canvas : theme.pageBg)
+
+  const vars: Array<[string, string]> = [
+    [v('text'), theme.text],
+    [v('surface'), theme.surface],
+    [v('raised'), theme.raised],
+    [v('raised-hover'), theme.raisedHover],
+    [v('border'), theme.border],
+    [v('muted'), theme.muted],
+    [v('muted-strong'), theme.mutedStrong],
+  ]
+  // A message on a canvas of its own keeps the light defaults baked into
+  // READER_CSS: its own colors were authored against them.
+  if (theme.appearance === 'dark' && !canvas) {
+    for (const [name, value] of vars) style.setProperty(name, value)
+  } else {
+    for (const [name] of vars) style.removeProperty(name)
+  }
+
+  // A canvas the message declared but never wrote text colors for still needs a
+  // readable foreground — a restored black page with the light-mode default on
+  // it is the dark-on-dark case this whole path exists to avoid.
+  if (canvasText) style.setProperty(v('text'), canvasText)
+}
+
+/**
+ * The reader's own element carrying `id`, if it is really ours.
+ *
+ * A sender can ship `<style id="meron-reader-style">`: the core strips `meron-*`
+ * hooks, but a body that predates that (or arrives from a feed) can still carry
+ * one, and looking the id up blindly would let it stand in for the reader's own
+ * stylesheet. A squatter loses the id and the reader injects its own.
+ */
+function ownStyle(doc: Document, id: string): HTMLElement | null {
+  const found = doc.getElementById(id)
+  if (!found) return null
+  if (isOwnStyleElement(found)) return found
+  found.removeAttribute('id')
+  return null
+}
 
 // Neutralise likely tracking pixels in the stored email HTML: tiny/hidden images
 // and known tracker URL patterns are swapped for a transparent 1x1 GIF.
@@ -229,7 +301,7 @@ export function applyReaderFont(doc: Document, font: MessageFrameFont) {
   if (font.family) rules.push(`font-family: ${font.family};`)
   if (font.zoom !== 1) rules.push(`zoom: ${font.zoom};`)
 
-  let style = doc.getElementById(READER_FONT_STYLE_ID)
+  let style = ownStyle(doc, READER_FONT_STYLE_ID)
   if (rules.length === 0) {
     style?.remove()
     return
@@ -237,6 +309,7 @@ export function applyReaderFont(doc: Document, font: MessageFrameFont) {
   if (!style) {
     style = doc.createElement('style')
     style.id = READER_FONT_STYLE_ID
+    ownStyleElement(style)
     ;(doc.head ?? doc.documentElement).appendChild(style)
   }
   style.textContent = `body { ${rules.join(' ')} }`
@@ -246,13 +319,20 @@ export function applyReaderFont(doc: Document, font: MessageFrameFont) {
 // stylesheet, wrap standalone <pre> elements with copy-code buttons, and force
 // media to fit. Runs in the frontend so already-stored feed HTML gets the same
 // treatment.
-export function applyReaderLayout(doc: Document, font: MessageFrameFont = DEFAULT_READER_FONT) {
+export function applyReaderLayout(
+  doc: Document,
+  font: MessageFrameFont = DEFAULT_READER_FONT,
+  theme: ReaderTheme = DEFAULT_READER_THEME,
+) {
   applyReaderFont(doc, font)
+  applyReaderTheme(doc, theme)
 
-  if (!doc.getElementById(READER_STYLE_ID)) {
+  if (!ownStyle(doc, READER_STYLE_ID)) {
+    const prefix = frameVarPrefix(doc)
     const style = doc.createElement('style')
     style.id = READER_STYLE_ID
-    style.textContent = READER_CSS
+    style.textContent = readerCss((name) => frameVar(prefix, name))
+    ownStyleElement(style)
     ;(doc.head ?? doc.documentElement).appendChild(style)
   }
 

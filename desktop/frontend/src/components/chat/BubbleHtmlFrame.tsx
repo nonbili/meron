@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
-import { prepareBubbleHtml } from './bubbleHtml'
+import { FRAME_GENERATION_MARKER, applyBubbleTheme, prepareBubbleHtml } from './bubbleHtml'
 import { bodyContentKey } from './messageHelpers'
 import { applyFrameHighlights, clearFrameHighlights } from './frameSearchHighlight'
 import { frameMetrics, measureFrameHeight } from './frameHeight'
 import { useMessageFrameFont } from './useMessageFrameFont'
+import { useBubbleTheme } from './useFrameTheme'
 
 const DEFAULT_FRAME_HEIGHT = 120
 const HEIGHT_CHANGE_EPSILON = 1
@@ -18,6 +19,7 @@ const measuredHeights = new Map<string, number>()
 // the frame grows to fit while the bubble wrapper owns scrolling.
 export function BubbleHtmlFrame({
   html,
+  outgoing = false,
   allowRemote = false,
   searchQuery = '',
   activeSearchOffset = -1,
@@ -25,6 +27,8 @@ export function BubbleHtmlFrame({
   onUserScrollIntent,
 }: {
   html: string
+  /** Which bubble the frame sits in: its colors are the ones the frame paints with. */
+  outgoing?: boolean
   /** Loosen the baked CSP so this message's remote content loads. */
   allowRemote?: boolean
   /** In-thread search query; matches are marked inside the frame document. */
@@ -36,19 +40,33 @@ export function BubbleHtmlFrame({
 }) {
   const { t } = useTranslation()
   const messageFont = useMessageFrameFont()
-  // Re-preparing the document is what re-renders the frame with new typography.
-  const prepareHtml = useCallback(
-    (raw: string) => prepareBubbleHtml(raw, messageFont, allowRemote),
-    [messageFont, allowRemote],
-  )
-  // Typography is part of the key: the same HTML measures to a different height
-  // once the message font or text size changes.
-  const cacheKey = useMemo(
-    // Remote content is part of the key too: revealing it usually makes the
-    // document taller, so a cached height from the blocked render is stale.
+  const bubbleTheme = useBubbleTheme(outgoing)
+  // Everything the frame's document is built from. Typography is part of it:
+  // the same HTML measures to a different height once the message font or text
+  // size changes, and so is remote content, since revealing it usually makes the
+  // document taller. A change here reloads the frame.
+  const documentKey = useMemo(
     () => `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${bodyContentKey(html)}`,
     [html, messageFont, allowRemote],
   )
+  // What this document is called while it is the current one. The frame is wired
+  // as soon as its srcDoc changes — while the document it replaces is still
+  // loaded — so the ready handler checks the stamp before it measures anything,
+  // and leaves the outgoing document to the handler it already has.
+  const generation = useMemo(() => `${documentKey.length}-${Math.random().toString(36).slice(2)}`, [documentKey])
+  // Re-preparing the document is what re-renders the frame with new typography.
+  // The theme isn't baked in: its decision needs the rendered document, so it is
+  // applied to the live frame instead (see applyBubbleTheme).
+  const prepareHtml = useCallback(
+    (raw: string) => prepareBubbleHtml(raw, messageFont, allowRemote, generation),
+    [messageFont, allowRemote, generation],
+  )
+  // The appearance changes the height too — a self-styled message gets a padded
+  // card in a dark theme — but repaints the live document instead of reloading
+  // it, so it is the one dimension a measurement reads live.
+  const appearanceRef = useRef(bubbleTheme.appearance)
+  appearanceRef.current = bubbleTheme.appearance
+  const cacheKey = `${documentKey}:${bubbleTheme.appearance}`
   const cachedHeight = measuredHeights.get(cacheKey)
   const [height, setHeight] = useState(() => cachedHeight ?? DEFAULT_FRAME_HEIGHT)
   const [measured, setMeasured] = useState(() => cachedHeight !== undefined)
@@ -57,6 +75,10 @@ export function BubbleHtmlFrame({
   const heightRef = useRef(height)
   const measuredRef = useRef(measured)
   const [frameDoc, setFrameDoc] = useState<Document | null>(null)
+  // The ready handler is keyed on the document, not on the theme; the effect
+  // below repaints a live frame when the theme changes under it.
+  const bubbleThemeRef = useRef(bubbleTheme)
+  bubbleThemeRef.current = bubbleTheme
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
 
@@ -93,14 +115,17 @@ export function BubbleHtmlFrame({
     [openImage],
   )
 
+  // Only a new document starts over from the placeholder height. A theme change
+  // keeps the height it has — the frame is still showing a measured document —
+  // and the resize observer files the new one if the canvas changes its box.
   useEffect(() => {
-    const cached = measuredHeights.get(cacheKey)
+    const cached = measuredHeights.get(`${documentKey}:${appearanceRef.current}`)
     const nextHeight = cached ?? DEFAULT_FRAME_HEIGHT
     heightRef.current = nextHeight
     measuredRef.current = cached !== undefined
     setHeight(nextHeight)
     setMeasured(cached !== undefined)
-  }, [cacheKey])
+  }, [documentKey])
 
   useEffect(() => {
     const host = hostRef.current
@@ -116,10 +141,15 @@ export function BubbleHtmlFrame({
     })
     observer.observe(host)
     return () => observer.disconnect()
-  }, [cacheKey])
+  }, [documentKey])
 
   const handleReady = useCallback(
     (doc: Document) => {
+      // Not the document this handler was made for: about:blank on the first
+      // wiring, or the previous one still in the frame. Its own handler is
+      // still installed, and the load event wires this one again.
+      if (doc.documentElement.getAttribute(FRAME_GENERATION_MARKER) !== generation) return
+
       let animationFrame = 0
       let disposed = false
       // Per document: what its out-of-flow content was last seen to need.
@@ -128,7 +158,9 @@ export function BubbleHtmlFrame({
 
       const commitHeight = (nextHeight: number) => {
         if (disposed) return
-        measuredHeights.set(cacheKey, nextHeight)
+        // Filed under the document this handler was installed for, in whatever
+        // appearance is painting it now: a later document has its own handler.
+        measuredHeights.set(`${documentKey}:${appearanceRef.current}`, nextHeight)
         if (!measuredRef.current) {
           measuredRef.current = true
           setMeasured(true)
@@ -206,6 +238,7 @@ export function BubbleHtmlFrame({
         wrapper.appendChild(button)
       }
 
+      applyBubbleTheme(doc, bubbleThemeRef.current)
       setFrameDoc(doc)
       cleanupFns.push(() => setFrameDoc((current) => (current === doc ? null : current)))
 
@@ -246,8 +279,14 @@ export function BubbleHtmlFrame({
         cleanupFns.forEach((cleanup) => cleanup())
       }
     },
-    [cacheKey],
+    [documentKey, generation],
   )
+
+  // Repaint a live frame when the theme changes under it: the document isn't
+  // rebuilt for a theme (only typography is baked in), so nothing else would.
+  useEffect(() => {
+    if (frameDoc?.body) applyBubbleTheme(frameDoc, bubbleTheme)
+  }, [frameDoc, bubbleTheme])
 
   // Mark search hits in the live document. Re-runs when the query, the active
   // match, or the document itself changes; clearing on teardown keeps a frame

@@ -4,9 +4,10 @@ import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { mediaSrc, readerAttachmentImages } from './messageHelpers'
-import { applyReaderFont, applyReaderLayout, stripTrackingPixels } from './readerHtml'
+import { applyReaderFont, applyReaderLayout, applyReaderTheme, stripTrackingPixels } from './readerHtml'
 import { applyRemoteContentPolicy } from './remoteContentCsp'
 import { useMessageFrameFont } from './useMessageFrameFont'
+import { useReaderTheme } from './useFrameTheme'
 
 const readerScrollPositions = new Map<string, number>()
 
@@ -47,6 +48,7 @@ export function HtmlMessageView({
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const textRef = useRef<HTMLDivElement | null>(null)
   const messageFont = useMessageFrameFont()
+  const readerTheme = useReaderTheme()
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null)
@@ -145,18 +147,23 @@ export function HtmlMessageView({
 
   const handleFrameReady = useCallback(
     (doc: Document) => {
-      applyReaderLayout(doc, messageFont)
+      applyReaderLayout(doc, messageFont, readerTheme)
       requestAnimationFrame(restoreScrollPosition)
     },
-    [messageFont, restoreScrollPosition],
+    [messageFont, readerTheme, restoreScrollPosition],
   )
 
   // The frame only re-runs `onReady` when its document is replaced, so repaint
-  // the live document when the typography settings change under it.
+  // the live document when the typography or theme settings change under it.
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument
     if (doc?.body) applyReaderFont(doc, messageFont)
   }, [messageFont, html, viewMode])
+
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument
+    if (doc?.body) applyReaderTheme(doc, readerTheme)
+  }, [readerTheme, html, viewMode])
 
   useLayoutEffect(() => {
     if (viewMode !== 'plain' && html) return
@@ -193,7 +200,8 @@ export function HtmlMessageView({
         ref={iframeRef}
         html={sanitizedHtml ?? ''}
         title={title}
-        className="flex-1 w-full border-0 bg-white"
+        className="flex-1 w-full border-0"
+        style={{ backgroundColor: readerTheme.pageBg }}
         onFrameClick={handleFrameClick}
         onReady={handleFrameReady}
         onLinkHover={setHoveredLink}

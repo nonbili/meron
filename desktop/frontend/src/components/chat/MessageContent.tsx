@@ -98,6 +98,7 @@ export function MessageContent({
       <MessageBubbleBody
         message={message}
         useHtmlBody={view.useHtmlBody}
+        outgoing={view.outgoing}
         allowRemote={view.remoteVisible}
         normalizedSearchQuery={view.normalizedSearchQuery}
         activeSearchOffset={view.activeSearchOffset}

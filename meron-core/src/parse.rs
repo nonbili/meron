@@ -416,6 +416,11 @@ fn sanitize_email_html(source: &str) -> String {
         .add_tags(["style", "font", "center"])
         // By default ammonia also empties `<style>` content; keep the CSS.
         .rm_clean_content_tags(["style"])
+        // Ammonia sanitises a *fragment*: `<head>` and its children are dropped
+        // as tags, but a dropped tag's text survives. `<title>` is the one head
+        // element with text, so without this the subject line reappears as a
+        // stray paragraph above the message body.
+        .add_clean_content_tags(["title"])
         // Presentational attributes allowed on any element; styling must survive.
         .add_generic_attributes([
             "style",
@@ -445,6 +450,13 @@ fn sanitize_email_html(source: &str) -> String {
         // `/media/<key>` inline-image refs are relative and must pass through.
         .url_relative(ammonia::UrlRelative::PassThrough)
         .attribute_filter(|element, attribute, value| {
+            // `meron-*` ids and classes are the frames' own hooks: the injected
+            // reader stylesheet, the code-block wrappers, the search marks. A
+            // sender that claims one would be read back as ours.
+            if matches!(attribute, "id" | "class") && value.to_ascii_lowercase().contains("meron-")
+            {
+                return None;
+            }
             if value.trim_start().to_ascii_lowercase().starts_with("data:") {
                 // Keep `data:image/...` only on `<img src>`; drop it anywhere else
                 // (e.g. an `href`) so it can't become a navigable script document.
@@ -461,6 +473,250 @@ fn sanitize_email_html(source: &str) -> String {
     builder.clean(source).to_string()
 }
 
+/// What a message declares on its own `<body>` for the whole page.
+#[derive(Default)]
+struct BodyCanvas {
+    background: Option<String>,
+    text: Option<String>,
+    /// The properties the declaration marked `!important`, named as the frames
+    /// restore them: "background-color", "color".
+    important: Vec<&'static str>,
+}
+
+/// One canvas declaration read off a style attribute, with its importance.
+struct CanvasDeclaration {
+    value: String,
+    important: bool,
+}
+
+/// The canvas colors the email declares on its own `<body>`.
+///
+/// Ammonia sanitises a fragment, so the `<body>` tag (and with it the page colors
+/// most HTML mail sets there) never survives into the rendered document. The
+/// frames need them: a declared background marks the message as carrying its own
+/// design, which is what keeps a dark theme from repainting it, and the text
+/// color has to travel with it — restoring a black canvas without the white text
+/// that went on it is worse than restoring neither (see `frameTheme.ts`). Both
+/// are echoed into the head as `<meta>`s rather than re-applied here, so the
+/// frontend stays the single place that decides.
+fn declared_body_colors(source: &str) -> BodyCanvas {
+    let Some(tag) = body_start_tag(source) else {
+        return BodyCanvas::default();
+    };
+    let style = attribute_value(tag, "style").unwrap_or_default();
+    let (css_background, css_text) = css_canvas_colors(&style);
+    // Importance travels with the color: the frames restore these as the inline
+    // declarations they were, and an important one outranks a sender rule that a
+    // normal one loses to.
+    let mut important = Vec::new();
+    if css_background.as_ref().is_some_and(|held| held.important) {
+        important.push("background-color");
+    }
+    if css_text.as_ref().is_some_and(|held| held.important) {
+        important.push("color");
+    }
+
+    // A style declaration outranks the presentational attribute, as it does in
+    // the cascade — `bgcolor` is only the fallback for mail that predates CSS.
+    // A declaration that isn't a color (an image layer, say) still wins, and
+    // then drops out here rather than falling back to the attribute.
+    let background = match css_background.as_ref().map(|held| held.value.as_str()) {
+        Some(value) => safe_css_color(value),
+        None => attribute_value(tag, "bgcolor")
+            .as_deref()
+            .and_then(safe_css_color),
+    };
+    let text = match css_text.as_ref().map(|held| held.value.as_str()) {
+        Some(value) => safe_css_color(value),
+        None => attribute_value(tag, "text")
+            .as_deref()
+            .and_then(safe_css_color),
+    };
+
+    BodyCanvas {
+        background,
+        text,
+        important,
+    }
+}
+
+/// The raw `<body ...>` start tag, skipping any that only appears inside a comment.
+fn body_start_tag(source: &str) -> Option<&str> {
+    let lower = source.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(rel) = lower[from..].find("<body") {
+        let start = from + rel;
+        from = start + 5;
+        // `<bodyfoo` is a different element; the tag name must end here.
+        let after = lower.as_bytes().get(start + 5)?;
+        if !matches!(after, b' ' | b'\t' | b'\r' | b'\n' | b'>' | b'/') {
+            continue;
+        }
+        // A `<body>` written inside a comment isn't the document's body. Every
+        // comment that opens before it and hasn't closed yet swallows it.
+        let commented = lower[..start]
+            .rfind("<!--")
+            .is_some_and(|open| !lower[open..start].contains("-->"));
+        if commented {
+            continue;
+        }
+        let end = start + lower[start..].find('>')?;
+        return Some(&source[start..end]);
+    }
+    None
+}
+
+/// Accept a value only if it is an actual CSS color, and echo it back trimmed.
+///
+/// The value lands in a quoted attribute the frontend interpolates into CSS, so
+/// the grammar is the boundary: a hex triplet, an `rgb()`/`hsl()` function, or a
+/// bare keyword. Anything else — a `url()`, a gradient, a second declaration —
+/// is dropped rather than escaped.
+fn safe_css_color(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 64 {
+        return None;
+    }
+
+    let hex = value.strip_prefix('#');
+    let is_hex = hex.is_some_and(|digits| {
+        matches!(digits.len(), 3 | 4 | 6 | 8) && digits.chars().all(|c| c.is_ascii_hexdigit())
+    });
+    // A keyword: `white`, `transparent`, `currentcolor`. No digits, so it can't
+    // be confused with a length or a bare hex value.
+    let is_keyword = value.chars().all(|c| c.is_ascii_alphabetic());
+    // `rgb(0,0,0) url(probe.png)` must not slip through on a prefix/suffix check:
+    // the arguments are matched whole, and may only be numbers and separators.
+    let lower = value.to_ascii_lowercase();
+    let is_function = ["rgb", "rgba", "hsl", "hsla"].iter().any(|name| {
+        lower
+            .strip_prefix(name)
+            .and_then(|rest| rest.strip_prefix('('))
+            .and_then(|rest| rest.strip_suffix(')'))
+            .is_some_and(|args| {
+                // Letters are the angle units a hue may carry (`180deg`,
+                // `0.5turn`); parentheses stay out, which is what keeps a
+                // trailing `url(...)` layer from passing as a color.
+                !args.is_empty()
+                    && args.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || matches!(c, ',' | '.' | '%' | ' ' | '/' | '+' | '-')
+                    })
+            })
+    });
+
+    (is_hex || is_keyword || is_function).then(|| value.to_string())
+}
+
+/// Read `name="value"` (or `name=value`) out of a raw start tag, case-insensitively.
+fn attribute_value(tag: &str, name: &str) -> Option<String> {
+    let lower = tag.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(rel) = lower[from..].find(name) {
+        let at = from + rel;
+        from = at + name.len();
+        // Must be a whole attribute name: preceded by whitespace, followed by `=`.
+        let before_ok = tag[..at]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_whitespace);
+        let rest = lower[from..].trim_start();
+        if !before_ok || !rest.starts_with('=') {
+            continue;
+        }
+        let value = tag[tag.len() - rest.len() + 1..].trim_start();
+        let (quote, value) = match value.chars().next() {
+            Some(q @ ('"' | '\'')) => (Some(q), &value[1..]),
+            _ => (None, value),
+        };
+        let end = match quote {
+            Some(q) => value.find(q)?,
+            None => value.find(char::is_whitespace).unwrap_or(value.len()),
+        };
+        return Some(value[..end].to_string());
+    }
+    None
+}
+
+/// The canvas colors a style attribute ends up with: `(background, text)`.
+///
+/// Declarations are read in source order and the winner is chosen the way the
+/// cascade chooses it: an `!important` declaration beats a normal one, and among
+/// equals the last wins — including the `background` shorthand, which resets the
+/// color even when it names an image, so a later `background: url(...)` really
+/// does drop an earlier `background-color`.
+fn css_canvas_colors(style: &str) -> (Option<CanvasDeclaration>, Option<CanvasDeclaration>) {
+    let mut background: Option<CanvasDeclaration> = None;
+    let mut text: Option<CanvasDeclaration> = None;
+
+    // Comments can sit anywhere, including between `!` and `important`, and can
+    // hold whole declarations of their own.
+    let style = strip_css_comments(style);
+    for decl in style.split(';') {
+        let Some((name, value)) = decl.split_once(':') else {
+            continue;
+        };
+        // `!important` is part of the declaration, not of the color. CSS allows
+        // whitespace after the `!`, which minifiers and hand-written mail both use.
+        let (value, important) = split_important(value.trim());
+        let slot = match name.trim().to_ascii_lowercase().as_str() {
+            "background-color" | "background" => &mut background,
+            "color" => &mut text,
+            _ => continue,
+        };
+        // A normal declaration can't displace an important one; anything else
+        // that comes later can.
+        if slot
+            .as_ref()
+            .is_some_and(|held| held.important && !important)
+        {
+            continue;
+        }
+        *slot = Some(CanvasDeclaration {
+            value: value.to_string(),
+            important,
+        });
+    }
+
+    (background, text)
+}
+
+/// Drop `/* ... */` comments, which are valid anywhere a space is.
+fn strip_css_comments(style: &str) -> String {
+    let mut out = String::with_capacity(style.len());
+    let mut rest = style;
+    while let Some(open) = rest.find("/*") {
+        out.push_str(&rest[..open]);
+        out.push(' ');
+        match rest[open + 2..].find("*/") {
+            Some(close) => rest = &rest[open + 2 + close + 2..],
+            // An unterminated comment runs to the end of the declaration block.
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Split a declaration value from its `!important` flag, tolerating `! important`.
+fn split_important(value: &str) -> (&str, bool) {
+    let Some(bang) = value.rfind('!') else {
+        return (value, false);
+    };
+    let flag = value[bang + 1..].trim_start();
+    // `get` rather than a slice: the suffix is untrusted UTF-8, and a fixed byte
+    // offset can land inside a code point (`!ééééé`), which would panic.
+    let important = flag
+        .get(.."important".len())
+        .is_some_and(|word| word.eq_ignore_ascii_case("important"))
+        && flag["important".len()..].trim().is_empty();
+    if important {
+        (value[..bang].trim_end(), true)
+    } else {
+        (value, false)
+    }
+}
+
 /// Wrap stored HTML for safe iframe rendering: inject a CSP `<meta>` that allows
 /// same-origin (`/media`), data, and blob images/media always, and remote (`https:`)
 /// images/media only when the account opts in. The reader renders this in a `sandbox`ed
@@ -471,6 +727,7 @@ pub fn prepare_html(source: &str, load_remote_images: bool) -> String {
     // Defence in depth: strip script-bearing markup *before* the CSP `<meta>` is
     // injected, so a CSP bypass alone can't run the email's JS. CSS is kept (the
     // CSP allows `style-src 'unsafe-inline'`); only script vectors are removed.
+    let raw_source = source;
     let source = &sanitize_email_html(source);
     let (img, media) = if load_remote_images {
         (
@@ -491,9 +748,29 @@ pub fn prepare_html(source: &str, load_remote_images: bool) -> String {
     );
     // Keep oversized inline images within the reader width (preserving aspect), and
     // hint that they open the gallery. `style-src 'unsafe-inline'` covers this block.
+    // The email's own canvas colors, hoisted off the `<body>` ammonia just
+    // dropped. The frames read them back to tell a self-styled message (leave its
+    // design alone) from one with no colors of its own (safe to render dark).
+    let canvas = declared_body_colors(raw_source);
+    let mut body_colors = [
+        ("meron-body-bg", canvas.background),
+        ("meron-body-fg", canvas.text),
+    ]
+    .into_iter()
+    .filter_map(|(name, color)| {
+        color.map(|color| format!("<meta name=\"{name}\" content=\"{color}\">"))
+    })
+    .collect::<String>();
+    if !canvas.important.is_empty() {
+        body_colors.push_str(&format!(
+            "<meta name=\"meron-body-important\" content=\"{}\">",
+            canvas.important.join(" ")
+        ));
+    }
     let head = format!(
         "<meta charset=\"utf-8\">\
          <meta http-equiv=\"Content-Security-Policy\" content=\"{csp}\">\
+         {body_colors}\
          <style>img,video{{max-width:100%;height:auto}}img{{cursor:zoom-in}}</style>"
     );
     inject_head(source, &head)
@@ -1503,6 +1780,167 @@ AQID\r\n\
         assert!(out.contains("color:red"));
         assert!(out.contains("font-weight:bold"));
         assert!(out.contains("https://example.com"));
+    }
+
+    #[test]
+    fn prepare_html_drops_head_title_text() {
+        let out = prepare_html(
+            "<html><head><title>Secure your schedule</title></head><body><p>hi</p></body></html>",
+            false,
+        );
+        // The subject must not leak into the body as a stray line of text.
+        assert!(!out.contains("Secure your schedule"));
+        assert!(out.contains("hi"));
+    }
+
+    #[test]
+    fn prepare_html_hoists_body_colors() {
+        let style = prepare_html(
+            "<html><body style=\"margin: 0; background-color: #f5f4f2;\"><p>hi</p></body></html>",
+            false,
+        );
+        assert!(style.contains("<meta name=\"meron-body-bg\" content=\"#f5f4f2\">"));
+
+        // A dark canvas travels with the text color that makes it readable.
+        let dark = prepare_html(
+            "<html><body bgcolor=\"#000000\" text=\"white\"><p>hi</p></body></html>",
+            false,
+        );
+        assert!(dark.contains("<meta name=\"meron-body-bg\" content=\"#000000\">"));
+        assert!(dark.contains("<meta name=\"meron-body-fg\" content=\"white\">"));
+
+        // A style declaration outranks the presentational attribute.
+        let both = prepare_html(
+            "<body bgcolor=\"#ffffff\" style=\"background: #101010\"><p>hi</p></body>",
+            false,
+        );
+        assert!(both.contains("content=\"#101010\""));
+
+        // A `<body>` that only appears inside a comment isn't the document's.
+        let commented = prepare_html(
+            "<!-- <body bgcolor=\"#123456\"> --><body bgcolor=\"#abcdef\"><p>hi</p></body>",
+            false,
+        );
+        assert!(commented.contains("content=\"#abcdef\""));
+        assert!(!commented.contains("#123456"));
+
+        assert!(!prepare_html("<body><p>hi</p></body>", false).contains("meron-body-"));
+    }
+
+    #[test]
+    fn prepare_html_hoists_colors_not_arbitrary_css() {
+        // Only real colors travel: an image layer would become a background-image
+        // (and a network fetch) once the frontend interpolates it into CSS.
+        for value in [
+            "background: url(probe.png)",
+            "background: linear-gradient(#fff, #000)",
+            "background-color: a&quot;><script>",
+            "background-color: expression(alert(1))",
+        ] {
+            let out = prepare_html(&format!("<body style=\"{value}\"><p>hi</p></body>"), false);
+            assert!(!out.contains("meron-body-bg"), "accepted {value}");
+        }
+
+        // A second declaration is just another declaration, not an injection.
+        let pair = prepare_html(
+            "<body style=\"background-color: #fff; color: red\"><p>hi</p></body>",
+            false,
+        );
+        assert!(pair.contains("<meta name=\"meron-body-bg\" content=\"#fff\">"));
+        assert!(pair.contains("<meta name=\"meron-body-fg\" content=\"red\">"));
+
+        // `!important` belongs to the declaration, and decides which one wins.
+        let important = prepare_html(
+            "<body style=\"background: #000000 !important; background: #ffffff; color: white\"><p>hi</p></body>",
+            false,
+        );
+        assert!(important.contains("<meta name=\"meron-body-bg\" content=\"#000000\">"));
+        assert!(important.contains("<meta name=\"meron-body-fg\" content=\"white\">"));
+
+        // CSS allows whitespace after the `!`, and a comment anywhere a space is.
+        for style in [
+            "background: #000000 ! important; background: #ffffff",
+            "background: #000000 !IMPORTANT; background: #ffffff",
+            "background: #000000 !/* whoops */important; background: #ffffff",
+            // Non-ASCII after the `!` must not land mid-code-point.
+            "background: #000000; background: #ffffff !ééééé; background: #000000",
+            "background: #ffffff; /* background: #ffffff */ background: #000000",
+        ] {
+            let out = prepare_html(&format!("<body style=\"{style}\"><p>hi</p></body>"), false);
+            assert!(
+                out.contains("<meta name=\"meron-body-bg\" content=\"#000000\">"),
+                "lost the winning declaration in {style}"
+            );
+        }
+
+        // A trailing layer is not a color, however the value starts.
+        for value in [
+            "background: rgb(0,0,0) url(probe.png)",
+            "background-color: rgb(0 0 0 / url(x))",
+            "background: hsl(0, 0%, 0%) no-repeat",
+        ] {
+            let out = prepare_html(&format!("<body style=\"{value}\"><p>hi</p></body>"), false);
+            assert!(!out.contains("meron-body-bg"), "accepted {value}");
+        }
+
+        // The last declaration wins, as it does in the cascade: a shorthand that
+        // names an image resets an earlier color rather than losing to it.
+        let reset = prepare_html(
+            "<body style=\"background-color: #fff; background: url(x.png); color: white\"><p>hi</p></body>",
+            false,
+        );
+        assert!(!reset.contains("meron-body-bg"));
+        assert!(reset.contains("<meta name=\"meron-body-fg\" content=\"white\">"));
+
+        // Importance travels with the declaration it was written on.
+        let important = prepare_html(
+            "<body style=\"background: #000 !important; color: white\"><p>hi</p></body>",
+            false,
+        );
+        assert!(
+            important.contains("<meta name=\"meron-body-important\" content=\"background-color\">")
+        );
+        assert!(
+            !prepare_html("<body style=\"color: white\"><p>hi</p></body>", false)
+                .contains("meron-body-important")
+        );
+
+        // `#fff`, `rgb(...)` and a bare keyword are the accepted forms — including
+        // the angle units a hue may carry.
+        for value in [
+            "#fff",
+            "#ffffffaa",
+            "rgb(255, 0, 0)",
+            "white",
+            "hsl(180deg 50% 50%)",
+            "hsl(0.5turn 50% 50%)",
+            "hsl(-90 50% 50%)",
+        ] {
+            let out = prepare_html(
+                &format!("<body style=\"background-color: {value}\"><p>hi</p></body>"),
+                false,
+            );
+            assert!(
+                out.contains(&format!("content=\"{value}\"")),
+                "dropped {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn prepare_html_strips_sender_claimed_meron_hooks() {
+        // The frames read their own `meron-*` ids and classes back out of the
+        // document; a sender must not be able to plant one.
+        let out = prepare_html(
+            "<style id=\"meron-reader-style\">body{color:#333}</style>\
+             <mark class=\"meron-search-hit\">x</mark>\
+             <div class=\"card meron-copy-code\">y</div>",
+            false,
+        );
+        assert!(!out.contains("meron-"));
+        // Only the hooks are dropped, not the elements or their other markup.
+        assert!(out.contains("<style>"));
+        assert!(out.contains("<mark>"));
     }
 
     #[test]

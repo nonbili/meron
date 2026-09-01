@@ -20,6 +20,7 @@ import { matchRanges } from './frameSearchHighlight'
 export function MessageBubbleBody({
   message,
   useHtmlBody,
+  outgoing = false,
   allowRemote = false,
   normalizedSearchQuery,
   activeSearchOffset,
@@ -29,6 +30,9 @@ export function MessageBubbleBody({
 }: {
   message: Message
   useHtmlBody: boolean
+  /** Whether this message sits in an outgoing bubble; its HTML frame is painted
+   *  with that bubble's colors. */
+  outgoing?: boolean
   /** Whether this message's remote content may load (account setting, allowed
    *  sender, or a reveal the user just made). */
   allowRemote?: boolean
@@ -61,6 +65,7 @@ export function MessageBubbleBody({
       <div className={`${boxClass} -mr-3.5 pr-3.5`} style={boxStyle}>
         <BubbleHtmlFrame
           html={message.body_html!}
+          outgoing={outgoing}
           allowRemote={allowRemote}
           searchQuery={normalizedSearchQuery}
           activeSearchOffset={activeSearchOffset}

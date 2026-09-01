@@ -2,6 +2,50 @@ import { describe, expect, it } from 'bun:test'
 import { darken, formatColor, isValidColor, lighten, luminance, mix, parseColor, withAlpha } from './color'
 
 describe('parseColor', () => {
+  it('parses the syntaxes email writes: 4-digit hex, hsl, space-separated rgb', () => {
+    expect(parseColor('#0009')).toEqual({ r: 0, g: 0, b: 0, a: 0x99 / 255 })
+    expect(parseColor('hsl(0, 0%, 0%)')).toEqual({ r: 0, g: 0, b: 0, a: 1 })
+    expect(parseColor('hsl(210 50% 90%)')).toEqual({ r: 217, g: 230, b: 242, a: 1 })
+    expect(parseColor('rgb(0 0 0 / 50%)')).toEqual({ r: 0, g: 0, b: 0, a: 0.5 })
+    expect(parseColor('rgb(50%, 0, 0)')).toEqual({ r: 128, g: 0, b: 0, a: 1 })
+  })
+
+  it('accepts a hue in any CSS angle unit', () => {
+    const teal = { r: 64, g: 191, b: 191, a: 1 }
+    for (const angle of ['0.5turn', '3.14rad', '200grad', '180deg', '180']) {
+      expect(parseColor(`hsl(${angle} 50% 50%)`)).toEqual(teal)
+    }
+  })
+
+  it('reads units and function names case-insensitively, as CSS does', () => {
+    expect(parseColor('HSL(180DEG 50% 50%)')).toEqual({ r: 64, g: 191, b: 191, a: 1 })
+    expect(parseColor('RGB(0, 0, 0)')).toEqual({ r: 0, g: 0, b: 0, a: 1 })
+  })
+
+  it('holds hsl to its own channel grammar', () => {
+    // A hue is an angle and the other two are percentages; neither swaps.
+    for (const invalid of ['hsl(50% 50% 50%)', 'hsl(0 1 1)', 'hsl(0, 50, 50)']) {
+      expect(parseColor(invalid)).toBeNull()
+      expect(isValidColor(invalid)).toBe(false)
+    }
+    expect(parseColor('hsl(0, 0%, 0%)')).toEqual({ r: 0, g: 0, b: 0, a: 1 })
+  })
+
+  it('rejects a mix of the comma and space grammars', () => {
+    for (const invalid of ['rgb(1/2/3)', 'rgb(1, 2 3)', 'hsl(0, 50% 50%)', 'rgb(0 0 0 / 1 / 1)']) {
+      expect(parseColor(invalid)).toBeNull()
+      expect(isValidColor(invalid)).toBe(false)
+    }
+  })
+
+  it('rejects components that only start with a number', () => {
+    // `parseFloat` would read each of these as a valid channel.
+    for (const invalid of ['rgb(12px, 0, 0)', 'rgb(10junk, 20, 30)', 'hsl(0x, 50y, 50z)', 'rgb(0, 0)']) {
+      expect(parseColor(invalid)).toBeNull()
+      expect(isValidColor(invalid)).toBe(false)
+    }
+  })
+
   it('parses 6-digit hex', () => {
     expect(parseColor('#4f46e5')).toEqual({ r: 0x4f, g: 0x46, b: 0xe5, a: 1 })
   })

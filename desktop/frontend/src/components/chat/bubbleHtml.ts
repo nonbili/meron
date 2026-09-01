@@ -1,5 +1,21 @@
 import { BUBBLE_CODE_BASE_PX, BUBBLE_HTML_BASE_PX, type MessageFrameFont } from '../../lib/fonts'
 import { allowRemoteContent, blockRemoteContent } from './remoteContentCsp'
+import {
+  DEFAULT_BUBBLE_THEME,
+  LIGHT_ON_DARK_TEXT,
+  colorTone,
+  disownStyleElements,
+  frameCanvas,
+  frameVar,
+  frameVarPrefix,
+  ownStyleElement,
+  declaredCanvas,
+  frameCanvasBackground,
+  type BubbleTheme,
+} from './frameTheme'
+
+/** The attribute `prepareBubbleHtml` stamps its generation on. */
+export const FRAME_GENERATION_MARKER = 'data-meron-generation'
 
 const DEFAULT_MESSAGE_FRAME_FONT: MessageFrameFont = {
   family: null,
@@ -19,6 +35,8 @@ export function prepareBubbleHtml(
   html: string,
   font: MessageFrameFont = DEFAULT_MESSAGE_FRAME_FONT,
   allowRemote = false,
+  /** Stamped on the document so the frame can tell it from the one it replaced. */
+  generation = '',
 ) {
   try {
     const parser = new DOMParser()
@@ -56,20 +74,39 @@ export function prepareBubbleHtml(
     if (allowRemote) allowRemoteContent(doc)
     else blockRemoteContent(doc)
 
+    // Anything that arrived claiming to be a frame stylesheet isn't one — the
+    // marker is also where this document's variable prefix travels.
+    disownStyleElements(doc)
+    // Which document this is. A frame is wired as soon as its srcDoc changes,
+    // while the one it replaces is still loaded, so the host checks this before
+    // it treats what it finds as the document it just asked for. Sanitising
+    // drops every `data-*` attribute, so sender markup can't carry one.
+    doc.documentElement.setAttribute(FRAME_GENERATION_MARKER, generation)
+
     const style = doc.createElement('style')
+    ownStyleElement(style)
+    const v = (name: string) => frameVar(frameVarPrefix(doc), name)
     style.textContent = `
-      html, body {
+      html {
         margin: 0 !important;
         padding: 0 !important;
         background: transparent !important;
-        color: #0f172a;
+      }
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        color: var(${v('text')}, ${DEFAULT_BUBBLE_THEME.text});
         font: ${BUBBLE_HTML_BASE_PX}px/1.45 ${font.family ?? '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'};
         overflow-wrap: anywhere;
         overflow: hidden !important;
       }
       /* Zoom sits on the body, not the root: the frame self-sizes off the
          document's height, which only tracks the scaled content that way. */
-      body { max-width: 100% !important;${font.zoom === 1 ? '' : ` zoom: ${font.zoom};`} }
+      body {
+        max-width: 100% !important;
+        padding: var(${v('canvas-pad')}, 0) !important;
+        border-radius: var(${v('canvas-radius')}, 0);${font.zoom === 1 ? '' : ` zoom: ${font.zoom};`}
+      }
       *, *::before, *::after { box-sizing: border-box; }
       img, video {
         max-width: 100% !important;
@@ -91,10 +128,10 @@ export function prepareBubbleHtml(
         white-space: pre;
         margin: 8px 0 !important;
         padding: 10px 42px 8px 12px !important;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(${v('border')}, ${DEFAULT_BUBBLE_THEME.border});
         border-radius: 8px;
-        background: #f1f5f9;
-        color: #1e293b;
+        background: var(${v('surface')}, ${DEFAULT_BUBBLE_THEME.surface});
+        color: var(${v('surface-text')}, ${DEFAULT_BUBBLE_THEME.surfaceText});
         font: ${BUBBLE_CODE_BASE_PX}px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       }
       pre code {
@@ -128,7 +165,7 @@ export function prepareBubbleHtml(
         max-width: 100%;
         overflow-x: auto;
       }
-      a { color: #4f46e5; }
+      a { color: var(${v('link')}, ${DEFAULT_BUBBLE_THEME.link}); }
       .meron-code-block {
         position: relative;
         max-width: 100%;
@@ -143,10 +180,10 @@ export function prepareBubbleHtml(
         justify-content: center;
         width: 28px;
         height: 28px;
-        border: 1px solid #cbd5e1;
+        border: 1px solid var(${v('strong-border')}, ${DEFAULT_BUBBLE_THEME.strongBorder});
         border-radius: 6px;
-        background: rgba(255, 255, 255, 0.92);
-        color: #64748b;
+        background: var(${v('raised')}, ${DEFAULT_BUBBLE_THEME.raised});
+        color: var(${v('muted')}, ${DEFAULT_BUBBLE_THEME.muted});
         opacity: 0;
         cursor: pointer;
         box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
@@ -157,8 +194,8 @@ export function prepareBubbleHtml(
         opacity: 1;
       }
       .meron-copy-code:hover {
-        background: #ffffff;
-        color: #0f172a;
+        background: var(${v('raised-hover')}, ${DEFAULT_BUBBLE_THEME.raisedHover});
+        color: var(${v('text')}, ${DEFAULT_BUBBLE_THEME.text});
       }
       .meron-copy-code svg {
         width: 15px;
@@ -169,7 +206,7 @@ export function prepareBubbleHtml(
         border-radius: 3px;
         padding: 0 1px;
         background: rgba(253, 224, 71, 0.55);
-        color: inherit;
+        color: var(${v('highlight-text')}, ${DEFAULT_BUBBLE_THEME.highlightText});
       }
       mark.meron-search-hit.meron-search-hit-active {
         background: #fcd34d;
@@ -194,5 +231,52 @@ export function prepareBubbleHtml(
     return doc.documentElement.outerHTML
   } catch {
     return html
+  }
+}
+
+/**
+ * Paint a live bubble frame with the active theme.
+ *
+ * The decision needs the rendered document — which colors the message's own CSS
+ * actually resolves to, and how much text they cover — so it runs here rather
+ * than in `prepareBubbleHtml`, and writes the `--meron-*` properties its
+ * stylesheet reads. A message that brings its own colors gets the canvas they
+ * were authored for and the palette that goes with it; one that declares nothing
+ * is painted in the bubble's colors, so it reads as part of the conversation.
+ */
+export function applyBubbleTheme(doc: Document, theme: BubbleTheme) {
+  const style = doc.documentElement.style
+  const v = (name: string) => frameVar(frameVarPrefix(doc), name)
+  // A light bubble only needs a canvas when the message declared a dark one:
+  // otherwise its light design already sits on a light bubble.
+  const needsCanvas = theme.appearance === 'dark' || colorTone(declaredCanvas(doc).background ?? '') === 'dark'
+  const {
+    background: canvas,
+    text: declaredText,
+    framePaints,
+  } = frameCanvas(doc, theme.appearance, LIGHT_ON_DARK_TEXT, needsCanvas)
+  const palette = canvas && colorTone(canvas) !== 'dark' ? DEFAULT_BUBBLE_THEME : theme
+  const text = declaredText ?? palette.text
+
+  const vars: Array<[string, string | null]> = [
+    // The canvas itself is painted on the body by `frameCanvas`; a canvas of
+    // the frame's own also reads as a card, inset from the bubble's edges,
+    // while the message's own design keeps its own box.
+    [v('canvas-pad'), framePaints ? '10px' : null],
+    [v('canvas-radius'), framePaints ? '8px' : null],
+    [v('text'), text],
+    [v('link'), palette.link],
+    [v('surface'), palette.surface],
+    [v('surface-text'), palette.surfaceText],
+    [v('border'), palette.border],
+    [v('strong-border'), palette.strongBorder],
+    [v('raised'), palette.raised],
+    [v('raised-hover'), palette.raisedHover],
+    [v('muted'), palette.muted],
+    [v('highlight-text'), palette.highlightText],
+  ]
+  for (const [name, value] of vars) {
+    if (value === null) style.removeProperty(name)
+    else style.setProperty(name, value)
   }
 }
