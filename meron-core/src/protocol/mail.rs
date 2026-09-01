@@ -387,17 +387,6 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
             }))?;
         store::delete_draft_copies(&conn, &account_id, &drafts, &local_draft_id, None)
             .map_err(|err| err.to_string())?;
-        if let Some(parsed) = parse_thread_id(&opt_str(params, "thread_id")) {
-            if parsed.account == account_id {
-                store::delete_quick_reply_drafts_in_thread(
-                    &conn,
-                    &account_id,
-                    &drafts,
-                    &parsed.thread_key,
-                )
-                .map_err(|err| err.to_string())?;
-            }
-        }
         Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
     })
 }

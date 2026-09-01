@@ -2559,6 +2559,46 @@ fn delete_draft_copies_removes_stale_autosaves_keeping_live_uid() {
 }
 
 #[test]
+fn thread_draft_cleanup_requires_real_thread_key_and_generated_id() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    let draft = |uid: u32, thread_key: &str, message_id: &str| MessageHeader {
+        uid,
+        thread_key: thread_key.into(),
+        message_id: message_id.into(),
+        ..Default::default()
+    };
+    upsert_messages(
+        &conn,
+        "acct",
+        "Drafts",
+        &[
+            draft(10, "root@example.com", "meron-draft-old@gmail.com"),
+            draft(11, "root@example.com", "manual@example.com"),
+            draft(12, "uid:12", "meron-draft-uid@gmail.com"),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        delete_quick_reply_drafts_in_thread(&conn, "acct", "Drafts", "uid:12").unwrap(),
+        0
+    );
+    assert_eq!(
+        delete_quick_reply_drafts_in_thread(&conn, "acct", "Drafts", "root@example.com").unwrap(),
+        1
+    );
+    let uids: Vec<u32> = conn
+        .prepare("SELECT uid FROM messages WHERE folder = 'Drafts' ORDER BY uid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(uids, vec![11, 12]);
+}
+
+#[test]
 fn delete_draft_sibling_copies_drops_hidden_same_id_rows() {
     use crate::imap::MessageHeader;
     let conn = test_conn();
@@ -2596,44 +2636,6 @@ fn delete_draft_sibling_copies_drops_hidden_same_id_rows() {
         .collect::<rusqlite::Result<_>>()
         .unwrap();
     assert_eq!(uids, vec![12]);
-}
-
-#[test]
-fn delete_quick_reply_drafts_in_thread_removes_only_meron_drafts() {
-    use crate::imap::MessageHeader;
-    let conn = test_conn();
-    let draft = |uid: u32, thread_key: &str, message_id: &str| MessageHeader {
-        uid,
-        subject: "Re: test".into(),
-        date: 100 + uid as i64,
-        thread_key: thread_key.into(),
-        message_id: message_id.into(),
-        ..Default::default()
-    };
-    upsert_messages(
-        &conn,
-        "acct",
-        "Drafts",
-        &[
-            draft(10, "root@mail.example", "meron-draft-old@meron"),
-            draft(11, "root@mail.example", "meron-draft-new@meron"),
-            draft(12, "root@mail.example", "manual-draft@example.com"),
-            draft(13, "other@mail.example", "meron-draft-other@meron"),
-        ],
-    )
-    .unwrap();
-
-    let deleted =
-        delete_quick_reply_drafts_in_thread(&conn, "acct", "Drafts", "root@mail.example").unwrap();
-    assert_eq!(deleted, 2);
-    let uids: Vec<u32> = conn
-        .prepare("SELECT uid FROM messages WHERE folder = 'Drafts' ORDER BY uid")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .collect::<rusqlite::Result<_>>()
-        .unwrap();
-    assert_eq!(uids, vec![12, 13]);
 }
 
 #[test]

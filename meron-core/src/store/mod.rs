@@ -2083,27 +2083,26 @@ pub fn delete_draft_copies(
     Ok(deleted)
 }
 
-/// Remove locally cached quick-reply draft rows in a thread. This repairs stale
-/// duplicates left by older autosave code that minted multiple `meron-draft-*`
-/// Message-IDs for the same quick reply; the server discard still targets the
-/// one draft Message-ID the client knows about.
+/// Remove cached Meron quick-reply drafts in a known conversation. Used by the
+/// desktop cleanup path for stale ids left by older autosave code. UID-only
+/// fallback keys are deliberately rejected by requiring a stored thread key;
+/// equal IMAP UIDs in different folders are unrelated messages.
 pub fn delete_quick_reply_drafts_in_thread(
     conn: &Connection,
     account: &str,
     folder: &str,
     thread_key: &str,
 ) -> Result<usize> {
-    if thread_key.trim().is_empty() {
+    if thread_key.trim().is_empty() || thread_key.starts_with("uid:") {
         return Ok(0);
     }
-    let deleted = conn.execute(
+    Ok(conn.execute(
         "DELETE FROM messages
          WHERE account = ?1 AND folder = ?2
-           AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?3
-           AND lower(COALESCE(json_extract(json, '$.message_id'), '')) LIKE 'meron-draft-%@meron'",
+           AND NULLIF(thread_key, '') = ?3
+           AND lower(COALESCE(json_extract(json, '$.message_id'), '')) GLOB 'meron-draft-*'",
         params![account, folder, thread_key],
-    )?;
-    Ok(deleted)
+    )?)
 }
 
 pub fn delete_messages_by_uid(

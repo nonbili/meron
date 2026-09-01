@@ -2,6 +2,7 @@ package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,6 +79,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -250,6 +252,73 @@ internal fun ThreadScreen(
             ?: (message.id == lastMessageId || message.id in unreadOnArrival || searchMatches.contains(message.id))
     }
     val listState = rememberLazyListState()
+    var endFollowRequest by remember(thread?.id) { mutableStateOf(0) }
+    var followNextLocalSend by remember(thread?.id) { mutableStateOf(false) }
+    var keyboardAnchor by remember(thread?.id) { mutableStateOf<Pair<String, Int>?>(null) }
+    val currentMessages by rememberUpdatedState(messages)
+    val currentHeaderItemCount by rememberUpdatedState(threadHeaderItemCount(canLoadOlder || loadingOlder))
+
+    fun requestEndFollow() {
+        endFollowRequest += 1
+    }
+
+    LaunchedEffect(endFollowRequest) {
+        if (endFollowRequest == 0) return@LaunchedEffect
+        // IME resize and asynchronously measured message bodies can both move
+        // the end after the first scroll. Follow layout changes briefly, unless
+        // the user takes over by dragging the conversation.
+        withTimeoutOrNull(1_000) {
+            coroutineScope {
+                val follower =
+                    launch {
+                        snapshotFlow {
+                            listState.layoutInfo.run { totalItemsCount to visibleItemsInfo.map { Triple(it.index, it.offset, it.size) } }
+                        }.distinctUntilChanged()
+                            .collect {
+                                val last = listState.layoutInfo.totalItemsCount - 1
+                                if (last >= 0) listState.scrollToItem(last)
+                            }
+                    }
+                listState.interactionSource.interactions.first { it is DragInteraction.Start }
+                follower.cancel()
+            }
+        }
+    }
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        if (!followNextLocalSend || messages.lastOrNull()?.id?.startsWith("local-send-") != true) return@LaunchedEffect
+        followNextLocalSend = false
+        requestEndFollow()
+    }
+    LaunchedEffect(keyboardAnchor) {
+        val (messageId, bottomGapPx) = keyboardAnchor ?: return@LaunchedEffect
+        coroutineScope {
+            val anchor =
+                launch {
+                    snapshotFlow {
+                        val info = listState.layoutInfo
+                        val messageIndex = currentMessages.indexOfFirst { it.id == messageId }
+                        Triple(
+                            info.viewportStartOffset to info.viewportEndOffset,
+                            info.visibleItemsInfo.map { ListItemGeometry(it.index, it.offset, it.size) },
+                            messageIndex.takeIf { it >= 0 }?.plus(currentHeaderItemCount),
+                        )
+                    }.distinctUntilChanged()
+                        .collect { (viewport, visible, targetIndex) ->
+                            targetIndex ?: return@collect
+                            val item = visible.firstOrNull { it.index == targetIndex }
+                            if (item == null) {
+                                listState.scrollToItem(targetIndex)
+                                return@collect
+                            }
+                            val desiredBottom = viewport.second - bottomGapPx
+                            val correction = item.offset + item.size - desiredBottom
+                            if (kotlin.math.abs(correction) > 1) listState.scrollBy(correction.toFloat())
+                        }
+                }
+            listState.interactionSource.interactions.first { it is DragInteraction.Start }
+            anchor.cancel()
+        }
+    }
     // Message the reader just expanded by tapping its summary. Expanding in
     // place leaves the body wherever the tap happened to be; bring its header
     // to the top of the viewport so the message reads from its beginning.
@@ -262,8 +331,6 @@ internal fun ThreadScreen(
     // instead of the two pulling the list in different directions on every
     // layout change. Cleared once the anchor is released.
     var anchorItem by remember(thread?.id) { mutableStateOf<ThreadListAnchor?>(null) }
-    val currentMessages by rememberUpdatedState(messages)
-    val currentHeaderItemCount by rememberUpdatedState(threadHeaderItemCount(canLoadOlder || loadingOlder))
     LaunchedEffect(anchorItem) {
         val anchorTo = anchorItem ?: return@LaunchedEffect
         // Resolved fresh on every scroll rather than captured once: loading an
@@ -764,6 +831,9 @@ internal fun ThreadScreen(
                                     )
                                 }
                             }
+                            item(key = "conversation-end") {
+                                Spacer(Modifier.height(1.dp))
+                            }
                         }
                         // Reading a message taller than the screen scrolls its
                         // header away, and with it the tap target that collapses
@@ -842,7 +912,26 @@ internal fun ThreadScreen(
                         onAttach = onQuickReplyAttach,
                         onRemoveAttachment = onRemoveQuickReplyAttachment,
                         onOpenFullEditor = onOpenFullReply,
-                        onSend = onSendReply,
+                        onFocusChange = { focused ->
+                            keyboardAnchor =
+                                if (focused) {
+                                    val info = listState.layoutInfo
+                                    bottomVisibleMessageAnchor(
+                                        visible = info.visibleItemsInfo.map { ListItemGeometry(it.index, it.offset, it.size) },
+                                        headerItemCount = currentHeaderItemCount,
+                                        messageCount = messages.size,
+                                        viewportStartOffset = info.viewportStartOffset,
+                                        viewportEndOffset = info.viewportEndOffset,
+                                    )?.let { anchor -> messages.getOrNull(anchor.messageIndex)?.id?.let { it to anchor.bottomGapPx } }
+                                } else {
+                                    null
+                                }
+                        },
+                        onSend = {
+                            keyboardAnchor = null
+                            followNextLocalSend = !listState.canScrollForward
+                            onSendReply()
+                        },
                         onRetry = onRetryReply,
                         hasContent = quickReplyHasContent,
                         sending = quickReplySending,
@@ -1303,6 +1392,7 @@ internal fun ReplyBar(
     onAttach: () -> Unit,
     onRemoveAttachment: (DraftAttachment) -> Unit,
     onOpenFullEditor: () -> Unit,
+    onFocusChange: (Boolean) -> Unit = {},
     onSend: () -> Unit,
     onRetry: () -> Unit = onSend,
     // Whether the bar holds anything worth sending. Passed in rather than read
@@ -1396,6 +1486,7 @@ internal fun ReplyBar(
                     modifier =
                         Modifier
                             .weight(1f)
+                            .onFocusChanged { onFocusChange(it.isFocused) }
                             .onPreviewKeyEvent { event ->
                                 if (shouldSendFromEditor(event, sendShortcutMode) && canSend) {
                                     onSend()

@@ -878,7 +878,10 @@ class MobileCommandsTest {
         )
         assertEquals(
             """{"id":42,"method":"mail.discardDraft","params":{"account_id":"acc1","draft_id":"draft@example.com"}}""",
-            discardDraftRequest(id = 42, params = DiscardDraftParams(accountId = "acc1", draftId = "draft@example.com")).toJson(),
+            discardDraftRequest(
+                id = 42,
+                params = DiscardDraftParams(accountId = "acc1", draftId = "draft@example.com"),
+            ).toJson(),
         )
     }
 

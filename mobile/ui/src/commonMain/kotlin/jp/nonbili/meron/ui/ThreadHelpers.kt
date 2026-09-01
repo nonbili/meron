@@ -73,6 +73,34 @@ internal data class ListItemGeometry(
     val size: Int,
 )
 
+internal data class BottomMessageAnchor(
+    val messageIndex: Int,
+    val bottomGapPx: Int,
+)
+
+/** The lowest message currently visible, plus its distance from the viewport
+ * bottom. Captured before the keyboard resizes the conversation so that same
+ * message can remain in the same bottom-relative position. */
+internal fun bottomVisibleMessageAnchor(
+    visible: List<ListItemGeometry>,
+    headerItemCount: Int,
+    messageCount: Int,
+    viewportStartOffset: Int,
+    viewportEndOffset: Int,
+): BottomMessageAnchor? =
+    visible
+        .filter { item ->
+            item.index in headerItemCount until (headerItemCount + messageCount) &&
+                item.offset < viewportEndOffset &&
+                item.offset + item.size > viewportStartOffset
+        }.maxByOrNull { it.offset + it.size }
+        ?.let { item ->
+            BottomMessageAnchor(
+                messageIndex = item.index - headerItemCount,
+                bottomGapPx = (viewportEndOffset - (item.offset + item.size)).coerceAtLeast(0),
+            )
+        }
+
 internal data class ThreadScrollSnapshot(
     val firstVisibleIndex: Int,
     val visible: List<ListItemGeometry>,

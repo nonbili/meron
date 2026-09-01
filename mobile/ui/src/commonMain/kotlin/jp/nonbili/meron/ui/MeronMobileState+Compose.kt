@@ -1001,7 +1001,8 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
         }
     }.fold(
         onSuccess = { savedDraftId ->
-            val sameEditor = selectedCoreThread?.id == thread.id && quickReplyThreadId == thread.id
+            val threadId = thread.backendThreadId()
+            val sameEditor = selectedCoreThread?.backendThreadId() == threadId && quickReplyThreadId == threadId
             val newlyAllocated = draftId.startsWith("local-draft-")
             if (sameEditor && newlyAllocated && quickReplyDraftId.isBlank()) {
                 // Publish the allocated id even if the text changed or a send is
@@ -1009,7 +1010,7 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
                 // waiting send can capture it as the draft it must discard.
                 quickReplyDraftId = savedDraftId
                 quickReplyDraftSaved = true
-                markThreadDraftEverywhere(thread.id)
+                markThreadDraftEverywhere(threadId)
                 true
             } else if (quickReplyGeneration != generation || !sameEditor || quickReplySendInFlight) {
                 // The save still belongs to the editor that started it. Keep its
@@ -1020,12 +1021,12 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
                 // off the bar — the bar has moved on, or never held it — so hand
                 // it over directly. Without this the copy just written is the one
                 // left in Drafts beside the reply that send is about to deliver.
-                if (quickReplySendInFlight) quickReplySendDraftHandover = thread.id to savedDraftId
+                if (quickReplySendInFlight) quickReplySendDraftHandover = threadId to savedDraftId
                 true
             } else {
                 quickReplyDraftId = savedDraftId
                 quickReplyDraftSaved = true
-                markThreadDraftEverywhere(thread.id)
+                markThreadDraftEverywhere(threadId)
                 if (showStatus) status = "Draft saved"
                 true
             }
@@ -1086,7 +1087,9 @@ internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
                 withManagedGoogleAuth(client, accountId) {
-                    client.discardDraft(DiscardDraftParams(accountId = accountId, draftId = draftId))
+                    client.discardDraft(
+                        DiscardDraftParams(accountId = accountId, draftId = draftId),
+                    )
                 }
             }
         }.onSuccess {
@@ -1335,6 +1338,7 @@ internal fun String.normalizedComposeDraftId(): String = trim().trim('<', '>').l
 internal fun MeronMobileState.sendQuickReply() {
     if (quickReplySendInFlight) return
     val thread = selectedCoreThread
+    val threadId = thread?.backendThreadId().orEmpty()
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
     val parent = quickReplyParent()
     val sentBody = quickReplyBody.trim()
@@ -1365,7 +1369,7 @@ internal fun MeronMobileState.sendQuickReply() {
     val claimedDraftOwner =
         quickReplyDraftId
             .takeIf { quickReplyDraftSaved && it.isNotBlank() }
-            ?.let { ComposeDraftOwner(accountId, it, thread.id) }
+            ?.let { ComposeDraftOwner(accountId, it, threadId) }
     // Hold it from the click too. The allocation below is long enough to leave
     // the conversation and come back, and the draft rehydrated in between holds
     // the text being sent — indistinguishable, by the time the send settles,
@@ -1404,11 +1408,11 @@ internal fun MeronMobileState.sendQuickReply() {
                 val resolvedOwner =
                     claimedDraftOwner
                         ?: quickReplyDraftId
-                            .takeIf { quickReplyDraftSaved && it.isNotBlank() && quickReplyThreadId == thread.id }
-                            ?.let { ComposeDraftOwner(accountId, it, thread.id) }
+                            .takeIf { quickReplyDraftSaved && it.isNotBlank() && quickReplyThreadId == threadId }
+                            ?.let { ComposeDraftOwner(accountId, it, threadId) }
                         ?: quickReplySendDraftHandover
-                            ?.takeIf { it.first == thread.id }
-                            ?.let { ComposeDraftOwner(accountId, it.second, thread.id) }
+                            ?.takeIf { it.first == threadId }
+                            ?.let { ComposeDraftOwner(accountId, it.second, threadId) }
                 quickReplySendDraftHandover = null
                 resolvedOwner?.let { quickReplyConsumedDraftIds += it.draftId.normalizedComposeDraftId() }
                 val outboundMessageId =
@@ -1449,7 +1453,7 @@ internal fun MeronMobileState.sendQuickReply() {
                     accountId = accountId,
                     params = params,
                     tempMessageId = tempId,
-                    threadId = thread.id,
+                    threadId = threadId,
                     draftOwner = resolvedOwner,
                     quickReplyGeneration = generation,
                 )
@@ -1504,8 +1508,9 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         // Everything else — the bar untouched, or moved to another thread or
         // another draft — leaves nobody pointing at the consumed copy, and not
         // discarding it is what strands it in Drafts beside the sent reply.
+        var consumedDraftDiscarded = false
         pending.draftOwner?.takeIf { !barKeptTheDraft }?.let { owner ->
-            val discarded =
+            consumedDraftDiscarded =
                 runCatching {
                     withContext(ioDispatcher) {
                         MobileMailCommandClient(core).discardDraft(
@@ -1513,7 +1518,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
                         )
                     }
                 }.isSuccess
-            if (discarded) removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
+            if (consumedDraftDiscarded) removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
         }
         if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
         if (pendingQuickReplySend == pending) pendingQuickReplySend = null
@@ -1530,13 +1535,22 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
             seedQuickReplySignature()
         }
         status = "Reply sent"
-        val threadStillOpen = selectedCoreThread?.id == pending.threadId
+        val threadStillOpen = selectedCoreThread?.backendThreadId() == pending.threadId
         if (threadStillOpen) {
             messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.None) else it }
         }
         errorBanner = null
         syncCoreThreads(syncFirst = false)
-        if (threadStillOpen) runCatching { reloadCurrentThreadMessages() }.onFailure { }
+        if (threadStillOpen) {
+            runCatching { reloadCurrentThreadMessages() }.onSuccess {
+                // The read can race the server-side discard and return its stale
+                // pre-discard row. The discard already succeeded, so reconcile
+                // that row once more after applying the refreshed conversation.
+                pending.draftOwner?.takeIf { !barKeptTheDraft && consumedDraftDiscarded }?.let { owner ->
+                    removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
+                }
+            }
+        }
     }.onFailure {
         // A failed send leaves the draft as the safety net it was written to be.
         if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
@@ -1557,7 +1571,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
 }
 
 private fun MeronMobileState.quickReplyEditorOwns(pending: PendingQuickReplySend): Boolean =
-    selectedCoreThread?.id == pending.threadId &&
+    selectedCoreThread?.backendThreadId() == pending.threadId &&
         quickReplyThreadId == pending.threadId &&
         quickReplyGeneration == pending.quickReplyGeneration
 
@@ -1929,8 +1943,13 @@ private fun MeronMobileState.showLocalDraftInOpenThread() {
 
 internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
     if (threadId.isBlank()) return
-    locallyDraftedThreadIds = locallyDraftedThreadIds + threadId
-    coreThreads = threadsWithDraftFlag(coreThreads, setOf(threadId))
+    val canonicalId =
+        (listOfNotNull(selectedCoreThread).asSequence() + coreThreads.asSequence())
+            .firstOrNull { it.id == threadId || it.threadId == threadId }
+            ?.backendThreadId()
+            ?: threadId
+    locallyDraftedThreadIds = locallyDraftedThreadIds + canonicalId
+    coreThreads = threadsWithDraftFlag(coreThreads, setOf(canonicalId))
     selectedCoreThread =
         selectedCoreThread?.let { thread ->
             if (thread.id == threadId || thread.threadId == threadId) thread.copy(hasDraft = true) else thread
@@ -1947,7 +1966,21 @@ internal fun MeronMobileState.markThreadDraftEverywhere(threadId: String) {
 
 internal fun MeronMobileState.clearThreadDraftEverywhere(threadId: String) {
     if (threadId.isBlank()) return
-    locallyDraftedThreadIds = locallyDraftedThreadIds - threadId
+    val matchingIds =
+        buildSet {
+            add(threadId)
+            (
+                listOfNotNull(selectedCoreThread).asSequence() +
+                    coreThreads.asSequence() +
+                    kanbanColumns.values.asSequence().flatMap { it.threads.asSequence() } +
+                    mailboxCache.values.asSequence().flatMap { it.threads.asSequence() }
+            ).filter { it.id == threadId || it.threadId == threadId }
+                .forEach {
+                    add(it.id)
+                    if (it.threadId.isNotBlank()) add(it.threadId)
+                }
+        }
+    locallyDraftedThreadIds = locallyDraftedThreadIds - matchingIds
     coreThreads = threadsWithoutDraftFlag(coreThreads, threadId)
     selectedCoreThread =
         selectedCoreThread?.let { thread ->

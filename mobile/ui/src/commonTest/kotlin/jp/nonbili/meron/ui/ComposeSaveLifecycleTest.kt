@@ -259,6 +259,102 @@ class ComposeSaveLifecycleTest {
         }
 
     @Test
+    fun quickReplyUsesBackendThreadIdForAutosaveAndSendOwnership() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state, rowId = "account#INBOX#thread", backendThreadId = "account#thread")
+            state.onQuickReplyBodyChange("Reply")
+
+            state.autoSaveQuickReplyDraft()
+            core.firstSaveStarted.await()
+            core.releaseFirstSave.complete(Unit)
+            core.firstSaveFinished.await()
+            withTimeout(1_000) {
+                while (state.quickReplyDraftId.isBlank()) yield()
+            }
+
+            assertEquals("draft-1@example.com", state.quickReplyDraftId)
+            state.sendQuickReply()
+            core.sendFinished.await()
+            core.discardFinished.await()
+            withTimeout(1_000) {
+                while (state.quickReplySendInFlight) yield()
+            }
+
+            assertEquals(1, core.saveCalls)
+            assertTrue(core.discardPayloads.single().contains("draft-1@example.com"))
+        }
+
+    @Test
+    fun sendDoesNotClaimAMatchingLoadedDraftWithoutOwnership() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.messages = state.messages + consumedDraft().copy(messageId = "meron-draft-full-editor@gmail.com")
+            state.onQuickReplyBodyChange("Reply")
+
+            state.sendQuickReply()
+            core.sendFinished.await()
+            withTimeout(1_000) {
+                while (state.quickReplySendInFlight) yield()
+            }
+
+            assertTrue(core.discardPayloads.isEmpty())
+            assertTrue(state.messages.any { it.id == "draft-row" })
+        }
+
+    @Test
+    fun clearingDraftMarkerRemovesRowAndBackendKeys() =
+        runBlocking {
+            val state = state(SaveCore(), this)
+            prepareQuickReply(state, rowId = "account#INBOX#thread", backendThreadId = "account#thread")
+            state.locallyDraftedThreadIds = setOf("account#INBOX#thread", "account#thread")
+
+            state.clearThreadDraftEverywhere("account#thread")
+
+            assertTrue(state.locallyDraftedThreadIds.isEmpty())
+        }
+
+    @Test
+    fun failedPostSendDiscardKeepsReloadedDraftVisible() =
+        runBlocking {
+            val core =
+                SaveCore().apply {
+                    discardFails = true
+                    threadReadResponse = threadReadWithConsumedDraft()
+                }
+            val state = state(core, this)
+            prepareQuickReply(state)
+            state.quickReplyDraftId = "reply-draft@example.com"
+            state.quickReplyDraftSaved = true
+            state.selectedCoreThread = state.selectedCoreThread?.copy(hasDraft = true)
+            state.onQuickReplyBodyChange("Reply")
+
+            state.sendQuickReply()
+            core.sendFinished.await()
+            core.discardFinished.await()
+            withTimeout(1_000) {
+                while (state.quickReplySendInFlight || core.threadReadCalls == 0 || state.messages.none { it.id == "draft-row" }) yield()
+            }
+
+            assertTrue(state.messages.any { it.id == "draft-row" })
+            assertEquals(true, state.selectedCoreThread?.hasDraft)
+        }
+
+    @Test
+    fun markingDraftUsesBackendKey() =
+        runBlocking {
+            val state = state(SaveCore(), this)
+            prepareQuickReply(state, rowId = "account#INBOX#thread", backendThreadId = "account#thread")
+
+            state.markThreadDraftEverywhere("account#INBOX#thread")
+
+            assertEquals(setOf("account#thread"), state.locallyDraftedThreadIds)
+        }
+
+    @Test
     fun reopeningTheThreadWhileTheSentDraftIsBeingDiscardedKeepsTheReplyBarClear() =
         runBlocking {
             val core = SaveCore().apply { holdDiscard = CompletableDeferred() }
@@ -321,7 +417,7 @@ class ComposeSaveLifecycleTest {
         }
 
     @Test
-    fun aConsumedDraftStaysOutOfTheConversationAfterReopening() =
+    fun aConsumedDraftStaysHiddenOnlyUntilItsDiscardSettles() =
         runBlocking {
             val core = SaveCore().apply { holdDiscard = CompletableDeferred() }
             val state = state(core, this)
@@ -352,6 +448,10 @@ class ComposeSaveLifecycleTest {
                 while (state.quickReplySendInFlight) yield()
             }
             assertTrue(state.messages.none { it.id == "draft-row" })
+            state.messages = state.messages + consumedDraft()
+            // A later server-returned row is evidence the discard did not remove
+            // that copy; do not hide it indefinitely on a successful response.
+            assertTrue(state.visibleThreadMessages().any { it.id == "draft-row" })
         }
 
     @Test
@@ -691,10 +791,23 @@ class ComposeSaveLifecycleTest {
             messageId = "reply-draft@example.com",
         )
 
-    private fun prepareQuickReply(state: MeronMobileState) {
+    private fun threadReadWithConsumedDraft(): String = """{"messages":[{"id":"message","folder_id":"INBOX","from_addr":"sender@example.com","to":"a@example.com","subject":"Subject","body":"Original","message_id":"original@example.com"},{"id":"draft-row","folder_id":"Drafts","from_addr":"a@example.com","to":"sender@example.com","subject":"Re: Subject","body":"Reply","message_id":"reply-draft@example.com"}]}"""
+
+    private fun prepareQuickReply(
+        state: MeronMobileState,
+        rowId: String = "thread",
+        backendThreadId: String = "",
+    ) {
         state.selectedCoreThread =
-            ThreadSummary(id = "thread", accountId = "a", folder = "INBOX", subject = "Subject", sender = "sender@example.com")
-        state.quickReplyThreadId = "thread"
+            ThreadSummary(
+                id = rowId,
+                accountId = "a",
+                folder = "INBOX",
+                subject = "Subject",
+                sender = "sender@example.com",
+                threadId = backendThreadId,
+            )
+        state.quickReplyThreadId = backendThreadId.ifBlank { rowId }
         state.messages =
             listOf(
                 MessageBody(
@@ -726,6 +839,8 @@ class ComposeSaveLifecycleTest {
         var sendFails = false
         var holdDiscard: CompletableDeferred<Unit>? = null
         var allocationCalls = 0
+        var threadReadCalls = 0
+        var threadReadResponse = "{}"
 
         override suspend fun invoke(
             command: String,
@@ -766,6 +881,11 @@ class ComposeSaveLifecycleTest {
                     sendFinished.complete(Unit)
                     if (sendFails) throw RuntimeException("send failed")
                     "{}"
+                }
+
+                MobileCommand.ThreadRead -> {
+                    threadReadCalls++
+                    threadReadResponse
                 }
 
                 else -> {
