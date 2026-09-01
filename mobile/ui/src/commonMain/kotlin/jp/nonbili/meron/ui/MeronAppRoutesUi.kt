@@ -140,7 +140,6 @@ internal fun KanbanRouteContent(
                         }
                         scope.launch { drawerState.close() }
                     },
-                    onSelectKanban = { scope.launch { drawerState.close() } },
                     onSelectKanbanBoard = { board ->
                         if (activeKanbanBoardId != board.id) {
                             activeKanbanBoardId = board.id
@@ -520,12 +519,6 @@ internal fun MailRouteContent(
                             syncCoreThreads(accountOverride = account.id, folderOverride = INBOX_FOLDER, syncFirst = false)
                         }
                         screen = Screen.Mail
-                        scope.launch { drawerState.close() }
-                    },
-                    onSelectKanban = {
-                        screen = Screen.Kanban
-                        previousTopScreen = Screen.Kanban
-                        loadKanbanBoard(refresh = false)
                         scope.launch { drawerState.close() }
                     },
                     onSelectKanbanBoard = { board ->

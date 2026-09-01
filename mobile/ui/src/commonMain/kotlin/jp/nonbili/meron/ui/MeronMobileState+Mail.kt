@@ -1355,7 +1355,7 @@ internal fun MeronMobileState.loadMoreThreadMessages() {
             messages = (older + messages).sortedBy { message -> message.dateEpochSeconds }
             messageCursor = page.nextCursor
             loadingMoreMessages = false
-            status = if (older.isEmpty()) "No older messages in this thread." else "Loaded ${older.size} older message(s)."
+            if (older.isEmpty()) status = "No older messages in this thread."
         }.onFailure {
             loadingMoreMessages = false
             status = "Could not load older messages: ${it.message}"

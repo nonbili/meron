@@ -245,7 +245,6 @@ internal fun MailDrawer(
     activeKanbanBoardId: String,
     onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
-    onSelectKanban: () -> Unit,
     onSelectKanbanBoard: (KanbanBoardSpec) -> Unit,
     onAddAccount: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -324,40 +323,27 @@ internal fun MailDrawer(
                     )
                 }
             }
-            if (accounts.isNotEmpty()) {
+            if (accounts.isNotEmpty() && kanbanBoards.isNotEmpty()) {
                 item { DrawerLabel(tr("drawer.views"), chat) }
-                if (kanbanBoards.isEmpty()) {
-                    item {
-                        SidebarRow(
-                            selected = currentScreen == Screen.Kanban,
-                            chat = chat,
-                            onClick = onSelectKanban,
-                            leading = { Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            title = tr("mobile.tabs.kanban"),
-                            trailing = null,
-                        )
-                    }
-                } else {
-                    items(kanbanBoards, key = { it.id }) { board ->
-                        SidebarRow(
-                            selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
-                            chat = chat,
-                            onClick = { onSelectKanbanBoard(board) },
-                            leading = {
-                                if (board.avatarUrl.isNotBlank()) {
-                                    AccountBadgeAvatar(
-                                        label = board.name,
-                                        avatarUrl = board.avatarUrl,
-                                        size = 24.dp,
-                                    )
-                                } else {
-                                    Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp))
-                                }
-                            },
-                            title = board.name,
-                            trailing = null,
-                        )
-                    }
+                items(kanbanBoards, key = { it.id }) { board ->
+                    SidebarRow(
+                        selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
+                        chat = chat,
+                        onClick = { onSelectKanbanBoard(board) },
+                        leading = {
+                            if (board.avatarUrl.isNotBlank()) {
+                                AccountBadgeAvatar(
+                                    label = board.name,
+                                    avatarUrl = board.avatarUrl,
+                                    size = 24.dp,
+                                )
+                            } else {
+                                Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp))
+                            }
+                        },
+                        title = board.name,
+                        trailing = null,
+                    )
                 }
             }
             item {
