@@ -2072,11 +2072,21 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
     screen = Screen.AddAccount
 }
 
-internal fun MeronMobileState.createKanbanBoard(): String {
-    val board = defaultKanbanBoard(coreAccounts).copy(name = "Kanban board ${kanbanBoards.size + 1}")
+/** Append a board holding [columns] and make it the active one. */
+private fun MeronMobileState.addKanbanBoard(columns: List<KanbanColumnSpec>): KanbanBoardSpec {
+    val board =
+        defaultKanbanBoard(coreAccounts).copy(
+            name = "Kanban board ${kanbanBoards.size + 1}",
+            columns = columns,
+        )
     persistKanbanBoards(kanbanBoards + board)
     activeKanbanBoardId = board.id
     saveActiveKanbanBoardId(kanbanPrefs, board.id)
+    return board
+}
+
+internal fun MeronMobileState.createKanbanBoard(): String {
+    val board = addKanbanBoard(defaultKanbanBoard(coreAccounts).columns)
     loadKanbanBoard(refresh = false)
     return board.id
 }
@@ -2107,9 +2117,14 @@ internal fun MeronMobileState.updateKanbanBoard(
 }
 
 internal fun MeronMobileState.deleteKanbanBoard(boardId: String) {
-    val next = kanbanBoards.filterNot { it.id == boardId }
-    persistKanbanBoards(if (next.isEmpty()) listOf(defaultKanbanBoard(coreAccounts)) else next)
-    if (boardId == activeKanbanBoardId) {
+    // Deleting the last board leaves no board at all; the kanban screen and the
+    // drawer both render that empty state, and reseeding a default here would
+    // make the delete look like it did nothing.
+    val wasActive = boardId == activeKanbanBoardId
+    persistKanbanBoards(kanbanBoards.filterNot { it.id == boardId })
+    // persistKanbanBoards has already moved the selection off the deleted board,
+    // so drop the cached columns and load whatever it landed on (if anything).
+    if (wasActive) {
         kanbanColumns = emptyMap()
         loadKanbanBoard(refresh = false)
     }
@@ -2129,11 +2144,16 @@ internal fun MeronMobileState.addKanbanColumn(column: KanbanColumnSpec) {
 /**
  * Replace the active board's columns with [columns] (the selection from the add-column
  * dialog), preserving the relative order of existing columns and appending new ones.
- * Loads any newly added column and drops cached data for removed ones.
+ * Loads any newly added column and drops cached data for removed ones. With no board
+ * left at all, the selection creates one.
  */
 internal fun MeronMobileState.applyKanbanColumns(columns: List<KanbanColumnSpec>) {
-    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
     val deduped = columns.distinctBy(::kanbanColumnKey)
+    // Every board can be deleted, and the empty kanban screen still offers "Add
+    // column", so a selection made with no board left has to bring one with it.
+    val active = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId }
+    if (active == null && deduped.isEmpty()) return
+    val board = active ?: addKanbanBoard(emptyList())
     val nextKeys = deduped.map(::kanbanColumnKey).toSet()
     val existingKeys = board.columns.map(::kanbanColumnKey).toSet()
     if (nextKeys == existingKeys) return

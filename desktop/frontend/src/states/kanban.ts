@@ -7,7 +7,7 @@ import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { isUnifiedStarredColumn } from '../lib/kanbanData'
 import { compose$, openMessageTab } from './compose'
 import { persistedField } from '../lib/sessionPref'
-import { settings$, type KanbanBoard } from './settings'
+import { hasStoredKanbanBoards, settings$, type KanbanBoard } from './settings'
 import { invoke } from '../lib/bridge'
 import { thread$ } from './thread'
 
@@ -58,11 +58,11 @@ export function defaultKanbanBoard(): KanbanBoard {
   }
 }
 
+/** Seed the starter board on a fresh profile only. An empty stored list is a
+ * user who deleted every board, so it must survive the restart. */
 export function ensureDefaultKanbanBoard() {
-  const boards = settings$.kanbanBoards.get()
-  if (boards.length > 0) return
-  const board = defaultKanbanBoard()
-  settings$.kanbanBoards.set([board])
+  if (hasStoredKanbanBoards() || settings$.kanbanBoards.get().length > 0) return
+  settings$.kanbanBoards.set([defaultKanbanBoard()])
 }
 
 export function activeKanbanBoard(): KanbanBoard | null {
@@ -203,19 +203,16 @@ export function setKanbanBoardWallpaper(boardId: string, wallpaper: ChatWallpape
 
 export function removeKanbanBoard(boardId: string) {
   const boards = settings$.kanbanBoards.get()
-  if (boards.length <= 1) {
-    const board = defaultKanbanBoard()
-    settings$.kanbanBoards.set([board])
-    selectKanbanBoard(board.id)
-    return
-  }
   const index = boards.findIndex((board) => board.id === boardId)
   if (index === -1) return
   const next = boards.filter((board) => board.id !== boardId)
   settings$.kanbanBoards.set(next)
-  if (kanban$.activeBoardId.peek() === boardId) {
-    selectKanbanBoard(next[Math.max(0, index - 1)]?.id ?? next[0].id)
-  }
+  if (kanban$.activeBoardId.peek() !== boardId) return
+  // Deleting the board on screen: fall back to its neighbour, or leave the board
+  // view for the mail view when that was the last board.
+  const fallback = next[Math.max(0, index - 1)]?.id
+  if (fallback) selectKanbanBoard(fallback)
+  else closeKanbanBoard()
 }
 
 export function reorderKanbanBoards(oldIndex: number, newIndex: number) {

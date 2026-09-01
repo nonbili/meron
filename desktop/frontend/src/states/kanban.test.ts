@@ -6,6 +6,7 @@ import {
   focusKanbanThreadFolder,
   markColumnAllRead,
   openCorrespondentMail,
+  removeKanbanBoard,
   removeKanbanColumnsForFolder,
   switchKanbanColumnFolder,
 } from './kanban'
@@ -282,5 +283,33 @@ describe('removeKanbanColumnsForFolder', () => {
     removeKanbanColumnsForFolder('acc1', 'Work')
 
     expect(settings$.kanbanBoards.get()[0].columns).toEqual([{ accountId: 'acc2', folderId: 'Work' }])
+  })
+})
+
+describe('removeKanbanBoard', () => {
+  beforeEach(() => {
+    settings$.kanbanBoards.set([
+      { id: 'b1', name: 'Board', columns: [] },
+      { id: 'b2', name: 'Other', columns: [] },
+    ])
+  })
+
+  it('falls back to the neighbouring board when the open one is deleted', () => {
+    kanban$.activeBoardId.set('b2')
+
+    removeKanbanBoard('b2')
+
+    expect(settings$.kanbanBoards.get().map((board) => board.id)).toEqual(['b1'])
+    expect(kanban$.activeBoardId.get()).toBe('b1')
+  })
+
+  it('deletes the last board and leaves the board view', () => {
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [] }])
+    kanban$.activeBoardId.set('b1')
+
+    removeKanbanBoard('b1')
+
+    expect(settings$.kanbanBoards.get()).toEqual([])
+    expect(kanban$.activeBoardId.get()).toBe('')
   })
 })

@@ -96,6 +96,10 @@ internal fun ensureKanbanDefaults(
     // exactly as the user arranged them — re-adding the unified inbox (or a
     // per-account inbox) here would undo deliberate removals on every restart.
     if (boards.isNotEmpty()) return boards
+    // A stored (even empty) list means the user has boards of their own, or
+    // deleted every one of them; only a profile that never stored any gets the
+    // starter board, otherwise deleting the last board would undo itself.
+    if (prefs.getString(KANBAN_BOARDS_PREF, "").isNotBlank()) return boards
     val next = listOf(defaultKanbanBoard(accounts))
     saveKanbanBoards(prefs, next)
     return next

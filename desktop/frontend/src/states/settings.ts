@@ -479,6 +479,14 @@ export function deleteCustomTheme(id: string) {
   if (settings$.themeId.peek() === id) settings$.themeId.set(DEFAULT_LIGHT_ID)
 }
 
+// Whether hydration found a stored kanban-boards row. An empty stored list means
+// the user deleted every board, which boot must not treat as a fresh profile.
+let storedKanbanBoards = false
+
+export function hasStoredKanbanBoards(): boolean {
+  return storedKanbanBoards
+}
+
 export function sanitizeKanbanBoards(raw: unknown): KanbanBoard[] | null {
   if (!Array.isArray(raw)) return null
   const out: KanbanBoard[] = []
@@ -680,7 +688,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     if (remoteImageSenders) settings$.remoteImageSenders.set(remoteImageSenders)
 
     const boards = sanitizeKanbanBoards(prefs[DB_KEY.kanbanBoards])
-    if (boards) settings$.kanbanBoards.set(boards)
+    if (boards) {
+      storedKanbanBoards = true
+      settings$.kanbanBoards.set(boards)
+    }
 
     const threadListWidth = prefs[DB_KEY.threadListWidth]
     if (typeof threadListWidth === 'number' && Number.isFinite(threadListWidth)) {
