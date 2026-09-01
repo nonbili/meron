@@ -241,6 +241,7 @@ import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
 import jp.nonbili.meron.shared.untrustedCertificateProtocol
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -948,12 +949,23 @@ internal fun MeronMobileState.quickReplyIsBlank(): Boolean = quickReplyWithoutSi
 
 private suspend fun MeronMobileState.saveQuickReplyDraft(showStatus: Boolean): Boolean =
     quickReplySaveMutex.withLock {
-        saveQuickReplyDraftLocked(showStatus)
+        // Sending cancels this job, but the write it is already making lands on
+        // the server regardless. Cancelling between the write and the fold below
+        // is what strands the draft: runCatching swallows the CancellationException
+        // as a failed save, so the id just written is never published to the bar
+        // nor handed over, and the send that cancelled us finds no draft to
+        // discard. Once the write is under way, see it through and record it.
+        withContext(NonCancellable) { saveQuickReplyDraftLocked(showStatus) }
     }
 
 private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boolean): Boolean {
-    // A send is about to discard the draft; saving now could resurrect it.
-    if (quickReplySendInFlight) return false
+    // A send is about to discard the draft; saving now could resurrect it. The
+    // reply the user has since started still has to reach the server though, so
+    // record that a save was turned away and run it once the send settles.
+    if (quickReplySendInFlight) {
+        quickReplyAutosaveDeferred = true
+        return false
+    }
     val thread = selectedCoreThread
     val generation = quickReplyGeneration
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
@@ -1059,6 +1071,20 @@ internal fun MeronMobileState.autoSaveQuickReplyDraft() {
     }
 }
 
+/**
+ * Run a save that a send in flight turned away. The bar empties on the click, so
+ * the user can start their next reply while the previous one is still going out
+ * — and that reply's debounce lands inside the send, where saving is refused.
+ * Nothing else reschedules it: until it runs, the copy in Drafts still holds the
+ * text that was already sent, and the reply on screen is not saved anywhere.
+ */
+private fun MeronMobileState.runDeferredQuickReplyAutosave() {
+    if (!quickReplyAutosaveDeferred) return
+    quickReplyAutosaveDeferred = false
+    if (quickReplyIsBlank()) return
+    autoSaveQuickReplyDraft()
+}
+
 // Flushes any pending debounced autosave immediately — used when navigating
 // away from the thread screen, mirroring closeCompose()'s autosave-on-close
 // for the full composer, so the last few keystrokes aren't lost to the
@@ -1075,6 +1101,10 @@ internal fun MeronMobileState.flushQuickReplyAutosave() {
 
 internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
     if (!quickReplyIsBlank()) return
+    // A send out for this conversation is still holding this draft as the copy
+    // it falls back on if it fails. Emptying a *newer* reply out of the bar is
+    // not permission to delete the safety net of the one already on its way.
+    if (quickReplySendInFlight && quickReplySendThreadId == quickReplyThreadId) return
     val draftId = quickReplyDraftId.takeIf { quickReplyDraftSaved } ?: return
     val thread = selectedCoreThread ?: return
     val accountId = thread.accountId.ifBlank { defaultSendAccountId() }
@@ -1093,15 +1123,18 @@ internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
                 }
             }
         }.onSuccess {
-            syncCoreThreads(syncFirst = false)
             val normalizedDraftId = draftId.normalizedComposeDraftId()
-            selectedCoreThread =
-                selectedCoreThread?.copy(
-                    hasDraft =
-                        messages.any {
-                            it.messageId.normalizedComposeDraftId() != normalizedDraftId && folderIsDrafts(it.folderId)
-                        },
-                )
+            val anotherDraftRemains =
+                messages.any {
+                    it.messageId.normalizedComposeDraftId() != normalizedDraftId && folderIsDrafts(it.folderId)
+                }
+            // Clearing only the open thread's copy leaves the thread in
+            // locallyDraftedThreadIds, and the refresh below stamps the flag
+            // straight back onto the row it just fetched — so the badge outlives
+            // the draft everywhere the thread is listed.
+            if (!anotherDraftRemains) clearThreadDraftEverywhere(thread.backendThreadId())
+            syncCoreThreads(syncFirst = false)
+            selectedCoreThread = selectedCoreThread?.copy(hasDraft = anotherDraftRemains)
         }
     }
 }
@@ -1359,6 +1392,10 @@ internal fun MeronMobileState.sendQuickReply() {
     quickReplyFailure = ""
     quickReplyAutosaveJob?.cancel()
     quickReplySendInFlight = true
+    // Which conversation the send belongs to, so a read landing mid-send knows
+    // the draft at its tail is this send's and not a reply left unfinished.
+    // The bar is empty from the click, so its own emptiness no longer says so.
+    quickReplySendThreadId = threadId
     pendingCertificateRetry = null
     pendingQuickReplySend = null
     val generation = quickReplyGeneration
@@ -1385,15 +1422,47 @@ internal fun MeronMobileState.sendQuickReply() {
             ownAddresses = ownAddressList(coreAccounts),
             attachments = sentAttachments,
         )
-    // Render the sent bubble optimistically — before the send round-trip — so
-    // replying feels instant. The bubble shows a "Sending…" status until the
-    // canonical stored message replaces it on re-fetch; on failure it flips to
-    // "Failed" and stays visible so the reply isn't lost. The reply-bar text
-    // itself is left populated until the send actually succeeds, so a failed
-    // send can be retried with its real content instead of resending blank.
+    // Empty the visible bar on the click, not when the send settles. The work
+    // below — an autosave still holding the lock, then an identity round trip,
+    // then the send itself — runs for seconds against a slow mailbox, and
+    // leaving the text sitting there reads as a tap that did nothing.
+    //
+    // Only what the user can see is cleared. The draft id stays on the bar: a
+    // failed send keeps that draft as its safety net, and edits made after the
+    // failure have to write back into the same copy rather than open a second
+    // one beside it. The success path below clears the id once there is nothing
+    // left to fall back to.
+    val barBodyAtClick = quickReplyBody
+    val barSignatureAtClick = quickReplySignature
+    quickReplyAttachments = emptyList()
+    seedQuickReplySignature()
+    // Render the sent bubble optimistically — on the click, before the send
+    // round-trip — so replying feels instant. The bubble shows a "Sending…"
+    // status until the canonical stored message replaces it on re-fetch; on
+    // failure it flips to "Failed" and stays visible so the reply isn't lost.
     // A counter suffix keeps ids unique even for two sends in the same
     // millisecond — message ids key the conversation list, duplicates crash.
     val tempId = "local-send-${currentTimeMillis()}-${localSendSequence++}"
+    messages =
+        messages +
+        MessageBody(
+            id = tempId,
+            folderId = parent.folderId,
+            from = "You",
+            fromAddr = replyFrom.ifBlank { account?.email.orEmpty() },
+            to = baseParams.to,
+            cc = baseParams.cc,
+            subject = baseParams.subject,
+            body = sentBody,
+            references = baseParams.references,
+            dateEpochSeconds = currentTimeMillis() / 1000,
+            hasAttachments = sentAttachments.isNotEmpty(),
+            attachments =
+                sentAttachments.map {
+                    MessageAttachment(filename = it.displayName, mimeType = it.mimeType, sizeBytes = it.sizeBytes)
+                },
+            sendStatus = SendStatus.Sending,
+        )
     scope.launch {
         val pending =
             quickReplySaveMutex.withLock {
@@ -1420,35 +1489,32 @@ internal fun MeronMobileState.sendQuickReply() {
                         withContext(ioDispatcher) { allocateCoreMessageId(MobileMailCommandClient(core), accountId, draft = false) }
                     }.getOrElse {
                         quickReplySendInFlight = false
+                        quickReplySendThreadId = ""
                         resolvedOwner?.let { owner ->
                             quickReplyConsumedDraftIds -= owner.draftId.normalizedComposeDraftId()
+                        }
+                        // Nothing was sent, so take the optimistic bubble back
+                        // down rather than leave a reply that does not exist.
+                        messages = messages.filterNot { message -> message.id == tempId }
+                        // No send was ever dispatched, so there is no pending
+                        // reply for Retry to resend. Put the reply back where the
+                        // user left it instead: the box they typed it into, ready
+                        // to send again. Only if they have not started another.
+                        if (quickReplyGeneration == generation) {
+                            quickReplyBody = barBodyAtClick
+                            quickReplySignature = barSignatureAtClick
+                            quickReplyAttachments = sentAttachments
                         }
                         quickReplyFailure = it.message.orEmpty()
                         status = "Send failed: ${it.message}"
                         return@launch
                     }
                 val params = baseParams.copy(messageId = outboundMessageId)
-                val optimistic =
-                    MessageBody(
-                        id = tempId,
-                        folderId = parent.folderId,
-                        from = "You",
-                        fromAddr = replyFrom.ifBlank { account?.email.orEmpty() },
-                        to = params.to,
-                        cc = params.cc,
-                        subject = params.subject,
-                        body = sentBody,
-                        messageId = outboundMessageId,
-                        references = params.references,
-                        dateEpochSeconds = currentTimeMillis() / 1000,
-                        hasAttachments = sentAttachments.isNotEmpty(),
-                        attachments =
-                            sentAttachments.map {
-                                MessageAttachment(filename = it.displayName, mimeType = it.mimeType, sizeBytes = it.sizeBytes)
-                            },
-                        sendStatus = SendStatus.Sending,
-                    )
-                messages = messages + optimistic
+                // The bubble went up on the click; only its id was still unknown.
+                messages =
+                    messages.map { message ->
+                        if (message.id == tempId) message.copy(messageId = outboundMessageId) else message
+                    }
                 PendingQuickReplySend(
                     accountId = accountId,
                     params = params,
@@ -1466,7 +1532,10 @@ internal fun MeronMobileState.sendQuickReply() {
 
 internal fun MeronMobileState.retryQuickReplySend() {
     val pending = pendingQuickReplySend ?: return
-    if (!quickReplyEditorOwns(pending)) return
+    // The reply is resent from the params it was captured with, so it only has
+    // to belong to the conversation on screen. Requiring the bar to be untouched
+    // made a failed send unretryable the moment the user typed anything.
+    if (selectedCoreThread?.backendThreadId() != pending.threadId) return
     retryQuickReplySend(pending)
 }
 
@@ -1474,6 +1543,10 @@ internal fun MeronMobileState.retryQuickReplySend(pending: PendingQuickReplySend
     if (quickReplySendInFlight) return
     pendingQuickReplySend = pending
     quickReplySendInFlight = true
+    // A retry is a send: it owns this conversation's draft for as long as it is
+    // out, exactly as the first attempt did. Without this the guards that read
+    // the pair see a blank thread and stand down for the whole retry.
+    quickReplySendThreadId = pending.threadId
     quickReplyFailure = ""
     messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.Sending) else it }
     status = "Sending reply..."
@@ -1503,6 +1576,11 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         // over it. That is the one case where the draft stays.
         val barKeptTheDraft =
             !sameEditorGeneration &&
+                // An empty box is not "the user's next reply". Typing one and
+                // clearing it again moves the generation on while leaving the id
+                // claimed, and treating that as kept is what left the draft in
+                // Drafts still holding the reply that already went out.
+                !quickReplyIsBlank() &&
                 quickReplyThreadId == pending.draftOwner?.threadId &&
                 quickReplyDraftId.normalizedComposeDraftId() == pending.draftOwner?.draftId?.normalizedComposeDraftId()
         // Everything else — the bar untouched, or moved to another thread or
@@ -1518,12 +1596,21 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
                         )
                     }
                 }.isSuccess
-            if (consumedDraftDiscarded) removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
+            if (consumedDraftDiscarded) {
+                removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
+                // The bar can still be claiming the copy just deleted — an empty
+                // box that was typed in and cleared keeps its id. Leaving the
+                // claim would point the next save at a draft that is gone.
+                if (quickReplyDraftId.normalizedComposeDraftId() == owner.draftId.normalizedComposeDraftId()) {
+                    quickReplyDraftId = ""
+                    quickReplyDraftSaved = false
+                }
+            }
         }
-        if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
         if (pendingQuickReplySend == pending) pendingQuickReplySend = null
         if (pendingCertificateRetry == PendingCertificateRetry.QuickReply(pending)) pendingCertificateRetry = null
         quickReplySendInFlight = false
+        quickReplySendThreadId = ""
         if (sameEditorGeneration) {
             quickReplyFailure = ""
             quickReplyAttachments = emptyList()
@@ -1551,15 +1638,28 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
                 }
             }
         }
+        // Only now stop hiding it. Released any earlier, the refreshes above can
+        // paint the server's pre-discard draft row beside the reply it was sent
+        // as, leaving both cards on screen until the next read drops one.
+        if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
+        runDeferredQuickReplyAutosave()
     }.onFailure {
         // A failed send leaves the draft as the safety net it was written to be.
         if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
         quickReplySendInFlight = false
+        quickReplySendThreadId = ""
         val message = it.message ?: "Send failed"
         status = "Reply failed: $message"
-        if (quickReplyEditorOwns(pending)) {
+        // The bubble belongs to this send, not to whoever holds the bar now.
+        // Gating it on the editor left it reading "Sending…" for good once the
+        // user started their next reply — the one state it must never show is a
+        // send that is no longer happening.
+        messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.Failed) else it }
+        // Retry resends the params this send captured, so the conversation being
+        // open is enough to offer it; the bar having moved on is not a reason to
+        // hide the only way back to a reply that never went out.
+        if (selectedCoreThread?.backendThreadId() == pending.threadId) {
             quickReplyFailure = message
-            messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.Failed) else it }
         }
         if (untrustedCertificateProtocol(message) != null) {
             errorBanner = message
@@ -1567,6 +1667,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         } else if (pendingCertificateRetry == PendingCertificateRetry.QuickReply(pending)) {
             pendingCertificateRetry = null
         }
+        runDeferredQuickReplyAutosave()
     }
 }
 

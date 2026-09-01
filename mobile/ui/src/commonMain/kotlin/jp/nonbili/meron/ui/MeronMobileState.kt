@@ -236,6 +236,8 @@ internal class MeronMobileState(
     var quickReplyInReplyTo by mutableStateOf("")
     var quickReplyReferences by mutableStateOf("")
     var quickReplyThreadId by mutableStateOf("")
+    var quickReplySendThreadId by mutableStateOf("")
+    var quickReplyAutosaveDeferred = false
 
     // Send-as address explicitly chosen in the reply bar's From row. Blank means
     // "auto" — fall back to the alias the original was delivered to

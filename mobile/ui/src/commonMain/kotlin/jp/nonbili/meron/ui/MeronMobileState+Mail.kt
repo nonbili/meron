@@ -989,6 +989,11 @@ internal fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     // A draft a send already consumed, whose discard has not come back yet: it
     // holds the text we just sent, not a reply left unfinished.
     if (normalizedTailId.isNotBlank() && normalizedTailId in quickReplyConsumedDraftIds) return
+    // A send still out for this conversation owns whatever draft sits at the
+    // tail — the copy it is about to discard, or the one its autosave was
+    // mid-write on when the click cancelled it. The bar empties on the click
+    // now, so a full bar no longer stands guard over that window.
+    if (quickReplySendInFlight && quickReplySendThreadId == threadBackendId) return
     if (quickReplyDraftId.isNotBlank() && quickReplyDraftId.normalizedComposeDraftId() == normalizedTailId) return
     // Only a draft we can address on the server. A row synced from its envelope
     // carries no Message-ID yet — and no body either — so taking it would put an
@@ -1751,6 +1756,24 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
     val messageFolder = message.folderId.ifBlank { thread.folder }
     val messagesBefore = messages
     messages = messages.filterNot { it.id == message.id }
+    // Deleting the thread's last draft has to take its "Draft" marker down too.
+    // The marker is UI-side state the core's next thread list would rewrite, but
+    // returning to the list reloads nothing, so leaving it set keeps the badge
+    // on a row whose draft is gone. Another draft still here keeps it on.
+    // The reply bar's own saved draft lives on the server without a row in
+    // messages until a later read brings one back, so the visible rows alone do
+    // not say whether this was the thread's last draft.
+    val barHoldsADraftHere =
+        quickReplyDraftSaved && quickReplyDraftId.isNotBlank() && quickReplyThreadId == thread.backendThreadId()
+    val clearedDraftThreadId =
+        thread
+            .backendThreadId()
+            .takeIf {
+                folderIsDrafts(messageFolder) &&
+                    !barHoldsADraftHere &&
+                    messages.none { other -> folderIsDrafts(other.folderId) }
+            }
+    clearedDraftThreadId?.let { clearThreadDraftEverywhere(it) }
     status = "Deleting message..."
     scope.launch {
         runCatching {
@@ -1773,6 +1796,7 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
         }.onFailure {
             Log.w("Mail", "delete message failed", it)
             messages = messagesBefore
+            clearedDraftThreadId?.let { threadId -> markThreadDraftEverywhere(threadId) }
             status = "Delete failed: ${it.message}"
         }
     }
