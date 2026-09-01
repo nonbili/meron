@@ -1,0 +1,5 @@
+- Load remote content per message or configure allowed senders
+- Fix inline media display and attachment actions on Android
+- Clean up quick reply drafts and remove stale draft badges after sending
+- Preserve conversation scroll position when reading threads
+- Allow deleting the last Kanban board

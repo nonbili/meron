@@ -24,6 +24,8 @@ jobs:
 
       # Gradle's preBuild runs `bun scripts/i18n/catalog.ts generate`.
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
 
       - name: install rust
         uses: dtolnay/rust-toolchain@1.96.1
