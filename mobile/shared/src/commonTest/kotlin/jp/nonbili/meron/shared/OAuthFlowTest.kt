@@ -73,6 +73,9 @@ class OAuthFlowTest {
         assertFailsWith<IllegalArgumentException> {
             parseOAuthCallbackUrl("${defaultOAuthRedirectUri()}?error=access_denied&state=expected", expectedState = "expected")
         }
+        assertFailsWith<IllegalArgumentException> {
+            parseOAuthCallbackUrl("${defaultOAuthRedirectUri()}?code=abc", expectedState = "")
+        }
     }
 
     @Test
@@ -81,6 +84,10 @@ class OAuthFlowTest {
         assertTrue(isOAuthCallbackUrl("${defaultOAuthRedirectUri()}?code=abc"))
         assertTrue(isOAuthCallbackUrl("JP.NONBILI.MERON.OAUTH://oauth?code=abc"))
         assertNull(parseOAuthCallbackUrl("https://example.com/oauth?code=abc", expectedState = "state"))
+        assertTrue(isMeronOAuthCallbackScheme("jp.nonbili.meron.oauth"))
+        assertTrue(isMeronOAuthCallbackScheme("msauth"))
+        assertTrue(isMeronOAuthCallbackScheme("com.googleusercontent.apps.client"))
+        assertTrue(!isMeronOAuthCallbackScheme("https"))
     }
 
     @Test

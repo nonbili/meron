@@ -1752,11 +1752,17 @@ internal fun MeronMobileState.openMessageAttachment(attachment: MessageAttachmen
                         fileName = safeAttachmentFilename(attachment.filename),
                     )
             } else {
-                services.shareFile(
-                    bytes,
-                    safeAttachmentFilename(attachment.filename),
-                    attachment.mimeType.ifBlank { "application/octet-stream" },
-                )
+                when (
+                    services.openFile(
+                        bytes,
+                        safeAttachmentFilename(attachment.filename),
+                        attachment.mimeType.ifBlank { "application/octet-stream" },
+                    )
+                ) {
+                    AttachmentOpenResult.Opened -> Unit
+                    AttachmentOpenResult.Unsupported -> status = "No app can open this attachment."
+                    AttachmentOpenResult.Blocked -> status = "This attachment type is blocked for safety."
+                }
             }
         }.onFailure {
             status = "Attachment open failed: ${it.message}"

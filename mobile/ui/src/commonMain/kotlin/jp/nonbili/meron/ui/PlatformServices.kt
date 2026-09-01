@@ -25,10 +25,18 @@ data class PickedFile(
     }
 }
 
+enum class AttachmentOpenResult {
+    Opened,
+    Unsupported,
+    Blocked,
+}
+
 /** Platform actions the shared UI triggers but cannot perform itself. Provided by
  *  each host (Android Activity, iOS UIViewController). */
 interface PlatformServices {
     fun openUrl(url: String)
+
+    fun tryOpenUrl(url: String): Boolean = runCatching { openUrl(url) }.isSuccess
 
     fun openOAuthUrl(
         url: String,
@@ -36,7 +44,7 @@ interface PlatformServices {
         onCallback: (String) -> Unit,
         onFailure: (String) -> Unit,
     ) {
-        runCatching { openUrl(url) }.onFailure { onFailure(it.message ?: "OAuth browser launch failed") }
+        if (!tryOpenUrl(url)) onFailure("OAuth browser launch failed")
     }
 
     fun copyText(
@@ -56,11 +64,31 @@ interface PlatformServices {
         mimeType: String,
     )
 
+    fun openFile(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+    ): AttachmentOpenResult {
+        shareFile(bytes, fileName, mimeType)
+        return AttachmentOpenResult.Opened
+    }
+
     fun saveFile(
         bytes: ByteArray,
         fileName: String,
         mimeType: String,
     )
+
+    fun saveFile(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        onComplete: (Result<Boolean>) -> Unit,
+    ) {
+        runCatching { saveFile(bytes, fileName, mimeType) }
+            .onSuccess { onComplete(Result.success(true)) }
+            .onFailure { onComplete(Result.failure(it)) }
+    }
 
     fun pickFile(
         mimeTypes: List<String>,

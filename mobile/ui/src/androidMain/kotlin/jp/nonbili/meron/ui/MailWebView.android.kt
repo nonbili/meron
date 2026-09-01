@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -22,7 +23,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import jp.nonbili.meron.shared.isMeronOAuthCallbackScheme
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.FileInputStream
+import java.net.URI
 import kotlin.math.roundToInt
+
+private const val MAIL_WEB_VIEW_ORIGIN = "https://appassets.androidplatform.net/"
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -73,7 +81,8 @@ actual fun MailWebView(
                         ): Boolean {
                             val url = request?.url?.toString().orEmpty()
                             if (url.isBlank()) return false
-                            latestOnOpenUrl.value(url)
+                            val externalUrl = externalMailUrl(url) ?: return true
+                            latestOnOpenUrl.value(externalUrl)
                             return true
                         }
 
@@ -83,8 +92,21 @@ actual fun MailWebView(
                             url: String?,
                         ): Boolean {
                             if (url.isNullOrBlank()) return false
-                            latestOnOpenUrl.value(url)
+                            val externalUrl = externalMailUrl(url) ?: return true
+                            latestOnOpenUrl.value(externalUrl)
                             return true
+                        }
+
+                        override fun shouldInterceptRequest(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): WebResourceResponse? {
+                            val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
+                            localMailMediaResponse(context, uri.scheme, uri.host, uri.path)?.let { return it }
+                            if (isMailWebViewOrigin(uri.host)) {
+                                return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
+                            }
+                            return super.shouldInterceptRequest(view, request)
                         }
                     }
                 // JS is enabled to run the height-reporting script; matches the
@@ -121,7 +143,9 @@ actual fun MailWebView(
                     object {
                         @JavascriptInterface
                         fun open(url: String) {
-                            if (url.isNotBlank()) post { latestOnOpenUrl.value(url) }
+                            externalMailUrl(url)?.let { externalUrl ->
+                                post { latestOnOpenUrl.value(externalUrl) }
+                            }
                         }
                     },
                     "MeronLink",
@@ -130,7 +154,9 @@ actual fun MailWebView(
                     object {
                         @JavascriptInterface
                         fun open(src: String) {
-                            if (src.isNotBlank()) post { latestOnOpenImage.value(src) }
+                            mailImageRef(src)?.let { imageRef ->
+                                post { latestOnOpenImage.value(imageRef) }
+                            }
                         }
                     },
                     "MeronImage",
@@ -181,11 +207,80 @@ actual fun MailWebView(
             }
             if (webView.tag != html) {
                 webView.tag = html
-                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                webView.loadDataWithBaseURL(MAIL_WEB_VIEW_ORIGIN, html, "text/html", "UTF-8", null)
             }
         },
     )
 }
+
+private fun localMailMediaResponse(
+    context: Context,
+    scheme: String?,
+    host: String?,
+    path: String?,
+): WebResourceResponse? {
+    if (scheme != "https" || host != "appassets.androidplatform.net" || path == null) return null
+    val relative = path.removePrefix("/media/")
+    if (relative == path || relative.isBlank() || relative.split('/').any { it == ".." || it.isBlank() }) return null
+    return runCatching {
+        val root = androidMediaRoot(context, relative)
+        val file = File(root, relative).canonicalFile
+        if (!file.startsWith(root) || !file.isFile) return null
+        WebResourceResponse(mailMediaMimeType(file.name), null, FileInputStream(file))
+    }.getOrNull()
+}
+
+internal fun mailMediaMimeType(filename: String): String =
+    when (filename.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "svg" -> "image/svg+xml"
+        else -> "application/octet-stream"
+    }
+
+internal fun externalMailUrl(url: String): String? {
+    val value = url.trim()
+    if (value.isEmpty()) return null
+    val host = runCatching { URI(value).host }.getOrNull()
+    if (isMailWebViewOrigin(host)) return null
+    val scheme = runCatching { URI(value).scheme?.lowercase() }.getOrNull() ?: return null
+    return value.takeUnless {
+        scheme in setOf("intent", "javascript", "file", "content", "data", "cid", "about") ||
+            isMeronOAuthCallbackScheme(scheme)
+    }
+}
+
+internal fun mailImageRef(src: String): String? {
+    val value = src.trim()
+    if (value.isEmpty()) return null
+    val uri = runCatching { URI(encodeIllegalUriCharacters(value)) }.getOrNull() ?: return null
+    if (isMailWebViewOrigin(uri.host)) return uri.path?.takeIf { it.startsWith("/media/") }
+    if (value.startsWith("/media/")) return value
+    return value.takeIf { uri.scheme?.lowercase() in setOf("http", "https") }
+}
+
+private fun isMailWebViewOrigin(host: String?): Boolean = host.equals("appassets.androidplatform.net", ignoreCase = true)
+
+private fun encodeIllegalUriCharacters(value: String): String =
+    buildString(value.length) {
+        value.forEach { char ->
+            append(
+                when (char) {
+                    ' ' -> "%20"
+                    '|' -> "%7C"
+                    '^' -> "%5E"
+                    '{' -> "%7B"
+                    '}' -> "%7D"
+                    '[' -> "%5B"
+                    ']' -> "%5D"
+                    '`' -> "%60"
+                    else -> char
+                },
+            )
+        }
+    }
 
 /** Remembers where the finger went down: [View.OnLongClickListener] is not told the
  *  press position, and without it a link menu can only be placed at the view corner. */

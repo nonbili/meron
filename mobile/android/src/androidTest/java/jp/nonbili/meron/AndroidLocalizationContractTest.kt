@@ -15,6 +15,8 @@ class AndroidLocalizationContractTest {
 
         assertEquals("Cancel", context.withLocale(Locale.ENGLISH).getString(R.string.buttons_cancel))
         assertEquals("キャンセル", context.withLocale(Locale.JAPANESE).getString(R.string.buttons_cancel))
+        assertEquals("File saved", context.withLocale(Locale.ENGLISH).getString(R.string.mobile_android_file_saved))
+        assertEquals("ファイルを保存しました", context.withLocale(Locale.JAPANESE).getString(R.string.mobile_android_file_saved))
     }
 
     @Test
@@ -22,6 +24,7 @@ class AndroidLocalizationContractTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
 
         assertEquals("Cancelar", context.withLocale(Locale.forLanguageTag("pt-BR")).getString(R.string.buttons_cancel))
+        assertEquals("Arquivo salvo", context.withLocale(Locale.forLanguageTag("pt-BR")).getString(R.string.mobile_android_file_saved))
     }
 
     @Test

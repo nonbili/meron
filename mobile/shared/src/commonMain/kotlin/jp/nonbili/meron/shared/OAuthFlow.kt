@@ -3,6 +3,13 @@ package jp.nonbili.meron.shared
 const val MERON_OAUTH_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth"
 const val MERON_OAUTH_CALLBACK_SCHEME = "jp.nonbili.meron.oauth"
 
+fun isMeronOAuthCallbackScheme(scheme: String?): Boolean {
+    val normalized = scheme?.trim()?.lowercase().orEmpty()
+    return normalized == MERON_OAUTH_CALLBACK_SCHEME ||
+        normalized == "msauth" ||
+        normalized.startsWith("com.googleusercontent.apps.")
+}
+
 data class OAuthAuthorizationRequest(
     val provider: String,
     val clientId: String,
@@ -107,6 +114,9 @@ private fun parseOAuthCallbackFields(
     rawUrl: String,
     expectedState: String,
 ): OAuthCallbackResult {
+    require(expectedState.isNotBlank()) {
+        "No OAuth flow is in progress"
+    }
     val trimmed = rawUrl.trim()
     val query =
         trimmed

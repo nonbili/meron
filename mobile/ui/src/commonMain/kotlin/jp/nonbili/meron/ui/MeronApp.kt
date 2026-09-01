@@ -217,6 +217,7 @@ fun MeronApp(
     incomingMailtoDraft: ComposeDraft? = null,
     onMailtoDraftConsumed: () -> Unit = {},
     incomingOAuthCallbackUrl: String? = null,
+    onOAuthCallbackConsumed: () -> Unit = {},
     incomingNotificationThreadTarget: NotificationThreadTarget? = null,
     /**
      * Notified after the language has been stored and pushed to the OS, for hosts
@@ -312,6 +313,7 @@ fun MeronApp(
                 incomingMailtoDraft = incomingMailtoDraft,
                 onMailtoDraftConsumed = onMailtoDraftConsumed,
                 incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                onOAuthCallbackConsumed = onOAuthCallbackConsumed,
                 incomingNotificationThreadTarget = incomingNotificationThreadTarget,
                 appearanceMode = appearanceMode,
                 onAppearanceModeChange = onAppearanceModeChange,
@@ -360,6 +362,7 @@ private fun MeronMobileScreenContent(
     incomingMailtoDraft: ComposeDraft?,
     onMailtoDraftConsumed: () -> Unit,
     incomingOAuthCallbackUrl: String?,
+    onOAuthCallbackConsumed: () -> Unit,
     incomingNotificationThreadTarget: NotificationThreadTarget?,
     appearanceMode: AppAppearanceMode,
     onAppearanceModeChange: (AppAppearanceMode) -> Unit,
@@ -616,13 +619,26 @@ private fun MeronMobileScreenContent(
             }
         }
         launchOpmlExport = { fileName ->
-            services.saveFile(pendingOpmlExport.encodeToByteArray(), fileName, "text/xml")
-            pendingOpmlExport = ""
-            status = "Exported OPML"
+            val document = pendingOpmlExport
+            services.saveFile(document.encodeToByteArray(), fileName, "text/xml") { result ->
+                result
+                    .onSuccess { saved ->
+                        if (saved) {
+                            pendingOpmlExport = ""
+                            status = "Exported OPML"
+                        }
+                    }.onFailure { status = "OPML export failed: ${it.message}" }
+            }
         }
         launchBackupExport = { fileName ->
-            services.saveFile(pendingBackupExport.encodeToByteArray(), fileName, "application/json")
+            val document = pendingBackupExport
             pendingBackupExport = ""
+            services.saveFile(document.encodeToByteArray(), fileName, "application/json") { result ->
+                result
+                    .onSuccess { saved ->
+                        if (saved) status = trs("settings.backup.exported")
+                    }.onFailure { status = "Backup export failed: ${it.message}" }
+            }
         }
         // Restore starts at the file picker; the core decides whether what came
         // back needs a passphrase.
@@ -643,8 +659,12 @@ private fun MeronMobileScreenContent(
                     runCatching {
                         withContext(ioDispatcher) { readAttachmentBytes(attachment) }
                     }.onSuccess { bytes ->
-                        services.saveFile(bytes, fileName, attachment.mimeType.ifBlank { "application/octet-stream" })
-                        status = "Saved ${attachment.filename.ifBlank { "attachment" }}"
+                        services.saveFile(bytes, fileName, attachment.mimeType.ifBlank { "application/octet-stream" }) { result ->
+                            result
+                                .onSuccess { saved ->
+                                    if (saved) status = "Saved ${attachment.filename.ifBlank { "attachment" }}"
+                                }.onFailure { status = "Attachment save failed: ${it.message}" }
+                        }
                     }.onFailure {
                         status = "Attachment save failed: ${it.message}"
                     }
@@ -775,6 +795,7 @@ private fun MeronMobileScreenContent(
         LaunchedEffect(incomingOAuthCallbackUrl) {
             incomingOAuthCallbackUrl?.let { rawUrl ->
                 handleOAuthCallback(rawUrl)
+                onOAuthCallbackConsumed()
             }
         }
 

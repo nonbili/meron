@@ -77,7 +77,6 @@ internal fun MeronMobileState.exportBackup(
                 backupPassphraseMode = null
                 pendingBackupExport = document
                 launchBackupExport(backupFileName())
-                status = trs("settings.backup.exported")
             }
         }.onFailure {
             status = "${trs("settings.backup.exportFailed")}: ${it.message}"

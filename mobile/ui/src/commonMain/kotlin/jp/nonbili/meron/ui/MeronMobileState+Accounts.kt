@@ -1767,17 +1767,20 @@ internal fun MeronMobileState.launchOAuthFlow() {
 
 internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
     Log.i("Meron.OAuth", "callback received length=${rawUrl.length}")
-    loadPendingOAuthFlow(prefs)?.let { pending ->
-        Log.i(
-            "Meron.OAuth",
-            "pending flow provider=${pending.provider} redirectUri=${pending.redirectUri} emailPresent=${pending.email.isNotBlank()}",
-        )
-        oauthProvider = pending.provider
-        oauthState = pending.state
-        oauthVerifier = pending.verifier
-        oauthRedirectUri = pending.redirectUri
-        oauthEmail = pending.email
+    val pending = loadPendingOAuthFlow(prefs)
+    if (pending == null || pending.state.isBlank() || pending.redirectUri.isBlank()) {
+        Log.w("Meron.OAuth", "callback ignored without a pending flow")
+        return
     }
+    Log.i(
+        "Meron.OAuth",
+        "pending flow provider=${pending.provider} redirectUri=${pending.redirectUri} emailPresent=${pending.email.isNotBlank()}",
+    )
+    oauthProvider = pending.provider
+    oauthState = pending.state
+    oauthVerifier = pending.verifier
+    oauthRedirectUri = pending.redirectUri
+    oauthEmail = pending.email
     runCatching {
         parseOAuthCallbackUrlForRedirect(
             rawUrl = rawUrl,

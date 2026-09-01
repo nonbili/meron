@@ -11,10 +11,14 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import jp.nonbili.meron.ui.AttachmentOpenResult
 import jp.nonbili.meron.ui.GoogleDeviceAccount
 import jp.nonbili.meron.ui.GoogleDeviceAccountResult
 import jp.nonbili.meron.ui.ManagedTokenRefresh
@@ -25,13 +29,39 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+
+private const val PENDING_SAVE_STATE_KEY = "meron.pending-document-save"
+private const val PENDING_SAVE_PATH_KEY = "path"
+private val documentSaveScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 class AndroidPlatformServices(
     private val activity: ComponentActivity,
 ) : PlatformServices {
     private var pendingPick: ((PickedFile?) -> Unit)? = null
+    private val pendingSaveDir = File(activity.cacheDir, "pending-saves").apply { mkdirs() }.canonicalFile
+    private var pendingSaveFile: File? =
+        activity.savedStateRegistry
+            .consumeRestoredStateForKey(PENDING_SAVE_STATE_KEY)
+            ?.getString(PENDING_SAVE_PATH_KEY)
+            ?.let(::File)
+            ?.canonicalFile
+            ?.takeIf { it.isFile && it.parentFile == pendingSaveDir }
+    private var pendingSaveCallback: ((Result<Boolean>) -> Unit)? = null
+    private var pendingSaveStarting = false
+
+    init {
+        pendingSaveDir.listFiles()?.forEach { file ->
+            if (file.canonicalFile != pendingSaveFile) file.delete()
+        }
+        activity.savedStateRegistry.registerSavedStateProvider(PENDING_SAVE_STATE_KEY) {
+            android.os.Bundle().apply {
+                pendingSaveFile?.absolutePath?.let { putString(PENDING_SAVE_PATH_KEY, it) }
+            }
+        }
+    }
 
     private val openDocument =
         activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -40,9 +70,67 @@ class AndroidPlatformServices(
             callback?.invoke(uri?.toPickedFile())
         }
 
+    private val createDocument =
+        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val staged = pendingSaveFile
+            pendingSaveFile = null
+            pendingSaveStarting = false
+            val callback = pendingSaveCallback
+            pendingSaveCallback = null
+            val uri = result.data?.data
+            if (result.resultCode != Activity.RESULT_OK || uri == null) {
+                staged?.delete()
+                callback?.invoke(Result.success(false))
+                return@registerForActivityResult
+            }
+            if (staged == null || !staged.isFile) {
+                val error = IllegalStateException("Pending document data is unavailable")
+                Log.e("Meron", "Could not save document", error)
+                if (callback != null) {
+                    callback(Result.failure(error))
+                } else {
+                    Toast.makeText(activity, "File save failed", Toast.LENGTH_SHORT).show()
+                }
+                return@registerForActivityResult
+            }
+            val appContext = activity.applicationContext
+            documentSaveScope.launch {
+                val saved =
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            appContext.contentResolver.openOutputStream(uri)?.use { output ->
+                                staged.inputStream().use { input -> input.copyTo(output) }
+                            } ?: error("Could not open the selected document")
+                        }
+                    }
+                try {
+                    saved.onFailure { Log.e("Meron", "Could not save document", it) }
+                    if (callback != null && activity.lifecycle.currentState != Lifecycle.State.DESTROYED) {
+                        callback(saved.map { true })
+                    } else {
+                        Toast
+                            .makeText(
+                                appContext,
+                                if (saved.isSuccess) R.string.mobile_android_file_saved else R.string.mobile_android_file_save_failed,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    }
+                } finally {
+                    staged.delete()
+                }
+            }
+        }
+
     override fun openUrl(url: String) {
-        activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        if (!tryOpenUrl(url)) Toast.makeText(activity, R.string.mobile_android_link_open_failed, Toast.LENGTH_SHORT).show()
     }
+
+    override fun tryOpenUrl(url: String): Boolean =
+        runCatching {
+            activity.startActivity(
+                externalViewIntent(url),
+            )
+        }.isSuccess
 
     override fun openOAuthUrl(
         url: String,
@@ -57,7 +145,7 @@ class AndroidPlatformServices(
                 .build()
                 .launchUrl(activity, Uri.parse(url))
         }.recoverCatching {
-            openUrl(url)
+            if (!tryOpenUrl(url)) error(activity.getString(R.string.mobile_android_oauth_browser_launch_failed))
         }.onFailure {
             onFailure(it.message ?: activity.getString(R.string.mobile_android_oauth_browser_launch_failed))
         }
@@ -87,12 +175,60 @@ class AndroidPlatformServices(
         shareBytesViaFileProvider(activity, bytes, fileName, mimeType)
     }
 
+    override fun openFile(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+    ): AttachmentOpenResult {
+        if (!isSafeAttachmentToOpen(fileName, mimeType)) return AttachmentOpenResult.Blocked
+        val uri = writeBytesToAttachmentCache(activity, bytes, fileName)
+        val intent = openFileIntent(uri, mimeType)
+        return if (runCatching { activity.startActivity(intent) }.isSuccess) AttachmentOpenResult.Opened else AttachmentOpenResult.Unsupported
+    }
+
     override fun saveFile(
         bytes: ByteArray,
         fileName: String,
         mimeType: String,
     ) {
-        shareFile(bytes, fileName, mimeType)
+        saveFile(bytes, fileName, mimeType) {}
+    }
+
+    override fun saveFile(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        onComplete: (Result<Boolean>) -> Unit,
+    ) {
+        if (pendingSaveStarting || pendingSaveCallback != null) {
+            onComplete(Result.failure(IllegalStateException("Another document save is already in progress")))
+            return
+        }
+        pendingSaveFile?.delete()
+        pendingSaveFile = null
+        pendingSaveStarting = true
+        activity.lifecycleScope.launch {
+            val staged =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        File.createTempFile("document-", ".tmp", pendingSaveDir).apply { writeBytes(bytes) }
+                    }
+                }.getOrElse {
+                    pendingSaveStarting = false
+                    onComplete(Result.failure(it))
+                    return@launch
+                }
+            pendingSaveFile = staged
+            pendingSaveCallback = onComplete
+            runCatching { createDocument.launch(createDocumentIntent(fileName, mimeType)) }
+                .onFailure {
+                    pendingSaveStarting = false
+                    pendingSaveFile = null
+                    pendingSaveCallback = null
+                    staged.delete()
+                    onComplete(Result.failure(it))
+                }
+        }
     }
 
     override fun pickFile(
@@ -124,16 +260,54 @@ private fun shareBytesViaFileProvider(
     fileName: String,
     mimeType: String,
 ) {
-    val dir = File(activity.cacheDir, "attachments").apply { mkdirs() }
-    val file = File(dir, fileName.ifBlank { "meron-file" })
-    file.writeBytes(bytes)
-    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+    val uri = writeBytesToAttachmentCache(activity, bytes, fileName)
     val intent =
         Intent(Intent.ACTION_SEND)
             .setType(mimeType)
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     activity.startActivity(Intent.createChooser(intent, fileName))
+}
+
+private fun writeBytesToAttachmentCache(
+    activity: ComponentActivity,
+    bytes: ByteArray,
+    fileName: String,
+): Uri {
+    val dir = File(activity.cacheDir, "attachments").apply { mkdirs() }
+    val file = File(dir, fileName.ifBlank { "meron-file" })
+    file.writeBytes(bytes)
+    return FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+}
+
+internal fun openFileIntent(
+    uri: Uri,
+    mimeType: String,
+): Intent =
+    Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, mimeType)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        .apply { clipData = ClipData.newRawUri("attachment", uri) }
+
+internal fun externalViewIntent(url: String): Intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+
+internal fun createDocumentIntent(
+    fileName: String,
+    mimeType: String,
+): Intent =
+    Intent(Intent.ACTION_CREATE_DOCUMENT)
+        .addCategory(Intent.CATEGORY_OPENABLE)
+        .setType(mimeType)
+        .putExtra(Intent.EXTRA_TITLE, fileName.ifBlank { "meron-file" })
+
+internal fun isSafeAttachmentToOpen(
+    fileName: String,
+    mimeType: String,
+): Boolean {
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    val mime = mimeType.substringBefore(';').trim().lowercase()
+    return extension !in setOf("apk", "apks", "xapk") &&
+        mime !in setOf("application/vnd.android.package-archive", "application/x-android-package")
 }
 
 internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001

@@ -337,6 +337,7 @@ class ComposeMainActivity : ComponentActivity() {
                 incomingMailtoDraft = incomingMailtoDraft,
                 onMailtoDraftConsumed = ::consumeMailtoIntent,
                 incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                onOAuthCallbackConsumed = ::consumeOAuthIntent,
                 incomingNotificationThreadTarget = incomingNotificationThreadTarget,
                 // Storing and pushing to the OS both happen in MeronApp; the
                 // Activity only has to reload its resources for the new language.
@@ -366,6 +367,17 @@ class ComposeMainActivity : ComponentActivity() {
                 removeExtra(Intent.EXTRA_SUBJECT)
                 removeExtra(Intent.EXTRA_TEXT)
                 removeExtra(Intent.EXTRA_STREAM)
+            },
+        )
+    }
+
+    private fun consumeOAuthIntent() {
+        incomingOAuthCallbackUrl = null
+        setIntent(
+            Intent(intent).apply {
+                action = Intent.ACTION_MAIN
+                data = null
+                clipData = null
             },
         )
     }
