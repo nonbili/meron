@@ -1628,6 +1628,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         }
         errorBanner = null
         syncCoreThreads(syncFirst = false)
+        refreshKanbanColumnsHoldingThread(pending.threadId)
         if (threadStillOpen) {
             runCatching { reloadCurrentThreadMessages() }.onSuccess {
                 // The read can race the server-side discard and return its stale

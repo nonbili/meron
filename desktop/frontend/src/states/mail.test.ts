@@ -1017,6 +1017,73 @@ describe('deleteThread', () => {
     expect(mail$.messages.get()).toEqual([inboxMessage])
     expect(mail$.threads.get()[0]).toMatchObject({ has_draft: false, preview: 'test' })
   })
+
+  // With a board up the mail list is off screen and its reload steps out, but
+  // the board's column still shows the card. A reply sent from the board's pane
+  // left that card counting the discarded draft until some later sync happened
+  // to touch the column.
+  it('re-reads the kanban column holding the thread when its draft is discarded', async () => {
+    const inboxThread = thread({ has_draft: true, message_count: 3 })
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [{ accountId: 'acc', folderId: 'inbox' }] }])
+    kanban$.activeBoardId.set('b1')
+    kanban$.threads.set({ 'acc\ninbox': [inboxThread] })
+    mail$.threads.set([])
+    mail$.messages.set([thread({ id: 'acc:inbox:thread:1#101', message_id: 'root@example.com' })])
+    responses['mail.discardDraft'] = { ok: true, deleted: 1, permanent: true }
+    responses['mail.threadList'] = { threads: [{ ...inboxThread, has_draft: false, message_count: 2 }] }
+
+    try {
+      await discardSavedDraftCopy({
+        threadId: 'acc:inbox:thread:1',
+        messageId: '',
+        folderId: '',
+        accountId: 'acc',
+        draftMessageId: 'draft-id@example.com',
+      })
+
+      expect(calls.find((call) => call.command === 'mail.threadList')?.payload).toMatchObject({
+        account_id: 'acc',
+        folder_id: 'inbox',
+        refresh: false,
+      })
+      expect(kanban$.threads['acc\ninbox'].get()[0]).toMatchObject({ has_draft: false, message_count: 2 })
+    } finally {
+      kanban$.activeBoardId.set('')
+      settings$.kanbanBoards.set([])
+    }
+  })
+
+  // The draft was the only loaded message, so its card leaves the column ahead
+  // of the round-trip. The column still has to be re-read: the server may hold
+  // older messages of the thread the pane never loaded, and the card comes back.
+  it('still re-reads the column when the discard emptied the card out of it', async () => {
+    const inboxThread = thread({ has_draft: true, message_count: 2 })
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [{ accountId: 'acc', folderId: 'inbox' }] }])
+    kanban$.activeBoardId.set('b1')
+    kanban$.threads.set({ 'acc\ninbox': [inboxThread] })
+    mail$.threads.set([])
+    mail$.messages.set([
+      thread({ id: 'acc:Drafts:thread:1#201', folder_id: 'Drafts', message_id: '<draft-id@example.com>' }),
+    ])
+    responses['mail.discardDraft'] = { ok: true, deleted: 1, permanent: true }
+    responses['mail.threadList'] = { threads: [{ ...inboxThread, has_draft: false, message_count: 1 }] }
+
+    try {
+      await discardSavedDraftCopy({
+        threadId: 'acc:inbox:thread:1',
+        messageId: '',
+        folderId: '',
+        accountId: 'acc',
+        draftMessageId: 'draft-id@example.com',
+      })
+
+      expect(calls.some((call) => call.command === 'mail.threadList')).toBe(true)
+      expect(kanban$.threads['acc\ninbox'].get()).toHaveLength(1)
+    } finally {
+      kanban$.activeBoardId.set('')
+      settings$.kanbanBoards.set([])
+    }
+  })
 })
 
 describe('moveThreadToFolder undo', () => {

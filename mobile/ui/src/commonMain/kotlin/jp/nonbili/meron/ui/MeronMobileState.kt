@@ -187,6 +187,13 @@ internal class MeronMobileState(
     var kanbanBoards by mutableStateOf(parseKanbanBoards(kanbanPrefs.getString(KANBAN_BOARDS_PREF, "")))
     var activeKanbanBoardId by mutableStateOf(loadActiveKanbanBoardId(kanbanPrefs))
     var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
+
+    /** Newest `loadKanbanColumn` request per column key. Two reloads of one
+     *  column can be out at once — the Sent copy event's and a post-discard
+     *  one — and only the newest may write: the earlier read the store before
+     *  the change the later is reacting to, and landing last it would put the
+     *  stale card back. */
+    val kanbanColumnLoadTokens = mutableMapOf<String, Long>()
     var kanbanFilter by mutableStateOf(loadKanbanFilter(kanbanPrefs))
     var kanbanSearch by mutableStateOf(loadKanbanSearch(kanbanPrefs))
     var kanbanSearchScope by mutableStateOf(loadKanbanSearchScope(kanbanPrefs))

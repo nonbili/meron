@@ -385,6 +385,8 @@ internal fun MeronMobileState.loadKanbanColumn(
     }
     val key = kanbanColumnKey(column)
     val query = kanbanColumnSearchQuery(column)
+    val token = (kanbanColumnLoadTokens[key] ?: 0L) + 1
+    kanbanColumnLoadTokens[key] = token
     updateKanbanColumn(key) { it.copy(loading = true, error = null) }
     scope.launch {
         runCatching {
@@ -398,6 +400,9 @@ internal fun MeronMobileState.loadKanbanColumn(
                 }
             }
         }.onSuccess { result ->
+            // A newer load of this column is out or has landed; its rows are the
+            // answer, and it clears the loading flag itself.
+            if (kanbanColumnLoadTokens[key] != token) return@onSuccess
             val columnQuery = kanbanColumnSearchQuery(column)
             if (result.folders.isNotEmpty()) {
                 foldersByAccount = foldersByAccount + result.folders.groupBy { it.accountId }
@@ -414,6 +419,7 @@ internal fun MeronMobileState.loadKanbanColumn(
                 )
             }
         }.onFailure {
+            if (kanbanColumnLoadTokens[key] != token) return@onFailure
             updateKanbanColumn(key) { state -> state.copy(loading = false, error = it.message ?: "Load failed") }
             status = "Kanban load failed: ${it.message}"
         }
@@ -476,6 +482,28 @@ internal fun MeronMobileState.refreshKanbanColumnsForAccount(accountId: String) 
             column.accountId == accountId ||
                 (column.accountId == UNIFIED_ACCOUNT_ID && accountIncludedInUnified)
         }.distinctBy(::kanbanColumnKey)
+        .forEach { column -> loadKanbanColumn(column, refresh = false) }
+}
+
+// Re-read the active board's columns whose card stands for [threadId] after a
+// change inside the conversation the card's message count and Draft badge
+// reflect — a quick reply's post-send draft discard. The mailbox reload that
+// runs alongside feeds the list behind the board, not the board; and the Sent
+// copy event that does re-read the account's columns fires from the send,
+// before the discard, so the card kept counting the draft until some later
+// sync happened to touch its column. The discard already dropped the cached
+// draft rows, so a cache read is enough.
+internal fun MeronMobileState.refreshKanbanColumnsHoldingThread(threadId: String) {
+    if (threadId.isBlank()) return
+    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    val keys =
+        kanbanColumns
+            .filterValues { state -> state.threads.any { it.id == threadId || it.backendThreadId() == threadId } }
+            .keys
+    if (keys.isEmpty()) return
+    board.columns
+        .filter { kanbanColumnKey(it) in keys }
+        .distinctBy(::kanbanColumnKey)
         .forEach { column -> loadKanbanColumn(column, refresh = false) }
 }
 

@@ -4,7 +4,14 @@ import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
-import { kanban$, forgetDeletedMailViewFolder, removeKanbanColumnsForFolder } from './kanban'
+import {
+  kanban$,
+  forgetDeletedMailViewFolder,
+  getKanbanColumns,
+  kanbanColumnKey,
+  removeKanbanColumnsForFolder,
+} from './kanban'
+import { columnSearchActive, loadKanbanColumn } from '../lib/kanbanData'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { isUnifiedStarred, unifiedFolderRole, unifiedFolders } from '../lib/unifiedFolders'
 import { isLocalSendId, discardPendingSend } from './pendingSends'
@@ -73,6 +80,39 @@ function kanbanKeysWithThread(threadId: string): string[] {
   return Object.entries(kanban$.threads.get())
     .filter(([, threads]) => threads.some((thread) => thread.thread_id === threadId))
     .map(([key]) => key)
+}
+
+// Re-read the list whose card stands for this thread after a change inside the
+// conversation (a draft discarded, a message deleted) that the card's message
+// count and Draft badge reflect. In the mail view that is the thread list. With
+// a Kanban board up, `loadThreads` steps out — the list is off screen and
+// reloads when the board closes — but the board's columns still show the card,
+// and nothing else re-reads them: a reply sent from the board's pane left its
+// card counting the draft the send had discarded until some later sync happened
+// to touch that column.
+//
+// `columnKeys` are the columns that held the card, captured before any
+// optimistic removal: a conversation whose only loaded message went is dropped
+// from the columns ahead of the server round-trip, and looking the card up
+// afterwards would find nothing to reload — yet the server may still hold older
+// messages of the thread, which only a re-read of those columns brings back.
+async function reloadThreadCards(columnKeys: string[]) {
+  const boardId = kanban$.activeBoardId.peek()
+  if (!boardId) {
+    await loadThreads(false)
+    return
+  }
+  const keys = new Set(columnKeys)
+  const query = kanban$.searchQuery.peek().trim()
+  const scope = kanban$.searchScope.peek()
+  await Promise.all(
+    getKanbanColumns(boardId)
+      .filter((column) => keys.has(kanbanColumnKey(column)))
+      .map((column) => {
+        const key = kanbanColumnKey(column)
+        return loadKanbanColumn(column, false, columnSearchActive(key, query, scope) ? query : '')
+      }),
+  )
 }
 
 function restoreAccountFolders(entries: KeyEntries<Folder[]>) {
@@ -1852,6 +1892,7 @@ export async function discardSavedDraftCopy(
   const nextMessages = withoutDiscardedDraft(previousMessages)
   const selectedThread = ui$.selectedThread.get()
   const removeThread = !!draft.threadId && !nextMessages.some((message) => message.thread_id === draft.threadId)
+  const kanbanKeys = kanbanKeysWithThread(draft.threadId)
 
   mail$.messages.set(nextMessages)
   if (removeThread) {
@@ -1881,7 +1922,7 @@ export async function discardSavedDraftCopy(
       if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(res)
       applyMutationFolderUnreads(res as MutationResult)
     }
-    await loadThreads(false)
+    await reloadThreadCards(kanbanKeys)
     // A mail.synced thread refresh can land while the server discard is on the
     // wire and reinsert the stale draft row after the optimistic removal above.
     // The discard has now succeeded, so remove that copy again before deriving
@@ -1936,6 +1977,7 @@ export async function deleteMessage(message: Message) {
   const threadId = message.thread_id
   const previousMessages = mail$.messages.get()
   const nextMessages = previousMessages.filter((item) => item.id !== message.id)
+  const kanbanKeys = kanbanKeysWithThread(threadId)
 
   mail$.messages.set(nextMessages)
 
@@ -1956,7 +1998,7 @@ export async function deleteMessage(message: Message) {
       }
       removeKanbanThread(threadId)
     }
-    await loadThreads(false)
+    await reloadThreadCards(kanbanKeys)
     const selectedAcc = ui$.selectedAccount.get()
     if (selectedAcc) void loadFolders(selectedAcc, false)
     if (message.account_id && message.account_id !== selectedAcc) {
