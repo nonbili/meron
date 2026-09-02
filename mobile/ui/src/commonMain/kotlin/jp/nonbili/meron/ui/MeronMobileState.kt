@@ -136,6 +136,12 @@ internal class MeronMobileState(
     // still editing an unsubmitted query.
     var visibleMailboxKey by mutableStateOf<MailboxCacheKey?>(null)
     var activeMailboxLoadKey by mutableStateOf<MailboxCacheKey?>(null)
+
+    /** A reload that stepped aside for the load already out for its mailbox,
+     *  null when none. That load read the store before whatever prompted the
+     *  reload changed it — a post-send draft discard, say — so its rows are not
+     *  the answer the reload was after; it runs again once that load settles. */
+    var deferredMailboxReload: DeferredMailboxReload? = null
     var activeMailboxLoadToken by mutableStateOf(0L)
     var activeMailboxLoadStartedAtMillis by mutableStateOf(0L)
     var blockingMailboxLoadWarned by mutableStateOf(false)

@@ -1743,6 +1743,43 @@ describe('thread list view identity', () => {
     expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
   })
 
+  // Stepping aside is not the same as being answered: the load in flight read the
+  // cache before the change the refresh is reacting to. A quick reply's post-send
+  // draft discard used to run its refresh while the view's own load was still
+  // out, and the rows that load then wrote still counted the discarded draft, so
+  // the card showed one message too many until something else reloaded the list.
+  it('runs a background refresh that stepped aside once the view load lands', async () => {
+    let resolveForeground!: (value: unknown) => void
+    const foregroundPage = new Promise((resolve) => {
+      resolveForeground = resolve
+    })
+    const refreshes: boolean[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (_command: string, payload: { refresh?: boolean }) => {
+            refreshes.push(payload.refresh ?? true)
+            if (payload.refresh) return foregroundPage
+            return { threads: [], next_cursor: '' }
+          },
+        },
+      },
+    }
+
+    const foreground = loadThreads()
+    await nextTick()
+    // The post-send discard's refresh, while the view load is still out.
+    await loadThreads(false)
+    expect(refreshes).toEqual([true])
+
+    resolveForeground({ threads: [], next_cursor: '' })
+    await foreground
+    await nextTick()
+
+    expect(refreshes).toEqual([true, false])
+    expect(mail$.threadsLoadedKey.get()).toBe(currentKey())
+  })
+
   // Stepping aside for the load in flight is only right while that load is still
   // going to write. A search superseded by the next keystroke used to hold the
   // claim for good, so every later background refresh of that view was skipped —

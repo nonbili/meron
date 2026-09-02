@@ -457,11 +457,18 @@ internal fun MeronMobileState.syncCoreThreads(
     val requestKey = mailboxCacheKey(accountId, requestedFolder, query, filter)
     if (syncing && activeMailboxLoadKey == requestKey) {
         Log.i("MailLoad", "sync skipped duplicate account=$accountId folder=$requestedFolder")
+        deferredMailboxReload =
+            DeferredMailboxReload(
+                key = requestKey,
+                refreshSearch = refreshSearch || deferredMailboxReload?.takeIf { it.key == requestKey }?.refreshSearch == true,
+            )
         return
     }
     val requestToken = activeMailboxLoadToken + 1
     activeMailboxLoadToken = requestToken
     activeMailboxLoadKey = requestKey
+    // This load reads the store after anything a skipped reload was reacting to.
+    deferredMailboxReload = null
     activeMailboxLoadStartedAtMillis = currentTimeMillis()
     blockingMailboxLoadWarned = false
     blockingMailboxLoadSlow = false
@@ -590,6 +597,11 @@ internal fun MeronMobileState.syncCoreThreads(
                     refreshSearch = true,
                 )
             }
+            // After the live search above: it reads the store afresh and so
+            // stands in for a reload that stepped aside. Re-running that reload
+            // first would start a cache read the live search then steps aside
+            // for, and the two would take turns for good.
+            runDeferredMailboxReload(requestKey, accountId, requestedFolder)
             if (firstLoad && syncFirst && !unifiedStarred) {
                 deepenMailboxSync(accountId, folder, selectedAccounts)
             }
@@ -604,6 +616,7 @@ internal fun MeronMobileState.syncCoreThreads(
             blockingMailboxLoadSlow = false
             syncing = false
             initialThreadsLoaded = true
+            runDeferredMailboxReload(requestKey, accountId, requestedFolder)
             val contextual = it as? AccountSyncException
             val failedAccountId =
                 contextual?.accountId
@@ -615,6 +628,25 @@ internal fun MeronMobileState.syncCoreThreads(
             Log.w("MailLoad", "sync failed account=$accountId folder=$requestedFolder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", it)
         }
     }
+}
+
+// A reload that stepped aside for the load that just settled was asking about
+// a store that load had already read — the draft a post-send discard removed
+// is still in the rows just painted, so the card keeps its Draft badge and
+// counts the draft. Run the reload now that nothing is in its way.
+private fun MeronMobileState.runDeferredMailboxReload(
+    settledKey: MailboxCacheKey,
+    accountId: String,
+    folder: String,
+) {
+    val deferred = deferredMailboxReload?.takeIf { it.key == settledKey } ?: return
+    deferredMailboxReload = null
+    syncCoreThreads(
+        accountOverride = accountId,
+        folderOverride = folder,
+        syncFirst = false,
+        refreshSearch = deferred.refreshSearch,
+    )
 }
 
 // Second phase of a first-load sync: fetch the full header page for each mail

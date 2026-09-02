@@ -732,6 +732,11 @@ let reselectAfterThreadLoad = false
 // releases it. Read by the background-refresh guard below.
 let pendingRefreshKey = ''
 let pendingRefreshVersion = 0
+// View key of a background refresh that stepped aside for the load above, ''
+// when none. The load it yielded to read the cache before whatever prompted
+// the refresh changed it — a post-send draft discard, say — so its rows are
+// not the answer the refresh was after; it runs again once that load lands.
+let deferredRefreshKey = ''
 
 // Called by flows that clear `selectedThread` because the open conversation is
 // leaving the list (delete, move, discard draft) and want the next load to open
@@ -813,6 +818,7 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
     pendingRefreshKey === viewKey &&
     pendingRefreshVersion === threadLoadVersion
   ) {
+    deferredRefreshKey = viewKey
     return
   }
 
@@ -820,6 +826,8 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
   if (refresh) {
     pendingRefreshKey = viewKey
     pendingRefreshVersion = version
+    // This load reads the cache after anything a skipped refresh was reacting to.
+    deferredRefreshKey = ''
   }
   // Hand the claim above back the moment this load stops being the one that will
   // write. Every background refresh of this view steps aside while it stands, so
@@ -986,6 +994,14 @@ export async function loadThreads(refresh = true, searchStage: ThreadSearchStage
   if (refresh) {
     mail$.threadsLoadedKey.set(viewKey)
     releasePendingRefresh()
+    // A background refresh that stepped aside for this load was asking about a
+    // cache this load had already read — the draft a post-send discard removed
+    // is still in the rows just written, so its card keeps the Draft badge and
+    // counts the draft. Run the refresh now that nothing is in its way.
+    if (deferredRefreshKey === viewKey) {
+      deferredRefreshKey = ''
+      void loadThreads(false).catch(console.error)
+    }
   }
 
   const filtered = getFilteredThreads()

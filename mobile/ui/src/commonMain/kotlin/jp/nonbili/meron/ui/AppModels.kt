@@ -179,6 +179,14 @@ internal data class MailboxCacheKey(
     val filter: FilterMode,
 )
 
+/** See `MeronMobileState.deferredMailboxReload`. `refreshSearch` is kept so a
+ *  live search that stepped aside is re-run as one, not as the cache read that
+ *  would only schedule it again. */
+internal data class DeferredMailboxReload(
+    val key: MailboxCacheKey,
+    val refreshSearch: Boolean,
+)
+
 internal data class KanbanColumnSpec(
     val accountId: String,
     val folderId: String,
