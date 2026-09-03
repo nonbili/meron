@@ -184,7 +184,12 @@ fn thread_cards_json_keyed(
     // the cached folder, bucketed by the folder each card actually sits in
     // (starred and search pages span several). The page tally stays as a floor:
     // a live IMAP page can hold messages the cache has not stored yet.
-    let mut counts: HashMap<String, u32> = HashMap::new();
+    //
+    // Both lookups are keyed by (folder, key): a `uid:` key names a message by
+    // (folder, uid), so on a page that spans folders `INBOX/uid:7` and
+    // `Sent/uid:7` are unrelated cards under one key, and a flat map would let
+    // whichever folder ran last answer for both.
+    let mut counts: HashMap<(String, String), u32> = HashMap::new();
     let mut keys_by_folder: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     for card in &cards {
         keys_by_folder
@@ -192,8 +197,22 @@ fn thread_cards_json_keyed(
             .or_default()
             .push(card.thread_key.clone());
     }
+    // Same slice problem for the card's title: an unread view can hold a reply
+    // while the seen message that opened the thread sits just outside the page,
+    // and a title read off the slice alone would call that reply the thread's
+    // start. The cache answers for the whole mailbox.
+    let mut root_subjects: HashMap<(String, String), String> = HashMap::new();
     for (folder, keys) in keys_by_folder {
-        counts.extend(store::card_message_counts(conn, account_id, folder, &keys)?);
+        counts.extend(
+            store::card_message_counts(conn, account_id, folder, &keys)?
+                .into_iter()
+                .map(|(key, count)| ((folder.to_string(), key), count)),
+        );
+        root_subjects.extend(
+            store::card_root_subjects(conn, account_id, folder, &keys)?
+                .into_iter()
+                .map(|(key, subject)| ((folder.to_string(), key), subject)),
+        );
     }
 
     cards
@@ -201,10 +220,20 @@ fn thread_cards_json_keyed(
         .map(|card| {
             let folder = card.header.folder.as_str();
             let message_count = counts
-                .get(&card.thread_key)
+                .get(&(folder.to_string(), card.thread_key.clone()))
                 .copied()
                 .unwrap_or(0)
                 .max(card.message_count);
+            // Cached rows win when the thread has any: every listed message is
+            // cached, so the cache is the fuller view, and the page's own title
+            // only stands in for a thread the cache has not stored yet.
+            let subject = root_subjects
+                .get(&(
+                    folder.to_string(),
+                    store::split_thread_key(&card.thread_key).0,
+                ))
+                .cloned()
+                .unwrap_or_else(|| card.header.subject.clone());
             let folder_role = store::folder_role(conn, account_id, folder)?;
             let thread_id = format_thread_id(account_id, folder, &card.thread_key);
             let original_thread_id = card
@@ -223,7 +252,7 @@ fn thread_cards_json_keyed(
                 "from_name": card.header.from_name,
                 "from_addr": card.header.from_addr,
                 "to": "",
-                "subject": card.header.subject,
+                "subject": subject,
                 "preview": "",
                 "body": "",
                 "date": card.header.date,
@@ -512,6 +541,7 @@ fn decode_starred_cursor(cursor: &str) -> Option<(i64, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::slice;
 
     #[test]
     fn allocated_message_ids_use_account_domain_and_lifecycle_prefix() {
@@ -561,7 +591,10 @@ mod tests {
 
         let one = starred_thread_cards(&conn, 1).unwrap();
         assert_eq!(one.len(), 1, "{one:?}");
-        assert_eq!(one[0]["subject"], "Sprint planning");
+        // The newest starred branch is the one kept. Card titles carry the root
+        // thread's subject, the same for every branch, so the date names which
+        // branch this is.
+        assert_eq!(one[0]["date"], 300);
 
         let both = starred_thread_cards(&conn, 2).unwrap();
         assert_eq!(both.len(), 2, "{both:?}");
@@ -613,8 +646,57 @@ mod tests {
             cards[0]["thread_id"],
             format_thread_id("me@example.com", "INBOX", "root@example.com#Topic")
         );
-        // Both copies are one thread, page or no page.
+        // Both copies are one thread, page or no page — and the title is the
+        // cached Inbox root's, not the reply that was all the page carried.
         assert_eq!(cards[0]["message_count"], 2);
+        assert_eq!(cards[0]["subject"], "Topic");
+    }
+
+    // A `uid:` key names a message by (folder, uid) — the fallback for one with
+    // no threading headers — so a page that spans folders can carry two
+    // unrelated cards under `uid:7`. Neither may answer for the other.
+    #[test]
+    fn same_uid_cards_in_two_folders_keep_their_own_titles_and_counts() {
+        let conn = Connection::open_in_memory().unwrap();
+        store::run_migrations(&conn).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        store::ensure_folder(&conn, "me@example.com", "Sent").unwrap();
+        let inbox = MessageHeader {
+            uid: 7,
+            folder: "INBOX".to_string(),
+            subject: "Inbox topic".to_string(),
+            date: 100,
+            ..Default::default()
+        };
+        let sent = MessageHeader {
+            uid: 7,
+            folder: "Sent".to_string(),
+            subject: "Sent topic".to_string(),
+            date: 300,
+            ..Default::default()
+        };
+        store::upsert_messages(&conn, "me@example.com", "INBOX", slice::from_ref(&inbox)).unwrap();
+        store::upsert_messages(&conn, "me@example.com", "Sent", slice::from_ref(&sent)).unwrap();
+
+        let cards = thread_cards_json(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            vec![sent, inbox],
+            &HashSet::new(),
+        )
+        .unwrap();
+
+        assert_eq!(cards.len(), 2, "{cards:?}");
+        let title = |folder: &str| {
+            cards
+                .iter()
+                .find(|card| card["folder_id"] == folder)
+                .unwrap_or_else(|| panic!("no card in {folder}: {cards:?}"))["subject"]
+                .clone()
+        };
+        assert_eq!(title("INBOX"), "Inbox topic");
+        assert_eq!(title("Sent"), "Sent topic");
     }
 
     #[test]

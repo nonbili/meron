@@ -37,6 +37,7 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<()> {
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1244,11 +1245,14 @@ pub fn group_thread_cards_with_drafts(
 ) -> Vec<ThreadCard> {
     use std::collections::HashMap;
 
-    #[derive(Default)]
     struct RootSubject {
+        /// The card's title: the oldest message's subject verbatim. Reply
+        /// prefixes are stripped for grouping, never for display — when the
+        /// thread's own first message is not in the mailbox the oldest one here
+        /// is itself a reply, and dropping its `Re:` claims a thread start that
+        /// this folder does not hold.
         display: String,
         group: String,
-        uid: u32,
     }
 
     // What one card collects. A real thread key is the same thread wherever its
@@ -1268,19 +1272,40 @@ pub fn group_thread_cards_with_drafts(
         format!("{folder}\u{1}{key}")
     };
 
-    let mut roots: HashMap<String, RootSubject> = HashMap::new();
+    let mut candidates: HashMap<String, Vec<RootCandidate>> = HashMap::new();
     for message in &messages {
         if message.uid == 0 {
             continue;
         }
         let thread_key = group_key(message, &effective_thread_key(message));
-        let entry = roots.entry(thread_key).or_default();
-        if entry.uid == 0 || message.uid < entry.uid {
-            entry.uid = message.uid;
-            entry.display = normalize_thread_subject(&message.subject);
-            entry.group = thread_grouping_subject(&message.subject);
-        }
+        let folder = if message.folder.is_empty() {
+            default_folder
+        } else {
+            message.folder.as_str()
+        };
+        candidates
+            .entry(thread_key)
+            .or_default()
+            .push(RootCandidate {
+                folder: folder.to_string(),
+                uid: message.uid,
+                date: message.date,
+                subject: message.subject.clone(),
+            });
     }
+    let roots: HashMap<String, RootSubject> = candidates
+        .into_iter()
+        .filter_map(|(key, candidates)| {
+            let root = pick_root(candidates, default_folder)?;
+            Some((
+                key,
+                RootSubject {
+                    display: root.subject.trim().to_string(),
+                    group: thread_grouping_subject(&root.subject),
+                },
+            ))
+        })
+        .collect();
 
     let mut groups: HashMap<String, ThreadCard> = HashMap::new();
     let mut order = Vec::new();
@@ -1484,6 +1509,100 @@ pub fn card_message_counts(
     Ok(counts)
 }
 
+/// The title each of `card_keys` should show: the subject of the oldest cached
+/// message of its thread, verbatim.
+///
+/// The page a card was grouped from is a filtered, cursor-paged slice — an
+/// unread view can hold a reply while the seen thread opener sits in the same
+/// folder just outside the page — so a title read off that slice can call a
+/// reply the thread's start. The cache has the whole mailbox and settles it, the
+/// same way [`card_message_counts`] settles the tally.
+///
+/// Keyed by root thread key, not card key: every subject branch of a thread
+/// carries the root thread's title.
+pub fn card_root_subjects(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    card_keys: &[String],
+) -> Result<std::collections::HashMap<String, String>> {
+    use std::collections::HashMap;
+
+    let mut roots: Vec<String> = card_keys
+        .iter()
+        .map(|key| split_thread_key(key).0)
+        .collect();
+    roots.sort();
+    roots.dedup();
+    let (uid_roots, threaded_roots): (Vec<String>, Vec<String>) =
+        roots.into_iter().partition(|root| root.starts_with("uid:"));
+
+    // `uid:` roots name a message by (folder, uid) and never move; a real thread
+    // key is the same thread wherever its copies sit, so its oldest message may
+    // be cached in another folder.
+    let mut candidates: HashMap<String, Vec<RootCandidate>> = HashMap::new();
+    collect_root_candidates(conn, account, Some(folder), &uid_roots, &mut candidates)?;
+    collect_root_candidates(conn, account, None, &threaded_roots, &mut candidates)?;
+
+    Ok(candidates
+        .into_iter()
+        .filter_map(|(root, candidates)| {
+            let subject = pick_root(candidates, folder)?.subject.trim().to_string();
+            Some((root, subject))
+        })
+        .collect())
+}
+
+/// Gather the cached rows of `roots` as root candidates, keyed by root thread
+/// key. `folder` scopes the query to a single mailbox; `None` spans the account.
+fn collect_root_candidates(
+    conn: &Connection,
+    account: &str,
+    folder: Option<&str>,
+    roots: &[String],
+    candidates: &mut std::collections::HashMap<String, Vec<RootCandidate>>,
+) -> Result<()> {
+    // SQLite caps bound parameters per statement; chunk so an unpaginated caller
+    // cannot overrun it (see `count_card_rows`).
+    for chunk in roots.chunks(100) {
+        let first = if folder.is_some() { 3 } else { 2 };
+        let placeholders = (first..first + chunk.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let folder_clause = if folder.is_some() {
+            "folder = ?2 AND "
+        } else {
+            ""
+        };
+        let mut stmt = conn.prepare(&format!(
+            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject
+             FROM messages
+             WHERE account = ?1 AND {folder_clause}uid <> 0
+               AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) IN ({placeholders})"
+        ))?;
+        let mut args: Vec<&str> = vec![account];
+        args.extend(folder);
+        args.extend(chunk.iter().map(String::as_str));
+        let rows = stmt.query_map(params_from_iter(args), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                RootCandidate {
+                    folder: row.get(1)?,
+                    uid: row.get(2)?,
+                    date: row.get(3)?,
+                    subject: row.get(4)?,
+                },
+            ))
+        })?;
+        for row in rows {
+            let (root, candidate) = row?;
+            candidates.entry(root).or_default().push(candidate);
+        }
+    }
+    Ok(())
+}
+
 /// Tally the cached rows of `roots` into `counts`, one card key at a time.
 /// `folder` scopes the query to a single mailbox; `None` spans the account.
 fn count_card_rows(
@@ -1547,6 +1666,57 @@ fn count_card_rows(
     Ok(())
 }
 
+/// A candidate for a thread's opening message: what [`pick_root`] compares.
+struct RootCandidate {
+    folder: String,
+    uid: u32,
+    /// Send time as Unix epoch seconds, 0 when the row carries no usable Date.
+    date: i64,
+    subject: String,
+}
+
+/// Choose the oldest message of one thread from `candidates`. `read_folder` is
+/// the mailbox the card belongs to.
+///
+/// UIDs ascend with arrival inside a folder, so there the lowest UID is the
+/// oldest message — authoritative even for a row whose Date header is missing.
+/// Across folders UIDs are unrelated: on a page that merges the mailbox with
+/// Sent (search, and any thread the user replied to) a Sent reply's UID 1 is not
+/// older than an Inbox root's UID 100. So each folder's own pick is made by UID
+/// first, and only those are compared, by send time alone — UID says nothing
+/// here and must not break the tie, or the Sent reply wins back whenever the two
+/// share a timestamp or neither carries one.
+///
+/// What breaks a cross-folder tie is the mailbox being read: it is the folder
+/// the card sits in, so its copy is the one that should title it. The folder
+/// name settles what is left, so the pick never follows input order.
+fn pick_root(candidates: Vec<RootCandidate>, read_folder: &str) -> Option<RootCandidate> {
+    let mut per_folder: BTreeMap<String, RootCandidate> = BTreeMap::new();
+    for candidate in candidates {
+        match per_folder.get(&candidate.folder) {
+            Some(best) if best.uid <= candidate.uid => {}
+            _ => {
+                per_folder.insert(candidate.folder.clone(), candidate);
+            }
+        }
+    }
+    per_folder.into_values().min_by(|left, right| {
+        fn rank<'a>(candidate: &'a RootCandidate, read_folder: &str) -> (i64, bool, &'a str) {
+            (
+                // An undated pick loses to a dated one.
+                if candidate.date == 0 {
+                    i64::MAX
+                } else {
+                    candidate.date
+                },
+                !candidate.folder.eq_ignore_ascii_case(read_folder),
+                candidate.folder.as_str(),
+            )
+        }
+        rank(left, read_folder).cmp(&rank(right, read_folder))
+    })
+}
+
 fn effective_thread_key(message: &MessageHeader) -> String {
     if message.thread_key.is_empty() {
         format!("uid:{}", message.uid)
@@ -1606,14 +1776,6 @@ pub fn split_branch_compound_key(compound: &str) -> (String, Option<String>) {
         ),
         None => (compound.to_string(), None),
     }
-}
-
-pub fn normalize_thread_subject(subject: &str) -> String {
-    let mut subject = subject.trim();
-    while let Some(rest) = strip_reply_prefix(subject) {
-        subject = rest.trim();
-    }
-    subject.to_string()
 }
 
 pub fn thread_grouping_subject(subject: &str) -> String {

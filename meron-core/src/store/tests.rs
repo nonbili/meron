@@ -1202,9 +1202,9 @@ fn thread_subject_normalization_matches_desktop_prefix_semantics() {
         ("Topic", "Topic"),
     ];
     for (subject, expected) in cases {
-        assert_eq!(normalize_thread_subject(subject), expected, "{subject}");
+        assert_eq!(thread_grouping_subject(subject), expected, "{subject}");
     }
-    // The grouping variant additionally drops leading bracket tags.
+    // Leading bracket tags drop too.
     assert_eq!(thread_grouping_subject("[EXTERNAL] Re: Topic"), "Topic");
     assert_eq!(thread_grouping_subject("[JIRA-1] Topic"), "Topic");
 }
@@ -1282,6 +1282,174 @@ fn group_thread_cards_branches_subject_drift_and_links_to_root() {
     assert_eq!(cards[1].header.subject, "Old topic");
     assert_eq!(cards[1].unread_count, 1);
     assert_eq!(cards[1].message_count, 2);
+}
+
+#[test]
+fn group_thread_cards_keep_reply_prefix_when_the_thread_start_is_missing() {
+    use crate::imap::MessageHeader;
+    // Only replies reached this mailbox, so the oldest message here is itself a
+    // reply. The card must say so rather than pass the reply off as the thread's
+    // opening message.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 2,
+                subject: "Re: abdullah <> ping".to_string(),
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Re: abdullah <> ping".to_string(),
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.subject, "Re: abdullah <> ping");
+    // Grouping still ignores the prefix, so the branch key is the bare subject.
+    assert_eq!(cards[0].thread_key, "refs-root#abdullah <> ping");
+    assert_eq!(cards[0].message_count, 2);
+}
+
+#[test]
+fn group_thread_cards_pick_the_root_by_date_across_folders() {
+    use crate::imap::MessageHeader;
+    // A folder-spanning page (search, or any thread the user replied to) merges
+    // Inbox and Sent, whose UID spaces are unrelated: the Sent reply's UID 1 is
+    // not older than the Inbox root's UID 100. Send time is what orders them.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 1,
+                folder: "Sent".to_string(),
+                subject: "Re: Topic".to_string(),
+                date: 200,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 100,
+                folder: "INBOX".to_string(),
+                subject: "Topic".to_string(),
+                date: 100,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.subject, "Topic");
+}
+
+#[test]
+fn group_thread_cards_break_a_cross_folder_tie_with_the_read_mailbox() {
+    use crate::imap::MessageHeader;
+    // Neither copy carries a date, so send time cannot separate them. UID must
+    // not step in — it is folder-local, and the Sent reply's UID 1 would win
+    // against the Inbox root's UID 100. The mailbox being read owns the card.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 1,
+                folder: "Sent".to_string(),
+                subject: "Re: Topic".to_string(),
+                date: 0,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 100,
+                folder: "INBOX".to_string(),
+                subject: "Topic".to_string(),
+                date: 0,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.subject, "Topic");
+}
+
+#[test]
+fn group_thread_cards_keep_uid_order_within_a_folder_when_a_date_is_missing() {
+    use crate::imap::MessageHeader;
+    // `date == 0` means unknown, not "epoch". Inside one folder UIDs already
+    // order by arrival, so the undated root stays the root.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 2,
+                subject: "Re: Topic".to_string(),
+                date: 100,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                subject: "Topic".to_string(),
+                date: 0,
+                thread_key: "refs-root".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.subject, "Topic");
+}
+
+#[test]
+fn card_root_subjects_read_the_thread_start_the_page_left_out() {
+    let conn = test_conn();
+    let insert = |uid: u32, subject: &str, seen: i64| {
+        conn.execute(
+            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
+                                  date, seen, thread_key)
+             VALUES('acct', 'INBOX', ?1, ?2, ?3, 'Aki', 'aki@example.com', ?4, ?5,
+                    'root@example.com')",
+            params![uid.to_string(), uid, subject, 100 * uid as i64, seen],
+        )
+        .unwrap();
+    };
+    insert(1, "Topic", 1);
+    insert(2, "Re: Topic", 0);
+
+    // The unread view's page holds only the reply, so grouping alone would title
+    // the card "Re: Topic". The cache still has the seen thread start.
+    let subjects = card_root_subjects(
+        &conn,
+        "acct",
+        "INBOX",
+        &["root@example.com#Topic".to_string()],
+    )
+    .unwrap();
+    assert_eq!(
+        subjects.get("root@example.com").map(String::as_str),
+        Some("Topic")
+    );
+
+    // A thread the cache has never stored answers nothing, leaving the caller
+    // its own page-derived title.
+    assert!(
+        card_root_subjects(
+            &conn,
+            "acct",
+            "INBOX",
+            &["missing@example.com#Topic".to_string()]
+        )
+        .unwrap()
+        .is_empty()
+    );
 }
 
 #[test]
