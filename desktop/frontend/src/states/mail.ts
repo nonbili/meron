@@ -14,7 +14,7 @@ import {
 import { columnSearchActive, loadKanbanColumn } from '../lib/kanbanData'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { isUnifiedStarred, unifiedFolderRole, unifiedFolders } from '../lib/unifiedFolders'
-import { isLocalSendId, discardPendingSend } from './pendingSends'
+import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { bareAddr, splitAddressList } from '../lib/address'
 
@@ -1239,7 +1239,11 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
       message.outgoing &&
       !isDraftFolder(message.folder_id, message.account_id),
   )
-  const paired = pairLocalSendsWithServerCopies(unresolved, candidates)
+  // A bubble still waiting on its Message-ID has not been handed to SMTP yet, so
+  // nothing this refresh reveals can be its copy — only an earlier reply of ours
+  // that happens to look alike, which must not swallow it.
+  const dispatched = unresolved.filter((message) => !!message.message_id || message.send_status !== 'sending')
+  const paired = pairLocalSendsWithServerCopies(dispatched, candidates)
   const optimistic = unresolved.filter((message) => !paired.has(message.id))
   if (optimistic.length === 0) return refreshed
   return [...refreshed, ...optimistic].sort((a, b) => a.date - b.date)
@@ -1957,6 +1961,10 @@ export async function deleteMessage(message: Message) {
   // any pending retry payload — no backend round-trip, no confirm.
   if (isLocalSendId(message.id)) {
     discardPendingSend(message.id)
+    // Also cancel any rescue keyed on it: without this the bubble the user
+    // just deleted would be restored on the next thread load, and a rescue
+    // still on the wire would leave its draft copy behind.
+    cancelUnsentRescue(message.id)
     mail$.messages.set(mail$.messages.get().filter((item) => item.id !== message.id))
     return
   }

@@ -218,6 +218,41 @@ describe('thread message refresh reconciliation', () => {
     expect(mergeRefreshedThreadMessages([optimistic], [canonical], 't1').map((m) => m.id)).toEqual(['sent:1'])
   })
 
+  it('does not let an earlier reply of ours claim a bubble still waiting on its Message-ID', () => {
+    // The bubble goes up at the click, before the thread load that back-fills
+    // Message-IDs. That load can reveal a reply we sent minutes ago with the
+    // same envelope; it cannot be this bubble's copy, since nothing has been
+    // handed to SMTP yet.
+    const optimistic = thread({
+      id: 'sent-local',
+      thread_id: 't1',
+      from_addr: 'me@example.com',
+      to: 'Sender <sender@example.com>',
+      subject: 'Re: Subject',
+      message_id: '',
+      body: 'Second reply',
+      send_status: 'sending',
+      date: 1000,
+    })
+    const earlier = thread({
+      id: 'sent:1',
+      folder_id: 'Sent',
+      thread_id: 't1',
+      from_addr: 'me@example.com',
+      to: 'sender@example.com',
+      subject: 'Re: Subject',
+      message_id: 'earlier@example.com',
+      body: 'First reply',
+      outgoing: true,
+      date: 940,
+    })
+
+    expect(mergeRefreshedThreadMessages([optimistic], [earlier], 't1').map((m) => m.id)).toEqual([
+      'sent:1',
+      'sent-local',
+    ])
+  })
+
   it('does not let a newly saved draft claim an optimistic reply', () => {
     // The autosaved draft of the *next* reply: outgoing, same envelope, minutes
     // apart — but a draft is not a sent copy.

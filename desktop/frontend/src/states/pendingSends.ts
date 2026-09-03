@@ -2,6 +2,7 @@
 // message id (`sent-…`). Lives in its own module so both compose.ts (which
 // dispatches and retries sends) and mail.ts (which deletes messages) can touch
 // it without forming an import cycle.
+import type { Message } from '../types'
 
 /** Args forwarded verbatim to the `mail.send` bridge command. Held here so a
  * failed send can be retried with the original payload — including raw
@@ -38,3 +39,42 @@ export const getPendingSend = (id: string) => registry.get(id)
 export const discardPendingSend = (id: string) => {
   registry.delete(id)
 }
+
+/** A reply whose send died before it ever had a payload to retry, and whose
+ * draft rescue has not (yet) put a copy on the server. The bubble is the only
+ * copy left, which makes it worth putting back when its thread is loaded
+ * again: the message page is replaced wholesale on every navigation. `retry`
+ * re-runs the rescue (see sendReply's rescueUnsentQuickReply); `inFlight` is
+ * set while it runs, and `cancelled` records that the user deleted the bubble
+ * meanwhile — the rescue reads it back and undoes what it wrote. */
+export type UnsentRescue = {
+  threadId: string
+  bubble: Message
+  retry: () => Promise<void>
+  inFlight: boolean
+  cancelled: boolean
+}
+
+const rescues = new Map<string, UnsentRescue>()
+
+export const setUnsentRescue = (id: string, rescue: UnsentRescue) => {
+  rescues.set(id, rescue)
+}
+
+export const getUnsentRescue = (id: string) => rescues.get(id)
+
+/** Forget a rescue whose reply is safe on the server. */
+export const discardUnsentRescue = (id: string) => {
+  rescues.delete(id)
+}
+
+/** Forget a rescue because the user deleted its bubble — they threw the reply
+ * away, so a rescue still on the wire must undo itself rather than leave the
+ * copy (and a resurrected bubble) behind. */
+export const cancelUnsentRescue = (id: string) => {
+  const rescue = rescues.get(id)
+  if (rescue) rescue.cancelled = true
+  rescues.delete(id)
+}
+
+export const unsentRescues = () => [...rescues.entries()]
