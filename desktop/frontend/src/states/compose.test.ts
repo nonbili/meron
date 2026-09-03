@@ -1875,6 +1875,131 @@ describe('quick reply draft sharing', () => {
     expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(true)
   })
 
+  it('shows the sending bubble and empties the box before the identity is allocated', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Instant reply')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+
+    let identityStarted!: () => void
+    const allocating = new Promise<void>((resolve) => (identityStarted = resolve))
+    let releaseIdentity!: () => void
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') {
+        identityStarted()
+        await new Promise<void>((resolve) => (releaseIdentity = resolve))
+        return { message_id: 'sent@example.com' }
+      }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    const send = sendReply()
+    // Synchronously at the click: the bubble is up and the box is empty.
+    const bubble = mail$.messages.get().find((m) => m.send_status === 'sending')
+    expect(bubble?.body).toBe('Instant reply')
+    expect(bubble?.to).toBe('Sender <them@example.com>')
+    expect(bubble?.message_id).toBe('')
+    expect(compose$.composer.get()).toBe('')
+    await allocating
+    releaseIdentity()
+    await send
+
+    // Once allocated, the bubble carries the identity the send went out under.
+    const settled = mail$.messages.get().find((m) => m.id === bubble?.id)
+    expect(settled?.message_id).toBe('sent@example.com')
+    expect(settled?.send_status).toBe('sent')
+    const sent = calls.find((call) => call.command === 'mail.send')
+    expect((sent?.payload as { message_id?: string })?.message_id).toBe('sent@example.com')
+  })
+
+  it('threads a sent-only conversation against the loaded message instead of its new bubble', async () => {
+    const headerOnly = message({
+      id: 'server-header',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'Sent',
+      from_addr: 'me@example.com',
+      to: 'them@example.com',
+      message_id: '',
+      outgoing: true,
+      date: 1000,
+    })
+    const loaded = message({
+      ...headerOnly,
+      id: 'server-loaded',
+      message_id: 'parent@example.com',
+    })
+    mail$.threads.set([headerOnly])
+    mail$.messages.set([headerOnly])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Follow up')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [loaded] }
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    await sendReply()
+
+    expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
+    const sent = calls.find((call) => call.command === 'mail.send')
+    expect(sent?.payload).toMatchObject({
+      to: 'them@example.com',
+      in_reply_to: 'parent@example.com',
+      references: 'parent@example.com',
+    })
+  })
+
+  it('takes the bubble down and puts the reply back when the send dies before going out', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Never left')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') throw new Error('offline')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    await expect(sendReply()).rejects.toThrow('offline')
+
+    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(compose$.composer.get()).toBe('Never left')
+    expect(calls.some((call) => call.command === 'mail.send')).toBe(false)
+  })
+
   it('keeps a draft written after a From change during the send', async () => {
     const thread = message({
       id: 'root',
@@ -1910,7 +2035,9 @@ describe('quick reply draft sharing', () => {
 
     const send = sendReply()
     await allocating
-    // Picking another identity re-saves the reply against it (QuickReplyFrom).
+    // The click emptied the box; the next reply goes in, and picking another
+    // identity re-saves it against that (QuickReplyFrom).
+    compose$.composer.set('Second reply')
     compose$.quickReplyFrom.set('me@example.com')
     await saveQuickReplyDraft()
     releaseIdentity()
@@ -1918,6 +2045,7 @@ describe('quick reply draft sharing', () => {
 
     // That draft is the box's, not the send's: clearing the pointer would strand
     // it in Drafts.
+    expect(compose$.composer.get()).toBe('Second reply')
     expect(compose$.quickReplyDraftId.get()).toBe('from-change-draft@example.com')
     expect(compose$.quickReplyDraftSaved.get()).toBe(true)
   })

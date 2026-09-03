@@ -1239,7 +1239,11 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
       message.outgoing &&
       !isDraftFolder(message.folder_id, message.account_id),
   )
-  const paired = pairLocalSendsWithServerCopies(unresolved, candidates)
+  // A bubble still waiting on its Message-ID has not been handed to SMTP yet, so
+  // nothing this refresh reveals can be its copy — only an earlier reply of ours
+  // that happens to look alike, which must not swallow it.
+  const dispatched = unresolved.filter((message) => !!message.message_id || message.send_status !== 'sending')
+  const paired = pairLocalSendsWithServerCopies(dispatched, candidates)
   const optimistic = unresolved.filter((message) => !paired.has(message.id))
   if (optimistic.length === 0) return refreshed
   return [...refreshed, ...optimistic].sort((a, b) => a.date - b.date)
