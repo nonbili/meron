@@ -292,17 +292,16 @@ class ComposeSaveLifecycleTest {
     @Test
     fun sendDoesNotClaimAMatchingLoadedDraftWithoutOwnership() =
         runBlocking {
-            val core = SaveCore()
+            val unrelatedDraft = consumedDraft().copy(messageId = "meron-draft-full-editor@gmail.com")
+            val core = SaveCore().apply { threadReadResponse = threadReadWithConsumedDraft(unrelatedDraft.messageId) }
             val state = state(core, this)
             prepareQuickReply(state)
-            state.messages = state.messages + consumedDraft().copy(messageId = "meron-draft-full-editor@gmail.com")
+            state.messages = state.messages + unrelatedDraft
             state.onQuickReplyBodyChange("Reply")
 
             state.sendQuickReply()
             core.sendFinished.await()
-            withTimeout(1_000) {
-                while (state.quickReplySendInFlight) yield()
-            }
+            awaitState { !state.quickReplySendInFlight && core.threadReadCalls > 0 }
 
             assertTrue(core.discardPayloads.isEmpty())
             assertTrue(state.messages.any { it.id == "draft-row" })
@@ -1121,7 +1120,7 @@ class ComposeSaveLifecycleTest {
             messageId = "reply-draft@example.com",
         )
 
-    private fun threadReadWithConsumedDraft(): String = """{"messages":[{"id":"message","folder_id":"INBOX","from_addr":"sender@example.com","to":"a@example.com","subject":"Subject","body":"Original","message_id":"original@example.com"},{"id":"draft-row","folder_id":"Drafts","from_addr":"a@example.com","to":"sender@example.com","subject":"Re: Subject","body":"Reply","message_id":"reply-draft@example.com"}]}"""
+    private fun threadReadWithConsumedDraft(messageId: String = "reply-draft@example.com"): String = """{"messages":[{"id":"message","folder_id":"INBOX","from_addr":"sender@example.com","to":"a@example.com","subject":"Subject","body":"Original","message_id":"original@example.com"},{"id":"draft-row","folder_id":"Drafts","from_addr":"a@example.com","to":"sender@example.com","subject":"Re: Subject","body":"Reply","message_id":"$messageId"}]}"""
 
     private fun prepareQuickReply(
         state: MeronMobileState,

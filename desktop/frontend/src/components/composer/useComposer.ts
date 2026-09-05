@@ -71,6 +71,11 @@ export function useComposer(tabId: string) {
    * Delete the server-side copy of a draft: the one the last save actually
    * wrote, which by then is the allocated id rather than the local placeholder
    * the composer opened with.
+   *
+   * A tab opened from the Drafts list carries `sourceDraft`, whose thread is
+   * the draft itself and disappears with it. A reply escalated out of a
+   * conversation has no such row — only the tab's conversation, which keeps its
+   * card and needs its Draft badge cleared once the draft behind it is gone.
    */
   const discardRemoteDraft = async (target: ComposeDraft, throwOnError = false) => {
     const remoteId = target.draftMessageId?.startsWith('local-draft-') ? undefined : target.draftMessageId
@@ -82,6 +87,7 @@ export function useComposer(tabId: string) {
         folderId: target.sourceDraft?.folderId ?? '',
         accountId: target.accountId,
         draftMessageId: remoteId,
+        replyThreadId: target.sourceDraft ? '' : (tab?.threadId ?? ''),
       },
       { throwOnError },
     )

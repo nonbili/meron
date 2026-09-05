@@ -626,8 +626,11 @@ export async function loadFolders(accountId: string, refresh = true) {
   }
 
   const result = await invoke<{ folders: Folder[] }>('mail.folderList', { account_id: accountId, refresh })
-  mail$.folders.set(result.folders)
-  mail$.foldersByAccount[accountId].set(result.folders)
+  // A response without a folders array (an empty JSON object from the sidecar)
+  // must not leave the stores holding `undefined`: every reader spreads them.
+  const folders = result.folders || []
+  mail$.folders.set(folders)
+  mail$.foldersByAccount[accountId].set(folders)
 }
 
 export async function refreshAccountFoldersCache(accountId: string, refresh = false): Promise<Folder[]> {
@@ -1873,6 +1876,11 @@ export async function discardSavedDraftCopy(
     folderId: string
     accountId?: string
     draftMessageId?: string
+    /** The conversation a full-editor reply was written into. Unlike
+     *  `threadId` — the discarded draft's own thread, which the discard can
+     *  empty — this is a thread the reply is only one message of: its card
+     *  carries the Draft badge, but it never goes away with the draft. */
+    replyThreadId?: string
   },
   options: { throwOnError?: boolean; failureMessage?: string } = {},
 ): Promise<boolean> {
@@ -1896,7 +1904,7 @@ export async function discardSavedDraftCopy(
   const nextMessages = withoutDiscardedDraft(previousMessages)
   const selectedThread = ui$.selectedThread.get()
   const removeThread = !!draft.threadId && !nextMessages.some((message) => message.thread_id === draft.threadId)
-  const kanbanKeys = kanbanKeysWithThread(draft.threadId)
+  const kanbanKeys = kanbanKeysWithThread(draft.threadId || (draft.replyThreadId ?? ''))
 
   mail$.messages.set(nextMessages)
   if (removeThread) {
@@ -1909,6 +1917,20 @@ export async function discardSavedDraftCopy(
   } else {
     reconcileThreadDraftFromLoadedMessages(draft.threadId, nextMessages)
   }
+  // The absence of a draft row proves nothing unless every message of the
+  // conversation is here to say so: a thread that isn't open has none of them
+  // loaded, and one opened past its first page is still missing its older ones,
+  // where a second draft the badge stands for may well sit. Deriving the badge
+  // from a partial view would clear it — and clear it again after the card
+  // re-read below has correctly put it back. Short of the whole conversation,
+  // that re-read is what settles it.
+  const reconcileReplyThreadDraft = (loaded: Message[]) => {
+    const replyThreadId = draft.replyThreadId ?? ''
+    if (!replyThreadId || mail$.messagesCursor.get()) return
+    if (!loaded.some((message) => message.thread_id === replyThreadId)) return
+    reconcileThreadDraftFromLoadedMessages(replyThreadId, loaded)
+  }
+  reconcileReplyThreadDraft(nextMessages)
 
   try {
     if (draft.accountId && draft.draftMessageId) {
@@ -1934,6 +1956,7 @@ export async function discardSavedDraftCopy(
     const reconciledMessages = withoutDiscardedDraft(mail$.messages.get())
     if (reconciledMessages.length !== mail$.messages.get().length) mail$.messages.set(reconciledMessages)
     if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, reconciledMessages)
+    reconcileReplyThreadDraft(reconciledMessages)
     const selectedAcc = ui$.selectedAccount.get()
     if (selectedAcc) void loadFolders(selectedAcc, false)
     if (draft.accountId && draft.accountId !== selectedAcc) void loadFolders(draft.accountId, false)

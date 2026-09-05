@@ -7,6 +7,7 @@ import {
   ANCHOR_GAP_PX,
   anchorScrollTop,
   collectManualUnreadIds,
+  isAtBottom,
   isMessageRead,
   isUserScroll,
   OPEN_ANCHOR_WINDOW_MS,
@@ -41,6 +42,11 @@ function readScrollAnchor(container: HTMLElement): ScrollAnchor | null {
   }
 }
 
+/** A saved anchor plus whether the reader had it parked at the end of the
+ *  thread, which decides whether returning restores the position or follows
+ *  whatever arrived in the meantime. */
+type SavedScrollAnchor = ScrollAnchor & { atBottom: boolean }
+
 function readScrollMetrics(container: HTMLElement): ScrollMetrics {
   return {
     scrollTop: container.scrollTop,
@@ -64,8 +70,14 @@ export function useConversationScroll(
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null)
   const messagesWrapperRef = useRef<HTMLDivElement | null>(null)
   const lastScrollHeightRef = useRef(0)
+  // Content height as of the last position we know the reader's view was
+  // measured against — their own scrolling, or our own anchoring. A message
+  // arriving is judged against this rather than against the height it just
+  // created, so following the thread does not depend on the new message being
+  // shorter than the stick distance.
+  const viewedScrollHeightRef = useRef(0)
   const markingMessageIdsRef = useRef(new Set<string>())
-  const conversationAnchorRef = useRef(new Map<string, ScrollAnchor>())
+  const conversationAnchorRef = useRef(new Map<string, SavedScrollAnchor>())
   // Threads awaiting a scroll restore. A single slot would lose the first one
   // when the reader leaves A for B and comes back: switching to A overwrites
   // the pending thread with B, and A restores nothing.
@@ -103,6 +115,7 @@ export function useConversationScroll(
   const applyScrollTop = useCallback((container: HTMLElement, scrollTop: number) => {
     const previousScrollTop = container.scrollTop
     container.scrollTop = scrollTop
+    viewedScrollHeightRef.current = container.scrollHeight
     // Read it back: the browser clamps to the scrollable range, and the clamped
     // value is what the scroll event will report.
     expectedScrollTopRef.current = container.scrollTop
@@ -224,7 +237,12 @@ export function useConversationScroll(
       const container = scrollRef.current
       if (!container || !activeThreadId) return
       const anchor = readScrollAnchor(container)
-      if (anchor) conversationAnchorRef.current.set(activeThreadId, anchor)
+      if (anchor) {
+        conversationAnchorRef.current.set(activeThreadId, {
+          ...anchor,
+          atBottom: isAtBottom(readScrollMetrics(container)),
+        })
+      }
       if (restoreOnReturn) {
         pendingScrollRestoreRef.current.add(activeThreadId)
       }
@@ -285,6 +303,7 @@ export function useConversationScroll(
     ) {
       releasePin()
     }
+    if (container) viewedScrollHeightRef.current = container.scrollHeight
     saveConversationScroll()
     maybeMarkRead()
   }, [maybeMarkRead, releasePin, saveConversationScroll])
@@ -328,6 +347,7 @@ export function useConversationScroll(
       }
       if (pinned && !pin?.persistent) armPinRelease()
       lastScrollHeightRef.current = container.scrollHeight
+      viewedScrollHeightRef.current = container.scrollHeight
       maybeMarkRead()
     })
 
@@ -367,7 +387,7 @@ export function useConversationScroll(
     const isNewThread = positionedThreadRef.current !== activeThreadId
     const grew = messages.length > messageCountRef.current
     messageCountRef.current = messages.length
-    let savedAnchor: ScrollAnchor | null = null
+    let savedAnchor: SavedScrollAnchor | null = null
     let savedScrollTop: number | null = null
     if (pendingScrollRestoreRef.current.delete(activeThreadId)) {
       savedAnchor = conversationAnchorRef.current.get(activeThreadId) ?? null
@@ -387,7 +407,9 @@ export function useConversationScroll(
       isNewThread,
       grew,
       savedScrollTop,
+      savedAtBottom: savedAnchor?.atBottom ?? false,
       metrics: readScrollMetrics(container),
+      previousScrollHeight: viewedScrollHeightRef.current,
       containerOffsetTop: container.offsetTop,
       hasUnread,
       firstUnreadOffsetTop: firstUnread ? firstUnread.offsetTop : null,
@@ -405,6 +427,12 @@ export function useConversationScroll(
       pinMessage(lastMessage.dataset.messageId)
     } else if (plan.pin === 'restore' && savedAnchor) {
       pinMessage(savedAnchor.messageId, savedAnchor.offset)
+    } else if (plan.scrollTop !== null && pinnedRef.current) {
+      // A plan that positions without an anchor is authoritative, so an older
+      // pin has to go: the persistent one an expanded message leaves behind
+      // outlives a trip to the full editor, and the first resize after the
+      // reply lands would pull the view straight back off it.
+      releasePin()
     }
     if (plan.scrollTop !== null) {
       applyScrollTop(container, plan.scrollTop)
@@ -423,6 +451,7 @@ export function useConversationScroll(
     maybeMarkRead,
     pendingScrollMessageId,
     pinMessage,
+    releasePin,
     applyScrollTop,
   ])
 

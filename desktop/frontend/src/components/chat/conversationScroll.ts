@@ -102,10 +102,22 @@ function bottomScrollTop(metrics: ScrollMetrics): number {
 }
 
 /**
+ * Whether the view counts as parked at the end of the thread — the one rule
+ * every "should the view follow the content" decision here asks. `scrollHeight`
+ * overrides the measured one so a caller can ask "was the reader at the end"
+ * against the height the position was measured against, rather than "is the new
+ * content past the fold" against the height that content just created. Getting
+ * that backwards is how a reply taller than the stick distance left the reader
+ * looking at the message above it.
+ */
+export function isAtBottom(metrics: ScrollMetrics, scrollHeight = metrics.scrollHeight): boolean {
+  return scrollHeight - metrics.scrollTop - metrics.clientHeight <= BOTTOM_STICK_PX
+}
+
+/**
  * Where a content resize should leave the view. `previousScrollHeight` is the
- * height measured before this resize, so the distance-from-bottom test asks
- * "was the reader at the bottom", not "is the new content past the fold".
- * Returns null to leave the scroll position alone.
+ * height measured before this resize, which is what isAtBottom is asked
+ * against. Returns null to leave the scroll position alone.
  */
 export function resolveResizeScrollTop({
   metrics,
@@ -127,8 +139,7 @@ export function resolveResizeScrollTop({
   // Keep the view pinned to the bottom only when it already was (content grew
   // under the fold, e.g. images loading after open). A reader scrolled up — to
   // star or reread something — must not be yanked back down.
-  const previousDistanceFromBottom = previousScrollHeight - metrics.scrollTop - metrics.clientHeight
-  if (previousDistanceFromBottom > BOTTOM_STICK_PX) return null
+  if (!isAtBottom(metrics, previousScrollHeight)) return null
   return metrics.scrollHeight
 }
 
@@ -151,7 +162,9 @@ export function resolveOpenScroll({
   isNewThread,
   grew,
   savedScrollTop,
+  savedAtBottom,
   metrics,
+  previousScrollHeight,
   containerOffsetTop,
   hasUnread,
   firstUnreadOffsetTop,
@@ -162,7 +175,12 @@ export function resolveOpenScroll({
   grew: boolean
   /** Position saved when leaving this thread, or null when not restoring. */
   savedScrollTop: number | null
+  /** Whether that saved position was at the end of the thread. */
+  savedAtBottom: boolean
   metrics: ScrollMetrics
+  /** Height the container had when the reader's position was last known — i.e.
+   *  before the message that just arrived was rendered into it. */
+  previousScrollHeight: number
   containerOffsetTop: number
   hasUnread: boolean
   /** offsetTop of the first unread message, or null when none is rendered. */
@@ -179,6 +197,11 @@ export function resolveOpenScroll({
     // show that message, not the position they scrolled away from. Unread below
     // is simply the thread continuing, so the saved position still wins.
     if (unreadAnchor !== null && unreadAnchor < restored) return { scrollTop: unreadAnchor, pin: 'unread' }
+    // The reader left off at the end of the thread and it has grown since —
+    // a reply sent from the full editor, or mail that arrived while they were
+    // in another tab. The saved position is the old end, so restoring it would
+    // leave the new message below the fold; follow the thread instead.
+    if (savedAtBottom) return { scrollTop: metrics.scrollHeight, pin: null }
     // Pinned like any other target: the saved position was measured against
     // settled bodies, and restoring it against placeholder heights would let
     // the next resize snap the view to the bottom.
@@ -189,8 +212,10 @@ export function resolveOpenScroll({
     // A read-state change or a re-render is not a reason to move the view; only
     // a newly arrived message is, and only for a reader already at the bottom.
     if (!grew) return { scrollTop: null, pin: null }
-    const distanceFromBottom = metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight
-    if (distanceFromBottom > BOTTOM_STICK_PX) return { scrollTop: null, pin: null }
+    // Against the height from before the arriving message was rendered, the
+    // same way a resize is measured: that message is itself what pushed the
+    // bottom away.
+    if (!isAtBottom(metrics, previousScrollHeight)) return { scrollTop: null, pin: null }
     return { scrollTop: metrics.scrollHeight, pin: null }
   }
 

@@ -1542,6 +1542,10 @@ export async function closeMessageTab(id: string) {
             folderId: draft.sourceDraft?.folderId ?? '',
             accountId: draft.accountId,
             draftMessageId: remoteId,
+            // A reply escalated out of a conversation has no draft row of its
+            // own to take the card away with it; the conversation's card stays
+            // and only its Draft badge goes.
+            replyThreadId: draft.sourceDraft ? '' : tabs[index].threadId,
           },
           { throwOnError: true },
         )

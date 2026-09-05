@@ -4,6 +4,7 @@ import {
   anchorScrollTop,
   BOTTOM_STICK_PX,
   collectManualUnreadIds,
+  isAtBottom,
   isMessageRead,
   isUserScroll,
   resolveOpenScroll,
@@ -26,6 +27,21 @@ describe('anchorScrollTop', () => {
   it('never scrolls above the top', () => {
     expect(anchorScrollTop(CONTAINER_TOP, CONTAINER_TOP)).toBe(0)
     expect(anchorScrollTop(0, CONTAINER_TOP)).toBe(0)
+  })
+})
+
+describe('isAtBottom', () => {
+  it('counts a view within the stick distance of the end', () => {
+    expect(isAtBottom(metrics(3000 - VIEWPORT - BOTTOM_STICK_PX, 3000))).toBe(true)
+    expect(isAtBottom(metrics(3000 - VIEWPORT - BOTTOM_STICK_PX - 1, 3000))).toBe(false)
+  })
+
+  it('measures against the given height rather than the one content just grew to', () => {
+    // The shared rule both a resize and an arriving message ask: the reader was
+    // at the end of a 3000px thread, and the 600px that just landed under them
+    // is not a reason to say they had scrolled away from it.
+    expect(isAtBottom(metrics(3000 - VIEWPORT, 3600), 3000)).toBe(true)
+    expect(isAtBottom(metrics(3000 - VIEWPORT, 3600))).toBe(false)
   })
 })
 
@@ -56,7 +72,9 @@ describe('resolveOpenScroll on a fresh open', () => {
       isNewThread: true,
       grew: true,
       savedScrollTop: null,
+      savedAtBottom: false,
       metrics: metrics(0, 2000),
+      previousScrollHeight: 2000,
       containerOffsetTop: CONTAINER_TOP,
       hasUnread: false,
       firstUnreadOffsetTop: null,
@@ -102,7 +120,9 @@ describe('resolveOpenScroll on an already-open thread', () => {
       isNewThread: false,
       grew: false,
       savedScrollTop: null,
+      savedAtBottom: false,
       metrics: metrics(500, 3000),
+      previousScrollHeight: 3000,
       containerOffsetTop: CONTAINER_TOP,
       hasUnread: false,
       firstUnreadOffsetTop: null,
@@ -123,6 +143,19 @@ describe('resolveOpenScroll on an already-open thread', () => {
       scrollTop: null,
       pin: null,
     })
+  })
+
+  it('follows a message taller than the stick distance', () => {
+    // The regression: a quick reply long enough to push the bottom more than
+    // BOTTOM_STICK_PX away is measured against the height it just created, and
+    // the reader who sent it was left looking at the date divider above it.
+    expect(
+      reopen({
+        grew: true,
+        previousScrollHeight: 3000,
+        metrics: metrics(3000 - VIEWPORT, 3600),
+      }),
+    ).toEqual({ scrollTop: 3600, pin: null })
   })
 
   it('holds the restored position against bodies still settling', () => {
@@ -150,6 +183,23 @@ describe('resolveOpenScroll on an already-open thread', () => {
 
   it('restores the saved position when returning to a thread', () => {
     expect(reopen({ savedScrollTop: 640 })).toEqual({ scrollTop: 640, pin: 'restore' })
+  })
+
+  it('follows the thread when the reader left off at its end', () => {
+    // The regression: a reply sent from the full editor lands while the
+    // conversation is behind the compose tab, and restoring the position saved
+    // on the way out parks the view at the old end, above the new message.
+    expect(reopen({ savedScrollTop: 2200, savedAtBottom: true, metrics: metrics(2200, 3000) })).toEqual({
+      scrollTop: 3000,
+      pin: null,
+    })
+  })
+
+  it('still shows an unread message left above a saved position at the end', () => {
+    expect(reopen({ savedScrollTop: 2200, savedAtBottom: true, hasUnread: true, firstUnreadOffsetTop: 900 })).toEqual({
+      scrollTop: 900 - CONTAINER_TOP - ANCHOR_GAP_PX,
+      pin: 'unread',
+    })
   })
 
   it('clamps a saved position that no longer exists to the bottom', () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import { accounts$ } from './accounts'
 import { kanban$ } from './kanban'
@@ -25,8 +25,10 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 
 describe('markAccountInboxRead', () => {
   const calls: { command: string; payload: any }[] = []
+  let previousGo: unknown
 
   beforeEach(() => {
+    previousGo = (window as any).go
     calls.length = 0
     accounts$.set([
       {
@@ -89,6 +91,13 @@ describe('markAccountInboxRead', () => {
         },
       },
     }
+  })
+
+  // The bridge stub is global: leaving one behind lets a later test file's
+  // state writes reach this file's fake backend.
+  afterEach(() => {
+    if (previousGo === undefined) delete (window as any).go
+    else (window as any).go = previousGo
   })
 
   it('marks only the chosen account Inbox read', async () => {
