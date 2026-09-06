@@ -63,6 +63,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.4" date="2026-09-06">
+      <description>
+        <ul>
+          <li>Let deleting the last board leave no board instead of reseeding a default</li>
+          <li>Theme message body frames and stop the head title leaking into them</li>
+          <li>Fix stale thread count after quick reply by re-running deferred list reloads</li>
+          <li>Reload kanban column after quick reply draft discard</li>
+          <li>Keep the Re: prefix on thread cards whose thread start is missing</li>
+          <li>Fix preview when sending</li>
+          <li>Follow the thread to a sent reply and clear the draft badge after a full-editor send</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.3" date="2026-09-01">
       <description>
         <ul>

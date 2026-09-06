@@ -1,0 +1,7 @@
+- Let deleting the last board leave no board instead of reseeding a default
+- Theme message body frames and stop the head title leaking into them
+- Fix stale thread count after quick reply by re-running deferred list reloads
+- Reload kanban column after quick reply draft discard
+- Keep the Re: prefix on thread cards whose thread start is missing
+- Fix preview when sending
+- Follow the thread to a sent reply and clear the draft badge after a full-editor send

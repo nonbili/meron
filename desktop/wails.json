@@ -9,7 +9,7 @@
   "build:tags": "webkit2_41",
   "info": {
     "productName": "Meron",
-    "productVersion": "0.3.3",
+    "productVersion": "0.3.4",
     "comments": "Messages that spark joy",
     "protocols": [
       {
