@@ -174,6 +174,7 @@ import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoveRssFeedParams
+import jp.nonbili.meron.shared.ReplyRecipients
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.RssThreadParams
@@ -197,6 +198,7 @@ import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.bodyWithSignature
 import jp.nonbili.meron.shared.bodyWithSwappedSignature
 import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
+import jp.nonbili.meron.shared.buildReplyRecipients
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
@@ -233,6 +235,7 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
+import jp.nonbili.meron.shared.replyAllAddsRecipients
 import jp.nonbili.meron.shared.resolveSignatureHtml
 import jp.nonbili.meron.shared.signaturePlainText
 import jp.nonbili.meron.shared.threadIdIsRss
@@ -866,6 +869,17 @@ internal fun MeronMobileState.quickReplyIdentities(): List<SendIdentity> {
     return if (identities.size < 2) emptyList() else identities
 }
 
+/** Backs the reply bar's recipient row: the To/Cc the bar would send to as it
+ * stands. Both blank when the open thread cannot be replied to, which hides the
+ * row. */
+internal fun MeronMobileState.quickReplyRecipients(): ReplyRecipients {
+    val none = ReplyRecipients("", "")
+    val thread = selectedCoreThread ?: return none
+    if (threadIdIsRss(thread.id)) return none
+    val parent = quickReplyParent() ?: return none
+    return buildReplyRecipients(parent, ownAddressList(coreAccounts))
+}
+
 // The identity the reply bar's From row shows as current — the resolved send-as
 // address matched back to the pickable list.
 internal fun MeronMobileState.selectedQuickReplyIdentity(): SendIdentity? {
@@ -1155,7 +1169,11 @@ internal fun MeronMobileState.onQuickReplyBodyChange(value: String) {
         }
 }
 
-internal fun MeronMobileState.openQuickReplyInFullEditor() {
+/** Escalate the quick reply bar into the full composer, seeded as a reply and
+ * carrying over whatever has been typed. `replyAll` seeds the wider recipient
+ * list; the bar has no recipient fields to show it in, so reply-all always
+ * lands here rather than in the bar. */
+internal fun MeronMobileState.openQuickReplyInFullEditor(replyAll: Boolean = false) {
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
     val parent = quickReplyParent()
@@ -1183,6 +1201,7 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
             from = replyFrom,
             ownAddresses = ownAddressList(coreAccounts),
             attachments = quickReplyAttachments,
+            replyAll = replyAll,
         )
     val generation = ++composeSessionGeneration
     val open: MeronMobileState.() -> Unit = open@{
@@ -1225,6 +1244,75 @@ internal fun MeronMobileState.openQuickReplyInFullEditor() {
         // The thread is still behind the composer, so the bar the user comes
         // back to is a fresh quick reply — signature and all.
         seedQuickReplySignature()
+        composeReturnScreen = Screen.Thread
+        rememberComposeSeed()
+        screen = Screen.Compose
+        status = ""
+    }
+    if (appSignatureLoaded) {
+        open()
+    } else {
+        scope.launch {
+            awaitAppSignatureLoaded()
+            open()
+        }
+    }
+}
+
+/** Whether the open conversation's reply target has other recipients, so
+ * reply-all would reach someone the reply bar does not. */
+internal fun MeronMobileState.canReplyAllToThread(): Boolean {
+    val thread = selectedCoreThread ?: return false
+    if (threadIdIsRss(thread.id)) return false
+    val parent = quickReplyParent() ?: return false
+    return replyAllAddsRecipients(parent, ownAddressList(coreAccounts))
+}
+
+/** The same question for one message, for its own menu. */
+internal fun MeronMobileState.canReplyAllToMessage(message: MessageBody): Boolean = replyAllAddsRecipients(message, ownAddressList(coreAccounts))
+
+/** Reply-all to one message, rather than to the conversation's reply target:
+ * the message menu acts on the message it belongs to. Opens the full composer —
+ * the recipients are the point of the action, and only the composer shows them.
+ * The reply bar and any draft it holds are left untouched. */
+internal fun MeronMobileState.replyAllToMessage(message: MessageBody) {
+    val thread = selectedCoreThread
+    val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
+    if (accountId.isBlank() || thread == null) {
+        status = "Open a mail thread before replying."
+        return
+    }
+    if (threadIdIsRss(thread.id)) {
+        status = "RSS items do not support replies."
+        return
+    }
+    val account = coreAccounts.firstOrNull { it.id == accountId }
+    // The bar's From override belongs to the bar's own reply; this one sends
+    // from whichever identity this message was addressed to.
+    val replyFrom = account?.let { detectReplyFromIdentity(message, it) }.orEmpty()
+    val params =
+        message.toReplyMailParams(
+            accountId = accountId,
+            body = "",
+            from = replyFrom,
+            ownAddresses = ownAddressList(coreAccounts),
+            replyAll = true,
+        )
+    val generation = ++composeSessionGeneration
+    val open: MeronMobileState.() -> Unit = open@{
+        if (generation != composeSessionGeneration) return@open
+        // A reply of its own, not a continuation of whatever the composer last
+        // held: threading headers and leftover forward state go first.
+        clearComposeDraftState()
+        to = params.to
+        cc = params.cc
+        bcc = params.bcc
+        subject = params.subject
+        body = seedBodyWithSignature(params.body, accountId)
+        composeFromAccountId = accountId
+        composeFromEmail = replyFrom
+        composeInReplyTo = params.inReplyTo
+        composeReferences = params.references
         composeReturnScreen = Screen.Thread
         rememberComposeSeed()
         screen = Screen.Compose

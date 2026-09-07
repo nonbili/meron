@@ -124,6 +124,7 @@
   "chat.actions.forward": "전달",
   "chat.actions.openDraft": "공개 초안",
   "chat.actions.openLink": "링크 열기",
+  "chat.actions.replyAll": "전체 답장",
   "chat.actions.saveAsEml": ".eml로 저장",
   "chat.actions.saveImage": "이미지 저장...",
   "chat.allowRemoteFrom": "{sender} 항상 허용",

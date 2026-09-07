@@ -124,6 +124,7 @@
   "chat.actions.forward": "Προώθηση",
   "chat.actions.openDraft": "Άνοιγμα προσχέδιο",
   "chat.actions.openLink": "Άνοιγμα συνδέσμου",
+  "chat.actions.replyAll": "Απάντηση σε όλους",
   "chat.actions.saveAsEml": "Αποθήκευση ως .eml",
   "chat.actions.saveImage": "Αποθήκευση εικόνας...",
   "chat.allowRemoteFrom": "Να επιτρέπεται πάντα από {sender}",

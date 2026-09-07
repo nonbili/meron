@@ -96,6 +96,8 @@ internal fun MessageBubble(
     isRss: Boolean,
     remoteContent: MessageRemoteContent,
     onForward: (MessageBody) -> Unit,
+    onReplyAllToMessage: (MessageBody) -> Unit,
+    canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
     onOpenDraft: (MessageBody) -> Unit,
     onToggleRead: (MessageBody) -> Unit,
@@ -263,6 +265,8 @@ internal fun MessageBubble(
                     actionsEnabled = actionsEnabled,
                     itemActionsEnabled = itemActionsEnabled,
                     onForward = onForward,
+                    onReplyAllToMessage = onReplyAllToMessage,
+                    canReplyAllToMessage = canReplyAllToMessage,
                     onEditAsNew = onEditAsNew,
                     onToggleRead = onToggleRead,
                     onToggleStarred = onToggleStarred,
@@ -310,6 +314,8 @@ internal fun MessageActionsButton(
     actionsEnabled: Boolean,
     itemActionsEnabled: Boolean,
     onForward: (MessageBody) -> Unit,
+    onReplyAllToMessage: (MessageBody) -> Unit,
+    canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
@@ -371,6 +377,20 @@ internal fun MessageActionsButton(
                 )
             }
             if (actionsEnabled) {
+                // A draft has no sender to reply to: replying to one would
+                // thread a new "Re:" under an unsent message instead of
+                // opening it to edit. A message with no other recipients has
+                // nobody for reply-all to add, which makes it the reply the
+                // bar already sends.
+                if (!folderIsDrafts(message.folderId) && canReplyAllToMessage(message)) {
+                    DropdownMenuItem(
+                        text = { Text(tr("chat.actions.replyAll")) },
+                        onClick = {
+                            menuOpen = false
+                            onReplyAllToMessage(message)
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(tr("chat.actions.forward")) },
                     onClick = {

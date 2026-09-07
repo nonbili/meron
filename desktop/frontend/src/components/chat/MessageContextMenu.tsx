@@ -7,12 +7,20 @@ import {
   Link2,
   Mail,
   MailOpen,
+  ReplyAll,
   SquarePen,
   Star,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
-import { openMessageTab, editAsNewMessage, forwardMessage, openDraftCompose } from '../../states/compose'
+import {
+  openMessageTab,
+  editAsNewMessage,
+  forwardMessage,
+  openDraftCompose,
+  messageCanReplyAll,
+  replyAllToMessage,
+} from '../../states/compose'
 import { deleteMessage, isDraftFolder, markMessageReadState, saveMessageAsEml, starMessage } from '../../states/mail'
 import { openExternal } from '../../lib/native'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
@@ -132,6 +140,17 @@ export function MessageContextMenu({
               void starMessage(message, !message.starred)
             }}
           />
+          {!isDraft && !isRSS && messageCanReplyAll(state.message) && (
+            <MenuItem
+              icon={<ReplyAll size={13} className="text-accent" />}
+              label={t('chat.actions.replyAll')}
+              onClick={() => {
+                const message = state.message
+                onClose()
+                replyAllToMessage(message)
+              }}
+            />
+          )}
           {!isDraft && !isRSS && !headerOnly && (
             <MenuItem
               icon={<Forward size={13} className="text-accent" />}

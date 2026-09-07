@@ -6,6 +6,7 @@ import { sendShortcutLabel, settings$ } from '../../states/settings'
 import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 import { QuickReplyFrom } from './QuickReplyFrom'
+import { QuickReplyRecipients } from './QuickReplyRecipients'
 
 export function QuickReplyComposer() {
   const { t } = useTranslation()
@@ -30,7 +31,14 @@ export function QuickReplyComposer() {
   return (
     <footer className="p-3.5 bg-header border-t border-border z-10 flex flex-col items-center justify-center">
       <div className="flex flex-col gap-2 w-full bg-hover p-2 rounded-2xl border border-border/50 shadow-sm focus-within:ring-1 focus-within:ring-accent focus-within:bg-chats transition-all duration-150">
-        <QuickReplyFrom />
+        {/* One line, not two: From and To are both single-address disclosures,
+            and stacking them pushed the box itself down the window. Recipients
+            lead — they are what changes from thread to thread — and the send-as
+            address sits out of the way at the right edge. */}
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <QuickReplyRecipients />
+          <QuickReplyFrom />
+        </div>
         <QuickReplyAttachments attachments={composerAttachments} />
 
         <div className="flex items-end gap-2 w-full">
@@ -42,7 +50,7 @@ export function QuickReplyComposer() {
             <Paperclip size={16} />
           </button>
           <button
-            onClick={openReplyInFullEditor}
+            onClick={() => openReplyInFullEditor()}
             className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active transition-colors cursor-pointer"
             title={t('composer.actions.openFullEditor')}
           >

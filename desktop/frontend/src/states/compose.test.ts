@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import {
   activateConversationTab,
+  buildReplyRecipients,
+  ownAddressSet,
   cancelQuickReplyDraftSave,
   closeMessageTab,
   compose$,
@@ -20,6 +22,9 @@ import {
   quickReplyCaretOffset,
   quickReplyFromState,
   quickReplyDraftBelongsToThread,
+  quickReplyRecipients,
+  replyAllAddsRecipients,
+  replyAllToMessage,
   pickReplyTarget,
   resolveQuickReplyFrom,
   retrySend,
@@ -3594,5 +3599,176 @@ describe('revealMessageRemote', () => {
     const tabs = compose$.tabs.get()
     expect(tabs.find((tab) => tab.messageId === 'm1')?.revealRemote).toBe(true)
     expect(tabs.find((tab) => tab.messageId === 'm2')?.revealRemote).toBe(false)
+  })
+})
+
+describe('reply-all recipients', () => {
+  const ownAddrs = () =>
+    ownAddressSet([
+      {
+        id: 'acc-1',
+        email: 'me@example.com',
+        display_name: 'Me',
+        sender_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+        aliases: [{ email: 'sales@example.com', name: 'Sales' }],
+      },
+    ])
+
+  const incoming = message({
+    from_name: 'Them',
+    from_addr: 'them@example.com',
+    to: 'me@example.com, Alice <alice@example.com>',
+    cc: 'bob@example.com',
+  })
+
+  it('keeps the other To recipients, dropping our own addresses', () => {
+    const { to, cc } = buildReplyRecipients(incoming, ownAddrs(), true)
+
+    expect(to).toBe('Them <them@example.com>, Alice <alice@example.com>')
+    expect(cc).toBe('bob@example.com')
+  })
+
+  it('leaves a plain reply addressed to the sender alone', () => {
+    const { to, cc } = buildReplyRecipients(incoming, ownAddrs())
+
+    expect(to).toBe('Them <them@example.com>')
+    expect(cc).toBe('bob@example.com')
+  })
+
+  it('does not duplicate a sender who is also listed in To', () => {
+    const target = message({
+      from_name: '',
+      from_addr: 'them@example.com',
+      to: 'them@example.com, sales@example.com, alice@example.com',
+      cc: '',
+    })
+
+    const { to } = buildReplyRecipients(target, ownAddrs(), true)
+
+    // The sender appears once, our own alias not at all.
+    expect(to).toBe('them@example.com, alice@example.com')
+  })
+
+  it('reports whether reply-all reaches anyone the reply does not', () => {
+    const own = ownAddrs()
+
+    // Only us and the sender: reply-all is the reply, so the menus hide it.
+    expect(replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com' }), own)).toBe(false)
+    // Our own alias alongside us is still nobody new.
+    expect(
+      replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com, sales@example.com' }), own),
+    ).toBe(false)
+    // A Cc-only third party is already kept by a plain reply.
+    expect(
+      replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com', cc: 'bob@x.com' }), own),
+    ).toBe(false)
+    expect(replyAllAddsRecipients(incoming, own)).toBe(true)
+  })
+
+  it('seeds a composer tab addressed to everyone when replying all to one message', () => {
+    accounts$.set([
+      {
+        id: 'acc-1',
+        email: 'me@example.com',
+        display_name: 'Me',
+        sender_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+
+    replyAllToMessage(
+      message({
+        account_id: 'acc-1',
+        from_name: 'Them',
+        from_addr: 'them@example.com',
+        to: 'me@example.com, Alice <alice@example.com>',
+        cc: 'bob@example.com',
+        subject: 'Design',
+        message_id: 'root@example.com',
+      }),
+    )
+
+    const draft = compose$.tabs.get()[0]?.compose
+    expect(draft?.to).toBe('Them <them@example.com>, Alice <alice@example.com>')
+    expect(draft?.cc).toBe('bob@example.com')
+    expect(draft?.showCcBcc).toBe(true)
+    expect(draft?.subject).toBe('Re: Design')
+    expect(draft?.inReplyTo).toBe('root@example.com')
+  })
+
+  it('addresses the original recipients when the target is one of ours', () => {
+    const target = message({
+      from_addr: 'me@example.com',
+      to: 'them@example.com, alice@example.com',
+      cc: 'bob@example.com',
+    })
+
+    const { to, cc } = buildReplyRecipients(target, ownAddrs(), true)
+
+    expect(to).toBe('them@example.com, alice@example.com')
+    expect(cc).toBe('bob@example.com')
+  })
+})
+
+describe('quick reply recipient line', () => {
+  beforeEach(() => {
+    mail$.threads.set([])
+    mail$.messages.set([])
+    ui$.selectedThread.set('')
+    ui$.selectedAccount.set('acc-1')
+    accounts$.set([
+      {
+        id: 'acc-1',
+        email: 'me@example.com',
+        display_name: 'Me',
+        sender_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+  })
+
+  it('reports the addresses the box would send to', () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_name: 'Them',
+      from_addr: 'them@example.com',
+      to: 'me@example.com, alice@example.com',
+      cc: 'bob@example.com, me@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+
+    // A plain reply: alice is dropped, our own address stays out of the Cc.
+    expect(quickReplyRecipients()).toEqual({ to: 'Them <them@example.com>', cc: 'bob@example.com' })
+  })
+
+  it('reports nothing without an open conversation, which hides the line', () => {
+    expect(quickReplyRecipients()).toEqual({ to: '', cc: '' })
   })
 })

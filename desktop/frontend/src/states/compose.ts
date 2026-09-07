@@ -1157,15 +1157,17 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
 // Escalate the active thread's quick reply into a full-window composer tab,
 // seeded as a reply (recipients, "Re:" subject, threading headers) and carrying
 // over whatever's been typed/attached. Clears the quick reply on success.
-// No-op when there's no active conversation.
-export function openReplyInFullEditor() {
+// No-op when there's no active conversation. `replyAll` seeds the wider
+// recipient list; the quick reply box has no recipient fields to show it in, so
+// reply-all always lands here rather than in the box.
+export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const t = getActiveThread()
   if (!t) return
   const subject = t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`
   const target = pickReplyTarget(t)
   const accounts = accounts$.get()
   const ownAddrs = ownAddressSet(accounts)
-  const { to, cc } = buildReplyRecipients(target, ownAddrs)
+  const { to, cc } = buildReplyRecipients(target, ownAddrs, options?.replyAll)
   const { in_reply_to, references } = buildReplyThreading(target)
   const replyAcc = accounts.find((acc) => acc.id === t.account_id)
   // Hand off any draft already saved for this quick reply so the full editor
@@ -1432,6 +1434,33 @@ export async function openDraftConversationOrCompose(thread: Message) {
 // Open a clean compose draft for forwarding a message. Recipients and threading
 // headers are intentionally blank; the original content is quoted in the body
 // and non-inline attachments are copied back into the composer.
+/** Reply-all to one message, rather than to the conversation's reply target:
+ * the message menu acts on the message under the cursor. Opens a composer tab
+ * — the recipients are the point of the action, and only the full editor shows
+ * them. The quick reply's own draft is left alone; this is a separate reply. */
+export function replyAllToMessage(message: Message) {
+  const accounts = accounts$.get()
+  if (accounts.filter(isSendableAccount).length === 0) {
+    showToast(t('compose.toast.addMailAccountBeforeComposing'))
+    return
+  }
+  const { to, cc } = buildReplyRecipients(message, ownAddressSet(accounts), true)
+  const { in_reply_to, references } = buildReplyThreading(message)
+  const acc = accounts.find((a) => a.id === message.account_id)
+  const subject = message.subject.startsWith('Re:') ? message.subject : `Re: ${message.subject}`
+  openComposeTab({
+    accountId: message.account_id || undefined,
+    fromEmail: acc ? detectAliasFrom(message, acc) : '',
+    to,
+    cc,
+    showCcBcc: !!cc.trim(),
+    subject,
+    title: subject,
+    inReplyTo: in_reply_to,
+    references,
+  })
+}
+
 export async function forwardMessage(message: Message) {
   if (accounts$.get().filter(isSendableAccount).length === 0) {
     showToast(t('compose.toast.addMailAccountBeforeComposing'))
@@ -1840,19 +1869,51 @@ export function quickReplyFromState(): { identities: Alias[]; selected: Alias | 
   return { identities, selected }
 }
 
+/** Backs the quick reply's recipient line: the To/Cc the box would send to as
+ * it stands, as raw address-list strings. Empty for a thread that cannot be
+ * replied to, which hides the line. Reactive: safe to read from a component. */
+export function quickReplyRecipients(): { to: string; cc: string } {
+  const none = { to: '', cc: '' }
+  const thread = getActiveThread()
+  if (!thread) return none
+  const accounts = accounts$.get()
+  const acc = accounts.find((a) => a.id === (thread.account_id || ui$.selectedAccount.get())) ?? accounts[0] ?? null
+  if (!isSendableAccount(acc)) return none
+  return buildReplyRecipients(pickReplyTarget(thread), ownAddressSet(accounts))
+}
+
 /** Build the To/Cc for a reply: To is the Reply-To header (or From), Cc is
  * the source Cc minus our own address and minus anything already in To.
  *
  * When the target was sent by us (e.g. replying inside a Sent-folder thread,
  * where every message is ours), treat it as a follow-up instead: address the
  * original recipients (target.To) rather than bouncing the message back to
- * ourselves. */
-export function buildReplyRecipients(target: Message, ownAddrs: Set<string>): { to: string; cc: string } {
+ * ourselves.
+ *
+ * `replyAll` additionally keeps the original To recipients — everyone the
+ * message was addressed to alongside us — which a plain reply drops. Our own
+ * addresses stay out of both lists either way. */
+export function buildReplyRecipients(
+  target: Message,
+  ownAddrs: Set<string>,
+  replyAll = false,
+): { to: string; cc: string } {
   const isOwnTarget = ownAddrs.has((target.from_addr || '').toLowerCase())
   const replyTo = splitAddressList(target.reply_to)
   const fromEntry = target.from_name ? `${target.from_name} <${target.from_addr}>` : target.from_addr
   const toList = isOwnTarget ? splitAddressList(target.to) : replyTo.length > 0 ? replyTo : [fromEntry]
   const toAddrs = new Set(toList.map(bareAddr))
+
+  // Reply-all: append the other original recipients, skipping our own addresses
+  // and anyone the reply already goes to (the sender, typically also listed).
+  if (replyAll && !isOwnTarget) {
+    for (const entry of splitAddressList(target.to)) {
+      const addr = bareAddr(entry)
+      if (!addr || ownAddrs.has(addr) || toAddrs.has(addr)) continue
+      toList.push(entry)
+      toAddrs.add(addr)
+    }
+  }
 
   const ccList = splitAddressList(target.cc).filter((entry) => {
     const addr = bareAddr(entry)
@@ -1860,6 +1921,29 @@ export function buildReplyRecipients(target: Message, ownAddrs: Set<string>): { 
   })
 
   return { to: toList.join(', '), cc: ccList.join(', ') }
+}
+
+/** Whether replying to all would reach anyone a plain reply does not — the
+ * message carries other recipients besides us and the sender. False makes the
+ * two actions identical, and the menus hide the reply-all item rather than
+ * offering a second way to do the same thing. */
+export function replyAllAddsRecipients(target: Message, ownAddrs: Set<string>): boolean {
+  return buildReplyRecipients(target, ownAddrs, true).to !== buildReplyRecipients(target, ownAddrs).to
+}
+
+/** The active conversation's reply target has other recipients to reply to.
+ * Reactive: safe to read from a component. */
+export function canReplyAllToThread(): boolean {
+  const thread = getActiveThread()
+  if (!thread) return false
+  const accounts = accounts$.get()
+  return replyAllAddsRecipients(pickReplyTarget(thread), ownAddressSet(accounts))
+}
+
+/** One message has other recipients to reply to. Not reactive; the message
+ * menus read it once, for the message they were opened on. */
+export function messageCanReplyAll(message: Message): boolean {
+  return replyAllAddsRecipients(message, ownAddressSet(accounts$.peek()))
 }
 
 /** Build the `In-Reply-To` (parent Message-ID) and `References` chain (parent's

@@ -124,6 +124,7 @@
   "chat.actions.forward": "転送",
   "chat.actions.openDraft": "オープンドラフト",
   "chat.actions.openLink": "リンクを開く",
+  "chat.actions.replyAll": "全員に返信",
   "chat.actions.saveAsEml": ".eml として保存",
   "chat.actions.saveImage": "画像を保存...",
   "chat.allowRemoteFrom": "{sender} を常に許可",

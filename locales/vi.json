@@ -124,6 +124,7 @@
   "chat.actions.forward": "Chuyển tiếp",
   "chat.actions.openDraft": "Mở bản nháp",
   "chat.actions.openLink": "Mở liên kết",
+  "chat.actions.replyAll": "Trả lời tất cả",
   "chat.actions.saveAsEml": "Lưu dưới dạng .eml",
   "chat.actions.saveImage": "Lưu ảnh...",
   "chat.allowRemoteFrom": "Luôn cho phép từ {sender}",

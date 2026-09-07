@@ -124,6 +124,7 @@
   "chat.actions.forward": "Encaminhar",
   "chat.actions.openDraft": "Rascunho aberto",
   "chat.actions.openLink": "Abrir ligação",
+  "chat.actions.replyAll": "Responder a todos",
   "chat.actions.saveAsEml": "Gravar como .eml",
   "chat.actions.saveImage": "Gravar imagem...",
   "chat.allowRemoteFrom": "Permitir sempre de {sender}",

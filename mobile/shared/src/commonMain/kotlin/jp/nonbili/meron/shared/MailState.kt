@@ -774,9 +774,13 @@ private fun headerLine(
     return if (trimmed.isBlank()) "" else "$label: $trimmed"
 }
 
+/** `replyAll` additionally keeps the original To recipients — everyone the
+ * message was addressed to alongside us — which a plain reply drops. Our own
+ * addresses stay out of both lists either way. */
 fun buildReplyRecipients(
     message: MessageBody,
     ownAddresses: List<String> = emptyList(),
+    replyAll: Boolean = false,
 ): ReplyRecipients {
     val own = ownAddresses.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
     val isOwnSender = own.contains(message.fromAddr.trim().lowercase())
@@ -787,11 +791,23 @@ fun buildReplyRecipients(
             message.replyTo.ifBlank { message.fromAddr }.ifBlank { message.from }
         }
     val toList =
-        splitAddressList(toSource).filter { entry ->
+        splitAddressList(toSource)
+            .filter { entry ->
+                val addr = bareAddress(entry).lowercase()
+                addr.isNotBlank() && !own.contains(addr)
+            }.toMutableList()
+    val toAddrs = toList.map { bareAddress(it).lowercase() }.toMutableSet()
+
+    // Reply-all: append the other original recipients, skipping our own addresses
+    // and anyone the reply already goes to (the sender, typically also listed).
+    if (replyAll && !isOwnSender) {
+        for (entry in splitAddressList(message.to)) {
             val addr = bareAddress(entry).lowercase()
-            addr.isNotBlank() && !own.contains(addr)
+            if (addr.isBlank() || own.contains(addr) || toAddrs.contains(addr)) continue
+            toList += entry
+            toAddrs += addr
         }
-    val toAddrs = toList.map { bareAddress(it).lowercase() }.toSet()
+    }
     val ccList =
         splitAddressList(message.cc).filter { entry ->
             val addr = bareAddress(entry).lowercase()
@@ -803,19 +819,33 @@ fun buildReplyRecipients(
     )
 }
 
+/** Whether replying to all would reach anyone a plain reply does not — the
+ * message carries other recipients besides us and the sender. False makes the
+ * two actions identical, and the menus hide the reply-all item rather than
+ * offering a second way to do the same thing. */
+fun replyAllAddsRecipients(
+    message: MessageBody,
+    ownAddresses: List<String> = emptyList(),
+): Boolean =
+    buildReplyRecipients(message, ownAddresses, replyAll = true).to !=
+        buildReplyRecipients(message, ownAddresses).to
+
+/** Only the double quote opens a quoted string (RFC 5322): an apostrophe is an
+ * ordinary character in a name like O'Connor, and treating it as a delimiter
+ * swallows every recipient after it. */
 fun splitAddressList(value: String): List<String> {
     val entries = mutableListOf<String>()
-    var quote: Char? = null
+    var quoted = false
     var angleDepth = 0
     var start = 0
     value.forEachIndexed { index, ch ->
         when {
-            quote != null -> {
-                if (ch == quote) quote = null
+            quoted -> {
+                if (ch == '"') quoted = false
             }
 
-            ch == '"' || ch == '\'' -> {
-                quote = ch
+            ch == '"' -> {
+                quoted = true
             }
 
             ch == '<' -> {

@@ -10,6 +10,25 @@ describe('splitAddressList', () => {
     expect(splitAddressList('a@x.com,, ,b@y.com')).toEqual(['a@x.com', 'b@y.com'])
   })
 
+  it('keeps a comma inside a quoted display name in its own entry', () => {
+    expect(splitAddressList('"Me, Myself" <me@x.com>, Alice <a@y.com>')).toEqual([
+      '"Me, Myself" <me@x.com>',
+      'Alice <a@y.com>',
+    ])
+  })
+
+  it('treats an apostrophe in a name as an ordinary character', () => {
+    expect(splitAddressList("Me <me@x.com>, O'Connor <other@x.com>, Alice <a@y.com>")).toEqual([
+      'Me <me@x.com>',
+      "O'Connor <other@x.com>",
+      'Alice <a@y.com>',
+    ])
+  })
+
+  it('keeps a comma inside angle brackets', () => {
+    expect(splitAddressList('Group <a@x.com,b@x.com>, c@y.com')).toEqual(['Group <a@x.com,b@x.com>', 'c@y.com'])
+  })
+
   it('returns [] for empty, null, and undefined input', () => {
     expect(splitAddressList('')).toEqual([])
     expect(splitAddressList(null)).toEqual([])

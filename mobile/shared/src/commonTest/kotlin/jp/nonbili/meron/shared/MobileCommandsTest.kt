@@ -995,6 +995,103 @@ class MobileCommandsTest {
     }
 
     @Test
+    fun replyAllKeepsTheOtherToRecipientsWithoutOurOwnAddresses() {
+        val incoming =
+            MessageBody(
+                id = "m1",
+                from = "Ada",
+                fromAddr = "ada@example.com",
+                to = "Me <me@example.com>, Alice <alice@example.com>, Ada <ada@example.com>",
+                cc = "Project <project@example.com>",
+                subject = "Design",
+                body = "Original",
+            )
+
+        val plain = buildReplyRecipients(incoming, listOf("me@example.com"))
+        assertEquals("ada@example.com", plain.to)
+        assertEquals("Project <project@example.com>", plain.cc)
+
+        // The sender is listed in To as well: it must not appear twice, and our
+        // own address stays out.
+        val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
+        assertEquals("ada@example.com, Alice <alice@example.com>", all.to)
+        assertEquals("Project <project@example.com>", all.cc)
+    }
+
+    @Test
+    fun replyAllIsOfferedOnlyWhenItReachesSomeoneNew() {
+        val own = listOf("me@example.com", "sales@example.com")
+
+        fun message(
+            to: String,
+            cc: String = "",
+        ) = MessageBody(
+            id = "m1",
+            from = "Ada",
+            fromAddr = "ada@example.com",
+            to = to,
+            cc = cc,
+            subject = "Design",
+            body = "Original",
+        )
+
+        // Only us and the sender, or one of our own aliases beside us: nobody
+        // for reply-all to add. A Cc third party is kept by a plain reply too.
+        assertEquals(false, replyAllAddsRecipients(message("me@example.com"), own))
+        assertEquals(false, replyAllAddsRecipients(message("me@example.com, sales@example.com"), own))
+        assertEquals(false, replyAllAddsRecipients(message("me@example.com", cc = "bob@x.com"), own))
+        assertEquals(true, replyAllAddsRecipients(message("me@example.com, alice@example.com"), own))
+    }
+
+    @Test
+    fun addressListsSplitOnRealSeparatorsOnly() {
+        // A comma inside a quoted name or angle brackets does not separate
+        // entries; an apostrophe is an ordinary character in a name.
+        assertEquals(
+            listOf("\"Me, Myself\" <me@x.com>", "Alice <a@y.com>"),
+            splitAddressList("\"Me, Myself\" <me@x.com>, Alice <a@y.com>"),
+        )
+        assertEquals(
+            listOf("Me <me@x.com>", "O'Connor <other@x.com>", "Alice <a@y.com>"),
+            splitAddressList("Me <me@x.com>, O'Connor <other@x.com>, Alice <a@y.com>"),
+        )
+    }
+
+    @Test
+    fun replyAllDropsOurOwnQuotedNameEntry() {
+        val incoming =
+            MessageBody(
+                id = "m1",
+                from = "Ada",
+                fromAddr = "ada@example.com",
+                to = "\"Me, Myself\" <me@example.com>, Alice <alice@example.com>",
+                subject = "Design",
+                body = "Original",
+            )
+
+        val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
+        assertEquals("ada@example.com, Alice <alice@example.com>", all.to)
+    }
+
+    @Test
+    fun replyAllOnOurOwnMessageStillAddressesTheOriginalRecipients() {
+        val outgoing =
+            MessageBody(
+                id = "m2",
+                from = "Me",
+                fromAddr = "me@example.com",
+                to = "Ada <ada@example.com>, Alice <alice@example.com>",
+                cc = "Project <project@example.com>",
+                subject = "Re: Design",
+                body = "Original",
+            )
+
+        val all = buildReplyRecipients(outgoing, listOf("me@example.com"), replyAll = true)
+        assertEquals("Ada <ada@example.com>, Alice <alice@example.com>", all.to)
+        assertEquals("Project <project@example.com>", all.cc)
+    }
+
+    @Test
     fun messageForwardAndEditDraftsCarryBodyHeadersAndAttachments() {
         val message =
             MessageBody(

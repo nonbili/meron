@@ -974,10 +974,13 @@ private fun MeronMobileScreenContent(
                             autoSaveQuickReplyDraft()
                         }
                     },
-                    onOpenFullReply = ::openQuickReplyInFullEditor,
+                    onOpenFullReply = { openQuickReplyInFullEditor() },
+                    onReplyAll = { openQuickReplyInFullEditor(replyAll = true) },
+                    canReplyAllToThread = canReplyAllToThread(),
                     onSendReply = ::sendQuickReply,
                     onRetryReply = ::retryQuickReplySend,
                     quickReplyFromIdentities = quickReplyIdentities(),
+                    quickReplyRecipients = quickReplyRecipients(),
                     quickReplySelectedFrom = selectedQuickReplyIdentity(),
                     onSelectQuickReplyFrom = { identity ->
                         quickReplyFrom = identity.email
@@ -988,6 +991,8 @@ private fun MeronMobileScreenContent(
                         if (quickReplyDraftSaved) autoSaveQuickReplyDraft()
                     },
                     onForward = { openMessageCompose(it, forward = true) },
+                    onReplyAllToMessage = ::replyAllToMessage,
+                    canReplyAllToMessage = ::canReplyAllToMessage,
                     onEditAsNew = { openMessageCompose(it, forward = false) },
                     onOpenDraft = { message ->
                         selectedCoreThread?.let { thread ->

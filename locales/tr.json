@@ -124,6 +124,7 @@
   "chat.actions.forward": "İlet",
   "chat.actions.openDraft": "Taslağı aç",
   "chat.actions.openLink": "Bağlantıyı aç",
+  "chat.actions.replyAll": "Tümünü yanıtla",
   "chat.actions.saveAsEml": ".eml olarak kaydet",
   "chat.actions.saveImage": "Resmi kaydet...",
   "chat.allowRemoteFrom": "{sender} için her zaman izin ver",

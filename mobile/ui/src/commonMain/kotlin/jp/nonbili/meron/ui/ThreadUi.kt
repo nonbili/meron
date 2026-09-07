@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ReplyAll
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -93,6 +94,7 @@ import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.RemoteContentPolicy
+import jp.nonbili.meron.shared.ReplyRecipients
 import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.ThreadMediaItem
 import jp.nonbili.meron.shared.ThreadSummary
@@ -144,12 +146,17 @@ internal fun ThreadScreen(
     onQuickReplyAttach: () -> Unit,
     onRemoveQuickReplyAttachment: (DraftAttachment) -> Unit,
     onOpenFullReply: () -> Unit,
+    onReplyAll: () -> Unit,
+    canReplyAllToThread: Boolean,
     onSendReply: () -> Unit,
     onRetryReply: () -> Unit,
     quickReplyFromIdentities: List<SendIdentity>,
+    quickReplyRecipients: ReplyRecipients,
     quickReplySelectedFrom: SendIdentity?,
     onSelectQuickReplyFrom: (SendIdentity) -> Unit,
     onForward: (MessageBody) -> Unit,
+    onReplyAllToMessage: (MessageBody) -> Unit,
+    canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
     onOpenDraft: (MessageBody) -> Unit,
     onToggleMessageRead: (MessageBody) -> Unit,
@@ -631,6 +638,19 @@ internal fun ThreadScreen(
                                     },
                                 )
                                 if (!isRss) {
+                                    // Hidden when the reply target has no other
+                                    // recipients: a reply-all identical to the
+                                    // reply is a second name for the same action.
+                                    if (canReplyAllToThread) {
+                                        DropdownMenuItem(
+                                            text = { Text(tr("chat.actions.replyAll")) },
+                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = null) },
+                                            onClick = {
+                                                overflowOpen = false
+                                                onReplyAll()
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(if (preferHtml) "View as plain text" else "View as HTML") },
                                         leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
@@ -783,6 +803,8 @@ internal fun ThreadScreen(
                                         isRss = isRss,
                                         remoteContent = remoteContentFor(message),
                                         onForward = onForward,
+                                        onReplyAllToMessage = onReplyAllToMessage,
+                                        canReplyAllToMessage = canReplyAllToMessage,
                                         onEditAsNew = onEditAsNew,
                                         onOpenDraft = onOpenDraft,
                                         onToggleRead = onToggleMessageRead,
@@ -813,6 +835,8 @@ internal fun ThreadScreen(
                                         isRss = isRss,
                                         remoteContent = remoteContentFor(message),
                                         onForward = onForward,
+                                        onReplyAllToMessage = onReplyAllToMessage,
+                                        canReplyAllToMessage = canReplyAllToMessage,
                                         onEditAsNew = onEditAsNew,
                                         onOpenDraft = onOpenDraft,
                                         onToggleRead = onToggleMessageRead,
@@ -887,6 +911,8 @@ internal fun ThreadScreen(
                                                 expandOverrides = expandOverrides + (message.id to false)
                                             },
                                             onForward = onForward,
+                                            onReplyAllToMessage = onReplyAllToMessage,
+                                            canReplyAllToMessage = canReplyAllToMessage,
                                             onEditAsNew = onEditAsNew,
                                             onOpenDraft = onOpenDraft,
                                             onToggleRead = onToggleMessageRead,
@@ -936,6 +962,7 @@ internal fun ThreadScreen(
                         hasContent = quickReplyHasContent,
                         sending = quickReplySending,
                         fromIdentities = quickReplyFromIdentities,
+                        recipients = quickReplyRecipients,
                         selectedFrom = quickReplySelectedFrom,
                         onSelectFrom = onSelectQuickReplyFrom,
                     )
@@ -1401,6 +1428,7 @@ internal fun ReplyBar(
     hasContent: Boolean = value.isNotBlank() || attachments.isNotEmpty(),
     sending: Boolean = false,
     fromIdentities: List<SendIdentity> = emptyList(),
+    recipients: ReplyRecipients = ReplyRecipients("", ""),
     selectedFrom: SendIdentity? = null,
     onSelectFrom: (SendIdentity) -> Unit = {},
 ) {
@@ -1409,12 +1437,30 @@ internal fun ReplyBar(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (selectedFrom != null && fromIdentities.size > 1) {
-                ReplyFromRow(
-                    identities = fromIdentities,
-                    selected = selectedFrom,
-                    onSelect = onSelectFrom,
+            // One line, not two: From and To are both single-address
+            // disclosures, and stacking them pushed the bar itself up the
+            // screen. Recipients lead — they are what changes from thread to
+            // thread — and the send-as address sits at the right edge, held
+            // there by the spacer even when there are no recipients to show.
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ReplyRecipientsRow(
+                    recipients = recipients,
+                    onOpenFullEditor = onOpenFullEditor,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                Spacer(Modifier.weight(1f))
+                if (selectedFrom != null && fromIdentities.size > 1) {
+                    ReplyFromRow(
+                        identities = fromIdentities,
+                        selected = selectedFrom,
+                        onSelect = onSelectFrom,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
             }
             if (attachments.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1509,6 +1555,71 @@ internal fun ReplyBar(
     }
 }
 
+// Who the reply goes to. The bar has no address fields, and a plain reply keeps
+// the Cc while dropping the other To recipients — a recipient set worth
+// disclosing rather than leaving to be discovered in the Sent copy. Read-only:
+// tapping opens the full editor, where the addresses can actually be edited.
+@Composable
+private fun ReplyRecipientsRow(
+    recipients: ReplyRecipients,
+    onOpenFullEditor: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val to = addressChipItems(recipients.to)
+    if (to.isEmpty()) return
+    val cc = addressChipItems(recipients.cc)
+    Row(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpenFullEditor)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            tr("composer.fields.to"),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            summarizeRecipients(to),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (cc.isNotEmpty()) {
+            Text(
+                tr("composer.fields.cc"),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                summarizeRecipients(cc),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
+    }
+}
+
+// How many names the recipient row spells out before collapsing the rest.
+private const val VISIBLE_RECIPIENT_NAMES = 2
+
+internal fun summarizeRecipients(items: List<AddressChipItem>): String =
+    if (items.size <= VISIBLE_RECIPIENT_NAMES) {
+        items.joinToString(", ") { it.display }
+    } else {
+        val shown = items.take(VISIBLE_RECIPIENT_NAMES).joinToString(", ") { it.display }
+        "$shown +${items.size - VISIBLE_RECIPIENT_NAMES}"
+    }
+
 // The reply bar's send-as identity: shows which address the reply goes out from,
 // and opens a picker to override it. Only rendered when the account has more
 // than one identity — with a single address there is nothing to disclose.
@@ -1517,9 +1628,10 @@ private fun ReplyFromRow(
     identities: List<SendIdentity>,
     selected: SendIdentity,
     onSelect: (SendIdentity) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
+    Box(modifier) {
         Row(
             Modifier
                 .clip(RoundedCornerShape(8.dp))

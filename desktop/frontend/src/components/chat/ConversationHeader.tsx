@@ -11,6 +11,7 @@ import {
   Mail,
   MoreVertical,
   PanelRight,
+  ReplyAll,
   Search,
   SquarePen,
   Star,
@@ -23,7 +24,7 @@ import { showToast, ui$ } from '../../states/ui'
 import { archiveThread, deleteThread, starThread } from '../../states/mail'
 import { thread$, type ConversationMode } from '../../states/thread'
 import { closeKanbanPane, kanban$, openCorrespondentMail } from '../../states/kanban'
-import { openComposeTab } from '../../states/compose'
+import { canReplyAllToThread, openComposeTab, openReplyInFullEditor } from '../../states/compose'
 import type { Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
@@ -91,6 +92,10 @@ export function ConversationHeader({
       })
       .catch(() => undefined)
   }
+
+  // Hidden when the conversation's reply target has no other recipients: a
+  // reply-all identical to the reply is a second name for the same action.
+  const replyAll = useValue(canReplyAllToThread)
 
   const senderName = activeThread.from_name.trim()
   const senderEmail = activeThread.from_addr.trim()
@@ -253,6 +258,17 @@ export function ConversationHeader({
                   <FileText size={15} className="shrink-0" /> {t('chat.viewAsPlainText')}
                 </button>
                 <div className="my-1 h-px bg-border" />
+                {!isRSS && replyAll && (
+                  <button
+                    onClick={() => {
+                      openReplyInFullEditor({ replyAll: true })
+                      setActionsMenuOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
+                  >
+                    <ReplyAll size={15} className="shrink-0" /> {t('chat.actions.replyAll')}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     void starThread(activeThread.thread_id, !activeThread.starred)

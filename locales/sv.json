@@ -124,6 +124,7 @@
   "chat.actions.forward": "Vidarebefordra",
   "chat.actions.openDraft": "Öppna utkast",
   "chat.actions.openLink": "Öppna länk",
+  "chat.actions.replyAll": "Svara alla",
   "chat.actions.saveAsEml": "Spara som .eml",
   "chat.actions.saveImage": "Spara bild...",
   "chat.allowRemoteFrom": "Tillåt alltid från {sender}",

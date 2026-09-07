@@ -124,6 +124,7 @@
   "chat.actions.forward": "Pārsūtīt",
   "chat.actions.openDraft": "Atvērt melnrakstu",
   "chat.actions.openLink": "Atvērt saiti",
+  "chat.actions.replyAll": "Atbildēt visiem",
   "chat.actions.saveAsEml": "Saglabāt kā .eml",
   "chat.actions.saveImage": "Saglabāt attēlu...",
   "chat.allowRemoteFrom": "Vienmēr atļaut no {sender}",

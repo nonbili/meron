@@ -124,6 +124,7 @@
   "chat.actions.forward": "轉寄",
   "chat.actions.openDraft": "開放草稿",
   "chat.actions.openLink": "開啟連結",
+  "chat.actions.replyAll": "全部回覆",
   "chat.actions.saveAsEml": "另存為 .eml",
   "chat.actions.saveImage": "儲存圖片...",
   "chat.allowRemoteFrom": "一律允許 {sender}",

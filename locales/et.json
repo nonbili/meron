@@ -124,6 +124,7 @@
   "chat.actions.forward": "Edasta",
   "chat.actions.openDraft": "Ava mustand",
   "chat.actions.openLink": "Ava link",
+  "chat.actions.replyAll": "Vasta kõigile",
   "chat.actions.saveAsEml": "Salvesta .eml-failina",
   "chat.actions.saveImage": "Salvesta pilt...",
   "chat.allowRemoteFrom": "Luba alati saatjalt {sender}",
