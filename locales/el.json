@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Σύρετε για αναδιάταξη στήλης",
   "kanban.actions.expand": "Ανάπτυξη",
   "kanban.actions.hideColumn": "Απόκρυψη στήλης",
+  "kanban.actions.markAllColumnsRead": "Σήμανση όλων των στηλών ως αναγνωσμένων",
   "kanban.actions.minimize": "Ελαχιστοποίηση",
   "kanban.actions.minimizeColumn": "Ελαχιστοποίηση στήλης",
   "kanban.actions.moveColumnLeft": "Μετακίνηση στήλης αριστερά",

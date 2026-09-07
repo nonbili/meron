@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderDelete
+import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -329,6 +330,15 @@ internal fun KanbanRouteContent(
                                         )
                                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                         DropdownMenuItem(
+                                            text = { Text(tr("kanban.actions.markAllColumnsRead")) },
+                                            leadingIcon = { Icon(Icons.Filled.MarkEmailRead, contentDescription = null) },
+                                            enabled = !kanbanMarkingRead && activeKanbanBoard?.columns?.isNotEmpty() == true,
+                                            onClick = {
+                                                kanbanMenuOpen = false
+                                                markKanbanBoardAllRead()
+                                            },
+                                        )
+                                        DropdownMenuItem(
                                             text = { Text(tr("mobile.actions.refreshBoard")) },
                                             leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                                             onClick = {
@@ -421,6 +431,7 @@ internal fun KanbanRouteContent(
                     onRefreshColumn = { loadKanbanColumn(it, refresh = true) },
                     onLoadMoreColumn = ::loadMoreKanbanColumn,
                     onMarkColumnAllRead = ::markKanbanColumnAllRead,
+                    markingRead = kanbanMarkingRead,
                     onEmptyColumnFolder = { column, folder ->
                         pendingEmptyFolder =
                             EmptyFolderTarget(

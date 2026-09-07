@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Trascina per riordinare la colonna",
   "kanban.actions.expand": "Espandi",
   "kanban.actions.hideColumn": "Nascondi colonna",
+  "kanban.actions.markAllColumnsRead": "Segna tutte le colonne come lette",
   "kanban.actions.minimize": "Riduci a icona",
   "kanban.actions.minimizeColumn": "Riduci a icona la colonna",
   "kanban.actions.moveColumnLeft": "Sposta la colonna a sinistra",

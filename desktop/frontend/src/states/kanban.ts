@@ -1,6 +1,6 @@
 import { observable } from '@legendapp/state'
 import type { ChatWallpaper, Message } from '../types'
-import { isFilterMode, pauseMailFolderPersist, persistMailFolder, ui$, type FilterMode } from './ui'
+import { isFilterMode, pauseMailFolderPersist, persistMailFolder, ui$, showToast, type FilterMode } from './ui'
 import { mail$, refreshAccountFoldersCache } from './mail'
 import { accounts$ } from './accounts'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
@@ -10,6 +10,7 @@ import { persistedField } from '../lib/sessionPref'
 import { hasStoredKanbanBoards, settings$, type KanbanBoard } from './settings'
 import { invoke } from '../lib/bridge'
 import { thread$ } from './thread'
+import { t } from '../lib/i18n'
 
 export type KanbanColumn = {
   accountId: string
@@ -398,76 +399,100 @@ export function switchKanbanColumnFolder(boardId: string, column: KanbanColumn, 
 // Mark a column as read. Mail columns are marked folder-wide, so unread messages
 // outside the loaded page are cleared too; RSS/starred aggregates fall back to
 // per loaded item/thread operations because they have no folder-wide unread flag.
-export async function markColumnAllRead(column: KanbanColumn) {
+type ReadRequest = (command: string, payload: Record<string, string>) => Promise<void>
+
+const requestRead: ReadRequest = async (command, payload) => {
+  const result = await invoke<{ ok?: boolean; failures?: Array<{ message: string }> }>(command, payload)
+  if (result?.ok === false || result?.failures?.length) {
+    throw new Error(result.failures?.map((failure) => failure.message).join('; ') || t('notification.markReadFailed'))
+  }
+}
+
+async function markColumnRead(column: KanbanColumn, request: ReadRequest) {
   const key = kanbanColumnKey(column)
   const threads = kanban$.threads[key].get() ?? []
   const unread = threads.filter((thread) => thread.unread)
-
-  if (column.accountId === 'unified' && column.folderId.toLowerCase() === 'starred') {
-    if (unread.length === 0) return
-    kanban$.threads[key].set(
-      threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
-    )
-    // Starred rows are whole threads, so each one is marked read as a thread —
-    // there is no single message id to scope this to.
-    await Promise.all(
-      unread.map((thread) =>
-        invoke('mail.markRead', { thread_id: thread.thread_id }).catch((err) =>
-          console.error('markAllRead (starred) failed:', err),
-        ),
-      ),
-    )
-    return
-  }
-
   const accounts = accounts$.get()
+  const starred = isUnifiedStarredColumn(column)
   const columnAccount = accounts.find((account) => account.id === column.accountId)
-  const mailAccountIds =
-    column.accountId === 'unified'
+  const mailAccountIds = starred
+    ? []
+    : column.accountId === 'unified'
       ? accounts
           .filter((account) => account.included_in_unified !== false && !isRssAccount(account, account.id))
           .map((account) => account.id)
       : !isRssAccount(columnAccount, column.accountId)
         ? [column.accountId]
         : []
-  const rssUnread = unread.filter((thread) =>
-    isRssAccount(
-      accounts.find((account) => account.id === thread.account_id),
-      thread.account_id,
-    ),
-  )
-  if (mailAccountIds.length === 0 && rssUnread.length === 0) return
-
-  kanban$.threads[key].set(
-    threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)),
-  )
-  kanban$.unreadCounts[key].set(0)
-
-  const mailRequests =
-    column.accountId === 'unified'
-      ? [
-          invoke('mail.markAllRead', { account_id: 'unified', folder_id: column.folderId }).catch((err) =>
-            console.error('markAllRead failed:', err),
-          ),
-        ]
-      : mailAccountIds.map((accountId) =>
-          invoke('mail.markAllRead', { account_id: accountId, folder_id: column.folderId }).catch((err) =>
-            console.error('markAllRead failed:', err),
-          ),
-        )
-  await Promise.all([
-    ...mailRequests,
-    ...rssUnread.map((thread) =>
-      invoke('mail.markRead', { thread_id: thread.thread_id }).catch((err) =>
-        console.error('markAllRead (rss) failed:', err),
-      ),
-    ),
+  const itemTargets = starred
+    ? unread
+    : unread.filter((thread) =>
+        isRssAccount(
+          accounts.find((account) => account.id === thread.account_id),
+          thread.account_id,
+        ),
+      )
+  const results = await Promise.allSettled([
+    ...(mailAccountIds.length
+      ? [request('mail.markAllRead', { account_id: column.accountId, folder_id: column.folderId })]
+      : []),
+    ...itemTargets.map((thread) => request('mail.markRead', { thread_id: thread.thread_id })),
   ])
   await Promise.all(
-    Array.from(new Set([...mailAccountIds, ...rssUnread.map((thread) => thread.account_id)]))
+    Array.from(new Set([...mailAccountIds, ...itemTargets.map((thread) => thread.account_id)]))
       .filter(Boolean)
       .map((accountId) => refreshAccountFoldersCache(accountId, false)),
   )
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') throw failure.reason
+  const readIds = new Set(unread.map((thread) => thread.thread_id))
+  kanban$.threads[key].set(
+    (kanban$.threads[key].get() ?? []).map((thread) =>
+      readIds.has(thread.thread_id) ? { ...thread, unread: false, unread_count: 0 } : thread,
+    ),
+  )
+  if (!starred && results.length) kanban$.unreadCounts[key].set(0)
+}
+
+export async function markColumnAllRead(column: KanbanColumn) {
+  try {
+    await markColumnRead(column, requestRead)
+  } catch {
+    showToast(t('notification.markReadFailed'), 'error')
+  }
+}
+
+export async function markBoardAllRead(boardId: string) {
+  const columns = Array.from(
+    new Map(getKanbanColumns(boardId).map((column) => [kanbanColumnKey(column), column])).values(),
+  )
+  const requests = new Map<string, Promise<void>>()
+  const request: ReadRequest = (command, payload) => {
+    // Reuse a unified folder write for a concrete column covering the same folder.
+    if (command === 'mail.markAllRead' && payload.account_id !== 'unified') {
+      const account = accounts$.get().find((account) => account.id === payload.account_id)
+      const folder = mail$.foldersByAccount[payload.account_id].get()?.find((folder) => folder.id === payload.folder_id)
+      const role = folder?.role || (payload.folder_id.toLowerCase() === 'inbox' ? 'inbox' : '')
+      const unified = columns.find(
+        (column) =>
+          column.accountId === 'unified' && column.folderId.toLowerCase() === role && !isUnifiedStarredColumn(column),
+      )
+      if (account && account.included_in_unified !== false && unified) {
+        payload = { account_id: 'unified', folder_id: unified.folderId }
+      }
+    }
+    const key = JSON.stringify([command, payload])
+    let pending = requests.get(key)
+    if (!pending) {
+      pending = requestRead(command, payload)
+      requests.set(key, pending)
+    }
+    return pending
+  }
+  const results = await Promise.allSettled(columns.map((column) => markColumnRead(column, request)))
+  if (results.some((result) => result.status === 'rejected')) {
+    showToast(t('notification.markReadFailed'), 'error')
+  }
 }
 
 // Open a card the keyboard moved onto, the same way clicking it would. Feed

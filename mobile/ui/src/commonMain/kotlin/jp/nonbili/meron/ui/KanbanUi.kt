@@ -453,6 +453,7 @@ internal fun KanbanScreen(
     onRefreshColumn: (KanbanColumnSpec) -> Unit,
     onLoadMoreColumn: (KanbanColumnSpec) -> Unit,
     onMarkColumnAllRead: (KanbanColumnSpec) -> Unit,
+    markingRead: Boolean,
     onEmptyColumnFolder: (KanbanColumnSpec, FolderSummary) -> Unit,
     onDeleteColumnFolder: (KanbanColumnSpec, FolderSummary) -> Unit,
     onRemoveColumn: (KanbanColumnSpec) -> Unit,
@@ -535,6 +536,7 @@ internal fun KanbanScreen(
                             onRefresh = { onRefreshColumn(column) },
                             onLoadMore = { onLoadMoreColumn(column) },
                             onMarkAllRead = { onMarkColumnAllRead(column) },
+                            markingRead = markingRead,
                             onEmptyFolder = { folder -> onEmptyColumnFolder(column, folder) },
                             onDeleteFolder = { folder -> onDeleteColumnFolder(column, folder) },
                             onRemove = { onRemoveColumn(column) },
@@ -636,6 +638,7 @@ internal fun KanbanColumn(
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onMarkAllRead: () -> Unit,
+    markingRead: Boolean,
     onEmptyFolder: (FolderSummary) -> Unit,
     onDeleteFolder: (FolderSummary) -> Unit,
     onRemove: () -> Unit,
@@ -678,6 +681,7 @@ internal fun KanbanColumn(
                 otherColumnFolderIds = otherColumnFolderIds,
                 onRefresh = onRefresh,
                 onMarkAllRead = onMarkAllRead,
+                markingRead = markingRead,
                 onEmptyFolder = onEmptyFolder,
                 onDeleteFolder = onDeleteFolder,
                 onRemove = onRemove,
@@ -793,6 +797,7 @@ internal fun KanbanColumnHeader(
     otherColumnFolderIds: Set<String>,
     onRefresh: () -> Unit,
     onMarkAllRead: () -> Unit,
+    markingRead: Boolean,
     onEmptyFolder: (FolderSummary) -> Unit,
     onDeleteFolder: (FolderSummary) -> Unit,
     onRemove: () -> Unit,
@@ -871,7 +876,7 @@ internal fun KanbanColumnHeader(
                 }, onClick = {
                     menuOpen = false
                     onMarkAllRead()
-                }, enabled = unread > 0)
+                }, enabled = unread > 0 && !markingRead)
                 emptiableFolder?.let { folder ->
                     DropdownMenuItem(text = {
                         Text(

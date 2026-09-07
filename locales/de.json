@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Ziehen, um Spalte neu anzuordnen",
   "kanban.actions.expand": "Maximieren",
   "kanban.actions.hideColumn": "Spalte ausblenden",
+  "kanban.actions.markAllColumnsRead": "Alle Spalten als gelesen markieren",
   "kanban.actions.minimize": "Minimieren",
   "kanban.actions.minimizeColumn": "Spalte minimieren",
   "kanban.actions.moveColumnLeft": "Spalte nach links verschieben",

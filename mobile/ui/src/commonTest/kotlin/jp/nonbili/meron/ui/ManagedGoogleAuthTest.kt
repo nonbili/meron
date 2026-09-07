@@ -1,5 +1,6 @@
 package jp.nonbili.meron.ui
 
+import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.CloseableHandle
 import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
@@ -7,9 +8,13 @@ import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MobileCommand
 import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.ThreadActionParams
+import jp.nonbili.meron.shared.ThreadSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,8 +29,49 @@ private const val OAUTH_FAILURE_MESSAGE =
 
 class ManagedGoogleAuthTest {
     @Test
+    fun kanbanSingleAccountMarkReadRetriesTheWriteAfterOAuthFailure() =
+        runBlocking {
+            val core = ScriptedCore(failCount = 1, failureCommand = MobileCommand.MarkAllRead)
+            val host = ManagedHost()
+            val state = testState(core, host, this)
+            state.coreAccounts = listOf(AccountSummary(id = "acc1", email = "one@example.com"))
+
+            state.markKanbanColumnAllRead(KanbanColumnSpec("acc1", "INBOX"))
+            withTimeout(5_000) { while (state.kanbanMarkingRead) delay(10) }
+
+            assertEquals(listOf(MobileCommand.MarkAllRead, MobileCommand.AccountUpdateOAuthToken, MobileCommand.MarkAllRead), core.commands)
+            assertEquals(1, host.forceRefreshes)
+        }
+
+    @Test
+    fun kanbanBoardSuccessCountsOverlappingThreadsOnceAndUsesAppLanguage() =
+        runBlocking {
+            val core = ScriptedCore(failCount = 0)
+            val state = testState(core, ManagedHost(), this)
+            state.coreAccounts = listOf(AccountSummary(id = "acc1", email = "one@example.com"))
+            val direct = KanbanColumnSpec("acc1", "INBOX")
+            val unified = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, "inbox")
+            state.kanbanBoards = listOf(KanbanBoardSpec(id = "board", name = "Board", columns = listOf(direct, unified)))
+            state.activeKanbanBoardId = "board"
+            val thread = ThreadSummary(id = "direct-row", threadId = "acc1#thread", accountId = "acc1", folder = "INBOX", subject = "Subject", sender = "Sender", unread = true)
+            state.kanbanColumns =
+                mapOf(
+                    kanbanColumnKey(direct) to KanbanColumnState(threads = listOf(thread), unreadCount = 1),
+                    kanbanColumnKey(unified) to KanbanColumnState(threads = listOf(thread.copy(id = "unified-row")), unreadCount = 1),
+                )
+            saveAppLanguageTag(state.prefs, "ja")
+
+            state.markKanbanBoardAllRead()
+            withTimeout(5_000) { while (state.kanbanMarkingRead) delay(10) }
+
+            assertEquals(1, core.commands.count { it == MobileCommand.MarkAllRead })
+            assertEquals(localizedString("ja", "mail.toast.markedReadCount", mapOf("count" to 1)), state.status)
+            assertTrue(state.kanbanColumns.values.all { column -> column.threads.none { it.unread } })
+        }
+
+    @Test
     fun retriesOnceAfterForceMintWhenServerRejectsOAuthPayload() {
-        val core = ScriptedCore(failDeletes = 1)
+        val core = ScriptedCore(failCount = 1)
         val host = ManagedHost()
         val state = testState(core, host)
 
@@ -42,7 +88,7 @@ class ManagedGoogleAuthTest {
 
     @Test
     fun retriesOnceWhenCoreThrowsOAuthFailure() {
-        val core = ScriptedCore(failDeletes = 1, throwOnFailure = true)
+        val core = ScriptedCore(failCount = 1, throwOnFailure = true)
         val host = ManagedHost()
         val state = testState(core, host)
 
@@ -58,7 +104,7 @@ class ManagedGoogleAuthTest {
 
     @Test
     fun rethrowsWhenRetryFailsToo() {
-        val core = ScriptedCore(failDeletes = 2, throwOnFailure = true)
+        val core = ScriptedCore(failCount = 2, throwOnFailure = true)
         val host = ManagedHost()
         val state = testState(core, host)
 
@@ -75,7 +121,7 @@ class ManagedGoogleAuthTest {
 
     @Test
     fun doesNotRetryNonAuthErrors() {
-        val core = ScriptedCore(failDeletes = 1, failureMessage = "delete failed: no such folder")
+        val core = ScriptedCore(failCount = 1, failureMessage = "delete failed: no such folder")
         val host = ManagedHost()
         val state = testState(core, host)
 
@@ -88,7 +134,7 @@ class ManagedGoogleAuthTest {
 
     @Test
     fun surfacesReconnectWhenForceMintFails() {
-        val core = ScriptedCore(failDeletes = 1)
+        val core = ScriptedCore(failCount = 1)
         val host = ManagedHost(failForceMint = true)
         val state = testState(core, host)
 
@@ -103,7 +149,7 @@ class ManagedGoogleAuthTest {
 
     @Test
     fun skipsTokenPushWhileFreshAndRunsActionUnchanged() {
-        val core = ScriptedCore(failDeletes = 0)
+        val core = ScriptedCore(failCount = 0)
         val host = ManagedHost()
         val state = testState(core, host)
 
@@ -140,8 +186,9 @@ class ManagedGoogleAuthTest {
     private fun testState(
         core: MeronCore,
         host: MobileHost,
+        scope: CoroutineScope = CoroutineScope(EmptyCoroutineContext),
     ) = MeronMobileState(
-        scope = CoroutineScope(EmptyCoroutineContext),
+        scope = scope,
         core = core,
         coreLoaded = true,
         prefs = MemoryPreferences(),
@@ -178,11 +225,12 @@ class ManagedGoogleAuthTest {
             }
     }
 
-    /** Fails the first [failDeletes] mail.delete calls, as an error payload or a throw. */
+    /** Fails the first [failCount] [failureCommand] calls, as an error payload or a throw. */
     private class ScriptedCore(
-        private var failDeletes: Int,
+        private var failCount: Int,
         private val throwOnFailure: Boolean = false,
         private val failureMessage: String = OAUTH_FAILURE_MESSAGE,
+        private val failureCommand: String = MobileCommand.Delete,
     ) : MeronCore {
         val commands = mutableListOf<String>()
 
@@ -191,8 +239,8 @@ class ManagedGoogleAuthTest {
             payloadJson: String,
         ): String {
             commands += command
-            if (command == MobileCommand.Delete && failDeletes > 0) {
-                failDeletes--
+            if (command == failureCommand && failCount > 0) {
+                failCount--
                 if (throwOnFailure) {
                     throw RuntimeException(failureMessage.replace("\\\"", "\""))
                 }

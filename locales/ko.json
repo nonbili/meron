@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "드래그하여 열 순서 변경",
   "kanban.actions.expand": "확장",
   "kanban.actions.hideColumn": "열 숨기기",
+  "kanban.actions.markAllColumnsRead": "모든 열을 읽음으로 표시",
   "kanban.actions.minimize": "최소화",
   "kanban.actions.minimizeColumn": "열 최소화",
   "kanban.actions.moveColumnLeft": "열을 왼쪽으로 이동",

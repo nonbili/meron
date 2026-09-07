@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Przeciągnij, aby zmienić kolejność kolumn",
   "kanban.actions.expand": "Rozwiń",
   "kanban.actions.hideColumn": "Ukryj kolumnę",
+  "kanban.actions.markAllColumnsRead": "Oznacz wszystkie kolumny jako przeczytane",
   "kanban.actions.minimize": "Minimalizuj",
   "kanban.actions.minimizeColumn": "Minimalizuj kolumnę",
   "kanban.actions.moveColumnLeft": "Przesuń kolumnę w lewo",

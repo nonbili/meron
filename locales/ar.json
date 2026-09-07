@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "اسحب لإعادة ترتيب العمود",
   "kanban.actions.expand": "توسيع",
   "kanban.actions.hideColumn": "إخفاء العمود",
+  "kanban.actions.markAllColumnsRead": "وضع علامة مقروء على جميع الأعمدة",
   "kanban.actions.minimize": "تصغير",
   "kanban.actions.minimizeColumn": "تصغير العمود",
   "kanban.actions.moveColumnLeft": "نقل العمود إلى اليسار",

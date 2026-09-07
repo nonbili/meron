@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Lohista veeru ümberjärjestamiseks",
   "kanban.actions.expand": "Laienda",
   "kanban.actions.hideColumn": "Peida veerg",
+  "kanban.actions.markAllColumnsRead": "Märgi kõik veerud loetuks",
   "kanban.actions.minimize": "Minimeeri",
   "kanban.actions.minimizeColumn": "Minimeeri veerg",
   "kanban.actions.moveColumnLeft": "Liiguta veergu vasakule",

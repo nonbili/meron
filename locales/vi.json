@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Kéo để sắp xếp lại cột",
   "kanban.actions.expand": "Mở rộng",
   "kanban.actions.hideColumn": "Ẩn cột",
+  "kanban.actions.markAllColumnsRead": "Đánh dấu tất cả các cột là đã đọc",
   "kanban.actions.minimize": "Thu nhỏ",
   "kanban.actions.minimizeColumn": "Thu nhỏ cột",
   "kanban.actions.moveColumnLeft": "Di chuyển cột sang trái",

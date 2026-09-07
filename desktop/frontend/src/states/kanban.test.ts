@@ -5,6 +5,7 @@ import {
   kanban$,
   focusKanbanThreadFolder,
   markColumnAllRead,
+  markBoardAllRead,
   openCorrespondentMail,
   removeKanbanBoard,
   removeKanbanColumnsForFolder,
@@ -140,6 +141,56 @@ describe('markColumnAllRead', () => {
         },
       },
     }
+  })
+
+  it('marks all board columns including unloaded and minimized folders, deduplicating unified overlap', async () => {
+    settings$.kanbanBoards.set([
+      {
+        id: 'board',
+        name: 'Board',
+        columns: [
+          { accountId: 'acc1', folderId: 'INBOX' },
+          { accountId: 'unified', folderId: 'inbox' },
+          { accountId: 'acc2', folderId: 'Archive' },
+          { accountId: 'acc2', folderId: 'Archive' },
+        ],
+      },
+      { id: 'other', name: 'Other', columns: [{ accountId: 'acc1', folderId: 'Trash' }] },
+    ])
+    settings$.kanbanMinimizedColumns.set({ 'board\nacc2\nArchive': true })
+    await markBoardAllRead('board')
+    expect(calls.filter((call) => call.command === 'mail.markAllRead').map((call) => call.payload)).toEqual([
+      { account_id: 'unified', folder_id: 'inbox' },
+      { account_id: 'acc2', folder_id: 'Archive' },
+    ])
+  })
+
+  it('keeps failed columns unread while completing other columns and reporting a partial failure', async () => {
+    settings$.kanbanBoards.set([
+      {
+        id: 'board',
+        name: 'Board',
+        columns: [
+          { accountId: 'unified', folderId: 'inbox' },
+          { accountId: 'acc2', folderId: 'Archive' },
+        ],
+      },
+    ])
+    kanban$.threads['unified\ninbox'].set([message()])
+    kanban$.unreadCounts['unified\ninbox'].set(4)
+    kanban$.threads['acc2\nArchive'].set([message({ account_id: 'acc2', folder_id: 'Archive' })])
+    const original = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+      if (command === 'mail.markAllRead' && payload.account_id === 'unified') {
+        return { ok: false, failures: [{ account_id: 'acc1', message: 'Offline' }] }
+      }
+      return original(command, payload)
+    }
+    await markBoardAllRead('board')
+    expect(kanban$.threads['unified\ninbox'].get()[0].unread).toBe(true)
+    expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(4)
+    expect(kanban$.threads['acc2\nArchive'].get()[0].unread).toBe(false)
+    expect(ui$.toastTone.get()).toBe('error')
   })
 
   it('refreshes affected account folder caches after marking a kanban column read', async () => {

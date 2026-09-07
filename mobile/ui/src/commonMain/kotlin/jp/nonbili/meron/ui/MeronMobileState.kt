@@ -200,6 +200,7 @@ internal class MeronMobileState(
     var kanbanActionThread by mutableStateOf<ThreadSummary?>(null)
     var kanbanSettingsTargetId by mutableStateOf<String?>(null)
     var kanbanMenuOpen by mutableStateOf(false)
+    var kanbanMarkingRead by mutableStateOf(false)
     var showKanbanColumnDialog by mutableStateOf(false)
     var showKanbanCreateFolderDialog by mutableStateOf<AccountSummary?>(null)
     var kanbanFolderNameInput by mutableStateOf("")

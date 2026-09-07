@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "ドラッグして列の順序を変更",
   "kanban.actions.expand": "展開",
   "kanban.actions.hideColumn": "列を非表示",
+  "kanban.actions.markAllColumnsRead": "すべての列を既読にする",
   "kanban.actions.minimize": "最小化",
   "kanban.actions.minimizeColumn": "列を最小化",
   "kanban.actions.moveColumnLeft": "列を左へ移動",

@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Sütunu yeniden sıralamak için sürükleyin",
   "kanban.actions.expand": "Genişlet",
   "kanban.actions.hideColumn": "Sütunu gizle",
+  "kanban.actions.markAllColumnsRead": "Tüm sütunları okundu olarak işaretle",
   "kanban.actions.minimize": "Küçült",
   "kanban.actions.minimizeColumn": "Sütunu simge durumuna küçült",
   "kanban.actions.moveColumnLeft": "Sütunu sola taşı",

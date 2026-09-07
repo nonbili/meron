@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Velciet, lai pārkārtotu kolonnu",
   "kanban.actions.expand": "Izvērst",
   "kanban.actions.hideColumn": "Paslēpt kolonnu",
+  "kanban.actions.markAllColumnsRead": "Atzīmēt visas kolonnas kā izlasītas",
   "kanban.actions.minimize": "Minimizēt",
   "kanban.actions.minimizeColumn": "Minimizēt kolonnu",
   "kanban.actions.moveColumnLeft": "Pārvietot kolonnu pa kreisi",

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Check, Columns3, Inbox, Lock, Mail, Minus, MoreVertical, Plus, Settings, Star } from 'lucide-react'
+import { Check, Columns3, Inbox, Lock, Mail, MailCheck, Minus, MoreVertical, Plus, Settings, Star } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { type FilterMode, ui$ } from '../../states/ui'
@@ -9,6 +9,7 @@ import {
   KANBAN_COLUMN_MIN_WIDTH,
   settings$,
 } from '../../states/settings'
+import { markBoardAllRead } from '../../states/kanban'
 import { IconButton } from '../button/IconButton'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MenuItem } from '../menu/MenuItem'
@@ -78,6 +79,8 @@ export function BoardMenu({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [markingRead, setMarkingRead] = useState(false)
+  const boards = useValue(settings$.kanbanBoards)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const lockScroll = useValue(settings$.kanbanLockScroll)
   const columnWidth = useValue(settings$.kanbanColumnWidth)
@@ -134,6 +137,17 @@ export function BoardMenu({
             {filterItem('starred', t('filters.starred'), <Star size={13} className="text-secondary shrink-0" />)}
             <div className="my-1 border-t border-border" />
           </div>
+          <MenuItem
+            icon={<MailCheck size={13} className="text-secondary shrink-0" />}
+            label={t('kanban.actions.markAllColumnsRead')}
+            disabled={markingRead || !boards.find((board) => board.id === boardId)?.columns.length}
+            onClick={() => {
+              setOpen(false)
+              setMarkingRead(true)
+              void markBoardAllRead(boardId).finally(() => setMarkingRead(false))
+            }}
+          />
+          <div className="my-1 border-t border-border" />
           <MenuItem
             className="flex-nowrap"
             icon={<Plus size={13} className="text-secondary shrink-0" />}

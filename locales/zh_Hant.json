@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "拖曳以重新排列欄位",
   "kanban.actions.expand": "展開",
   "kanban.actions.hideColumn": "隱藏欄位",
+  "kanban.actions.markAllColumnsRead": "將所有欄位標為已讀",
   "kanban.actions.minimize": "最小化",
   "kanban.actions.minimizeColumn": "最小化列",
   "kanban.actions.moveColumnLeft": "向左移動列",

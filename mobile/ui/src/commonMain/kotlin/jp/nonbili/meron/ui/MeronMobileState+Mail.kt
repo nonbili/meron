@@ -1927,89 +1927,119 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
 }
 
 internal fun MeronMobileState.markKanbanColumnAllRead(column: KanbanColumnSpec) {
-    val key = kanbanColumnKey(column)
-    val unread = kanbanColumns[key]?.threads.orEmpty().filter { it.unread }
+    markKanbanColumnsAllRead(listOf(column))
+}
+
+internal fun MeronMobileState.markKanbanBoardAllRead() {
+    val board = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: return
+    markKanbanColumnsAllRead(board.columns.distinctBy(::kanbanColumnKey))
+}
+
+private fun MeronMobileState.markKanbanColumnsAllRead(columns: List<KanbanColumnSpec>) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
         return
     }
-    val accountsById = coreAccounts.associateBy { it.id }
-    val mailTargets =
-        if (isUnifiedStarredColumn(column)) {
-            unread
-                .filterNot { threadIdIsRss(it.id) }
-                .map { thread -> thread.backendThreadId() to listOf(thread.id) }
-        } else if (column.accountId == UNIFIED_ACCOUNT_ID) {
-            coreAccounts
-                .filter { it.includedInUnified && !accountSummaryIsRss(it) }
-                .map { account -> account.id to emptyList<String>() }
-        } else {
-            val account = accountsById[column.accountId]
-            if (account != null && !accountSummaryIsRss(account)) listOf(column.accountId to emptyList()) else emptyList()
-        }
-    val rssTargets = unread.filter { threadIdIsRss(it.backendThreadId()) }
-    if (mailTargets.isEmpty() && rssTargets.isEmpty()) {
-        status = "No unread cards."
-        return
-    }
-    val threadsBefore = coreThreads
-    val kanbanBefore = kanbanColumns
-    updateKanbanColumn(key) { state ->
-        state.copy(
-            threads = state.threads.map { if (it.unread) it.copy(unread = false) else it },
-            unreadCount = 0,
-        )
-    }
-    coreThreads =
-        coreThreads.map { thread ->
-            if (unread.any { it.id == thread.id }) thread.copy(unread = false) else thread
-        }
+    if (kanbanMarkingRead || columns.isEmpty()) return
+    kanbanMarkingRead = true
     scope.launch {
-        runCatching {
-            withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                val responses = mutableListOf<String>()
-                if (column.accountId == UNIFIED_ACCOUNT_ID && !isUnifiedStarredColumn(column)) {
-                    mailTargets.forEach { (accountId, _) -> withManagedGoogleAuth(client, accountId) { "" } }
-                    responses +=
-                        requireCoreOk(
-                            client.markAllRead(MarkAllReadParams(accountId = UNIFIED_ACCOUNT_ID, folderId = column.folderId)),
-                        )
-                } else {
-                    mailTargets.forEach { (target, messageIds) ->
-                        if (isUnifiedStarredColumn(column)) {
-                            responses += requireCoreOk(client.markRead(MarkReadParams(threadId = target, messageIds = messageIds)))
-                        } else {
-                            responses +=
-                                requireCoreOk(
-                                    withManagedGoogleAuth(client, target) {
-                                        client.markAllRead(MarkAllReadParams(accountId = target, folderId = column.folderId))
-                                    },
-                                )
+        try {
+            val requests = KanbanReadRequests()
+            var failures = 0
+            val marked = mutableSetOf<Pair<String, String>>()
+            for (column in columns) {
+                // Capture targets before each write, and never roll back other columns.
+                val key = kanbanColumnKey(column)
+                val unread = kanbanColumns[key]?.threads.orEmpty().filter { it.unread }
+                val starred = isUnifiedStarredColumn(column)
+                val accounts = coreAccounts
+                val mailAccounts =
+                    if (starred) {
+                        emptyList()
+                    } else if (column.accountId == UNIFIED_ACCOUNT_ID) {
+                        accounts.filter { it.includedInUnified && !accountSummaryIsRss(it) }
+                    } else {
+                        accounts.filter { it.id == column.accountId && !accountSummaryIsRss(it) }
+                    }
+                val unifiedTarget =
+                    if (column.accountId != UNIFIED_ACCOUNT_ID && mailAccounts.any { it.includedInUnified }) {
+                        columns.firstOrNull {
+                            it.accountId == UNIFIED_ACCOUNT_ID && !isUnifiedStarredColumn(it) &&
+                                unifiedColumnMatchesFolder(it.folderId, foldersByAccount[column.accountId].orEmpty(), column.folderId)
+                        }
+                    } else {
+                        null
+                    }
+                val writeColumn = unifiedTarget ?: column
+                val result =
+                    runCatching {
+                        withContext(ioDispatcher) {
+                            val client = MobileMailCommandClient(core)
+                            val responses = mutableListOf<String>()
+                            if (mailAccounts.isNotEmpty()) {
+                                responses +=
+                                    requests.run("folder:${kanbanColumnKey(writeColumn)}") {
+                                        val params = MarkAllReadParams(accountId = writeColumn.accountId, folderId = writeColumn.folderId)
+                                        val response =
+                                            if (writeColumn.accountId == UNIFIED_ACCOUNT_ID) {
+                                                accounts
+                                                    .filter { it.includedInUnified && !accountSummaryIsRss(it) }
+                                                    .forEach { withManagedGoogleAuth(client, it.id) { "" } }
+                                                client.markAllRead(params)
+                                            } else {
+                                                withManagedGoogleAuth(client, writeColumn.accountId) {
+                                                    client.markAllRead(params)
+                                                }
+                                            }
+                                        requireCoreOk(response)
+                                    }
+                            }
+                            if (starred) {
+                                unread.filterNot { threadIdIsRss(it.id) }.groupBy { it.backendThreadId() }.forEach { (threadId, rows) ->
+                                    val messageIds = rows.map { it.id }.distinct().sorted()
+                                    responses +=
+                                        requests.run("thread:$threadId:$messageIds") {
+                                            requireCoreOk(client.markRead(MarkReadParams(threadId = threadId, messageIds = messageIds)))
+                                        }
+                                }
+                            }
+                            unread.filter { threadIdIsRss(it.backendThreadId()) }.groupBy { it.backendThreadId() }.forEach { (threadId, rows) ->
+                                val itemKeys = rows.flatMap { it.rssItemKeys() }.distinct().sorted()
+                                responses +=
+                                    requests.run("rss:$threadId:$itemKeys") {
+                                        requireCoreOk(client.markRssRead(RssMarkReadParams(threadId = threadId, seen = true, itemKeys = itemKeys)))
+                                    }
+                            }
+                            responses
                         }
                     }
-                }
-                rssTargets.groupBy { it.backendThreadId() }.forEach { (threadId, rows) ->
-                    requireCoreOk(
-                        client.markRssRead(
-                            RssMarkReadParams(
-                                threadId = threadId,
-                                seen = true,
-                                itemKeys = rows.flatMap { it.rssItemKeys() }.distinct(),
-                            ),
-                        ),
-                    )
-                }
-                responses
+                result
+                    .onSuccess { responses ->
+                        val readIds = unread.map { it.id }.toSet()
+                        updateKanbanColumn(key) { state ->
+                            state.copy(
+                                threads = state.threads.map { if (it.id in readIds) it.copy(unread = false) else it },
+                                unreadCount = if (responses.isNotEmpty()) 0 else state.unreadCount,
+                            )
+                        }
+                        coreThreads = coreThreads.map { if (it.id in readIds) it.copy(unread = false) else it }
+                        responses.forEach(::applyCoreFolderUnreadChanges)
+                        marked += unread.map { it.accountId to it.backendThreadId() }
+                    }.onFailure {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        Log.w("Mail", "kanban mark all read failed", it)
+                        failures++
+                    }
             }
-        }.onSuccess { responses ->
-            responses.forEach(::applyCoreFolderUnreadChanges)
-            status = "Marked ${unread.size} Kanban card(s) read"
-        }.onFailure {
-            Log.w("Mail", "kanban mark all read failed", it)
-            coreThreads = threadsBefore
-            kanbanColumns = kanbanBefore
-            status = "Kanban mark all read failed: ${it.message}"
+            val language = loadAppLanguageTag(prefs).ifBlank { "en" }
+            status =
+                if (failures > 0) {
+                    localizedString(language, "notification.markReadFailed")
+                } else {
+                    localizedString(language, "mail.toast.markedReadCount", mapOf("count" to marked.size))
+                }
+        } finally {
+            kanbanMarkingRead = false
         }
     }
 }

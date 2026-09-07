@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Arrastar para reordenar coluna",
   "kanban.actions.expand": "Expandir",
   "kanban.actions.hideColumn": "Ocultar coluna",
+  "kanban.actions.markAllColumnsRead": "Marcar todas as colunas como lidas",
   "kanban.actions.minimize": "Minimizar",
   "kanban.actions.minimizeColumn": "Minimizar coluna",
   "kanban.actions.moveColumnLeft": "Mover coluna para a esquerda",

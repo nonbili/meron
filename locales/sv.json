@@ -376,6 +376,7 @@
   "kanban.actions.dragToReorderColumn": "Dra för att ändra ordning på kolumn",
   "kanban.actions.expand": "Expandera",
   "kanban.actions.hideColumn": "Dölj kolumn",
+  "kanban.actions.markAllColumnsRead": "Markera alla kolumner som lästa",
   "kanban.actions.minimize": "Minimera",
   "kanban.actions.minimizeColumn": "Minimera kolumn",
   "kanban.actions.moveColumnLeft": "Flytta kolumnen åt vänster",
