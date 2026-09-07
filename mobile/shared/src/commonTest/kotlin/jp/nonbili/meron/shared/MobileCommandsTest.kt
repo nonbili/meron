@@ -1040,11 +1040,17 @@ class MobileCommandsTest {
         assertEquals(false, replyAllAddsRecipients(message("me@example.com"), own))
         assertEquals(false, replyAllAddsRecipients(message("me@example.com, sales@example.com"), own))
         assertEquals(false, replyAllAddsRecipients(message("me@example.com", cc = "bob@x.com"), own))
+        assertEquals(false, replyAllAddsRecipients(message("me@example.com, Bob <BOB@x.com>", cc = "bob@x.com"), own))
         assertEquals(true, replyAllAddsRecipients(message("me@example.com, alice@example.com"), own))
     }
 
     @Test
     fun addressListsSplitOnRealSeparatorsOnly() {
+        val escaped = """"He said \"hi\", <ok>" <a@x.com>"""
+        assertEquals(listOf(escaped, "b@y.com"), splitAddressList("$escaped, b@y.com"))
+        val backslash = """"Name\\" <a@x.com>"""
+        assertEquals(listOf(backslash, "b@y.com"), splitAddressList("$backslash, b@y.com"))
+
         // A comma inside a quoted name or angle brackets does not separate
         // entries; an apostrophe is an ordinary character in a name.
         assertEquals(

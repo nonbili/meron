@@ -179,6 +179,10 @@ describe('messageHelpers text and link helpers', () => {
   })
 
   it('extracts address data and searchable message text', () => {
+    expect(parseAddressList('"Doe; Jane" <jane@x.com>; bob@y.com')).toEqual([
+      { name: 'Doe; Jane', email: 'jane@x.com', original: '"Doe; Jane" <jane@x.com>' },
+      { name: 'bob@y.com', email: 'bob@y.com', original: 'bob@y.com' },
+    ])
     expect(extractAddr('Ada Lovelace <ada@example.com>')).toBe('ada@example.com')
     expect(extractAddr('plain@example.com')).toBe('plain@example.com')
     expect(parseAddressList('"Ada Lovelace" <ada@example.com>, bob@example.com')).toEqual([

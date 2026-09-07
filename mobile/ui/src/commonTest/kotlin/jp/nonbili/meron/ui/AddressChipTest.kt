@@ -6,6 +6,21 @@ import kotlin.test.assertEquals
 
 class AddressChipTest {
     @Test
+    fun participantAddressesPreserveQuotedNames() {
+        assertEquals(
+            listOf("Doe, Jane" to "jane@x.com", "Alice" to "a@y.com"),
+            parseAddressList(""""Doe, Jane" <jane@x.com>; Alice <a@y.com>"""),
+        )
+    }
+
+    @Test
+    fun quotedNamesDoNotInflateRecipientSummary() {
+        val items = addressChipItems(""""Doe, Jane" <jane@x.com>; Alice <a@y.com>""")
+        assertEquals(listOf("Doe, Jane", "Alice"), items.map { it.display })
+        assertEquals("Doe, Jane, Alice", summarizeRecipients(items))
+    }
+
+    @Test
     fun namedAddressKeepsNameAndAddressApart() {
         val items = addressChipItems(""""Ping Chen" <ping@example.com>""")
         assertEquals(1, items.size)

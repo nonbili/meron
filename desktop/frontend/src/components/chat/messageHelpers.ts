@@ -1,3 +1,4 @@
+import { splitAddressList } from '../../lib/address'
 import {
   File,
   FileArchive,
@@ -444,38 +445,10 @@ export interface AddressItem {
   original: string
 }
 
-function splitAddressEntries(raw: string): string[] {
-  const entries: string[] = []
-  let quoted = false
-  let angleDepth = 0
-  let start = 0
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index]
-    if (char === '"' && raw[index - 1] !== '\\') {
-      quoted = !quoted
-    } else if (quoted) {
-      continue
-    } else if (char === '<') {
-      angleDepth += 1
-    } else if (char === '>' && angleDepth > 0) {
-      angleDepth -= 1
-    } else if (char === ',' && angleDepth === 0) {
-      const entry = raw.slice(start, index).trim()
-      if (entry) entries.push(entry)
-      start = index + 1
-    }
-  }
-
-  const entry = raw.slice(start).trim()
-  if (entry) entries.push(entry)
-  return entries
-}
-
 export function parseAddressList(raw: string | undefined | null): AddressItem[] {
   if (!raw) return []
   const results: AddressItem[] = []
-  const entries = splitAddressEntries(raw)
+  const entries = splitAddressList(raw, true)
   for (const entry of entries) {
     const bracketMatch = entry.match(/^(.*?)\s*<([^>]+)>$/)
     const bracketEmail = bracketMatch?.[2]?.trim()

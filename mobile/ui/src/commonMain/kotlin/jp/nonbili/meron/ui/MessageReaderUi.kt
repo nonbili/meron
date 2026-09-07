@@ -68,6 +68,8 @@ internal fun MessageReaderScreen(
     onCopy: (String, String) -> Unit,
     onComposeTo: (String) -> Unit,
     onForward: (MessageBody) -> Unit,
+    onReplyAllToMessage: (MessageBody) -> Unit,
+    canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
     onOpenAttachment: (MessageAttachment) -> Unit,
@@ -248,6 +250,15 @@ internal fun MessageReaderScreen(
                                     )
                                 }
                                 if (actionsEnabled) {
+                                    if (canReplyAllToMessage(message)) {
+                                        DropdownMenuItem(
+                                            text = { Text(tr("chat.actions.replyAll")) },
+                                            onClick = {
+                                                menuOpen = false
+                                                onReplyAllToMessage(message)
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(tr("chat.actions.forward")) },
                                         onClick = {

@@ -3669,6 +3669,12 @@ describe('reply-all recipients', () => {
     expect(
       replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com', cc: 'bob@x.com' }), own),
     ).toBe(false)
+    expect(
+      replyAllAddsRecipients(
+        message({ from_addr: 'them@example.com', to: 'me@example.com, Bob <BOB@x.com>', cc: 'bob@x.com' }),
+        own,
+      ),
+    ).toBe(false)
     expect(replyAllAddsRecipients(incoming, own)).toBe(true)
   })
 
@@ -3694,6 +3700,7 @@ describe('reply-all recipients', () => {
     replyAllToMessage(
       message({
         account_id: 'acc-1',
+        thread_id: 'reply-thread',
         from_name: 'Them',
         from_addr: 'them@example.com',
         to: 'me@example.com, Alice <alice@example.com>',
@@ -3703,6 +3710,7 @@ describe('reply-all recipients', () => {
       }),
     )
 
+    expect(compose$.tabs.peek()[0].threadId).toBe('reply-thread')
     const draft = compose$.tabs.get()[0]?.compose
     expect(draft?.to).toBe('Them <them@example.com>, Alice <alice@example.com>')
     expect(draft?.cc).toBe('bob@example.com')

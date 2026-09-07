@@ -35,7 +35,7 @@ export function QuickReplyComposer() {
             and stacking them pushed the box itself down the window. Recipients
             lead — they are what changes from thread to thread — and the send-as
             address sits out of the way at the right edge. */}
-        <div className="flex w-full min-w-0 items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 empty:hidden">
           <QuickReplyRecipients />
           <QuickReplyFrom />
         </div>

@@ -826,22 +826,33 @@ fun buildReplyRecipients(
 fun replyAllAddsRecipients(
     message: MessageBody,
     ownAddresses: List<String> = emptyList(),
-): Boolean =
-    buildReplyRecipients(message, ownAddresses, replyAll = true).to !=
-        buildReplyRecipients(message, ownAddresses).to
+): Boolean {
+    val reply = buildReplyRecipients(message, ownAddresses)
+    val all = buildReplyRecipients(message, ownAddresses, replyAll = true)
+    val existing = (splitAddressList(reply.to) + splitAddressList(reply.cc)).map { bareAddress(it).lowercase() }.toSet()
+    return (splitAddressList(all.to) + splitAddressList(all.cc)).any { bareAddress(it).lowercase() !in existing }
+}
 
 /** Only the double quote opens a quoted string (RFC 5322): an apostrophe is an
  * ordinary character in a name like O'Connor, and treating it as a delimiter
  * swallows every recipient after it. */
-fun splitAddressList(value: String): List<String> {
+fun splitAddressList(
+    value: String,
+    allowSemicolon: Boolean = false,
+): List<String> {
     val entries = mutableListOf<String>()
     var quoted = false
+    var escaped = false
     var angleDepth = 0
     var start = 0
     value.forEachIndexed { index, ch ->
         when {
             quoted -> {
-                if (ch == '"') quoted = false
+                when {
+                    escaped -> escaped = false
+                    ch == '\\' -> escaped = true
+                    ch == '"' -> quoted = false
+                }
             }
 
             ch == '"' -> {
@@ -856,7 +867,7 @@ fun splitAddressList(value: String): List<String> {
                 angleDepth -= 1
             }
 
-            ch == ',' && angleDepth == 0 -> {
+            (ch == ',' || (allowSemicolon && ch == ';')) && angleDepth == 0 -> {
                 value
                     .substring(start, index)
                     .trim()

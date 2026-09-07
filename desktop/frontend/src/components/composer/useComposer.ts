@@ -95,7 +95,7 @@ export function useComposer(tabId: string) {
 
   /**
    * Throw the draft away: stop saving, let the queue finish so nothing is left
-   * mid-allocation, delete the server copy, then close. Closing on its own is
+   * mid-allocation, close the tab, then delete the server copy. Closing on its own is
    * not enough — a save still running would put the draft back seconds later,
    * with nothing left on screen to explain where it came from.
    */
@@ -104,8 +104,8 @@ export function useComposer(tabId: string) {
     try {
       await stopSaving()
       const current = latestDraft()
-      if (current) await discardRemoteDraft(current, true)
       finishClosingMessageTab(tabId)
+      if (current) await discardRemoteDraft(current, true)
     } catch (err) {
       const message = contextualErrorMessage(err, t('composer.status.couldNotDiscardDraft'))
       showToast(message, 'error')

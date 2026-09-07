@@ -8,8 +8,8 @@
  * out as malformed recipients. Only the double quote opens a quoted string
  * (RFC 5322): an apostrophe is an ordinary character in a name like O'Connor,
  * and treating it as a delimiter swallows every recipient after it. Mirrors the
- * mobile splitter. */
-export function splitAddressList(raw: string | undefined | null): string[] {
+ * mobile splitter. Display parsers can opt into semicolon separators too. */
+export function splitAddressList(raw: string | undefined | null, allowSemicolon = false): string[] {
   if (!raw) return []
   const entries: string[] = []
   let quoted = false
@@ -22,14 +22,15 @@ export function splitAddressList(raw: string | undefined | null): string[] {
   for (let i = 0; i < raw.length; i++) {
     const ch = raw[i]
     if (quoted) {
-      if (ch === '"') quoted = false
+      if (ch === '\\') i += 1
+      else if (ch === '"') quoted = false
     } else if (ch === '"') {
       quoted = true
     } else if (ch === '<') {
       angleDepth += 1
     } else if (ch === '>' && angleDepth > 0) {
       angleDepth -= 1
-    } else if (ch === ',' && angleDepth === 0) {
+    } else if ((ch === ',' || (allowSemicolon && ch === ';')) && angleDepth === 0) {
       push(i)
       start = i + 1
     }

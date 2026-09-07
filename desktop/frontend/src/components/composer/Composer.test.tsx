@@ -32,12 +32,14 @@ describe('Composer', () => {
   // the first is still in flight.
   let holdAllocation: (() => void) | null = null
   let discardFailure = false
+  let pendingDiscard: Promise<void> | null = null
 
   beforeEach(() => {
     calls = []
     allocations = 0
     holdAllocation = null
     discardFailure = false
+    pendingDiscard = null
     compose$.tabs.set([])
     compose$.activeTab.set('')
     settings$.signature.set('')
@@ -58,7 +60,10 @@ describe('Composer', () => {
               }
               return { message_id: id }
             }
-            if (command === 'mail.discardDraft' && discardFailure) throw new Error('server refused discard')
+            if (command === 'mail.discardDraft') {
+              await pendingDiscard
+              if (discardFailure) throw new Error('server refused discard')
+            }
             return {}
           },
         },
@@ -296,6 +301,34 @@ describe('Composer', () => {
     expect(calls.filter((call) => call.command === 'mail.discardDraft')).toHaveLength(1)
     expect(draftOf(tabId)).toBeUndefined()
   })
+
+  for (const mounted of [true, false]) {
+    it(`closes an empty ${mounted ? 'mounted' : 'unmounted'} composer before remote discard finishes`, async () => {
+      const tabId = openComposeTab()!
+      updateComposeDraft(tabId, { draftMessageId: 'saved-empty@example.com' })
+      if (mounted) render(<Composer tabId={tabId} />)
+
+      let releaseDiscard!: () => void
+      pendingDiscard = new Promise<void>((resolve) => {
+        releaseDiscard = resolve
+      })
+      let closing!: Promise<void>
+      try {
+        await act(async () => {
+          closing = closeMessageTab(tabId)
+        })
+        expect(draftOf(tabId)).toBeUndefined()
+        expect(calls.filter((call) => call.command === 'mail.discardDraft')).toHaveLength(1)
+        await closeMessageTab(tabId)
+        expect(calls.filter((call) => call.command === 'mail.discardDraft')).toHaveLength(1)
+      } finally {
+        await act(async () => {
+          releaseDiscard()
+          await closing
+        })
+      }
+    })
+  }
 
   it('closes an explicitly discarded composer after reporting a discard failure', async () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!

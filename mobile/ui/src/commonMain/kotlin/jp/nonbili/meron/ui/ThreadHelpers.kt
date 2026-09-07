@@ -299,7 +299,7 @@ internal data class AddressChipItem(
 )
 
 internal fun addressChipItems(rawList: String): List<AddressChipItem> =
-    rawList.split(',', ';').mapNotNull { raw ->
+    jp.nonbili.meron.shared.splitAddressList(rawList, allowSemicolon = true).mapNotNull { raw ->
         val entry = raw.trim()
         if (entry.isBlank()) return@mapNotNull null
         val bracket = Regex("""^(.*)<([^>]+)>$""").matchEntire(entry)
@@ -327,7 +327,7 @@ internal fun fullFromAddress(message: MessageBody): String {
 
 internal fun parseAddressList(value: String): List<Pair<String, String>> {
     if (value.isBlank()) return emptyList()
-    return value.split(',', ';').mapNotNull { raw ->
+    return jp.nonbili.meron.shared.splitAddressList(value, allowSemicolon = true).mapNotNull { raw ->
         val entry = raw.trim()
         if (entry.isBlank()) return@mapNotNull null
         val bracket = Regex("""^(.*)<([^>]+)>$""").matchEntire(entry)

@@ -1449,6 +1449,7 @@ export function replyAllToMessage(message: Message) {
   const acc = accounts.find((a) => a.id === message.account_id)
   const subject = message.subject.startsWith('Re:') ? message.subject : `Re: ${message.subject}`
   openComposeTab({
+    threadId: message.thread_id,
     accountId: message.account_id || undefined,
     fromEmail: acc ? detectAliasFrom(message, acc) : '',
     to,
@@ -1529,7 +1530,7 @@ export function updateComposeDraft(id: string, partial: Partial<ComposeDraft>) {
   )
 }
 
-// Remove a tab after any compose lifecycle work has completed.
+// Remove a tab once saves have drained; remote cleanup may still be running.
 export function finishClosingMessageTab(id: string) {
   const tabs = compose$.tabs.get()
   const index = tabs.findIndex((tab) => tab.id === id)
@@ -1562,6 +1563,7 @@ export async function closeMessageTab(id: string) {
   if (!draft) return finishClosingMessageTab(id)
   return closeComposeSession(id, async () => {
     const remoteId = draft.draftMessageId?.startsWith('local-draft-') ? undefined : draft.draftMessageId
+    finishClosingMessageTab(id)
     try {
       if (remoteId || draft.sourceDraft) {
         await discardSavedDraftCopy(
@@ -1587,8 +1589,6 @@ export async function closeMessageTab(id: string) {
           : t('composer.status.couldNotDiscardDraft'),
         'error',
       )
-    } finally {
-      finishClosingMessageTab(id)
     }
   })
 }
@@ -1928,7 +1928,10 @@ export function buildReplyRecipients(
  * two actions identical, and the menus hide the reply-all item rather than
  * offering a second way to do the same thing. */
 export function replyAllAddsRecipients(target: Message, ownAddrs: Set<string>): boolean {
-  return buildReplyRecipients(target, ownAddrs, true).to !== buildReplyRecipients(target, ownAddrs).to
+  const reply = buildReplyRecipients(target, ownAddrs)
+  const all = buildReplyRecipients(target, ownAddrs, true)
+  const existing = new Set([...splitAddressList(reply.to), ...splitAddressList(reply.cc)].map(bareAddr))
+  return [...splitAddressList(all.to), ...splitAddressList(all.cc)].some((entry) => !existing.has(bareAddr(entry)))
 }
 
 /** The active conversation's reply target has other recipients to reply to.

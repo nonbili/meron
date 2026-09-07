@@ -1007,6 +1007,11 @@ internal fun ThreadScreen(
                     readerMessage = null
                     onComposeTo(email)
                 },
+                canReplyAllToMessage = canReplyAllToMessage,
+                onReplyAllToMessage = { message ->
+                    readerMessage = null
+                    onReplyAllToMessage(message)
+                },
                 onForward = { message ->
                     readerMessage = null
                     onForward(message)
@@ -1437,29 +1442,31 @@ internal fun ReplyBar(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // One line, not two: From and To are both single-address
-            // disclosures, and stacking them pushed the bar itself up the
-            // screen. Recipients lead — they are what changes from thread to
-            // thread — and the send-as address sits at the right edge, held
-            // there by the spacer even when there are no recipients to show.
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                ReplyRecipientsRow(
-                    recipients = recipients,
-                    onOpenFullEditor = onOpenFullEditor,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.weight(1f))
-                if (selectedFrom != null && fromIdentities.size > 1) {
-                    ReplyFromRow(
-                        identities = fromIdentities,
-                        selected = selectedFrom,
-                        onSelect = onSelectFrom,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
+            val showRecipients = addressChipItems(recipients.to).isNotEmpty()
+            val showFrom = selectedFrom != null && fromIdentities.size > 1
+            if (showRecipients || showFrom) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (showRecipients) {
+                        ReplyRecipientsRow(
+                            recipients = recipients,
+                            onOpenFullEditor = onOpenFullEditor,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (showFrom) {
+                        ReplyFromRow(
+                            identities = fromIdentities,
+                            selected = selectedFrom,
+                            onSelect = onSelectFrom,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
                 }
             }
             if (attachments.isNotEmpty()) {
