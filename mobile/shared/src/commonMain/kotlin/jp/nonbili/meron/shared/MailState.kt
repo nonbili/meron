@@ -775,8 +775,9 @@ private fun headerLine(
 }
 
 /** `replyAll` additionally keeps the original To recipients — everyone the
- * message was addressed to alongside us — which a plain reply drops. Our own
- * addresses stay out of both lists either way. */
+ * message was addressed to alongside us — which a plain reply drops. They join
+ * the Cc rather than the To, as Gmail and the rest do: only the sender is
+ * addressed. Our own addresses stay out of both lists either way. */
 fun buildReplyRecipients(
     message: MessageBody,
     ownAddresses: List<String> = emptyList(),
@@ -795,23 +796,22 @@ fun buildReplyRecipients(
             .filter { entry ->
                 val addr = bareAddress(entry).lowercase()
                 addr.isNotBlank() && !own.contains(addr)
-            }.toMutableList()
-    val toAddrs = toList.map { bareAddress(it).lowercase() }.toMutableSet()
+            }
+    val toAddrs = toList.map { bareAddress(it).lowercase() }.toSet()
 
-    // Reply-all: append the other original recipients, skipping our own addresses
-    // and anyone the reply already goes to (the sender, typically also listed).
-    if (replyAll && !isOwnSender) {
-        for (entry in splitAddressList(message.to)) {
-            val addr = bareAddress(entry).lowercase()
-            if (addr.isBlank() || own.contains(addr) || toAddrs.contains(addr)) continue
-            toList += entry
-            toAddrs += addr
+    // Reply-all: the other original recipients are copied, not addressed — the
+    // reply is still to the sender, and everyone else keeps their Cc standing.
+    val ccSource =
+        if (replyAll && !isOwnSender) {
+            splitAddressList(message.to) + splitAddressList(message.cc)
+        } else {
+            splitAddressList(message.cc)
         }
-    }
+    val ccAddrs = mutableSetOf<String>()
     val ccList =
-        splitAddressList(message.cc).filter { entry ->
+        ccSource.filter { entry ->
             val addr = bareAddress(entry).lowercase()
-            addr.isNotBlank() && !own.contains(addr) && !toAddrs.contains(addr)
+            addr.isNotBlank() && !own.contains(addr) && !toAddrs.contains(addr) && ccAddrs.add(addr)
         }
     return ReplyRecipients(
         to = toList.joinToString(", "),

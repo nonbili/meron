@@ -995,7 +995,7 @@ class MobileCommandsTest {
     }
 
     @Test
-    fun replyAllKeepsTheOtherToRecipientsWithoutOurOwnAddresses() {
+    fun replyAllCopiesTheOtherToRecipientsWithoutOurOwnAddresses() {
         val incoming =
             MessageBody(
                 id = "m1",
@@ -1011,11 +1011,11 @@ class MobileCommandsTest {
         assertEquals("ada@example.com", plain.to)
         assertEquals("Project <project@example.com>", plain.cc)
 
-        // The sender is listed in To as well: it must not appear twice, and our
-        // own address stays out.
+        // Only the sender is addressed; the other recipients join the Cc, and
+        // the sender's own To entry does not come back as a copy.
         val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
-        assertEquals("ada@example.com, Alice <alice@example.com>", all.to)
-        assertEquals("Project <project@example.com>", all.cc)
+        assertEquals("ada@example.com", all.to)
+        assertEquals("Alice <alice@example.com>, Project <project@example.com>", all.cc)
     }
 
     @Test
@@ -1076,7 +1076,8 @@ class MobileCommandsTest {
             )
 
         val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
-        assertEquals("ada@example.com, Alice <alice@example.com>", all.to)
+        assertEquals("ada@example.com", all.to)
+        assertEquals("Alice <alice@example.com>", all.cc)
     }
 
     @Test

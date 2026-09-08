@@ -3628,11 +3628,12 @@ describe('reply-all recipients', () => {
     cc: 'bob@example.com',
   })
 
-  it('keeps the other To recipients, dropping our own addresses', () => {
+  it('copies the other To recipients, dropping our own addresses', () => {
     const { to, cc } = buildReplyRecipients(incoming, ownAddrs(), true)
 
-    expect(to).toBe('Them <them@example.com>, Alice <alice@example.com>')
-    expect(cc).toBe('bob@example.com')
+    // Only the sender is addressed; everyone else is copied, as Gmail does.
+    expect(to).toBe('Them <them@example.com>')
+    expect(cc).toBe('Alice <alice@example.com>, bob@example.com')
   })
 
   it('leaves a plain reply addressed to the sender alone', () => {
@@ -3650,10 +3651,11 @@ describe('reply-all recipients', () => {
       cc: '',
     })
 
-    const { to } = buildReplyRecipients(target, ownAddrs(), true)
+    const { to, cc } = buildReplyRecipients(target, ownAddrs(), true)
 
     // The sender appears once, our own alias not at all.
-    expect(to).toBe('them@example.com, alice@example.com')
+    expect(to).toBe('them@example.com')
+    expect(cc).toBe('alice@example.com')
   })
 
   it('reports whether reply-all reaches anyone the reply does not', () => {
@@ -3712,8 +3714,8 @@ describe('reply-all recipients', () => {
 
     expect(compose$.tabs.peek()[0].threadId).toBe('reply-thread')
     const draft = compose$.tabs.get()[0]?.compose
-    expect(draft?.to).toBe('Them <them@example.com>, Alice <alice@example.com>')
-    expect(draft?.cc).toBe('bob@example.com')
+    expect(draft?.to).toBe('Them <them@example.com>')
+    expect(draft?.cc).toBe('Alice <alice@example.com>, bob@example.com')
     expect(draft?.showCcBcc).toBe(true)
     expect(draft?.subject).toBe('Re: Design')
     expect(draft?.inReplyTo).toBe('root@example.com')

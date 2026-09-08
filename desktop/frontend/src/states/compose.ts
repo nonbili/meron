@@ -1891,8 +1891,9 @@ export function quickReplyRecipients(): { to: string; cc: string } {
  * ourselves.
  *
  * `replyAll` additionally keeps the original To recipients — everyone the
- * message was addressed to alongside us — which a plain reply drops. Our own
- * addresses stay out of both lists either way. */
+ * message was addressed to alongside us — which a plain reply drops. They join
+ * the Cc rather than the To, as Gmail and the rest do: only the sender is
+ * addressed. Our own addresses stay out of both lists either way. */
 export function buildReplyRecipients(
   target: Message,
   ownAddrs: Set<string>,
@@ -1904,20 +1905,18 @@ export function buildReplyRecipients(
   const toList = isOwnTarget ? splitAddressList(target.to) : replyTo.length > 0 ? replyTo : [fromEntry]
   const toAddrs = new Set(toList.map(bareAddr))
 
-  // Reply-all: append the other original recipients, skipping our own addresses
-  // and anyone the reply already goes to (the sender, typically also listed).
-  if (replyAll && !isOwnTarget) {
-    for (const entry of splitAddressList(target.to)) {
-      const addr = bareAddr(entry)
-      if (!addr || ownAddrs.has(addr) || toAddrs.has(addr)) continue
-      toList.push(entry)
-      toAddrs.add(addr)
-    }
-  }
-
-  const ccList = splitAddressList(target.cc).filter((entry) => {
+  // Reply-all: the other original recipients are copied, not addressed — the
+  // reply is still to the sender, and everyone else keeps their Cc standing.
+  const ccSource =
+    replyAll && !isOwnTarget
+      ? [...splitAddressList(target.to), ...splitAddressList(target.cc)]
+      : splitAddressList(target.cc)
+  const ccAddrs = new Set<string>()
+  const ccList = ccSource.filter((entry) => {
     const addr = bareAddr(entry)
-    return !ownAddrs.has(addr) && !toAddrs.has(addr)
+    if (!addr || ownAddrs.has(addr) || toAddrs.has(addr) || ccAddrs.has(addr)) return false
+    ccAddrs.add(addr)
+    return true
   })
 
   return { to: toList.join(', '), cc: ccList.join(', ') }
