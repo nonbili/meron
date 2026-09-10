@@ -1,8 +1,25 @@
-import { expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
 import { configurationRefresh } from './configurationRefresh'
 import { settings$ } from '../states/settings'
 import { accounts$ } from '../states/accounts'
 import type { Account } from '../types'
+
+// These tests drive the shared settings observable, so put the values they
+// touch back or later test files inherit them.
+const pristine = {
+  spellCheck: settings$.spellCheck.get(),
+  threadListWidth: settings$.threadListWidth.get(),
+  language: settings$.language.get(),
+  signature: settings$.signature.get(),
+}
+
+afterEach(() => {
+  settings$.spellCheck.set(pristine.spellCheck)
+  settings$.threadListWidth.set(pristine.threadListWidth)
+  settings$.language.set(pristine.language)
+  settings$.signature.set(pristine.signature)
+  accounts$.set([])
+})
 
 test('configuration refresh only hydrates changed keys and ignores unrelated stale prefs', async () => {
   const calls: any[] = []
