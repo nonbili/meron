@@ -1,0 +1,6 @@
+- Add reply-all to the conversation and message menus and show the quick reply recipients
+- Copy the other original recipients instead of addressing them on reply-all
+- Add board-wide mark all as read on Kanban boards
+- Fix composer closing and reply recipient handling
+- Fix stale thread count and reload Kanban column after quick reply actions
+- Keep the Re: prefix on thread cards whose thread start is missing

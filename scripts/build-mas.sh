@@ -50,6 +50,9 @@ MAS_ARCHS="${MAS_ARCHS:-universal}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# Keep macOS awake while accessing keychain private keys, including preflight.
+sign_awake() { /usr/bin/caffeinate -u -i "$@"; }
+
 # ------------------------------------------------------------- nix-shell
 
 # A universal sidecar needs both Rust targets installed, which means rustup.
@@ -91,7 +94,7 @@ done
 # Decode the profile up front so a profile for another app or distribution
 # certificate fails locally instead of producing a late App Store upload error.
 profile_plist="$(/usr/bin/mktemp -t meron-mas-profile)"
-trap 'rm -f "$profile_plist"' EXIT
+trap 'rm -f "$profile_plist" "${signing_probe:-}" "${app_entitlements:-}"' EXIT
 security cms -D -i "$MAS_PROVISION_PROFILE" > "$profile_plist" 2>/dev/null \
   || die "could not decode provisioning profile: $MAS_PROVISION_PROFILE"
 
@@ -111,6 +114,19 @@ profile_certificate_sha="$(plutil -extract DeveloperCertificates.0 raw -o - "$pr
   || die "could not read the distribution certificate from the provisioning profile"
 [ "$(printf '%s' "$profile_certificate_sha" | tr '[:lower:]' '[:upper:]')" = "$app_identity_sha" ] \
   || die "provisioning profile does not authorize signing identity: $APP_IDENTITY"
+
+# find-identity can list certificates even when their private keys are locked.
+# Exercise the key before spending time building both architectures. Sign a
+# disposable executable without a timestamp so this only checks local signing.
+echo "==> Checking signing key access"
+signing_probe="$(/usr/bin/mktemp -t meron-mas-signing)"
+cp /usr/bin/true "$signing_probe"
+sign_awake codesign --force --timestamp=none --sign "$APP_IDENTITY" "$signing_probe" \
+  || die "cannot use signing key: $APP_IDENTITY.
+       Unlock the signing keychain in your local terminal, then retry:
+         security unlock-keychain ~/Library/Keychains/login.keychain-db
+       If it is already unlocked, check this key's access permissions in Keychain Access."
+rm -f "$signing_probe"
 
 command -v wails >/dev/null || die "wails not found; go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0"
 command -v cargo >/dev/null || die "cargo not found"
@@ -220,8 +236,8 @@ actual_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/C
 # The build runs long enough that the machine can slip into dark wake (awake for
 # power or the network, display asleep) before signing starts, and macOS refuses
 # to use a keychain private key there: signing dies with CSSMERR_CSP_IN_DARK_WAKE.
-# `caffeinate -u` asserts user activity for as long as the command it wraps runs.
-sign_awake() { /usr/bin/caffeinate -u -i "$@"; }
+# sign_awake asserts user activity while each signing command runs. It does not
+# unlock a locked keychain; the preflight above checks private-key access.
 
 # Inside out: nested code first, then the bundle. The sidecar gets inherit-only
 # entitlements so it adopts the app's sandbox at exec time.
@@ -241,7 +257,6 @@ sign_awake codesign --force --timestamp \
 # profile already validated above. It stays out of the checked-in plist
 # because it embeds the team ID, which is configurable.
 app_entitlements="$(/usr/bin/mktemp -t meron-mas-entitlements)"
-trap 'rm -f "$profile_plist" "$app_entitlements"' EXIT
 cp desktop/build/darwin/EntitlementsMAS.plist "$app_entitlements"
 plist_put() {
   /usr/libexec/PlistBuddy -c "Set :$1 $2" "$app_entitlements" 2>/dev/null \
