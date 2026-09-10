@@ -4,11 +4,13 @@ import { InfoTip } from '../tooltip/InfoTip'
 import { SelectInput, TextInput } from '../field/Field'
 
 // iOS/chat-style switch, matching the look used across the settings UI.
-function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label?: string }) {
   return (
     <button
+      type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={onChange}
       className={`relative inline-flex h-5.5 w-10 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
         checked ? 'bg-accent' : 'bg-active'
@@ -72,7 +74,16 @@ export function ToggleRow({
   checked: boolean
   onChange: () => void
 }) {
-  return <SettingRow icon={icon} title={title} hint={hint} control={<Switch checked={checked} onChange={onChange} />} />
+  // The row's title is the switch's only visible label, so it names the control
+  // for assistive tech too.
+  return (
+    <SettingRow
+      icon={icon}
+      title={title}
+      hint={hint}
+      control={<Switch checked={checked} onChange={onChange} label={title} />}
+    />
+  )
 }
 
 export function SegmentedRow<T extends string>({

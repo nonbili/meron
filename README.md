@@ -66,6 +66,7 @@ updater works as well and always fetches the full image.
 - Threaded conversations with rich-text composing and media galleries
 - Easy setup with OAuth or automatic mailbox discovery
 - Encrypted local storage with credentials kept in the OS keyring
+- Optional local desktop MCP access for AI clients, with per-client account permissions
 - Themes and 20+ languages
 
 ## Architecture

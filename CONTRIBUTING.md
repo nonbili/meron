@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- [Go](https://go.dev) 1.23+
+- [Go](https://go.dev) 1.25+
 - [Rust](https://www.rust-lang.org) (with `cargo`)
 - [Bun](https://bun.sh)
 - The [Wails CLI](https://wails.io): `go install github.com/wailsapp/wails/v2/cmd/wails@latest`

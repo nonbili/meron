@@ -170,6 +170,11 @@ func selectedTLSMode(legacyTLS bool, explicitTLS, explicitStartTLS *bool, port u
 
 func (a *App) accountRemove(payload map[string]any) (any, error) {
 	id, _ := payload["id"].(string)
+	if a.mcp != nil {
+		if err := a.mcp.removeAccount(id); err != nil {
+			return nil, err
+		}
+	}
 	// The unified DB is the single source of truth: the sidecar deletes the
 	// account row and cascades its cached state (mail folders/messages or rss
 	// subscriptions/items), plus the keychain secret.

@@ -12,6 +12,7 @@ pub mod ffi;
 pub mod imap;
 pub mod log;
 pub mod mail_model;
+pub mod mcp_mail;
 pub mod parse;
 pub mod protocol;
 pub mod proxy;

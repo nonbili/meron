@@ -65,9 +65,10 @@ import { BoardPanel } from './BoardSettingsPanel'
 import { RemoteSendersDialog } from './RemoteSendersDialog'
 import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
+import { McpSettingsPanel } from './McpSettingsPanel'
 
-// The single non-account section. Account ids never collide with "general", so
-// one `selected` string can address either.
+// General uses the empty selection; MCP has its own section below. Account
+// and board IDs share the selection state with these settings sections.
 const SECTIONS: { id: 'general'; label: string; icon: LucideIcon }[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
 ]
@@ -127,7 +128,7 @@ export function SettingsDialog() {
   const selectedAccount = accounts.find((acc) => acc.id === selected)
   const selectedBoard = !selectedAccount ? boards.find((board) => board.id === selected) : undefined
   // A removed account/board (or a stale id) falls back to General.
-  const activeKey: string = selectedAccount || selectedBoard ? selected : 'general'
+  const activeKey: string = selectedAccount || selectedBoard || selected === 'mcp' ? selected : 'general'
 
   const mailAccounts = accounts.filter((acc) => !isRssAccount(acc))
   const feedAccounts = accounts.filter(isRssAccount)
@@ -181,6 +182,10 @@ export function SettingsDialog() {
               </NavItem>
             ))}
 
+            <NavItem active={activeKey === 'mcp'} onClick={() => selectAccount('mcp')}>
+              <Server size={15} className="shrink-0" />
+              <span>{t('mcp.title')}</span>
+            </NavItem>
             <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
             <AccountGroup
               label={t('settings.sections.mailAccounts')}
@@ -206,6 +211,8 @@ export function SettingsDialog() {
               <AccountPanel account={selectedAccount} />
             ) : selectedBoard ? (
               <BoardPanel board={selectedBoard} />
+            ) : selected === 'mcp' ? (
+              <McpSettingsPanel />
             ) : (
               <GeneralSection />
             )}

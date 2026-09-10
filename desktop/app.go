@@ -15,6 +15,7 @@ import (
 )
 
 type App struct {
+	mcp           *mcpService
 	ctx           context.Context
 	sidecar       *Sidecar
 	logger        *log.Logger
@@ -99,6 +100,7 @@ func (a *App) Startup(ctx context.Context) {
 	} else {
 		a.logf("core started")
 	}
+	a.startMCP()
 	a.setupNotificationListener()
 	a.setupResumeListener()
 }
@@ -124,6 +126,9 @@ func (a *App) HandleSecondInstanceLaunch(args []string) {
 
 func (a *App) Shutdown(ctx context.Context) {
 	a.logf("shutdown")
+	if a.mcp != nil {
+		a.mcp.close()
+	}
 	a.stopTray()
 	if a.sidecar != nil {
 		a.sidecar.Close()
@@ -152,6 +157,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		payload = map[string]any{}
 	}
 	switch command {
+	case "mcp.status", "mcp.enable", "mcp.setPort", "mcp.clientSave", "mcp.clientRegenerate", "mcp.clientRevoke", "mcp.pending", "mcp.resolve":
+		return a.mcpSettings(command, payload)
 	case "system.check":
 		return a.systemCheck()
 	case "system.pickImageFile":

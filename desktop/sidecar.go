@@ -365,7 +365,7 @@ func sidecarCallTimeout(method string) time.Duration {
 	case "account.probeCert":
 		return 20 * time.Second
 	// A full-folder STORE + EXPUNGE on a large Trash can take a while.
-	case "messages.emptyFolder":
+	case "messages.emptyFolder", "mcp.prepareDelete", "mcp.delete", "mcp.organize":
 		return 60 * time.Second
 	// Backups derive a key with 600k PBKDF2 rounds, on top of reading or
 	// writing every account, feed and setting.

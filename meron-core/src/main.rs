@@ -1129,6 +1129,9 @@ async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
 async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
     let p = &req.params;
     match req.method.as_str() {
+        "mcp.prepareDelete" => meron_core::mcp_mail::prepare_delete(engine, p.clone()).await,
+        "mcp.delete" => meron_core::mcp_mail::delete(engine, p.clone()).await,
+        "mcp.organize" => meron_core::mcp_mail::organize(engine, p.clone()).await,
         "ping" => Ok(ping_response()),
 
         // Fetch the in-app changelog from the GitHub releases atom feed. The

@@ -20,6 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { AppHotkeys } from './components/dialog/AppHotkeys'
 import { ShortcutsDialog } from './components/dialog/ShortcutsDialog'
 import { AppToast } from './components/toast/AppToast'
+import { McpApprovalDialog } from './components/dialog/McpApprovalDialog'
 import { AppConfirm } from './components/dialog/AppConfirm'
 import { CertificateTrustDialog } from './components/dialog/CertificateTrustDialog'
 import { MacTitleBar } from './components/titlebar/MacTitleBar'
@@ -115,6 +116,7 @@ export default function App() {
 
         <AppToast />
         <AppConfirm />
+        <McpApprovalDialog />
         <CertificateTrustDialog />
       </main>
     </div>
