@@ -113,6 +113,12 @@ export function useMessageView(message: Message) {
     /** The same summary regardless of direction, for layouts that always show a
      *  "to …" line. */
     allRecipientSummary: formatRecipientSummary(toRaw, ccRaw),
+    // An incoming message that went to other people too: the compact bubble
+    // header names only the sender, so a reader answers with a plain reply
+    // without ever noticing the others. Kept to that case — a message addressed
+    // to us alone would only spend the line repeating our own name.
+    incomingRecipientSummary:
+      !outgoing && message.reply?.all_adds_recipients === true ? formatRecipientSummary(toRaw, ccRaw) : '',
     // An outgoing message is us: show the account's own avatar — the image the
     // side navigation shows — instead of resolving the From address.
     avatarSrc: outgoing ? account?.avatar_url : undefined,

@@ -30,6 +30,7 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
     isRSS,
     useHtmlBody,
     recipientSummary,
+    incomingRecipientSummary,
     fromRaw,
     toRaw,
     ccRaw,
@@ -86,9 +87,21 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
         <div className="relative flex items-center justify-between gap-2 mb-1.5">
           <div className="relative flex items-center gap-1 min-w-0">
             {!outgoing ? (
-              <span className="text-[0.78125rem] font-bold text-accent select-none truncate tracking-wide">
-                {message.from_name || message.from_addr}
-              </span>
+              <>
+                <span className="text-[0.78125rem] font-bold text-accent select-none truncate tracking-wide">
+                  {message.from_name || message.from_addr}
+                </span>
+                {/* Who else got it, so the reader sees a reply-all is called
+                    for before opening the details. */}
+                {incomingRecipientSummary && (
+                  <span
+                    title={[toRaw, ccRaw].filter(Boolean).join(', ')}
+                    className="text-[0.6875rem] font-normal text-secondary/70 select-none truncate"
+                  >
+                    {t('chat.toRecipients', { recipients: incomingRecipientSummary })}
+                  </span>
+                )}
+              </>
             ) : (
               recipientSummary && (
                 <span

@@ -163,8 +163,13 @@ internal fun MessageBubble(
                 // Tapping the sender (or, on outgoing bubbles, the recipient
                 // summary) expands the full addresses, the way clicking the
                 // sender does on desktop.
+                // An incoming message names its sender, and the recipients only
+                // when a reply-all would reach someone else: without them the
+                // reader answers the sender alone without ever noticing the
+                // others. A message addressed to us alone stays quiet — the
+                // line would only repeat our own name.
                 val recipients =
-                    if (outgoing) {
+                    if (outgoing || canReplyAllToMessage(message)) {
                         remember(message.to, message.cc) { formatRecipientSummary(message.to, message.cc) }
                     } else {
                         ""
@@ -193,6 +198,16 @@ internal fun MessageBubble(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (recipients.isNotBlank()) {
+                            Text(
+                                tr("chat.toRecipients", mapOf("recipients" to recipients)),
+                                modifier = Modifier.weight(1f, fill = false),
+                                fontSize = 11.sp,
+                                color = textColor.copy(alpha = 0.6f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     } else if (recipients.isNotBlank()) {
                         // An outgoing bubble has no sender to name, and a reply and a
                         // forward of the same text look identical without recipients —

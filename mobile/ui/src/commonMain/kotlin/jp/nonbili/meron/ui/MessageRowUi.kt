@@ -368,6 +368,21 @@ internal fun MessageRowHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // Who else received it, named only when a reply-all would reach
+            // someone the plain reply misses — otherwise the reader answers the
+            // sender alone without noticing the others.
+            if (!outgoing && canReplyAllToMessage(message)) {
+                val recipients = remember(message.to, message.cc) { formatRecipientSummary(message.to, message.cc) }
+                if (recipients.isNotBlank()) {
+                    Text(
+                        tr("chat.toRecipients", mapOf("recipients" to recipients)),
+                        fontSize = 11.sp,
+                        color = mutedColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         BlockedRemoteButton(
             message = message,
