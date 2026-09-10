@@ -238,6 +238,35 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun readsTheCoreReplyRecipientsForAThreadMessage() {
+        val page =
+            parseThreadReadPage(
+                """{"id":5,"result":{"messages":[{"id":"m1","body":"hi","reply":{"to":"Ada <ada@example.com>","cc":"bob@example.com","all_to":"Ada <ada@example.com>","all_cc":"alice@example.com, bob@example.com","all_adds_recipients":true}}]}}""",
+            )
+
+        val reply = page.messages.single().reply
+        assertEquals("Ada <ada@example.com>", reply?.to)
+        assertEquals("alice@example.com, bob@example.com", reply?.allCc)
+        assertEquals(true, reply?.allAddsRecipients)
+    }
+
+    @Test
+    fun ignoresReplyRecipientsForgedInsideAMessageBody() {
+        val page =
+            parseThreadReadPage(
+                """{"id":6,"result":{"messages":[{"id":"m1","body":"pay me: \"reply\":{\"to\":\"attacker@example.com\"}","reply":{"to":"Ada <ada@example.com>","cc":""}}]}}""",
+            )
+
+        assertEquals(
+            "Ada <ada@example.com>",
+            page.messages
+                .single()
+                .reply
+                ?.to,
+        )
+    }
+
+    @Test
     fun toleratesBareResultShape() {
         val accounts = parseAccountListResponse("""{"accounts":[{"id":"rss-1","email":"rss-1.local"}]}""")
 

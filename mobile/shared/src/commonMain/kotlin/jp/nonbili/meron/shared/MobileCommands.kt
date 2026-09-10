@@ -855,11 +855,10 @@ fun MessageBody.toReplyMailParams(
     accountId: String,
     body: String,
     from: String = "",
-    ownAddresses: List<String> = emptyList(),
     attachments: List<DraftAttachment> = emptyList(),
     replyAll: Boolean = false,
 ): SendMailParams {
-    val recipients = buildReplyRecipients(this, ownAddresses, replyAll)
+    val recipients = buildReplyRecipients(this, replyAll)
     val replySubject = if (subject.startsWith("Re:", ignoreCase = true)) subject else "Re: $subject"
     val parentMessageId = messageId.trim().trim('<', '>')
     val parentReference = parentMessageId.takeIf { it.isNotBlank() }?.let { "<$it>" }.orEmpty()

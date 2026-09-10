@@ -209,6 +209,11 @@ data class MessageBody(
     val bodyMissing: Boolean = false,
     val attachments: List<MessageAttachment> = emptyList(),
     val sendStatus: SendStatus = SendStatus.None,
+    // Who a reply to this message addresses and copies, decided by the core so
+    // mobile, desktop and the MCP tools agree. Null for a message shaped
+    // locally (an optimistic send bubble) or by a version before the core sent
+    // it.
+    val reply: MessageReply? = null,
 )
 
 data class DraftAttachment(
@@ -244,6 +249,17 @@ data class ComposeDraft(
 data class ReplyRecipients(
     val to: String,
     val cc: String,
+)
+
+/** Both reply forms of one message, as the core decided them (see
+ * meron-core/src/reply.rs): `to`/`cc` for a plain reply, `allTo`/`allCc` for
+ * reply-all, and whether reply-all reaches anyone the plain reply does not. */
+data class MessageReply(
+    val to: String = "",
+    val cc: String = "",
+    val allTo: String = "",
+    val allCc: String = "",
+    val allAddsRecipients: Boolean = false,
 )
 
 fun newDraftMessageId(accountId: String = ""): String {
@@ -774,64 +790,31 @@ private fun headerLine(
     return if (trimmed.isBlank()) "" else "$label: $trimmed"
 }
 
-/** `replyAll` additionally keeps the original To recipients — everyone the
- * message was addressed to alongside us — which a plain reply drops. They join
- * the Cc rather than the To, as Gmail and the rest do: only the sender is
- * addressed. Our own addresses stay out of both lists either way. */
+/** The To/Cc a reply to this message gets, as the core decided them (see
+ * meron-core/src/reply.rs): the sender is addressed, the original Cc is copied,
+ * and our own addresses stay out of both. `replyAll` picks the form that also
+ * copies the other original recipients.
+ *
+ * A message with no `reply` of its own carries nothing to decide from — a local
+ * send bubble, or a row shaped before the core sent the field. Addressing its
+ * sender is all that can be said. */
 fun buildReplyRecipients(
     message: MessageBody,
-    ownAddresses: List<String> = emptyList(),
     replyAll: Boolean = false,
 ): ReplyRecipients {
-    val own = ownAddresses.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
-    val isOwnSender = own.contains(message.fromAddr.trim().lowercase())
-    val toSource =
-        if (isOwnSender) {
-            message.to
-        } else {
-            message.replyTo.ifBlank { message.fromAddr }.ifBlank { message.from }
-        }
-    val toList =
-        splitAddressList(toSource)
-            .filter { entry ->
-                val addr = bareAddress(entry).lowercase()
-                addr.isNotBlank() && !own.contains(addr)
-            }
-    val toAddrs = toList.map { bareAddress(it).lowercase() }.toSet()
-
-    // Reply-all: the other original recipients are copied, not addressed — the
-    // reply is still to the sender, and everyone else keeps their Cc standing.
-    val ccSource =
-        if (replyAll && !isOwnSender) {
-            splitAddressList(message.to) + splitAddressList(message.cc)
-        } else {
-            splitAddressList(message.cc)
-        }
-    val ccAddrs = mutableSetOf<String>()
-    val ccList =
-        ccSource.filter { entry ->
-            val addr = bareAddress(entry).lowercase()
-            addr.isNotBlank() && !own.contains(addr) && !toAddrs.contains(addr) && ccAddrs.add(addr)
-        }
-    return ReplyRecipients(
-        to = toList.joinToString(", "),
-        cc = ccList.joinToString(", "),
-    )
+    val reply = message.reply ?: return ReplyRecipients(to = message.fromAddr.ifBlank { message.from }, cc = "")
+    return if (replyAll) {
+        ReplyRecipients(to = reply.allTo, cc = reply.allCc)
+    } else {
+        ReplyRecipients(to = reply.to, cc = reply.cc)
+    }
 }
 
 /** Whether replying to all would reach anyone a plain reply does not — the
  * message carries other recipients besides us and the sender. False makes the
  * two actions identical, and the menus hide the reply-all item rather than
  * offering a second way to do the same thing. */
-fun replyAllAddsRecipients(
-    message: MessageBody,
-    ownAddresses: List<String> = emptyList(),
-): Boolean {
-    val reply = buildReplyRecipients(message, ownAddresses)
-    val all = buildReplyRecipients(message, ownAddresses, replyAll = true)
-    val existing = (splitAddressList(reply.to) + splitAddressList(reply.cc)).map { bareAddress(it).lowercase() }.toSet()
-    return (splitAddressList(all.to) + splitAddressList(all.cc)).any { bareAddress(it).lowercase() !in existing }
-}
+fun replyAllAddsRecipients(message: MessageBody): Boolean = message.reply?.allAddsRecipients == true
 
 /** Only the double quote opens a quoted string (RFC 5322): an apostrophe is an
  * ordinary character in a name like O'Connor, and treating it as a delimiter

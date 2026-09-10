@@ -16,6 +16,7 @@ pub mod mcp_mail;
 pub mod parse;
 pub mod protocol;
 pub mod proxy;
+pub mod reply;
 pub mod rss;
 pub mod secrets;
 #[cfg(target_os = "linux")]

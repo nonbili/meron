@@ -1942,6 +1942,8 @@ describe('quick reply draft sharing', () => {
       message_id: '',
       outgoing: true,
       date: 1000,
+      // Our own message: the core answers a follow-up to its recipients.
+      reply: { to: 'them@example.com', cc: '', all_to: 'them@example.com', all_cc: '', all_adds_recipients: false },
     })
     const loaded = message({
       ...headerOnly,
@@ -3603,81 +3605,48 @@ describe('revealMessageRemote', () => {
 })
 
 describe('reply-all recipients', () => {
-  const ownAddrs = () =>
-    ownAddressSet([
-      {
-        id: 'acc-1',
-        email: 'me@example.com',
-        display_name: 'Me',
-        sender_name: 'Me',
-        provider: 'custom',
-        auth_type: 'password',
-        imap_host: 'imap.example.com',
-        imap_port: 993,
-        smtp_host: 'smtp.example.com',
-        smtp_port: 465,
-        tls: true,
-        aliases: [{ email: 'sales@example.com', name: 'Sales' }],
-      },
-    ])
+  // The rule itself lives in the core (meron-core/src/reply.rs) and is tested
+  // there; what matters here is that the composer uses the recipients the core
+  // sent rather than deriving its own.
+  const replied = (overrides: Partial<Message['reply']> = {}): Message['reply'] => ({
+    to: 'Them <them@example.com>',
+    cc: 'bob@example.com',
+    all_to: 'Them <them@example.com>',
+    all_cc: 'Alice <alice@example.com>, bob@example.com',
+    all_adds_recipients: true,
+    ...overrides,
+  })
 
   const incoming = message({
     from_name: 'Them',
     from_addr: 'them@example.com',
     to: 'me@example.com, Alice <alice@example.com>',
     cc: 'bob@example.com',
+    reply: replied(),
   })
 
-  it('copies the other To recipients, dropping our own addresses', () => {
-    const { to, cc } = buildReplyRecipients(incoming, ownAddrs(), true)
-
-    // Only the sender is addressed; everyone else is copied, as Gmail does.
-    expect(to).toBe('Them <them@example.com>')
-    expect(cc).toBe('Alice <alice@example.com>, bob@example.com')
-  })
-
-  it('leaves a plain reply addressed to the sender alone', () => {
-    const { to, cc } = buildReplyRecipients(incoming, ownAddrs())
-
-    expect(to).toBe('Them <them@example.com>')
-    expect(cc).toBe('bob@example.com')
-  })
-
-  it('does not duplicate a sender who is also listed in To', () => {
-    const target = message({
-      from_name: '',
-      from_addr: 'them@example.com',
-      to: 'them@example.com, sales@example.com, alice@example.com',
-      cc: '',
+  it('addresses the sender and copies the rest for reply-all', () => {
+    expect(buildReplyRecipients(incoming, true)).toEqual({
+      to: 'Them <them@example.com>',
+      cc: 'Alice <alice@example.com>, bob@example.com',
     })
-
-    const { to, cc } = buildReplyRecipients(target, ownAddrs(), true)
-
-    // The sender appears once, our own alias not at all.
-    expect(to).toBe('them@example.com')
-    expect(cc).toBe('alice@example.com')
   })
 
-  it('reports whether reply-all reaches anyone the reply does not', () => {
-    const own = ownAddrs()
+  it('takes the plain reply form by default', () => {
+    expect(buildReplyRecipients(incoming)).toEqual({ to: 'Them <them@example.com>', cc: 'bob@example.com' })
+  })
 
-    // Only us and the sender: reply-all is the reply, so the menus hide it.
-    expect(replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com' }), own)).toBe(false)
-    // Our own alias alongside us is still nobody new.
-    expect(
-      replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com, sales@example.com' }), own),
-    ).toBe(false)
-    // A Cc-only third party is already kept by a plain reply.
-    expect(
-      replyAllAddsRecipients(message({ from_addr: 'them@example.com', to: 'me@example.com', cc: 'bob@x.com' }), own),
-    ).toBe(false)
-    expect(
-      replyAllAddsRecipients(
-        message({ from_addr: 'them@example.com', to: 'me@example.com, Bob <BOB@x.com>', cc: 'bob@x.com' }),
-        own,
-      ),
-    ).toBe(false)
-    expect(replyAllAddsRecipients(incoming, own)).toBe(true)
+  it('falls back to the sender for a target with no recipients of its own', () => {
+    // A thread card standing in for a thread whose messages have not loaded.
+    const card = message({ from_name: 'Them', from_addr: 'them@example.com', to: '', reply: undefined })
+
+    expect(buildReplyRecipients(card, true)).toEqual({ to: 'Them <them@example.com>', cc: '' })
+  })
+
+  it('offers reply-all only when the core says it reaches someone new', () => {
+    expect(replyAllAddsRecipients(incoming)).toBe(true)
+    expect(replyAllAddsRecipients(message({ reply: replied({ all_adds_recipients: false }) }))).toBe(false)
+    expect(replyAllAddsRecipients(message({ reply: undefined }))).toBe(false)
   })
 
   it('seeds a composer tab addressed to everyone when replying all to one message', () => {
@@ -3709,6 +3678,7 @@ describe('reply-all recipients', () => {
         cc: 'bob@example.com',
         subject: 'Design',
         message_id: 'root@example.com',
+        reply: replied(),
       }),
     )
 
@@ -3719,19 +3689,6 @@ describe('reply-all recipients', () => {
     expect(draft?.showCcBcc).toBe(true)
     expect(draft?.subject).toBe('Re: Design')
     expect(draft?.inReplyTo).toBe('root@example.com')
-  })
-
-  it('addresses the original recipients when the target is one of ours', () => {
-    const target = message({
-      from_addr: 'me@example.com',
-      to: 'them@example.com, alice@example.com',
-      cc: 'bob@example.com',
-    })
-
-    const { to, cc } = buildReplyRecipients(target, ownAddrs(), true)
-
-    expect(to).toBe('them@example.com, alice@example.com')
-    expect(cc).toBe('bob@example.com')
   })
 })
 
@@ -3769,6 +3726,13 @@ describe('quick reply recipient line', () => {
       to: 'me@example.com, alice@example.com',
       cc: 'bob@example.com, me@example.com',
       message_id: 'root@example.com',
+      reply: {
+        to: 'Them <them@example.com>',
+        cc: 'bob@example.com',
+        all_to: 'Them <them@example.com>',
+        all_cc: 'alice@example.com, bob@example.com',
+        all_adds_recipients: true,
+      },
     })
     mail$.threads.set([thread])
     mail$.messages.set([thread])

@@ -216,7 +216,6 @@ import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
 import jp.nonbili.meron.shared.noSignatureMark
-import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
 import jp.nonbili.meron.shared.parseAllocatedMessageId
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
@@ -877,7 +876,7 @@ internal fun MeronMobileState.quickReplyRecipients(): ReplyRecipients {
     val thread = selectedCoreThread ?: return none
     if (threadIdIsRss(thread.id)) return none
     val parent = quickReplyParent() ?: return none
-    return buildReplyRecipients(parent, ownAddressList(coreAccounts))
+    return buildReplyRecipients(parent)
 }
 
 // The identity the reply bar's From row shows as current — the resolved send-as
@@ -999,7 +998,6 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
             accountId = accountId,
             body = quickReplyBody.trim(),
             from = replyFrom,
-            ownAddresses = ownAddressList(coreAccounts),
             attachments = quickReplyAttachments,
         )
     val draftId = quickReplyDraftId.ifBlank { newDraftMessageId(accountId) }
@@ -1199,7 +1197,6 @@ internal fun MeronMobileState.openQuickReplyInFullEditor(replyAll: Boolean = fal
             accountId = accountId,
             body = carriedBody.trim(),
             from = replyFrom,
-            ownAddresses = ownAddressList(coreAccounts),
             attachments = quickReplyAttachments,
             replyAll = replyAll,
         )
@@ -1265,11 +1262,11 @@ internal fun MeronMobileState.canReplyAllToThread(): Boolean {
     val thread = selectedCoreThread ?: return false
     if (threadIdIsRss(thread.id)) return false
     val parent = quickReplyParent() ?: return false
-    return replyAllAddsRecipients(parent, ownAddressList(coreAccounts))
+    return replyAllAddsRecipients(parent)
 }
 
 /** The same question for one message, for its own menu. */
-internal fun MeronMobileState.canReplyAllToMessage(message: MessageBody): Boolean = replyAllAddsRecipients(message, ownAddressList(coreAccounts))
+internal fun MeronMobileState.canReplyAllToMessage(message: MessageBody): Boolean = replyAllAddsRecipients(message)
 
 /** Reply-all to one message, rather than to the conversation's reply target:
  * the message menu acts on the message it belongs to. Opens the full composer —
@@ -1295,7 +1292,6 @@ internal fun MeronMobileState.replyAllToMessage(message: MessageBody) {
             accountId = accountId,
             body = "",
             from = replyFrom,
-            ownAddresses = ownAddressList(coreAccounts),
             replyAll = true,
         )
     val generation = ++composeSessionGeneration
@@ -1507,7 +1503,6 @@ internal fun MeronMobileState.sendQuickReply() {
             accountId = accountId,
             body = sentBody,
             from = replyFrom,
-            ownAddresses = ownAddressList(coreAccounts),
             attachments = sentAttachments,
         )
     // Empty the visible bar on the click, not when the send settles. The work

@@ -385,6 +385,12 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
             if (id.isBlank()) return@mapNotNull null
             val fromName = item.findJsonStringProperty("from_name").orEmpty()
             val fromAddr = item.findJsonStringProperty("from_addr").orEmpty()
+            // Read the reply recipients out of the message's *top-level* keys.
+            // The scanning helpers below match the first occurrence anywhere in
+            // the object, and the body — attacker-written text — is serialized
+            // ahead of this key, so a mail whose body contains its own
+            // "reply": {...} would otherwise choose who the user replies to.
+            val replyObject = item.jsonObjectEntries().firstOrNull { it.first == "reply" }?.second
             MessageBody(
                 id = id,
                 folderId = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
@@ -406,6 +412,16 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 starred = item.findJsonBooleanProperty("starred") ?: false,
                 hasAttachments = item.findJsonBooleanProperty("has_attachments") ?: false,
                 bodyMissing = item.findJsonBooleanProperty("body_missing") ?: false,
+                reply =
+                    replyObject?.takeIf { it.startsWith("{") }?.let { reply ->
+                        MessageReply(
+                            to = reply.findJsonStringProperty("to").orEmpty(),
+                            cc = reply.findJsonStringProperty("cc").orEmpty(),
+                            allTo = reply.findJsonStringProperty("all_to").orEmpty(),
+                            allCc = reply.findJsonStringProperty("all_cc").orEmpty(),
+                            allAddsRecipients = reply.findJsonBooleanProperty("all_adds_recipients") ?: false,
+                        )
+                    },
                 attachments =
                     item
                         .findJsonArrayProperty("attachments")

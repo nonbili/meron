@@ -73,7 +73,7 @@ results are kept for one hour while Meron runs.
 | `list_accounts` | Approved account IDs, names, email addresses and provider only; no credentials or server settings. |
 | `list_folders` | Folders for one approved account. |
 | `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Text search includes the selected folder and Sent. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
-| `read_thread` | Up to 50 messages using an exact thread ID from search; accepts a pagination cursor. Missing bodies may be filled in the background, so a subsequent read may be needed. |
+| `read_thread` | Up to 50 messages using an exact thread ID from search; accepts a pagination cursor. Each message carries a `reply` object with the recipients a reply to it should use. Missing bodies may be filled in the background, so a subsequent read may be needed. |
 | `read_attachment` | Returns one cached attachment from an approved account as base64, up to 5 MiB. The key comes from `read_thread`; bytes exist only after that call cached the message. |
 | `create_draft` | Optional: creates a new plain text draft with recipients, subject and body, plus `in_reply_to` and `references` to keep a reply in its thread. Review and send it in Meron. |
 | `update_draft` | Optional: replaces an existing draft, addressed by its Message-ID — one `create_draft` returned, or one started in Meron and reported as `message_id` by `read_thread`. The whole draft is overwritten. |
@@ -105,8 +105,11 @@ ID from elsewhere in the mailbox adds a draft rather than replacing that
 message. Neither tool can set an arbitrary sender or attach files. A reply draft
 threads the same way a sent reply does: pass the `message_id` `read_thread`
 reports as `in_reply_to`, and that message's references plus its own ID as
-`references`. Choosing the recipients of a reply is the client's job; this
-layer only carries the headers. Sending is
+`references`. The recipients come from the same message's `reply` object —
+`to`/`cc` for a reply, `all_to`/`all_cc` for a reply to everyone — which the app
+decides with the rule its own composer uses, with the user's addresses already
+excluded. Deriving recipients from the raw To and Cc headers instead risks
+copying the user back into their own reply. Sending is
 plain text only, without attachments or a sender override, and is separate from
 the draft permission.
 Attachments are read from Meron's own media cache, one file per call, and only

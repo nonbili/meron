@@ -561,6 +561,44 @@ pub fn self_addrs(conn: &Connection, id: &str) -> std::collections::HashSet<Stri
     addrs
 }
 
+/// Every address the user owns, across all accounts (primary + send-as aliases),
+/// lowercased. A reply excludes all of them rather than only the replying
+/// account's: mail addressed to two of the user's own addresses should not come
+/// back to either of them.
+pub fn all_self_addrs(conn: &Connection) -> std::collections::HashSet<String> {
+    let mut addrs = std::collections::HashSet::new();
+    let Ok(mut stmt) = conn.prepare("SELECT email, prefs FROM accounts") else {
+        return addrs;
+    };
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, Option<String>>(0)?,
+            row.get::<_, Option<String>>(1)?,
+        ))
+    }) else {
+        return addrs;
+    };
+    for row in rows.flatten() {
+        let (email, prefs) = row;
+        let mut candidates = vec![email.unwrap_or_default()];
+        if let Some(prefs) = prefs {
+            candidates.extend(
+                AccountPrefs::parse(&prefs)
+                    .aliases()
+                    .into_iter()
+                    .map(|alias| alias.email),
+            );
+        }
+        for candidate in candidates {
+            let email = candidate.trim().to_lowercase();
+            if !email.is_empty() {
+                addrs.insert(email);
+            }
+        }
+    }
+    addrs
+}
+
 /// Whether a cached message is one this account sent: it lives in a Sent mailbox
 /// — a copy filed there is outbound by definition, even when it was sent from an
 /// alias meron doesn't know about (e.g. a webmail send-as) — or its From is one

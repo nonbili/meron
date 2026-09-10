@@ -2179,10 +2179,29 @@ async fn dispatch(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::
             let uid = req_u32(p, "uid")?;
 
             let message = read_cached_or_fetch(engine, &account, &folder, uid).await?;
-            let mine = store::self_addrs(&engine.db.lock().unwrap(), &account);
+            let (mine, ours) = {
+                let db = engine.db.lock().unwrap();
+                (store::self_addrs(&db, &account), store::all_self_addrs(&db))
+            };
             let outgoing =
                 store::is_outgoing(&mine, &folder, &message.from_addr, message.delivered);
-            Ok(json!({ "outgoing": outgoing, "message": serde_json::to_value(message)? }))
+            // The same reply rule the thread read ships with every message, so a
+            // single-message read seeds a reply identically.
+            let reply = meron_core::reply::reply_json(
+                &meron_core::reply::ReplyTarget {
+                    from_name: &message.from_name,
+                    from_addr: &message.from_addr,
+                    reply_to: &message.reply_to,
+                    to: &message.to,
+                    cc: &message.cc,
+                },
+                &ours,
+            );
+            Ok(json!({
+                "outgoing": outgoing,
+                "reply": reply,
+                "message": serde_json::to_value(message)?
+            }))
         }
 
         "messages.thread" => {

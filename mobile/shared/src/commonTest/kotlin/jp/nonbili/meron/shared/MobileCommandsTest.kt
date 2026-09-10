@@ -916,10 +916,10 @@ class MobileCommandsTest {
                         replyTo = "Team <team@example.com>",
                         messageId = "old@example.com",
                         references = "<root@example.com>",
+                        reply = MessageReply(to = "Team <team@example.com>", cc = "Project <project@example.com>"),
                     ).toReplyMailParams(
                         accountId = "acc1",
                         body = "Quick reply",
-                        ownAddresses = listOf("me@example.com"),
                     ),
             )
 
@@ -943,6 +943,7 @@ class MobileCommandsTest {
                         body = "Original",
                         fromAddr = "ada@example.com",
                         messageId = "old@example.com",
+                        reply = MessageReply(to = "ada@example.com"),
                     ).toReplyMailParams(
                         accountId = "acc1",
                         body = "With file",
@@ -966,7 +967,7 @@ class MobileCommandsTest {
     }
 
     @Test
-    fun replyMailParamsFilterOwnAddressesAndUseOriginalToWhenSenderIsSelf() {
+    fun replyMailParamsUseTheRecipientsTheCoreDecided() {
         val request =
             sendMailRequest(
                 id = 8,
@@ -980,11 +981,13 @@ class MobileCommandsTest {
                         body = "Original",
                         fromAddr = "me@example.com",
                         messageId = "<old@example.com>",
+                        // Our own message: the core answers a follow-up to its
+                        // recipients, with our addresses already filtered out.
+                        reply = MessageReply(to = "Ada <ada@example.com>", cc = "Project <project@example.com>"),
                     ).toReplyMailParams(
                         accountId = "acc1",
                         body = "Follow-up",
                         from = "alias@example.com",
-                        ownAddresses = listOf("me@example.com", "alias@example.com"),
                     ),
             )
 
@@ -994,54 +997,70 @@ class MobileCommandsTest {
         )
     }
 
+    // The rule itself lives in the core (meron-core/src/reply.rs) and is tested
+    // there; mobile only has to use the form it was sent.
     @Test
-    fun replyAllCopiesTheOtherToRecipientsWithoutOurOwnAddresses() {
+    fun replyRecipientsComeFromTheCoreDecision() {
         val incoming =
             MessageBody(
                 id = "m1",
                 from = "Ada",
                 fromAddr = "ada@example.com",
-                to = "Me <me@example.com>, Alice <alice@example.com>, Ada <ada@example.com>",
+                to = "Me <me@example.com>, Alice <alice@example.com>",
                 cc = "Project <project@example.com>",
                 subject = "Design",
                 body = "Original",
+                reply =
+                    MessageReply(
+                        to = "Ada <ada@example.com>",
+                        cc = "Project <project@example.com>",
+                        allTo = "Ada <ada@example.com>",
+                        allCc = "Alice <alice@example.com>, Project <project@example.com>",
+                        allAddsRecipients = true,
+                    ),
             )
 
-        val plain = buildReplyRecipients(incoming, listOf("me@example.com"))
-        assertEquals("ada@example.com", plain.to)
+        val plain = buildReplyRecipients(incoming)
+        assertEquals("Ada <ada@example.com>", plain.to)
         assertEquals("Project <project@example.com>", plain.cc)
 
-        // Only the sender is addressed; the other recipients join the Cc, and
-        // the sender's own To entry does not come back as a copy.
-        val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
-        assertEquals("ada@example.com", all.to)
+        val all = buildReplyRecipients(incoming, replyAll = true)
+        assertEquals("Ada <ada@example.com>", all.to)
         assertEquals("Alice <alice@example.com>, Project <project@example.com>", all.cc)
     }
 
     @Test
-    fun replyAllIsOfferedOnlyWhenItReachesSomeoneNew() {
-        val own = listOf("me@example.com", "sales@example.com")
+    fun aMessageWithoutTheCoreFieldStillRepliesToItsSender() {
+        val bubble =
+            MessageBody(
+                id = "local",
+                from = "Ada",
+                fromAddr = "ada@example.com",
+                to = "Me <me@example.com>",
+                subject = "Design",
+                body = "Original",
+            )
 
-        fun message(
-            to: String,
-            cc: String = "",
-        ) = MessageBody(
-            id = "m1",
-            from = "Ada",
-            fromAddr = "ada@example.com",
-            to = to,
-            cc = cc,
-            subject = "Design",
-            body = "Original",
-        )
+        assertEquals("ada@example.com", buildReplyRecipients(bubble, replyAll = true).to)
+        assertEquals("", buildReplyRecipients(bubble).cc)
+    }
 
-        // Only us and the sender, or one of our own aliases beside us: nobody
-        // for reply-all to add. A Cc third party is kept by a plain reply too.
-        assertEquals(false, replyAllAddsRecipients(message("me@example.com"), own))
-        assertEquals(false, replyAllAddsRecipients(message("me@example.com, sales@example.com"), own))
-        assertEquals(false, replyAllAddsRecipients(message("me@example.com", cc = "bob@x.com"), own))
-        assertEquals(false, replyAllAddsRecipients(message("me@example.com, Bob <BOB@x.com>", cc = "bob@x.com"), own))
-        assertEquals(true, replyAllAddsRecipients(message("me@example.com, alice@example.com"), own))
+    @Test
+    fun replyAllIsOfferedOnlyWhenTheCoreSaysItReachesSomeoneNew() {
+        fun message(reply: MessageReply?) =
+            MessageBody(
+                id = "m1",
+                from = "Ada",
+                fromAddr = "ada@example.com",
+                to = "Me <me@example.com>",
+                subject = "Design",
+                body = "Original",
+                reply = reply,
+            )
+
+        assertEquals(true, replyAllAddsRecipients(message(MessageReply(allAddsRecipients = true))))
+        assertEquals(false, replyAllAddsRecipients(message(MessageReply(allAddsRecipients = false))))
+        assertEquals(false, replyAllAddsRecipients(message(null)))
     }
 
     @Test
@@ -1061,41 +1080,6 @@ class MobileCommandsTest {
             listOf("Me <me@x.com>", "O'Connor <other@x.com>", "Alice <a@y.com>"),
             splitAddressList("Me <me@x.com>, O'Connor <other@x.com>, Alice <a@y.com>"),
         )
-    }
-
-    @Test
-    fun replyAllDropsOurOwnQuotedNameEntry() {
-        val incoming =
-            MessageBody(
-                id = "m1",
-                from = "Ada",
-                fromAddr = "ada@example.com",
-                to = "\"Me, Myself\" <me@example.com>, Alice <alice@example.com>",
-                subject = "Design",
-                body = "Original",
-            )
-
-        val all = buildReplyRecipients(incoming, listOf("me@example.com"), replyAll = true)
-        assertEquals("ada@example.com", all.to)
-        assertEquals("Alice <alice@example.com>", all.cc)
-    }
-
-    @Test
-    fun replyAllOnOurOwnMessageStillAddressesTheOriginalRecipients() {
-        val outgoing =
-            MessageBody(
-                id = "m2",
-                from = "Me",
-                fromAddr = "me@example.com",
-                to = "Ada <ada@example.com>, Alice <alice@example.com>",
-                cc = "Project <project@example.com>",
-                subject = "Re: Design",
-                body = "Original",
-            )
-
-        val all = buildReplyRecipients(outgoing, listOf("me@example.com"), replyAll = true)
-        assertEquals("Ada <ada@example.com>, Alice <alice@example.com>", all.to)
-        assertEquals("Project <project@example.com>", all.cc)
     }
 
     @Test

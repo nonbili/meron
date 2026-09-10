@@ -119,6 +119,17 @@ export type ComposerAttachment = {
   inlineId?: string
 }
 
+/** Both reply forms of one message, as address-list strings: `to`/`cc` for a
+ * plain reply, `all_to`/`all_cc` for reply-all, and whether reply-all reaches
+ * anyone the plain reply does not — false hides the reply-all actions. */
+export type ReplyRecipients = {
+  to: string
+  cc: string
+  all_to: string
+  all_cc: string
+  all_adds_recipients: boolean
+}
+
 export type Message = {
   id: string
   account_id: string
@@ -165,6 +176,11 @@ export type Message = {
   has_draft?: boolean
   has_attachments: boolean
   attachments?: Attachment[]
+  /** The recipients a reply to this message gets, decided by the core (see
+   * meron-core/src/reply.rs) so desktop, mobile and the MCP tools all address a
+   * reply the same way. Absent on thread cards, which carry no recipient
+   * headers, and on RSS items. */
+  reply?: ReplyRecipients
   /** Source feed URL; present on RSS feed threads only. */
   feed_url?: string
   /** Cached feed-icon media key (served at `/media/<key>`); present on RSS feed

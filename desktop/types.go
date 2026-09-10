@@ -86,11 +86,15 @@ type Message struct {
 	UnreadCount uint32 `json:"unread_count,omitempty"`
 	// MessageCount is every message in the thread, read or not; 0 when the
 	// core did not group (raw message rows, RSS items).
-	MessageCount     uint32 `json:"message_count,omitempty"`
-	Starred          bool   `json:"starred"`
-	HasDraft         bool   `json:"has_draft,omitempty"`
-	HasAttachments   bool   `json:"has_attachments"`
-	Attachments      any    `json:"attachments,omitempty"`
+	MessageCount   uint32 `json:"message_count,omitempty"`
+	Starred        bool   `json:"starred"`
+	HasDraft       bool   `json:"has_draft,omitempty"`
+	HasAttachments bool   `json:"has_attachments"`
+	Attachments    any    `json:"attachments,omitempty"`
+	// Reply carries the core's reply and reply-all recipients for this message
+	// (see meron-core/src/reply.rs), so every client addresses a reply the same
+	// way. Absent on thread cards, which have no recipient headers to work from.
+	Reply            any    `json:"reply,omitempty"`
 	OriginalThreadID string `json:"original_thread_id,omitempty"`
 	// RecipientOverflow is the count of additional recipients beyond the one shown
 	// on an outbound thread card (for a "+N" hint); 0 for inbound/single-recipient.

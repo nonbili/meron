@@ -14,7 +14,8 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
 
 use crate::engine::{Engine, attach_html};
-use crate::{imap, mail_model, parse, store};
+use crate::reply::ReplyTarget;
+use crate::{imap, mail_model, parse, reply, store};
 
 /// Called after a background body fetch stored at least one new message, so
 /// the platform can tell its UI to re-read the open thread.
@@ -251,10 +252,11 @@ pub async fn read_thread_page(
         }
     }
 
-    let (mine, remote_policy) = {
+    let (mine, ours, remote_policy) = {
         let db = engine.db.lock().unwrap();
         (
             store::self_addrs(&db, account),
+            store::all_self_addrs(&db),
             store::remote_image_policy(&db, account).unwrap_or_default(),
         )
     };
@@ -283,6 +285,7 @@ pub async fn read_thread_page(
             header,
             cached.as_ref(),
             &mine,
+            &ours,
         ));
     }
 
@@ -441,6 +444,7 @@ pub fn thread_message_json(
     header: &imap::MessageHeader,
     cached: Option<&parse::Message>,
     mine: &HashSet<String>,
+    ours: &HashSet<String>,
 ) -> Value {
     // A conversation spans folders, but IMAP UIDs do not: INBOX/42 and
     // Sent/42 are two different messages. Key the message by its own mailbox
@@ -452,6 +456,23 @@ pub fn thread_message_json(
     let from_addr = cached
         .map(|message| message.from_addr.as_str())
         .unwrap_or(header.from_addr.as_str());
+    // Who a reply addresses and who it copies is settled here, from the same
+    // headers, so every frontend and the MCP tools agree on it (see
+    // [`crate::reply`]).
+    let reply = reply::reply_json(
+        &ReplyTarget {
+            from_name: cached
+                .map(|message| message.from_name.as_str())
+                .unwrap_or(header.from_name.as_str()),
+            from_addr,
+            reply_to: cached
+                .map(|message| message.reply_to.as_str())
+                .unwrap_or(""),
+            to: cached.map(|message| message.to.as_str()).unwrap_or(""),
+            cc: cached.map(|message| message.cc.as_str()).unwrap_or(""),
+        },
+        ours,
+    );
     json!({
         "id": id,
         "account_id": account_id,
@@ -490,6 +511,7 @@ pub fn thread_message_json(
         "attachments": cached
             .map(|message| serde_json::to_value(&message.attachments).unwrap_or_else(|_| json!([])))
             .unwrap_or_else(|| json!([])),
+        "reply": reply,
     })
 }
 
@@ -518,12 +540,16 @@ mod tests {
             &header(10, false),
             None,
             &HashSet::new(),
+            &HashSet::new(),
         );
         assert_eq!(value["id"], "acc#INBOX#10");
         assert_eq!(value["thread_id"], "tid");
         assert_eq!(value["folder_id"], "INBOX");
         assert_eq!(value["unread"], true);
         assert_eq!(value["subject"], "Hi");
+        // The reply rule travels with the message, even before its body caches.
+        assert_eq!(value["reply"]["to"], "ann@x.com");
+        assert_eq!(value["reply"]["all_adds_recipients"], false);
     }
 
     #[test]
@@ -534,6 +560,7 @@ mod tests {
             "Sent",
             &header(11, true),
             None,
+            &HashSet::new(),
             &HashSet::new(),
         );
         assert_eq!(value["body_missing"], true);
@@ -550,6 +577,7 @@ mod tests {
             &header(10, false),
             None,
             &HashSet::new(),
+            &HashSet::new(),
         );
         let sent = thread_message_json(
             "acc",
@@ -557,6 +585,7 @@ mod tests {
             "Sent",
             &header(10, true),
             None,
+            &HashSet::new(),
             &HashSet::new(),
         );
 

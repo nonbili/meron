@@ -154,6 +154,7 @@ func messageJSON(accountID, threadID, folder string, raw any) any {
 		Date:           jsonNumber(msg["date"]),
 		HasAttachments: len(attachmentList) > 0,
 		Attachments:    attachmentList,
+		Reply:          object["reply"],
 	}}}
 }
 
