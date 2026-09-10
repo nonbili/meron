@@ -63,6 +63,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.5" date="2026-09-10">
+      <description>
+        <ul>
+          <li>Add reply-all to the conversation and message menus and show the quick reply recipients</li>
+          <li>Fix composer closing and reply recipient handling</li>
+          <li>Add board-wide mark all as read</li>
+          <li>Copy the other original recipients instead of addressing them on reply-all</li>
+          <li>Add a local MCP server with per-client account grants</li>
+          <li>Move the reply-recipient rule into the core so every client shares one decision</li>
+          <li>Add MCP account and settings configuration tools with scoped permissions</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.4" date="2026-09-06">
       <description>
         <ul>

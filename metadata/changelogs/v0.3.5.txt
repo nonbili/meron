@@ -1,0 +1,7 @@
+- Add reply-all to the conversation and message menus and show the quick reply recipients
+- Fix composer closing and reply recipient handling
+- Add board-wide mark all as read
+- Copy the other original recipients instead of addressing them on reply-all
+- Add a local MCP server with per-client account grants
+- Move the reply-recipient rule into the core so every client shares one decision
+- Add MCP account and settings configuration tools with scoped permissions
