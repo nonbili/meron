@@ -14,11 +14,17 @@ import (
 type mcpPermission string
 
 const (
-	mcpRead     mcpPermission = "read"
-	mcpDraft    mcpPermission = "draft"
-	mcpOrganize mcpPermission = "organize"
-	mcpSend     mcpPermission = "send"
-	mcpDelete   mcpPermission = "delete"
+	mcpRead              mcpPermission = "read"
+	mcpDraft             mcpPermission = "draft"
+	mcpOrganize          mcpPermission = "organize"
+	mcpSend              mcpPermission = "send"
+	mcpDelete            mcpPermission = "delete"
+	mcpManageAccounts    mcpPermission = "manage_accounts"
+	mcpManageSettings    mcpPermission = "manage_settings"
+	mcpReadAccounts      mcpPermission = "read_accounts"
+	mcpReadSettings      mcpPermission = "read_settings"
+	mcpReadConfiguration mcpPermission = "read_configuration"
+	mcpCreateAccount     mcpPermission = "create_account"
 )
 
 func mcpPermitted(c mcpClient, p mcpPermission) bool {
@@ -33,6 +39,12 @@ func mcpPermitted(c mcpClient, p mcpPermission) bool {
 		return c.Send
 	case mcpDelete:
 		return c.Delete
+	case mcpManageAccounts, mcpReadAccounts, mcpCreateAccount:
+		return c.ManageAccounts
+	case mcpReadConfiguration:
+		return c.ManageAccounts || c.ManageSettings
+	case mcpManageSettings, mcpReadSettings:
+		return c.ManageSettings
 	}
 	return false
 }

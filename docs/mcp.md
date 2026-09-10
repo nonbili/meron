@@ -6,6 +6,8 @@ is running. Enable it in **Settings → MCP access**. It is disabled by default.
 1. Enable the local server.
 2. Enter a name for a client and select the accounts it may read. **Select all
    current accounts** selects a snapshot; accounts added later need approval.
+   Alternatively, enable **All accounts, including future accounts** for dynamic
+   access to every current and future mail and feed account.
 3. Optionally grant write permissions: organizing messages, creating drafts,
    sending, and permanent deletion. Each is off by default. Sending and
    permanent deletion additionally choose whether Meron asks for confirmation
@@ -32,16 +34,75 @@ choose another port.
 
 ## Permissions
 
-Every approved client can read only its selected accounts. Organizing, draft
-creation, sending and permanent deletion are separate, optional permissions.
+**Manage accounts** and **Manage app settings** are separate, off-by-default,
+app-wide configuration permissions. Either allows approving a setup-only client
+without selecting mail accounts. Manage accounts can inspect every account's
+configuration, create password-based IMAP/SMTP accounts, and update supported
+account preferences, including outgoing sender names and aliases, signatures,
+and pausing synchronization on any account. These configuration changes affect
+subsequent mail operations even without a mail grant for the configuring client.
+Manage app settings can read and change supported global
+preferences. Changes apply immediately, without per-call confirmation. Neither
+permission grants access to messages, and newly created accounts are not added
+to a client's selected-account grant. Clients with **All accounts, including
+future accounts** also cover newly created accounts. Credentials are never
+returned by configuration reads.
+
+### Agent-assisted setup and migration
+
+Meron provides receiving interfaces; the agent interprets backups or other
+configuration sources and maps them to Meron's capabilities:
+
+1. Call `configuration_capabilities` to discover supported keys and value types.
+2. Use `list_account_configurations` to inspect existing accounts and avoid duplicates.
+3. Call `create_password_account` with IMAP/SMTP settings and a password or app
+   password. Both servers must use validated TLS or STARTTLS. Plaintext and
+   caller-supplied certificate pins are not accepted over MCP; certificate
+   exceptions use Meron's interactive account dialog. This connects and saves
+   the account; it refuses to overwrite an
+   existing account. OAuth authentication and changing existing connection
+   settings are currently done inside Meron.
+4. Use `set_account_setting` for account labels, sender names, aliases,
+   signatures, image/display preferences, unified inclusion, mute, pause and
+   sent-copy behavior.
+5. Use `get_app_settings` and `set_app_setting` for the supported app-wide
+   signature, composition, display and font preferences.
+
+Each settings call changes one key and leaves other settings alone. Unsupported
+keys and invalid values fail before writing. No source-specific backup parser,
+arbitrary preference storage or MCP permission-management tool is exposed.
+MCP signature HTML is limited to 256 KiB and checked against an HTML allowlist.
+If the allowlist would change the input, the call fails without saving anything:
+inline CSS, data-URI logos, active content, unsupported attributes and unsafe
+URLs are not supported. Use simplified, normalized HTML (double-quoted attributes
+and escaped entities), HTTPS image URLs, or Meron's signature editor. Links are
+not automatically given `rel="nofollow"`. Reading and writing an unsupported
+existing signature therefore fails explicitly rather than silently rewriting it.
+Update-check preferences are not exposed through MCP.
+
+Every approved client can read its selected accounts, or every current and future
+account when **All accounts, including future accounts** is enabled. This scope
+does not enable any action or configuration permission. It can be approved before
+any accounts exist. Disable it to return to the client's individual selections.
+Organizing, draft creation, sending and permanent deletion are separate, optional
+permissions.
 Edit access or revoke a client in the same panel. Disabling MCP stops the
 listener and keeps grants for later use. Revoking deletes the grant and
 invalidates its credential. Any change to MCP settings or grants also cancels
 approval requests still waiting; the client sees them as `cancelled`. Changing
-grants waits for any tool operation already in progress; it cannot undo a
+grants waits for short tool operations already in progress; it cannot undo a
 completed read, draft, send, move or deletion. Removing an account also removes
-it from all MCP grants, so adding that address again does not restore access
-automatically.
+it from explicit account selections, so adding that address again does not restore access
+automatically for selected-account grants. All-account grants intentionally cover
+re-added accounts as well.
+
+Account creation releases the MCP control lock before connecting, so settings,
+revocation and approval resolution remain available while a server is unreachable.
+Only one MCP account setup can be in flight at a time. Revocation blocks new
+dispatches but does not cancel an already dispatched connection or roll back its
+account. A client granted both Manage accounts and All accounts intentionally can
+create accounts and use its existing mail permissions on them, including re-added
+addresses; selected-account grants still require separate mail approval.
 
 Reading does not mark messages read. A client may send retrieved content to its
 AI provider; local transport does not imply local AI processing. Email and feed

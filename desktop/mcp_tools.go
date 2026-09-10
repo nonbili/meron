@@ -293,10 +293,11 @@ func (s *mcpService) readAttachment(account, key string) (any, error) {
 
 // The HTTP handler authenticates each request. This second check uses the
 // current grant at execution time, including calls from already initialized
-// clients. The lock covers the operation so revocation waits for in-flight work.
+// clients. The lock covers short operations. Account setup authorizes dispatch
+// under the lock, then releases it before network work so revocation stays usable.
 func mcpRegister[A any](s *mcpService, server *mcp.Server, client mcpClient, name, description string, permission mcpPermission, account func(A) string, run func(A, mcpClient) (any, error)) {
-	destructive := permission == mcpOrganize || permission == mcpDelete
-	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: permission == mcpRead, DestructiveHint: &destructive}}, func(ctx context.Context, req *mcp.CallToolRequest, args A) (*mcp.CallToolResult, any, error) {
+	destructive := permission == mcpOrganize || permission == mcpDelete || permission == mcpManageAccounts || permission == mcpManageSettings || permission == mcpCreateAccount
+	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: permission == mcpRead || permission == mcpReadAccounts || permission == mcpReadSettings || permission == mcpReadConfiguration, DestructiveHint: &destructive}}, func(ctx context.Context, req *mcp.CallToolRequest, args A) (*mcp.CallToolResult, any, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		var current *mcpClient
@@ -314,10 +315,26 @@ func mcpRegister[A any](s *mcpService, server *mcp.Server, client mcpClient, nam
 			err = ctx.Err()
 		case !s.config.Enabled || current == nil:
 			err = errors.New("Client access revoked")
-		case id != "" && !mcpAllows(*current, id):
+		// Configuration targets are audited, but their authority is the
+		// app-wide configuration permission rather than a mail account grant.
+		case id != "" && permission != mcpManageAccounts && permission != mcpCreateAccount && !mcpAllows(*current, id):
 			err = errors.New("Account access denied")
 		case !mcpPermitted(*current, permission):
 			err = errors.New("Permission is not allowed")
+		case permission == mcpCreateAccount:
+			if s.creatingAccount {
+				err = errors.New("An account setup is already in progress; retry after it finishes")
+				break
+			}
+			// Authorize dispatch under the lock, but never hold the control-plane
+			// lock over a connection to a caller-selected host. Revocation stops
+			// subsequent dispatches; it cannot undo this already-started setup.
+			s.creatingAccount = true
+			func() {
+				s.mu.Unlock()
+				defer func() { s.mu.Lock(); s.creatingAccount = false }()
+				result, err = run(args, *current)
+			}()
 		default:
 			result, err = run(args, *current)
 		}
@@ -415,6 +432,7 @@ func (s *mcpService) tools(c mcpClient) *mcp.Server {
 		})
 	}
 	s.registerMutationTools(server, c)
+	s.registerConfigurationTools(server, c)
 	return server
 }
 func mcpThreadAccount(id string) string {

@@ -734,8 +734,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
       settings$.dismissedUpdateVersion.set(dismissedUpdate)
     }
 
-    const language = normalizeI18nLanguage(prefs[DB_KEY.language] as string | null | undefined)
-    settings$.language.set(language)
+    if (DB_KEY.language in prefs) {
+      const language = normalizeI18nLanguage(prefs[DB_KEY.language] as string | null | undefined)
+      settings$.language.set(language)
+    }
 
     const shortcutOverrides = sanitizeShortcutOverrides(prefs[DB_KEY.shortcutOverrides])
     if (shortcutOverrides) settings$.shortcutOverrides.set(shortcutOverrides)

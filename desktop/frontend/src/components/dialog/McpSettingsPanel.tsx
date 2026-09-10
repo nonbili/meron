@@ -13,7 +13,10 @@ type Client = {
   id: string
   name: string
   accounts: string[]
+  all_accounts: boolean
   drafts: boolean
+  manage_accounts: boolean
+  manage_settings: boolean
   organize: boolean
   send: boolean
   delete: boolean
@@ -33,7 +36,10 @@ const emptyClient = (): Client => ({
   id: '',
   name: '',
   accounts: [],
+  all_accounts: false,
   drafts: false,
+  manage_accounts: false,
+  manage_settings: false,
   organize: false,
   send: false,
   delete: false,
@@ -230,92 +236,128 @@ export function McpSettingsPanel() {
           </div>
         </SettingsGroup>
         <SettingsGroup title={t('mcp.accounts')}>
-          {accounts.map((account) => (
-            <ToggleRow
-              key={account.id}
-              title={account.email || account.display_name}
-              checked={editor.accounts.includes(account.id)}
-              onChange={() =>
-                setEditor({
-                  ...editor,
-                  accounts: editor.accounts.includes(account.id)
-                    ? editor.accounts.filter((id) => id !== account.id)
-                    : [...editor.accounts, account.id],
-                })
-              }
-            />
-          ))}
-          <div className="flex items-center justify-between gap-3 px-3.5 py-2">
-            <p className="text-[0.6875rem] text-secondary">{t('mcp.newAccounts')}</p>
-            <button
-              type="button"
-              onClick={() => setEditor({ ...editor, accounts: accounts.map((account) => account.id) })}
-              className="shrink-0 text-xs font-semibold text-accent hover:underline cursor-pointer"
-            >
-              {t('mcp.selectAll')}
-            </button>
-          </div>
+          <ToggleRow
+            title={t('mcp.allAccounts')}
+            checked={editor.all_accounts}
+            onChange={() => setEditor({ ...editor, all_accounts: !editor.all_accounts })}
+          />
+          {!editor.all_accounts && (
+            <>
+              {accounts.map((account) => (
+                <ToggleRow
+                  key={account.id}
+                  title={account.email || account.display_name}
+                  checked={editor.accounts.includes(account.id)}
+                  onChange={() =>
+                    setEditor({
+                      ...editor,
+                      accounts: editor.accounts.includes(account.id)
+                        ? editor.accounts.filter((id) => id !== account.id)
+                        : [...editor.accounts, account.id],
+                    })
+                  }
+                />
+              ))}
+              <div className="flex items-center justify-between gap-3 px-3.5 py-2">
+                <p className="text-[0.6875rem] text-secondary">{t('mcp.newAccounts')}</p>
+                <button
+                  type="button"
+                  onClick={() => setEditor({ ...editor, accounts: accounts.map((account) => account.id) })}
+                  className="shrink-0 text-xs font-semibold text-accent hover:underline cursor-pointer"
+                >
+                  {t('mcp.selectAll')}
+                </button>
+              </div>
+            </>
+          )}
+        </SettingsGroup>
+        <SettingsGroup title={t('mcp.configurationPermissions')}>
+          <ToggleRow
+            title={t('mcp.manageAccounts')}
+            hint={t('mcp.manageAccountsPermission')}
+            checked={editor.manage_accounts}
+            onChange={() => setEditor({ ...editor, manage_accounts: !editor.manage_accounts })}
+          />
+          <ToggleRow
+            title={t('mcp.manageSettings')}
+            hint={t('mcp.manageSettingsPermission')}
+            checked={editor.manage_settings}
+            onChange={() => setEditor({ ...editor, manage_settings: !editor.manage_settings })}
+          />
         </SettingsGroup>
         <SettingsGroup title={t('mcp.permissions')}>
-          <SettingRow
-            title={t('mcp.read')}
-            hint={t('mcp.readPermission')}
-            control={<span className="text-xs font-semibold text-secondary">{t('mcp.always')}</span>}
-          />
-          <ToggleRow
-            title={t('mcp.organize')}
-            hint={t('mcp.organizePermission')}
-            checked={editor.organize}
-            onChange={() => setEditor({ ...editor, organize: !editor.organize })}
-          />
-          <ToggleRow
-            title={t('chat.draft')}
-            hint={t('mcp.drafts')}
-            checked={editor.drafts}
-            onChange={() => setEditor({ ...editor, drafts: !editor.drafts })}
-          />
-          <ToggleRow
-            title={t('buttons.send')}
-            hint={t('mcp.sendPermission')}
-            checked={editor.send}
-            onChange={() => setEditor({ ...editor, send: !editor.send, send_without_confirmation: false })}
-          />
-          {editor.send && (
-            <SegmentedRow
-              title={t('mcp.sendConfirmation')}
-              hint={t('mcp.confirmationHint')}
-              value={editor.send_without_confirmation ? 'allow' : 'ask'}
-              options={[
-                { value: 'ask', label: t('mcp.ask') },
-                { value: 'allow', label: t('mcp.withoutAsking') },
-              ]}
-              onChange={(value) => setEditor({ ...editor, send_without_confirmation: value === 'allow' })}
+          <fieldset
+            disabled={!editor.all_accounts && !editor.accounts.length}
+            className="m-0 min-w-0 border-0 p-0 disabled:opacity-50"
+          >
+            <SettingRow
+              title={t('mcp.read')}
+              hint={t('mcp.readPermission')}
+              control={<span className="text-xs font-semibold text-secondary">{t('mcp.always')}</span>}
             />
-          )}
-          <ToggleRow
-            title={t('mcp.delete')}
-            hint={t('mcp.deletePermission')}
-            checked={editor.delete}
-            onChange={() => setEditor({ ...editor, delete: !editor.delete, delete_without_confirmation: false })}
-          />
-          {editor.delete && (
-            <SegmentedRow
-              title={t('mcp.deleteConfirmation')}
-              hint={t('mcp.confirmationHint')}
-              value={editor.delete_without_confirmation ? 'allow' : 'ask'}
-              options={[
-                { value: 'ask', label: t('mcp.ask') },
-                { value: 'allow', label: t('mcp.withoutAsking') },
-              ]}
-              onChange={(value) => setEditor({ ...editor, delete_without_confirmation: value === 'allow' })}
+            <ToggleRow
+              title={t('mcp.organize')}
+              hint={t('mcp.organizePermission')}
+              checked={editor.organize}
+              onChange={() => setEditor({ ...editor, organize: !editor.organize })}
             />
-          )}
+            <ToggleRow
+              title={t('chat.draft')}
+              hint={t('mcp.drafts')}
+              checked={editor.drafts}
+              onChange={() => setEditor({ ...editor, drafts: !editor.drafts })}
+            />
+            <ToggleRow
+              title={t('buttons.send')}
+              hint={t('mcp.sendPermission')}
+              checked={editor.send}
+              onChange={() => setEditor({ ...editor, send: !editor.send, send_without_confirmation: false })}
+            />
+            {editor.send && (
+              <SegmentedRow
+                title={t('mcp.sendConfirmation')}
+                hint={t('mcp.confirmationHint')}
+                value={editor.send_without_confirmation ? 'allow' : 'ask'}
+                options={[
+                  { value: 'ask', label: t('mcp.ask') },
+                  { value: 'allow', label: t('mcp.withoutAsking') },
+                ]}
+                onChange={(value) => setEditor({ ...editor, send_without_confirmation: value === 'allow' })}
+              />
+            )}
+            <ToggleRow
+              title={t('mcp.delete')}
+              hint={t('mcp.deletePermission')}
+              checked={editor.delete}
+              onChange={() => setEditor({ ...editor, delete: !editor.delete, delete_without_confirmation: false })}
+            />
+            {editor.delete && (
+              <SegmentedRow
+                title={t('mcp.deleteConfirmation')}
+                hint={t('mcp.confirmationHint')}
+                value={editor.delete_without_confirmation ? 'allow' : 'ask'}
+                options={[
+                  { value: 'ask', label: t('mcp.ask') },
+                  { value: 'allow', label: t('mcp.withoutAsking') },
+                ]}
+                onChange={(value) => setEditor({ ...editor, delete_without_confirmation: value === 'allow' })}
+              />
+            )}
+          </fieldset>
         </SettingsGroup>
         <div className="flex items-center justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => setEditor(null)}>
             {t('buttons.cancel')}
           </Button>
-          <Button type="submit" variant="primary" disabled={busy || !editor.name.trim() || !editor.accounts.length}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={
+              busy ||
+              !editor.name.trim() ||
+              (!editor.all_accounts && !editor.accounts.length && !editor.manage_accounts && !editor.manage_settings)
+            }
+          >
             {editor.id ? t('mcp.save') : t('mcp.approve')}
           </Button>
         </div>
@@ -395,20 +437,32 @@ export function McpSettingsPanel() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-primary">{client.name}</p>
               <p className="mt-0.5 truncate text-[0.6875rem] text-secondary">
-                {client.accounts.map(emailOf).join(', ')}
+                {client.all_accounts ? t('mcp.allAccounts') : client.accounts.map(emailOf).join(', ')}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <Chip label={t('mcp.read')} unconfirmedLabel={t('mcp.withoutAsking')} />
-                {client.organize && <Chip label={t('mcp.organize')} unconfirmedLabel={t('mcp.withoutAsking')} />}
-                {client.drafts && <Chip label={t('chat.draft')} unconfirmedLabel={t('mcp.withoutAsking')} />}
-                {client.send && (
+                {(client.all_accounts || client.accounts.length > 0) && (
+                  <Chip label={t('mcp.read')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {client.manage_accounts && (
+                  <Chip label={t('mcp.manageAccounts')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {client.manage_settings && (
+                  <Chip label={t('mcp.manageSettings')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {(client.all_accounts || client.accounts.length > 0) && client.organize && (
+                  <Chip label={t('mcp.organize')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {(client.all_accounts || client.accounts.length > 0) && client.drafts && (
+                  <Chip label={t('chat.draft')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {(client.all_accounts || client.accounts.length > 0) && client.send && (
                   <Chip
                     label={t('buttons.send')}
                     unconfirmed={client.send_without_confirmation}
                     unconfirmedLabel={t('mcp.withoutAsking')}
                   />
                 )}
-                {client.delete && (
+                {(client.all_accounts || client.accounts.length > 0) && client.delete && (
                   <Chip
                     label={t('mcp.delete')}
                     unconfirmed={client.delete_without_confirmation}

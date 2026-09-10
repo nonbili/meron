@@ -96,10 +96,12 @@ test('approval starts with no accounts and read only, and shows a credential onc
   const name = await openEditor(view)
   const work = view.getByRole('switch', { name: 'work@example.com' })
   const drafts = view.getByRole('switch', { name: 'Draft' })
+  expect((drafts.closest('fieldset') as HTMLFieldSetElement).disabled).toBe(true)
   expect(work.getAttribute('aria-checked')).toBe('false')
   expect(drafts.getAttribute('aria-checked')).toBe('false')
   fireEvent.change(name, { target: { value: 'Assistant' } })
   fireEvent.click(work)
+  expect((drafts.closest('fieldset') as HTMLFieldSetElement).disabled).toBe(false)
   fireEvent.click(view.getByText('Create credential'))
   await waitFor(() => expect(view.getByLabelText('Client configuration')).toBeTruthy())
   const saved = calls.find((call) => call.command === 'mcp.clientSave')!
@@ -107,7 +109,10 @@ test('approval starts with no accounts and read only, and shows a credential onc
     id: '',
     name: 'Assistant',
     accounts: ['work'],
+    all_accounts: false,
     drafts: false,
+    manage_accounts: false,
+    manage_settings: false,
     organize: false,
     send: false,
     delete: false,
@@ -121,6 +126,55 @@ test('approval starts with no accounts and read only, and shows a credential onc
   expect(view.getByText('work@example.com')).toBeTruthy()
   fireEvent.click(view.getByText('Hide secret'))
   expect(view.queryByLabelText('Client configuration')).toBeNull()
+})
+
+test('a setup-only client can be approved without mail accounts', async () => {
+  accounts$.set([])
+  const view = render(<McpSettingsPanel />)
+  const name = await openEditor(view)
+  fireEvent.change(name, { target: { value: 'Setup' } })
+  expect((view.getByText('Create credential') as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(view.getByRole('switch', { name: 'Manage accounts' }))
+  fireEvent.click(view.getByText('Create credential'))
+  await waitFor(() => expect(view.getByLabelText('Client configuration')).toBeTruthy())
+  expect(calls.find((call) => call.command === 'mcp.clientSave')?.payload).toMatchObject({
+    accounts: [],
+    manage_accounts: true,
+    manage_settings: false,
+  })
+})
+
+test('all-account scope hides selections and allows approval before accounts exist', async () => {
+  accounts$.set([])
+  const view = render(<McpSettingsPanel />)
+  const name = await openEditor(view)
+  fireEvent.change(name, { target: { value: 'Every account' } })
+  fireEvent.click(view.getByRole('switch', { name: 'All accounts, including future accounts' }))
+  expect(view.queryByText('Select all current accounts')).toBeNull()
+  fireEvent.click(view.getByText('Create credential'))
+  await waitFor(() => expect(view.getByLabelText('Client configuration')).toBeTruthy())
+  expect(calls.find((call) => call.command === 'mcp.clientSave')?.payload).toMatchObject({
+    accounts: [],
+    all_accounts: true,
+    drafts: false,
+    send: false,
+    delete: false,
+    manage_accounts: false,
+    manage_settings: false,
+  })
+  expect(view.getByText('All accounts, including future accounts')).toBeTruthy()
+})
+
+test('switching back from all accounts preserves individual selections', async () => {
+  const view = render(<McpSettingsPanel />)
+  await openEditor(view)
+  fireEvent.click(view.getByRole('switch', { name: 'work@example.com' }))
+  const scope = view.getByRole('switch', { name: 'All accounts, including future accounts' })
+  fireEvent.click(scope)
+  expect(view.queryByRole('switch', { name: 'work@example.com' })).toBeNull()
+  fireEvent.click(scope)
+  expect(view.getByRole('switch', { name: 'work@example.com' }).getAttribute('aria-checked')).toBe('true')
+  expect(view.getByRole('switch', { name: 'personal@example.com' }).getAttribute('aria-checked')).toBe('false')
 })
 
 test('revoking asks first and only then drops the grant', async () => {

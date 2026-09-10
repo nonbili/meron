@@ -148,6 +148,83 @@ func TestMCPListsOnlyGrantedAccountMetadata(t *testing.T) {
 		t.Fatal(writer.calls)
 	}
 }
+
+func TestMCPAllAccountsIncludesFutureAccountsAndCanBeNarrowed(t *testing.T) {
+	app, writer := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"accounts": []any{map[string]any{"id": "allowed"}}}},
+		sidecarResponsePlan{Result: map[string]any{"accounts": []any{map[string]any{"id": "allowed"}, map[string]any{"id": "new-account"}}}},
+	)
+	s := testMCPService(t, app, false)
+	s.config.Clients[0].AllAccounts = true
+	session := connectTestMCP(t, s)
+	for _, wantNew := range []bool{false, true} {
+		result := callMCP(t, session, "list_accounts", map[string]any{})
+		data, _ := json.Marshal(result)
+		if result.IsError || strings.Contains(string(data), "new-account") != wantNew {
+			t.Fatalf("%s", data)
+		}
+	}
+	s.mu.Lock()
+	s.config.Clients[0].AllAccounts = false
+	s.mu.Unlock()
+	if !callMCP(t, session, "list_folders", map[string]any{"account_id": "new-account"}).IsError {
+		t.Fatal("narrowed grant still allowed new account")
+	}
+	if len(writer.calls) != 2 {
+		t.Fatal(writer.calls)
+	}
+}
+
+func TestMCPAllAccountScopeDoesNotWidenPermissions(t *testing.T) {
+	c := mcpClient{AllAccounts: true}
+	for _, id := range []string{"future-mail", "future-feed"} {
+		if !mcpAllows(c, id) {
+			t.Fatalf("denied %s", id)
+		}
+	}
+	for _, id := range []string{"", "unified"} {
+		if mcpAllows(c, id) {
+			t.Fatalf("allowed synthetic account %q", id)
+		}
+	}
+	for _, permission := range []mcpPermission{mcpDraft, mcpOrganize, mcpSend, mcpDelete, mcpManageAccounts, mcpManageSettings} {
+		if mcpPermitted(c, permission) {
+			t.Fatalf("enabled %s", permission)
+		}
+	}
+	var old mcpClient
+	if err := json.Unmarshal([]byte(`{"accounts":["selected"]}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.AllAccounts || mcpAllows(old, "future-mail") {
+		t.Fatal("legacy grant widened")
+	}
+}
+
+func TestMCPAllAccountsGrantPersistsWithoutAccounts(t *testing.T) {
+	s := testMCPService(t, &App{}, false)
+	_, err := s.app.mcpSettings("mcp.clientSave", map[string]any{"name": "All", "accounts": []any{}, "all_accounts": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg mcpConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Clients) != 2 || !cfg.Clients[1].AllAccounts {
+		t.Fatalf("%s", data)
+	}
+	if err := s.removeAccount("future-mail"); err != nil {
+		t.Fatal(err)
+	}
+	if !mcpAllows(s.config.Clients[1], "future-mail") {
+		t.Fatal("removal disabled dynamic scope")
+	}
+}
 func TestMCPUnscopedSearchMergesOnlyApprovedAccounts(t *testing.T) {
 	app, writer := newMailHandlerTestApp(t,
 		sidecarResponsePlan{Result: map[string]any{"accounts": []any{

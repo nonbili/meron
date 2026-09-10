@@ -48,7 +48,10 @@ type mcpClient struct {
 	ID                        string   `json:"id"`
 	Name                      string   `json:"name"`
 	Accounts                  []string `json:"accounts"`
+	AllAccounts               bool     `json:"all_accounts"`
 	Drafts                    bool     `json:"drafts"`
+	ManageAccounts            bool     `json:"manage_accounts"`
+	ManageSettings            bool     `json:"manage_settings"`
 	Organize                  bool     `json:"organize"`
 	Send                      bool     `json:"send"`
 	Delete                    bool     `json:"delete"`
@@ -70,16 +73,17 @@ type mcpActivity struct {
 	Status  string `json:"status,omitempty"`
 }
 type mcpService struct {
-	mu         sync.RWMutex
-	config     mcpConfig
-	path       string
-	app        *App
-	server     *http.Server
-	listener   net.Listener
-	startError string
-	activityMu sync.Mutex
-	activity   []mcpActivity
-	operations map[string]*mcpOperation
+	mu              sync.RWMutex
+	config          mcpConfig
+	path            string
+	app             *App
+	server          *http.Server
+	listener        net.Listener
+	startError      string
+	activityMu      sync.Mutex
+	activity        []mcpActivity
+	operations      map[string]*mcpOperation
+	creatingAccount bool // protected by mu; only one MCP account setup at a time
 }
 type mcpClientContextKey struct{}
 
@@ -297,8 +301,8 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 			}
 			selected[id] = true
 		}
-		if len(selected) == 0 {
-			return nil, errors.New("Select at least one account")
+		if len(selected) == 0 && !c.AllAccounts && !c.ManageAccounts && !c.ManageSettings {
+			return nil, errors.New("Select at least one account or a configuration permission")
 		}
 		token := ""
 		if c.ID == "" {
@@ -443,6 +447,9 @@ func mcpAllows(c mcpClient, account string) bool {
 	if account == "" || account == "unified" {
 		return false
 	}
+	if c.AllAccounts {
+		return true
+	}
 	for _, id := range c.Accounts {
 		if id == account {
 			return true
@@ -451,8 +458,8 @@ func mcpAllows(c mcpClient, account string) bool {
 	return false
 }
 
-// Account IDs can be reused when an address is added again. Remove grants
-// before deleting the account so a later setup requires fresh approval.
+// Account IDs can be reused when an address is added again. Remove explicit
+// selections before deleting; dynamic all-account grants intentionally survive.
 func (s *mcpService) removeAccount(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
