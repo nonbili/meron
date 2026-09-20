@@ -56,14 +56,11 @@ const activeListSession = persistedField(ui$.activeTaskList, 'session_task_list'
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
 export const TASKS_SESSION_KEYS = [panelOpenSession.key, activeListSession.key]
 
-/**
- * Restore the panel from the last session. The list id is not validated here —
- * the lists live in the core, not in settings, so this seeds the id and
- * [`openTasksPanel`] confirms it still exists when the panel opens.
- */
-export function restoreTasksSession(prefs: Record<string, unknown>) {
-  panelOpenSession.restore(prefs)
+/** Restore and validate the remembered list before displaying its panel. */
+export async function restoreTasksSession(prefs: Record<string, unknown>) {
   activeListSession.restore(prefs)
+  panelOpenSession.restore(prefs.tasks_enabled === true ? prefs : { ...prefs, session_tasks_panel: false })
+  if (ui$.tasksPanelOpen.peek()) await openTasksPanel()
 }
 
 /**
@@ -97,7 +94,7 @@ export function toggleTasksPanel() {
   else void openTasksPanel()
 }
 
-async function loadTaskLists(): Promise<{ lists: TaskList[]; defaultListId: string }> {
+export async function loadTaskLists(): Promise<{ lists: TaskList[]; defaultListId: string }> {
   const res = await invoke<{ lists?: TaskList[]; default_list_id?: string }>('tasks.lists')
   const lists = res?.lists ?? []
   tasks$.lists.set(lists)
@@ -134,17 +131,18 @@ export async function addTask(title: string) {
 }
 
 /**
- * Turn a message into a task. Used from the mail surfaces, where there is no
- * list picker, so the core files it under the default list.
+ * Turn a message into a task in the chosen list. Callers without an explicit
+ * destination use the remembered selection, or the core default on first use.
  */
 export async function addTaskFromMessage(input: {
   title: string
   account: string
   threadId: string
   messageId?: string
+  listId?: string
 }) {
   await invoke('tasks.create', {
-    list_id: '',
+    list_id: input.listId ?? ui$.activeTaskList.peek(),
     title: input.title,
     account: input.account,
     thread_id: input.threadId,

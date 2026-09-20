@@ -10,6 +10,7 @@ import {
   closeTasksPanel,
   loadTasks,
   openTasksPanel,
+  restoreTasksSession,
   setShowCompleted,
   tasks$,
   toggleTasksPanel,
@@ -149,7 +150,7 @@ describe('toggleTasksPanel', () => {
 })
 
 describe('addTaskFromMessage', () => {
-  it('files the message under the default list and keeps the link', async () => {
+  it('uses the default on first use and keeps the mail link', async () => {
     await addTaskFromMessage({
       title: 'Boiler repair',
       account: 'acct1',
@@ -165,6 +166,20 @@ describe('addTaskFromMessage', () => {
       message_id: '<boiler@example.com>',
     })
   })
+
+  for (const panelOpen of [true, false]) {
+    it(`uses the selected list with the panel ${panelOpen ? 'open' : 'closed'}`, async () => {
+      await openTasksPanel('list-2')
+      if (!panelOpen) closeTasksPanel()
+      calls.length = 0
+      await addTaskFromMessage({ title: 'Follow up', account: 'acct1', threadId: 'thread-1' })
+      expect(calls.find((call) => call.command === 'tasks.create')?.payload.list_id).toBe('list-2')
+      expect(calls.some((call) => call.command === 'tasks.items')).toBe(panelOpen)
+      if (panelOpen) {
+        expect(calls.find((call) => call.command === 'tasks.items')?.payload.list_id).toBe('list-2')
+      }
+    })
+  }
 
   it('does not reload a panel that is closed', async () => {
     await addTaskFromMessage({ title: 'Boiler repair', account: 'acct1', threadId: 'acct1#thread#4' })
@@ -249,5 +264,27 @@ describe('undoable deletes', () => {
     await deleteTask('task-1')
     expect(ui$.toast.get()).not.toBe('')
     expect(ui$.toastUndo.get()).toBe(null)
+  })
+})
+
+describe('restoreTasksSession', () => {
+  it('loads the lists and items when restoring an open panel', async () => {
+    await restoreTasksSession({ tasks_enabled: true, session_tasks_panel: true, session_task_list: 'list-2' })
+    expect(ui$.tasksPanelOpen.get()).toBe(true)
+    expect(ui$.activeTaskList.get()).toBe('list-2')
+    expect(tasks$.lists.get()).toHaveLength(2)
+    expect(tasks$.items.get()).toHaveLength(1)
+  })
+
+  it('replaces a missing remembered list with the default', async () => {
+    await restoreTasksSession({ tasks_enabled: true, session_tasks_panel: true, session_task_list: 'deleted' })
+    expect(ui$.activeTaskList.get()).toBe('list-1')
+    expect(tasks$.lists.get()).toHaveLength(2)
+  })
+
+  it('keeps the panel closed when Tasks is disabled', async () => {
+    await restoreTasksSession({ tasks_enabled: false, session_tasks_panel: true, session_task_list: 'list-2' })
+    expect(ui$.tasksPanelOpen.get()).toBe(false)
+    expect(calls.some((call) => call.command.startsWith('tasks.'))).toBe(false)
   })
 })

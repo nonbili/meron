@@ -374,6 +374,7 @@ private fun MeronMobileScreenContent(
     coreProtocolVersion: Int,
 ) {
     with(state) {
+        MailTaskListPicker(state)
         val navController = rememberNavController()
         val currentBackStackEntry by navController.currentBackStackEntryAsState()
         val startRoute = remember { screen.route() }
@@ -927,11 +928,7 @@ private fun MeronMobileScreenContent(
                             ?.let { thread ->
                                 {
                                     scope.launch {
-                                        addTaskFromMessage(
-                                            title = thread.subject,
-                                            account = thread.accountId,
-                                            threadId = thread.id,
-                                        )
+                                        requestAddMailToTasks(thread)
                                     }
                                     Unit
                                 }

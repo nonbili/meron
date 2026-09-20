@@ -13,7 +13,6 @@ import { SideNav } from './components/sidenav/SideNav'
 import { ThreadList } from './components/threads/ThreadList'
 import { KanbanView } from './components/kanban/KanbanView'
 import { TasksPanel } from './components/tasks/TasksPanel'
-import { PanelRail } from './components/sidenav/PanelRail'
 import { MessagePane } from './components/chat/MessagePane'
 import { AboutDialog } from './components/dialog/AboutDialog'
 import { ChangelogDialog } from './components/dialog/ChangelogDialog'
@@ -112,9 +111,6 @@ export default function App() {
             <TasksPanel listId={activeTaskList} />
           </ErrorBoundary>
         ) : null}
-        <ErrorBoundary label="panel rail">
-          <PanelRail />
-        </ErrorBoundary>
 
         <AppHotkeys />
         <CommandPalette />

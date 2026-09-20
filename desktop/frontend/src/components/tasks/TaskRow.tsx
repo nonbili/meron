@@ -1,18 +1,13 @@
 import type { ReactNode } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Mail, Trash2 } from 'lucide-react'
+import { CalendarDays, GripVertical, Mail, Trash2 } from 'lucide-react'
 
 import { useTranslation } from '../../lib/i18n'
-import { formatDueDate } from '../../lib/date'
+import { formatDueDate, taskIsOverdue } from '../../lib/date'
 import { Checkbox } from '../field/Checkbox'
 import { IconButton } from '../button/IconButton'
 import type { Task } from '../../states/tasks'
-
-/** Whether a due date has already passed, so it can be called out. */
-function isOverdue(dueAt: number): boolean {
-  return dueAt > 0 && dueAt * 1000 < Date.now()
-}
 
 interface TaskRowProps {
   task: Task
@@ -42,7 +37,7 @@ export function TaskRow({
     id: task.id,
     disabled: !sortable,
   })
-  const overdue = isOverdue(task.due_at) && !task.done
+  const overdue = taskIsOverdue(task.due_at) && !task.done
 
   return (
     <div
@@ -58,7 +53,7 @@ export function TaskRow({
       <div className="group flex items-start gap-1.5 px-1.5 py-1.5 hover:bg-hover">
         {/* The handle keeps to a fixed-width slot so titles stay aligned
           whether or not a row can be dragged. */}
-        <span className="flex h-5 w-4 shrink-0 items-center justify-center">
+        <span className="flex h-6 w-4 shrink-0 items-center justify-center">
           {sortable ? (
             <button
               type="button"
@@ -75,16 +70,13 @@ export function TaskRow({
           ) : null}
         </span>
 
-        <Checkbox
-          className="mt-0.5 shrink-0"
-          checked={task.done}
-          onChange={(event) => onToggle(event.target.checked)}
-          aria-label={task.title}
-        />
+        <span className="flex h-6 shrink-0 items-center">
+          <Checkbox checked={task.done} onChange={(event) => onToggle(event.target.checked)} aria-label={task.title} />
+        </span>
 
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 py-0.5 text-left">
           <span
-            className={`block break-words text-sm leading-snug ${
+            className={`block break-words text-sm leading-5 ${
               task.done ? 'text-secondary line-through' : 'text-primary'
             }`}
           >
@@ -93,20 +85,28 @@ export function TaskRow({
           {task.notes ? <span className="mt-0.5 block truncate text-xs text-secondary">{task.notes}</span> : null}
           {task.due_at > 0 ? (
             <span
-              className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[0.6875rem] font-medium ${
+              className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6875rem] font-medium ${
                 overdue ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-raised text-secondary'
               }`}
             >
+              <CalendarDays size={12} aria-hidden="true" />
               {formatDueDate(task.due_at)}
             </span>
           ) : null}
         </button>
 
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5">
           {task.thread_id && onOpenMessage ? (
             <IconButton label={t('tasks.openMessage')} icon={Mail} size="sm" onClick={onOpenMessage} />
           ) : null}
-          <IconButton label={t('tasks.deleteTask')} icon={Trash2} size="sm" variant="danger" onClick={onDelete} />
+          <IconButton
+            label={t('tasks.deleteTask')}
+            icon={Trash2}
+            size="sm"
+            variant="danger"
+            onClick={onDelete}
+            className="opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+          />
         </div>
       </div>
 

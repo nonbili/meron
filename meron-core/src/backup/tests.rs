@@ -854,7 +854,7 @@ fn importing_a_backup_twice_does_not_duplicate_tasks() {
 
     let target = test_conn();
     // The destination has already opened Tasks once, so the default list exists
-    // and is empty — the case where matching lists by id would lose everything.
+    // and must remain separate from the imported list.
     crate::tasks::ensure_default_list(&target).unwrap();
 
     assert_eq!(apply(&target, &data, &|_, _, _| Ok(())).unwrap().tasks, 1);
@@ -865,11 +865,9 @@ fn importing_a_backup_twice_does_not_duplicate_tasks() {
     );
 
     let lists = store::task_lists(&target).unwrap();
-    assert_eq!(lists.len(), 1, "merged into the existing list");
+    assert_eq!(lists.len(), 2, "preserve the unrelated existing list");
     assert_eq!(
-        store::tasks_for_list(&target, &lists[0].id, true)
-            .unwrap()
-            .len(),
+        store::tasks_for_list(&target, &list, true).unwrap().len(),
         1
     );
 }
@@ -884,4 +882,53 @@ fn a_backup_without_tasks_still_imports() {
     assert_eq!(summary.tasks, 0);
     assert_eq!(summary.settings, 1);
     assert!(store::task_lists(&conn).unwrap().is_empty());
+}
+
+#[test]
+fn task_backup_preserves_distinct_rows_with_matching_titles_and_timestamps() {
+    let source = test_conn();
+    for list_id in ["list-a", "list-b"] {
+        store::insert_task_list(&source, list_id, "Same list").unwrap();
+        for suffix in ["a", "b"] {
+            store::insert_task(
+                &source,
+                &format!("{list_id}-{suffix}"),
+                list_id,
+                "Same task",
+                suffix,
+                0,
+                "",
+                "",
+                "",
+            )
+            .unwrap();
+        }
+    }
+    source
+        .execute("UPDATE tasks SET created_at = 100", [])
+        .unwrap();
+    let mut data = collect(&source, false, &no_secrets).unwrap();
+    for legacy in [false, true] {
+        if legacy {
+            for list in &mut data.task_lists {
+                list.id.clear();
+                for task in &mut list.tasks {
+                    task.id.clear();
+                }
+            }
+        }
+        let target = test_conn();
+        assert_eq!(apply(&target, &data, &|_, _, _| Ok(())).unwrap().tasks, 4);
+        assert_eq!(apply(&target, &data, &|_, _, _| Ok(())).unwrap().tasks, 0);
+        let lists = store::task_lists(&target).unwrap();
+        assert_eq!(lists.len(), 2);
+        for list in lists {
+            assert_eq!(
+                store::tasks_for_list(&target, &list.id, true)
+                    .unwrap()
+                    .len(),
+                2
+            );
+        }
+    }
 }

@@ -9,7 +9,7 @@ import { useTranslation } from '../../lib/i18n'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
-import { openMailAccount } from '../../states/kanban'
+import { openThreadTabById } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 import {
   addTask,
@@ -171,7 +171,7 @@ export function TasksPanel({ listId }: { listId: string }) {
                   onToggle={(done) => void setTaskDone(task.id, done)}
                   onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
                   onDelete={() => void deleteTask(task.id)}
-                  onOpenMessage={task.thread_id ? () => openTaskThread(task.account, task.thread_id) : undefined}
+                  onOpenMessage={task.thread_id ? () => void openThreadTabById(task.thread_id) : undefined}
                 >
                   <TaskEditor task={task} lists={lists} />
                 </TaskRow>
@@ -201,7 +201,7 @@ export function TasksPanel({ listId }: { listId: string }) {
                     onToggle={(done) => void setTaskDone(task.id, done)}
                     onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
                     onDelete={() => void deleteTask(task.id)}
-                    onOpenMessage={task.thread_id ? () => openTaskThread(task.account, task.thread_id) : undefined}
+                    onOpenMessage={task.thread_id ? () => void openThreadTabById(task.thread_id) : undefined}
                   >
                     <TaskEditor task={task} lists={lists} />
                   </TaskRow>
@@ -354,16 +354,4 @@ function PanelEmptyState({ title, text }: { title: string; text: string }) {
       <p className="mt-1 text-xs leading-relaxed text-secondary">{text}</p>
     </div>
   )
-}
-
-/**
- * Show the message a task was made from, in the pane beside the panel.
- *
- * Nothing here closes Tasks: the panel stays put while the mail view moves
- * under it, which is exactly what it is for.
- */
-function openTaskThread(accountId: string, threadId: string) {
-  if (!accountId) return
-  openMailAccount(accountId)
-  ui$.selectedThread.set(threadId)
 }

@@ -88,10 +88,16 @@ class DateFormatTest {
 
     @Test
     fun onlyAPastDueDateCountsAsOverdue() {
-        assertEquals(true, taskIsOverdue(dueAtSeconds = 100, nowMillis = 200_000))
-        assertEquals(false, taskIsOverdue(dueAtSeconds = 400, nowMillis = 200_000))
-        // "No due date" is 0, which must never read as overdue.
-        assertEquals(false, taskIsOverdue(dueAtSeconds = 0, nowMillis = 200_000))
+        val today = epochSecondsForLocalDate(2026, 6, 10)
+        val yesterday = epochSecondsForLocalDate(2026, 6, 9)
+        val tomorrow = epochSecondsForLocalDate(2026, 6, 11)
+        val noon = today * 1000 + 12 * 60 * 60 * 1000
+        assertEquals(true, taskIsOverdue(yesterday, noon))
+        assertEquals(false, taskIsOverdue(today, noon))
+        assertEquals(false, taskIsOverdue(tomorrow, noon))
+        assertEquals(false, taskIsOverdue(0, noon))
+        assertEquals(false, taskIsOverdue(today, tomorrow * 1000 - 1))
+        assertEquals(true, taskIsOverdue(today, tomorrow * 1000))
     }
 
     @Test

@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Copy,
   FolderInput,
-  ListTodo,
   Mail,
   MailOpen,
   MessageSquare,
@@ -20,7 +19,7 @@ import { settings$ } from '../../states/settings'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderMenuTree } from '../menu/FolderMenuTree'
 import { MenuItem } from '../menu/MenuItem'
-import { addTaskFromMessage } from '../../states/tasks'
+import { AddMailToTasksMenu } from '../tasks/AddMailToTasksMenu'
 import { mail$ } from '../../states/mail'
 import { markThreadRead, markThreadUnread, starThread } from '../../states/mailFlags'
 import { ensureAccountFolders, isDraftFolder, isTrashFolderId } from '../../states/mailFolders'
@@ -420,14 +419,12 @@ export function ThreadContextMenu({
         />
       )}
       {tasksEnabled && (
-        <MenuItem
-          icon={<ListTodo size={13} className="text-secondary" />}
-          label={t('tasks.addFromMessage')}
-          onClick={() => {
-            const { threadId, accountId, subject } = menu
-            close()
-            void addTaskFromMessage({ title: subject, account: accountId, threadId })
-          }}
+        <AddMailToTasksMenu
+          key={menu.threadId}
+          title={menu.subject}
+          account={menu.accountId}
+          threadId={menu.threadId}
+          onAdded={close}
         />
       )}
       <div className="my-1 border-t border-border" />

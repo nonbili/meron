@@ -23,7 +23,7 @@ import jp.nonbili.meron.shared.requireCoreOk
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
+/*
  * The Tasks screen's state transitions.
  *
  * Every question about what a task *is* — ordering, which list a new one lands
@@ -92,20 +92,22 @@ internal suspend fun MeronMobileState.addTask(title: String) {
 }
 
 /**
- * File a message as a task. There is no list picker on a thread screen, so the
- * core puts it in the default list.
+ * File a message in the chosen list, retaining the mail link. Callers without
+ * an explicit destination use the remembered list or the core default.
  */
 internal suspend fun MeronMobileState.addTaskFromMessage(
     title: String,
     account: String,
     threadId: String,
     messageId: String = "",
+    listId: String = activeTaskListId,
 ) {
     val created =
         onCore {
             requireCoreOk(
                 it.createTask(
                     TaskCreateParams(
+                        listId = listId,
                         title = title,
                         account = account,
                         threadId = threadId,
@@ -269,4 +271,21 @@ internal fun parseTaskDueInput(value: String): Long {
     val day = parts[2].toIntOrNull() ?: return 0
     if (month !in 1..12 || day !in 1..31) return 0
     return epochSecondsForLocalDate(year, month, day)
+}
+
+/** Choose a destination explicitly when more than one list exists. */
+internal suspend fun MeronMobileState.requestAddMailToTasks(thread: jp.nonbili.meron.shared.ThreadSummary) {
+    val response = onCore { requireCoreOk(it.taskLists()) } ?: return
+    taskLists = parseTaskListsResponse(response).lists
+    if (taskLists.size == 1) {
+        addTaskFromMessage(thread.subject, thread.accountId, thread.id, listId = taskLists.single().id)
+    } else if (taskLists.size > 1) {
+        pendingTaskThread = thread
+    }
+}
+
+internal suspend fun MeronMobileState.pickMailTaskList(listId: String) {
+    val thread = pendingTaskThread ?: return
+    pendingTaskThread = null
+    addTaskFromMessage(thread.subject, thread.accountId, thread.id, listId = listId)
 }

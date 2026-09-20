@@ -50,3 +50,10 @@ export function fromDateInputValue(value: string): number {
   if (!year || !month || !day) return 0
   return Math.floor(new Date(year, month - 1, day).getTime() / 1000)
 }
+
+/** A date-only deadline becomes overdue on the following local day. */
+export function taskIsOverdue(dueAt: number, nowMillis = Date.now()): boolean {
+  const today = new Date(nowMillis)
+  today.setHours(0, 0, 0, 0)
+  return dueAt > 0 && dueAt * 1000 < today.getTime()
+}

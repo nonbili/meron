@@ -468,8 +468,6 @@ class MobileCommandsTest {
         assertEquals("""{"list_id":"list-1"}""", core.lastPayloadJson)
     }
 
-    /** A null field is "leave it alone", so it must not reach the core at all. */
-
     /**
      * The restore blob travels from the delete response back to the core
      * untouched — parsing and rebuilding it would be a chance to lose a field.
@@ -495,6 +493,7 @@ class MobileCommandsTest {
         assertEquals(null, parseTaskRestorePayload("""{"id":1,"result":{"ok":true,"restore":null}}"""))
     }
 
+    /** A null field is "leave it alone", so it must not reach the core at all. */
     @Test
     fun taskUpdateOmitsTheFieldsItIsNotChanging() {
         val core = FakeMeronCore("""{"ok":true}""")

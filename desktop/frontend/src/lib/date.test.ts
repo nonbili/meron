@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test'
-import { formatThreadDate } from './date'
+import { formatThreadDate, taskIsOverdue, fromDateInputValue } from './date'
 
 // Fixed reference: Wednesday 2026-06-10 15:30 local time.
 const NOW = new Date(2026, 5, 10, 15, 30, 0)
@@ -39,5 +39,20 @@ describe('formatThreadDate', () => {
 
   it('includes the year for prior-year dates', () => {
     expect(formatThreadDate(sec(new Date(2025, 11, 31, 9, 0)))).toMatch(/2025/)
+  })
+})
+
+describe('taskIsOverdue', () => {
+  it('only marks dates before today overdue', () => {
+    expect(taskIsOverdue(fromDateInputValue('2026-06-09'))).toBe(true)
+    expect(taskIsOverdue(fromDateInputValue('2026-06-10'))).toBe(false)
+    expect(taskIsOverdue(fromDateInputValue('2026-06-11'))).toBe(false)
+    expect(taskIsOverdue(0)).toBe(false)
+  })
+
+  it('becomes overdue at the next local midnight', () => {
+    const due = fromDateInputValue('2026-03-08')
+    expect(taskIsOverdue(due, new Date(2026, 2, 8, 23, 59, 59).getTime())).toBe(false)
+    expect(taskIsOverdue(due, new Date(2026, 2, 9).getTime())).toBe(true)
   })
 })

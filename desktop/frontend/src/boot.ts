@@ -27,7 +27,7 @@ export async function boot() {
   accounts$.set(accountResult.accounts)
   restoreUiSession(prefs, accountResult.accounts)
   restoreKanbanSession(prefs)
-  restoreTasksSession(prefs)
+  await restoreTasksSession(prefs)
   ensureDefaultKanbanBoard()
 
   const pendingMailto = await invoke<unknown>('mailto.consumePending').catch(() => [])

@@ -83,4 +83,4 @@ internal fun formatTaskDueDate(
 internal fun taskIsOverdue(
     dueAtSeconds: Long,
     nowMillis: Long = currentTimeMillis(),
-): Boolean = dueAtSeconds > 0 && dueAtSeconds * 1000 < nowMillis
+): Boolean = dueAtSeconds > 0 && dueAtSeconds * 1000 < nowMillis && !isSameLocalDate(dueAtSeconds * 1000, nowMillis)

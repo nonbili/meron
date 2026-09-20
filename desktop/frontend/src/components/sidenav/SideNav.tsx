@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { DragEvent } from 'react'
-import { Mail, MoreHorizontal, EyeOff, SquarePen } from 'lucide-react'
+import { Mail, ListTodo, MoreHorizontal, EyeOff, SquarePen } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { formatShortcut, isMac, RAIL_SHORTCUT_IDS } from '../../lib/shortcuts'
@@ -15,6 +15,7 @@ import { kanban$, openMailAccount, reorderKanbanBoards, selectKanbanBoard } from
 import { mail$ } from '../../states/mail'
 import { inboxUnread } from '../../states/mailFolders'
 import { settings$, setUnifiedInboxSideNavVisible } from '../../states/settings'
+import { toggleTasksPanel } from '../../states/tasks'
 import { ui$ } from '../../states/ui'
 import { QuickSettingsMenu } from './QuickSettingsMenu'
 import { SortableBoard, SortableAccount } from './SortableRailItems'
@@ -29,6 +30,8 @@ export function SideNav() {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
   useValue(settings$.shortcutOverrides)
+  const tasksEnabled = useValue(settings$.tasksEnabled)
+  const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
   const boards = useValue(settings$.kanbanBoards)
   const hiddenSideNavAccounts = useValue(settings$.hiddenSideNavAccounts)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
@@ -256,6 +259,18 @@ export function SideNav() {
 
       {/* Utilities */}
       <div className="flex flex-col gap-3 items-center">
+        {tasksEnabled && (
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white/60 transition-colors hover:bg-white/20 hover:text-white cursor-pointer max-[900px]:hidden"
+            onClick={toggleTasksPanel}
+            title={t('tasks.title')}
+            aria-label={t('tasks.title')}
+            aria-pressed={tasksPanelOpen}
+          >
+            <ListTodo size={18} />
+          </button>
+        )}
         <button
           className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${
             moreMenu ? 'bg-white/20 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'

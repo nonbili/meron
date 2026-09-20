@@ -17,7 +17,7 @@ use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ring::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::num::NonZeroU32;
@@ -127,6 +127,8 @@ pub struct BackupAccount {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BackupTaskList {
     #[serde(default)]
+    pub id: String,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub sort_order: i64,
@@ -134,11 +136,11 @@ pub struct BackupTaskList {
     pub tasks: Vec<BackupTask>,
 }
 
-/// One task. `created_at` is carried rather than restamped because it is half
-/// of the identity [`apply`] uses to avoid duplicating a task that a previous
-/// import of the same file already restored.
+/// One task, retaining its identity across exports and repeated imports.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BackupTask {
+    #[serde(default)]
+    pub id: String,
     #[serde(default)]
     pub title: String,
     #[serde(default)]
@@ -273,6 +275,7 @@ fn collect_task_lists(conn: &Connection) -> Result<Vec<BackupTaskList>> {
         let tasks = store::tasks_for_list(conn, &list.id, true)?
             .into_iter()
             .map(|task| BackupTask {
+                id: task.id,
                 title: task.title,
                 notes: task.notes,
                 due_at: task.due_at,
@@ -285,6 +288,7 @@ fn collect_task_lists(conn: &Connection) -> Result<Vec<BackupTaskList>> {
             })
             .collect();
         out.push(BackupTaskList {
+            id: list.id,
             title: list.title,
             sort_order: list.sort_order,
             tasks,
@@ -623,8 +627,8 @@ pub fn apply(
         summary.settings += 1;
     }
 
-    for list in &data.task_lists {
-        summary.tasks += restore_task_list(&tx, list, now)?;
+    for (index, list) in data.task_lists.iter().enumerate() {
+        summary.tasks += restore_task_list(&tx, list, index, now)?;
     }
 
     tx.commit()?;
@@ -662,46 +666,39 @@ fn restore_subscription(
     Ok(added as u32)
 }
 
-/// Merge one backed-up list into the store, returning how many tasks landed.
-///
-/// A list is matched by title rather than id, because ids are per-device: the
-/// destination has very likely already auto-created "My Tasks", and creating a
-/// second list with the same name would be a confusing way to restore. Within a
-/// matched list, a task already present with the same title and creation time
-/// is left alone, so importing the same file twice doesn't double everything.
-fn restore_task_list(conn: &Connection, list: &BackupTaskList, now: i64) -> Result<u32> {
-    let title = list.title.trim();
-    let existing: Option<String> = conn
-        .query_row(
-            "SELECT id FROM task_lists WHERE title = ?1 ORDER BY sort_order, id LIMIT 1",
-            params![title],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let list_id = match existing {
-        Some(id) => id,
-        None => {
-            let id = crate::tasks::new_id("tasklist");
-            conn.execute(
-                "INSERT INTO task_lists(id, title, sort_order, created_at, updated_at)
-                 VALUES(?1, ?2, ?3, ?4, ?4)",
-                params![id, title, list.sort_order, now],
-            )?;
-            id
-        }
+/// Preserve identities rather than merging unrelated rows with equal titles.
+/// Old backups lack IDs: derive repeatable IDs from their contents and position
+/// so even identical rows survive, and importing the same file is idempotent.
+fn restore_task_list(
+    conn: &Connection,
+    list: &BackupTaskList,
+    index: usize,
+    now: i64,
+) -> Result<u32> {
+    let list_id = if list.id.is_empty() {
+        legacy_task_id("tasklist", &serde_json::to_vec(&(index, list))?)
+    } else {
+        list.id.clone()
     };
+    conn.execute(
+        "INSERT OR IGNORE INTO task_lists(id, title, sort_order, created_at, updated_at)
+         VALUES(?1, ?2, ?3, ?4, ?4)",
+        params![list_id, list.title.trim(), list.sort_order, now],
+    )?;
 
     let mut restored = 0;
-    for task in &list.tasks {
+    for (index, task) in list.tasks.iter().enumerate() {
+        let task_id = if task.id.is_empty() {
+            legacy_task_id("task", &serde_json::to_vec(&(&list_id, index, task))?)
+        } else {
+            task.id.clone()
+        };
         let added = conn.execute(
-            "INSERT INTO tasks(id, list_id, title, notes, due_at, completed_at, sort_order,
+            "INSERT OR IGNORE INTO tasks(id, list_id, title, notes, due_at, completed_at, sort_order,
                                account, thread_id, message_id, json, created_at, updated_at)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, '{}', ?11, ?12
-             WHERE NOT EXISTS (
-               SELECT 1 FROM tasks WHERE list_id = ?2 AND title = ?3 AND created_at = ?11
-             )",
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, '{}', ?11, ?12)",
             params![
-                crate::tasks::new_id("task"),
+                task_id,
                 list_id,
                 task.title.trim(),
                 task.notes,
@@ -722,6 +719,14 @@ fn restore_task_list(conn: &Connection, list: &BackupTaskList, now: i64) -> Resu
         restored += added as u32;
     }
     Ok(restored)
+}
+
+fn legacy_task_id(prefix: &str, bytes: &[u8]) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
+    format!(
+        "{prefix}-legacy-{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest.as_ref())
+    )
 }
 
 fn json_column(value: &Value) -> String {

@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react'
+import { CalendarDays, X } from 'lucide-react'
+
+import { Button } from '../button/Button'
+import { IconButton } from '../button/IconButton'
 
 import { useTranslation } from '../../lib/i18n'
 import { fromDateInputValue, toDateInputValue } from '../../lib/date'
@@ -13,16 +17,27 @@ export function TaskEditor({ task, lists }: { task: Task; lists: TaskList[] }) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes)
+  const [addingDueDate, setAddingDueDate] = useState(false)
 
   // Re-seed when the pane switches to a different task, so the fields don't
   // keep showing the previous one's text.
   useEffect(() => {
     setTitle(task.title)
     setNotes(task.notes)
+    setAddingDueDate(false)
   }, [task.id])
 
   return (
-    <div className="flex flex-col gap-2 border-t border-border px-3 pb-3 pt-2">
+    <div
+      className="flex flex-col gap-2 border-t border-border px-3 pb-3 pt-2"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        event.stopPropagation()
+        // Flush the focused field's blur save before unmounting the editor.
+        if (event.target instanceof HTMLElement) event.target.blur()
+        tasks$.editingId.set('')
+      }}
+    >
       <input
         value={title}
         onChange={(event) => setTitle(event.target.value)}
@@ -44,25 +59,6 @@ export function TaskEditor({ task, lists }: { task: Task; lists: TaskList[] }) {
         rows={2}
         className="w-full resize-none rounded-lg bg-app px-2 py-1.5 text-sm text-primary outline-none ring-1 ring-border focus:ring-accent"
       />
-
-      <label className="flex items-center gap-2 text-xs text-secondary">
-        <span className="shrink-0">{t('tasks.dueDate')}</span>
-        <input
-          type="date"
-          value={toDateInputValue(task.due_at)}
-          onChange={(event) => void updateTask(task.id, { dueAt: fromDateInputValue(event.target.value) })}
-          className="rounded-lg bg-app px-2 py-1 text-xs text-primary outline-none ring-1 ring-border focus:ring-accent"
-        />
-        {task.due_at > 0 ? (
-          <button
-            type="button"
-            onClick={() => void updateTask(task.id, { dueAt: 0 })}
-            className="text-xs text-secondary hover:text-primary"
-          >
-            {t('tasks.clearDueDate')}
-          </button>
-        ) : null}
-      </label>
 
       {lists.length > 1 ? (
         <label className="flex items-center gap-2 text-xs text-secondary">
@@ -86,6 +82,36 @@ export function TaskEditor({ task, lists }: { task: Task; lists: TaskList[] }) {
           </select>
         </label>
       ) : null}
+
+      <div className="flex items-center justify-between gap-2 pt-1">
+        {task.due_at > 0 || addingDueDate ? (
+          <div className="flex min-w-0 items-center gap-1 rounded-lg bg-raised px-2 ring-1 ring-border focus-within:ring-accent">
+            <CalendarDays size={14} className="shrink-0 text-secondary" aria-hidden="true" />
+            <input
+              autoFocus={addingDueDate}
+              type="date"
+              aria-label={t('tasks.dueDate')}
+              value={toDateInputValue(task.due_at)}
+              onChange={(event) => void updateTask(task.id, { dueAt: fromDateInputValue(event.target.value) })}
+              className="min-w-0 bg-transparent py-1.5 text-xs text-primary outline-none"
+            />
+            <IconButton
+              label={t('tasks.clearDueDate')}
+              icon={X}
+              size="sm"
+              onClick={() => {
+                setAddingDueDate(false)
+                if (task.due_at > 0) void updateTask(task.id, { dueAt: 0 })
+              }}
+            />
+          </div>
+        ) : (
+          <IconButton label={t('tasks.dueDate')} icon={CalendarDays} size="md" onClick={() => setAddingDueDate(true)} />
+        )}
+        <Button variant="secondary" size="sm" onClick={() => tasks$.editingId.set('')}>
+          {t('buttons.done')}
+        </Button>
+      </div>
     </div>
   )
 }
