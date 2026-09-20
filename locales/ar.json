@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "إخفاء المكتملة",
   "tasks.listDeleted": "تم حذف «{name}»",
   "tasks.listNamePlaceholder": "اسم القائمة",
+  "tasks.mailNotFound": "الرسالة لم تعد متاحة",
   "tasks.moveDown": "تحريك لأسفل",
   "tasks.moveToList": "نقل إلى قائمة",
   "tasks.moveUp": "تحريك لأعلى",

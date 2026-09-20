@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "隱藏已完成",
   "tasks.listDeleted": "已刪除「{name}」",
   "tasks.listNamePlaceholder": "清單名稱",
+  "tasks.mailNotFound": "郵件已不存在",
   "tasks.moveDown": "下移",
   "tasks.moveToList": "移至清單",
   "tasks.moveUp": "上移",

@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import jp.nonbili.meron.shared.MobileMailCommandClient
+import jp.nonbili.meron.shared.RssThreadParams
 import jp.nonbili.meron.shared.TaskClearCompletedParams
 import jp.nonbili.meron.shared.TaskCreateParams
 import jp.nonbili.meron.shared.TaskDeleteParams
@@ -15,11 +16,15 @@ import jp.nonbili.meron.shared.TaskRestoreParams
 import jp.nonbili.meron.shared.TaskSetDoneParams
 import jp.nonbili.meron.shared.TaskSummary
 import jp.nonbili.meron.shared.TaskUpdateParams
+import jp.nonbili.meron.shared.ThreadReadParams
+import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.parseNotificationThreadId
 import jp.nonbili.meron.shared.parseTaskListsResponse
 import jp.nonbili.meron.shared.parseTaskRestorePayload
 import jp.nonbili.meron.shared.parseTasksResponse
+import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.requireCoreOk
+import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -243,20 +248,62 @@ private suspend fun MeronMobileState.refreshTaskLists() {
 /**
  * Follow a task back to the message it was made from.
  *
- * The task keeps only the composite thread id, so it is split back into the
- * account, folder and key a thread-open needs. This reuses the notification
- * tap-through, which already knows how to find one thread in a mailbox it has
- * not loaded yet.
+ * The task keeps only the composite thread id, which the core's thread read
+ * resolves by itself — across the account's folders, so a mail that has since
+ * been archived or trashed still opens. Nothing here loads a mailbox: the
+ * conversation is shown over whatever the user was looking at, as a
+ * notification tap-through does.
  */
 internal fun MeronMobileState.openTaskThread(task: TaskSummary) {
-    val parsed = parseNotificationThreadId(task.threadId) ?: return
-    openNotificationThread(
-        NotificationThreadTarget(
-            accountId = parsed.accountId.ifBlank { task.account },
-            folder = parsed.folder,
-            threadKey = parsed.threadKey,
-        ),
-    )
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val threadId = task.threadId
+    if (threadId.isBlank()) return
+    // Only for the account to authenticate with and a folder to fall back on:
+    // the read itself resolves the thread across the account's folders, so a
+    // message that was merely moved (archived, trashed) still opens.
+    val parsed = parseNotificationThreadId(threadId)
+    val accountId = parsed?.accountId?.takeIf { it.isNotBlank() } ?: task.account
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                val response =
+                    if (threadIdIsRss(threadId)) {
+                        client.readRssThread(RssThreadParams(threadId = threadId))
+                    } else {
+                        withManagedGoogleAuth(client, accountId) {
+                            client.readThread(ThreadReadParams(threadId = threadId))
+                        }
+                    }
+                parseThreadReadPage(response).messages
+            }
+        }.onSuccess { messages ->
+            val newest = messages.maxByOrNull { it.dateEpochSeconds }
+            if (newest == null) {
+                // The mail is gone, not merely elsewhere. Nothing is remembered
+                // about that: a sync can bring the conversation back, and the
+                // entry is worth pressing again then.
+                status = trs("tasks.mailNotFound")
+                return@onSuccess
+            }
+            readCoreThread(
+                ThreadSummary(
+                    id = threadId,
+                    threadId = threadId,
+                    accountId = accountId,
+                    folder = newest.folderId.ifBlank { parsed?.folder.orEmpty() },
+                    subject = newest.subject,
+                    sender = newest.fromAddr.ifBlank { newest.from },
+                    dateEpochSeconds = newest.dateEpochSeconds,
+                ),
+            )
+        }.onFailure {
+            status = "Could not open message: ${it.message}"
+        }
+    }
 }
 
 /** A due date as `YYYY-MM-DD` for the edit field, blank when there is none. */

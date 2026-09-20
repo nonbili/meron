@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Masquer les tâches terminées",
   "tasks.listDeleted": "« {name} » supprimée",
   "tasks.listNamePlaceholder": "Nom de la liste",
+  "tasks.mailNotFound": "Message plus disponible",
   "tasks.moveDown": "Descendre",
   "tasks.moveToList": "Déplacer vers une liste",
   "tasks.moveUp": "Monter",

@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import { accounts$ } from './accounts'
+import { compose$ } from './composeState'
+import type { MessageTab } from '../types'
 import {
   kanban$,
+  closeKanbanPane,
   focusKanbanThreadFolder,
   markColumnAllRead,
   markBoardAllRead,
@@ -616,5 +619,58 @@ describe('removeKanbanBoard', () => {
 
     expect(settings$.kanbanBoards.get()).toEqual([])
     expect(kanban$.activeBoardId.get()).toBe('')
+  })
+})
+
+describe('closeKanbanPane', () => {
+  const tab = (threadId: string): MessageTab => ({
+    id: `thread-${threadId}`,
+    kind: 'thread',
+    messageId: '',
+    threadId,
+    subject: threadId,
+    from: 'sender@example.com',
+    body: '',
+    viewMode: 'plain',
+  })
+
+  beforeEach(() => {
+    kanban$.activeBoardId.set('b1')
+    kanban$.paneThreadId.set('t-card')
+    kanban$.paneColumnKey.set('b1:INBOX')
+    ui$.selectedThread.set('t-card')
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+  })
+
+  it('closes the pane when the card conversation is all it holds', () => {
+    closeKanbanPane()
+
+    expect(kanban$.paneThreadId.get()).toBe('')
+    expect(ui$.selectedThread.get()).toBe('')
+    expect(ui$.mobilePane.get()).toBe('threads')
+  })
+
+  it('keeps the pane on a still-open tab instead of hiding it', () => {
+    compose$.tabs.set([tab('t-tab')])
+
+    closeKanbanPane()
+
+    expect(kanban$.paneThreadId.get()).toBe('')
+    expect(compose$.activeTab.get()).toBe('thread-t-tab')
+    expect(ui$.selectedThread.get()).toBe('t-tab')
+    expect(compose$.conversationThread.get()).toBe('')
+  })
+
+  it('leaves an active tab alone and only closes the card conversation', () => {
+    compose$.tabs.set([tab('t-tab')])
+    compose$.activeTab.set('thread-t-tab')
+    ui$.selectedThread.set('t-tab')
+
+    closeKanbanPane()
+
+    expect(kanban$.paneThreadId.get()).toBe('')
+    expect(compose$.activeTab.get()).toBe('thread-t-tab')
+    expect(ui$.selectedThread.get()).toBe('t-tab')
   })
 })

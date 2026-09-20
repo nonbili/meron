@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Slēpt pabeigtos",
   "tasks.listDeleted": "“{name}” izdzēsts",
   "tasks.listNamePlaceholder": "Saraksta nosaukums",
+  "tasks.mailNotFound": "Vēstule vairs nav pieejama",
   "tasks.moveDown": "Pārvietot uz leju",
   "tasks.moveToList": "Pārvietot uz sarakstu",
   "tasks.moveUp": "Pārvietot uz augšu",

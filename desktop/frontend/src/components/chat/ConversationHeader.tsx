@@ -30,6 +30,7 @@ import { thread$, type ConversationMode } from '../../states/thread'
 import { closeKanbanPane, kanban$, openCorrespondentMail } from '../../states/kanban'
 import { openComposeTab, openReplyInFullEditor } from '../../states/compose'
 import { canReplyAllToThread } from '../../states/composeReply'
+import { compose$ } from '../../states/composeState'
 import type { Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
@@ -62,6 +63,9 @@ export function ConversationHeader({
 }) {
   const { t } = useTranslation()
   const inKanban = !!useValue(kanban$.activeBoardId)
+  // A tab's conversation is closed from the tab strip, not from here: this
+  // button closes the conversation the board's card opened.
+  const tabOwnsPane = !!useValue(compose$.activeTab)
   const threadSearch = useValue(thread$.search)
   const threadSearchOpen = useValue(thread$.searchOpen)
   const mediaOpen = useValue(thread$.mediaOpen)
@@ -132,7 +136,7 @@ export function ConversationHeader({
           <ChevronLeft size={20} />
         </button>
 
-        {inKanban && (
+        {inKanban && !tabOwnsPane && (
           <button
             className="-mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-hover text-secondary cursor-pointer max-[768px]:hidden"
             onClick={closeKanbanPane}

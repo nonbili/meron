@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Peida tehtud",
   "tasks.listDeleted": "„{name}“ kustutatud",
   "tasks.listNamePlaceholder": "Loendi nimi",
+  "tasks.mailNotFound": "Kiri pole enam saadaval",
   "tasks.moveDown": "Liiguta alla",
   "tasks.moveToList": "Teisalda loendisse",
   "tasks.moveUp": "Liiguta üles",

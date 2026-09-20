@@ -4,16 +4,31 @@ import jp.nonbili.meron.shared.CloseableHandle
 import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.MeronCore
+import jp.nonbili.meron.shared.TaskSummary
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
+private const val TASK_THREAD_ID = "account#INBOX#t.dGhyZWFk"
+
 class TasksStateTest {
+    private val taskWithMail =
+        TaskSummary(
+            id = "task-1",
+            listId = "list-1",
+            title = "Pay the rent",
+            account = "account",
+            threadId = TASK_THREAD_ID,
+        )
+
     @Test
     fun mailUsesTheSelectedListEvenFromTheThreadScreen() =
         runBlocking {
@@ -80,9 +95,68 @@ class TasksStateTest {
             assertEquals("", core.createdPayload)
         }
 
+    // A task's mail opens wherever it now lives: the thread id names the folder
+    // it was filed from, but the read resolves it across the account.
+    @Test
+    fun taskMailOpensAfterItHasBeenMovedToAnotherFolder() =
+        runBlocking {
+            val core = RecordingCore()
+            core.threadMessages = """[{"id":"m1","folder_id":"Archive","subject":"Rent","from_addr":"landlord@example.com","date":7}]"""
+            val state = testState(core, this)
+            state.openTaskThread(taskWithMail)
+            awaitState { state.selectedCoreThread != null }
+            assertEquals(TASK_THREAD_ID, state.selectedCoreThread?.threadId)
+            assertEquals(Screen.Thread, state.screen)
+            coroutineContext.cancelChildren()
+        }
+
+    // Deleted for good: the user is told, and nothing else about the task
+    // changes — the entry stays pressable for when a sync brings the mail back.
+    @Test
+    fun taskMailThatIsGoneIsReported() =
+        runBlocking {
+            val core = RecordingCore()
+            core.threadMessages = "[]"
+            val state = testState(core, this)
+            state.openTaskThread(taskWithMail)
+            awaitState { state.status.isNotBlank() }
+            assertEquals(null, state.selectedCoreThread)
+            assertEquals("Message no longer available", state.status)
+            coroutineContext.cancelChildren()
+        }
+
+    @Test
+    fun taskMailOpensOnceItComesBack() =
+        runBlocking {
+            val core = RecordingCore()
+            core.threadMessages = "[]"
+            val state = testState(core, this)
+            state.openTaskThread(taskWithMail)
+            awaitState { state.status.isNotBlank() }
+            core.threadMessages = """[{"id":"m1","folder_id":"INBOX","subject":"Rent","from_addr":"landlord@example.com","date":7}]"""
+
+            state.openTaskThread(taskWithMail)
+            awaitState { state.selectedCoreThread != null }
+
+            assertEquals(TASK_THREAD_ID, state.selectedCoreThread?.threadId)
+            coroutineContext.cancelChildren()
+        }
+
+    /**
+     * Wait for the state a launched open lands in. The tests cancel what is
+     * left running afterwards: opening a conversation starts a wait for the
+     * app signature that only a real core ever settles.
+     */
+    private suspend fun awaitState(reached: () -> Boolean) {
+        withTimeout(5_000) {
+            while (!reached()) delay(5)
+        }
+    }
+
     private class RecordingCore : MeronCore {
         var createdPayload = ""
         var lists = """[{"id":"list-1","title":"First"},{"id":"list-2","title":"Second"}]"""
+        var threadMessages = "[]"
 
         override suspend fun invoke(
             command: String,
@@ -90,6 +164,7 @@ class TasksStateTest {
         ): String {
             if (command == "tasks.lists") return """{"lists":$lists,"default_list_id":"list-1"}"""
             if (command == "tasks.create") createdPayload = payloadJson
+            if (command == "mail.threadRead") return """{"messages":$threadMessages}"""
             return "{}"
         }
 

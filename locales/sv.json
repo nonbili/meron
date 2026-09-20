@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Dölj klara",
   "tasks.listDeleted": "”{name}” borttagen",
   "tasks.listNamePlaceholder": "Listnamn",
+  "tasks.mailNotFound": "Meddelandet är inte längre tillgängligt",
   "tasks.moveDown": "Flytta ner",
   "tasks.moveToList": "Flytta till lista",
   "tasks.moveUp": "Flytta upp",

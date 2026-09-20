@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
-import type { Message } from '../types'
+import type { Message, MessageTab } from '../types'
 import {
   activateConversationTab,
   closeMessageTab,
@@ -423,6 +423,29 @@ describe('tab navigation', () => {
         url: 'data:image/png;base64,aW1hZ2U=',
       },
     ])
+  })
+
+  it('hands over to a remaining tab when there is no Current conversation', () => {
+    // Tabs restored from the previous run: nothing in the activation trail, and
+    // no conversation behind them (the pane was empty). The Current tab has
+    // nothing to show — and in kanban view it closes the pane — so closing the
+    // active tab moves to a tab that's still open.
+    const restored = (threadId: string): MessageTab => ({
+      id: `thread-${threadId}`,
+      kind: 'thread',
+      messageId: '',
+      threadId,
+      subject: threadId,
+      from: 'a@example.com',
+      body: '',
+      viewMode: 'plain',
+    })
+    compose$.tabs.set([restored('t-a'), restored('t-b')])
+    compose$.activeTab.set('thread-t-b')
+
+    void closeMessageTab('thread-t-b')
+    expect(compose$.activeTab.get()).toBe('thread-t-a')
+    expect(ui$.selectedThread.get()).toBe('t-a')
   })
 
   it('falls back to the Current conversation when the last tab is closed', () => {

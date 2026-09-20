@@ -277,7 +277,15 @@ export function newestMessage(messages: Message[]): Message | null {
   }, null)
 }
 
-export async function openThreadTabById(threadId: string) {
+/**
+ * Open a thread in its own tab from an id alone — a notification tap, a task's
+ * mail link. `notFoundMessage` is the toast for a thread the read cannot find
+ * (deleted, expunged), since each caller knows what the user was pointing at.
+ */
+export async function openThreadTabById(
+  threadId: string,
+  notFoundMessage = t('compose.toast.couldNotOpenNotificationThread'),
+) {
   if (!threadId) return
   const id = `thread-${threadId}`
   const existing = compose$.tabs.get().find((tab) => tab.id === id)
@@ -295,7 +303,7 @@ export async function openThreadTabById(threadId: string) {
     })
     const message = newestMessage(result.messages ?? [])
     if (!message) {
-      showToast(t('compose.toast.couldNotOpenNotificationThread'), 'error')
+      showToast(notFoundMessage, 'error')
       return
     }
     openThreadTab(message)
@@ -307,7 +315,7 @@ export async function openThreadTabById(threadId: string) {
       mail$.messages.set(result.messages ?? [])
     }
   } catch (error) {
-    showToast(error instanceof Error ? error.message : t('compose.toast.couldNotOpenNotificationThread'), 'error')
+    showToast(error instanceof Error ? error.message : notFoundMessage, 'error')
   }
 }
 
@@ -807,7 +815,13 @@ export function finishClosingMessageTab(id: string) {
   compose$.tabs.set(next)
   if (compose$.activeTab.get() === id) {
     const target = popToPreviousTab(id, next)
-    const nextTab = target ? next.find((tab) => tab.id === target) : null
+    // Falling back to the Current tab needs a conversation to fall back to.
+    // With none — a tab opened from tasks or a notification over an empty pane
+    // — Current is not even offered in the strip (and in kanban view it would
+    // close the pane), so hand over to a tab that's still open instead.
+    const fallback = !target && !compose$.conversationThread.get() ? next[next.length - 1]?.id : ''
+    const resolved = fallback || target
+    const nextTab = resolved ? next.find((tab) => tab.id === resolved) : null
     if (!nextTab) {
       activateConversationTab()
     } else if (nextTab.kind === 'thread') {

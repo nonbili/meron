@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Tamamlananları gizle",
   "tasks.listDeleted": "“{name}” silindi",
   "tasks.listNamePlaceholder": "Liste adı",
+  "tasks.mailNotFound": "İleti artık kullanılamıyor",
   "tasks.moveDown": "Aşağı taşı",
   "tasks.moveToList": "Listeye taşı",
   "tasks.moveUp": "Yukarı taşı",

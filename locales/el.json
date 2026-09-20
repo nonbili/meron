@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Απόκρυψη ολοκληρωμένων",
   "tasks.listDeleted": "Η «{name}» διαγράφηκε",
   "tasks.listNamePlaceholder": "Όνομα λίστας",
+  "tasks.mailNotFound": "Το μήνυμα δεν είναι πλέον διαθέσιμο",
   "tasks.moveDown": "Μετακίνηση κάτω",
   "tasks.moveToList": "Μετακίνηση σε λίστα",
   "tasks.moveUp": "Μετακίνηση πάνω",

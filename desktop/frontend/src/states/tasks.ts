@@ -2,6 +2,7 @@ import { observable } from '@legendapp/state'
 
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
+import { openThreadTabById } from './compose'
 import { showToast, showUndoToast, ui$ } from './ui'
 import { persistedField } from '../lib/sessionPref'
 
@@ -152,6 +153,21 @@ export async function addTaskFromMessage(input: {
   // The panel is very likely open and showing the list this landed in, so it
   // has to repaint; when it is closed the next open reads fresh anyway.
   if (ui$.tasksPanelOpen.peek()) await loadTasks()
+}
+
+/**
+ * Open the mail a task was made from. The read resolves the thread across the
+ * account's folders, so a message that was merely moved (archived, trashed)
+ * still opens; one that is gone for good says so in a toast of its own rather
+ * than the notification wording.
+ *
+ * Nothing is remembered about a read that found nothing: the mail can come back
+ * with the next sync, and a link the user can press again — and be told again —
+ * beats one this app has quietly decided is dead.
+ */
+export async function openTaskMail(threadId: string) {
+  if (!threadId) return
+  await openThreadTabById(threadId, t('tasks.mailNotFound'))
 }
 
 export async function setTaskDone(taskId: string, done: boolean) {

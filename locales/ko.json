@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "완료된 작업 숨기기",
   "tasks.listDeleted": "‘{name}’을(를) 삭제했습니다",
   "tasks.listNamePlaceholder": "목록 이름",
+  "tasks.mailNotFound": "메시지를 더 이상 찾을 수 없습니다",
   "tasks.moveDown": "아래로 이동",
   "tasks.moveToList": "목록으로 이동",
   "tasks.moveUp": "위로 이동",

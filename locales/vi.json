@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Ẩn mục đã hoàn thành",
   "tasks.listDeleted": "Đã xóa “{name}”",
   "tasks.listNamePlaceholder": "Tên danh sách",
+  "tasks.mailNotFound": "Không còn thư này",
   "tasks.moveDown": "Di chuyển xuống",
   "tasks.moveToList": "Chuyển sang danh sách",
   "tasks.moveUp": "Di chuyển lên",

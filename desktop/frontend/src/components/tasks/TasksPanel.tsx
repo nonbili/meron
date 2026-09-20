@@ -9,7 +9,6 @@ import { useTranslation } from '../../lib/i18n'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
-import { openThreadTabById } from '../../states/compose'
 import { ui$ } from '../../states/ui'
 import {
   addTask,
@@ -19,6 +18,7 @@ import {
   deleteTask,
   deleteTaskList,
   loadTasks,
+  openTaskMail,
   renameTaskList,
   reorderTasks,
   setShowCompleted,
@@ -171,7 +171,7 @@ export function TasksPanel({ listId }: { listId: string }) {
                   onToggle={(done) => void setTaskDone(task.id, done)}
                   onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
                   onDelete={() => void deleteTask(task.id)}
-                  onOpenMessage={task.thread_id ? () => void openThreadTabById(task.thread_id) : undefined}
+                  onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
                 >
                   <TaskEditor task={task} lists={lists} />
                 </TaskRow>
@@ -201,7 +201,7 @@ export function TasksPanel({ listId }: { listId: string }) {
                     onToggle={(done) => void setTaskDone(task.id, done)}
                     onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
                     onDelete={() => void deleteTask(task.id)}
-                    onOpenMessage={task.thread_id ? () => void openThreadTabById(task.thread_id) : undefined}
+                    onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
                   >
                     <TaskEditor task={task} lists={lists} />
                   </TaskRow>

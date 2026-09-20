@@ -853,6 +853,7 @@
   "tasks.hideCompleted": "Ukryj ukończone",
   "tasks.listDeleted": "Usunięto „{name}”",
   "tasks.listNamePlaceholder": "Nazwa listy",
+  "tasks.mailNotFound": "Wiadomość nie jest już dostępna",
   "tasks.moveDown": "Przenieś w dół",
   "tasks.moveToList": "Przenieś do listy",
   "tasks.moveUp": "Przenieś w górę",

@@ -88,10 +88,28 @@ export function selectKanbanBoard(boardId: string) {
   kanban$.activeBoardId.set(boardId)
 }
 
+// Close the conversation a card opened in the pane. The pane itself only goes
+// away when nothing else is left in it: tabs opened over the conversation are
+// rendered by this same pane, so hiding it with them still open would strand
+// them out of sight (and still in the strip when a card reopens the pane).
 export function closeKanbanPane() {
-  ui$.selectedThread.set('')
   kanban$.paneThreadId.set('')
   kanban$.paneColumnKey.set('')
+  // Nothing to return to once the card's conversation is closed, so the Current
+  // tab stops offering one (see ConversationTabs).
+  compose$.conversationThread.set('')
+  const tabs = compose$.tabs.peek()
+  const activeTab = compose$.activeTab.peek()
+  // A tab is on screen rather than the card's conversation: it owns the pane
+  // and selectedThread, which points at the thread it renders. Leave both be.
+  if (tabs.some((tab) => tab.id === activeTab)) return
+  ui$.selectedThread.set('')
+  const last = tabs[tabs.length - 1]
+  if (last) {
+    compose$.activeTab.set(last.id)
+    if (last.kind === 'thread') ui$.selectedThread.set(last.threadId)
+    return
+  }
   ui$.mobilePane.set('threads')
 }
 

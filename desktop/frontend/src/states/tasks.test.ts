@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 
 import { ui$ } from './ui'
 import { settings$, setTasksEnabled } from './settings'
+import { compose$ } from './composeState'
 import {
   addTaskFromMessage,
   clearCompletedTasks,
@@ -9,6 +10,7 @@ import {
   deleteTaskList,
   closeTasksPanel,
   loadTasks,
+  openTaskMail,
   openTasksPanel,
   restoreTasksSession,
   setShowCompleted,
@@ -33,6 +35,7 @@ const task = (overrides: Partial<Task> = {}): Task => ({
 
 const calls: { command: string; payload: any }[] = []
 let items: Task[] = []
+let threadMessages: any[] = []
 
 beforeEach(() => {
   calls.length = 0
@@ -44,6 +47,20 @@ beforeEach(() => {
   tasks$.lists.set([])
   tasks$.items.set([])
   tasks$.showCompleted.set(false)
+  compose$.tabs.set([])
+  compose$.activeTab.set('')
+  threadMessages = [
+    {
+      id: 'm1',
+      account_id: 'acct',
+      folder_id: 'INBOX',
+      thread_id: 'acct#INBOX#t.abc',
+      from_name: 'Landlord',
+      from_addr: 'landlord@example.com',
+      subject: 'Rent',
+      date: 1,
+    },
+  ]
   ;(window as any).go = {
     main: {
       App: {
@@ -59,6 +76,7 @@ beforeEach(() => {
             }
           }
           if (command === 'tasks.items') return { tasks: items }
+          if (command === 'mail.threadRead') return { messages: threadMessages }
           if (command === 'tasks.delete') return { ok: true, restore: { tasks: [task()] } }
           if (command === 'tasks.listDelete') {
             return { ok: true, restore: { list: { id: 'list-1' }, tasks: [task()] } }
@@ -286,5 +304,47 @@ describe('restoreTasksSession', () => {
     await restoreTasksSession({ tasks_enabled: false, session_tasks_panel: true, session_task_list: 'list-2' })
     expect(ui$.tasksPanelOpen.get()).toBe(false)
     expect(calls.some((call) => call.command.startsWith('tasks.'))).toBe(false)
+  })
+})
+
+describe('openTaskMail', () => {
+  const threadId = 'acct#INBOX#t.abc'
+
+  it('opens the mail in its own tab', async () => {
+    await openTaskMail(threadId)
+    expect(compose$.tabs.get().map((tab) => tab.threadId)).toEqual([threadId])
+  })
+
+  // The mail was deleted: say so in the task's own words rather than leaving
+  // the click unexplained. The link keeps working — a later sync can bring the
+  // conversation back, and the next press then opens it.
+  it('reports mail the read cannot find', async () => {
+    threadMessages = []
+
+    await openTaskMail(threadId)
+
+    expect(compose$.tabs.get()).toEqual([])
+    expect(ui$.toast.get()).toBe('Message no longer available')
+  })
+
+  it('opens a thread that comes back', async () => {
+    threadMessages = []
+    await openTaskMail(threadId)
+    threadMessages = [
+      {
+        id: 'm1',
+        account_id: 'acct',
+        folder_id: 'INBOX',
+        thread_id: threadId,
+        from_name: 'Landlord',
+        from_addr: 'landlord@example.com',
+        subject: 'Rent',
+        date: 1,
+      },
+    ]
+
+    await openTaskMail(threadId)
+
+    expect(compose$.tabs.get().map((tab) => tab.threadId)).toEqual([threadId])
   })
 })
