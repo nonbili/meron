@@ -125,6 +125,7 @@ internal fun KanbanRouteContent(
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     kanbanBoards = kanbanBoards,
                     activeKanbanBoardId = activeKanbanBoardId,
+                    tasksEnabled = tasksEnabled,
                     onSelectUnified = {
                         screen = Screen.Mail
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
@@ -148,6 +149,12 @@ internal fun KanbanRouteContent(
                             loadKanbanBoard(refresh = false)
                         }
                         scope.launch { drawerState.close() }
+                    },
+                    onSelectTasks = {
+                        scope.launch {
+                            openTasks()
+                            drawerState.close()
+                        }
                     },
                     onAddAccount = {
                         resetPasswordAccountForm()
@@ -516,6 +523,7 @@ internal fun MailRouteContent(
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     kanbanBoards = kanbanBoards,
                     activeKanbanBoardId = activeKanbanBoardId,
+                    tasksEnabled = tasksEnabled,
                     onSelectUnified = {
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                             selectCoreMailbox(UNIFIED_ACCOUNT_ID, INBOX_FOLDER)
@@ -539,6 +547,12 @@ internal fun MailRouteContent(
                         previousTopScreen = Screen.Kanban
                         loadKanbanBoard(refresh = false)
                         scope.launch { drawerState.close() }
+                    },
+                    onSelectTasks = {
+                        scope.launch {
+                            openTasks()
+                            drawerState.close()
+                        }
                     },
                     onAddAccount = {
                         resetPasswordAccountForm()

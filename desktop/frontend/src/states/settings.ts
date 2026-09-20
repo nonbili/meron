@@ -1,5 +1,6 @@
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
+import { ui$ } from './ui'
 import {
   DEFAULT_LIGHT_ID,
   THEME_TOKEN_KEYS,
@@ -134,6 +135,12 @@ export type Settings = {
   hiddenSideNavAccounts: string[]
   /** Whether the synthetic unified inbox appears in the desktop side navigation. */
   showUnifiedInboxInSideNav: boolean
+  /**
+   * Whether the optional Tasks surface is available. Off by default: an upgrade
+   * shouldn't grow a rail entry nobody asked for. The tasks themselves live in
+   * the core's own tables, not here — this is only whether the app shows them.
+   */
+  tasksEnabled: boolean
   /** Whether to poll for new releases in the background (see states/update.ts). */
   autoUpdateCheck: boolean
   /** Version whose update banner the user dismissed, so it doesn't nag. */
@@ -176,6 +183,7 @@ const DB_KEY = {
   kanbanMinimizedColumns: 'kanban_minimized_columns',
   hiddenSideNavAccounts: 'hidden_sidenav_accounts',
   showUnifiedInboxInSideNav: 'show_unified_inbox_in_sidenav',
+  tasksEnabled: 'tasks_enabled',
   autoUpdateCheck: 'auto_update_check',
   dismissedUpdateVersion: 'dismissed_update_version',
   language: 'language',
@@ -343,6 +351,7 @@ export const settings$ = observable<Settings>({
   kanbanMinimizedColumns: {},
   hiddenSideNavAccounts: [],
   showUnifiedInboxInSideNav: true,
+  tasksEnabled: false,
   autoUpdateCheck: true,
   dismissedUpdateVersion: null,
   language: null,
@@ -633,6 +642,13 @@ export function setUnifiedInboxSideNavVisible(visible: boolean) {
   settings$.showUnifiedInboxInSideNav.set(visible)
 }
 
+export function setTasksEnabled(enabled: boolean) {
+  settings$.tasksEnabled.set(enabled)
+  // Switching the feature off takes its panel with it; the list it was on is
+  // left alone, so switching back on reopens where the user was.
+  if (!enabled) ui$.tasksPanelOpen.set(false)
+}
+
 /** Apply persisted settings loaded from the DB (via `app.prefsGet`). */
 export function hydrateSettings(prefs: Record<string, unknown>) {
   hydrating = true
@@ -727,6 +743,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.showUnifiedInboxInSideNav] === 'boolean') {
       settings$.showUnifiedInboxInSideNav.set(prefs[DB_KEY.showUnifiedInboxInSideNav] as boolean)
+    }
+
+    if (typeof prefs[DB_KEY.tasksEnabled] === 'boolean') {
+      settings$.tasksEnabled.set(prefs[DB_KEY.tasksEnabled] as boolean)
     }
 
     if (typeof prefs[DB_KEY.autoUpdateCheck] === 'boolean') {

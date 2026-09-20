@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.HideImage
@@ -143,6 +144,8 @@ internal fun SettingsScreen(
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
     onToggleUnifiedInboxNav: () -> Unit,
+    tasksEnabled: Boolean,
+    onToggleTasks: () -> Unit,
     sendShortcutMode: SendShortcutMode,
     onToggleSendShortcut: () -> Unit,
     conversationLayout: ConversationLayout,
@@ -315,6 +318,8 @@ internal fun SettingsScreen(
                     onToggleUnreadBadges = onToggleUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     onToggleUnifiedInboxNav = onToggleUnifiedInboxNav,
+                    tasksEnabled = tasksEnabled,
+                    onToggleTasks = onToggleTasks,
                     kanbanColumnWidth = kanbanColumnWidth,
                     onCycleKanbanColumnWidth = onCycleKanbanColumnWidth,
                     sendShortcutMode = sendShortcutMode,
@@ -671,6 +676,8 @@ internal fun SettingsGeneralPage(
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
     onToggleUnifiedInboxNav: () -> Unit,
+    tasksEnabled: Boolean,
+    onToggleTasks: () -> Unit,
     kanbanColumnWidth: Int,
     onCycleKanbanColumnWidth: () -> Unit,
     sendShortcutMode: SendShortcutMode,
@@ -797,6 +804,17 @@ internal fun SettingsGeneralPage(
                 title = tr("settings.sideNav.showUnifiedInbox"),
                 checked = showUnifiedInboxNav,
                 onToggle = onToggleUnifiedInboxNav,
+            )
+        }
+
+        item { SettingsSectionLabel(tr("settings.sections.tasks")) }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Checklist,
+                title = tr("settings.tasks.enable"),
+                hint = tr("settings.tasks.enableHint"),
+                checked = tasksEnabled,
+                onToggle = onToggleTasks,
             )
         }
 

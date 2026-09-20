@@ -69,6 +69,21 @@ object MobileCommand {
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
     const val RssMarkStarred = "rss.markStarred"
+
+    // Optional Tasks surface. The desktop sidecar serves these under exactly the
+    // same names, so a change on one client is a change for both.
+    const val TaskLists = "tasks.lists"
+    const val TaskListCreate = "tasks.listCreate"
+    const val TaskListRename = "tasks.listRename"
+    const val TaskListDelete = "tasks.listDelete"
+    const val TaskItems = "tasks.items"
+    const val TaskCreate = "tasks.create"
+    const val TaskUpdate = "tasks.update"
+    const val TaskSetDone = "tasks.setDone"
+    const val TaskDelete = "tasks.delete"
+    const val TaskReorder = "tasks.reorder"
+    const val TaskClearCompleted = "tasks.clearCompleted"
+    const val TaskRestore = "tasks.restore"
 }
 
 data class AddRssAccountParams(
@@ -1123,6 +1138,30 @@ class MobileMailCommandClient(
 
     suspend fun markRssStarred(params: RssMarkStarredParams): String = core.invoke(MobileCommand.RssMarkStarred, params.toJson())
 
+    suspend fun taskLists(): String = core.invoke(MobileCommand.TaskLists)
+
+    suspend fun createTaskList(params: TaskListCreateParams): String = core.invoke(MobileCommand.TaskListCreate, params.toJson())
+
+    suspend fun renameTaskList(params: TaskListRenameParams): String = core.invoke(MobileCommand.TaskListRename, params.toJson())
+
+    suspend fun deleteTaskList(params: TaskListDeleteParams): String = core.invoke(MobileCommand.TaskListDelete, params.toJson())
+
+    suspend fun taskItems(params: TaskItemsParams): String = core.invoke(MobileCommand.TaskItems, params.toJson())
+
+    suspend fun createTask(params: TaskCreateParams): String = core.invoke(MobileCommand.TaskCreate, params.toJson())
+
+    suspend fun updateTask(params: TaskUpdateParams): String = core.invoke(MobileCommand.TaskUpdate, params.toJson())
+
+    suspend fun setTaskDone(params: TaskSetDoneParams): String = core.invoke(MobileCommand.TaskSetDone, params.toJson())
+
+    suspend fun deleteTask(params: TaskDeleteParams): String = core.invoke(MobileCommand.TaskDelete, params.toJson())
+
+    suspend fun reorderTasks(params: TaskReorderParams): String = core.invoke(MobileCommand.TaskReorder, params.toJson())
+
+    suspend fun clearCompletedTasks(params: TaskClearCompletedParams): String = core.invoke(MobileCommand.TaskClearCompleted, params.toJson())
+
+    suspend fun restoreTasks(params: TaskRestoreParams): String = core.invoke(MobileCommand.TaskRestore, params.toJson())
+
     suspend fun send(params: SendMailParams): String = core.invoke(MobileCommand.Send, params.toJson())
 
     suspend fun saveDraft(params: SaveDraftParams): String = core.invoke(MobileCommand.SaveDraft, params.toJson())
@@ -1440,6 +1479,133 @@ fun rssMarkStarredRequest(
     id: Long = 1,
     params: RssMarkStarredParams,
 ): CoreRequest = CoreRequest(id, MobileCommand.RssMarkStarred, params.toJson())
+
+// ---- Tasks ------------------------------------------------------------------
+
+data class TaskItemsParams(
+    val listId: String,
+    val includeCompleted: Boolean = false,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "list_id" to listId.jsonString(),
+            "include_completed" to includeCompleted.toString(),
+        )
+}
+
+data class TaskListCreateParams(
+    val title: String,
+) {
+    fun toJson(): String = jsonObject("title" to title.jsonString())
+}
+
+data class TaskListRenameParams(
+    val listId: String,
+    val title: String,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "list_id" to listId.jsonString(),
+            "title" to title.jsonString(),
+        )
+}
+
+data class TaskListDeleteParams(
+    val listId: String,
+) {
+    fun toJson(): String = jsonObject("list_id" to listId.jsonString())
+}
+
+/**
+ * A new task. [listId] may be blank — the core then files it under the default
+ * list, which is what "add this message to Tasks" wants, since that action has
+ * no list picker to offer.
+ */
+data class TaskCreateParams(
+    val listId: String = "",
+    val title: String,
+    val notes: String = "",
+    val dueAt: Long = 0,
+    val account: String = "",
+    val threadId: String = "",
+    val messageId: String = "",
+) {
+    fun toJson(): String =
+        jsonObject(
+            "list_id" to listId.jsonString(),
+            "title" to title.jsonString(),
+            "notes" to notes.jsonString(),
+            "due_at" to dueAt.toString(),
+            "account" to account.jsonString(),
+            "thread_id" to threadId.jsonString(),
+            "message_id" to messageId.jsonString(),
+        )
+}
+
+/** A patch: a null field is left alone rather than cleared. */
+data class TaskUpdateParams(
+    val taskId: String,
+    val title: String? = null,
+    val notes: String? = null,
+    val dueAt: Long? = null,
+    val listId: String? = null,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "task_id" to taskId.jsonString(),
+            "title" to title?.jsonString(),
+            "notes" to notes?.jsonString(),
+            "due_at" to dueAt?.toString(),
+            "list_id" to listId?.jsonString(),
+        )
+}
+
+data class TaskSetDoneParams(
+    val taskId: String,
+    val done: Boolean,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "task_id" to taskId.jsonString(),
+            "done" to done.toString(),
+        )
+}
+
+data class TaskDeleteParams(
+    val taskId: String,
+) {
+    fun toJson(): String = jsonObject("task_id" to taskId.jsonString())
+}
+
+data class TaskReorderParams(
+    val listId: String,
+    val taskIds: List<String>,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "list_id" to listId.jsonString(),
+            "task_ids" to taskIds.jsonStringArray(),
+        )
+}
+
+/**
+ * Undo a delete, by handing back the `restore` blob the delete returned.
+ *
+ * [restore] is raw JSON, not a string value: the client never looks inside it,
+ * so it travels from the delete response to here untouched rather than being
+ * parsed into fields and rebuilt.
+ */
+data class TaskRestoreParams(
+    val restore: String,
+) {
+    fun toJson(): String = jsonObject("restore" to restore)
+}
+
+data class TaskClearCompletedParams(
+    val listId: String,
+) {
+    fun toJson(): String = jsonObject("list_id" to listId.jsonString())
+}
 
 private fun jsonObject(vararg fields: Pair<String, String?>): String =
     fields

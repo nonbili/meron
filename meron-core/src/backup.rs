@@ -17,7 +17,7 @@ use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ring::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::num::NonZeroU32;
@@ -121,6 +121,47 @@ pub struct BackupAccount {
     pub secrets: Option<Secrets>,
 }
 
+/// One task list and its items. Tasks are local-only — no server holds a copy —
+/// so unlike cached mail they cannot be re-fetched, which is why the config
+/// backup carries them in full rather than a pointer.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BackupTaskList {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub sort_order: i64,
+    #[serde(default)]
+    pub tasks: Vec<BackupTask>,
+}
+
+/// One task. `created_at` is carried rather than restamped because it is half
+/// of the identity [`apply`] uses to avoid duplicating a task that a previous
+/// import of the same file already restored.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BackupTask {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub due_at: i64,
+    #[serde(default)]
+    pub completed_at: i64,
+    #[serde(default)]
+    pub sort_order: i64,
+    #[serde(default)]
+    pub created_at: i64,
+    /// The thread this task came from, empty for a task typed from scratch.
+    /// Restored as-is: if the account it names isn't on this device the link is
+    /// simply dead, which is better than dropping the task.
+    #[serde(default)]
+    pub account: String,
+    #[serde(default)]
+    pub thread_id: String,
+    #[serde(default)]
+    pub message_id: String,
+}
+
 /// The decrypted body of a backup. Not `Debug`, for the same reason as
 /// [`BackupAccount`].
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -130,6 +171,11 @@ pub struct BackupData {
     /// The `settings` table, key -> parsed JSON value.
     #[serde(default)]
     pub settings: Map<String, Value>,
+    /// Absent in files written before Tasks existed, hence `default`. That is
+    /// also why [`FORMAT_VERSION`] does not move: an older build reading a
+    /// newer file ignores the field rather than failing on it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub task_lists: Vec<BackupTaskList>,
 }
 
 /// What [`import`] changed, for the "restored N accounts" confirmation.
@@ -140,6 +186,7 @@ pub struct ImportSummary {
     pub feeds: u32,
     pub settings: u32,
     pub secrets: u32,
+    pub tasks: u32,
 }
 
 impl ImportSummary {
@@ -150,6 +197,7 @@ impl ImportSummary {
             "feeds": self.feeds,
             "settings": self.settings,
             "secrets": self.secrets,
+            "tasks": self.tasks,
         })
     }
 }
@@ -208,7 +256,41 @@ pub fn collect(
         redact_settings(&mut settings);
     }
 
-    Ok(BackupData { accounts, settings })
+    Ok(BackupData {
+        accounts,
+        settings,
+        task_lists: collect_task_lists(conn)?,
+    })
+}
+
+/// Read every task list and its items. Tasks hold nothing secret — they are
+/// whatever the user typed — so unlike account config they are not redacted
+/// from a plaintext export.
+fn collect_task_lists(conn: &Connection) -> Result<Vec<BackupTaskList>> {
+    let lists = store::task_lists(conn)?;
+    let mut out = Vec::with_capacity(lists.len());
+    for list in lists {
+        let tasks = store::tasks_for_list(conn, &list.id, true)?
+            .into_iter()
+            .map(|task| BackupTask {
+                title: task.title,
+                notes: task.notes,
+                due_at: task.due_at,
+                completed_at: task.completed_at,
+                sort_order: task.sort_order,
+                created_at: task.created_at,
+                account: task.account,
+                thread_id: task.thread_id,
+                message_id: task.message_id,
+            })
+            .collect();
+        out.push(BackupTaskList {
+            title: list.title,
+            sort_order: list.sort_order,
+            tasks,
+        });
+    }
+    Ok(out)
 }
 
 fn collect_subscriptions(conn: &Connection, account: &str) -> Result<Vec<BackupSubscription>> {
@@ -541,6 +623,10 @@ pub fn apply(
         summary.settings += 1;
     }
 
+    for list in &data.task_lists {
+        summary.tasks += restore_task_list(&tx, list, now)?;
+    }
+
     tx.commit()?;
     Ok(summary)
 }
@@ -574,6 +660,68 @@ fn restore_subscription(
         ],
     )?;
     Ok(added as u32)
+}
+
+/// Merge one backed-up list into the store, returning how many tasks landed.
+///
+/// A list is matched by title rather than id, because ids are per-device: the
+/// destination has very likely already auto-created "My Tasks", and creating a
+/// second list with the same name would be a confusing way to restore. Within a
+/// matched list, a task already present with the same title and creation time
+/// is left alone, so importing the same file twice doesn't double everything.
+fn restore_task_list(conn: &Connection, list: &BackupTaskList, now: i64) -> Result<u32> {
+    let title = list.title.trim();
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM task_lists WHERE title = ?1 ORDER BY sort_order, id LIMIT 1",
+            params![title],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let list_id = match existing {
+        Some(id) => id,
+        None => {
+            let id = crate::tasks::new_id("tasklist");
+            conn.execute(
+                "INSERT INTO task_lists(id, title, sort_order, created_at, updated_at)
+                 VALUES(?1, ?2, ?3, ?4, ?4)",
+                params![id, title, list.sort_order, now],
+            )?;
+            id
+        }
+    };
+
+    let mut restored = 0;
+    for task in &list.tasks {
+        let added = conn.execute(
+            "INSERT INTO tasks(id, list_id, title, notes, due_at, completed_at, sort_order,
+                               account, thread_id, message_id, json, created_at, updated_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, '{}', ?11, ?12
+             WHERE NOT EXISTS (
+               SELECT 1 FROM tasks WHERE list_id = ?2 AND title = ?3 AND created_at = ?11
+             )",
+            params![
+                crate::tasks::new_id("task"),
+                list_id,
+                task.title.trim(),
+                task.notes,
+                task.due_at.max(0),
+                task.completed_at.max(0),
+                task.sort_order,
+                task.account,
+                task.thread_id,
+                task.message_id,
+                if task.created_at > 0 {
+                    task.created_at
+                } else {
+                    now
+                },
+                now,
+            ],
+        )?;
+        restored += added as u32;
+    }
+    Ok(restored)
 }
 
 fn json_column(value: &Value) -> String {

@@ -12,6 +12,8 @@ import { useAppEffects } from './useAppEffects'
 import { SideNav } from './components/sidenav/SideNav'
 import { ThreadList } from './components/threads/ThreadList'
 import { KanbanView } from './components/kanban/KanbanView'
+import { TasksPanel } from './components/tasks/TasksPanel'
+import { PanelRail } from './components/sidenav/PanelRail'
 import { MessagePane } from './components/chat/MessagePane'
 import { AboutDialog } from './components/dialog/AboutDialog'
 import { ChangelogDialog } from './components/dialog/ChangelogDialog'
@@ -38,6 +40,8 @@ export default function App() {
   const system = useValue(ui$.system)
   const accounts = useValue(accounts$)
   const activeBoardId = useValue(kanban$.activeBoardId)
+  const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
+  const activeTaskList = useValue(ui$.activeTaskList)
   const composeTabs = useValue(compose$.tabs)
   const activeComposeTab = useValue(compose$.activeTab)
   const threadListWidth = useValue(settings$.threadListWidth)
@@ -100,6 +104,17 @@ export default function App() {
             </ErrorBoundary>
           </div>
         ) : null}
+
+        {/* Tasks is a panel, not a view: it sits to the right of whatever is
+          open so a list can be worked against the thread list beside it. */}
+        {tasksPanelOpen && activeTaskList ? (
+          <ErrorBoundary label="tasks">
+            <TasksPanel listId={activeTaskList} />
+          </ErrorBoundary>
+        ) : null}
+        <ErrorBoundary label="panel rail">
+          <PanelRail />
+        </ErrorBoundary>
 
         <AppHotkeys />
         <CommandPalette />

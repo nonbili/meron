@@ -2179,7 +2179,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 
     for table in [
         "accounts",
@@ -2193,6 +2193,8 @@ fn run_migrations_creates_schema_and_bumps_version() {
         "meta",
         "settings",
         "observed_mail_identities",
+        "task_lists",
+        "tasks",
     ] {
         let exists = conn
             .query_row(
@@ -2211,7 +2213,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 }
 
 #[test]
@@ -2239,7 +2241,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -3847,4 +3849,38 @@ fn starred_mutation_skips_matching_flags_and_stars_only_source_messages_and_copi
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn tasks_tables_arrive_on_an_existing_install() {
+    let conn = Connection::open_in_memory().unwrap();
+    db::migrate_to_v8(&conn).unwrap();
+    insert_message(&conn, 1, "existing", "", "", None);
+    let table_count = |name: &str| -> i64 {
+        conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![name],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(table_count("tasks"), 0, "not there before the migration");
+
+    db::run_migrations(&conn).unwrap();
+
+    assert_eq!(table_count("tasks"), 1);
+    assert_eq!(table_count("task_lists"), 1);
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 10);
+
+    // Cached mail is untouched, and the new tables are writable.
+    let messages: i64 = conn
+        .query_row("SELECT count(*) FROM messages", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(messages, 1);
+    insert_task_list(&conn, "list1", "My Tasks").unwrap();
+    insert_task(&conn, "task1", "list1", "Write it down", "", 0, "", "", "").unwrap();
+    assert_eq!(tasks_for_list(&conn, "list1", false).unwrap().len(), 1);
 }

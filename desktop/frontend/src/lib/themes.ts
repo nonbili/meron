@@ -477,8 +477,8 @@ const EMBER: ThemeTokens = {
 export const BUILTIN_THEMES: ThemeDef[] = [
   { id: 'light', name: 'Meron Light', appearance: 'light', tokens: MERON_LIGHT },
   { id: 'indigo', name: 'Indigo', appearance: 'light', tokens: INDIGO_LIGHT },
-  { id: 'indigo-dark', name: 'Indigo Dark', appearance: 'dark', tokens: INDIGO_DARK },
   { id: 'dark', name: 'Meron Dark', appearance: 'dark', tokens: MERON_DARK },
+  { id: 'indigo-dark', name: 'Indigo Dark', appearance: 'dark', tokens: INDIGO_DARK },
   { id: 'mist', name: 'Mist', appearance: 'light', tokens: MIST },
   { id: 'paper', name: 'Paper', appearance: 'light', tokens: PAPER },
   { id: 'dawn', name: 'Dawn', appearance: 'light', tokens: DAWN },

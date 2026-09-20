@@ -184,6 +184,7 @@ import jp.nonbili.meron.shared.parseThreadListResponse
 import jp.nonbili.meron.shared.parseThreadReadPage
 import jp.nonbili.meron.shared.recipientTail
 import jp.nonbili.meron.shared.replaceRecipientTail
+import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
 import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
@@ -920,6 +921,21 @@ private fun MeronMobileScreenContent(
                             selectedCoreThread = t.copy(starred = !t.starred)
                         }
                     },
+                    onAddToTasks =
+                        selectedCoreThread
+                            ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
+                            ?.let { thread ->
+                                {
+                                    scope.launch {
+                                        addTaskFromMessage(
+                                            title = thread.subject,
+                                            account = thread.accountId,
+                                            threadId = thread.id,
+                                        )
+                                    }
+                                    Unit
+                                }
+                            },
                     moveFolders =
                         selectedCoreThread
                             ?.let { thread -> foldersByAccount[thread.accountId].orEmpty() }
@@ -1279,6 +1295,12 @@ private fun MeronMobileScreenContent(
                         showUnifiedInboxNav = !showUnifiedInboxNav
                         saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
                     },
+                    tasksEnabled = tasksEnabled,
+                    onToggleTasks = {
+                        tasksEnabled = !tasksEnabled
+                        saveAppBoolean(prefs, TASKS_ENABLED_PREF, tasksEnabled)
+                        if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
+                    },
                     sendShortcutMode = sendShortcutMode,
                     onToggleSendShortcut = {
                         val next = sendShortcutMode.next()
@@ -1381,6 +1403,14 @@ private fun MeronMobileScreenContent(
                     mailSelectionActive = mailSelectionActive,
                     selectedMailThreads = selectedMailThreads,
                     activeKanbanBoard = activeKanbanBoard,
+                )
+            }
+
+            composable(AppRoutes.Tasks) {
+                TasksRouteContent(
+                    state = state,
+                    drawerState = drawerState,
+                    drawerFolders = drawerFolders,
                 )
             }
 

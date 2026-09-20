@@ -5,11 +5,12 @@ import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ThreadSummary
 
-internal enum class Screen { Mail, Kanban, Thread, Compose, AddAccount, Settings }
+internal enum class Screen { Mail, Kanban, Tasks, Thread, Compose, AddAccount, Settings }
 
 internal object AppRoutes {
     const val Mail = "mail"
     const val Kanban = "kanban"
+    const val Tasks = "tasks"
     const val Thread = "thread"
     const val Compose = "compose"
     const val AddAccount = "add-account"
@@ -20,6 +21,7 @@ internal fun Screen.route(): String =
     when (this) {
         Screen.Mail -> AppRoutes.Mail
         Screen.Kanban -> AppRoutes.Kanban
+        Screen.Tasks -> AppRoutes.Tasks
         Screen.Thread -> AppRoutes.Thread
         Screen.Compose -> AppRoutes.Compose
         Screen.AddAccount -> AppRoutes.AddAccount
@@ -30,6 +32,7 @@ internal fun appRouteToScreen(route: String?): Screen? =
     when (route?.substringBefore("?")) {
         AppRoutes.Mail -> Screen.Mail
         AppRoutes.Kanban -> Screen.Kanban
+        AppRoutes.Tasks -> Screen.Tasks
         AppRoutes.Thread -> Screen.Thread
         AppRoutes.Compose -> Screen.Compose
         AppRoutes.AddAccount -> Screen.AddAccount
@@ -125,6 +128,9 @@ internal const val APP_PREFS = "meron_app_prefs"
 internal const val APPEARANCE_MODE_PREF = "appearance_mode_v1"
 internal const val SHOW_UNREAD_BADGES_PREF = "show_unread_badges_v1"
 internal const val SHOW_UNIFIED_INBOX_PREF = "show_unified_inbox_v1"
+
+/** Whether the optional Tasks screen is offered. Off until the user asks for it. */
+internal const val TASKS_ENABLED_PREF = "tasks_enabled_v1"
 internal const val SHOW_SENDER_IMAGES_PREF = "show_sender_images_v1"
 internal const val NOTIFICATION_BANNER_DISMISSED_PREF = "notification_banner_dismissed_v1"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"

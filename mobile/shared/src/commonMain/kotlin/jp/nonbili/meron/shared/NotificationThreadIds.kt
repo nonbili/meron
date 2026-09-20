@@ -44,3 +44,42 @@ fun notificationThreadId(
  *  in its new folder. A uid-derived key cannot: IMAP assigns fresh uids in the
  *  target mailbox, so the old uid names nothing there. */
 fun notificationThreadKeyIsStableAcrossMove(threadKey: String): Boolean = threadKey.isNotBlank() && !threadKey.startsWith("uid:")
+
+/** The account, folder and thread key a composite `thread_id` was built from. */
+data class ParsedThreadId(
+    val accountId: String,
+    val folder: String,
+    val threadKey: String,
+)
+
+/**
+ * The inverse of [notificationThreadId]: split a stored `thread_id` back into
+ * the fields a thread-open needs.
+ *
+ * A Tasks entry keeps only the composite id — that is all the core hands the
+ * clients — but reopening the thread on mobile needs the folder to load and the
+ * key to match against, so the id has to come apart again.
+ *
+ * Returns null for anything that isn't the three-part shape, including a feed
+ * id, whose middle segment is the literal `rss` rather than a folder.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+fun parseNotificationThreadId(threadId: String): ParsedThreadId? {
+    val separator = threadId.lastIndexOf('#')
+    if (separator <= 0) return null
+    val head = threadId.substring(0, separator)
+    val key = threadId.substring(separator + 1)
+    val folderSeparator = head.lastIndexOf('#')
+    if (folderSeparator <= 0) return null
+    val accountId = head.substring(0, folderSeparator)
+    val folder = head.substring(folderSeparator + 1)
+    if (accountId.isBlank() || folder.isBlank() || key.isBlank()) return null
+    val threadKey =
+        if (key.startsWith("t.")) {
+            val padded = key.substring(2).padEnd((key.length - 2 + 3) / 4 * 4, '=')
+            runCatching { Base64.UrlSafe.decode(padded).decodeToString() }.getOrNull() ?: return null
+        } else {
+            "uid:$key"
+        }
+    return ParsedThreadId(accountId, folder, threadKey)
+}

@@ -18,6 +18,7 @@ mod mail;
 mod media;
 mod oauth;
 mod prefs;
+mod tasks;
 
 pub(crate) use accounts::*;
 pub(crate) use backup::*;
@@ -27,6 +28,7 @@ pub(crate) use mail::*;
 pub(crate) use media::*;
 pub(crate) use oauth::*;
 pub(crate) use prefs::*;
+pub(crate) use tasks::*;
 
 #[cfg(test)]
 mod tests;
@@ -119,7 +121,10 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "rss.thread" => Ok(json!({ "messages": [] })),
         "rss.markRead" => Ok(json!({ "ok": true })),
         "rss.markStarred" => Ok(json!({ "ok": true })),
-        method => Err(format!("unknown method: {method}")),
+        method => match stub_mobile_tasks(method) {
+            Some(value) => Ok(value),
+            None => Err(format!("unknown method: {method}")),
+        },
     }
 }
 
@@ -223,7 +228,10 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "rss.thread" => read_mobile_rss_thread(data_dir, &req.params),
         "rss.markRead" => mark_mobile_rss_thread_read(data_dir, &req.params),
         "rss.markStarred" => mark_mobile_rss_thread_starred(data_dir, &req.params),
-        _ => dispatch_protocol_request(req),
+        method => match dispatch_mobile_tasks(data_dir, method, &req.params) {
+            Some(result) => result,
+            None => dispatch_protocol_request(req),
+        },
     }
 }
 

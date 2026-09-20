@@ -663,6 +663,83 @@ private fun String.jsonObjectEntries(): List<Pair<String, String>> {
     return out
 }
 
+// ---- Tasks ------------------------------------------------------------------
+
+/** One task list, as `tasks.lists` reports it. */
+data class TaskListSummary(
+    val id: String,
+    val title: String,
+)
+
+/**
+ * One task. `dueAt` and `completedAt` are epoch seconds with 0 for "unset",
+ * matching the core's columns, so no nullable arithmetic is needed to sort or
+ * compare them.
+ */
+data class TaskSummary(
+    val id: String,
+    val listId: String,
+    val title: String,
+    val notes: String = "",
+    val dueAt: Long = 0,
+    val completedAt: Long = 0,
+    val done: Boolean = false,
+    val account: String = "",
+    val threadId: String = "",
+    val messageId: String = "",
+)
+
+/** Lists plus the id to open when the caller has no preference of its own. */
+data class TaskListsResponse(
+    val lists: List<TaskListSummary>,
+    val defaultListId: String,
+)
+
+fun parseTaskListsResponse(responseJson: String): TaskListsResponse {
+    val lists =
+        responseJson
+            .findJsonArrayProperty("lists")
+            ?.jsonArrayElements()
+            ?.mapNotNull { item ->
+                val id = item.findJsonStringProperty("id").orEmpty()
+                if (id.isBlank()) null else TaskListSummary(id, item.findJsonStringProperty("title").orEmpty())
+            }.orEmpty()
+    return TaskListsResponse(lists, responseJson.findJsonStringProperty("default_list_id").orEmpty())
+}
+
+fun parseTasksResponse(responseJson: String): List<TaskSummary> =
+    responseJson
+        .findJsonArrayProperty("tasks")
+        ?.jsonArrayElements()
+        ?.mapNotNull(::parseTaskObject)
+        .orEmpty()
+
+fun parseClearedTaskCount(responseJson: String): Int = responseJson.findJsonLongProperty("removed")?.toInt() ?: 0
+
+/**
+ * The raw `restore` object a delete returned, or null when there is nothing to
+ * put back. Deliberately not parsed into fields: the caller's only job is to
+ * hand it back, and re-encoding it would be a chance to lose something.
+ */
+fun parseTaskRestorePayload(responseJson: String): String? = responseJson.findJsonPropertyValue("restore")?.takeIf { it.startsWith('{') }
+
+private fun parseTaskObject(item: String): TaskSummary? {
+    val id = item.findJsonStringProperty("id").orEmpty()
+    if (id.isBlank()) return null
+    return TaskSummary(
+        id = id,
+        listId = item.findJsonStringProperty("list_id").orEmpty(),
+        title = item.findJsonStringProperty("title").orEmpty(),
+        notes = item.findJsonStringProperty("notes").orEmpty(),
+        dueAt = item.findJsonLongProperty("due_at") ?: 0,
+        completedAt = item.findJsonLongProperty("completed_at") ?: 0,
+        done = item.findJsonBooleanProperty("done") ?: false,
+        account = item.findJsonStringProperty("account").orEmpty(),
+        threadId = item.findJsonStringProperty("thread_id").orEmpty(),
+        messageId = item.findJsonStringProperty("message_id").orEmpty(),
+    )
+}
+
 private fun String.findJsonStringProperty(name: String): String? {
     val value = findJsonPropertyValue(name) ?: return null
     if (!value.startsWith('"')) return null

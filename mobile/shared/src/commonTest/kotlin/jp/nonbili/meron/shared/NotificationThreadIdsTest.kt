@@ -70,4 +70,22 @@ class NotificationThreadIdsTest {
         assertTrue(notificationThreadKeyIsStableAcrossMove("topic"))
         assertTrue(notificationThreadKeyIsStableAcrossMove("<abc@example.com>#Re: lunch"))
     }
+
+    @Test
+    fun aCompositeIdSplitsBackIntoTheFieldsItWasBuiltFrom() {
+        for (threadKey in listOf("topic", "uid:4821", "<msg@example.com>", "a/b+c")) {
+            val id = notificationThreadId("me@example.com", "INBOX", threadKey)
+            val parsed = parseNotificationThreadId(id)
+            assertEquals("me@example.com", parsed?.accountId)
+            assertEquals("INBOX", parsed?.folder)
+            assertEquals(threadKey, parsed?.threadKey)
+        }
+    }
+
+    @Test
+    fun anIdWithNoFolderOrKeyIsRejected() {
+        assertEquals(null, parseNotificationThreadId("me@example.com"))
+        assertEquals(null, parseNotificationThreadId("me@example.com#INBOX"))
+        assertEquals(null, parseNotificationThreadId(""))
+    }
 }

@@ -65,6 +65,13 @@ export const ui$ = observable({
   accountSettingsId: '',
   addFeedAccount: '',
   editFeed: null as EditFeed | null,
+  // The optional Tasks panel: whether the right-hand panel is showing, and
+  // which list it is showing. Unlike a board it does not own the main pane —
+  // it sits beside mail or kanban, so both stay visible while you work through
+  // a list. Lives here rather than in states/tasks because the panel is app
+  // chrome, like the dialogs above it.
+  tasksPanelOpen: false,
+  activeTaskList: '',
   // Command palette (⌘/Ctrl+K). Ephemeral: open flag, search query, and the
   // highlighted row index.
   paletteOpen: false,

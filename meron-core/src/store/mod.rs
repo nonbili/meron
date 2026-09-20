@@ -48,6 +48,7 @@ mod messages;
 mod rss;
 mod search;
 mod settings;
+mod tasks;
 mod threads;
 mod updates;
 
@@ -58,6 +59,7 @@ pub use messages::*;
 pub use rss::*;
 pub use search::*;
 pub use settings::*;
+pub use tasks::*;
 pub use threads::*;
 pub use updates::*;
 

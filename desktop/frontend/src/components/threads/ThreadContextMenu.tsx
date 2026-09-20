@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   FolderInput,
+  ListTodo,
   Mail,
   MailOpen,
   MessageSquare,
@@ -15,9 +16,11 @@ import {
 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { moveFeed, openFeedEdit } from '../../states/feeds'
+import { settings$ } from '../../states/settings'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderMenuTree } from '../menu/FolderMenuTree'
 import { MenuItem } from '../menu/MenuItem'
+import { addTaskFromMessage } from '../../states/tasks'
 import { mail$ } from '../../states/mail'
 import { markThreadRead, markThreadUnread, starThread } from '../../states/mailFlags'
 import { ensureAccountFolders, isDraftFolder, isTrashFolderId } from '../../states/mailFolders'
@@ -196,6 +199,7 @@ export function ThreadContextMenu({
   // thread's account folders are loaded — in the unified view they aren't part
   // of the selected account's `mail$.folders`.
   const mailAccountId = menu?.kind === 'mail' ? menu.accountId : undefined
+  const tasksEnabled = useValue(settings$.tasksEnabled)
   useEffect(() => {
     setMoveOpen(false)
     setCopyOpen(false)
@@ -412,6 +416,17 @@ export function ThreadContextMenu({
             const threadId = menu.threadId
             close()
             onSelectThread(threadId)
+          }}
+        />
+      )}
+      {tasksEnabled && (
+        <MenuItem
+          icon={<ListTodo size={13} className="text-secondary" />}
+          label={t('tasks.addFromMessage')}
+          onClick={() => {
+            const { threadId, accountId, subject } = menu
+            close()
+            void addTaskFromMessage({ title: subject, account: accountId, threadId })
           }}
         />
       )}

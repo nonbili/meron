@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -126,6 +127,8 @@ internal fun ThreadScreen(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onToggleStar: () -> Unit,
+    /** Null when Tasks is switched off, which hides the action entirely. */
+    onAddToTasks: (() -> Unit)? = null,
     moveFolders: List<FolderSummary>,
     copyFolders: List<FolderSummary>,
     onMoveToFolder: (FolderSummary) -> Unit,
@@ -629,6 +632,16 @@ internal fun ThreadScreen(
                                         onArchive()
                                     },
                                 )
+                                if (onAddToTasks != null) {
+                                    DropdownMenuItem(
+                                        text = { Text(tr("tasks.addFromMessage")) },
+                                        leadingIcon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
+                                        onClick = {
+                                            overflowOpen = false
+                                            onAddToTasks()
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text(tr("chat.searchThread")) },
                                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },

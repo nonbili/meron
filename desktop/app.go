@@ -223,6 +223,11 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.exportOpml(payload)
 	case "rss.importOpml":
 		return a.importOpml(payload)
+	case "tasks.lists", "tasks.listCreate", "tasks.listRename", "tasks.listDelete",
+		"tasks.listReorder", "tasks.items", "tasks.create", "tasks.update",
+		"tasks.setDone", "tasks.delete", "tasks.reorder", "tasks.clearCompleted",
+		"tasks.restore", "tasks.forThread":
+		return a.tasksInvoke(command, payload)
 	case "backup.export":
 		return a.exportBackup(payload)
 	case "backup.import":

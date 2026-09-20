@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -243,9 +244,11 @@ internal fun MailDrawer(
     showUnifiedInboxNav: Boolean,
     kanbanBoards: List<KanbanBoardSpec>,
     activeKanbanBoardId: String,
+    tasksEnabled: Boolean,
     onSelectUnified: () -> Unit,
     onSelectAccount: (AccountSummary) -> Unit,
     onSelectKanbanBoard: (KanbanBoardSpec) -> Unit,
+    onSelectTasks: () -> Unit,
     onAddAccount: () -> Unit,
     onOpenSettings: () -> Unit,
     onShowAbout: () -> Unit,
@@ -323,8 +326,23 @@ internal fun MailDrawer(
                     )
                 }
             }
-            if (accounts.isNotEmpty() && kanbanBoards.isNotEmpty()) {
+            if (accounts.isNotEmpty() && (kanbanBoards.isNotEmpty() || tasksEnabled)) {
                 item { DrawerLabel(tr("drawer.views"), chat) }
+            }
+            // Tasks is one row, shown only once the feature is switched on.
+            if (tasksEnabled) {
+                item {
+                    SidebarRow(
+                        selected = currentScreen == Screen.Tasks,
+                        chat = chat,
+                        onClick = onSelectTasks,
+                        leading = { Icon(Icons.Filled.Checklist, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = tr("tasks.title"),
+                        trailing = null,
+                    )
+                }
+            }
+            if (accounts.isNotEmpty() && kanbanBoards.isNotEmpty()) {
                 items(kanbanBoards, key = { it.id }) { board ->
                     SidebarRow(
                         selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,

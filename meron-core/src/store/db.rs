@@ -194,6 +194,38 @@ CREATE TABLE IF NOT EXISTS account_secrets (
 );
 ";
 
+/// Optional Tasks feature. Two tables rather than a JSON blob in `settings`:
+/// tasks are user-authored data that grows without bound and is queried by list
+/// and by linked thread, which a blob can serve neither cheaply nor safely.
+/// `json` is the usual catch-all, so subtasks or recurrence can arrive later
+/// without a migration.
+pub(super) const TASKS_DDL: &str = "
+CREATE TABLE IF NOT EXISTS task_lists (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS tasks (
+  id           TEXT PRIMARY KEY,
+  list_id      TEXT NOT NULL,
+  title        TEXT NOT NULL DEFAULT '',
+  notes        TEXT NOT NULL DEFAULT '',
+  due_at       INTEGER NOT NULL DEFAULT 0,   -- 0 = no due date
+  completed_at INTEGER NOT NULL DEFAULT 0,   -- 0 = not done
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  account      TEXT NOT NULL DEFAULT '',     -- mail link; empty for a plain task
+  thread_id    TEXT NOT NULL DEFAULT '',
+  message_id   TEXT NOT NULL DEFAULT '',
+  json         TEXT NOT NULL DEFAULT '{}',
+  created_at   INTEGER NOT NULL DEFAULT 0,
+  updated_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS tasks_list_idx ON tasks(list_id, sort_order);
+CREATE INDEX IF NOT EXISTS tasks_thread_idx ON tasks(thread_id);
+";
+
 const BODY_CACHE_VERSION: &str = "1";
 
 pub fn open() -> Result<Connection> {
@@ -490,6 +522,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 9 {
         migrate_v9(&tx)?;
     }
+    if version < 10 {
+        migrate_v10(&tx)?;
+    }
 
     tx.commit()?;
     Ok(())
@@ -645,6 +680,15 @@ fn migrate_v9(conn: &Connection) -> Result<()> {
         ))?;
     }
     conn.execute_batch("PRAGMA user_version = 9;")?;
+    Ok(())
+}
+
+/// Tasks: lists and their items, for the optional Tasks surface. Local-only —
+/// nothing here is synced to a server, so the rows are also carried by the
+/// config backup.
+fn migrate_v10(conn: &Connection) -> Result<()> {
+    conn.execute_batch(TASKS_DDL)?;
+    conn.execute_batch("PRAGMA user_version = 10;")?;
     Ok(())
 }
 

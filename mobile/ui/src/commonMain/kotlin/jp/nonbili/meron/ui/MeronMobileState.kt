@@ -17,6 +17,8 @@ import jp.nonbili.meron.shared.SignatureMark
 import jp.nonbili.meron.shared.SignatureTracking
 import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
+import jp.nonbili.meron.shared.TaskListSummary
+import jp.nonbili.meron.shared.TaskSummary
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.coercePollIntervalMinutes
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
@@ -298,6 +300,14 @@ internal class MeronMobileState(
     var syncing by mutableStateOf(false)
     var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))
     var showUnifiedInboxNav by mutableStateOf(loadAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, true))
+    var tasksEnabled by mutableStateOf(loadAppBoolean(prefs, TASKS_ENABLED_PREF, false))
+
+    /** Lists and items for the Tasks screen; empty until it is first opened. */
+    var taskLists by mutableStateOf(emptyList<TaskListSummary>())
+    var activeTaskListId by mutableStateOf("")
+    var tasks by mutableStateOf(emptyList<TaskSummary>())
+    var tasksLoading by mutableStateOf(false)
+    var showCompletedTasks by mutableStateOf(false)
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))
@@ -328,7 +338,7 @@ internal class MeronMobileState(
         get() = screenState
         set(value) {
             screenState = value
-            if (value == Screen.Mail || value == Screen.Kanban) {
+            if (value == Screen.Mail || value == Screen.Kanban || value == Screen.Tasks) {
                 saveLastTopScreen(prefs, value)
             }
         }

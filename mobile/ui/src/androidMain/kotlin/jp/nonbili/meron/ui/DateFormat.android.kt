@@ -16,6 +16,7 @@ internal actual fun formatDate(
             DateStyle.MonthDay -> "MMM d"
             DateStyle.MonthDayYear -> "MMM d, yyyy"
             DateStyle.FullTimestamp -> "EEE, MMM d, yyyy, HH:mm"
+            DateStyle.IsoDate -> "yyyy-MM-dd"
         }
     return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(epochMillis))
 }
@@ -39,4 +40,17 @@ internal actual fun isSameLocalYear(
     val reference = Calendar.getInstance().apply { timeInMillis = referenceEpochMillis }
     return date.get(Calendar.ERA) == reference.get(Calendar.ERA) &&
         date.get(Calendar.YEAR) == reference.get(Calendar.YEAR)
+}
+
+internal actual fun epochSecondsForLocalDate(
+    year: Int,
+    month: Int,
+    day: Int,
+): Long {
+    val calendar =
+        Calendar.getInstance().apply {
+            clear()
+            set(year, month - 1, day)
+        }
+    return calendar.timeInMillis / 1000
 }

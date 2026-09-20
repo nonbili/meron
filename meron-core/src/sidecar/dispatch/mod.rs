@@ -7,6 +7,7 @@ mod compose;
 mod feeds;
 mod folders;
 mod messages;
+mod tasks;
 mod watch;
 
 use serde_json::Value;
@@ -71,6 +72,21 @@ pub(crate) async fn dispatch(
         "account.addRss" | "feed.add" | "feed.remove" | "feed.move" | "rss.exportOpml"
         | "rss.importOpml" | "rss.thread" | "rss.markRead" | "rss.markAllRead"
         | "rss.markStarred" => feeds::dispatch(engine, req, out).await,
+
+        "tasks.lists"
+        | "tasks.listCreate"
+        | "tasks.listRename"
+        | "tasks.listDelete"
+        | "tasks.listReorder"
+        | "tasks.items"
+        | "tasks.create"
+        | "tasks.update"
+        | "tasks.setDone"
+        | "tasks.delete"
+        | "tasks.reorder"
+        | "tasks.clearCompleted"
+        | "tasks.restore"
+        | "tasks.forThread" => tasks::dispatch(engine, req, out).await,
 
         "folders.list"
         | "folders.create"

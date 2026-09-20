@@ -293,6 +293,13 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 showUnifiedInboxNav = loadAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, true)
             }
 
+            settingKeyFor(TASKS_ENABLED_PREF) -> {
+                tasksEnabled = loadAppBoolean(prefs, TASKS_ENABLED_PREF, false)
+                // A restore that switches Tasks off must not strand the user on
+                // the screen the drawer has just stopped offering.
+                if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
+            }
+
             settingKeyFor(SHOW_SENDER_IMAGES_PREF) -> {
                 showSenderImages = loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false)
             }

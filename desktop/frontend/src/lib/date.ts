@@ -22,3 +22,31 @@ export function formatThreadDate(epochSeconds: number): string {
       : { month: 'short', day: 'numeric', year: 'numeric' }
   return date.toLocaleDateString([], options)
 }
+
+/** A task's due date: month/day, with the year once it isn't this one. */
+export function formatDueDate(epochSeconds: number): string {
+  const date = fromEpochSeconds(epochSeconds)
+  if (!date) return ''
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === new Date().getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' }
+  return date.toLocaleDateString([], options)
+}
+
+/** `<input type="date">` wants a local-time YYYY-MM-DD, not an ISO instant. */
+export function toDateInputValue(epochSeconds: number): string {
+  const date = fromEpochSeconds(epochSeconds)
+  if (!date) return ''
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+/** The inverse: a date input's value as epoch seconds at local midnight. */
+export function fromDateInputValue(value: string): number {
+  if (!value) return 0
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return 0
+  return Math.floor(new Date(year, month - 1, day).getTime() / 1000)
+}

@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Send,
   Inbox,
+  ListTodo,
   Plus,
   Trash2,
   Camera,
@@ -40,6 +41,7 @@ import {
   KANBAN_COLUMN_MIN_WIDTH,
   sendShortcutLabel,
   setUnifiedInboxSideNavVisible,
+  setTasksEnabled,
   type ConversationLayout,
   type KanbanBoard,
   type SendShortcut,
@@ -373,6 +375,7 @@ function GeneralSection() {
   const sendShortcut = useValue(settings$.sendShortcut)
   const spellCheck = useValue(settings$.spellCheck)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
+  const tasksEnabled = useValue(settings$.tasksEnabled)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
   const kanbanLockScroll = useValue(settings$.kanbanLockScroll)
   const language = useValue(settings$.language)
@@ -434,6 +437,16 @@ function GeneralSection() {
           title={t('settings.sideNav.showUnifiedInbox')}
           checked={showUnifiedInbox}
           onChange={() => setUnifiedInboxSideNavVisible(!showUnifiedInbox)}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title={t('settings.sections.tasks')}>
+        <ToggleRow
+          icon={<ListTodo size={15} />}
+          title={t('settings.tasks.enable')}
+          hint={t('settings.tasks.enableHint')}
+          checked={tasksEnabled}
+          onChange={() => setTasksEnabled(!tasksEnabled)}
         />
       </SettingsGroup>
 

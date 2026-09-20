@@ -618,6 +618,7 @@ fn accounts_with_a_blank_id_are_dropped() {
             },
         ],
         settings: Map::new(),
+        ..Default::default()
     };
 
     let target = test_conn();
@@ -635,6 +636,7 @@ fn empty_engine_and_provider_fall_back_to_mail_defaults() {
             ..Default::default()
         }],
         settings: Map::new(),
+        ..Default::default()
     };
 
     let target = test_conn();
@@ -780,4 +782,106 @@ fn a_backup_without_a_platform_map_is_unaffected() {
 
     assert_eq!(data.settings["theme_id"], "nord");
     assert_eq!(data.settings.len(), 1);
+}
+
+/// Tasks have no server copy, so a backup is the only thing standing between a
+/// reinstall and losing them. Everything the user typed has to survive the
+/// round trip, including the link back to a mail thread.
+#[test]
+fn backup_round_trips_task_lists() {
+    let source = test_conn();
+    let list = crate::tasks::ensure_default_list(&source).unwrap();
+    let groceries = store::insert_task_list(&source, "list-groceries", "Groceries").unwrap();
+    crate::tasks::create_task(
+        &source,
+        &list,
+        "Reply to the landlord",
+        "about the boiler",
+        1_700_000_000,
+        "acct1",
+        "acct1#thread#4",
+        "<boiler@example.com>",
+    )
+    .unwrap();
+    let done =
+        crate::tasks::create_task(&source, &groceries.id, "Milk", "", 0, "", "", "").unwrap();
+    crate::tasks::set_done(&source, done["task"]["id"].as_str().unwrap(), true).unwrap();
+
+    let data = collect(&source, false, &no_secrets).unwrap();
+    assert_eq!(data.task_lists.len(), 2);
+
+    let target = test_conn();
+    let summary = apply(&target, &data, &|_, _, _| Ok(())).unwrap();
+    assert_eq!(summary.tasks, 2);
+
+    let restored_lists = store::task_lists(&target).unwrap();
+    let titles: Vec<&str> = restored_lists.iter().map(|l| l.title.as_str()).collect();
+    assert!(titles.contains(&"Groceries"), "{titles:?}");
+
+    let my_tasks = restored_lists
+        .iter()
+        .find(|l| l.title == crate::tasks::DEFAULT_LIST_TITLE)
+        .unwrap();
+    let tasks = store::tasks_for_list(&target, &my_tasks.id, true).unwrap();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].title, "Reply to the landlord");
+    assert_eq!(tasks[0].notes, "about the boiler");
+    assert_eq!(tasks[0].due_at, 1_700_000_000);
+    assert_eq!(tasks[0].thread_id, "acct1#thread#4");
+    assert_eq!(tasks[0].message_id, "<boiler@example.com>");
+
+    let groceries_id = &restored_lists
+        .iter()
+        .find(|l| l.title == "Groceries")
+        .unwrap()
+        .id;
+    let milk = store::tasks_for_list(&target, groceries_id, true).unwrap();
+    assert!(
+        milk[0].completed_at > 0,
+        "completion survives the round trip"
+    );
+}
+
+/// Importing the same file twice is something people do — twice through the
+/// dialog, or onto a device that already restored it. It must not double the
+/// list or its contents.
+#[test]
+fn importing_a_backup_twice_does_not_duplicate_tasks() {
+    let source = test_conn();
+    let list = crate::tasks::ensure_default_list(&source).unwrap();
+    crate::tasks::create_task(&source, &list, "Book the flight", "", 0, "", "", "").unwrap();
+    let data = collect(&source, false, &no_secrets).unwrap();
+
+    let target = test_conn();
+    // The destination has already opened Tasks once, so the default list exists
+    // and is empty — the case where matching lists by id would lose everything.
+    crate::tasks::ensure_default_list(&target).unwrap();
+
+    assert_eq!(apply(&target, &data, &|_, _, _| Ok(())).unwrap().tasks, 1);
+    assert_eq!(
+        apply(&target, &data, &|_, _, _| Ok(())).unwrap().tasks,
+        0,
+        "the second import adds nothing"
+    );
+
+    let lists = store::task_lists(&target).unwrap();
+    assert_eq!(lists.len(), 1, "merged into the existing list");
+    assert_eq!(
+        store::tasks_for_list(&target, &lists[0].id, true)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+/// Files written before Tasks existed carry no `task_lists` key at all.
+#[test]
+fn a_backup_without_tasks_still_imports() {
+    let conn = test_conn();
+    let data: BackupData =
+        serde_json::from_str(r#"{"accounts":[],"settings":{"theme_id":"meron-light"}}"#).unwrap();
+    let summary = apply(&conn, &data, &|_, _, _| Ok(())).unwrap();
+    assert_eq!(summary.tasks, 0);
+    assert_eq!(summary.settings, 1);
+    assert!(store::task_lists(&conn).unwrap().is_empty());
 }
