@@ -29,6 +29,7 @@ import {
   folderMatches,
   loadFolders,
   type MutationResult,
+  publishCachedFolders,
   refreshAccountFoldersCache,
   updateCachedFolderUnread,
 } from './mailFolders'
@@ -264,17 +265,20 @@ export async function bulkStarSelected(items: BulkSelectionItem[], starred: bool
 
 // Mark the current folder/view as read. Mail accounts are marked folder-wide, so
 // unread messages outside the loaded page are cleared too; RSS feeds are marked
-// per visible thread because they do not have an IMAP-style folder flag.
+// per visible thread because they do not have an IMAP-style folder flag, and so
+// is unified Starred, which is a flag rather than a mailbox.
 export async function markAllRead() {
   const threads = mail$.threads.get()
   const unread = threads.filter((thread) => thread.unread)
 
   const accounts = accounts$.get()
   const selectedAcc = ui$.selectedAccount.get()
+  const starred = isUnifiedStarred(selectedAcc, ui$.selectedFolder.get())
   const folder = selectedAcc === 'unified' ? unifiedFolderRole(ui$.selectedFolder.get()) : ui$.selectedFolder.get()
   const activeAccount = accounts.find((account) => account.id === selectedAcc)
-  const mailAccountIds =
-    selectedAcc === 'unified'
+  const mailAccountIds = starred
+    ? []
+    : selectedAcc === 'unified'
       ? unifiedAccounts()
           .filter((account) => !isRssAccount(account, account.id))
           .map((account) => account.id)
@@ -284,52 +288,107 @@ export async function markAllRead() {
 
   if (mailAccountIds.length === 0 && unread.length === 0) return
 
-  const rssUnread = unread.filter((thread) =>
-    isRssAccount(
-      accounts.find((account) => account.id === thread.account_id),
-      thread.account_id,
-    ),
+  const itemUnread = starred
+    ? unread
+    : unread.filter((thread) =>
+        isRssAccount(
+          accounts.find((account) => account.id === thread.account_id),
+          thread.account_id,
+        ),
+      )
+  const affectedAccountIds = Array.from(
+    new Set([...mailAccountIds, ...unread.map((thread) => thread.account_id)].filter(Boolean)),
   )
+  const viewKey = () =>
+    threadListViewKey(ui$.selectedAccount.peek(), ui$.selectedFolder.peek(), ui$.query.peek(), ui$.filterMode.peek())
+  const previousView = viewKey()
+  const previousMessages = mail$.messages.get()
+  // What a failure puts back: only the rows and folder counts cleared here, by
+  // id, so a view or conversation opened while the write was pending keeps its
+  // own state.
+  const clearedThreads = new Map(unread.map((thread) => [thread.id, thread]))
+  const clearedMessages = new Map(
+    previousMessages.filter((message) => message.unread).map((message) => [message.id, message]),
+  )
+  const clearedFolders = new Map<string, { accountId: string; folderId: string; previous: number }>()
+  const noteFolder = (accountId: string, folderId: string | undefined) => {
+    if (!folderId) return
+    const resolved = mail$.foldersByAccount[accountId]
+      .get()
+      ?.find((candidate) => folderMatches(candidate, accountId, folderId))
+    if (!resolved) return
+    const key = `${accountId}\n${resolved.id}`
+    if (!clearedFolders.has(key))
+      clearedFolders.set(key, { accountId, folderId: resolved.id, previous: resolved.unread })
+  }
 
   // Optimistic clear for currently loaded rows, and for the side navigation
   // badges they sum into — those read the folder cache, so leaving them to the
   // refresh below left the nav counts stale until the server answered. A mail
-  // account's folder goes to zero (its write is folder-wide); an RSS folder
-  // loses only the items marked here. The refresh below is still what reconciles
-  // a write that failed.
+  // account's folder goes to zero (its write is folder-wide); a folder marked
+  // item by item loses only the items marked here.
   mail$.threads.set(threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)))
-  mail$.messages.set(mail$.messages.get().map((message) => (message.unread ? { ...message, unread: false } : message)))
+  mail$.messages.set(previousMessages.map((message) => (message.unread ? { ...message, unread: false } : message)))
   for (const accountId of mailAccountIds) {
     const accountFolders = mail$.foldersByAccount[accountId].get()
     const folderId =
       selectedAcc === 'unified' ? accountFolderForRole(accountFolders, folder as UnifiedFolderRole) : folder
     const resolved = accountFolders?.find((candidate) => folderMatches(candidate, accountId, folderId))
+    noteFolder(accountId, resolved?.id)
     if (resolved) updateCachedFolderUnread(accountId, resolved.id, 0)
   }
-  for (const thread of rssUnread) {
+  for (const thread of itemUnread) {
+    noteFolder(thread.account_id, thread.folder_id)
     decrementFolderUnread(thread.account_id, thread.folder_id, 1)
   }
 
-  await Promise.all([
-    ...(selectedAcc === 'unified' && mailAccountIds.length > 0 ? ['unified'] : mailAccountIds).map((accountId) =>
-      invoke<MutationResult>('mail.markAllRead', { account_id: accountId, folder_id: folder })
-        .then(applyMutationFolderUnreads)
-        .catch((err) => console.error('markAllRead failed:', err)),
+  const results = await Promise.allSettled([
+    ...(selectedAcc === 'unified' && mailAccountIds.length > 0 ? ['unified'] : mailAccountIds).map(
+      async (accountId) => {
+        const result = await invoke<MutationResult & { ok?: boolean; failures?: Array<{ message: string }> }>(
+          'mail.markAllRead',
+          { account_id: accountId, folder_id: folder },
+        )
+        // A unified write that failed for some accounts still reports the ones
+        // it did mark, so take those counts before treating it as a failure.
+        applyMutationFolderUnreads(result)
+        if (result?.ok === false || result?.failures?.length) {
+          throw new Error(
+            result.failures?.map((failure) => failure.message).join('; ') || t('notification.markReadFailed'),
+          )
+        }
+      },
     ),
-    ...rssUnread.map((thread) =>
-      invoke('mail.markRead', { thread_id: thread.thread_id }).catch((err) =>
-        console.error('markAllRead (rss) failed:', err),
-      ),
-    ),
+    ...itemUnread.map((thread) => invoke('mail.markRead', { thread_id: thread.thread_id })),
   ])
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') {
+    console.error('markAllRead failed:', failure.reason)
+    mail$.threads.set(
+      mail$.threads.get().map((thread) => {
+        const before = clearedThreads.get(thread.id)
+        return before ? { ...thread, unread: before.unread, unread_count: before.unread_count } : thread
+      }),
+    )
+    mail$.messages.set(
+      mail$.messages.get().map((message) => (clearedMessages.has(message.id) ? { ...message, unread: true } : message)),
+    )
+    for (const target of clearedFolders.values()) {
+      updateCachedFolderUnread(target.accountId, target.folderId, target.previous, 'local')
+    }
+    showToast(failure.reason instanceof Error ? failure.reason.message : t('notification.markReadFailed'), 'error')
+    // Some writes may have landed; reload so the rows show what the server has.
+    // The folder refresh below reconciles the badges either way.
+    if (viewKey() === previousView) void loadThreads(false)
+  }
 
-  if (selectedAcc) void loadFolders(selectedAcc, false)
   // The visible list can span multiple accounts (unified inbox, Starred, a
   // Kanban board), so refresh each affected account's folder cache — not just
-  // the selected view — to keep every side navigation badge in sync.
-  for (const accountId of new Set([...mailAccountIds, ...unread.map((thread) => thread.account_id)])) {
-    if (accountId && accountId !== selectedAcc) void refreshAccountFoldersCache(accountId, false)
-  }
+  // the selected view — to keep every side navigation badge in sync. These are
+  // cache-only: the active folder list is republished from the cache only if
+  // the user is still on this account, so a view opened meanwhile keeps its own.
+  await Promise.all(affectedAccountIds.map((accountId) => refreshAccountFoldersCache(accountId, false)))
+  if (selectedAcc) publishCachedFolders(selectedAcc)
 }
 
 // Mark one account's Inbox (or its synthetic RSS Inbox) read from account-level

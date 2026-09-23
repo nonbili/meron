@@ -33,6 +33,7 @@ import {
   closeKanbanBoard,
   createKanbanBoard,
   kanban$,
+  markBoardAllRead,
   openMailAccount,
   selectKanbanBoard,
   setGlobalKanbanFilter,
@@ -97,7 +98,8 @@ export function useCommandList(): Command[] {
         label: 'Mark all as read',
         icon: icon(MailCheck),
         keywords: 'clear unread',
-        run: run(() => void markAllRead()),
+        // With a board open, the list behind it is hidden: mark the board instead.
+        run: run(() => void (activeBoardId ? markBoardAllRead(activeBoardId) : markAllRead())),
       },
       {
         id: 'search.thread',

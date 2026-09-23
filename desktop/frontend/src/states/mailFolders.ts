@@ -332,6 +332,26 @@ export async function refreshAccountFoldersCache(accountId: string, refresh = fa
   }
 }
 
+/**
+ * Republish the active folder list from the per-account cache, but only while
+ * `accountId` is still the selected account. For callers that refreshed the
+ * cache with [refreshAccountFoldersCache] after an await and must not replace
+ * the folders of a view the user has since switched to.
+ */
+export function publishCachedFolders(accountId: string) {
+  if (!accountId || ui$.selectedAccount.peek() !== accountId) return
+  const byAccount = mail$.foldersByAccount.get()
+  if (accountId === 'unified') {
+    const total = unifiedAccounts().reduce((sum, account) => sum + inboxUnread(byAccount[account.id]), 0)
+    const folders = unifiedFolders(t, total)
+    mail$.folders.set(folders)
+    mail$.foldersByAccount['unified'].set(folders)
+    return
+  }
+  const folders = byAccount[accountId]
+  if (folders) mail$.folders.set(folders)
+}
+
 /** Unread count of the INBOX folder in a folder list, or 0 if absent. */
 export function inboxUnread(folders: Folder[] | undefined): number {
   return folderUnread(folders, 'inbox')

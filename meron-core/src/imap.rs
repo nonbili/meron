@@ -1016,66 +1016,67 @@ pub async fn fetch_by_message_ids(
     if set.is_empty() {
         return Ok(Vec::new());
     }
-    let uid_set = set.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+    let uids = set.into_iter().collect::<Vec<_>>();
     let gmail = supports_gmail_ext(session).await;
     let mut out = Vec::new();
-    let mut stream = session
-        .uid_fetch(uid_set, fetch_items(gmail, true))
-        .await
-        .context("UID FETCH Message-ID matches")?;
-    while let Some(item) = stream.next().await {
-        let fetch = item.context("UID FETCH item")?;
-        let uid = match fetch.uid {
-            Some(uid) => uid,
-            None => continue,
-        };
-        let raw = match fetch.body() {
-            Some(body) => body.to_vec(),
-            None => continue,
-        };
-        let seen = fetch
-            .flags()
-            .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
-        let starred = fetch
-            .flags()
-            .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
-        let ef = fetch.header().map(header_fields).unwrap_or_default();
-        let thread_key = thread_key(
-            fetch.gmail_thread_id().copied(),
-            &ef.message_id,
-            &ef.in_reply_to,
-            &ef.references_root,
-            uid,
-        );
-        let media = parse::MediaCtx {
-            root: media_root.to_path_buf(),
-            account: account.to_string(),
-            folder: folder.to_string(),
-            uid,
-        };
-        let message = parse::parse_message(&raw, Some(&media));
-        out.push(FetchedMessage {
-            header: MessageHeader {
+    for uid_set in uid_set_chunks(&uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, fetch_items(gmail, true))
+            .await
+            .context("UID FETCH Message-ID matches")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH item")?;
+            let uid = match fetch.uid {
+                Some(uid) => uid,
+                None => continue,
+            };
+            let raw = match fetch.body() {
+                Some(body) => body.to_vec(),
+                None => continue,
+            };
+            let seen = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
+            let starred = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
+            let ef = fetch.header().map(header_fields).unwrap_or_default();
+            let thread_key = thread_key(
+                fetch.gmail_thread_id().copied(),
+                &ef.message_id,
+                &ef.in_reply_to,
+                &ef.references_root,
                 uid,
+            );
+            let media = parse::MediaCtx {
+                root: media_root.to_path_buf(),
+                account: account.to_string(),
                 folder: folder.to_string(),
-                subject: ef.subject,
-                from_name: ef.from_name,
-                from_addr: ef.from_addr,
-                date: ef.date,
-                seen,
-                starred,
-                thread_key,
-                message_id: ef.message_id,
-                gmail_msg_id: fetch.gmail_msg_id().copied(),
-                in_reply_to: ef.in_reply_to,
-                to: ef.to,
-                cc: ef.cc,
-                recipient_overflow: 0,
-            },
-            message,
-        });
+                uid,
+            };
+            let message = parse::parse_message(&raw, Some(&media));
+            out.push(FetchedMessage {
+                header: MessageHeader {
+                    uid,
+                    folder: folder.to_string(),
+                    subject: ef.subject,
+                    from_name: ef.from_name,
+                    from_addr: ef.from_addr,
+                    date: ef.date,
+                    seen,
+                    starred,
+                    thread_key,
+                    message_id: ef.message_id,
+                    gmail_msg_id: fetch.gmail_msg_id().copied(),
+                    in_reply_to: ef.in_reply_to,
+                    to: ef.to,
+                    cc: ef.cc,
+                    recipient_overflow: 0,
+                },
+                message,
+            });
+        }
     }
-    drop(stream);
     Ok(out)
 }
 
@@ -1101,56 +1102,52 @@ pub async fn fetch_headers_by_uid(
         return Ok(Vec::new());
     }
     session.select(folder).await.context("SELECT")?;
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
     let gmail = supports_gmail_ext(session).await;
     let mut out = Vec::new();
-    let mut stream = session
-        .uid_fetch(uid_set, fetch_items(gmail, false))
-        .await
-        .context("UID FETCH search headers")?;
-    while let Some(item) = stream.next().await {
-        let fetch = item.context("UID FETCH search header item")?;
-        let uid = match fetch.uid {
-            Some(uid) => uid,
-            None => continue,
-        };
-        let seen = fetch
-            .flags()
-            .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
-        let starred = fetch
-            .flags()
-            .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
-        let ef = fetch.header().map(header_fields).unwrap_or_default();
-        let thread_key = thread_key(
-            fetch.gmail_thread_id().copied(),
-            &ef.message_id,
-            &ef.in_reply_to,
-            &ef.references_root,
-            uid,
-        );
-        out.push(MessageHeader {
-            uid,
-            subject: ef.subject,
-            from_name: ef.from_name,
-            from_addr: ef.from_addr,
-            date: ef.date,
-            seen,
-            starred,
-            thread_key,
-            message_id: ef.message_id,
-            gmail_msg_id: fetch.gmail_msg_id().copied(),
-            in_reply_to: ef.in_reply_to,
-            folder: String::new(),
-            to: ef.to,
-            cc: ef.cc,
-            recipient_overflow: 0,
-        });
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, fetch_items(gmail, false))
+            .await
+            .context("UID FETCH search headers")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH search header item")?;
+            let uid = match fetch.uid {
+                Some(uid) => uid,
+                None => continue,
+            };
+            let seen = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
+            let starred = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
+            let ef = fetch.header().map(header_fields).unwrap_or_default();
+            let thread_key = thread_key(
+                fetch.gmail_thread_id().copied(),
+                &ef.message_id,
+                &ef.in_reply_to,
+                &ef.references_root,
+                uid,
+            );
+            out.push(MessageHeader {
+                uid,
+                subject: ef.subject,
+                from_name: ef.from_name,
+                from_addr: ef.from_addr,
+                date: ef.date,
+                seen,
+                starred,
+                thread_key,
+                message_id: ef.message_id,
+                gmail_msg_id: fetch.gmail_msg_id().copied(),
+                in_reply_to: ef.in_reply_to,
+                folder: String::new(),
+                to: ef.to,
+                cc: ef.cc,
+                recipient_overflow: 0,
+            });
+        }
     }
-    drop(stream);
     out.sort_unstable_by(|a, b| b.uid.cmp(&a.uid));
     Ok(out)
 }
@@ -1257,18 +1254,56 @@ pub async fn prepare_flag_update(session: &mut Session, folder: &str) -> Result<
     Ok(())
 }
 
+/// Longest UID set sent in one command. RFC 7162 asks clients to keep command
+/// lines under 8192 octets; this leaves room for the tag and the flag list.
+const MAX_UID_SET_LEN: usize = 7000;
+
+/// Compact `uids` into IMAP sequence sets (`1:5,9,12:20`), split so no set is
+/// longer than `max_len`. A folder-wide "mark all read" can cover tens of
+/// thousands of UIDs, which as a flat list overruns server line limits.
+fn uid_set_chunks(uids: &[u32], max_len: usize) -> Vec<String> {
+    let mut sorted = uids.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    let mut i = 0;
+    while i < sorted.len() {
+        let start = sorted[i];
+        let mut end = start;
+        while i + 1 < sorted.len() && sorted[i + 1] == end + 1 {
+            i += 1;
+            end = sorted[i];
+        }
+        i += 1;
+        let range = if start == end {
+            start.to_string()
+        } else {
+            format!("{start}:{end}")
+        };
+        if !current.is_empty() && current.len() + 1 + range.len() > max_len {
+            chunks.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push(',');
+        }
+        current.push_str(&range);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    chunks
+}
+
 async fn store_flag(session: &mut Session, uids: &[u32], op: &str) -> Result<()> {
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut stream = session
-        .uid_store(uid_set, op)
-        .await
-        .context("UID STORE FLAGS.SILENT")?;
-    while let Some(item) = stream.next().await {
-        item.context("UID STORE item")?;
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_store(uid_set, op)
+            .await
+            .context("UID STORE FLAGS.SILENT")?;
+        while let Some(item) = stream.next().await {
+            item.context("UID STORE item")?;
+        }
     }
     Ok(())
 }
@@ -1311,11 +1346,6 @@ pub async fn move_to_folder(
         return Ok(());
     }
     session.select(source_folder).await.context("SELECT")?;
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
     // UID MOVE is the RFC 6851 MOVE extension; servers that don't advertise it
     // (e.g. mailo) reject it with "Unknown command". Fall back to the classic
     // COPY + \Deleted + EXPUNGE sequence, which every IMAP server supports.
@@ -1323,16 +1353,20 @@ pub async fn move_to_folder(
         Ok(caps) => caps.has_str("MOVE"),
         Err(_) => false,
     };
-    if supports_move {
-        session
-            .uid_mv(&uid_set, dest_folder)
-            .await
-            .context("UID MOVE")?;
-    } else {
-        session
-            .uid_copy(&uid_set, dest_folder)
-            .await
-            .context("UID COPY")?;
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        if supports_move {
+            session
+                .uid_mv(&uid_set, dest_folder)
+                .await
+                .context("UID MOVE")?;
+        } else {
+            session
+                .uid_copy(&uid_set, dest_folder)
+                .await
+                .context("UID COPY")?;
+        }
+    }
+    if !supports_move {
         expunge_uids(session, source_folder, uids).await?;
     }
     Ok(())
@@ -1357,30 +1391,27 @@ pub async fn fetch_raw_messages_for_copy(
         return Ok(Vec::new());
     }
     session.select(folder).await.context("SELECT")?;
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut stream = session
-        .uid_fetch(uid_set, "(FLAGS BODY.PEEK[])")
-        .await
-        .context("UID FETCH raw copy")?;
     let mut out = Vec::new();
-    while let Some(item) = stream.next().await {
-        let fetch = item.context("UID FETCH raw copy item")?;
-        if let Some(body) = fetch.body() {
-            let seen = fetch
-                .flags()
-                .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
-            let starred = fetch
-                .flags()
-                .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
-            out.push(RawMessageCopy {
-                raw: body.to_vec(),
-                seen,
-                starred,
-            });
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, "(FLAGS BODY.PEEK[])")
+            .await
+            .context("UID FETCH raw copy")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH raw copy item")?;
+            if let Some(body) = fetch.body() {
+                let seen = fetch
+                    .flags()
+                    .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
+                let starred = fetch
+                    .flags()
+                    .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
+                out.push(RawMessageCopy {
+                    raw: body.to_vec(),
+                    seen,
+                    starred,
+                });
+            }
         }
     }
     Ok(out)
@@ -1412,19 +1443,8 @@ pub async fn expunge_uids(session: &mut Session, folder: &str, uids: &[u32]) -> 
         return Ok(());
     }
     session.select(folder).await.context("SELECT")?;
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut stream = session
-        .uid_store(&uid_set, "+FLAGS.SILENT (\\Deleted)")
-        .await
-        .context("UID STORE Deleted")?;
-    while let Some(item) = stream.next().await {
-        item.context("UID STORE item")?;
-    }
-    drop(stream);
+    let uid_sets = uid_set_chunks(uids, MAX_UID_SET_LEN);
+    store_deleted(session, &uid_sets).await?;
 
     let supports_uidplus = match session.capabilities().await {
         Ok(caps) => caps.has_str("UIDPLUS"),
@@ -1432,11 +1452,7 @@ pub async fn expunge_uids(session: &mut Session, folder: &str, uids: &[u32]) -> 
     };
 
     if supports_uidplus {
-        let estream = session.uid_expunge(&uid_set).await.context("UID EXPUNGE")?;
-        futures::pin_mut!(estream);
-        while let Some(item) = estream.next().await {
-            item.context("UID EXPUNGE item")?;
-        }
+        uid_expunge(session, &uid_sets).await?;
     } else {
         let estream = session.expunge().await.context("EXPUNGE")?;
         futures::pin_mut!(estream);
@@ -2022,8 +2038,27 @@ mod tests {
     use super::{
         MIN_PROTOCOL_TIMEOUT, civil_from_days, first_message_id, header_fields, imap_quote,
         interleave_address_families, looks_like_drafts, message_id_search_criteria,
-        normalize_message_id, protocol_timeout_for, search_criteria, thread_key,
+        normalize_message_id, protocol_timeout_for, search_criteria, thread_key, uid_set_chunks,
     };
+
+    #[test]
+    fn uid_set_chunks_compacts_runs_and_splits_long_sets() {
+        assert_eq!(
+            uid_set_chunks(&[5, 1, 2, 3, 9, 3, 11, 12], 100),
+            vec!["1:3,5,9,11:12"]
+        );
+        assert!(uid_set_chunks(&[], 100).is_empty());
+        let scattered = (1..=20_000).map(|n| n * 2).collect::<Vec<u32>>();
+        let chunks = uid_set_chunks(&scattered, 7000);
+        assert!(chunks.len() > 1);
+        assert!(chunks.iter().all(|chunk| chunk.len() <= 7000));
+        let rejoined = chunks
+            .join(",")
+            .split(',')
+            .map(|uid| uid.parse::<u32>().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(rejoined, scattered);
+    }
 
     #[test]
     fn protocol_stage_timeout_leaves_room_for_a_slow_but_healthy_login() {
@@ -2351,23 +2386,34 @@ async fn expunge_selected_uids(session: &mut Session, uids: &[u32]) -> Result<()
     if uids.is_empty() {
         return Ok(());
     }
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut stream = session
-        .uid_store(&uid_set, "+FLAGS.SILENT (\\Deleted)")
-        .await
-        .context("UID STORE Deleted")?;
-    while let Some(item) = stream.next().await {
-        item.context("UID STORE item")?;
+    let uid_sets = uid_set_chunks(uids, MAX_UID_SET_LEN);
+    store_deleted(session, &uid_sets).await?;
+    uid_expunge(session, &uid_sets).await
+}
+
+/// Flag every UID in `uid_sets` `\Deleted` in the selected mailbox.
+async fn store_deleted(session: &mut Session, uid_sets: &[String]) -> Result<()> {
+    for uid_set in uid_sets {
+        let mut stream = session
+            .uid_store(uid_set, "+FLAGS.SILENT (\\Deleted)")
+            .await
+            .context("UID STORE Deleted")?;
+        while let Some(item) = stream.next().await {
+            item.context("UID STORE item")?;
+        }
     }
-    drop(stream);
-    let stream = session.uid_expunge(&uid_set).await.context("UID EXPUNGE")?;
-    futures::pin_mut!(stream);
-    while let Some(item) = stream.next().await {
-        item.context("UID EXPUNGE item")?;
+    Ok(())
+}
+
+/// UID EXPUNGE (RFC 4315) exactly the UIDs in `uid_sets`, leaving any other
+/// `\Deleted` message in the mailbox alone.
+async fn uid_expunge(session: &mut Session, uid_sets: &[String]) -> Result<()> {
+    for uid_set in uid_sets {
+        let stream = session.uid_expunge(uid_set).await.context("UID EXPUNGE")?;
+        futures::pin_mut!(stream);
+        while let Some(item) = stream.next().await {
+            item.context("UID EXPUNGE item")?;
+        }
     }
     Ok(())
 }
@@ -2386,18 +2432,17 @@ pub async fn move_to_folder_checked(
         "Moving through MCP requires IMAP MOVE or UIDPLUS; no messages were changed"
     );
     session.select(folder).await.context("SELECT")?;
-    let uid_set = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    if supports_move {
-        session.uid_mv(&uid_set, target).await.context("UID MOVE")?;
-    } else {
-        session
-            .uid_copy(&uid_set, target)
-            .await
-            .context("UID COPY")?;
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        if supports_move {
+            session.uid_mv(&uid_set, target).await.context("UID MOVE")?;
+        } else {
+            session
+                .uid_copy(&uid_set, target)
+                .await
+                .context("UID COPY")?;
+        }
+    }
+    if !supports_move {
         expunge_selected_uids(session, uids).await?;
     }
     Ok(())
@@ -2510,6 +2555,38 @@ mod mcp_mutation_tests {
                 assert!(calls.iter().any(|c| c == "UID EXPUNGE 7"), "{calls:?}");
             } else {
                 assert!(!calls.iter().any(|c| c.starts_with("UID ")), "{calls:?}");
+            }
+            task.abort();
+        }
+    }
+    #[tokio::test]
+    async fn large_uid_sets_are_sent_in_bounded_commands() {
+        for caps in ["MOVE", "UIDPLUS"] {
+            let (mut session, commands, task) = server(caps).await;
+            let uids = (1..=20_000).map(|n| n * 2).collect::<Vec<u32>>();
+            move_to_folder(&mut session, "INBOX", "Archive", &uids)
+                .await
+                .unwrap();
+            let calls = commands.lock().unwrap().clone();
+            let uid_calls = calls
+                .iter()
+                .filter(|c| c.starts_with("UID "))
+                .collect::<Vec<_>>();
+            assert!(uid_calls.len() > 3, "{}", uid_calls.len());
+            assert!(uid_calls.iter().all(|c| c.len() < 8192));
+            let verb = if caps == "MOVE" {
+                "UID MOVE "
+            } else {
+                "UID COPY "
+            };
+            let moved = uid_calls
+                .iter()
+                .filter_map(|c| c.strip_prefix(verb))
+                .flat_map(|c| c.split_once(' ').unwrap().0.split(','))
+                .count();
+            assert_eq!(moved, uids.len());
+            if caps == "UIDPLUS" {
+                assert!(uid_calls.iter().any(|c| c.starts_with("UID EXPUNGE ")));
             }
             task.abort();
         }

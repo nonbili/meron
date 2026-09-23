@@ -22,6 +22,24 @@ fun requireCoreOk(responseJson: String): String {
 }
 
 /**
+ * [requireCoreOk] for a command that fans out across accounts, such as a unified
+ * mark-all-read: it answers `"ok":false` with per-account `failures` instead of
+ * an error payload when only some accounts failed, which must not read as done.
+ */
+fun requireCoreAllOk(responseJson: String): String {
+    requireCoreOk(responseJson)
+    if (responseJson.findJsonBooleanProperty("ok") == false) {
+        val message =
+            responseJson
+                .findJsonArrayProperty("failures")
+                ?.jsonArrayElements()
+                ?.firstNotNullOfOrNull { it.findJsonStringProperty("message") }
+        throw RuntimeException(message ?: "Some accounts could not be updated")
+    }
+    return responseJson
+}
+
+/**
  * True when a core failure message says the mail server rejected our OAuth
  * credentials — the shapes meron-core produces for an expired/revoked access
  * token: "oauth login failed: ... [AUTHENTICATIONFAILED] Invalid credentials"

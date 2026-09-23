@@ -28,6 +28,7 @@ import jp.nonbili.meron.shared.mailThreadIdFolder
 import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
+import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
 import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.CompletableDeferred
@@ -564,19 +565,30 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
         } else {
             emptyList()
         }
+    val unifiedRole = unifiedFolderRole(selectedCoreFolder)
+    val unifiedMailAccounts =
+        if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID && !unifiedStarred) {
+            coreAccounts.filter { it.includedInUnified && !accountSummaryIsRss(it) }
+        } else {
+            emptyList()
+        }
+    // The unified view marks the selected role (Sent, Archive, ...) in each
+    // account; the core resolves the mailbox itself, and the resolved names
+    // here only steer the optimistic badges and rows.
     val mailTargets =
         if (unifiedStarred) {
             emptyList()
         } else if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-            coreAccounts
-                .filter { it.includedInUnified && !accountSummaryIsRss(it) }
-                .map { account -> account.id to INBOX_FOLDER }
+            unifiedMailAccounts.mapNotNull { account ->
+                val folders = foldersByAccount[account.id] ?: coreFolders.filter { it.accountId == account.id }
+                unifiedAccountFolder(folders, unifiedRole)?.let { account.id to it }
+            }
         } else {
             val account = accountsById[selectedCoreAccountId]
             if (account != null && !accountSummaryIsRss(account)) listOf(selectedCoreAccountId to selectedCoreFolder) else emptyList()
         }
     val rssTargets = unread.filter { threadIdIsRss(it.backendThreadId()) }
-    if (mailTargets.isEmpty() && starredTargets.isEmpty() && rssTargets.isEmpty()) {
+    if (mailTargets.isEmpty() && unifiedMailAccounts.isEmpty() && starredTargets.isEmpty() && rssTargets.isEmpty()) {
         status = "No unread messages."
         return
     }
@@ -584,10 +596,23 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
     val kanbanBefore = kanbanColumns
     val foldersBefore = foldersByAccount
     val coreFoldersBefore = coreFolders
+    // Only cards this mark covers: the loaded rows, and anything else in a
+    // mailbox marked folder-wide. Other columns keep their unread state.
+    val clearedIds = unread.map { it.id }.toSet()
+    val inMarkedFolder = { card: ThreadSummary ->
+        mailTargets.any { (accountId, folder) ->
+            card.accountId == accountId && card.folder.equals(folder, ignoreCase = folder.equals(INBOX_FOLDER, ignoreCase = true))
+        }
+    }
     coreThreads = coreThreads.map { if (it.unread) it.copy(unread = false) else it }
     kanbanColumns =
         kanbanColumns.mapValues { (_, state) ->
-            state.copy(threads = state.threads.map { if (it.unread) it.copy(unread = false) else it })
+            state.copy(
+                threads =
+                    state.threads.map {
+                        if (it.unread && (it.id in clearedIds || inMarkedFolder(it))) it.copy(unread = false) else it
+                    },
+            )
         }
     applyLocalFolderUnread(plannedFolderUnread(mailTargets, rssTargets).first)
     scope.launch {
@@ -598,11 +623,11 @@ internal fun MeronMobileState.markVisibleMailboxAllRead() {
                 starredTargets.forEach { (threadId, messageIds) ->
                     responses += requireCoreOk(client.markRead(MarkReadParams(threadId = threadId, messageIds = messageIds)))
                 }
-                if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID && mailTargets.isNotEmpty()) {
-                    mailTargets.forEach { (accountId, _) -> withManagedGoogleAuth(client, accountId) { "" } }
+                if (unifiedMailAccounts.isNotEmpty()) {
+                    unifiedMailAccounts.forEach { withManagedGoogleAuth(client, it.id) { "" } }
                     responses +=
-                        requireCoreOk(
-                            client.markAllRead(MarkAllReadParams(accountId = UNIFIED_ACCOUNT_ID, folderId = INBOX_FOLDER)),
+                        requireCoreAllOk(
+                            client.markAllRead(MarkAllReadParams(accountId = UNIFIED_ACCOUNT_ID, folderId = unifiedRole)),
                         )
                 } else {
                     mailTargets.forEach { (accountId, folderId) ->
@@ -766,7 +791,7 @@ private fun MeronMobileState.markKanbanColumnsAllRead(columns: List<KanbanColumn
                                                     client.markAllRead(params)
                                                 }
                                             }
-                                        requireCoreOk(response)
+                                        requireCoreAllOk(response)
                                     }
                             }
                             if (starred) {

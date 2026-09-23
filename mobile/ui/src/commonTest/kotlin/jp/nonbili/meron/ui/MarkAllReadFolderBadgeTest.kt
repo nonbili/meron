@@ -181,6 +181,54 @@ class MarkAllReadFolderBadgeTest {
             assertEquals(1, folderUnread(state.coreFolders, INBOX_FOLDER))
         }
 
+    @Test
+    fun unifiedMarkAllReadMarksTheSelectedRoleNotTheInbox() =
+        runBlocking {
+            val core = GatedCore().apply { gate.complete(Unit) }
+            val state = state(core, this)
+            val sent = FolderSummary(accountId = "a", name = "Sent Items", role = "sent", unread = 3)
+            val sentRow = ThreadSummary(id = "a#Sent Items#s", accountId = "a", folder = "Sent Items", subject = "Re", sender = "Me", unread = true)
+            state.foldersByAccount = mapOf("a" to (state.foldersByAccount["a"].orEmpty() + sent))
+            state.coreFolders = state.coreFolders + sent
+            state.selectedCoreAccountId = UNIFIED_ACCOUNT_ID
+            state.selectedCoreFolder = "sent"
+            state.coreThreads = listOf(sentRow)
+
+            state.markVisibleMailboxAllRead()
+
+            assertEquals(0, folderUnread(state.foldersByAccount["a"], "Sent Items"))
+            assertEquals(12, folderUnread(state.foldersByAccount["a"], INBOX_FOLDER))
+            // The Inbox column's card is not in Sent, so it stays unread.
+            assertEquals(
+                true,
+                state.kanbanColumns["a\nINBOX"]
+                    ?.threads
+                    ?.single()
+                    ?.unread,
+            )
+            waitUntil { core.markAllReadPayloads.isNotEmpty() }
+            assertEquals(true, core.markAllReadPayloads.single().contains("\"folder_id\":\"sent\""))
+        }
+
+    @Test
+    fun aPartiallyFailedUnifiedWriteRollsBack() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    gate.complete(Unit)
+                    markAllReadResponse = """{"ok":false,"failures":[{"account_id":"a","message":"Offline"}],"folder_counts":[]}"""
+                }
+            val state = state(core, this)
+            state.selectedCoreAccountId = UNIFIED_ACCOUNT_ID
+            state.selectedCoreFolder = INBOX_FOLDER
+
+            state.markVisibleMailboxAllRead()
+
+            waitUntil { state.status.startsWith("Mark all read failed") }
+            assertEquals(12, folderUnread(state.foldersByAccount["a"], INBOX_FOLDER))
+            assertEquals(true, state.coreThreads.single().unread)
+        }
+
     private suspend fun waitUntil(condition: () -> Boolean) {
         withTimeout(5_000) {
             while (!condition()) delay(5)
@@ -229,6 +277,8 @@ class MarkAllReadFolderBadgeTest {
         var confirmedUnread = 0
         var failRss = false
         var markAllReadFails = false
+        var markAllReadResponse: String? = null
+        val markAllReadPayloads = mutableListOf<String>()
         var holdThreads = false
         val threadsStarted = CompletableDeferred<Unit>()
         val threadsGate = CompletableDeferred<Unit>()
@@ -239,9 +289,10 @@ class MarkAllReadFolderBadgeTest {
         ): String =
             when (command) {
                 MobileCommand.MarkAllRead -> {
+                    markAllReadPayloads += payloadJson
                     gate.await()
                     if (markAllReadFails) error("Server rejected the write")
-                    """{"ok":true,"folder_counts":[{"account_id":"a","folder_id":"INBOX","unread":$confirmedUnread}]}"""
+                    markAllReadResponse ?: """{"ok":true,"folder_counts":[{"account_id":"a","folder_id":"INBOX","unread":$confirmedUnread}]}"""
                 }
 
                 MobileCommand.RssMarkRead -> {
