@@ -1,0 +1,6 @@
+- Add local task lists and tasks navigation
+- Support printing messages and conversation threads
+- Fold quoted text in conversation bubbles
+- Make Meron Light the default theme and refine unread badges
+- Fix message undo restore, draft cleanup after sending, and mark all read
+- Update translations across locales

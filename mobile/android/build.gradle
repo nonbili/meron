@@ -13,8 +13,8 @@ def releaseProp = { String name, String envName = null, String fallback = "" ->
     return fallback
 }
 
-def releaseVersionCode = 32
-def releaseVersionName = "0.3.2"
+def releaseVersionCode = 33
+def releaseVersionName = "0.3.3"
 def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")
 // Gmail uses native Android OAuth clients. An Android OAuth client is bound to
 // package + signing-cert SHA-1, so each signing key is a *separate* client with
@@ -57,6 +57,7 @@ def releaseStorePassword = releaseProp("meronReleaseStorePassword", "MERON_ANDRO
 def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE_KEY_ALIAS", releaseProp("NB_UPLOAD_KEY_ALIAS", "NB_UPLOAD_KEY_ALIAS"))
 def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseProp("NB_UPLOAD_KEY_PASSWORD", "NB_UPLOAD_KEY_PASSWORD", releaseStorePassword))
 def hasReleaseSigning = releaseKeystore && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+def bundleRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
 def javaString = { String value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
 
 android {
@@ -109,6 +110,9 @@ android {
             manifestPlaceholders = [googleOauthScheme: googleOauthScheme(googleClientIdRelease)]
             buildConfigField "String", "MERON_OUTLOOK_REDIRECT_URI", javaString(outlookRedirectUriRelease)
             signingConfig hasReleaseSigning ? signingConfigs.release : null
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 
@@ -136,10 +140,12 @@ android {
     // core); the universal APK remains for local installs and users unsure of
     // their ABI. The AAB is unaffected — Play splits it per-ABI itself. AGP
     // forbids combining these splits with ndk.abiFilters; the shipped ABI set
-    // is whatever packageRustCoreAndroid puts under jniLibs.
+    // is whatever packageRustCoreAndroid puts under jniLibs. Bundle builds turn
+    // the splits off: with shrinkResources, AGP otherwise fails bundleRelease
+    // with "Multiple shrunk-resources files found" (issuetracker 402800800).
     splits {
         abi {
-            enable true
+            enable !bundleRequested
             reset()
             include "arm64-v8a", "armeabi-v7a"
             universalApk true

@@ -41,6 +41,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: install android ndk
         run: sdkmanager "ndk;27.3.13750724"

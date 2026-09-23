@@ -55,3 +55,10 @@ ndk-context = "0.1.1"
 # Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
 [patch.crates-io]
 async-imap = { git = "https://github.com/nonbili/async-imap.git", rev = "d04be74" }
+
+# Xcode 27's strip corrupts macOS proc-macro dylibs, and release strips
+# debuginfo by default, so rustc then fails with "can't find crate for
+# `jni_macros`". Host artifacts don't ship; the Android .so is stripped by
+# package-rust-core-android.sh with the NDK's llvm-strip.
+[profile.release.build-override]
+strip = false
