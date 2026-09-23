@@ -326,6 +326,7 @@ describe('thread message refresh reconciliation', () => {
 
 describe('thread list paging', () => {
   beforeEach(() => {
+    kanban$.activeBoardId.set('')
     mail$.threads.set([thread({ subject: 'Old first page' })])
     mail$.threadsCursor.set('old-cursor')
     mail$.threadsLoadingMore.set(false)

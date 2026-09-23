@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { MoreVertical, Inbox, Mail, Star, CheckCheck, EyeOff, FolderX, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Inbox, Mail, Star, CheckCheck, EyeOff, FolderX, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import type { FilterMode } from '../../states/ui'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
@@ -231,7 +231,7 @@ export function ThreadActionsMenu({
         }}
         title={t('threads.actions.title')}
       >
-        <MoreVertical size={size} />
+        <MoreHorizontal size={size} />
       </button>
       {open && (
         <div

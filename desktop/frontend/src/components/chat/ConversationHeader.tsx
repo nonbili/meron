@@ -10,7 +10,7 @@ import {
   FileText,
   LoaderCircle,
   Mail,
-  MoreVertical,
+  MoreHorizontal,
   PanelRight,
   Printer,
   ReplyAll,
@@ -246,7 +246,7 @@ export function ConversationHeader({
           />
           <div ref={actionsMenuRef} className="relative">
             <IconButton
-              icon={MoreVertical}
+              icon={MoreHorizontal}
               label={t('chat.moreActions')}
               active={actionsMenuOpen}
               onClick={() => setActionsMenuOpen((open) => !open)}

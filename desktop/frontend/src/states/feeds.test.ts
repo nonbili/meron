@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Account, Message } from '../types'
 import { accounts$ } from './accounts'
 import { nextRssAccountDisplayName, removeFeed } from './feeds'
+import { kanban$ } from './kanban'
 import { mail$ } from './mail'
 import { ui$ } from './ui'
 
@@ -28,6 +29,7 @@ describe('removeFeed', () => {
 
   beforeEach(() => {
     calls.length = 0
+    kanban$.activeBoardId.set('')
     accounts$.set([
       {
         id: 'rss-account',

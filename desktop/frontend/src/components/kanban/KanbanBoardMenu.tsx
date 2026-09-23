@@ -1,5 +1,17 @@
 import { useRef, useState } from 'react'
-import { Check, Columns3, Inbox, Lock, Mail, MailCheck, Minus, MoreVertical, Plus, Settings, Star } from 'lucide-react'
+import {
+  Check,
+  Columns3,
+  Inbox,
+  Lock,
+  Mail,
+  MailCheck,
+  Minus,
+  MoreHorizontal,
+  Plus,
+  Settings,
+  Star,
+} from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { type FilterMode, ui$ } from '../../states/ui'
@@ -114,7 +126,7 @@ export function BoardMenu({
   return (
     <div ref={rootRef} className="relative shrink-0">
       <IconButton
-        icon={MoreVertical}
+        icon={MoreHorizontal}
         label={t('kanban.actions.boardOptions')}
         variant={filterActive ? 'accentSoft' : 'ghost'}
         active={!filterActive && open}

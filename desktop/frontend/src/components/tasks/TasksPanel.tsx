@@ -86,7 +86,7 @@ export function TasksPanel({ listId }: { listId: string }) {
     <div
       // Hidden on a narrow window: at that width the thread list and
       // conversation already compete, and a third column would win nothing.
-      className="flex min-h-0 shrink-0 flex-col border-l border-border bg-app max-[900px]:hidden"
+      className="flex min-h-0 shrink-0 flex-col border-l border-border bg-chats max-[900px]:hidden"
       style={{ width: TASKS_PANEL_WIDTH }}
     >
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border pl-3 pr-1.5">

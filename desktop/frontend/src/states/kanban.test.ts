@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import { accounts$ } from './accounts'
 import { compose$ } from './composeState'
@@ -641,6 +641,10 @@ describe('closeKanbanPane', () => {
     ui$.selectedThread.set('t-card')
     compose$.tabs.set([])
     compose$.activeTab.set('')
+  })
+
+  afterEach(() => {
+    kanban$.activeBoardId.set('')
   })
 
   it('closes the pane when the card conversation is all it holds', () => {
