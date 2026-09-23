@@ -1010,12 +1010,49 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
+        let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
+            .map_err(|err| err.to_string())?;
+        let moved_ids = crate::ffi::engine_block_on(async {
+            anyhow::Ok(
+                crate::engine::moved_message_ids(
+                    &engine,
+                    &parsed.account,
+                    &parsed.folder,
+                    &uids,
+                    cached_ids,
+                )
+                .await,
+            )
+        })?;
         let delete_result = crate::ffi::engine_block_on(crate::engine::delete_to_trash(
             &engine,
             &parsed.account,
             &parsed.folder,
             &uids,
         ))?;
+        // Undo moves exactly these copies back out of Trash.
+        let trash_copies = match &delete_result {
+            Some(trashed) => {
+                let copies = crate::ffi::engine_block_on(async {
+                    anyhow::Ok(
+                        crate::engine::refresh_moved_copies(
+                            &engine,
+                            &parsed.account,
+                            &trashed.folder,
+                            uids.len(),
+                            trashed.uid_next_before,
+                            moved_ids.as_deref(),
+                        )
+                        .await,
+                    )
+                })?;
+                copies
+                    .store(&conn, &parsed.account, &trashed.folder)
+                    .map_err(|err| err.to_string())?;
+                copies.uids
+            }
+            None => Vec::new(),
+        };
         // Discarding a draft must also drop hidden local copies sharing its
         // Message-ID (stale autosaves the pane deduped away), or the thread
         // card keeps its has_draft badge until the next full sync.
@@ -1042,10 +1079,16 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                 None,
                 true,
             ),
-            Some(trash) => {
+            Some(crate::engine::Trashed { folder: trash, .. }) => {
                 let moved_thread_id = format_thread_id(&parsed.account, &trash, &parsed.thread_key);
                 crate::mail_model::mutation_result(
-                    json!({ "ok": true, "deleted": deleted, "trash": trash, "thread_id": moved_thread_id }),
+                    json!({
+                        "ok": true,
+                        "deleted": deleted,
+                        "trash": trash,
+                        "thread_id": moved_thread_id,
+                        "target_uids": trash_copies,
+                    }),
                     &conn,
                     &parsed.account,
                     &thread_id,
@@ -1088,41 +1131,50 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
+        let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
+            .map_err(|err| err.to_string())?;
+        let moved_ids = crate::ffi::engine_block_on(async {
+            anyhow::Ok(
+                crate::engine::moved_message_ids(
+                    &engine,
+                    &parsed.account,
+                    &parsed.folder,
+                    &uids,
+                    cached_ids,
+                )
+                .await,
+            )
+        })?;
         let op_folder = parsed.folder.clone();
         let op_target = target_folder.clone();
         let op_uids = uids.clone();
-        crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
-            let source = op_folder.clone();
-            let target = op_target.clone();
-            let uids = op_uids.clone();
-            Box::pin(async move { imap::move_to_folder(session, &source, &target, &uids).await })
-        }))?;
-        // Read-only refresh, on its own session: the MOVE has landed and must
-        // not be retried, and a message in the target folder that we cannot
-        // parse must not sink the whole move.
-        let target_batch = crate::ffi::engine_block_on(crate::engine::fetch_recent_resilient(
-            &engine,
+        let uid_next_before = crate::ffi::engine_block_on(engine.with_write_session(
             &parsed.account,
-            &target_folder,
-            50.max(uids.len() as u32),
+            move |session| {
+                let source = op_folder.clone();
+                let target = op_target.clone();
+                let uids = op_uids.clone();
+                Box::pin(
+                    async move { imap::move_to_folder(session, &source, &target, &uids).await },
+                )
+            },
         ))?;
-        store::ensure_folder(&conn, &parsed.account, &target_folder)
+        let copies = crate::ffi::engine_block_on(async {
+            anyhow::Ok(
+                crate::engine::refresh_moved_copies(
+                    &engine,
+                    &parsed.account,
+                    &target_folder,
+                    uids.len(),
+                    uid_next_before,
+                    moved_ids.as_deref(),
+                )
+                .await,
+            )
+        })?;
+        copies
+            .store(&conn, &parsed.account, &target_folder)
             .map_err(|err| err.to_string())?;
-        store::upsert_messages(
-            &conn,
-            &parsed.account,
-            &target_folder,
-            &target_batch.messages,
-        )
-        .map_err(|err| err.to_string())?;
-        store::set_folder_state(
-            &conn,
-            &parsed.account,
-            &target_folder,
-            target_batch.uidvalidity,
-            target_batch.uid_next,
-        )
-        .map_err(|err| err.to_string())?;
         store::move_messages_by_uid(
             &conn,
             &parsed.account,
@@ -1141,6 +1193,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
                 "moved": moved,
                 "folder": target_folder,
                 "thread_id": moved_thread_id,
+                "target_uids": copies.uids,
             }),
             &conn,
             &parsed.account,
@@ -1166,7 +1219,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
     }
     let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
-        let uids = cached_thread_uids(&conn, &parsed)?;
+        let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if uids.is_empty() {
             return Ok(
                 json!({ "ok": true, "moved": 0, "folder": target_folder, "thread_id": thread_id }),
@@ -1176,41 +1229,50 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
+        let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
+            .map_err(|err| err.to_string())?;
+        let moved_ids = crate::ffi::engine_block_on(async {
+            anyhow::Ok(
+                crate::engine::moved_message_ids(
+                    &engine,
+                    &parsed.account,
+                    &parsed.folder,
+                    &uids,
+                    cached_ids,
+                )
+                .await,
+            )
+        })?;
         let op_folder = parsed.folder.clone();
         let op_target = target_folder.clone();
         let op_uids = uids.clone();
-        crate::ffi::engine_block_on(engine.with_write_session(&parsed.account, move |session| {
-            let source = op_folder.clone();
-            let target = op_target.clone();
-            let uids = op_uids.clone();
-            Box::pin(async move { imap::move_to_folder(session, &source, &target, &uids).await })
-        }))?;
-        // Read-only refresh, on its own session: the MOVE has landed and must
-        // not be retried, and a message in the target folder that we cannot
-        // parse must not sink the whole move.
-        let target_batch = crate::ffi::engine_block_on(crate::engine::fetch_recent_resilient(
-            &engine,
+        let uid_next_before = crate::ffi::engine_block_on(engine.with_write_session(
             &parsed.account,
-            &target_folder,
-            50.max(uids.len() as u32),
+            move |session| {
+                let source = op_folder.clone();
+                let target = op_target.clone();
+                let uids = op_uids.clone();
+                Box::pin(
+                    async move { imap::move_to_folder(session, &source, &target, &uids).await },
+                )
+            },
         ))?;
-        store::ensure_folder(&conn, &parsed.account, &target_folder)
+        let copies = crate::ffi::engine_block_on(async {
+            anyhow::Ok(
+                crate::engine::refresh_moved_copies(
+                    &engine,
+                    &parsed.account,
+                    &target_folder,
+                    uids.len(),
+                    uid_next_before,
+                    moved_ids.as_deref(),
+                )
+                .await,
+            )
+        })?;
+        copies
+            .store(&conn, &parsed.account, &target_folder)
             .map_err(|err| err.to_string())?;
-        store::upsert_messages(
-            &conn,
-            &parsed.account,
-            &target_folder,
-            &target_batch.messages,
-        )
-        .map_err(|err| err.to_string())?;
-        store::set_folder_state(
-            &conn,
-            &parsed.account,
-            &target_folder,
-            target_batch.uidvalidity,
-            target_batch.uid_next,
-        )
-        .map_err(|err| err.to_string())?;
         store::move_messages_by_uid(
             &conn,
             &parsed.account,
@@ -1228,6 +1290,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 "moved": moved,
                 "folder": target_folder,
                 "thread_id": moved_thread_id,
+                "target_uids": copies.uids,
             }),
             &conn,
             &parsed.account,

@@ -1134,7 +1134,7 @@ describe('moveThreadToFolder undo', () => {
     calls.length = 0
     responses = {
       'mail.move': [
-        { ok: true, moved: 1 },
+        { ok: true, moved: 1, target_uids: [5] },
         { ok: true, moved: 1 },
       ],
       'mail.threadList': [{ threads: [] }, { threads: [thread({ thread_id: 'acc#inbox#t.MQ' })] }],
@@ -1176,6 +1176,7 @@ describe('moveThreadToFolder undo', () => {
     expect(calls.filter((call) => call.command === 'mail.move')[1]?.payload).toMatchObject({
       thread_id: 'acc#Work#t.MQ',
       target_folder_id: 'inbox',
+      message_ids: ['5'],
     })
     expect(ui$.toast.get()).toBe('Thread moved')
     expect(ui$.toastUndo.peek()).toBeNull()
@@ -1243,7 +1244,7 @@ describe('deleteThread trash undo', () => {
   beforeEach(() => {
     calls.length = 0
     responses = {
-      'mail.delete': [{ ok: true, deleted: 1, trash: 'Trash', thread_id: 'acc#Trash#t.MQ' }],
+      'mail.delete': [{ ok: true, deleted: 1, trash: 'Trash', thread_id: 'acc#Trash#t.MQ', target_uids: [42] }],
       'mail.move': [{ ok: true, moved: 1 }],
       'mail.threadList': [{ threads: [] }, { threads: [thread({ thread_id: 'acc#inbox#t.MQ' })] }],
     }
@@ -1290,6 +1291,7 @@ describe('deleteThread trash undo', () => {
     expect(calls.find((call) => call.command === 'mail.move')?.payload).toMatchObject({
       thread_id: 'acc#Trash#t.MQ',
       target_folder_id: 'inbox',
+      message_ids: ['42'],
     })
     expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['acc#inbox#t.MQ'])
     expect(ui$.toast.get()).toBe('Thread moved')
@@ -1326,7 +1328,7 @@ describe('archiveThread undo', () => {
   beforeEach(() => {
     calls.length = 0
     responses = {
-      'mail.archive': [{ ok: true, moved: 1, folder: 'Archive', thread_id: 'acc#Archive#t.MQ' }],
+      'mail.archive': [{ ok: true, moved: 1, folder: 'Archive', thread_id: 'acc#Archive#t.MQ', target_uids: [9] }],
       'mail.threadList': [{ threads: [] }, { threads: [thread({ thread_id: 'acc#inbox#t.MQ' })] }],
       'mail.move': [{ ok: true, moved: 1 }],
     }
@@ -1374,6 +1376,7 @@ describe('archiveThread undo', () => {
     expect(calls.find((call) => call.command === 'mail.move')?.payload).toMatchObject({
       thread_id: 'acc#Archive#t.MQ',
       target_folder_id: 'inbox',
+      message_ids: ['9'],
     })
     expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['acc#inbox#t.MQ'])
     expect(ui$.toastTone.get()).toBe('success')

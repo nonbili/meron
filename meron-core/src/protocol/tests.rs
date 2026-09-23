@@ -3690,3 +3690,37 @@ fn protocol_stub_answers_tasks_without_a_data_dir() {
     let unknown = invoke_protocol_json(r#"{"id":312,"method":"tasks.nope","params":{}}"#);
     assert_eq!(unknown["error"]["message"], "unknown method: tasks.nope");
 }
+
+#[test]
+fn mobile_protocol_move_honors_explicit_message_ids() {
+    // An undo moves back the copies an archive reported, by UID. Those rows
+    // need not be cached in the archive folder, and a uid: thread key names
+    // nothing there at all — so the explicit ids must be used as given rather
+    // than resolved through the cached thread.
+    let data_dir = unique_data_dir("move-explicit-ids");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "Archive").unwrap();
+    drop(conn);
+
+    let without_ids = invoke_mobile_protocol_json(
+        r#"{"id":68,"method":"mail.move","params":{"thread_id":"me@example.com#Archive#t.dG9waWM","target_folder_id":"INBOX"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(without_ids["result"]["moved"], 0);
+
+    // Past UID resolution to the server write, which this account can't make.
+    let with_ids = invoke_mobile_protocol_json(
+        r#"{"id":69,"method":"mail.move","params":{"thread_id":"me@example.com#Archive#t.dG9waWM","target_folder_id":"INBOX","message_ids":["42"]}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert!(
+        with_ids["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("account needs reconnect"),
+        "{with_ids}"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}

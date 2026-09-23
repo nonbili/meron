@@ -15,7 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import jp.nonbili.meron.shared.notificationThreadId
-import jp.nonbili.meron.shared.notificationThreadKeyIsStableAcrossMove
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -73,8 +73,9 @@ class AndroidNotificationActionReceiver : BroadcastReceiver() {
                 // not just the one pressed.
                 val cleared = AndroidNotificationService.cancelThreadRows(context, accountId, threadKey)
                 if (cleared.isEmpty()) manager.cancel(notificationId)
-                // The undo row replaces the mail in the shade, so the group
-                // summary must be recounted without the rows just cancelled.
+                // The group summary must be recounted without the rows just
+                // cancelled. The undo row comes later, from the worker, once
+                // the archive has reported the copies an undo would move back.
                 AndroidNotificationService.refreshNewMailSummary(
                     context,
                     accountId,
@@ -82,17 +83,6 @@ class AndroidNotificationActionReceiver : BroadcastReceiver() {
                     folder,
                     cleared + notificationId,
                 )
-                if (notificationThreadKeyIsStableAcrossMove(threadKey)) {
-                    AndroidNotificationService.notifyArchivedWithUndo(
-                        context,
-                        accountId = accountId,
-                        accountName = accountName,
-                        folder = folder,
-                        threadKey = threadKey,
-                        title = title,
-                        notificationId = notificationId,
-                    )
-                }
             }
 
             ACTION_MARK_READ -> {
@@ -202,19 +192,36 @@ class NotificationActionWorker(
                 }
 
                 ACTION_UNDO_ARCHIVE -> {
-                    // Where the archive actually put the mail — recorded by the
-                    // archive that ran just before this (work for one thread is
-                    // APPENDed, so it has finished). Absent means there is
-                    // nothing to undo: the archive failed, or never ran.
-                    val archiveFolder =
+                    // Where the archive put the mail, and exactly the copies it
+                    // made there — recorded by the archive that ran just before
+                    // this (work for one thread is APPENDed, so it has finished),
+                    // and the only case the undo row is ever posted for. Without
+                    // them there is no safe way back: the thread key would also
+                    // take older mail of the conversation.
+                    val archived =
                         takeArchivedFolder(applicationContext, accountId, threadKey)
-                            ?: return Result.success()
+                            ?.takeIf { it.uids.isNotEmpty() }
+                    if (archived == null) {
+                        Log.w(TAG, "$action has no archived copies to move back")
+                        AndroidNotificationService.notifyActionFailed(
+                            applicationContext,
+                            accountId = accountId,
+                            accountName = accountName,
+                            folder = folder,
+                            threadKey = threadKey,
+                            title = title,
+                            notificationId = notificationId,
+                            action = action,
+                        )
+                        return Result.failure()
+                    }
                     requestJson(
                         2,
                         "mail.move",
                         JSONObject()
-                            .put("thread_id", notificationThreadId(accountId, archiveFolder, threadKey))
-                            .put("target_folder_id", folder),
+                            .put("thread_id", notificationThreadId(accountId, archived.folder, threadKey))
+                            .put("target_folder_id", folder)
+                            .put("message_ids", JSONArray(archived.uids.map { it.toString() })),
                     )
                 }
 
@@ -230,8 +237,26 @@ class NotificationActionWorker(
                 // Core picks the archive folder itself; remember its answer so a
                 // later undo moves the mail out of the folder it really landed
                 // in rather than one guessed from the folder roles.
-                response.optJSONObject("result")?.optString("folder")?.takeIf { it.isNotBlank() }?.let { archived ->
-                    rememberArchivedFolder(applicationContext, accountId, threadKey, archived)
+                val result = response.optJSONObject("result")
+                result?.optString("folder")?.takeIf { it.isNotBlank() }?.let { archived ->
+                    val targetUids =
+                        result
+                            .optJSONArray("target_uids")
+                            ?.let { uids -> (0 until uids.length()).map { uids.getLong(it) } }
+                            .orEmpty()
+                    // Offer Undo only for copies it can move back exactly.
+                    if (targetUids.isNotEmpty()) {
+                        rememberArchivedFolder(applicationContext, accountId, threadKey, archived, targetUids)
+                        AndroidNotificationService.notifyArchivedWithUndo(
+                            applicationContext,
+                            accountId = accountId,
+                            accountName = accountName,
+                            folder = folder,
+                            threadKey = threadKey,
+                            title = title,
+                            notificationId = notificationId,
+                        )
+                    }
                 }
             }
             // A running app has no other way to learn the mailbox changed: this
@@ -297,16 +322,26 @@ private fun archivedFolderKey(
     threadKey: String,
 ): String = "$accountId#$threadKey"
 
+/** Where the archive put the mail, and the UIDs of the copies it made there.
+ *  Recorded only when core could tell those copies apart. */
+internal data class ArchivedPlacement(
+    val folder: String,
+    val uids: List<Long>,
+)
+
 internal fun rememberArchivedFolder(
     context: Context,
     accountId: String,
     threadKey: String,
     folder: String,
+    uids: List<Long>,
 ) {
+    val key = archivedFolderKey(accountId, threadKey)
     context
         .getSharedPreferences(ARCHIVED_FOLDER_PREFS, Context.MODE_PRIVATE)
         .edit()
-        .putString(archivedFolderKey(accountId, threadKey), folder)
+        .putString(key, folder)
+        .putString("$key#uids", uids.joinToString(","))
         .apply()
 }
 
@@ -316,12 +351,22 @@ internal fun takeArchivedFolder(
     context: Context,
     accountId: String,
     threadKey: String,
-): String? {
+): ArchivedPlacement? {
     val prefs = context.getSharedPreferences(ARCHIVED_FOLDER_PREFS, Context.MODE_PRIVATE)
     val key = archivedFolderKey(accountId, threadKey)
     val folder = prefs.getString(key, null)?.takeIf { it.isNotBlank() }
-    prefs.edit().remove(key).apply()
-    return folder
+    val uids =
+        prefs
+            .getString("$key#uids", null)
+            .orEmpty()
+            .split(',')
+            .mapNotNull { it.toLongOrNull() }
+    prefs
+        .edit()
+        .remove(key)
+        .remove("$key#uids")
+        .apply()
+    return folder?.let { ArchivedPlacement(it, uids) }
 }
 
 /** How long the undo offer stays in the shade. Long enough to notice a mis-tap,

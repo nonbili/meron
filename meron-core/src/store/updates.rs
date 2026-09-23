@@ -312,6 +312,29 @@ pub fn delete_quick_reply_drafts_in_thread(
     )?)
 }
 
+/// The lowercased Message-ID of each message in `uids` the cache holds, `""`
+/// for one without, `None` for one it doesn't. Read before a move drops the
+/// rows; see `engine::moved_message_ids`.
+pub fn cached_message_ids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> Result<Vec<Option<String>>> {
+    let mut stmt = conn.prepare(
+        "SELECT lower(COALESCE(json_extract(json, '$.message_id'), '')) FROM messages
+         WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+    )?;
+    let mut ids = Vec::with_capacity(uids.len());
+    for uid in uids {
+        let id: Option<String> = stmt
+            .query_row(params![account, folder, *uid], |row| row.get(0))
+            .optional()?;
+        ids.push(id.map(|id| id.trim().to_string()));
+    }
+    Ok(ids)
+}
+
 pub fn delete_messages_by_uid(
     conn: &Connection,
     account: &str,

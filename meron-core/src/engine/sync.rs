@@ -1,5 +1,6 @@
 //! Folder and message sync against the server, including companion folders.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,14 +64,21 @@ pub async fn mark_starred_copies(
     Ok(())
 }
 
+/// Where [`delete_to_trash`] moved messages, and the Trash folder's UIDNEXT
+/// from just before the move (see [`refresh_moved_copies`]).
+pub struct Trashed {
+    pub folder: String,
+    pub uid_next_before: Option<u32>,
+}
+
 /// Delete messages on the server. Returns `None` for a permanent expunge
-/// (Drafts, or items already in Trash), or `Some(trash)` when moved to Trash.
+/// (Drafts, or items already in Trash), or `Some` when moved to Trash.
 pub async fn delete_to_trash(
     engine: &Engine,
     account: &str,
     folder: &str,
     uids: &[u32],
-) -> anyhow::Result<Option<String>> {
+) -> anyhow::Result<Option<Trashed>> {
     engine
         .with_write_session(account, |session| {
             let folder = folder.to_string();
@@ -88,11 +96,192 @@ pub async fn delete_to_trash(
                     imap::expunge_uids(session, &folder, &uids).await?;
                     return anyhow::Ok(None);
                 }
-                imap::move_to_folder(session, &folder, &trash, &uids).await?;
-                anyhow::Ok(Some(trash))
+                let uid_next_before = imap::move_to_folder(session, &folder, &trash, &uids).await?;
+                anyhow::Ok(Some(Trashed {
+                    folder: trash,
+                    uid_next_before,
+                }))
             })
         })
         .await
+}
+
+/// The target folder's recent window, re-read after a move into it, and the
+/// UIDs of the copies that move created there.
+pub struct MovedCopies {
+    /// `None` when the re-read failed; the move itself still stands.
+    pub batch: Option<imap::RecentBatch>,
+    pub uids: Vec<u32>,
+}
+
+impl MovedCopies {
+    /// Cache the re-read target window, if there is one.
+    pub fn store(
+        &self,
+        conn: &rusqlite::Connection,
+        account: &str,
+        target: &str,
+    ) -> anyhow::Result<()> {
+        let Some(batch) = &self.batch else {
+            return Ok(());
+        };
+        store::ensure_folder(conn, account, target)?;
+        store::upsert_messages(conn, account, target, &batch.messages)?;
+        store::set_folder_state(conn, account, target, batch.uidvalidity, batch.uid_next)?;
+        Ok(())
+    }
+}
+
+/// The lowercased Message-ID of each message about to be moved, `""` for one
+/// without, so [`refresh_moved_copies`] can tell its copies from other mail in
+/// the target. `cached` comes from `store::cached_message_ids`; what the cache
+/// lacks is read from the server. `None` when a message can't be described
+/// there either — then no copies are picked.
+///
+/// Read-only, on its own session, and run before the move: best-effort, since
+/// failing here costs only the exact undo, never the move.
+pub async fn moved_message_ids(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+    cached: Vec<Option<String>>,
+) -> Option<Vec<String>> {
+    let missing: Vec<u32> = uids
+        .iter()
+        .zip(&cached)
+        .filter(|(_, id)| id.is_none())
+        .map(|(uid, _)| *uid)
+        .collect();
+    let fetched: HashMap<u32, String> = if missing.is_empty() {
+        HashMap::new()
+    } else {
+        match fetch_headers_isolating_unparseable(engine, account, folder, missing).await {
+            Ok((headers, _)) => headers
+                .into_iter()
+                .map(|header| (header.uid, header.message_id.trim().to_lowercase()))
+                .collect(),
+            Err(err) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.sync",
+                    "account={account} folder={folder}: reading messages before move failed: {err:#}"
+                );
+                return None;
+            }
+        }
+    };
+    uids.iter()
+        .zip(cached)
+        .map(|(uid, id)| id.or_else(|| fetched.get(uid).cloned()))
+        .collect()
+}
+
+/// The UIDs of the copies a move created, among the target's messages at or
+/// above its pre-move UIDNEXT (`arrivals`). `moved` holds the lowercased
+/// Message-ID of each moved message, `""` for one without.
+///
+/// Arrivals whose Message-ID the move didn't carry are other mail delivered
+/// meanwhile, and are passed over. Each Message-ID the move did carry — the
+/// empty one included — must account for exactly as many arrivals as moved
+/// messages: fewer means a copy is missing, more means a concurrent delivery
+/// is indistinguishable from it. Either way the answer would be wrong, so none
+/// is given, and no Undo is offered.
+pub(super) fn moved_copy_uids(arrivals: &[imap::MessageHeader], moved: &[String]) -> Vec<u32> {
+    let mut expected: HashMap<&str, usize> = HashMap::new();
+    for id in moved {
+        *expected.entry(id.as_str()).or_default() += 1;
+    }
+    let mut found: HashMap<&str, Vec<u32>> = HashMap::new();
+    for arrival in arrivals {
+        let id = arrival.message_id.trim().to_lowercase();
+        if let Some((&key, _)) = expected.get_key_value(id.as_str()) {
+            found.entry(key).or_default().push(arrival.uid);
+        }
+    }
+    let mut uids = Vec::with_capacity(moved.len());
+    for (id, count) in expected {
+        match found.remove(id) {
+            Some(copies) if copies.len() == count => uids.extend(copies),
+            _ => return Vec::new(),
+        }
+    }
+    uids.sort_unstable();
+    uids
+}
+
+/// Re-read `target` after moving `count` messages into it, and pick out the
+/// copies the move created (see [`moved_copy_uids`]): every message at or
+/// above the target's UIDNEXT from before the move is read, not just the
+/// recent window, so a large move can't lose its earliest copies. Undo moves
+/// exactly these back, rather than resolving the thread key in the target —
+/// which would also take older mail of the same conversation, and finds
+/// nothing for a `uid:` key, as UIDs change on a move.
+///
+/// `moved` is `None` when the moved messages couldn't all be described, and
+/// then no copies are picked, as when the pre-move UIDNEXT is unknown.
+///
+/// Read-only and best-effort, on its own sessions: the MOVE has landed and
+/// must not be retried or reported failed because a re-read went wrong.
+pub async fn refresh_moved_copies(
+    engine: &Arc<Engine>,
+    account: &str,
+    target: &str,
+    count: usize,
+    uid_next_before: Option<u32>,
+    moved: Option<&[String]>,
+) -> MovedCopies {
+    let batch = match fetch_recent_resilient(engine, account, target, 50.max(count as u32)).await {
+        Ok(batch) => Some(batch),
+        Err(err) => {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "account={account} folder={target}: refresh after move failed: {err:#}"
+            );
+            None
+        }
+    };
+    let uids = match (uid_next_before.filter(|uid_next| *uid_next > 0), moved) {
+        (Some(floor), Some(moved)) => match moved_arrivals(engine, account, target, floor).await {
+            Ok(arrivals) => moved_copy_uids(&arrivals, moved),
+            Err(err) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.sync",
+                    "account={account} folder={target}: locating moved copies failed: {err:#}"
+                );
+                Vec::new()
+            }
+        },
+        _ => Vec::new(),
+    };
+    MovedCopies { batch, uids }
+}
+
+/// Every message in `target` at or above `floor`. Fails rather than return a
+/// partial set, which [`moved_copy_uids`] would take for a missing copy.
+async fn moved_arrivals(
+    engine: &Arc<Engine>,
+    account: &str,
+    target: &str,
+    floor: u32,
+) -> anyhow::Result<Vec<imap::MessageHeader>> {
+    let uids = engine
+        .with_read_session(account, |session| {
+            let target = target.to_string();
+            Box::pin(async move { imap::uids_from(session, &target, floor).await })
+        })
+        .await?;
+    let (headers, skipped) =
+        fetch_headers_isolating_unparseable(engine, account, target, uids.clone()).await?;
+    anyhow::ensure!(
+        skipped.is_empty() && headers.len() == uids.len(),
+        "read {} of {} messages",
+        headers.len(),
+        uids.len()
+    );
+    Ok(headers)
 }
 
 /// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into

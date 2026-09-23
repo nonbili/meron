@@ -242,8 +242,29 @@ pub(crate) async fn dispatch(
                 );
             }
 
+            let cached_ids =
+                store::cached_message_ids(&engine.db.lock().unwrap(), &account, &folder, &uids)?;
+            let moved_ids = moved_message_ids(engine, &account, &folder, &uids, cached_ids).await;
             // Mutating, so it never auto-retries.
             let trashed = delete_to_trash(engine, &account, &folder, &uids).await?;
+            // Undo moves exactly these copies back out of Trash.
+            let copies = match &trashed {
+                Some(trash) => {
+                    let copies = refresh_moved_copies(
+                        engine,
+                        &account,
+                        &trash.folder,
+                        uids.len(),
+                        trash.uid_next_before,
+                        moved_ids.as_deref(),
+                    )
+                    .await;
+                    copies.store(&engine.db.lock().unwrap(), &account, &trash.folder)?;
+                    Some(copies)
+                }
+                None => None,
+            };
+            let trash_folder = trashed.as_ref().map(|trash| trash.folder.as_str());
 
             {
                 let db = engine.db.lock().unwrap();
@@ -258,9 +279,14 @@ pub(crate) async fn dispatch(
             // The server delete/move-to-Trash completed for every resolved UID.
             // A concurrent source refresh may already have pruned the cache rows.
             let deleted = uids.len();
-            let result = match trashed.as_deref() {
-                None => json!({ "ok": true, "deleted": deleted, "permanent": true }),
-                Some(trash) => json!({ "ok": true, "deleted": deleted, "trash": trash }),
+            let result = match (trash_folder, &copies) {
+                (Some(trash), Some(copies)) => json!({
+                    "ok": true,
+                    "deleted": deleted,
+                    "trash": trash,
+                    "target_uids": copies.uids,
+                }),
+                _ => json!({ "ok": true, "deleted": deleted, "permanent": true }),
             };
             mail_model::mutation_result(
                 result,
@@ -268,7 +294,7 @@ pub(crate) async fn dispatch(
                 &account,
                 &changed_thread_id,
                 &folder,
-                trashed.as_deref(),
+                trash_folder,
                 None,
                 None,
                 true,
@@ -346,7 +372,10 @@ pub(crate) async fn dispatch(
                 );
             }
 
-            engine
+            let cached_ids =
+                store::cached_message_ids(&engine.db.lock().unwrap(), &account, &folder, &uids)?;
+            let moved_ids = moved_message_ids(engine, &account, &folder, &uids, cached_ids).await;
+            let uid_next_before = engine
                 .with_write_session(&account, |session| {
                     let folder = folder.clone();
                     let target_folder = target_folder.clone();
@@ -356,25 +385,19 @@ pub(crate) async fn dispatch(
                     })
                 })
                 .await?;
-            // Read-only refresh, on its own session: the MOVE has landed and
-            // must not be retried, and a message the target folder holds that we
-            // cannot parse must not sink the whole move.
-            let target_batch =
-                fetch_recent_resilient(engine, &account, &target_folder, 50.max(uids.len() as u32))
-                    .await
-                    .context("refresh target folder after move")?;
+            let copies = refresh_moved_copies(
+                engine,
+                &account,
+                &target_folder,
+                uids.len(),
+                uid_next_before,
+                moved_ids.as_deref(),
+            )
+            .await;
 
             {
                 let db = engine.db.lock().unwrap();
-                store::ensure_folder(&db, &account, &target_folder)?;
-                store::upsert_messages(&db, &account, &target_folder, &target_batch.messages)?;
-                store::set_folder_state(
-                    &db,
-                    &account,
-                    &target_folder,
-                    target_batch.uidvalidity,
-                    target_batch.uid_next,
-                )?;
+                copies.store(&db, &account, &target_folder)?;
                 store::delete_messages_by_uid(&db, &account, &folder, &uids)?;
             }
             // The IMAP MOVE above completed for every resolved UID. A concurrent
@@ -382,7 +405,13 @@ pub(crate) async fn dispatch(
             // so the cache DELETE count is not the number moved on the server.
             let moved = uids.len();
             mail_model::mutation_result(
-                json!({ "ok": true, "moved": moved, "source_folder": folder, "target_folder": target_folder }),
+                json!({
+                    "ok": true,
+                    "moved": moved,
+                    "source_folder": folder,
+                    "target_folder": target_folder,
+                    "target_uids": copies.uids,
+                }),
                 &engine.db.lock().unwrap(),
                 &account,
                 &changed_thread_id,

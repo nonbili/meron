@@ -263,6 +263,23 @@ describe('undoable deletes', () => {
     expect(restore?.payload.restore.tasks).toHaveLength(1)
   })
 
+  it('reports an undo the core could not restore', async () => {
+    await openTasksPanel()
+    await deleteTask('task-1')
+    const undo = ui$.toastUndo.get() as (() => void) | null
+    const invokeTask = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+      if (command === 'tasks.restore') throw new Error('restore refused')
+      return invokeTask(command, payload)
+    }
+
+    undo?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(ui$.toast.get()).toBe('restore refused')
+    expect(ui$.toastTone.get()).toBe('error')
+  })
+
   it('offers an undo after clearing completed tasks', async () => {
     await openTasksPanel()
     await clearCompletedTasks()

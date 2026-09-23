@@ -458,3 +458,44 @@ fn folder_search_failure_keeps_other_folder_successes() {
     assert_eq!(failures.len(), 1);
     assert_eq!(failures[0].0, "Sent");
 }
+
+#[test]
+fn moved_copy_uids_picks_only_the_copies_a_move_created() {
+    use super::sync::moved_copy_uids;
+    let header = |uid: u32, message_id: &str| imap::MessageHeader {
+        uid,
+        message_id: message_id.to_string(),
+        ..Default::default()
+    };
+    let id = |value: &str| value.to_string();
+
+    // Arrivals past the pre-move UIDNEXT: the two moved copies, plus mail
+    // delivered meanwhile — with another Message-ID, and with none at all.
+    let arrivals = [
+        header(9, "<Moved@Example.com>"),
+        header(10, "<other@example.com>"),
+        header(11, ""),
+        header(12, "<second@example.com>"),
+    ];
+    let moved = [id("<moved@example.com>"), id("<second@example.com>")];
+    assert_eq!(moved_copy_uids(&arrivals, &moved), vec![9, 12]);
+
+    // A moved copy that isn't among the arrivals: incomplete, so nothing.
+    let moved = [id("<moved@example.com>"), id("<missing@example.com>")];
+    assert!(moved_copy_uids(&arrivals, &moved).is_empty());
+
+    // An id-less move is picked out only when the id-less arrivals match it
+    // one for one; a second one arriving meanwhile makes it ambiguous.
+    assert_eq!(moved_copy_uids(&arrivals, &[id("")]), vec![11]);
+    let crowded = [header(11, ""), header(13, "")];
+    assert!(moved_copy_uids(&crowded, &[id("")]).is_empty());
+
+    // Duplicate Message-IDs count per copy.
+    let twins = [
+        header(20, "<twin@example.com>"),
+        header(21, "<twin@example.com>"),
+    ];
+    let moved = [id("<twin@example.com>"), id("<twin@example.com>")];
+    assert_eq!(moved_copy_uids(&twins, &moved), vec![20, 21]);
+    assert!(moved_copy_uids(&twins, &moved[..1]).is_empty());
+}

@@ -227,8 +227,12 @@ export function toggleStarWithUndo(threadId: string) {
 // Mark a thread unread and show an undo toast (revert = mark read again).
 export function markUnreadWithUndo(threadId: string) {
   if (!threadId) return
-  void markThreadUnread(threadId)
-  showUndoToast('Marked unread', () => void markThreadRead(threadId))
+  // Offer the undo only once the flag has landed, so a failed mark doesn't
+  // leave an Undo toast that reverts nothing.
+  void markThreadUnread(threadId).then(
+    () => showUndoToast('Marked unread', () => void markThreadRead(threadId)),
+    (error) => showToast(error instanceof Error ? error.message : 'Mark unread failed', 'error'),
+  )
 }
 
 export async function bulkMarkSelectedRead(items: BulkSelectionItem[]) {

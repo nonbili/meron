@@ -2,8 +2,6 @@ package jp.nonbili.meron.shared
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class NotificationThreadIdsTest {
     @Test
@@ -59,16 +57,6 @@ class NotificationThreadIdsTest {
             "rssfeeds@example.com#INBOX#t.dG9waWM",
             notificationThreadId("rssfeeds@example.com", "INBOX", "topic"),
         )
-    }
-
-    @Test
-    fun onlyHeaderDerivedKeysSurviveAMove() {
-        // A uid names a different message in the target mailbox, so an undo
-        // keyed on it would move whatever now holds that uid.
-        assertFalse(notificationThreadKeyIsStableAcrossMove("uid:4821"))
-        assertFalse(notificationThreadKeyIsStableAcrossMove(""))
-        assertTrue(notificationThreadKeyIsStableAcrossMove("topic"))
-        assertTrue(notificationThreadKeyIsStableAcrossMove("<abc@example.com>#Re: lunch"))
     }
 
     @Test

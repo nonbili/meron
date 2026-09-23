@@ -38,13 +38,6 @@ fun notificationThreadId(
     return "$accountId#$coreFolder#t.$encoded"
 }
 
-/** True when a thread key survives being moved between folders.
- *
- *  Header-derived keys are stable, so undoing an archive can address the thread
- *  in its new folder. A uid-derived key cannot: IMAP assigns fresh uids in the
- *  target mailbox, so the old uid names nothing there. */
-fun notificationThreadKeyIsStableAcrossMove(threadKey: String): Boolean = threadKey.isNotBlank() && !threadKey.startsWith("uid:")
-
 /** The account, folder and thread key a composite `thread_id` was built from. */
 data class ParsedThreadId(
     val accountId: String,

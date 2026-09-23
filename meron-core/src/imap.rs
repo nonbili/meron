@@ -959,6 +959,19 @@ fn search_criteria(gmail: bool, query: &str, charset: bool) -> String {
     }
 }
 
+/// Every UID in `folder` at or above `floor`. `UID SEARCH UID n:*` names the
+/// highest UID even when it is below `n`, so the result is filtered again.
+pub async fn uids_from(session: &mut Session, folder: &str, floor: u32) -> Result<Vec<u32>> {
+    session.select(folder).await.context("SELECT")?;
+    let set: HashSet<u32> = session
+        .uid_search(format!("UID {floor}:*"))
+        .await
+        .context("UID SEARCH UID range")?;
+    let mut uids: Vec<u32> = set.into_iter().filter(|uid| *uid >= floor).collect();
+    uids.sort_unstable();
+    Ok(uids)
+}
+
 /// Return every UID currently in the folder. Used to prune locally cached
 /// messages that have been moved or deleted by another client.
 pub async fn list_all_uids(session: &mut Session, folder: &str) -> Result<HashSet<u32>> {
@@ -1336,15 +1349,25 @@ pub async fn store_starred(session: &mut Session, uids: &[u32], starred: bool) -
     store_flag(session, uids, op).await
 }
 
+/// Move `uids` from `source_folder` to `dest_folder`. Returns the target's
+/// UIDNEXT from just before the move, when the server reported it.
 pub async fn move_to_folder(
     session: &mut Session,
     source_folder: &str,
     dest_folder: &str,
     uids: &[u32],
-) -> Result<()> {
+) -> Result<Option<u32>> {
     if uids.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
+    // The target's UIDNEXT before the move: every copy the move creates lands
+    // at or above it, which is how a caller finds them again — async-imap
+    // drops the COPYUID response code. Best-effort; None if STATUS fails.
+    let target_uid_next = session
+        .status(dest_folder, "(UIDNEXT)")
+        .await
+        .ok()
+        .and_then(|mailbox| mailbox.uid_next);
     session.select(source_folder).await.context("SELECT")?;
     // UID MOVE is the RFC 6851 MOVE extension; servers that don't advertise it
     // (e.g. mailo) reject it with "Unknown command". Fall back to the classic
@@ -1369,7 +1392,7 @@ pub async fn move_to_folder(
     if !supports_move {
         expunge_uids(session, source_folder, uids).await?;
     }
-    Ok(())
+    Ok(target_uid_next)
 }
 
 #[derive(Clone)]

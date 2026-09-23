@@ -208,10 +208,14 @@ function offerUndo(message: string, restore: unknown) {
     return
   }
   showUndoToast(message, () => {
-    void invoke('tasks.restore', { restore }).then(async () => {
-      await refreshTaskLists()
-      await loadTasks()
-    })
+    void invoke('tasks.restore', { restore })
+      .then(async () => {
+        await refreshTaskLists()
+        await loadTasks()
+      })
+      .catch((error) => {
+        showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
+      })
   })
 }
 
