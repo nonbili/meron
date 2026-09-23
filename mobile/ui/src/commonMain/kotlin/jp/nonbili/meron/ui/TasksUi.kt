@@ -1,26 +1,29 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,6 +72,12 @@ internal fun TasksScreen(
     val open = tasks.filterNot { it.done }
     val completed = tasks.filter { it.done }
 
+    fun submit() {
+        if (draft.isBlank()) return
+        onAddTask(draft)
+        draft = ""
+    }
+
     Column(modifier.fillMaxSize()) {
         OutlinedTextField(
             value = draft,
@@ -76,15 +86,15 @@ internal fun TasksScreen(
             leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
             trailingIcon = {
                 if (draft.isNotBlank()) {
-                    TextButton(onClick = {
-                        onAddTask(draft)
-                        draft = ""
-                    }) {
+                    TextButton(onClick = ::submit) {
                         Text(tr("buttons.save"))
                     }
                 }
             },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            shape = MaterialTheme.shapes.extraLarge,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
@@ -123,7 +133,7 @@ internal fun TasksScreen(
                         item {
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
                             Text(
-                                tr("tasks.completed"),
+                                "${tr("tasks.completed")} · ${completed.size}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -151,6 +161,10 @@ internal fun TasksScreen(
     }
 }
 
+/**
+ * One task. Tapping the row edits it; a linked message gets its own button so
+ * getting back to the mail is one tap, and the rarer actions sit in the menu.
+ */
 @Composable
 private fun TaskRow(
     task: TaskSummary,
@@ -164,72 +178,72 @@ private fun TaskRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val overdue = taskIsOverdue(task.dueAt) && !task.done
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
-        Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onEdit)
+            .heightIn(min = 56.dp)
+            .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = task.done, onCheckedChange = onToggleDone)
 
         Column(
-            Modifier.weight(1f).padding(vertical = 4.dp),
+            Modifier.weight(1f).padding(vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 task.title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                color =
-                    if (task.done) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                color = if (task.done) secondary else MaterialTheme.colorScheme.onSurface,
             )
             if (task.notes.isNotBlank()) {
                 Text(
                     task.notes,
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondary,
                 )
             }
             if (task.dueAt > 0) {
-                Text(
-                    formatTaskDueDate(task.dueAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color =
-                        if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                val dueColor = if (overdue) MaterialTheme.colorScheme.error else secondary
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    Icon(Icons.Filled.Event, contentDescription = null, Modifier.size(14.dp), tint = dueColor)
+                    Text(
+                        formatTaskDueDate(task.dueAt),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = dueColor,
+                    )
+                }
+            }
+        }
+
+        if (task.threadId.isNotBlank()) {
+            IconButton(onClick = onOpenMessage) {
+                Icon(
+                    Icons.Outlined.Email,
+                    contentDescription = tr("tasks.openMessage"),
+                    Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
         }
 
         Box {
             IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"), Modifier.size(20.dp))
+                Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"), Modifier.size(20.dp), tint = secondary)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(tr("buttons.edit")) },
-                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                    onClick = {
-                        menuOpen = false
-                        onEdit()
-                    },
-                )
-                if (task.threadId.isNotBlank()) {
-                    DropdownMenuItem(
-                        text = { Text(tr("tasks.openMessage")) },
-                        leadingIcon = { Icon(Icons.Filled.Mail, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onOpenMessage()
-                        },
-                    )
-                }
                 if (canMoveUp) {
                     DropdownMenuItem(
                         text = { Text(tr("tasks.moveUp")) },

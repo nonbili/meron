@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.GregorianCalendar
 import java.util.Locale
 
 internal actual fun formatDate(
@@ -18,7 +19,10 @@ internal actual fun formatDate(
             DateStyle.FullTimestamp -> "EEE, MMM d, yyyy, HH:mm"
             DateStyle.IsoDate -> "yyyy-MM-dd"
         }
-    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(epochMillis))
+    // The ISO date is parsed back as Gregorian fields, so it must not follow a
+    // locale calendar such as th-TH's Buddhist one.
+    val locale = if (style == DateStyle.IsoDate) Locale.US else Locale.getDefault()
+    return SimpleDateFormat(pattern, locale).format(Date(epochMillis))
 }
 
 internal actual fun isSameLocalDate(
@@ -48,7 +52,7 @@ internal actual fun epochSecondsForLocalDate(
     day: Int,
 ): Long {
     val calendar =
-        Calendar.getInstance().apply {
+        GregorianCalendar().apply {
             clear()
             set(year, month - 1, day)
         }

@@ -112,4 +112,14 @@ class DateFormatTest {
         assertEquals(0, parseTaskDueInput("2026-06"))
         assertEquals("", formatTaskDueInput(0))
     }
+
+    @Test
+    fun aPickedDueDateRoundTripsThroughUtc() {
+        val due = parseTaskDueInput("2026-06-09")
+        // 2026-06-09T00:00:00Z
+        assertEquals(1_780_963_200_000L, taskDueToPickerMillis(due))
+        assertEquals(due, pickerMillisToTaskDue(1_780_963_200_000L))
+        assertEquals("2024-02-29", formatTaskDueInput(pickerMillisToTaskDue(taskDueToPickerMillis(parseTaskDueInput("2024-02-29"))!!)))
+        assertEquals(null, taskDueToPickerMillis(0))
+    }
 }

@@ -1,10 +1,14 @@
 package jp.nonbili.meron.ui
 
 import platform.Foundation.NSCalendar
+import platform.Foundation.NSCalendarIdentifierGregorian
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.Foundation.NSDateFormatter
+import platform.Foundation.NSLocale
+import platform.Foundation.NSTimeZone
 import platform.Foundation.dateWithTimeIntervalSince1970
+import platform.Foundation.localTimeZone
 import platform.Foundation.timeIntervalSince1970
 
 internal actual fun formatDate(
@@ -21,6 +25,12 @@ internal actual fun formatDate(
             DateStyle.FullTimestamp -> "EEE, MMM d, yyyy, HH:mm"
             DateStyle.IsoDate -> "yyyy-MM-dd"
         }
+    if (style == DateStyle.IsoDate) {
+        // Parsed back as Gregorian fields, so it must not follow the user's
+        // calendar setting (Buddhist, Japanese, ...).
+        formatter.calendar = gregorianCalendar()
+        formatter.locale = NSLocale(localeIdentifier = "en_US_POSIX")
+    }
     return formatter.stringFromDate(NSDate.dateWithTimeIntervalSince1970(epochMillis / 1000.0))
 }
 
@@ -54,6 +64,8 @@ internal actual fun epochSecondsForLocalDate(
             setMonth(month.toLong())
             setDay(day.toLong())
         }
-    val date = NSCalendar.currentCalendar.dateFromComponents(components) ?: return 0
+    val date = gregorianCalendar().dateFromComponents(components) ?: return 0
     return date.timeIntervalSince1970.toLong()
 }
+
+private fun gregorianCalendar(): NSCalendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian).apply { timeZone = NSTimeZone.localTimeZone }

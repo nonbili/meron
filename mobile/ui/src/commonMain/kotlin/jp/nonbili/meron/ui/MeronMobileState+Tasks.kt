@@ -320,6 +320,49 @@ internal fun parseTaskDueInput(value: String): Long {
     return epochSecondsForLocalDate(year, month, day)
 }
 
+/**
+ * A due date as the date picker holds it: UTC midnight of the same calendar
+ * day, or null for none. The picker works in UTC; tasks store local midnight.
+ */
+internal fun taskDueToPickerMillis(epochSeconds: Long): Long? {
+    val parts = formatTaskDueInput(epochSeconds).split("-").mapNotNull { it.toIntOrNull() }
+    if (parts.size != 3) return null
+    return daysFromCivil(parts[0], parts[1], parts[2]) * 86_400_000L
+}
+
+/** The inverse of [taskDueToPickerMillis]: the picked day at local midnight. */
+internal fun pickerMillisToTaskDue(utcMillis: Long): Long {
+    val (year, month, day) = civilFromDays(utcMillis.floorDiv(86_400_000L))
+    return epochSecondsForLocalDate(year, month, day)
+}
+
+// Howard Hinnant's days-from-civil algorithms, proleptic Gregorian.
+private fun daysFromCivil(
+    year: Int,
+    month: Int,
+    day: Int,
+): Long {
+    val y = (if (month <= 2) year - 1 else year).toLong()
+    val era = y.floorDiv(400L)
+    val yoe = y - era * 400
+    val doy = (153 * (if (month > 2) month - 3 else month + 9) + 2) / 5 + day - 1
+    val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146_097 + doe - 719_468
+}
+
+private fun civilFromDays(days: Long): Triple<Int, Int, Int> {
+    val z = days + 719_468
+    val era = z.floorDiv(146_097L)
+    val doe = z - era * 146_097
+    val yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365
+    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    val mp = (5 * doy + 2) / 153
+    val day = (doy - (153 * mp + 2) / 5 + 1).toInt()
+    val month = (if (mp < 10) mp + 3 else mp - 9).toInt()
+    val year = (yoe + era * 400 + if (month <= 2) 1 else 0).toInt()
+    return Triple(year, month, day)
+}
+
 /** Choose a destination explicitly when more than one list exists. */
 internal suspend fun MeronMobileState.requestAddMailToTasks(thread: jp.nonbili.meron.shared.ThreadSummary) {
     val response = onCore { requireCoreOk(it.taskLists()) } ?: return

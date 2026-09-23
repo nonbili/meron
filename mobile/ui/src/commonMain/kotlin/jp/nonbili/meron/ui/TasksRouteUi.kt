@@ -1,15 +1,29 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -23,12 +37,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.TaskSummary
@@ -286,62 +302,96 @@ internal fun TasksRouteContent(
                     editing = null
                     scope.launch { updateTask(task.id, title = title, notes = notes, dueAt = dueAt) }
                 },
+                onOpenMessage = {
+                    editing = null
+                    openTaskThread(task)
+                },
             )
         }
     }
 }
 
 /**
- * Edit one task's title, notes and due date.
- *
- * The due date is typed as `YYYY-MM-DD` rather than picked from a calendar:
- * nothing else in this app shows a date picker, and a wrong-looking one is
- * worse than a field that says exactly what it wants.
+ * Edit one task's title, notes and due date. The due date opens the platform
+ * date picker; a linked message can be opened from here too.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskEditDialog(
     task: TaskSummary,
     onDismiss: () -> Unit,
     onSave: (title: String, notes: String, dueAt: Long) -> Unit,
+    onOpenMessage: () -> Unit,
 ) {
     var title by remember(task.id) { mutableStateOf(task.title) }
     var notes by remember(task.id) { mutableStateOf(task.notes) }
-    var due by remember(task.id) { mutableStateOf(formatTaskDueInput(task.dueAt)) }
+    var dueAt by remember(task.id) { mutableStateOf(task.dueAt) }
+    var pickingDate by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("buttons.edit")) },
         text = {
-            androidx.compose.foundation.layout.Column(
-                verticalArrangement =
-                    androidx.compose.foundation.layout.Arrangement
-                        .spacedBy(8.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     placeholder = { Text(tr("tasks.titlePlaceholder")) },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
                     placeholder = { Text(tr("tasks.notesPlaceholder")) },
+                    minLines = 3,
+                    maxLines = 6,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = due,
-                    onValueChange = { due = it },
-                    label = { Text(tr("tasks.dueDate")) },
-                    placeholder = { Text("YYYY-MM-DD") },
-                    singleLine = true,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(
+                        onClick = { pickingDate = true },
+                        label = {
+                            Text(if (dueAt > 0) formatTaskDueDate(dueAt) else tr("tasks.noDueDate"))
+                        },
+                        leadingIcon = { Icon(Icons.Filled.Event, contentDescription = null, Modifier.size(18.dp)) },
+                    )
+                    if (dueAt > 0) {
+                        IconButton(onClick = { dueAt = 0 }) {
+                            Icon(Icons.Filled.Close, contentDescription = tr("tasks.clearDueDate"), Modifier.size(18.dp))
+                        }
+                    }
+                }
+                if (task.threadId.isNotBlank()) {
+                    TextButton(onClick = onOpenMessage, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Icon(Icons.Outlined.Email, contentDescription = null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("tasks.openMessage"))
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title, notes, parseTaskDueInput(due)) }) {
+            TextButton(onClick = { onSave(title, notes, dueAt) }, enabled = title.isNotBlank()) {
                 Text(tr("buttons.save"))
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) } },
     )
+
+    if (pickingDate) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = taskDueToPickerMillis(dueAt))
+        DatePickerDialog(
+            onDismissRequest = { pickingDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { dueAt = pickerMillisToTaskDue(it) }
+                    pickingDate = false
+                }) { Text(tr("buttons.save")) }
+            },
+            dismissButton = { TextButton(onClick = { pickingDate = false }) { Text(tr("buttons.cancel")) } },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 }
