@@ -56,7 +56,7 @@ function ImageNodeView({ node, updateAttributes, selected }: any) {
           width={width}
           height={height}
           className="block max-w-full h-auto rounded-lg select-none"
-          style={{ width: width || '100%', height: height || 'auto' }}
+          style={{ width: width || undefined, height: height || 'auto' }}
         />
         {/* Resize Handles (4 Corners) */}
         <div

@@ -1,3 +1,4 @@
+import { DOMParser as SchemaParser, type Schema } from '@tiptap/pm/model'
 import type { Account, AccountSignature } from '../types'
 
 // Signatures are stored as HTML: one app-wide signature in settings, plus an
@@ -19,6 +20,59 @@ export function isBlankSignature(html: string): boolean {
     .replace(/<[^>]*>/g, '')
     .replace(/&nbsp;/gi, ' ')
   return !stripped.trim()
+}
+
+/**
+ * Editor HTML as a signature is stored: '' when blank, and without the empty
+ * paragraphs at its end. Those are either Enter pressed one time too many or
+ * the paragraph the editor keeps after a trailing image so the caret has
+ * somewhere to go; kept, they would put blank lines at the foot of every mail.
+ */
+export function savedSignatureHtml(html: string): string {
+  if (isBlankSignature(html)) return ''
+  return html.replace(/(<p><\/p>)+$/, '')
+}
+
+// What `unsupportedSignatureMarkup` lets through without a mention.
+//
+// Attributes the editor keeps, on the elements it keeps them on.
+const KEPT_ATTRIBUTES: Record<string, string[]> = {
+  a: ['href', 'target', 'rel', 'title'],
+  img: ['src', 'alt', 'title', 'width', 'height'],
+}
+// Attributes whose loss changes nothing a recipient sees: class and id only
+// mean something to a stylesheet, and losing that is reported on its own.
+const INERT_ATTRIBUTES = new Set(['class', 'id', 'dir', 'lang'])
+// Elements that only wrap their content, which the editor keeps. A table's
+// parts are reported once, as the table.
+const WRAPPERS = new Set(['div', 'span', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'colgroup', 'col', 'caption'])
+
+/**
+ * The markup in hand-written signature HTML that the editor cannot represent,
+ * and so drops on save: elements it has no node or mark for (`<table>`,
+ * `<font>`, `<style>`), attributes it does not carry (`style`, `bgcolor`), and
+ * links around images, which it keeps as a bare image. Empty when what is saved
+ * looks the same as what was written.
+ */
+export function unsupportedSignatureMarkup(html: string, schema: Schema): string[] {
+  const selectors = SchemaParser.fromSchema(schema).rules.flatMap((rule) =>
+    'tag' in rule && rule.tag && !rule.ignore ? [rule.tag] : [],
+  )
+  const supported = (element: Element) => selectors.some((selector) => element.matches(selector))
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const found = new Set<string>()
+  for (const element of Array.from(doc.querySelectorAll('head style, body *'))) {
+    const tag = element.localName
+    const kept = supported(element)
+    if (!kept && !WRAPPERS.has(tag)) found.add(`<${tag}>`)
+    for (const { name } of Array.from(element.attributes)) {
+      if (INERT_ATTRIBUTES.has(name) || name.startsWith('data-') || name.startsWith('aria-')) continue
+      if (kept && KEPT_ATTRIBUTES[tag]?.includes(name)) continue
+      found.add(name)
+    }
+    if (tag === 'img' && element.closest('a')) found.add('<a><img>')
+  }
+  return Array.from(found)
 }
 
 /**

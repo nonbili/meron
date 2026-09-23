@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { PenLine } from 'lucide-react'
+import { CodeXml, PenLine } from 'lucide-react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { settings$ } from '../../states/settings'
 import { accounts$, setAccountSignature } from '../../states/accounts'
-import { accountSignaturePayload, isBlankSignature } from '../../lib/signature'
+import { accountSignaturePayload, savedSignatureHtml, unsupportedSignatureMarkup } from '../../lib/signature'
 import type { Account, AccountSignature } from '../../types'
-import { ComposerToolbar } from '../composer/ComposerToolbar'
+import { ComposerToolbar, ToolbarButton } from '../composer/ComposerToolbar'
+import { ResizableImage } from '../composer/composerImage'
+import { extractClipboardImages } from '../composer/composerHelpers'
 import { SelectRow, SettingsGroup } from './AccountSettingsRows'
 
 // Keystrokes shouldn't each cost a DB write (app-wide) or a bridge round trip
@@ -50,22 +52,63 @@ function SignatureEditor({
   // life, whatever the parent has moved on to.
   const ownerRef = useRef(owner).current
 
+  // Image files pasted or dropped in go in as data URLs: the composer's media
+  // files are scratch copies, and a signature outlives any one draft. The
+  // composer turns them into inline attachments when the mail is sent.
+  //
+  // `at` is where they go; without one they replace the selection, as any
+  // paste does. All are read before any is inserted, so they land together
+  // and in order rather than each at wherever the previous one left the caret.
+  const insertImageFiles = async (files: File[], at?: number) => {
+    const sources = await Promise.all(files.map(readAsDataUrl))
+    if (!editor || editor.isDestroyed) return
+    const images = sources.map((src, i) => ({ type: 'image', attrs: { src, alt: files[i].name } }))
+    const chain = editor.chain().focus()
+    if (at === undefined) chain.insertContent(images).run()
+    // Reading is quick, but the document may still have changed under it.
+    else chain.insertContentAt(Math.min(at, editor.state.doc.content.size), images).run()
+  }
+
   const editor = useEditor({
-    extensions: [StarterKit.configure({ link: { openOnClick: false } })],
+    // The same image node as the composer's, so a signature with a logo or an
+    // animated GIF lands in a draft exactly as it was written here.
+    extensions: [
+      StarterKit.configure({ link: { openOnClick: false } }),
+      ResizableImage.configure({ allowBase64: true }),
+    ],
     content: value,
     editorProps: {
       attributes: {
         class: 'tiptap-body focus:outline-none min-h-[110px] px-3.5 py-2.5 text-[0.8125rem] leading-relaxed',
         spellcheck: String(spellCheck),
       },
+      handlePaste: (_view, event) => {
+        // An image copied from a page comes with markup pointing at where it is
+        // hosted; keeping that link beats embedding a copy of the file.
+        if (/<img[\s>]/i.test(event.clipboardData?.getData('text/html') ?? '')) return false
+        const files = extractClipboardImages(event.clipboardData)
+        if (files.length === 0) return false
+        event.preventDefault()
+        void insertImageFiles(files)
+        return true
+      },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved || !event.dataTransfer) return false
+        const files = extractClipboardImages(event.dataTransfer)
+        if (files.length === 0) return false
+        event.preventDefault()
+        // Where the files were dropped, not the caret: that may be a selection
+        // somewhere else entirely, which inserting there would overwrite.
+        const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos
+        if (at === undefined) return true
+        void insertImageFiles(files, at)
+        return true
+      },
     },
     onUpdate: ({ editor }) => {
       clearTimeout(saveTimer.current)
-      const html = editor.getHTML()
-      saveTimer.current = setTimeout(
-        () => onChangeRef.current(isBlankSignature(html) ? '' : html, ownerRef),
-        SAVE_DEBOUNCE_MS,
-      )
+      const html = savedSignatureHtml(editor.getHTML())
+      saveTimer.current = setTimeout(() => onChangeRef.current(html, ownerRef), SAVE_DEBOUNCE_MS)
     },
   })
 
@@ -76,8 +119,7 @@ function SignatureEditor({
     return () => {
       if (!saveTimer.current) return
       clearTimeout(saveTimer.current)
-      const html = editor?.getHTML() ?? ''
-      onChangeRef.current(isBlankSignature(html) ? '' : html, ownerRef)
+      onChangeRef.current(savedSignatureHtml(editor?.getHTML() ?? ''), ownerRef)
     }
   }, [editor, ownerRef])
 
@@ -97,14 +139,88 @@ function SignatureEditor({
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
 
+  // The HTML being edited as source, or null while editing rich text. What the
+  // textarea holds is the user's own text, left as typed; the editor is kept in
+  // step behind it and is what gets saved, so a signature goes out exactly as a
+  // composer will render it, whichever way it was written.
+  //
+  // Those can differ — the editor has no tables, colours or inline styles — so
+  // the editor stays on screen under the source as a preview of what is saved,
+  // with what is being dropped named above it.
+  const [source, setSource] = useState<string | null>(null)
+  const editingSource = source !== null
+  const unsupported = source && editor ? unsupportedSignatureMarkup(source, editor.schema) : []
+
+  // Read-only while previewing, so the only way to change the signature is the
+  // source. No update event: nothing has changed that needs saving.
+  useEffect(() => {
+    editor?.setEditable(!editingSource, false)
+  }, [editor, editingSource])
+
+  const toggleSource = () => {
+    if (!editor) return
+    if (source !== null) {
+      setSource(null)
+      editor.commands.focus()
+      return
+    }
+    setSource(savedSignatureHtml(editor.getHTML()))
+  }
+
+  const editSource = (html: string) => {
+    setSource(html)
+    editor?.commands.setContent(html)
+  }
+
   if (!editor) return null
+
+  const sourceToggle = (
+    <ToolbarButton active={source !== null} onClick={toggleSource} title={t('settings.signature.editHtml')}>
+      <CodeXml size={15} />
+    </ToolbarButton>
+  )
 
   return (
     <div>
-      <ComposerToolbar editor={editor} onSetLink={setLink} />
+      {source === null ? (
+        <ComposerToolbar editor={editor} onSetLink={setLink} trailing={sourceToggle} />
+      ) : (
+        <div className="flex shrink-0 items-center justify-end border-b border-border bg-header px-3 py-1.5 select-none">
+          {sourceToggle}
+        </div>
+      )}
+      {source !== null && (
+        <textarea
+          aria-label={t('settings.signature.label')}
+          value={source}
+          onChange={(event) => editSource(event.target.value)}
+          spellCheck={false}
+          autoFocus
+          className="block min-h-[110px] w-full resize-y bg-transparent px-3.5 py-2.5 font-mono text-[0.75rem] leading-relaxed text-primary focus:outline-none"
+        />
+      )}
+      {source !== null && unsupported.length > 0 && (
+        <p className="border-t border-border px-3.5 py-2 text-[0.6875rem] leading-relaxed text-amber-700/90 dark:text-amber-300/90">
+          {t('settings.signature.unsupportedHtml', { markup: unsupported.join(', ') })}
+        </p>
+      )}
+      {source !== null && (
+        <p className="border-t border-border px-3.5 pt-2 text-[0.6875rem] text-secondary">
+          {t('settings.signature.htmlPreview')}
+        </p>
+      )}
       <EditorContent editor={editor} aria-label={t('settings.signature.label')} />
     </div>
   )
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 /**

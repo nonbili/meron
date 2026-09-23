@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'bun:test'
+import { getSchema } from '@tiptap/core'
+import { StarterKit } from '@tiptap/starter-kit'
 import type { Account } from '../types'
+import { ResizableImage } from '../components/composer/composerImage'
 import {
   accountSignaturePayload,
   bodyWithSignature,
   bodyWithSwappedSignature,
   isBlankSignature,
   resolveSignature,
+  savedSignatureHtml,
+  unsupportedSignatureMarkup,
 } from './signature'
 
 const account = (overrides: Partial<Account> = {}): Account => ({
@@ -280,5 +285,49 @@ describe('accountSignaturePayload', () => {
   it('keeps the text when the account opts out, so switching back restores it', () => {
     expect(accountSignaturePayload('none', '<p>Mine</p>')).toEqual({ mode: 'none', html: '<p>Mine</p>' })
     expect(accountSignaturePayload('custom', '<p>Mine</p>')).toEqual({ mode: 'custom', html: '<p>Mine</p>' })
+  })
+})
+
+describe('unsupportedSignatureMarkup', () => {
+  // The signature editor's schema.
+  const schema = getSchema([StarterKit, ResizableImage.configure({ allowBase64: true })])
+
+  it('reports nothing for markup the editor keeps as written', () => {
+    const html =
+      '<div><p><strong>Ping</strong> · <a href="https://example.com" target="_blank">site</a><br>Tokyo</p></div>' +
+      '<img src="https://example.com/logo.gif" alt="logo" width="80" class="logo">'
+    expect(unsupportedSignatureMarkup(html, schema)).toEqual([])
+  })
+
+  it('names what a generated, table-based signature loses', () => {
+    const html =
+      '<style>td { padding: 0 }</style>' +
+      '<table cellpadding="0"><tr><td style="color: #333">' +
+      '<a href="https://example.com"><img src="https://example.com/logo.png" style="width: 80px"></a>' +
+      '</td><td><font color="red">Ping</font></td></tr></table>'
+    expect(unsupportedSignatureMarkup(html, schema).sort()).toEqual(
+      ['<a><img>', '<font>', '<style>', '<table>', 'cellpadding', 'color', 'style'].sort(),
+    )
+  })
+})
+
+describe('savedSignatureHtml', () => {
+  it('drops the empty paragraphs at the end, and only those', () => {
+    expect(savedSignatureHtml('<p>Ping</p><p></p><p>Tokyo</p><p></p><p></p>')).toBe('<p>Ping</p><p></p><p>Tokyo</p>')
+    expect(savedSignatureHtml('<img src="https://example.com/logo.gif"><p></p>')).toBe(
+      '<img src="https://example.com/logo.gif">',
+    )
+    expect(savedSignatureHtml('<p></p>')).toBe('')
+  })
+
+  it('still swaps an image signature once the composer has put its own trailing paragraph back', () => {
+    const logo = '<img src="https://example.com/logo.gif">'
+    const body = { rich: true, html: `<p>Hi</p><p></p>${logo}<p></p>`, text: '' }
+    const swapped = bodyWithSwappedSignature(
+      body,
+      { html: logo, text: '', placement: 'belowText' },
+      { html: '<p>B</p>', text: 'B' },
+    )
+    expect(swapped.body.html).toBe('<p>Hi</p><p></p><p>B</p><p></p>')
   })
 })

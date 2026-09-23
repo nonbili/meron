@@ -131,12 +131,9 @@ export function useComposer(tabId: string) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
-      ResizableImage.configure({
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'my-2 max-w-full rounded-lg',
-        },
-      }),
+      // No HTMLAttributes: the node view does the styling on screen, and class
+      // names would only go out in the mail, meaning nothing to its recipient.
+      ResizableImage.configure({ allowBase64: true }),
     ],
     content: initialHtml,
     editorProps: {

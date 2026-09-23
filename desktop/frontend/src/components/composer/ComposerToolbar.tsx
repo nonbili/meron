@@ -12,7 +12,7 @@ import {
 import type { Editor } from '@tiptap/react'
 import { useTranslation } from '../../lib/i18n'
 
-function ToolbarButton({
+export function ToolbarButton({
   active,
   onClick,
   title,
@@ -37,7 +37,15 @@ function ToolbarButton({
 }
 
 // Rich-text formatting toolbar shown above the body in rich mode.
-export function ComposerToolbar({ editor, onSetLink }: { editor: Editor; onSetLink: () => void }) {
+export function ComposerToolbar({
+  editor,
+  onSetLink,
+  trailing,
+}: {
+  editor: Editor
+  onSetLink: () => void
+  trailing?: React.ReactNode
+}) {
   const { t } = useTranslation()
 
   return (
@@ -102,15 +110,18 @@ export function ComposerToolbar({ editor, onSetLink }: { editor: Editor; onSetLi
       <ToolbarButton active={editor.isActive('link')} onClick={onSetLink} title={t('composer.toolbar.link')}>
         <Link2 size={15} />
       </ToolbarButton>
-      <span
-        className="ml-auto hidden items-center gap-1 pr-1 text-[0.625rem] font-medium text-secondary/70 select-none min-[900px]:flex"
-        title={t('composer.toolbar.markdownHint')}
-      >
-        {t('composer.toolbar.markdown')}:
-        <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">**bold**</code>
-        <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]"># heading</code>
-        <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">- list</code>
-      </span>
+      <div className="ml-auto flex items-center">
+        <span
+          className="hidden items-center gap-1 pr-1 text-[0.625rem] font-medium text-secondary/70 select-none min-[900px]:flex"
+          title={t('composer.toolbar.markdownHint')}
+        >
+          {t('composer.toolbar.markdown')}:
+          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">**bold**</code>
+          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]"># heading</code>
+          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">- list</code>
+        </span>
+        {trailing}
+      </div>
     </div>
   )
 }
