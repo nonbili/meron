@@ -145,10 +145,11 @@ class ComposeSaveLifecycleTest {
         }
 
     @Test
-    fun failedPostSendDraftDiscardRemainsQueuedForCleanup() =
+    fun failedPostSendDraftDiscardIsRetried() =
         runBlocking {
-            val core = SaveCore().apply { discardFails = true }
+            val core = SaveCore().apply { discardFailuresLeft = 1 }
             val state = state(core, this)
+            state.sentDraftDiscardRetryDelaysMs = listOf(1L)
             state.openCompose()
             state.to = "you@example.com"
             state.subject = "Send"
@@ -161,13 +162,13 @@ class ComposeSaveLifecycleTest {
             core.sendFinished.await()
             core.discardFinished.await()
             withTimeout(1_000) {
-                while (state.composeSendInFlight) yield()
+                while (state.composeSendInFlight || core.discardPayloads.size < 2) yield()
             }
+            awaitState { state.quickReplyConsumedDraftIds.isEmpty() }
 
-            assertEquals(
-                listOf(ComposeDraftOwner("a", "existing-a@example.com", "")),
-                state.composeDraftCleanupOwners,
-            )
+            // Retried on its own rather than parked until some later draft save.
+            assertTrue(core.discardPayloads.all { it.contains("existing-a@example.com") })
+            assertTrue(state.composeDraftCleanupOwners.isEmpty())
             assertEquals("", state.composeDraftId)
         }
 
@@ -320,7 +321,7 @@ class ComposeSaveLifecycleTest {
         }
 
     @Test
-    fun failedPostSendDiscardKeepsReloadedDraftVisible() =
+    fun failedPostSendDiscardKeepsTheStaleDraftOutOfTheReplyBar() =
         runBlocking {
             val core =
                 SaveCore().apply {
@@ -328,6 +329,7 @@ class ComposeSaveLifecycleTest {
                     threadReadResponse = threadReadWithConsumedDraft()
                 }
             val state = state(core, this)
+            state.sentDraftDiscardRetryDelaysMs = emptyList()
             prepareQuickReply(state)
             state.quickReplyDraftId = "reply-draft@example.com"
             state.quickReplyDraftSaved = true
@@ -341,8 +343,13 @@ class ComposeSaveLifecycleTest {
                 while (state.quickReplySendInFlight || core.threadReadCalls == 0 || state.messages.none { it.id == "draft-row" }) yield()
             }
 
+            // Still on the server, so the thread keeps its draft marker; but the
+            // reply already went out, so the copy stays held back from the
+            // conversation and the reply bar rather than offered up again.
             assertTrue(state.messages.any { it.id == "draft-row" })
             assertEquals(true, state.selectedCoreThread?.hasDraft)
+            assertTrue("reply-draft@example.com" in state.quickReplyConsumedDraftIds)
+            assertTrue(state.visibleThreadMessages().none { it.id == "draft-row" })
         }
 
     @Test
@@ -1164,6 +1171,9 @@ class ComposeSaveLifecycleTest {
         var saveCalls = 0
         var sendCalls = 0
         var discardFails = false
+
+        // Fails this many discards before the rest succeed.
+        var discardFailuresLeft = 0
         var allocationFails = false
         var sendFails = false
         var holdDiscard: CompletableDeferred<Unit>? = null
@@ -1204,7 +1214,7 @@ class ComposeSaveLifecycleTest {
                     // Set by tests that need the post-send discard to stay in
                     // flight while they act; nothing to wait on otherwise.
                     holdDiscard?.await()
-                    if (discardFails) throw RuntimeException("discard failed")
+                    if (discardFails || discardFailuresLeft-- > 0) throw RuntimeException("discard failed")
                     "{}"
                 }
 

@@ -508,7 +508,7 @@ export async function discardSavedDraftCopy(
     mail$.threads.set(previousThreads)
     mail$.messages.set(previousMessages)
     if (options.throwOnError) throw error
-    const message = options.failureMessage ?? "Sent, but couldn't discard draft"
+    const message = options.failureMessage ?? t('composer.status.couldNotDiscardDraft')
     showToast(error instanceof Error ? `${message}: ${error.message}` : message, 'error')
     return false
   }

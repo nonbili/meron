@@ -1,5 +1,6 @@
 import type { Message } from '../types'
-import { ui$ } from './ui'
+import { t } from '../lib/i18n'
+import { showToast, ui$ } from './ui'
 import { accounts$, isSendableAccount } from './accounts'
 import { mail$, getActiveThread, normalizeMessageId } from './mail'
 import { isDraftFolder } from './mailFolders'
@@ -7,7 +8,13 @@ import { discardSavedDraftCopy } from './mailMoves'
 import { getPendingSend, getUnsentRescue, unsentRescues } from './pendingSends'
 import { bodyWithSignature, bodyWithSwappedSignature, signatureForms, type ComposeBody } from '../lib/signature'
 import { settings$ } from './settings'
-import { newestMessage, readComposerAttachments, resolveSignatureFor, saveComposedDraft } from './compose'
+import {
+  draftIdOfFailedSave,
+  newestMessage,
+  readComposerAttachments,
+  resolveSignatureFor,
+  saveComposedDraft,
+} from './compose'
 import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
 import { compose$, newDraftMessageId } from './composeState'
 
@@ -158,6 +165,9 @@ async function performQuickReplyDraftSave() {
   const startTick = ++quickReplyOwnershipTick
 
   let savedDraftId = draftId
+  // Whether the server is known to hold the copy. A save that failed after its
+  // id was allocated may or may not have written it.
+  let confirmed = true
   try {
     savedDraftId = await saveComposedDraft({
       accountId: replyAccountId,
@@ -179,15 +189,24 @@ async function performQuickReplyDraftSave() {
     if (savedDraftId !== draftId && compose$.quickReplyDraftId.peek() === draftId) {
       compose$.quickReplyDraftId.set(savedDraftId)
     }
+    unconfirmedDraftIds.delete(normalizeMessageId(savedDraftId))
   } catch (error) {
     console.error('Quick reply draft autosave failed:', error)
-    return
+    // A save that allocated an id may have written the draft anyway, so the id
+    // is kept — for the next save to overwrite and a send to clean up — but
+    // never as a saved copy: nothing may rely on it holding the reply.
+    const attemptedId = draftIdOfFailedSave(error)
+    if (!attemptedId || attemptedId === draftId) return
+    savedDraftId = attemptedId
+    confirmed = false
+    unconfirmedDraftIds.add(normalizeMessageId(savedDraftId))
+    if (compose$.quickReplyDraftId.peek() === draftId) compose$.quickReplyDraftId.set(savedDraftId)
   }
 
   // A send that took the box *after* this save started consumed the very text it
   // just wrote; hand the id over and let the post-send discard drop the copy.
   // Without this the draft is left in Drafts beside the message it was sent as.
-  if (handOverToOvertakingSend(activeT.thread_id, startTick, savedDraftId)) return
+  if (handOverToOvertakingSend(activeT.thread_id, startTick, savedDraftId, confirmed)) return
 
   // Same story for an escalation that couldn't hand this id to the full editor:
   // the tab is editing a draft of its own, so this copy is an orphan whoever is
@@ -227,9 +246,22 @@ async function performQuickReplyDraftSave() {
     })
     return
   }
-  if (sameThread && compose$.quickReplyDraftId.peek() === savedDraftId) {
+  if (confirmed && sameThread && compose$.quickReplyDraftId.peek() === savedDraftId) {
     compose$.quickReplyDraftSaved.set(true)
   }
+}
+
+/** Ids a failed save may or may not have written under, normalized. The box and
+ * any send that takes it keep such an id apart from a saved draft's: reused so
+ * the next write overwrites the copy, discarded once its reply has gone out, but
+ * never trusted as the copy that keeps an unsent reply safe. */
+export const unconfirmedDraftIds = new Set<string>()
+
+/** The box's draft id when all that is known of it is that a save failed. */
+export function unconfirmedQuickReplyDraftId(): string {
+  if (compose$.quickReplyDraftSaved.peek()) return ''
+  const id = compose$.quickReplyDraftId.peek()
+  return id && unconfirmedDraftIds.has(normalizeMessageId(id)) ? id : ''
 }
 
 // Discard the quick reply's server-side draft once the user has cleared the
@@ -239,8 +271,11 @@ export async function discardQuickReplyDraftIfEmpty() {
   // itself re-checks on completion and self-discards if the composer is blank.
   while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
   if (!isQuickReplyBlank()) return
-  if (!compose$.quickReplyDraftSaved.peek()) return
-  const draftId = compose$.quickReplyDraftId.peek()
+  // A copy a failed save may have left goes too: if it did land, it holds the
+  // text the user just cleared and would come back on the next thread open.
+  const draftId = compose$.quickReplyDraftSaved.peek()
+    ? compose$.quickReplyDraftId.peek()
+    : unconfirmedQuickReplyDraftId()
   if (!draftId) return
   // The box can be left pointing at a draft a send or a full editor tab owns.
   // Clearing the box is still right; deleting their copy is not.
@@ -251,13 +286,14 @@ export async function discardQuickReplyDraftIfEmpty() {
   const activeT = getActiveThread()
 
   clearQuickReplyDraftOwnership()
-  await discardSavedDraftCopy({
+  const discarded = await discardSavedDraftCopy({
     threadId: activeT?.thread_id ?? '',
     messageId: '',
     folderId: '',
     accountId: activeT?.account_id,
     draftMessageId: draftId,
   })
+  if (discarded) unconfirmedDraftIds.delete(normalizeMessageId(draftId))
 }
 
 // Hide the saved draft currently hydrated into the quick-reply editor. The
@@ -288,6 +324,8 @@ type QuickReplySendHydrationGuard = {
   threadId: string
   accountId: string
   draftId: string
+  /** A copy a failed save may have left of this reply — see {@link unconfirmedDraftIds}. */
+  unconfirmedDraftId: string
   /** Tick at which the send took the box — see {@link quickReplyOwnershipTick}. */
   claimTick: number
   inFlight: boolean
@@ -328,8 +366,20 @@ ui$.selectedThread.onChange(() => {
 // Sends that have taken the box but haven't reached their guard yet: the
 // identity allocation between the two is an await a landing save can slip
 // through, and it needs something to hand its id to even then. The guard adopts
-// the claim's id when it is created.
-export type QuickReplySendClaim = { threadId: string; tick: number; draftId: string; generation: number }
+// the claim's ids when it is created. `draftId` is a copy known to be on the
+// server — the reply's safety net should the send die; `unconfirmedDraftId` is
+// one a failed save may have left, cleaned up after the send but never relied on.
+export type QuickReplySendClaim = {
+  threadId: string
+  tick: number
+  draftId: string
+  unconfirmedDraftId: string
+  generation: number
+}
+
+/** Every draft id a claim or guard holds. */
+const claimedDraftIds = (claim: { draftId: string; unconfirmedDraftId: string }) =>
+  [claim.draftId, claim.unconfirmedDraftId].filter(Boolean)
 export const pendingQuickReplySendClaims: QuickReplySendClaim[] = []
 
 /** Give up the claim of a send that never got off the ground, handing the box
@@ -345,6 +395,9 @@ export function releaseUnsentQuickReplyClaim(claim: QuickReplySendClaim) {
     // Give the draft back, saved: the box is still holding the reply it belongs
     // to, and a save that handed its id over returns before flipping the flag.
     ownQuickReplyDraft(claim.draftId, claim.threadId, true)
+  } else if (claim.unconfirmedDraftId) {
+    // Back as it was taken: an id for the next save to overwrite, not a copy.
+    ownQuickReplyDraft(claim.unconfirmedDraftId, claim.threadId, false)
   }
   // The claim cancelled this box's pending autosave on the way in. With the send
   // gone and nothing typed since, nothing else would re-arm it, and the reply
@@ -363,11 +416,12 @@ export function publishSendingDraftIds() {
   const ids = [
     ...new Set(
       [
-        ...pendingQuickReplySendClaims.filter((claim) => claim.draftId),
-        ...[...quickReplySendHydrationGuards.values()].filter(
-          (guard) => guard.draftId && (guard.inFlight || guard.suppressDraft),
-        ),
-      ].map((claim) => normalizeMessageId(claim.draftId)),
+        ...pendingQuickReplySendClaims,
+        ...[...quickReplySendHydrationGuards.values()].filter((guard) => guard.inFlight || guard.suppressDraft),
+      ]
+        .flatMap(claimedDraftIds)
+        .map(normalizeMessageId)
+        .concat([...sentDraftDiscards.keys()]),
     ),
   ]
   const previous = compose$.sendingDraftIds.peek()
@@ -433,6 +487,8 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   const tailDraftId = tail.message_id
   if (!tailDraftId) return
   const normalizedTailDraftId = normalizeMessageId(tailDraftId)
+  // Its message already went out; the copy is only waiting on its discard.
+  if (sentDraftDiscards.has(normalizedTailDraftId)) return
   // A send that has claimed the box but is still allocating its identity is as
   // in-flight as one with a guard: hydrating here would hand the box a draft
   // that send is about to consume and discard.
@@ -441,7 +497,7 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
     (guard) =>
       guard.threadId === activeThreadId &&
       (guard.inFlight ||
-        (guard.suppressDraft && !!guard.draftId && normalizeMessageId(guard.draftId) === normalizedTailDraftId)),
+        (guard.suppressDraft && claimedDraftIds(guard).some((id) => normalizeMessageId(id) === normalizedTailDraftId))),
   )
   if (guarded) return
   // An escalated reply is the full editor's now; hydrating it here would put two
@@ -459,7 +515,12 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   // send must not discard what the user is now editing.
   for (const guard of quickReplySendHydrationGuards.values()) {
     if (guard.draftId && normalizeMessageId(guard.draftId) === normalizedTailDraftId) guard.draftId = ''
+    if (guard.unconfirmedDraftId && normalizeMessageId(guard.unconfirmedDraftId) === normalizedTailDraftId) {
+      guard.unconfirmedDraftId = ''
+    }
   }
+  // The row is there to hydrate from, so the copy is no longer in doubt.
+  unconfirmedDraftIds.delete(normalizedTailDraftId)
   publishSendingDraftIds()
 
   compose$.composer.set(tail.body ?? '')
@@ -495,6 +556,68 @@ const openingComposeTabDraftIds = new Map<string, number>()
 // Drafts whose discard is on the wire. Opening one now would put a live editor
 // on a server copy that is going away, so the tab starts its own draft instead.
 export const discardingDraftIds = new Set<string>()
+
+type SentDraft = Parameters<typeof discardSavedDraftCopy>[0]
+// Drafts whose message has already gone out, by Message-ID, from the moment
+// their discard starts until it succeeds. Such a copy is stale, not a safety
+// net: while it lingers it stays out of the message pane and is never hydrated
+// into the quick reply — which would put text that was already sent back in
+// front of the user, one click from going out twice.
+const sentDraftDiscards = new Map<string, SentDraft>()
+// Gaps between further attempts at a discard that failed. A draft still there
+// after the last one is left for the user, who is told about it.
+const SENT_DRAFT_DISCARD_RETRY_DELAYS_MS = [5_000, 30_000, 120_000, 600_000]
+
+/**
+ * Discard the draft behind a message that was just sent. Resolves with whether
+ * the first attempt removed it; a failed one keeps the draft suppressed and is
+ * retried in the background, so callers can settle their own state either way.
+ */
+export async function discardSentDraft(draft: SentDraft): Promise<boolean> {
+  const id = normalizeMessageId(draft.draftMessageId)
+  // A row known only by its local id can be neither suppressed nor retried by
+  // Message-ID: one plain attempt, failing out loud.
+  if (!id) return discardSavedDraftCopy(draft)
+  sentDraftDiscards.set(id, draft)
+  publishSendingDraftIds()
+  if (await attemptSentDraftDiscard(id, draft)) return true
+  void retrySentDraftDiscard(id, draft)
+  return false
+}
+
+async function attemptSentDraftDiscard(id: string, draft: SentDraft): Promise<boolean> {
+  discardingDraftIds.add(id)
+  try {
+    await discardSavedDraftCopy(draft, { throwOnError: true })
+  } catch (error) {
+    console.error('Discarding a sent message’s draft failed:', error)
+    return false
+  } finally {
+    discardingDraftIds.delete(id)
+  }
+  if (sentDraftDiscards.get(id) === draft) {
+    sentDraftDiscards.delete(id)
+    publishSendingDraftIds()
+  }
+  return true
+}
+
+async function retrySentDraftDiscard(id: string, draft: SentDraft) {
+  for (const delay of SENT_DRAFT_DISCARD_RETRY_DELAYS_MS) {
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    if (sentDraftDiscards.get(id) !== draft) return
+    // Reopened in the full editor meanwhile: it is the user's draft again.
+    if (draftOpenInComposeTab(id)) {
+      sentDraftDiscards.delete(id)
+      publishSendingDraftIds()
+      return
+    }
+    if (await attemptSentDraftDiscard(id, draft)) return
+  }
+  // Still suppressed, so it cannot come back into the quick reply this session;
+  // the Drafts folder is where the user can remove it.
+  showToast(t('composer.status.couldNotDiscardDraft'), 'error')
+}
 
 /** Whether a full-editor tab is editing this server-side draft, or about to be:
  * an escalated quick reply hands its id over, and the tab is its owner from then
@@ -536,8 +659,8 @@ export function reserveOpeningDraft(draft: Pick<Message, 'id' | 'message_id'>): 
 function draftClaimedElsewhere(draftId: string): boolean {
   if (!draftId) return false
   const id = normalizeMessageId(draftId)
-  const claimedBySend = [...quickReplySendHydrationGuards.values(), ...pendingQuickReplySendClaims].some(
-    (claim) => !!claim.draftId && normalizeMessageId(claim.draftId) === id,
+  const claimedBySend = [...quickReplySendHydrationGuards.values(), ...pendingQuickReplySendClaims].some((claim) =>
+    claimedDraftIds(claim).some((claimed) => normalizeMessageId(claimed) === id),
   )
   return claimedBySend || draftOpenInComposeTab(draftId)
 }
@@ -547,12 +670,25 @@ function draftClaimedElsewhere(draftId: string): boolean {
  * of its own (one is allocated inside the save, so the send couldn't know it).
  * A send that was already under way when the save began is a *previous* reply
  * and must never adopt the text still being written. */
-function handOverToOvertakingSend(threadId: string, startTick: number, draftId: string): boolean {
+function handOverToOvertakingSend(threadId: string, startTick: number, draftId: string, confirmed: boolean): boolean {
+  // A send holding nothing takes the copy; one holding only this same id as
+  // unconfirmed has it confirmed. A different id means the send has its own.
+  const id = normalizeMessageId(draftId)
+  const takes = (candidate: { draftId: string; unconfirmedDraftId: string }) =>
+    !candidate.draftId && (!candidate.unconfirmedDraftId || normalizeMessageId(candidate.unconfirmedDraftId) === id)
+  const adopt = (candidate: { draftId: string; unconfirmedDraftId: string }) => {
+    if (confirmed) {
+      candidate.draftId = draftId
+      candidate.unconfirmedDraftId = ''
+    } else {
+      candidate.unconfirmedDraftId = draftId
+    }
+  }
   const claim = pendingQuickReplySendClaims.find(
-    (pending) => pending.threadId === threadId && pending.tick > startTick && !pending.draftId,
+    (pending) => pending.threadId === threadId && pending.tick > startTick && takes(pending),
   )
   if (claim) {
-    claim.draftId = draftId
+    adopt(claim)
     if (normalizeMessageId(compose$.quickReplyDraftId.peek()) === normalizeMessageId(draftId)) {
       clearQuickReplyDraftOwnership()
     }
@@ -560,10 +696,10 @@ function handOverToOvertakingSend(threadId: string, startTick: number, draftId: 
     return true
   }
   const guard = [...quickReplySendHydrationGuards.values()].find(
-    (candidate) => candidate.threadId === threadId && candidate.claimTick > startTick && !candidate.draftId,
+    (candidate) => candidate.threadId === threadId && candidate.claimTick > startTick && takes(candidate),
   )
   if (!guard) return false
-  guard.draftId = draftId
+  adopt(guard)
   if (normalizeMessageId(compose$.quickReplyDraftId.peek()) === normalizeMessageId(draftId)) {
     clearQuickReplyDraftOwnership()
   }

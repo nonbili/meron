@@ -302,8 +302,16 @@ pub async fn append_to_drafts(
         .await?;
     // Refresh local Drafts envelopes so an autosaved reply appears in the
     // existing cross-folder thread view immediately. Read-only, and the draft
-    // is already written, so it runs on its own session.
-    let batch = fetch_recent_resilient(engine, account, &drafts, 20).await?;
+    // is already written, so it runs on its own session — and a refresh that
+    // fails must not report the save as failed: the caller would drop the id
+    // it just wrote under, and nothing would ever discard that copy.
+    let batch = match fetch_recent_resilient(engine, account, &drafts, 20).await {
+        Ok(batch) => batch,
+        Err(err) => {
+            eprintln!("meron-core: Drafts refresh for {account}: {err:#}");
+            return Ok(());
+        }
+    };
     {
         let db = engine.db.lock().unwrap();
         store_folder_tail(&db, account, &drafts, &batch)?;

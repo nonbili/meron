@@ -47,6 +47,7 @@ import {
   quickReplyDraftSaveInFlight,
   quickReplyWithoutSignature,
   reserveOpeningDraft,
+  unconfirmedQuickReplyDraftId,
   seedQuickReplySignature,
 } from './quickReply'
 
@@ -444,8 +445,11 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const replyAcc = accounts.find((acc) => acc.id === t.account_id)
   // Hand off any draft already saved for this quick reply so the full editor
   // continues editing the same server-side draft instead of creating a
-  // duplicate one.
-  const existingDraftId = compose$.quickReplyDraftSaved.peek() ? compose$.quickReplyDraftId.peek() : undefined
+  // duplicate one — or the id a failed save may have left a copy under, which
+  // the editor's next save then overwrites instead of stranding.
+  const existingDraftId =
+    (compose$.quickReplyDraftSaved.peek() ? compose$.quickReplyDraftId.peek() : unconfirmedQuickReplyDraftId()) ||
+    undefined
   // Nothing to hand over while the first autosave is still allocating its id, so
   // the tab starts a draft of its own — mark the copy that save lands as
   // abandoned rather than leaving it in Drafts with nothing pointing at it.
@@ -1011,7 +1015,7 @@ export async function saveComposedDraft(args: {
     !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
       ? await allocateMessageIdentity(args.accountId, true)
       : args.draftMessageId
-  await invoke('mail.saveDraft', {
+  const request = invoke('mail.saveDraft', {
     account_id: args.accountId,
     from: args.from ?? '',
     to: args.to,
@@ -1031,5 +1035,22 @@ export async function saveComposedDraft(args: {
       inline_id: a.inlineId ?? '',
     })),
   })
+  try {
+    await request
+  } catch (error) {
+    // A failed save may still have written the draft (the host can give up
+    // waiting while the core carries on), so the id it was written under has to
+    // survive the failure: the next save then replaces that copy, and a send
+    // discards it, instead of it sitting in Drafts with nothing pointing at it.
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+      draftMessageId,
+    })
+  }
   return draftMessageId
+}
+
+/** The server draft id a failed [saveComposedDraft] was writing, if it had one. */
+export function draftIdOfFailedSave(error: unknown): string | undefined {
+  const id = (error as { draftMessageId?: unknown } | null)?.draftMessageId
+  return typeof id === 'string' && id ? id : undefined
 }

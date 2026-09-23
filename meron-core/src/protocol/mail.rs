@@ -324,13 +324,21 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             }))?;
         // Read-only refresh, on its own session: the draft is already written
         // and must not be retried, and a draft we cannot parse must not make the
-        // save look like it failed.
-        let batch = crate::ffi::engine_block_on(crate::engine::fetch_recent_resilient(
+        // save look like it failed — the caller would drop the id it was
+        // written under, leaving a copy nothing ever discards.
+        let saved = json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes });
+        let batch = match crate::ffi::engine_block_on(crate::engine::fetch_recent_resilient(
             &engine,
             &account_id,
             &drafts_folder,
             DRAFT_SYNC_LIMIT,
-        ))?;
+        )) {
+            Ok(batch) => batch,
+            Err(err) => {
+                eprintln!("meron-core: Drafts refresh for {account_id}: {err}");
+                return Ok(saved);
+            }
+        };
         store::upsert_messages(&conn, &account_id, &drafts_folder, &batch.messages)
             .map_err(|err| err.to_string())?;
         let keep_uid = batch
@@ -357,7 +365,7 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             batch.uid_next,
         )
         .map_err(|err| err.to_string())?;
-        Ok(json!({ "ok": true, "draft_id": draft_id, "saved_bytes": saved_bytes }))
+        Ok(saved)
     })
 }
 
@@ -374,17 +382,36 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
             return Err(format!("account needs reconnect: {account_id}"));
         }
         let local_draft_id = draft_id.clone();
+        // The LIST that finds the folder changes nothing and is where a dead
+        // pooled session gives out — likely right after a long send — so it
+        // preflights the delete that follows, as the desktop discard does.
+        let drafts_slot: std::sync::Arc<std::sync::Mutex<Option<String>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(None));
+        let preflight_slot = std::sync::Arc::clone(&drafts_slot);
         let (drafts, deleted) =
-            crate::ffi::engine_block_on(engine.with_write_session(&account_id, move |session| {
-                let draft_id = draft_id.clone();
-                Box::pin(async move {
-                    let drafts = imap::find_drafts_folder(session)
-                        .await?
-                        .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
-                    let deleted = imap::discard_draft(session, &drafts, &draft_id).await?;
-                    anyhow::Ok((drafts, deleted))
-                })
-            }))?;
+            crate::ffi::engine_block_on(engine.with_preflighted_write_session(
+                &account_id,
+                move |session| {
+                    let slot = std::sync::Arc::clone(&preflight_slot);
+                    Box::pin(async move {
+                        let drafts = imap::find_drafts_folder(session)
+                            .await?
+                            .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+                        *slot.lock().unwrap() = Some(drafts);
+                        anyhow::Ok(())
+                    })
+                },
+                move |session| {
+                    let draft_id = draft_id.clone();
+                    let slot = std::sync::Arc::clone(&drafts_slot);
+                    Box::pin(async move {
+                        let drafts = { slot.lock().unwrap().clone() }
+                            .ok_or_else(|| anyhow::anyhow!("no Drafts folder found"))?;
+                        let deleted = imap::discard_draft(session, &drafts, &draft_id).await?;
+                        anyhow::Ok((drafts, deleted))
+                    })
+                },
+            ))?;
         store::delete_draft_copies(&conn, &account_id, &drafts, &local_draft_id, None)
             .map_err(|err| err.to_string())?;
         Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))

@@ -58,41 +58,36 @@ pub(crate) async fn dispatch(
             // Finalize the Sent view. For Gmail/Outlook defaults this only
             // refreshes the provider-created copy; other accounts get Meron's
             // best-effort APPEND plus refresh. The mail already left via SMTP,
-            // so Sent-folder issues should not surface as "send failed".
-            match append_to_sent(engine, &account, &raw).await {
-                // The Sent copy is cached, so tell the UI to re-read the store
-                // — see `sent_copy_cached_detail`. When the provider has not
-                // exposed its own copy yet, the event waits for it in the
-                // background rather than firing at an unchanged cache: no
-                // later sync of the Sent folder is guaranteed to follow.
-                Ok(copy) => {
-                    if copy.observed {
-                        emit(
-                            out,
-                            "mail.sentCopyCached",
-                            sent_copy_cached_detail(&account),
-                        )
-                        .await;
-                    } else if copy.worth_awaiting() {
-                        let engine = engine.clone();
-                        let out = out.clone();
-                        let account = account.clone();
-                        tokio::spawn(async move {
-                            if await_sent_copy(&engine, &account, &copy).await {
-                                emit(
-                                    &out,
-                                    "mail.sentCopyCached",
-                                    sent_copy_cached_detail(&account),
-                                )
-                                .await;
-                            }
-                        });
+            // so none of this may hold up the reply: an APPEND re-uploads the
+            // whole message, and a host that times out waiting on it would
+            // report a delivered message as failed — and offer to send it again.
+            let engine = engine.clone();
+            let out = out.clone();
+            tokio::spawn(async move {
+                match append_to_sent(&engine, &account, &raw).await {
+                    // The Sent copy is cached, so tell the UI to re-read the
+                    // store — see `sent_copy_cached_detail`. When the provider
+                    // has not exposed its own copy yet, wait for it rather than
+                    // firing at an unchanged cache: no later sync of the Sent
+                    // folder is guaranteed to follow.
+                    Ok(copy) => {
+                        if copy.observed
+                            || (copy.worth_awaiting()
+                                && await_sent_copy(&engine, &account, &copy).await)
+                        {
+                            emit(
+                                &out,
+                                "mail.sentCopyCached",
+                                sent_copy_cached_detail(&account),
+                            )
+                            .await;
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("meron-core: APPEND to Sent failed for {account}: {err:#}");
                     }
                 }
-                Err(err) => {
-                    eprintln!("meron-core: APPEND to Sent failed for {account}: {err:#}");
-                }
-            }
+            });
             Ok(json!({ "ok": true }))
         }
 

@@ -10,6 +10,7 @@ import {
   sendComposed,
   appendSentMessage,
   saveComposedDraft,
+  draftIdOfFailedSave,
   updateComposeDraft,
   finishClosingMessageTab,
 } from '../../states/compose'
@@ -18,6 +19,7 @@ import { htmlToText } from '../../lib/html'
 import { invoke } from '../../lib/bridge'
 import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
+import { discardSentDraft } from '../../states/quickReply'
 import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
 import { getComposeSession, registerComposeSession } from '../../states/composeSessions'
 import { accounts$, isSendableAccount } from '../../states/accounts'
@@ -76,20 +78,21 @@ export function useComposer(tabId: string) {
    * conversation has no such row — only the tab's conversation, which keeps its
    * card and needs its Draft badge cleared once the draft behind it is gone.
    */
-  const discardRemoteDraft = async (target: ComposeDraft, throwOnError = false) => {
+  const remoteDraftOf = (target: ComposeDraft) => {
     const remoteId = target.draftMessageId?.startsWith('local-draft-') ? undefined : target.draftMessageId
-    if (!remoteId && !target.sourceDraft) return
-    await discardSavedDraftCopy(
-      {
-        threadId: target.sourceDraft?.threadId ?? '',
-        messageId: target.sourceDraft?.messageId ?? '',
-        folderId: target.sourceDraft?.folderId ?? '',
-        accountId: target.accountId,
-        draftMessageId: remoteId,
-        replyThreadId: target.sourceDraft ? '' : (tab?.threadId ?? ''),
-      },
-      { throwOnError },
-    )
+    if (!remoteId && !target.sourceDraft) return null
+    return {
+      threadId: target.sourceDraft?.threadId ?? '',
+      messageId: target.sourceDraft?.messageId ?? '',
+      folderId: target.sourceDraft?.folderId ?? '',
+      accountId: target.accountId,
+      draftMessageId: remoteId,
+      replyThreadId: target.sourceDraft ? '' : (tab?.threadId ?? ''),
+    }
+  }
+  const discardRemoteDraft = async (target: ComposeDraft) => {
+    const remote = remoteDraftOf(target)
+    if (remote) await discardSavedDraftCopy(remote, { throwOnError: true })
   }
 
   /**
@@ -104,7 +107,7 @@ export function useComposer(tabId: string) {
       await stopSaving()
       const current = latestDraft()
       finishClosingMessageTab(tabId)
-      if (current) await discardRemoteDraft(current, true)
+      if (current) await discardRemoteDraft(current)
     } catch (err) {
       const message = contextualErrorMessage(err, t('composer.status.couldNotDiscardDraft'))
       showToast(message, 'error')
@@ -320,6 +323,18 @@ export function useComposer(tabId: string) {
         setSaveError('')
       } catch (err) {
         console.error('Autosave draft failed:', err)
+        // Keep the id the failed save was writing under, as a successful one
+        // would, so a copy that landed anyway is replaced or discarded later.
+        const attemptedId = draftIdOfFailedSave(err)
+        const latest = latestDraft()
+        if (
+          attemptedId &&
+          latest?.accountId === current.accountId &&
+          latest.draftMessageId === current.draftMessageId &&
+          attemptedId !== current.draftMessageId
+        ) {
+          updateComposeDraft(tabId, { draftMessageId: attemptedId })
+        }
         if (!isCurrent()) return
         setSaveStatus('error')
         setSaveError(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')))
@@ -617,7 +632,12 @@ export function useComposer(tabId: string) {
           attachments,
         })
       }
-      await discardRemoteDraft(current)
+      // The message is out, so the tab closes now rather than after the draft
+      // cleanup: a slow Drafts server must not hold a delivered message on
+      // "Sending". discardSentDraft takes the copy over before the tab lets go
+      // of it, keeping it hidden — and out of the quick reply — until it's gone.
+      const remote = remoteDraftOf(current)
+      if (remote) void discardSentDraft(remote)
       showToast(t('chat.messageSent'))
       finishClosingMessageTab(tabId)
     } catch (err) {

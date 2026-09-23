@@ -768,7 +768,15 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
         // Only now stop hiding it. Released any earlier, the refreshes above can
         // paint the server's pre-discard draft row beside the reply it was sent
         // as, leaving both cards on screen until the next read drops one.
-        if (consumedDraftId.isNotBlank()) quickReplyConsumedDraftIds -= consumedDraftId
+        val undiscardedDraft = pending.draftOwner?.takeIf { !barKeptTheDraft && !consumedDraftDiscarded }
+        if (undiscardedDraft != null) {
+            // The reply went out, so the copy left behind is stale rather than
+            // a safety net: released now, it could hydrate the sent text back
+            // into the bar. It stays hidden until a retry removes it.
+            retrySentDraftDiscard(undiscardedDraft)
+        } else if (consumedDraftId.isNotBlank()) {
+            quickReplyConsumedDraftIds -= consumedDraftId
+        }
         runDeferredQuickReplyAutosave()
     }.onFailure {
         // A failed send leaves the draft as the safety net it was written to be.
@@ -795,6 +803,45 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
             pendingCertificateRetry = null
         }
         runDeferredQuickReplyAutosave()
+    }
+}
+
+/**
+ * Keep trying to discard the draft of a message that already went out, after
+ * the discard that followed the send failed. Until one succeeds the draft stays
+ * among [MeronMobileState.quickReplyConsumedDraftIds]: hidden from the
+ * conversation and never hydrated into the reply bar, where it would put text
+ * that was already sent one tap from going out twice.
+ */
+internal fun MeronMobileState.retrySentDraftDiscard(owner: ComposeDraftOwner) {
+    val id = owner.draftId.normalizedComposeDraftId()
+    if (id.isBlank()) return
+    quickReplyConsumedDraftIds += id
+    scope.launch {
+        for (delayMs in sentDraftDiscardRetryDelaysMs) {
+            delay(delayMs)
+            // Reopened in the full composer meanwhile: it is the user's again.
+            if (composeDraftId.normalizedComposeDraftId() == id) {
+                quickReplyConsumedDraftIds -= id
+                return@launch
+            }
+            val discarded =
+                runCatching {
+                    withContext(ioDispatcher) {
+                        MobileMailCommandClient(core).discardDraft(
+                            DiscardDraftParams(accountId = owner.accountId, draftId = owner.draftId),
+                        )
+                    }
+                }.isSuccess
+            if (discarded) {
+                quickReplyConsumedDraftIds -= id
+                removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
+                return@launch
+            }
+        }
+        // Still hidden, so it cannot come back into the reply bar this session;
+        // the Drafts folder is where the user can remove it.
+        status = "Could not discard draft"
     }
 }
 

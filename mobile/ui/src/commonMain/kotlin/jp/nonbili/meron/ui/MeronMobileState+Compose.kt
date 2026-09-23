@@ -363,9 +363,11 @@ internal fun MeronMobileState.retryComposeSend(pending: PendingComposeSend) {
 
 private suspend fun MeronMobileState.finishComposeSend(pending: PendingComposeSend) {
     val discardOutcome = discardComposeDraftOwners(pending.draftOwners)
-    composeDraftCleanupOwners =
-        (composeDraftCleanupOwners + discardOutcome.failedOwners)
-            .distinctBy { it.accountId to it.draftId }
+    // The message went out, so a draft that survived its discard is stale. Left
+    // to the next save's cleanup it lingered for as long as no other draft was
+    // saved — and, in a thread, could hydrate the reply bar with the sent text.
+    composeDraftCleanupOwners = composeDraftCleanupOwners - discardOutcome.failedOwners.toSet()
+    discardOutcome.failedOwners.forEach { retrySentDraftDiscard(it) }
     if (pendingComposeSend == pending) pendingComposeSend = null
     if (pendingCertificateRetry == PendingCertificateRetry.Compose(pending)) pendingCertificateRetry = null
     composeSendInFlight = false

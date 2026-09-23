@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { beforeEach, describe, expect, it, jest } from 'bun:test'
 import type { Message, MessageTab } from '../types'
 import {
   activateConversationTab,
@@ -634,6 +634,44 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
   })
 
+  it('discards the copy a failed autosave may have left once cleared back to blank', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Hello there')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'uncertain@example.com' }
+      // The host gave up waiting; the core may still have written the draft.
+      if (command === 'mail.saveDraft') throw new Error('sidecar save_draft timeout')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    await saveQuickReplyDraft()
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+
+    compose$.composer.set('')
+    await discardQuickReplyDraftIfEmpty()
+
+    expect(calls.find((c) => c.command === 'mail.discardDraft')?.payload).toMatchObject({
+      account_id: 'acc-1',
+      draft_id: 'uncertain@example.com',
+    })
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+  })
+
   it('discards the draft when the composer is cleared while the autosave is still in flight', async () => {
     const thread = message({
       id: 'root',
@@ -893,6 +931,113 @@ describe('quick reply draft sharing', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(mail$.messages.get().some((message) => message.id === 'draft-row')).toBe(false)
+  })
+
+  it("keeps a sent reply's draft suppressed and retries when its discard fails", async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    const other = message({ id: 'other', account_id: 'acc-1', thread_id: 't-2', message_id: 'other@example.com' })
+    const draft = message({
+      id: 'draft-row',
+      account_id: 'acc-1',
+      folder_id: 'Drafts',
+      thread_id: 't-1',
+      message_id: 'reply-draft@example.com',
+      body: 'Consumed reply',
+      date: 2000,
+    })
+    mail$.threads.set([thread, other])
+    mail$.messages.set([thread, draft])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Consumed reply')
+    compose$.quickReplyDraftId.set('reply-draft@example.com')
+    compose$.quickReplyDraftSaved.set(true)
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+
+    let discardFails = true
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      if (command === 'mail.discardDraft' && discardFails) throw new Error('offline')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+    const flush = async () => {
+      for (let i = 0; i < 50; i++) await Promise.resolve()
+    }
+
+    jest.useFakeTimers()
+    try {
+      await sendReply()
+      await flush()
+
+      // The message went out, so the copy left behind is stale rather than a
+      // safety net. Coming back to the thread before the Sent copy is cached
+      // leaves the draft as its tail — it must not hydrate the box with text
+      // that was already sent.
+      ui$.selectedThread.set('t-2')
+      ui$.selectedThread.set('t-1')
+      mail$.messages.set([thread, draft])
+      expect(compose$.composer.get()).toBe('')
+      expect(compose$.sendingDraftIds.get()).toContain('reply-draft@example.com')
+
+      discardFails = false
+      jest.advanceTimersByTime(5_000)
+      await flush()
+
+      expect(calls.filter((call) => call.command === 'mail.discardDraft')).toHaveLength(2)
+      expect(compose$.sendingDraftIds.get()).not.toContain('reply-draft@example.com')
+      expect(mail$.messages.get().some((message) => message.id === 'draft-row')).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('keeps the id a failed autosave was writing under', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Hello there')
+
+    let saveFails = true
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'draft-core@example.com' }
+      // The host gave up waiting; the core may still have written the draft.
+      if (command === 'mail.saveDraft' && saveFails) throw new Error('sidecar save_draft timeout')
+      return {}
+    }
+
+    await saveQuickReplyDraft()
+    expect(compose$.quickReplyDraftId.get()).toBe('draft-core@example.com')
+    // Kept for reuse, but not known to be on the server.
+    expect(compose$.quickReplyDraftSaved.get()).toBe(false)
+
+    saveFails = false
+    compose$.composer.set('Hello there, again')
+    await saveQuickReplyDraft()
+
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(calls.filter((call) => call.command === 'mail.allocateIdentity')).toHaveLength(1)
+    expect((saves[1].payload as { draft_id: string }).draft_id).toBe('draft-core@example.com')
+    expect(compose$.quickReplyDraftSaved.get()).toBe(true)
   })
 
   it('allows a different draft to hydrate after the sent draft cleanup settles', async () => {
@@ -2082,6 +2227,64 @@ describe('quick reply draft sharing', () => {
     expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
     expect(compose$.composer.get()).toBe('Next reply')
     expect(calls.some((call) => call.command === 'mail.send')).toBe(false)
+  })
+
+  it('rescues a reply whose only draft is one a failed autosave may not have written', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Only copy')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+
+    let autosaveFails = true
+    let identityStarted!: () => void
+    const allocating = new Promise<void>((resolve) => (identityStarted = resolve))
+    let failIdentity!: () => void
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') {
+        if ((payload as { draft?: boolean }).draft) return { message_id: 'uncertain@example.com' }
+        identityStarted()
+        await new Promise<void>((resolve) => (failIdentity = resolve))
+        throw new Error('offline')
+      }
+      if (command === 'mail.saveDraft' && autosaveFails) throw new Error('sidecar save_draft timeout')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    // The autosave failed after allocating: the server may or may not hold it.
+    await saveQuickReplyDraft()
+    expect(compose$.quickReplyDraftId.get()).toBe('uncertain@example.com')
+    autosaveFails = false
+    const callsBeforeSend = calls.length
+
+    const send = sendReply()
+    await allocating
+    compose$.composer.set('Next reply')
+    failIdentity()
+    await expect(send).rejects.toThrow('offline')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // The uncertain copy was no safety net, so the reply was rescued — under the
+    // same id, overwriting whatever the failed autosave may have left.
+    const rescues = calls.slice(callsBeforeSend).filter((call) => call.command === 'mail.saveDraft')
+    expect(rescues).toHaveLength(1)
+    const rescue = rescues[0]
+    expect((rescue?.payload as { body?: string })?.body).toBe('Only copy')
+    expect((rescue?.payload as { draft_id?: string })?.draft_id).toBe('uncertain@example.com')
+    expect(compose$.composer.get()).toBe('Next reply')
   })
 
   it('retries the rescue from the failed bubble when the draft save fails too', async () => {

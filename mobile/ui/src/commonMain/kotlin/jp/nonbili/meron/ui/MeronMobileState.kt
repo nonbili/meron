@@ -287,10 +287,14 @@ internal class MeronMobileState(
     // settles. The copy on the server outlives the send until its discard
     // returns, and reopening the conversation in that window would otherwise
     // hydrate the just-sent text straight back into the reply bar. Normalized
-    // draft ids; dropped once the send lifecycle finishes, so a discard that
-    // genuinely failed leaves its draft reachable again. Not UI state, so a
-    // plain set rather than mutableStateOf.
+    // draft ids; dropped once the discard succeeds — a failed one is retried
+    // (see retrySentDraftDiscard) and its stale copy stays held meanwhile. Not
+    // UI state, so a plain set rather than mutableStateOf.
     val quickReplyConsumedDraftIds = mutableSetOf<String>()
+
+    /** Gaps between further attempts at discarding a sent message's draft after
+     * the one following the send failed. */
+    internal var sentDraftDiscardRetryDelaysMs = listOf(5_000L, 30_000L, 120_000L, 600_000L)
 
     /** Thread id and draft id an autosave landed for a send that was waiting on
      * the save lock, where the reply bar had already moved on and could not
