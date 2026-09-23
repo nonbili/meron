@@ -1,0 +1,6 @@
+- Add local task lists and side panel with mail linking
+- Support images and HTML source editing in signatures
+- Fix undo after trash, move, and archive by restoring exact message copies
+- Fix draft cleanup after sending and prevent orphaned drafts
+- Fix mark all as read and chunk large IMAP operations
+- Update translations across locales
