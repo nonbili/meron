@@ -5,3 +5,10 @@
     native <methods>;
     private static void dispatchCoreEventFromNative(java.lang.String);
 }
+
+# WorkManager instantiates its Room database (WorkDatabase_Impl) reflectively
+# via the no-arg constructor. Room 2.6's consumer rule keeps the class but not
+# <init>, so R8 full mode strips it and the app crashes at startup.
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
