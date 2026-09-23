@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Mesaj gövdesini, uygulama metin boyutunun üzerine ölçekler.",
   "settings.appearance.messageTextSizeSystemHint": "Mesaj gövdesini ölçekler. Diğer metinler sistem metin boyutunu izler.",
   "settings.appearance.showSenderImages": "Gönderen Resimlerini Göster",
-  "settings.appearance.showSenderImagesHint": "Her gönderenin e-posta adresinin SHA-256 karmasını Gravatar'a, yedek olarak da gönderenin alan adını Google'a gönderir.",
+  "settings.appearance.showSenderImagesHint": "Her gönderenin e-posta adresinin SHA-256 karmasını Gravatar'a, yedek olarak da gönderenin alan adını (ve gerekirse üst alan adını) DuckDuckGo'ya gönderir.",
   "settings.appearance.showUnreadAccountBadge": "Okunmamış rozetini göster",
   "settings.appearance.showUnreadAccountBadgeHint": "Kenar çubuğundaki her hesap için okunmamış ileti sayısını göster.",
   "settings.appearance.textSize": "Metin boyutu",

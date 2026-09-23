@@ -31,6 +31,12 @@ pub(crate) async fn dispatch(
         "mcp.delete" => meron_core::mcp_mail::delete(engine, p.clone()).await,
         "mcp.organize" => meron_core::mcp_mail::organize(engine, p.clone()).await,
         "ping" => Ok(ping_response()),
+        "avatar.resolve" => {
+            let params = p.clone();
+            let image =
+                tokio::task::spawn_blocking(move || meron_core::avatar::resolve(&params)).await?;
+            Ok(serde_json::to_value(image)?)
+        }
 
         // Fetch the in-app changelog from the GitHub releases atom feed. The
         // network call runs on the blocking pool.

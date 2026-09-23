@@ -12,5 +12,5 @@
 <ul>
   <li>Meron syncs your mail and feeds through a shared Rust core for speed and reliability.</li>
   <li>Your accounts and messages are stored encrypted on your device.</li>
-  <li>When you enable sender images, Meron sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain to Google.</li>
+  <li>When you enable sender images, Meron sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.</li>
 </ul>

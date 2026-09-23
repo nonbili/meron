@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Điều chỉnh nội dung tin nhắn ngoài cỡ chữ của ứng dụng.",
   "settings.appearance.messageTextSizeSystemHint": "Điều chỉnh nội dung tin nhắn. Phần chữ còn lại theo cỡ chữ hệ thống.",
   "settings.appearance.showSenderImages": "Hiển thị ảnh người gửi",
-  "settings.appearance.showSenderImagesHint": "Gửi mã băm SHA-256 của địa chỉ email từng người gửi đến Gravatar và gửi tên miền của người gửi đến Google làm phương án dự phòng.",
+  "settings.appearance.showSenderImagesHint": "Gửi mã băm SHA-256 của địa chỉ email từng người gửi đến Gravatar và gửi tên miền của người gửi (cùng tên miền cha nếu cần) đến DuckDuckGo làm phương án dự phòng.",
   "settings.appearance.showUnreadAccountBadge": "Hiển thị huy hiệu chưa đọc",
   "settings.appearance.showUnreadAccountBadgeHint": "Hiển thị số lượng thư chưa đọc cho mỗi tài khoản trong thanh bên.",
   "settings.appearance.textSize": "Cỡ chữ",

@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "앱 글자 크기에 더해 메시지 본문 크기를 조절합니다.",
   "settings.appearance.messageTextSizeSystemHint": "메시지 본문 크기를 조절합니다. 나머지 텍스트는 시스템 글자 크기를 따릅니다.",
   "settings.appearance.showSenderImages": "보내는 사람 이미지 표시",
-  "settings.appearance.showSenderImagesHint": "각 발신자 이메일 주소의 SHA-256 해시를 Gravatar로 보내고, 대체 수단으로 발신자 도메인을 Google로 보냅니다.",
+  "settings.appearance.showSenderImagesHint": "각 발신자 이메일 주소의 SHA-256 해시를 Gravatar로 보내고, 대체 수단으로 발신자 도메인(필요한 경우 상위 도메인도)을 DuckDuckGo로 보냅니다.",
   "settings.appearance.showUnreadAccountBadge": "읽지 않은 배지 표시",
   "settings.appearance.showUnreadAccountBadgeHint": "사이드바에 각 계정의 읽지 않은 메시지 수를 표시합니다.",
   "settings.appearance.textSize": "글자 크기",

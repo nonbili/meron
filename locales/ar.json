@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "يحدد حجم نص الرسائل فوق حجم نص التطبيق.",
   "settings.appearance.messageTextSizeSystemHint": "يحدد حجم نص الرسائل. يتبع باقي النص حجم النص في نظامك.",
   "settings.appearance.showSenderImages": "إظهار صور المرسلين",
-  "settings.appearance.showSenderImagesHint": "يرسل تجزئة SHA-256 لعنوان البريد الإلكتروني لكل مرسل إلى Gravatar، ويرسل نطاق المرسل إلى Google كخيار احتياطي.",
+  "settings.appearance.showSenderImagesHint": "يرسل تجزئة SHA-256 لعنوان البريد الإلكتروني لكل مرسل إلى Gravatar، ويرسل نطاق المرسل (والنطاق الأصلي عند الحاجة) إلى DuckDuckGo كخيار احتياطي.",
   "settings.appearance.showUnreadAccountBadge": "إظهار الشارة غير المقروءة",
   "settings.appearance.showUnreadAccountBadgeHint": "عرض عدد الرسائل غير المقروءة لكل حساب في الشريط الجانبي.",
   "settings.appearance.textSize": "حجم النص",

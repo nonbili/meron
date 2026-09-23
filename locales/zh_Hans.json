@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "在应用文字大小的基础上调整邮件正文大小。",
   "settings.appearance.messageTextSizeSystemHint": "调整邮件正文大小。其他文字跟随系统文字大小。",
   "settings.appearance.showSenderImages": "显示发件人头像",
-  "settings.appearance.showSenderImagesHint": "将每位发件人电子邮件地址的 SHA-256 哈希发送给 Gravatar，并将发件人的域名发送给 Google 作为备选。",
+  "settings.appearance.showSenderImagesHint": "将每位发件人电子邮件地址的 SHA-256 哈希发送给 Gravatar，并将发件人的域名（必要时还包括其父域名）发送给 DuckDuckGo 作为备选。",
   "settings.appearance.showUnreadAccountBadge": "显示未读徽章",
   "settings.appearance.showUnreadAccountBadgeHint": "在侧边栏中显示每个帐户的未读消息数。",
   "settings.appearance.textSize": "文字大小",

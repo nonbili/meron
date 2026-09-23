@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Skaluje treść wiadomości ponad rozmiar tekstu aplikacji.",
   "settings.appearance.messageTextSizeSystemHint": "Skaluje treść wiadomości. Pozostały tekst korzysta z systemowego rozmiaru tekstu.",
   "settings.appearance.showSenderImages": "Pokaż zdjęcia nadawców",
-  "settings.appearance.showSenderImagesHint": "Wysyła skrót SHA-256 adresu e-mail każdego nadawcy do Gravatara, a w ramach opcji zapasowej domenę nadawcy do Google.",
+  "settings.appearance.showSenderImagesHint": "Wysyła skrót SHA-256 adresu e-mail każdego nadawcy do Gravatara, a w ramach opcji zapasowej domenę nadawcy (i w razie potrzeby jej domenę nadrzędną) do DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Pokaż nieprzeczytaną plakietkę",
   "settings.appearance.showUnreadAccountBadgeHint": "Pokaż liczbę nieprzeczytanych wiadomości dla każdego konta na pasku bocznym.",
   "settings.appearance.textSize": "Rozmiar tekstu",

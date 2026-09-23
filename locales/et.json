@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Muudab sõnumite sisu suurust rakenduse teksti suuruse peal.",
   "settings.appearance.messageTextSizeSystemHint": "Muudab sõnumite sisu suurust. Muu tekst järgib süsteemi teksti suurust.",
   "settings.appearance.showSenderImages": "Näita saatja pilte",
-  "settings.appearance.showSenderImagesHint": "Saadab iga saatja e-posti aadressi SHA-256 räsi Gravatarile ja varulahendusena saatja domeeni Google'ile.",
+  "settings.appearance.showSenderImagesHint": "Saadab iga saatja e-posti aadressi SHA-256 räsi Gravatarile ja varulahendusena saatja domeeni (ning vajaduse korral selle ülemise taseme domeeni) DuckDuckGo'le.",
   "settings.appearance.showUnreadAccountBadge": "Kuva lugemata märk",
   "settings.appearance.showUnreadAccountBadgeHint": "Kuva külgribal iga konto lugemata sõnumite arv.",
   "settings.appearance.textSize": "Teksti suurus",

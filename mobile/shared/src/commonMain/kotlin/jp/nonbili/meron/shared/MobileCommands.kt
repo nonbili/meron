@@ -50,6 +50,7 @@ object MobileCommand {
     const val AllocateIdentity = "mail.allocateIdentity"
     const val ThreadRead = "mail.threadRead"
     const val AttachmentRead = "mail.attachmentRead"
+    const val AvatarResolve = "avatar.resolve"
     const val ChangelogFetch = "changelog.fetch"
     const val StorageUsage = "storage.usage"
     const val StorageClearCache = "storage.clearCache"
@@ -1047,6 +1048,8 @@ class MobileMailCommandClient(
     suspend fun setAccountName(params: AccountNameParams): String = core.invoke(MobileCommand.AccountSetName, params.toJson())
 
     suspend fun setAccountSenderName(params: AccountNameParams): String = core.invoke(MobileCommand.AccountSetSenderName, params.toJson())
+
+    suspend fun resolveSenderImage(email: String): String = core.invoke(MobileCommand.AvatarResolve, jsonObject("email" to email.jsonString(), "size" to "96"))
 
     suspend fun setAccountAvatar(params: AccountAvatarParams): String = core.invoke(MobileCommand.AccountSetAvatar, params.toJson())
 

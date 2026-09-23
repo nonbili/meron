@@ -5,6 +5,7 @@
 //! and wire types live here so desktop, Android, and future FFI bindings share
 //! one source of truth.
 
+pub mod avatar;
 pub mod backup;
 pub mod changelog;
 pub mod engine;

@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "在應用程式文字大小的基礎上調整郵件內文大小。",
   "settings.appearance.messageTextSizeSystemHint": "調整郵件內文大小。其他文字依系統文字大小。",
   "settings.appearance.showSenderImages": "顯示寄件者圖片",
-  "settings.appearance.showSenderImagesHint": "將每位寄件者電子郵件地址的 SHA-256 雜湊傳送給 Gravatar，並將寄件者的網域傳送給 Google 作為備用方案。",
+  "settings.appearance.showSenderImagesHint": "將每位寄件者電子郵件地址的 SHA-256 雜湊傳送給 Gravatar，並將寄件者的網域（必要時也包括其父網域）傳送給 DuckDuckGo 作為備用方案。",
   "settings.appearance.showUnreadAccountBadge": "顯示未讀徽章",
   "settings.appearance.showUnreadAccountBadgeHint": "在側邊欄中顯示每個帳戶的未讀訊息數。",
   "settings.appearance.textSize": "文字大小",

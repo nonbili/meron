@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Skalar meddelandetexten utöver appens textstorlek.",
   "settings.appearance.messageTextSizeSystemHint": "Skalar meddelandetexten. Övrig text följer systemets textstorlek.",
   "settings.appearance.showSenderImages": "Visa avsändarbilder",
-  "settings.appearance.showSenderImagesHint": "Skickar en SHA-256-hash av varje avsändares e-postadress till Gravatar och, som reserv, avsändarens domän till Google.",
+  "settings.appearance.showSenderImagesHint": "Skickar en SHA-256-hash av varje avsändares e-postadress till Gravatar och, som reserv, avsändarens domän (och vid behov dess överordnade domän) till DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Visa oläst märke",
   "settings.appearance.showUnreadAccountBadgeHint": "Visa antal olästa meddelanden för varje konto i sidofältet.",
   "settings.appearance.textSize": "Textstorlek",

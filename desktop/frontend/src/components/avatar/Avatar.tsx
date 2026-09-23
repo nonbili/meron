@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
+import { invoke } from '../../lib/bridge'
 import { settings$ } from '../../states/settings'
 
 const COLORS = [
@@ -30,21 +31,31 @@ export function initials(value: string) {
     .join('')
 }
 
-function faviconForEmail(email: string) {
-  const domain = email.trim().toLowerCase().split('@')[1]
-  if (!domain) return undefined
-  return `https://icons.duckduckgo.com/ip3/${domain}.ico`
-}
-
-// Native SHA-256 Hashing helper
 type SourceKind = 'manual' | 'gravatar' | 'favicon' | 'none'
 
-// Module-level cache of resolved avatar outcomes, keyed by `email@size`. Without
-// it, every Avatar mount re-ran the SHA-256 + Gravatar fetch (and the 404 →
-// favicon fallback), so switching threads with the participants panel open fired
-// a burst of external requests through WebKitGTK's small connection pool. The
-// cache makes re-mounts for an already-seen address synchronous.
-const avatarCache = new Map<string, { src: string | undefined; kind: SourceKind }>()
+type ResolvedImage = { src: string; kind: SourceKind }
+const avatarCache = new Map<string, { image: ResolvedImage; expires: number }>()
+const avatarKey = (email: string, size: number) => `${email.trim().toLowerCase()}@${size}`
+
+function cachedAvatar(key: string): ResolvedImage | undefined {
+  const entry = avatarCache.get(key)
+  if (entry && entry.expires > Date.now()) return entry.image
+  avatarCache.delete(key)
+}
+
+function rememberAvatar(key: string, image: ResolvedImage) {
+  // Never persist a transient failure as initials. The core caches confirmed
+  // misses; this small UI cache only keeps successfully resolved images.
+  if (!image.src) return
+  avatarCache.delete(key)
+  avatarCache.set(key, { image, expires: Date.now() + 60 * 60 * 1000 })
+  while (
+    avatarCache.size > 512 ||
+    [...avatarCache.values()].reduce((bytes, entry) => bytes + entry.image.src.length, 0) > 16 * 1024 * 1024
+  ) {
+    avatarCache.delete(avatarCache.keys().next().value!)
+  }
+}
 
 // Run low-priority work (avatar resolution) once the browser is idle, so it
 // never competes with the synchronous render/commit of a thread switch. Falls
@@ -61,13 +72,6 @@ function onIdle(fn: () => void): () => void {
   }
   const handle = window.setTimeout(fn, 0)
   return () => window.clearTimeout(handle)
-}
-
-async function computeSha256(message: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(message)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 interface AvatarProps {
@@ -87,8 +91,9 @@ interface AvatarProps {
 
 export function Avatar({ name, email, src, size = 40, className = '', fallback }: AvatarProps) {
   const showRealAvatars = useValue(settings$.showRealAvatars)
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(src)
-  const [sourceKind, setSourceKind] = useState<SourceKind>(src ? 'manual' : 'none')
+  const initialImage = showRealAvatars && email && !src ? cachedAvatar(avatarKey(email, size)) : undefined
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(src || initialImage?.src)
+  const [sourceKind, setSourceKind] = useState<SourceKind>(src ? 'manual' : (initialImage?.kind ?? 'none'))
 
   useEffect(() => {
     if (src) {
@@ -103,38 +108,27 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
       return
     }
 
-    const cleanEmail = email.trim().toLowerCase()
-    const cacheKey = `${cleanEmail}@${size}`
-
-    // Reuse a previously resolved outcome (gravatar URL, favicon, or "no avatar")
-    // synchronously — no SHA recompute, no fetch.
-    const cached = avatarCache.get(cacheKey)
+    const key = avatarKey(email, size)
+    const cached = cachedAvatar(key)
     if (cached) {
       setResolvedSrc(cached.src)
       setSourceKind(cached.kind)
       return
     }
 
-    // Defer the SHA-256 + Gravatar resolution to idle time so a thread switch
-    // that mounts many avatars at once doesn't get held up by the burst — the
-    // initials placeholder is already on screen until this resolves.
     let cancelled = false
+    setResolvedSrc(undefined)
+    setSourceKind('none')
     const cancelIdle = onIdle(() => {
-      computeSha256(cleanEmail)
-        .then((hash) => {
+      invoke<ResolvedImage>('avatar.resolve', { email, size: size * 2 })
+        .then((image) => {
+          rememberAvatar(key, image)
           if (cancelled) return
-          const url = `https://www.gravatar.com/avatar/${hash}?s=${size * 2}&d=404`
-          avatarCache.set(cacheKey, { src: url, kind: 'gravatar' })
-          setResolvedSrc(url)
-          setSourceKind('gravatar')
+          setResolvedSrc(image.src || undefined)
+          setSourceKind(image.src ? image.kind : 'none')
         })
         .catch(() => {
-          if (cancelled) return
-          const favicon = faviconForEmail(cleanEmail)
-          const kind: SourceKind = favicon ? 'favicon' : 'none'
-          avatarCache.set(cacheKey, { src: favicon, kind })
-          setResolvedSrc(favicon)
-          setSourceKind(kind)
+          // The initials remain visible if the core is unavailable.
         })
     })
     return () => {
@@ -144,18 +138,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   }, [src, email, showRealAvatars, size])
 
   const handleImageError = () => {
-    const cacheKey = email ? `${email.trim().toLowerCase()}@${size}` : ''
-    if (sourceKind === 'gravatar' && email) {
-      const favicon = faviconForEmail(email)
-      const kind: SourceKind = favicon ? 'favicon' : 'none'
-      // Remember that this address has no Gravatar so future mounts skip the
-      // 404 round-trip and go straight to the favicon.
-      if (cacheKey) avatarCache.set(cacheKey, { src: favicon, kind })
-      setResolvedSrc(favicon)
-      setSourceKind(kind)
-      return
-    }
-    if (cacheKey) avatarCache.set(cacheKey, { src: undefined, kind: 'none' })
+    if (email && !src) avatarCache.delete(avatarKey(email, size))
     setResolvedSrc(undefined)
     setSourceKind('none')
   }

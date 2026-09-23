@@ -130,6 +130,9 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
 
 pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result<Value, String> {
     match req.method.as_str() {
+        "avatar.resolve" => {
+            serde_json::to_value(crate::avatar::resolve(&req.params)).map_err(|err| err.to_string())
+        }
         "changelog.fetch" => {
             let variant = crate::changelog::Variant::parse(
                 req.params

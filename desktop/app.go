@@ -330,6 +330,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.writeMediaFile(payload)
 	case "composer.openAttachment":
 		return a.openComposerAttachment(payload)
+	case "avatar.resolve":
+		return a.sidecar.Call("avatar.resolve", payload)
 	case "account.writeAvatarFile":
 		return a.writeAvatarFile(payload)
 	case "account.writeChatWallpaperFile":

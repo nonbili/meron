@@ -938,3 +938,5 @@ private fun String.readBalancedJson(
     }
     error("Unbalanced JSON value")
 }
+
+fun parseSenderImageResponse(responseJson: String): String = responseJson.findJsonStringProperty("src").orEmpty()

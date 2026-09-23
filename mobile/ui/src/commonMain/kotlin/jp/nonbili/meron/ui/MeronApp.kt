@@ -305,6 +305,7 @@ fun MeronApp(
         // rather than to English.
         LocalAppLocale provides appLanguageTag.ifBlank { deviceLanguageTag },
         LocalPlatformServices provides services,
+        LocalAvatarCore provides core,
     ) {
         MeronTheme(appearanceMode = appearanceMode, messageFontScale = state.messageFontScale) {
             MeronMobileScreenContent(

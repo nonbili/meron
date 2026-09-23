@@ -824,16 +824,14 @@ internal fun SenderAvatar(
     enabled: Boolean,
     size: Dp,
 ) {
-    val urls =
-        remember(label, enabled) {
-            if (enabled) senderImageUrls(label) else emptyList()
-        }
-    var image by remember(label, enabled) { mutableStateOf<ImageBitmap?>(null) }
+    val core = LocalAvatarCore.current
+    val email = remember(label) { extractEmail(label) }
+    var image by remember(email, enabled, core) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(urls) {
+    LaunchedEffect(email, enabled, core) {
         image = null
-        if (urls.isNotEmpty()) {
-            image = withContext(ioDispatcher) { loadFirstImageBitmap(urls) }
+        if (enabled && email != null && core != null) {
+            image = loadSenderImage(core, email)
         }
     }
 
@@ -899,16 +897,6 @@ internal fun Avatar(
 
 /** RSS accounts fall back to a feed glyph instead of initials, matching desktop. */
 internal fun accountAvatarFallbackIcon(account: AccountSummary): ImageVector? = if (accountSummaryIsRss(account)) Icons.Filled.RssFeed else null
-
-internal fun senderImageUrls(label: String): List<String> {
-    val email = extractEmail(label) ?: return emptyList()
-    val domain = email.substringAfter('@', "").takeIf { it.isNotBlank() } ?: return emptyList()
-    val hash = sha256Hex(email.lowercase().trim())
-    return listOf(
-        "https://www.gravatar.com/avatar/$hash?s=96&d=404",
-        "https://www.google.com/s2/favicons?domain=$domain&sz=96",
-    )
-}
 
 internal fun extractEmail(value: String): String? {
     val match = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).find(value)

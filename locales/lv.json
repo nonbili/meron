@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Maina ziņojumu teksta izmēru papildus lietotnes teksta izmēram.",
   "settings.appearance.messageTextSizeSystemHint": "Maina ziņojumu teksta izmēru. Pārējais teksts seko sistēmas teksta izmēram.",
   "settings.appearance.showSenderImages": "Rādīt sūtītāja attēlus",
-  "settings.appearance.showSenderImagesHint": "Nosūta katra sūtītāja e-pasta adreses SHA-256 jaucējvērtību pakalpojumam Gravatar un kā rezerves variantu sūtītāja domēnu uzņēmumam Google.",
+  "settings.appearance.showSenderImagesHint": "Nosūta katra sūtītāja e-pasta adreses SHA-256 jaucējvērtību pakalpojumam Gravatar un kā rezerves variantu sūtītāja domēnu (un, ja nepieciešams, tā augstāka līmeņa domēnu) pakalpojumam DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Rādīt nelasīto emblēmu",
   "settings.appearance.showUnreadAccountBadgeHint": "Rādīt nelasīto ziņojumu skaitu katram kontam sānu joslā.",
   "settings.appearance.textSize": "Teksta izmērs",

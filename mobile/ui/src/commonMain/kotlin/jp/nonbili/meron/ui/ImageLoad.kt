@@ -17,11 +17,6 @@ internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? =
         }
     }
 
-internal suspend fun loadFirstImageBitmap(refs: List<String>): ImageBitmap? {
-    for (ref in refs) loadImageBitmapRef(ref)?.let { return it }
-    return null
-}
-
 private const val IMAGE_BITMAP_CACHE_MAX_BYTES = 64L * 1024L * 1024L
 
 private class CachedBitmap(

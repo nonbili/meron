@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "アプリの文字サイズに加えて、メッセージ本文の大きさを調整します。",
   "settings.appearance.messageTextSizeSystemHint": "メッセージ本文の大きさを調整します。その他の文字はシステムの文字サイズに従います。",
   "settings.appearance.showSenderImages": "送信者の画像を表示",
-  "settings.appearance.showSenderImagesHint": "各送信者のメールアドレスのSHA-256ハッシュをGravatarに送信し、代替として送信者のドメインをGoogleに送信します。",
+  "settings.appearance.showSenderImagesHint": "各送信者のメールアドレスのSHA-256ハッシュをGravatarに送信し、代替として送信者のドメイン（必要に応じて親ドメインも）をDuckDuckGoに送信します。",
   "settings.appearance.showUnreadAccountBadge": "未読バッジを表示",
   "settings.appearance.showUnreadAccountBadgeHint": "サイドバーの各アカウントに未読のメッセージ数を表示します。",
   "settings.appearance.textSize": "文字サイズ",

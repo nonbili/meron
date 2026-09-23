@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Ajuste le corps des messages en plus de la taille du texte de l’application.",
   "settings.appearance.messageTextSizeSystemHint": "Ajuste le corps des messages. Le reste du texte suit la taille de texte du système.",
   "settings.appearance.showSenderImages": "Afficher les photos des expéditeurs",
-  "settings.appearance.showSenderImagesHint": "Envoie à Gravatar un hachage SHA-256 de l'adresse e-mail de chaque expéditeur et, à défaut, le domaine de l'expéditeur à Google.",
+  "settings.appearance.showSenderImagesHint": "Envoie à Gravatar un hachage SHA-256 de l'adresse e-mail de chaque expéditeur et, à défaut, le domaine de l'expéditeur (et, si nécessaire, son domaine parent) à DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Afficher le badge non lu",
   "settings.appearance.showUnreadAccountBadgeHint": "Afficher le nombre de messages non lus pour chaque compte dans la barre latérale.",
   "settings.appearance.textSize": "Taille du texte",

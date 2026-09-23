@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Ridimensiona il corpo dei messaggi oltre alla dimensione del testo dell’app.",
   "settings.appearance.messageTextSizeSystemHint": "Ridimensiona il corpo dei messaggi. Il resto del testo segue la dimensione del testo di sistema.",
   "settings.appearance.showSenderImages": "Mostra immagini dei mittenti",
-  "settings.appearance.showSenderImagesHint": "Invia a Gravatar un hash SHA-256 dell'indirizzo email di ogni mittente e, come alternativa, il dominio del mittente a Google.",
+  "settings.appearance.showSenderImagesHint": "Invia a Gravatar un hash SHA-256 dell'indirizzo email di ogni mittente e, come alternativa, il dominio del mittente (e, se necessario, il relativo dominio principale) a DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Mostra badge non letto",
   "settings.appearance.showUnreadAccountBadgeHint": "Mostra il conteggio dei messaggi non letti per ciascun account nella barra laterale.",
   "settings.appearance.textSize": "Dimensione del testo",

@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Sizes message bodies on top of the app text size.",
   "settings.appearance.messageTextSizeSystemHint": "Sizes message bodies. Other text follows your system text size.",
   "settings.appearance.showSenderImages": "Show sender images",
-  "settings.appearance.showSenderImagesHint": "Sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain to Google.",
+  "settings.appearance.showSenderImagesHint": "Sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Show unread badge",
   "settings.appearance.showUnreadAccountBadgeHint": "Show unread message count for each account in the sidebar.",
   "settings.appearance.textSize": "Text size",

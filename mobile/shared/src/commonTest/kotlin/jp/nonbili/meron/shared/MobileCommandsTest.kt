@@ -9,6 +9,16 @@ import kotlin.test.assertTrue
 
 class MobileCommandsTest {
     @Test
+    fun senderImagesUseSharedCoreResolution() {
+        val core = FakeMeronCore("""{"src":"data:image/png;base64,aGVsbG8=","kind":"favicon"}""")
+        val result = runSuspend { MobileMailCommandClient(core).resolveSenderImage("em@em1.cloudflare.com") }
+        assertEquals("avatar.resolve", core.lastCommand)
+        assertEquals("""{"email":"em@em1.cloudflare.com","size":96}""", core.lastPayloadJson)
+        assertEquals("data:image/png;base64,aGVsbG8=", parseSenderImageResponse(result))
+        assertEquals("", parseSenderImageResponse("""{"src":"","kind":""}"""))
+    }
+
+    @Test
     fun starredAndIdentityCommandsCarryCoreOwnedQueryAndLifecycle() {
         val core = FakeMeronCore("{}")
         val client = MobileMailCommandClient(core)

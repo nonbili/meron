@@ -682,7 +682,7 @@
   "settings.appearance.messageTextSizeHint": "Skaliert Nachrichtentexte zusätzlich zur App-Textgröße.",
   "settings.appearance.messageTextSizeSystemHint": "Skaliert Nachrichtentexte. Anderer Text folgt der Textgröße deines Systems.",
   "settings.appearance.showSenderImages": "Absenderbilder anzeigen",
-  "settings.appearance.showSenderImagesHint": "Sendet einen SHA-256-Hash der E-Mail-Adresse jedes Absenders an Gravatar und ersatzweise die Domain des Absenders an Google.",
+  "settings.appearance.showSenderImagesHint": "Sendet einen SHA-256-Hash der E-Mail-Adresse jedes Absenders an Gravatar und ersatzweise die Domain des Absenders (und bei Bedarf deren übergeordnete Domain) an DuckDuckGo.",
   "settings.appearance.showUnreadAccountBadge": "Ungelesene Abzeichen anzeigen",
   "settings.appearance.showUnreadAccountBadgeHint": "Zeigt die Anzahl ungelesener Nachrichten für jedes Konto in der Seitenleiste an.",
   "settings.appearance.textSize": "Textgröße",
