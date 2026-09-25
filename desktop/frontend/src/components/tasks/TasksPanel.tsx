@@ -21,7 +21,6 @@ import {
   openTaskMail,
   renameTaskList,
   reorderTasks,
-  setShowCompleted,
   setTaskDone,
   tasks$,
 } from '../../states/tasks'
@@ -47,14 +46,15 @@ export function TasksPanel({ listId }: { listId: string }) {
   const { t } = useTranslation()
   const lists = useValue(tasks$.lists)
   const items = useValue(tasks$.items)
-  const showCompleted = useValue(tasks$.showCompleted)
   const editingId = useValue(tasks$.editingId)
   const [draft, setDraft] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [listName, setListName] = useState('')
   const [listMenu, setListMenu] = useState<MenuAnchor | null>(null)
   const [actionsMenu, setActionsMenu] = useState<MenuAnchor | null>(null)
-  const [completedOpen, setCompletedOpen] = useState(true)
+  // Collapsed by default, as in Google Tasks: done work is there to be found,
+  // not to crowd the open tasks.
+  const [completedOpen, setCompletedOpen] = useState(false)
   const listButtonRef = useRef<HTMLButtonElement | null>(null)
   const actionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -179,37 +179,42 @@ export function TasksPanel({ listId }: { listId: string }) {
             </SortableContext>
           </DndContext>
         )}
-
-        {completed.length > 0 ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setCompletedOpen((value) => !value)}
-              className="mt-2 flex w-full items-center gap-1 px-3 py-1.5 text-xs font-semibold text-secondary hover:text-primary"
-            >
-              {completedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              {t('tasks.completed')}
-              <span className="text-secondary">({completed.length})</span>
-            </button>
-            {completedOpen
-              ? completed.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    sortable={false}
-                    expanded={editingId === task.id}
-                    onToggle={(done) => void setTaskDone(task.id, done)}
-                    onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
-                    onDelete={() => void deleteTask(task.id)}
-                    onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
-                  >
-                    <TaskEditor task={task} lists={lists} />
-                  </TaskRow>
-                ))
-              : null}
-          </>
-        ) : null}
       </div>
+
+      {/* Pinned under the scrolling list rather than at its end, so a long
+          list can't push it out of sight. Opened, the completed tasks scroll
+          on their own beneath it, up to half the panel. */}
+      {completed.length > 0 ? (
+        <div className="flex max-h-[50%] shrink-0 flex-col border-t border-border">
+          <button
+            type="button"
+            onClick={() => setCompletedOpen((value) => !value)}
+            className="flex w-full shrink-0 items-center gap-1 px-3 py-2 text-xs font-semibold text-secondary hover:text-primary"
+          >
+            {completedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            {t('tasks.completed')}
+            <span className="text-secondary">({completed.length})</span>
+          </button>
+          {completedOpen ? (
+            <div className="min-h-0 overflow-y-auto pb-1">
+              {completed.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  sortable={false}
+                  expanded={editingId === task.id}
+                  onToggle={(done) => void setTaskDone(task.id, done)}
+                  onOpen={() => tasks$.editingId.set(editingId === task.id ? '' : task.id)}
+                  onDelete={() => void deleteTask(task.id)}
+                  onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
+                >
+                  <TaskEditor task={task} lists={lists} />
+                </TaskRow>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {listMenu ? (
         <FloatingContextMenu
@@ -259,14 +264,6 @@ export function TasksPanel({ listId }: { listId: string }) {
               setActionsMenu(null)
               setListName(activeList?.title ?? '')
               setRenaming(true)
-            }}
-          />
-          <MenuItem
-            icon={<Check size={13} className="text-secondary" />}
-            label={showCompleted ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
-            onClick={() => {
-              setActionsMenu(null)
-              void setShowCompleted(!showCompleted)
             }}
           />
           {completed.length > 0 ? (

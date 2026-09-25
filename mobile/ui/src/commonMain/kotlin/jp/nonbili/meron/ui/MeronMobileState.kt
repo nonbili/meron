@@ -312,7 +312,6 @@ internal class MeronMobileState(
     var activeTaskListId by mutableStateOf("")
     var tasks by mutableStateOf(emptyList<TaskSummary>())
     var tasksLoading by mutableStateOf(false)
-    var showCompletedTasks by mutableStateOf(false)
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))

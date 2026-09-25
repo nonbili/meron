@@ -13,7 +13,6 @@ import {
   openTaskMail,
   openTasksPanel,
   restoreTasksSession,
-  setShowCompleted,
   tasks$,
   toggleTasksPanel,
   type Task,
@@ -46,7 +45,6 @@ beforeEach(() => {
   ui$.toastUndo.set(null)
   tasks$.lists.set([])
   tasks$.items.set([])
-  tasks$.showCompleted.set(false)
   compose$.tabs.set([])
   compose$.activeTab.set('')
   threadMessages = [
@@ -129,12 +127,11 @@ describe('openTasksPanel', () => {
 })
 
 describe('loadTasks', () => {
-  it('asks for completed tasks only when they are shown', async () => {
+  // Completed tasks always come along: they sit under a collapsible heading
+  // at the bottom, as in Google Tasks, rather than behind a toggle.
+  it('asks for completed tasks too', async () => {
     ui$.activeTaskList.set('list-1')
     await loadTasks()
-    expect(calls.at(-1)?.payload.include_completed).toBe(false)
-
-    await setShowCompleted(true)
     expect(calls.at(-1)?.payload.include_completed).toBe(true)
   })
 

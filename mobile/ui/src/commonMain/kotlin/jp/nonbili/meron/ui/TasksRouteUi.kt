@@ -198,22 +198,7 @@ internal fun TasksRouteContent(
                                             renamingList = true
                                         },
                                     )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                if (showCompletedTasks) {
-                                                    tr("tasks.hideCompleted")
-                                                } else {
-                                                    tr("tasks.showCompleted")
-                                                },
-                                            )
-                                        },
-                                        onClick = {
-                                            listMenuOpen = false
-                                            scope.launch { setShowCompletedTasks(!showCompletedTasks) }
-                                        },
-                                    )
-                                    if (showCompletedTasks && tasks.any { it.done }) {
+                                    if (tasks.any { it.done }) {
                                         DropdownMenuItem(
                                             text = { Text(tr("tasks.clearCompleted")) },
                                             onClick = {
@@ -239,7 +224,6 @@ internal fun TasksRouteContent(
                 TasksScreen(
                     tasks = tasks,
                     loading = tasksLoading,
-                    showCompleted = showCompletedTasks,
                     onAddTask = { title -> scope.launch { addTask(title) } },
                     onToggleDone = { task, done -> scope.launch { setTaskDone(task.id, done) } },
                     onEditTask = { editing = it },

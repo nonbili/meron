@@ -39,8 +39,6 @@ export const tasks$ = observable({
   lists: [] as TaskList[],
   items: [] as Task[],
   loading: false,
-  /** Whether ticked tasks stay on screen under a "Completed" heading. */
-  showCompleted: false,
   /** The task whose editor is open, '' for none. */
   editingId: '',
 })
@@ -109,7 +107,7 @@ export async function loadTasks(listId = ui$.activeTaskList.peek()) {
   try {
     const res = await invoke<{ tasks?: Task[] }>('tasks.items', {
       list_id: listId,
-      include_completed: tasks$.showCompleted.peek(),
+      include_completed: true,
     })
     // A list switch that landed while this was in flight owns the panel now.
     if (ui$.activeTaskList.peek() !== listId) return
@@ -117,11 +115,6 @@ export async function loadTasks(listId = ui$.activeTaskList.peek()) {
   } finally {
     tasks$.loading.set(false)
   }
-}
-
-export async function setShowCompleted(show: boolean) {
-  tasks$.showCompleted.set(show)
-  await loadTasks()
 }
 
 export async function addTask(title: string) {
@@ -204,19 +197,23 @@ export async function deleteTask(taskId: string) {
  */
 function offerUndo(message: string, restore: unknown) {
   if (!restore) {
-    showToast(message)
+    showToast(message, 'success', undefined, 'tasks')
     return
   }
-  showUndoToast(message, () => {
-    void invoke('tasks.restore', { restore })
-      .then(async () => {
-        await refreshTaskLists()
-        await loadTasks()
-      })
-      .catch((error) => {
-        showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
-      })
-  })
+  showUndoToast(
+    message,
+    () => {
+      void invoke('tasks.restore', { restore })
+        .then(async () => {
+          await refreshTaskLists()
+          await loadTasks()
+        })
+        .catch((error) => {
+          showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error', undefined, 'tasks')
+        })
+    },
+    'tasks',
+  )
 }
 
 async function refreshTaskLists() {

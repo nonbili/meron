@@ -73,7 +73,7 @@ internal suspend fun MeronMobileState.loadTasks(listId: String = activeTaskListI
     try {
         val response =
             onCore {
-                requireCoreOk(it.taskItems(TaskItemsParams(listId, includeCompleted = showCompletedTasks)))
+                requireCoreOk(it.taskItems(TaskItemsParams(listId, includeCompleted = true)))
             } ?: return
         // A list the user switched away from while this was in flight must not
         // paint over the one they are now looking at.
@@ -82,11 +82,6 @@ internal suspend fun MeronMobileState.loadTasks(listId: String = activeTaskListI
     } finally {
         tasksLoading = false
     }
-}
-
-internal suspend fun MeronMobileState.setShowCompletedTasks(show: Boolean) {
-    showCompletedTasks = show
-    loadTasks()
 }
 
 internal suspend fun MeronMobileState.addTask(title: String) {

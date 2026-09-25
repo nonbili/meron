@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Email
@@ -49,7 +51,8 @@ import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.TaskSummary
 
 /**
- * The Tasks screen body: an add field, the open tasks, then the completed ones.
+ * The Tasks screen body: an add field, the open tasks, then the completed ones
+ * under a collapsible heading, as in Google Tasks.
  *
  * Reordering is a menu action rather than a drag, because nothing else in this
  * app drags — kanban columns move with the same up/down pair.
@@ -58,7 +61,6 @@ import jp.nonbili.meron.shared.TaskSummary
 internal fun TasksScreen(
     tasks: List<TaskSummary>,
     loading: Boolean,
-    showCompleted: Boolean,
     onAddTask: (String) -> Unit,
     onToggleDone: (TaskSummary, Boolean) -> Unit,
     onEditTask: (TaskSummary) -> Unit,
@@ -68,7 +70,11 @@ internal fun TasksScreen(
     modifier: Modifier = Modifier,
 ) {
     var draft by remember { mutableStateOf("") }
+    // Collapsed by default: done work is there to be found, not to crowd the
+    // open tasks.
+    var completedOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val completedListState = rememberLazyListState()
     val open = tasks.filterNot { it.done }
     val completed = tasks.filter { it.done }
 
@@ -112,52 +118,96 @@ internal fun TasksScreen(
             }
 
             else -> {
-                LazyColumn(
-                    Modifier.fillMaxSize().appScrollbar(listState),
-                    state = listState,
-                ) {
-                    items(open, key = { it.id }) { task ->
-                        TaskRow(
-                            task = task,
-                            canMoveUp = open.firstOrNull()?.id != task.id,
-                            canMoveDown = open.lastOrNull()?.id != task.id,
-                            onToggleDone = { onToggleDone(task, it) },
-                            onEdit = { onEditTask(task) },
-                            onDelete = { onDeleteTask(task) },
-                            onMove = { onMoveTask(task, it) },
-                            onOpenMessage = { onOpenMessage(task) },
-                        )
-                    }
-
-                    if (showCompleted && completed.isNotEmpty()) {
-                        item {
-                            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                            Text(
-                                "${tr("tasks.completed")} · ${completed.size}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            )
+                // The Completed heading sits below the scrolling list rather than
+                // at its end, so a long list can't push it out of sight. Opened,
+                // the completed tasks scroll on their own beneath it, up to half
+                // the screen, leaving the open tasks the rest.
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val completedMaxHeight = maxHeight / 2
+                    Column(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            Modifier.weight(1f).fillMaxWidth().appScrollbar(listState),
+                            state = listState,
+                        ) {
+                            items(open, key = { it.id }) { task ->
+                                TaskRow(
+                                    task = task,
+                                    canMoveUp = open.firstOrNull()?.id != task.id,
+                                    canMoveDown = open.lastOrNull()?.id != task.id,
+                                    onToggleDone = { onToggleDone(task, it) },
+                                    onEdit = { onEditTask(task) },
+                                    onDelete = { onDeleteTask(task) },
+                                    onMove = { onMoveTask(task, it) },
+                                    onOpenMessage = { onOpenMessage(task) },
+                                )
+                            }
                         }
-                        items(completed, key = { it.id }) { task ->
-                            TaskRow(
-                                task = task,
-                                // Completed tasks are ordered by when they were
-                                // ticked, so hand-ordering them means nothing.
-                                canMoveUp = false,
-                                canMoveDown = false,
-                                onToggleDone = { onToggleDone(task, it) },
-                                onEdit = { onEditTask(task) },
-                                onDelete = { onDeleteTask(task) },
-                                onMove = {},
-                                onOpenMessage = { onOpenMessage(task) },
+
+                        if (completed.isNotEmpty()) {
+                            HorizontalDivider()
+                            CompletedHeader(
+                                count = completed.size,
+                                open = completedOpen,
+                                onToggle = { completedOpen = !completedOpen },
                             )
+                            if (completedOpen) {
+                                LazyColumn(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = completedMaxHeight)
+                                        .appScrollbar(completedListState),
+                                    state = completedListState,
+                                ) {
+                                    items(completed, key = { it.id }) { task ->
+                                        TaskRow(
+                                            task = task,
+                                            // Completed tasks are ordered by when they were
+                                            // ticked, so hand-ordering them means nothing.
+                                            canMoveUp = false,
+                                            canMoveDown = false,
+                                            onToggleDone = { onToggleDone(task, it) },
+                                            onEdit = { onEditTask(task) },
+                                            onDelete = { onDeleteTask(task) },
+                                            onMove = {},
+                                            onOpenMessage = { onOpenMessage(task) },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** The "Completed (N)" heading that shows or hides the ticked tasks. */
+@Composable
+private fun CompletedHeader(
+    count: Int,
+    open: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            if (open) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "${tr("tasks.completed")} ($count)",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
