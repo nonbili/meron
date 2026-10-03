@@ -23,6 +23,8 @@ import { buildGalleryItems, buildThreadMedia, buildParticipants } from './conver
 import { useThreadSearch } from './useThreadSearch'
 import { useConversationScroll } from './useConversationScroll'
 import { ArrowRight } from 'lucide-react'
+import { usePresence } from '../../lib/usePresence'
+import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 import { wallpaperCss } from '../../lib/wallpapers'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { openCorrespondentMail } from '../../states/kanban'
@@ -80,6 +82,11 @@ export function MessagePane() {
     activeTabData?.kind === 'thread' && activeTabData.threadId === selectedThreadId
       ? threadFromTab(activeTabData, listedActiveThread)
       : listedActiveThread
+
+  const detailsOpen = !!activeThread && !activeDocumentTab && mediaOpen
+  // Slides open and shut beside the conversation on a wide window (index.css,
+  // .details-slide), like the board's conversation pane.
+  const detailsPhase = usePresence(detailsOpen, PANE_ANIMATION_MS)
 
   const activeAccount = activeThread
     ? accounts.find((account) => account.id === activeThread.account_id)
@@ -336,29 +343,40 @@ export function MessagePane() {
           )}
         </section>
 
-        {activeThread && !activeDocumentTab && mediaOpen && (
-          <ConversationDetailsPanel
-            media={mediaItems}
-            files={fileItems}
-            participants={participants}
-            scopeTitle={activeThread.subject || '(no subject)'}
-            // For RSS, from_name duplicates the subject (both the feed title), so
-            // show the feed host instead; otherwise show the sender name.
-            scopeSubtitle={isRSS ? activeThread.from_addr : activeThread.from_name || activeThread.from_addr}
-            loading={showThreadLoading}
-            onOpenImage={(index) => thread$.galleryIndex.set(index)}
-            onShowInConversation={showMessageInConversation}
-            onComposeTo={(person) =>
-              openComposeTab({
-                accountId: activeThread.account_id,
-                to: person.name && person.name !== person.email ? `${person.name} <${person.email}>` : person.email,
-              })
-            }
-            onViewMessagesWith={(person) =>
-              openCorrespondentMail(activeThread.account_id, activeThread.folder_id, person.email)
-            }
-            onClose={() => thread$.mediaOpen.set(false)}
-          />
+        {activeThread && detailsPhase !== 'closed' && (
+          <div
+            data-pane-phase={detailsPhase}
+            className={`details-slide${
+              detailsPhase === 'entering'
+                ? ' animate-pane-open'
+                : detailsPhase === 'exiting'
+                  ? ' animate-pane-close'
+                  : ''
+            }`}
+          >
+            <ConversationDetailsPanel
+              media={mediaItems}
+              files={fileItems}
+              participants={participants}
+              scopeTitle={activeThread.subject || '(no subject)'}
+              // For RSS, from_name duplicates the subject (both the feed title), so
+              // show the feed host instead; otherwise show the sender name.
+              scopeSubtitle={isRSS ? activeThread.from_addr : activeThread.from_name || activeThread.from_addr}
+              loading={showThreadLoading}
+              onOpenImage={(index) => thread$.galleryIndex.set(index)}
+              onShowInConversation={showMessageInConversation}
+              onComposeTo={(person) =>
+                openComposeTab({
+                  accountId: activeThread.account_id,
+                  to: person.name && person.name !== person.email ? `${person.name} <${person.email}>` : person.email,
+                })
+              }
+              onViewMessagesWith={(person) =>
+                openCorrespondentMail(activeThread.account_id, activeThread.folder_id, person.email)
+              }
+              onClose={() => thread$.mediaOpen.set(false)}
+            />
+          </div>
         )}
       </div>
 

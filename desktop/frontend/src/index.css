@@ -919,10 +919,40 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* The kanban conversation pane grows from / collapses to zero width; its
-   content keeps the final width meanwhile (KanbanConversationPane). Each
-   keyframe names one end only, so the other end is the pane's own width.
-   Duration matches PANE_ANIMATION_MS. */
+/* The conversation details panel (MessagePane). On a narrow window it
+   overlays the conversation and slides in by itself, so its frame steps aside
+   and the panel just goes when closed. On a wide window it sits beside the
+   conversation: the frame grows and narrows like the board's conversation pane
+   (animate-pane-open/-close), without the panel's own fading slide-in. */
+.details-slide {
+  display: contents;
+}
+
+@media (max-width: 1099px) {
+  .details-slide[data-pane-phase='exiting'] {
+    display: none;
+  }
+}
+
+@media (min-width: 1100px) {
+  .details-slide {
+    display: flex;
+    flex-shrink: 0;
+    width: 340px;
+    overflow: hidden;
+  }
+
+  .details-slide > aside {
+    animation: none;
+  }
+}
+
+/* The kanban conversation pane, the Tasks panel and (on a wide window) the
+   details panel grow from / collapse to zero width; their content keeps the
+   final width meanwhile (KanbanConversationPane, TasksSlide, .details-slide).
+   Each keyframe names one end only, so the other end is the pane's own width.
+   Closing only narrows: a fade would show the window's background through the
+   panel while it goes. Duration matches PANE_ANIMATION_MS. */
 @keyframes paneOpen {
   from {
     width: 0;
@@ -932,7 +962,6 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 @keyframes paneClose {
   to {
     width: 0;
-    opacity: 0;
   }
 }
 
