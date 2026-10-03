@@ -429,6 +429,33 @@ textarea,
   outline: 2px solid color-mix(in srgb, var(--me-accent) 50%, transparent);
 }
 
+/* The content beside the side navigation and below Meron's title bar (App.tsx),
+   when the title bar is Meron's own: one surface with rounded corners and a
+   hairline edge, set into the frame the title bar and side navigation make
+   (<main> takes their colour behind it). Like Slack, it stops 8px short of the
+   window's right and bottom edges, so the frame shows round all its corners.
+   On a narrow window the side navigation is hidden, so the surface fills the
+   window, square. */
+.app-frame-content {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0 8px 8px 0;
+  background: var(--me-bg-app);
+  border: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .app-frame-content {
+    margin: 0;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+}
+
 /* Custom scrollbars, except on Linux, where WebKitGTK's own overlay
    scrollbars match the desktop (html.native-scrollbars, set in main.tsx). */
 html:not(.native-scrollbars) ::-webkit-scrollbar {
