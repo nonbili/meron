@@ -7,7 +7,7 @@ struct Meron: App {
     @UIApplicationDelegateAdaptor(IosNotificationDelegate.self) private var notificationDelegate
     private let incomingMailtoEvents = IncomingMailtoEvents()
     @State private var incomingOAuthCallbackUrl: String?
-    @State private var incomingNotificationThreadTarget: NotificationThreadTarget?
+    private let incomingThreadEvents = IncomingThreadEvents()
 
     private let core = IosMeronCore()
     private let coreLoaded = true
@@ -23,6 +23,7 @@ struct Meron: App {
         // Host the shared Engine for this (foreground) launch: warm session pool
         // + foreground IMAP IDLE. Paused on background, resumed on return.
         Self.engineLifecycle("engine.foreground")
+        IosUnreadWidgets.refresh()
     }
 
     /// Drive the core's foreground Engine lifecycle (warm pool + IDLE) from the
@@ -40,7 +41,7 @@ struct Meron: App {
                 coreInitJson: coreInitJson,
                 incomingMailtoEvents: incomingMailtoEvents,
                 incomingOAuthCallbackUrl: incomingOAuthCallbackUrl,
-                incomingNotificationThreadTarget: incomingNotificationThreadTarget,
+                incomingThreadEvents: incomingThreadEvents,
                 coreProtocolVersion: coreProtocolVersion
             )
             .ignoresSafeArea()
@@ -50,29 +51,37 @@ struct Meron: App {
                 // own userInfo is, so one parser reads both.
                 guard let target = iosNotificationThreadTarget(userInfo: notification.userInfo ?? [:])
                 else { return }
-                incomingNotificationThreadTarget =
-                    NotificationThreadTarget(
-                        accountId: target.accountId,
-                        folder: target.folder,
-                        threadKey: target.threadKey,
-                        nonce: Int64(Date().timeIntervalSince1970 * 1000)
-                    )
+                incomingThreadEvents.offer(target: NotificationThreadTarget(
+                    accountId: target.accountId,
+                    folder: target.folder,
+                    threadKey: target.threadKey,
+                    nonce: Int64(Date().timeIntervalSince1970 * 1000)
+                ))
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 // Refresh the visible mailbox right away on return from the
                 // background, instead of waiting out the remaining poll tick.
                 AppForegroundSignal.shared.signal()
+                IosUnreadWidgets.refresh()
                 Self.engineLifecycle("engine.foreground")
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 // Park the Engine: stop foreground IDLE and drop warm sockets the
                 // OS would freeze anyway.
                 Self.engineLifecycle("engine.background")
+                IosUnreadWidgets.refreshAfterBackgrounding()
             }
         }
     }
 
     private func handleOpenUrl(_ url: URL) {
+        if let target = iosWidgetThreadTarget(url) {
+            incomingThreadEvents.offer(target: NotificationThreadTarget(
+                accountId: target.accountId, folder: target.folder, threadKey: target.threadKey,
+                nonce: Int64(Date().timeIntervalSince1970 * 1000)
+            ))
+            return
+        }
         let rawUrl = url.absoluteString
         if OAuthFlowKt.isPotentialOAuthCallbackUrl(rawUrl: rawUrl) {
             incomingOAuthCallbackUrl = rawUrl

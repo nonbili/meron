@@ -17,6 +17,7 @@ function formatMegabytes(bytes: number): string {
 export function UpdateSection() {
   const { t } = useTranslation()
   const status = useValue(update$.status)
+  const error = status.error || status.installError
 
   // Store builds (Snap, Flathub, Microsoft Store) point at the right place for
   // updates. Anything else that can't self-update — `wails dev`, a binary run
@@ -106,11 +107,6 @@ export function UpdateSection() {
               {status.state === 'installing' ? t('updates.installing') : t('updates.restartAndInstall')}
             </Button>
           </div>
-          {status.error && (
-            <p className="mt-2 break-words text-[0.6875rem] leading-4 text-rose-600 dark:text-rose-400">
-              {status.error}
-            </p>
-          )}
         </div>
       )}
 
@@ -127,6 +123,8 @@ export function UpdateSection() {
           </Button>
         </div>
       )}
+
+      {error && <p className="mt-2 break-words text-[0.6875rem] leading-4 text-rose-600 dark:text-rose-400">{error}</p>}
 
       {/* The installer channels can all fail on a read-only or root-owned
           install dir, so a manual route out is always one click away. */}

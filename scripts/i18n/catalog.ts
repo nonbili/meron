@@ -20,6 +20,7 @@ const androidHelperOutput = path.join(
   'GeneratedIcuStrings.kt',
 )
 const iosOutput = path.join(root, 'mobile', 'ios', 'Meron', 'Localizable.xcstrings')
+const iosWidgetsOutput = path.join(root, 'mobile', 'ios', 'MeronWidgets', 'Localizable.xcstrings')
 
 type Catalog = Record<string, string>
 type Catalogs = Record<SupportedLocale, Catalog>
@@ -143,6 +144,7 @@ function generateAll(catalogs: Catalogs) {
   generateDesktop(catalogs)
   generateAndroid(catalogs)
   generateIos(catalogs)
+  generateIos(catalogs, iosWidgetsOutput, Object.keys(catalogs.en).filter(isWidgetCatalogKey))
 }
 
 function generateDesktop(catalogs: Catalogs) {
@@ -283,13 +285,17 @@ private fun replaceGeneratedPlaceholders(
   fs.writeFileSync(androidHelperOutput, kotlin)
 }
 
-function generateIos(catalogs: Catalogs) {
-  ensureDir(path.dirname(iosOutput))
+function isWidgetCatalogKey(key: string) {
+  return key.startsWith('mobile.ios.widget') || ['accounts.unified', 'settings.account.account'].includes(key)
+}
+
+function generateIos(catalogs: Catalogs, output = iosOutput, keys = Object.keys(catalogs.en)) {
+  ensureDir(path.dirname(output))
   const strings: Record<
     string,
     { extractionState: 'manual'; localizations: Record<string, { stringUnit: { state: 'translated'; value: string } }> }
   > = {}
-  for (const key of Object.keys(catalogs.en).sort()) {
+  for (const key of keys.sort()) {
     const localizations: Record<string, { stringUnit: { state: 'translated'; value: string } }> = {}
     for (const locale of supportedLocales) {
       localizations[iosLocale(locale)] = {
@@ -305,7 +311,7 @@ function generateIos(catalogs: Catalogs) {
     }
   }
   fs.writeFileSync(
-    iosOutput,
+    output,
     `${JSON.stringify(
       {
         sourceLanguage: 'en',

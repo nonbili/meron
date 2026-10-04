@@ -1,6 +1,14 @@
-import { describe, expect, it, beforeEach } from 'bun:test'
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
 import type { UpdateStatus } from '../lib/update'
-import { EMPTY_UPDATE_STATUS, applyUpdateStatus, shouldShowUpdateBanner, update$ } from './update'
+import {
+  EMPTY_UPDATE_STATUS,
+  applyUpdateStatus,
+  loadUpdateStatus,
+  runUpdateCheck,
+  shouldShowUpdateBanner,
+  update$,
+} from './update'
+import { ui$ } from './ui'
 
 function status(partial: Partial<UpdateStatus>): UpdateStatus {
   return { ...EMPTY_UPDATE_STATUS, ...partial }
@@ -29,6 +37,46 @@ describe('applyUpdateStatus', () => {
     applyUpdateStatus(undefined)
     applyUpdateStatus({} as UpdateStatus)
     expect(update$.status.state.get()).toBe('ready')
+  })
+})
+
+describe('restored installation failure', () => {
+  afterEach(() => {
+    delete (window as any).go
+    update$.status.set(EMPTY_UPDATE_STATUS)
+    ui$.toast.set('')
+    ui$.toastTone.set('success')
+  })
+
+  it('announces the failure at startup and retains it after background polling', async () => {
+    const message = 'Windows update failed: elevation cancelled'
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string) =>
+            status({
+              supported: true,
+              state: command === 'update.status' ? 'error' : 'available',
+              error: command === 'update.status' ? message : '',
+              installError: message,
+              latestVersion: '0.1.13',
+            }),
+        },
+      },
+    }
+    await loadUpdateStatus()
+    expect(ui$.toast.get()).toBe(message)
+    expect(ui$.toastTone.get()).toBe('error')
+    await runUpdateCheck()
+    expect(update$.status.state.get()).toBe('available')
+    expect(update$.status.installError.get()).toBe(message)
+  })
+
+  it('does not announce a normal startup', async () => {
+    ui$.toast.set('')
+    ;(window as any).go = { main: { App: { Invoke: async () => status({ state: 'idle' }) } } }
+    await loadUpdateStatus()
+    expect(ui$.toast.get()).toBe('')
   })
 })
 

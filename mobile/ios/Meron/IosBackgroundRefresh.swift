@@ -312,6 +312,7 @@ enum IosBackgroundRefresh {
     static func runOnce(completion: @escaping (String) -> Void) {
         DispatchQueue.global(qos: .background).async {
             let result = refreshNow()
+            IosUnreadWidgets.refreshBeforeCompletion()
             if result.refreshed > 0 {
                 IosNotificationService.notifyRefreshComplete(result.summary)
             }
@@ -332,6 +333,7 @@ enum IosBackgroundRefresh {
 
         let operation = BlockOperation {
             let result = refreshNow()
+            IosUnreadWidgets.refreshBeforeCompletion()
             if result.refreshed > 0 {
                 IosNotificationService.notifyRefreshComplete(result.summary)
             }
@@ -393,7 +395,8 @@ enum IosBackgroundRefresh {
                 // event listener, and a feed refresh raises no event at all.
                 if let result = response["result"] as? [String: Any],
                    let detail = result["new_messages"] as? [String: Any],
-                   let batch = iosNewMailBatch(detail) {
+                   let batch = iosNewMailBatch(detail)
+                {
                     IosNotificationService.notifyNewMail(
                         accountName: batch.accountName,
                         from: batch.from,

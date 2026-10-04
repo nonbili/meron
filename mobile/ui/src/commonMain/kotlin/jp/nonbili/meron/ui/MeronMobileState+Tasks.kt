@@ -240,17 +240,24 @@ private suspend fun MeronMobileState.refreshTaskLists() {
  * notification tap-through does.
  */
 internal fun MeronMobileState.openTaskThread(task: TaskSummary) {
+    openLinkedThread(task.threadId, task.account)
+}
+
+/** Open by composite id, independently of the mailbox's page or current folder. */
+internal fun MeronMobileState.openLinkedThread(
+    threadId: String,
+    fallbackAccountId: String,
+) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
         return
     }
-    val threadId = task.threadId
     if (threadId.isBlank()) return
     // Only for the account to authenticate with and a folder to fall back on:
     // the read itself resolves the thread across the account's folders, so a
     // message that was merely moved (archived, trashed) still opens.
     val parsed = parseNotificationThreadId(threadId)
-    val accountId = parsed?.accountId?.takeIf { it.isNotBlank() } ?: task.account
+    val accountId = parsed?.accountId?.takeIf { it.isNotBlank() } ?: fallbackAccountId
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {

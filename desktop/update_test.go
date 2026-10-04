@@ -226,6 +226,11 @@ func TestUpdaterCheckThenDownload(t *testing.T) {
 		app.updateChannelValue = updateChannel{Kind: channelAppImage, Target: filepath.Join(t.TempDir(), "Meron.AppImage")}
 	})
 	u := app.ensureUpdater()
+	// A restored installation failure must survive automatic release polling.
+	failure := "Windows update failed: elevation cancelled"
+	u.state = updateStateError
+	u.errMessage = failure
+	u.installError = failure
 
 	got, err := u.check()
 	if err != nil {
@@ -238,9 +243,20 @@ func TestUpdaterCheckThenDownload(t *testing.T) {
 	if after.LatestVersion != "99.0.0" || !after.Supported {
 		t.Fatalf("unexpected status: %+v", after)
 	}
+	if after.InstallError != failure {
+		t.Fatalf("check erased the installation failure: %+v", after)
+	}
+	got, err = u.check()
+	if err != nil || got.(updateStatusPayload).InstallError != failure {
+		t.Fatalf("repeat check erased the installation failure: status=%+v error=%v", got, err)
+	}
 
-	if _, err := u.startDownload(); err != nil {
+	got, err = u.startDownload()
+	if err != nil {
 		t.Fatalf("startDownload: %v", err)
+	}
+	if got.(updateStatusPayload).InstallError != "" {
+		t.Fatal("retry did not clear the previous installation failure")
 	}
 	waitForUpdateState(t, u, updateStateReady)
 
@@ -295,11 +311,17 @@ func TestUpdaterCheckWhenCurrent(t *testing.T) {
 		app.updateChannelValue = updateChannel{Kind: channelAppImage, Target: "/tmp/Meron.AppImage"}
 	})
 	u := app.ensureUpdater()
+	u.state = updateStateError
+	u.errMessage = "Windows update failed: elevation cancelled"
+	u.installError = u.errMessage
 
 	got, _ := u.check()
 	after := got.(updateStatusPayload)
 	if after.State != updateStateIdle {
 		t.Fatalf("state = %q, want %q", after.State, updateStateIdle)
+	}
+	if after.InstallError != "" || after.Error != "" {
+		t.Fatalf("up-to-date check kept a stale failure: %+v", after)
 	}
 	if _, err := u.startDownload(); err == nil {
 		t.Fatal("startDownload succeeded with nothing to download")

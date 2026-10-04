@@ -218,3 +218,17 @@ open class DefaultMobileHost(
         expiresAtEpochSeconds: Long,
     ) {}
 }
+
+/** Reactive handoff for thread links arriving after the native controller exists. */
+class IncomingThreadEvents {
+    var target by mutableStateOf<NotificationThreadTarget?>(null)
+        private set
+
+    fun consume() {
+        target = null
+    }
+
+    fun offer(target: NotificationThreadTarget) {
+        this.target = target
+    }
+}

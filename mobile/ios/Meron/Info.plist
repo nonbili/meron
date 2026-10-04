@@ -46,6 +46,14 @@
 				<string>com.googleusercontent.apps.247266375404-5cdrkea888lsttjh65fjtp3504h45r2k</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>jp.nonbili.meron.widget</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meron</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>

@@ -94,6 +94,7 @@ func (a *App) showMainWindow() {
 		return
 	}
 	a.windowHidden.Store(false)
+	a.revealWindow(true)
 	showAndRaiseMainWindow(ctx)
 }
 

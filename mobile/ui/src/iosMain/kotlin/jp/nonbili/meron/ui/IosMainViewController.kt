@@ -57,6 +57,7 @@ fun MainViewController(
     incomingMailtoEvents: IncomingMailtoEvents? = null,
     incomingOAuthCallbackUrl: String? = null,
     incomingNotificationThreadTarget: NotificationThreadTarget? = null,
+    incomingThreadEvents: IncomingThreadEvents? = null,
     outlookClientId: String = "",
     outlookRedirectUri: String = "",
     googleClientId: String = "",
@@ -97,7 +98,8 @@ fun MainViewController(
             incomingMailtoDraft = incomingMailtoEvents?.draft ?: incomingMailtoDraft,
             onMailtoDraftConsumed = { incomingMailtoEvents?.consume() },
             incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-            incomingNotificationThreadTarget = incomingNotificationThreadTarget,
+            incomingNotificationThreadTarget = incomingThreadEvents?.target ?: incomingNotificationThreadTarget,
+            onNotificationThreadTargetConsumed = { incomingThreadEvents?.consume() },
         )
     }
 }

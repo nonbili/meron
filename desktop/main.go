@@ -48,6 +48,7 @@ func main() {
 		Width:                    app.window.Width,
 		Height:                   app.window.Height,
 		WindowStartState:         startWindowState(startMaximised),
+		StartHidden:              startWindowHidden,
 		HideWindowOnClose:        hideOnCloseNatively,
 		Frameless:                framelessTitlebar && integrated,
 		EnableDefaultContextMenu: true,
@@ -63,8 +64,8 @@ func main() {
 		},
 		Mac: &mac.Options{
 			// Hide the native title bar and extend content to the top edge,
-			// keeping the traffic-light buttons. The frontend draws a slim
-			// draggable strip in their place (see MacTitleBar).
+			// keeping the traffic-light buttons. TitleBar.tsx draws the 40px
+			// draggable bar; alignNativeTitlebar centres the native buttons.
 			TitleBar:  mac.TitleBarHidden(),
 			OnUrlOpen: app.openMailtoURL,
 		},
@@ -76,6 +77,7 @@ func main() {
 		},
 		OnStartup: app.Startup,
 		OnDomReady: func(ctx context.Context) {
+			alignNativeTitlebar()
 			maximiseOnDomReady(ctx, startMaximised)
 		},
 		OnBeforeClose: app.beforeClose,

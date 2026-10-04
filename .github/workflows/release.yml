@@ -366,6 +366,15 @@ jobs:
           foreach ($name in $sizes.Keys) {
             & $magick desktop/build/appicon.png -resize $sizes[$name] (Join-Path $assets $name)
           }
+          # Taskbar assets need unplated variants for both light and dark themes;
+          # otherwise Windows shrinks the logo onto an accent-colored square.
+          foreach ($size in @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)) {
+            foreach ($variant in @('', '_altform-unplated', '_altform-lightunplated')) {
+              $name = "Square44x44Logo.targetsize-${size}${variant}.png"
+              & $magick desktop/build/appicon.png -resize "${size}x${size}" (Join-Path $assets $name)
+              if ($LASTEXITCODE -ne 0) { throw "Taskbar icon generation failed: $name" }
+            }
+          }
           # Wide tile: fit the icon centered on a transparent 310x150 canvas.
           & $magick desktop/build/appicon.png -resize 150x150 -background none -gravity center -extent 310x150 (Join-Path $assets 'Wide310x150Logo.png')
 
@@ -383,7 +392,21 @@ jobs:
             Sort-Object Name -Descending |
             Select-Object -First 1
           $makeappx = Join-Path $sdkBin.FullName 'x64\makeappx.exe'
+          $makepri = Join-Path $sdkBin.FullName 'x64\makepri.exe'
           $signtool = Join-Path $sdkBin.FullName 'x64\signtool.exe'
+
+          # Index qualified icons so the Windows shell can select the matching
+          # target size and unplated theme variant instead of the base logo.
+          $priConfig = Join-Path $env:RUNNER_TEMP 'meron-priconfig.xml'
+          & $makepri createconfig /cf $priConfig /dq en-US /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed" }
+          [xml]$pri = Get-Content $priConfig
+          # Keep resources in this package rather than creating resource packs.
+          $packaging = $pri.SelectSingleNode('//packaging')
+          if ($packaging) { $packaging.ParentNode.RemoveChild($packaging) | Out-Null }
+          $pri.Save($priConfig)
+          & $makepri new /pr $stage /cf $priConfig /mn (Join-Path $stage 'AppxManifest.xml') /of (Join-Path $stage 'resources.pri') /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri new failed" }
 
           $appx = "dist/${{ matrix.artifact }}.appx"
           & $makeappx pack /d $stage /p $appx /o

@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
+	"unicode/utf16"
 )
 
 // oldExeSuffix marks the displaced copy of a running exe. Windows lets a
@@ -33,18 +37,108 @@ func applyUpdate(channel updateChannel, payload string) error {
 // app again once it finishes. The installer may raise a UAC prompt for a
 // per-machine install; the UI warns about that before this is called.
 func runSilentInstaller(installer, exe string) error {
-	// One detached cmd does both halves so the relaunch survives our exit:
-	// /wait blocks until the installer is done, then start re-opens the app.
-	script := fmt.Sprintf(`start "" /wait "%s" /S && start "" "%s"`, installer, exe)
-	cmd := exec.Command("cmd", "/c", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: detachedProcess | createNewProcessGroup}
-	return cmd.Start()
+	if _, err := os.Stat(installer); err != nil {
+		return fmt.Errorf("update: installer unavailable: %w", err)
+	}
+	return startWindowsUpdateHelper(installer, exe)
 }
 
-const (
-	detachedProcess       = 0x00000008
-	createNewProcessGroup = 0x00000200
-)
+// PowerShell's process wait works without a console. cmd's timeout exits
+// immediately with redirected stdin, racing the single-instance lock; starting
+// NSIS before this process exits also races the locked executable. Keep the
+// helper unelevated so the relaunched app runs as the original user, and elevate
+// only NSIS (the Wails installer requires admin rights).
+func startWindowsUpdateHelper(installer, exe string) error {
+	script := windowsUpdateScript(installer, exe, windowsUpdateErrorPath(), os.Getpid(), 2*time.Minute)
+	cmd := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encodePowerShellCommand(script))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | 0x00000200 /* CREATE_NEW_PROCESS_GROUP */}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("update: could not start update helper: %w", err)
+	}
+	return cmd.Process.Release()
+}
+
+func windowsUpdateErrorPath() string {
+	// Keep failures outside the download cache, which startup cleans up.
+	return filepath.Join(appConfigDir(), "update-error.txt")
+}
+
+func pendingUpdateError() string {
+	path := windowsUpdateErrorPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	_ = os.Remove(path)
+	// Windows PowerShell 5.1's UTF-8 Set-Content writes a BOM.
+	return strings.TrimSpace(strings.TrimPrefix(string(data), "\ufeff"))
+}
+
+func powerShellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func encodePowerShellCommand(script string) string {
+	units := utf16.Encode([]rune(script))
+	data := make([]byte, 2*len(units))
+	for i, unit := range units {
+		binary.LittleEndian.PutUint16(data[2*i:], unit)
+	}
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+func windowsUpdateScript(installer, exe, errorPath string, pid int, wait time.Duration) string {
+	install := ""
+	if installer != "" {
+		// NSIS /D must be last and its directory must not be quoted, even when
+		// it contains spaces. Start-Process passes this one argument string on.
+		install = fmt.Sprintf(`
+    $installer = Start-Process -FilePath %s -ArgumentList %s -Verb RunAs -Wait -PassThru
+    if ($installer.ExitCode -ne 0) { throw "Installer exited with code $($installer.ExitCode)" }
+`, powerShellQuote(installer), powerShellQuote("/S /D="+filepath.Dir(exe)))
+	}
+	return fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+$exe = %s
+$errorPath = %s
+function Write-UpdateError([string]$message) {
+    try {
+        Set-Content -LiteralPath $errorPath -Value ("Windows update failed: " + $message) -Encoding UTF8
+    } catch { }
+}
+$deadline = [DateTime]::UtcNow.AddMilliseconds(%d)
+while (Get-Process -Id %d -ErrorAction SilentlyContinue) {
+    if ([DateTime]::UtcNow -ge $deadline) {
+        Write-UpdateError 'Timed out waiting for Meron to exit. Please restart Meron and try the update again.'
+        exit 1
+    }
+    Start-Sleep -Milliseconds 200
+}
+try {
+%s
+} catch {
+    Write-UpdateError $_.Exception.Message
+}
+# Reopen the existing app even if elevation was cancelled or installation failed.
+try {
+    # Use .NET directly: Start-Process resolves WorkingDirectory as a wildcard
+    # path in Windows PowerShell, so brackets in a portable install can fail.
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $exe
+    $startInfo.WorkingDirectory = [System.IO.Path]::GetDirectoryName($exe)
+    $startInfo.UseShellExecute = $true
+    [void][System.Diagnostics.Process]::Start($startInfo)
+} catch {
+    # Constrained Language Mode blocks constructing ProcessStartInfo and
+    # calling Process.Start, but permits Start-Process. Omit WorkingDirectory
+    # here so bracketed paths do not go through its wildcard resolution.
+    try {
+        Start-Process -FilePath $exe
+    } catch {
+        Write-UpdateError $_.Exception.Message
+    }
+}
+`, powerShellQuote(exe), powerShellQuote(errorPath), wait.Milliseconds(), pid, install)
+}
 
 // replacePortableExe swaps the loose meron.exe from the portable zip.
 func replacePortableExe(archive, exe string) error {
@@ -72,12 +166,7 @@ func replacePortableExe(archive, exe string) error {
 		return fmt.Errorf("update: could not move the new executable into place: %w", err)
 	}
 
-	// A short delay covers process teardown; the old exe still holds the
-	// single-instance lock for a moment after Quit returns.
-	script := fmt.Sprintf(`timeout /t 3 /nobreak >nul & start "" "%s"`, exe)
-	cmd := exec.Command("cmd", "/c", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: detachedProcess | createNewProcessGroup}
-	return cmd.Start()
+	return startWindowsUpdateHelper("", exe)
 }
 
 func extractExeFromZip(archive, name, dest string) error {

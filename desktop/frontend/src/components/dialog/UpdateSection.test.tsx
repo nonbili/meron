@@ -23,4 +23,25 @@ describe('UpdateSection', () => {
     expect(html).toContain('install directory is not writable')
     expect(html).toContain('Restart &amp; install')
   })
+
+  it('shows an update error as readable text instead of only a tooltip', () => {
+    const message = 'Windows update failed: elevation cancelled'
+    update$.status.set({ ...EMPTY_UPDATE_STATUS, supported: true, state: 'error', error: message })
+    const html = renderToStaticMarkup(<UpdateSection />)
+    expect(html).toMatch(/<p\b[^>]*>Windows update failed: elevation cancelled<\/p>/)
+  })
+
+  it('keeps the installation explanation visible when a check finds an update', () => {
+    const message = 'Windows update failed: elevation cancelled'
+    update$.status.set({
+      ...EMPTY_UPDATE_STATUS,
+      supported: true,
+      state: 'available',
+      latestVersion: '0.4.2',
+      installError: message,
+    })
+    const html = renderToStaticMarkup(<UpdateSection />)
+    expect(html).toMatch(/<p\b[^>]*>Windows update failed: elevation cancelled<\/p>/)
+    expect(html).toContain('Download')
+  })
 })

@@ -10,6 +10,15 @@ package main
 
 static GtkWindow *mainWindow = NULL;
 static gboolean wantIntegrated = FALSE;
+static gboolean waitStartupMaximise = FALSE;
+static gboolean startupReady = FALSE;
+static gboolean startupRevealed = FALSE;
+
+static void revealStartupIfReady(void) {
+	if (mainWindow == NULL || startupRevealed || !startupReady || waitStartupMaximise) return;
+	gtk_widget_set_opacity(GTK_WIDGET(mainWindow), 1.0);
+	startupRevealed = TRUE;
+}
 
 static GMutex chromeMu;
 static gchar *decorationLayout = NULL;
@@ -75,6 +84,10 @@ extern void goWindowStateChanged(void);
 static gboolean onWindowState(GtkWidget *widget, GdkEventWindowState *event, gpointer data) {
 	g_atomic_int_set(&tiled, (event->new_window_state & TILED_STATES) != 0);
 	if (wantIntegrated) clearSizeHints();
+	if (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) {
+		waitStartupMaximise = FALSE;
+		revealStartupIfReady();
+	}
 	goWindowStateChanged();
 	return FALSE;
 }
@@ -122,6 +135,10 @@ static gboolean onRealize(GSignalInvocationHint *hint, guint n, const GValue *pa
 		return TRUE;
 	}
 	mainWindow = GTK_WINDOW(object);
+	// Conceal the initial normal-size window without unmapping it: maximising
+	// an unmapped window loses the restore geometry on GNOME. React reveals
+	// it after its first frame, while WebKit continues rendering underneath.
+	gtk_widget_set_opacity(GTK_WIDGET(object), 0.0);
 	g_object_add_weak_pointer(object, (gpointer *)&mainWindow);
 	g_signal_connect(object, "window-state-event", G_CALLBACK(onWindowState), NULL);
 	GtkStyleContext *style = gtk_widget_get_style_context(GTK_WIDGET(object));
@@ -133,6 +150,7 @@ static gboolean onRealize(GSignalInvocationHint *hint, guint n, const GValue *pa
 		g_signal_connect(settings, "notify::gtk-titlebar-double-click", G_CALLBACK(onChromeSettingChanged), NULL);
 	}
 	applyTitlebar();
+	revealStartupIfReady();
 	return FALSE;
 }
 
@@ -152,6 +170,22 @@ static gboolean setIntegratedIdle(gpointer data) {
 
 static void setIntegrated(int integrated) {
 	g_idle_add(setIntegratedIdle, integrated ? GINT_TO_POINTER(1) : NULL);
+}
+
+static gboolean revealStartupIdle(gpointer data) {
+	startupReady = TRUE;
+	if (data != NULL) waitStartupMaximise = FALSE;
+	revealStartupIfReady();
+	return G_SOURCE_REMOVE;
+}
+
+static void revealStartupWindow(int force) {
+	g_idle_add(revealStartupIdle, force ? GINT_TO_POINTER(1) : NULL);
+}
+
+// Called before wails.Run, before any GTK callbacks can read this flag.
+static void expectStartupMaximise(int maximised) {
+	waitStartupMaximise = maximised ? TRUE : FALSE;
 }
 
 // The window's own close, so it runs through delete-event and Wails'
@@ -192,6 +226,14 @@ func installWindowChrome(integrated bool) {
 
 func setNativeTitlebarIntegrated(integrated bool) {
 	C.setIntegrated(cBool(integrated))
+}
+
+func nativeRevealStartupWindow(force bool) {
+	C.revealStartupWindow(cBool(force))
+}
+
+func nativeExpectStartupMaximise(maximised bool) {
+	C.expectStartupMaximise(cBool(maximised))
 }
 
 // nativeDrawsFrame reports whether GTK draws the window frame (see gtkFrame).

@@ -76,4 +76,18 @@ class NotificationThreadIdsTest {
         assertEquals(null, parseNotificationThreadId("me@example.com#INBOX"))
         assertEquals(null, parseNotificationThreadId(""))
     }
+
+    @Test
+    fun foldersContainingHashAndHeaderKeysRoundTrip() {
+        val key = "<abc@example.com>#日本語 & subject"
+        val id = notificationThreadId("a", "Folder with # sign", key)
+        assertEquals(ParsedThreadId("a", "Folder with # sign", key), parseNotificationThreadId(id))
+    }
+
+    @Test
+    fun feedIdsKeepSubscriptionKeysAndEmptyEncodedKeysAreRejected() {
+        assertEquals(ParsedThreadId("rss-a", "rss", "subscription"), parseNotificationThreadId("rss-a#rss#subscription"))
+        assertEquals(null, parseNotificationThreadId("a#INBOX#t."))
+        assertEquals(null, parseNotificationThreadId("a#INBOX#t.!!!"))
+    }
 }

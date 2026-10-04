@@ -27,10 +27,11 @@ type App struct {
 	trayStopOnce  sync.Once
 	// closeToTray is pushed by the frontend from its settings; until then the
 	// close button keeps its long-standing behaviour of hiding to the tray.
-	closeToTray  atomic.Bool
-	quitting     atomic.Bool
-	closing      atomic.Bool
-	windowHidden atomic.Bool
+	closeToTray     atomic.Bool
+	quitting        atomic.Bool
+	closing         atomic.Bool
+	windowHidden    atomic.Bool
+	windowReadyOnce sync.Once
 
 	windowMu        sync.Mutex
 	window          windowState
@@ -99,6 +100,7 @@ func NewApp() *App {
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.armStartupWindowFallback(startupWindowRevealDelay)
 	a.quitOnSignal()
 	a.queueStartupMailtoURLs(os.Args[1:])
 	if wailsRuntime.Environment(ctx).BuildType != "dev" {
@@ -215,6 +217,9 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.traySetUnread(payload)
 	case "window.resized":
 		return a.windowResized()
+	case "window.ready":
+		a.revealWindow(false)
+		return map[string]any{"ok": true}, nil
 	case "window.chrome":
 		return a.windowChrome()
 	case "window.setTitlebar":

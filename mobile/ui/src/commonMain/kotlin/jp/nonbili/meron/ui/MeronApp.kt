@@ -221,6 +221,7 @@ fun MeronApp(
     incomingOAuthCallbackUrl: String? = null,
     onOAuthCallbackConsumed: () -> Unit = {},
     incomingNotificationThreadTarget: NotificationThreadTarget? = null,
+    onNotificationThreadTargetConsumed: () -> Unit = {},
     /**
      * Notified after the language has been stored and pushed to the OS, for hosts
      * that must react — Android recreates its Activity to reload resources.
@@ -336,6 +337,7 @@ fun MeronApp(
                 incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
                 onOAuthCallbackConsumed = onOAuthCallbackConsumed,
                 incomingNotificationThreadTarget = incomingNotificationThreadTarget,
+                onNotificationThreadTargetConsumed = onNotificationThreadTargetConsumed,
                 themeChoice = themeChoice,
                 systemDark = systemDark,
                 onThemeChoiceChange = onThemeChoiceChange,
@@ -389,6 +391,7 @@ private fun MeronMobileScreenContent(
     incomingOAuthCallbackUrl: String?,
     onOAuthCallbackConsumed: () -> Unit,
     incomingNotificationThreadTarget: NotificationThreadTarget?,
+    onNotificationThreadTargetConsumed: () -> Unit,
     themeChoice: ThemeChoice,
     systemDark: Boolean,
     onThemeChoiceChange: (ThemeChoice) -> Unit,
@@ -831,7 +834,10 @@ private fun MeronMobileScreenContent(
         }
 
         LaunchedEffect(incomingNotificationThreadTarget) {
-            incomingNotificationThreadTarget?.let(::openNotificationThread)
+            incomingNotificationThreadTarget?.let { target ->
+                openNotificationThread(target)
+                onNotificationThreadTargetConsumed()
+            }
         }
 
         // Load persisted accounts once on startup so they survive app restarts.

@@ -7,6 +7,12 @@ import org.junit.Test
 
 class AndroidUnreadWidgetTest {
     @Test
+    fun feedRowsOpenTheAppWhileMailRowsKeepTheirThreadTarget() {
+        assertNull(widgetThreadTarget("rss-a#rss#subscription"))
+        assertEquals("uid:51", widgetThreadTarget("a#INBOX#51")?.threadKey)
+    }
+
+    @Test
     fun countsOnlyTheInbox() {
         val folders =
             listOf(

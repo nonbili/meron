@@ -29,6 +29,8 @@ export interface UpdateStatus {
   downloaded: number
   total: number
   error: string
+  /** Last installation failure, retained across checks until the user retries. */
+  installError?: string
   releasesUrl: string
 }
 

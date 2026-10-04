@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from './lib/i18n'
 import { ui$ } from './states/ui'
@@ -27,7 +26,7 @@ import { AppToast } from './components/toast/AppToast'
 import { McpApprovalDialog } from './components/dialog/McpApprovalDialog'
 import { AppConfirm } from './components/dialog/AppConfirm'
 import { CertificateTrustDialog } from './components/dialog/CertificateTrustDialog'
-import { TitleBar } from './components/titlebar/TitleBar'
+import { TitleBar, useTitleBar } from './components/titlebar/TitleBar'
 import { ConnectivityBanner } from './components/banner/ConnectivityBanner'
 import { UpdateBanner } from './components/banner/UpdateBanner'
 import { SetupScreen } from './components/setup/SetupScreen'
@@ -38,7 +37,6 @@ import { FeedEditDialog } from './components/dialog/FeedEditDialog'
 
 export default function App() {
   const { t } = useTranslation()
-  const mainRef = useRef<HTMLElement | null>(null)
   const system = useValue(ui$.system)
   const accounts = useValue(accounts$)
   const activeBoardId = useValue(kanban$.activeBoardId)
@@ -55,6 +53,11 @@ export default function App() {
   const editFeed = useValue(ui$.editFeed)
 
   useAppEffects()
+  // With Meron's own title bar, it and the side navigation form one frame
+  // around the content (the L-shaped frame of Slack, Discord, Teams): the
+  // content sits on its own surface with a rounded top-left corner, so the
+  // title bar reads as the window's frame rather than a second toolbar.
+  const frame = useTitleBar()
 
   const showKanbanMessagePane = !!kanbanPaneThreadId || composeTabs.some((tab) => tab.id === activeComposeTab)
 
@@ -75,43 +78,49 @@ export default function App() {
       <TitleBar />
       <ConnectivityBanner />
       <UpdateBanner />
-      <main ref={mainRef} className="flex min-h-0 w-full flex-1 overflow-hidden">
+      <main className={`flex min-h-0 w-full flex-1 overflow-hidden ${frame ? 'bg-sidenav' : ''}`}>
         <ErrorBoundary label="side navigation">
           <SideNav />
         </ErrorBoundary>
-        <ErrorBoundary label="thread list">
-          {activeBoardId ? (
-            <KanbanView boardId={activeBoardId} />
-          ) : (
-            <ThreadList width={threadListWidth} onResizeStart={startThreadListResize} />
-          )}
-        </ErrorBoundary>
-        {!activeBoardId ? (
-          <ErrorBoundary label="conversation">
-            <MessagePane />
+        <div className={frame ? 'app-frame-content' : 'contents'}>
+          <ErrorBoundary label="thread list">
+            {activeBoardId ? (
+              <KanbanView
+                boardId={activeBoardId}
+                aside={
+                  <KanbanConversationPane
+                    open={showKanbanMessagePane}
+                    widthPercent={kanbanPaneWidth}
+                    resizeTitle={t('layout.resizeConversation')}
+                    onResizeStart={startKanbanResize}
+                  >
+                    <ErrorBoundary label="conversation">
+                      <MessagePane />
+                    </ErrorBoundary>
+                  </KanbanConversationPane>
+                }
+              />
+            ) : (
+              <ThreadList width={threadListWidth} onResizeStart={startThreadListResize} />
+            )}
           </ErrorBoundary>
-        ) : (
-          <KanbanConversationPane
-            open={showKanbanMessagePane}
-            widthPercent={kanbanPaneWidth}
-            resizeTitle={t('layout.resizeConversation')}
-            onResizeStart={(event) => startKanbanResize(event, mainRef.current)}
-          >
+          {/* On a board the conversation opens inside KanbanView, under its header. */}
+          {!activeBoardId && (
             <ErrorBoundary label="conversation">
               <MessagePane />
             </ErrorBoundary>
-          </KanbanConversationPane>
-        )}
+          )}
 
-        {/* Tasks is a panel, not a view: it sits to the right of whatever is
+          {/* Tasks is a panel, not a view: it sits to the right of whatever is
           open so a list can be worked against the thread list beside it. */}
-        <TasksSlide open={tasksPanelOpen && !!activeTaskList}>
-          {activeTaskList ? (
-            <ErrorBoundary label="tasks">
-              <TasksPanel listId={activeTaskList} />
-            </ErrorBoundary>
-          ) : null}
-        </TasksSlide>
+          <TasksSlide open={tasksPanelOpen && !!activeTaskList}>
+            {activeTaskList ? (
+              <ErrorBoundary label="tasks">
+                <TasksPanel listId={activeTaskList} />
+              </ErrorBoundary>
+            ) : null}
+          </TasksSlide>
+        </div>
 
         <AppHotkeys />
         <QuitHotkey />

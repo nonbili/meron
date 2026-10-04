@@ -1093,9 +1093,18 @@ func TestIntegrationMailFlow(t *testing.T) {
 					strings.EqualFold(str(event.detail, "folder"), folder)
 			})
 		}
-		callMap(t, sidecar, "watch.start", map[string]any{"account": "bob", "folder": folder})
-
+		// Finish the startup catch-up before appending, so it cannot satisfy
+		// the event and cache assertions for the subsequent IDLE push.
 		baseline := synced()
+		callMap(t, sidecar, "watch.start", map[string]any{"account": "bob", "folder": folder})
+		deadline := time.Now().Add(60 * time.Second)
+		for synced() == baseline {
+			if time.Now().After(deadline) {
+				t.Fatalf("initial watch catch-up did not sync %s (synced %d, baseline %d)", folder, synced(), baseline)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		baseline = synced()
 		pushedSubject := "Meron integration idle pushed " + nonce
 		imapAppend(t, server.imapPort, "bob@mail.test", testPassword, folder, rawMessage([]string{
 			"From: Carol <carol@example.net>",
@@ -1105,24 +1114,29 @@ func TestIntegrationMailFlow(t *testing.T) {
 			"Date: " + time.Now().Format(time.RFC1123Z),
 		}, "pushed over IDLE"))
 
-		deadline := time.Now().Add(60 * time.Second)
-		for synced() == baseline {
-			if time.Now().After(deadline) {
-				t.Fatalf("IDLE never pushed a mail.synced for %s", folder)
+		// Wait for the expected cache contents as well as a new sync event;
+		// refresh:false ensures the watcher alone brings the message into SQLite.
+		waitCached := func(subject string, eventBaseline int, timeout time.Duration) {
+			t.Helper()
+			deadline := time.Now().Add(timeout)
+			for {
+				cached := callMap(t, sidecar, "messages.recent", map[string]any{
+					"account": "bob",
+					"folder":  folder,
+					"refresh": false,
+					"limit":   50,
+				})
+				eventCount := synced()
+				if eventCount > eventBaseline && messagesContainSubject(cached, subject) {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("IDLE watch did not cache %q in %s (synced %d, baseline %d): %v", subject, folder, eventCount, eventBaseline, cached)
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
-			time.Sleep(200 * time.Millisecond)
 		}
-		// refresh:false serves the store cache only, so a hit proves the push
-		// itself wrote the row.
-		cached := callMap(t, sidecar, "messages.recent", map[string]any{
-			"account": "bob",
-			"folder":  folder,
-			"refresh": false,
-			"limit":   50,
-		})
-		if !messagesContainSubject(cached, pushedSubject) {
-			t.Fatalf("IDLE push did not land %q in the store: %v", pushedSubject, cached)
-		}
+		waitCached(pushedSubject, baseline, 60*time.Second)
 
 		// Let the initial IDLE responses settle, then stop another folder's
 		// watcher. The original connection must stay parked, rather than doing
@@ -1172,7 +1186,7 @@ func TestIntegrationMailFlow(t *testing.T) {
 		if synced() != baseline {
 			t.Fatalf("a stopped watch kept syncing %s", folder)
 		}
-		cached = callMap(t, sidecar, "messages.recent", map[string]any{
+		cached := callMap(t, sidecar, "messages.recent", map[string]any{
 			"account": "bob",
 			"folder":  folder,
 			"refresh": false,
@@ -1186,22 +1200,8 @@ func TestIntegrationMailFlow(t *testing.T) {
 		// was stopped, proving the negative assertion above was not merely an
 		// append that had not reached the server yet.
 		callMap(t, sidecar, "watch.start", map[string]any{"account": "bob", "folder": folder})
-		deadline = time.Now().Add(30 * time.Second)
-		for synced() == baseline {
-			if time.Now().After(deadline) {
-				t.Fatalf("restarted watch never caught up %q", quietSubject)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		cached = callMap(t, sidecar, "messages.recent", map[string]any{
-			"account": "bob",
-			"folder":  folder,
-			"refresh": false,
-			"limit":   50,
-		})
-		if !messagesContainSubject(cached, quietSubject) {
-			t.Fatalf("restarted watch did not cache %q: %v", quietSubject, cached)
-		}
+		waitCached(quietSubject, baseline, 30*time.Second)
+
 		// Best-effort teardown only. The stop behavior was asserted above; once
 		// the restarted watcher has caught up, waiting for a second lifecycle
 		// event adds no coverage and can race the watcher entering IDLE.

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { Columns3, Plus, SquarePen } from 'lucide-react'
@@ -36,7 +36,12 @@ import { isRSSAccount, loadKanbanColumn, resolveKanbanMove, useFoldersByAccount 
 import { boardWallpaper, wallpaperCss } from '../../lib/wallpapers'
 import { useKanbanBoardSync, useKanbanDnd } from './useKanbanBoard'
 
-export function KanbanView({ boardId }: { boardId: string }) {
+/**
+ * `aside`: the board's conversation pane (App builds it). It opens beside the
+ * columns, *under* the board's header, so the header stays a toolbar across
+ * the whole board and its filters don't move when a card is opened.
+ */
+export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactNode }) {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
   const foldersByAccount = useFoldersByAccount()
@@ -168,7 +173,15 @@ export function KanbanView({ boardId }: { boardId: string }) {
 
   return (
     <section className="flex flex-1 min-w-0 flex-col bg-chats max-[768px]:w-full">
-      <div className="@container relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border/50 bg-header/70 backdrop-blur-md px-4">
+      <div
+        // Inside the framed content (Meron's title bar) the header sits in its
+        // rounded top-left corner, and WebKit (WebKitGTK, WKWebView) can fail to
+        // clip a blurred, separately composited layer to a rounded corner. Nothing
+        // scrolls under the header, so the blur changes nothing visible there.
+        className={`@container relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border/50 bg-header/70 px-4 ${
+          titleBar ? '' : 'backdrop-blur-md'
+        }`}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           {board?.avatarUrl ? (
             <img
@@ -226,63 +239,68 @@ export function KanbanView({ boardId }: { boardId: string }) {
           onCreateFolder={createDialogFolder}
         />
       )}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        // Locked boards stay put: a drag never scrolls the columns out from
-        // under the pointer, so a curated set of visible columns keeps its
-        // place. Off-screen columns are still reachable via "Move to…".
-        autoScroll={!lockScroll}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setDragPreview(null)}
-      >
-        <div className="relative flex flex-1 min-h-0">
-          {boardWallpaperCss && (
-            <div className={`absolute inset-0 ${boardWallpaperCss.className}`} style={boardWallpaperCss.style} />
-          )}
-          <div className="relative flex flex-1 min-h-0 gap-2 overflow-x-auto p-2">
-            {visibleColumns.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center">
-                <EmptyState title={t('empty.noColumns')} text={t('empty.noColumnsText')} />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            // Locked boards stay put: a drag never scrolls the columns out from
+            // under the pointer, so a curated set of visible columns keeps its
+            // place. Off-screen columns are still reachable via "Move to…".
+            autoScroll={!lockScroll}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setDragPreview(null)}
+          >
+            <div className="relative flex flex-1 min-h-0">
+              {boardWallpaperCss && (
+                <div className={`absolute inset-0 ${boardWallpaperCss.className}`} style={boardWallpaperCss.style} />
+              )}
+              <div className="relative flex flex-1 min-h-0 gap-2 overflow-x-auto p-2">
+                {visibleColumns.length === 0 ? (
+                  <div className="flex flex-1 items-center justify-center">
+                    <EmptyState title={t('empty.noColumns')} text={t('empty.noColumnsText')} />
+                  </div>
+                ) : (
+                  <SortableContext
+                    items={visibleColumns.map((column) => kanbanBoardColumnKey(boardId, column))}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    {visibleColumns.map((column) => (
+                      <SortableColumn
+                        key={kanbanColumnKey(column)}
+                        boardId={boardId}
+                        column={column}
+                        // While a card is in the air, every column that would refuse
+                        // it says so up front instead of only after the drop.
+                        dropRejection={dropRejections[kanbanColumnKey(column)]}
+                        onMoveThread={moveThread}
+                        onSearchColumn={searchColumn}
+                        threadMenu={threadMenu}
+                      />
+                    ))}
+                  </SortableContext>
+                )}
+                <button
+                  type="button"
+                  className="group flex h-full w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-chats/45 text-secondary backdrop-blur-sm transition-colors hover:border-accent/50 hover:bg-chats/75 hover:text-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
+                  title={t('kanban.actions.addColumn')}
+                  aria-label={t('kanban.actions.addColumn')}
+                  onClick={() => void openDialog()}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chats/80 shadow-sm transition-colors group-hover:bg-accent/10">
+                    <Plus size={16} />
+                  </span>
+                </button>
               </div>
-            ) : (
-              <SortableContext
-                items={visibleColumns.map((column) => kanbanBoardColumnKey(boardId, column))}
-                strategy={horizontalListSortingStrategy}
-              >
-                {visibleColumns.map((column) => (
-                  <SortableColumn
-                    key={kanbanColumnKey(column)}
-                    boardId={boardId}
-                    column={column}
-                    // While a card is in the air, every column that would refuse
-                    // it says so up front instead of only after the drop.
-                    dropRejection={dropRejections[kanbanColumnKey(column)]}
-                    onMoveThread={moveThread}
-                    onSearchColumn={searchColumn}
-                    threadMenu={threadMenu}
-                  />
-                ))}
-              </SortableContext>
-            )}
-            <button
-              type="button"
-              className="group flex h-full w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-chats/45 text-secondary backdrop-blur-sm transition-colors hover:border-accent/50 hover:bg-chats/75 hover:text-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
-              title={t('kanban.actions.addColumn')}
-              aria-label={t('kanban.actions.addColumn')}
-              onClick={() => void openDialog()}
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chats/80 shadow-sm transition-colors group-hover:bg-accent/10">
-                <Plus size={16} />
-              </span>
-            </button>
-          </div>
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {dragPreview ? <KanbanDragPreview thread={dragPreview.thread} column={dragPreview.column} /> : null}
+            </DragOverlay>
+          </DndContext>
         </div>
-        <DragOverlay dropAnimation={null}>
-          {dragPreview ? <KanbanDragPreview thread={dragPreview.thread} column={dragPreview.column} /> : null}
-        </DragOverlay>
-      </DndContext>
+        {aside}
+      </div>
     </section>
   )
 }

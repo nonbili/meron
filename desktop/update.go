@@ -77,21 +77,29 @@ type updateAsset struct {
 type updater struct {
 	app *App
 
-	mu         sync.Mutex
-	state      string
-	latest     string
-	pubDate    string
-	errMessage string
-	downloaded int64
-	total      int64
-	asset      updateAsset
-	stagedPath string
-	busy       bool
-	lastEmit   time.Time
+	mu           sync.Mutex
+	state        string
+	latest       string
+	pubDate      string
+	errMessage   string
+	installError string // Restored helper failure; checks must not erase it.
+	downloaded   int64
+	total        int64
+	asset        updateAsset
+	stagedPath   string
+	busy         bool
+	lastEmit     time.Time
 }
 
 func newUpdater(app *App) *updater {
-	return &updater{app: app, state: updateStateIdle}
+	u := &updater{app: app, state: updateStateIdle}
+	if message := pendingUpdateError(); message != "" {
+		u.state = updateStateError
+		u.errMessage = message
+		u.installError = message
+		app.logf("update: %s", message)
+	}
+	return u
 }
 
 // updateStatusPayload is what both the update.status command and the
@@ -107,6 +115,7 @@ type updateStatusPayload struct {
 	Downloaded     int64  `json:"downloaded"`
 	Total          int64  `json:"total"`
 	Error          string `json:"error"`
+	InstallError   string `json:"installError,omitempty"`
 	ReleasesURL    string `json:"releasesUrl"`
 }
 
@@ -124,6 +133,7 @@ func (u *updater) statusLocked() updateStatusPayload {
 		Downloaded:     u.downloaded,
 		Total:          u.total,
 		Error:          u.errMessage,
+		InstallError:   u.installError,
 		ReleasesURL:    releasesURLFor(u.latest),
 	}
 }
@@ -242,6 +252,7 @@ func (u *updater) check() (any, error) {
 	u.errMessage = ""
 	if compareVersions(manifest.Version, appVersion()) <= 0 {
 		u.state = updateStateIdle
+		u.installError = ""
 		u.asset = updateAsset{}
 		u.discardStagedLocked()
 	} else if u.state != updateStateReady || u.asset.SHA256 != asset.SHA256 {
@@ -324,6 +335,7 @@ func (u *updater) startDownload() (any, error) {
 		return u.statusLocked(), errors.New("no update available to download")
 	}
 	asset := u.asset
+	u.installError = ""
 	u.state = updateStateDownloading
 	u.errMessage = ""
 	u.downloaded = 0
@@ -517,6 +529,7 @@ func (u *updater) install() (any, error) {
 	}
 	channel := u.app.updateChannel()
 	staged := u.stagedPath
+	u.installError = ""
 	u.state = updateStateInstalling
 	u.errMessage = ""
 	u.emitLocked(true)

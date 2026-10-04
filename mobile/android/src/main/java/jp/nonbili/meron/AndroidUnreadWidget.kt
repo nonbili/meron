@@ -14,12 +14,14 @@ import android.widget.RemoteViews
 import androidx.core.widget.RemoteViewsCompat
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.FolderSummary
+import jp.nonbili.meron.shared.ParsedThreadId
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.parseAccountListResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseNotificationThreadId
 import jp.nonbili.meron.shared.parseThreadListPage
+import jp.nonbili.meron.shared.threadIdIsRss
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
@@ -302,8 +304,8 @@ object AndroidUnreadWidget {
             setTextViewText(R.id.widget_item_sender, thread.sender)
             setTextViewText(R.id.widget_item_subject, thread.subject)
             setTextViewText(R.id.widget_item_date, rowDate(context, thread.dateEpochSeconds))
-            // Feed threads don't split into account/folder/key; they open the app.
-            val target = parseNotificationThreadId(thread.id)
+            // Keep feed taps opening the app, as before the shared parser gained RSS support.
+            val target = widgetThreadTarget(thread.id)
             setOnClickFillInIntent(
                 R.id.widget_item_root,
                 Intent().apply {
@@ -381,3 +383,6 @@ internal fun widgetInbox(folders: List<FolderSummary>): FolderSummary? = folders
 
 /** Fits a 1x1 cell: four digits would crowd the icon. */
 internal fun widgetCountLabel(count: Int): String = if (count > 999) "999+" else count.coerceAtLeast(0).toString()
+
+/** Feed rows preserve their app-open behavior even though the shared parser supports RSS. */
+internal fun widgetThreadTarget(threadId: String): ParsedThreadId? = threadId.takeUnless(::threadIdIsRss)?.let(::parseNotificationThreadId)

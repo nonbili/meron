@@ -21,6 +21,19 @@ jobs:
       - run: go test -tags webkit2_41 ./...
         working-directory: desktop
 
+  windows-update:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: Create desktop/frontend/dist placeholder
+        shell: bash
+        run: mkdir -p desktop/frontend/dist && touch desktop/frontend/dist/placeholder
+      - run: go test -run 'TestWindowsUpdate|TestExtractExeFromZip' .
+        working-directory: desktop
+
   rust:
     runs-on: ubuntu-latest
     steps:

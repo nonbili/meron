@@ -60,7 +60,7 @@ export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut
       {...listeners}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      className="relative w-full flex justify-center group cursor-move"
+      className="relative w-full flex justify-center group cursor-pointer"
       title={board.name + (shortcut ? ` (${shortcut})` : '')}
     >
       {railIndicator(active)}
@@ -132,7 +132,7 @@ export function SortableAccount({
       onContextMenu={onContextMenu}
       onDragOver={(event) => onFeedDragOver?.(event, account)}
       onDrop={(event) => onFeedDrop?.(event, account)}
-      className="relative w-full flex justify-center group cursor-move"
+      className="relative w-full flex justify-center group cursor-pointer"
       title={baseTooltip + stateSuffix + (shortcut ? ` (${shortcut})` : '')}
     >
       {railIndicator(active)}

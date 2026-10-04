@@ -46,17 +46,16 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
   const kanbanBoard = useValue(kanban$.activeBoardId)
   const startControls = useValue(windowChrome$.layout.start)
   if (!shown) return null
-  // macOS: a little breathing room around the compact search. Windows: the caption's 32px, the
-  // caption buttons flush with the right edge. Linux: room for GNOME's 34px
-  // window controls.
-  const layout = isMac ? 'h-8 px-2' : windows ? 'h-8 pl-1.5' : 'h-10 px-1.5'
+  // A 40px bar on every platform leaves 4px above and below the 32px search.
+  // Windows caption buttons stay flush with the right edge.
+  const layout = isMac ? 'px-2' : windows ? 'pl-1.5' : 'px-1.5'
   return (
     <div
       data-titlebar
       // Three columns, the outer two equal while there is room, so the search
       // is centred on the window rather than between the ends' unequal contents.
       // Each end keeps at least its own width; the search gives way first.
-      className={`grid shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,28rem)_minmax(max-content,1fr)] items-center bg-sidenav text-sidenav-ink ${layout}`}
+      className={`grid h-10 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,36rem)_minmax(max-content,1fr)] items-center bg-sidenav text-sidenav-ink ${layout}`}
       onContextMenu={(event) => {
         // The search box keeps the webview's own menu for its text.
         if (!tools || event.defaultPrevented || event.target instanceof HTMLInputElement) return
@@ -81,8 +80,8 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
         )}
       </div>
       {/* The search of whatever is open: the thread list, or a kanban board.
-        Most of the row's height, a little off it on each side. */}
-      <div className={`flex min-w-0 px-2 ${isMac || windows ? 'h-6.5' : 'h-8'}`}>
+        32px on every platform. */}
+      <div className="flex h-8 min-w-0 px-2">
         {tools && (kanbanBoard ? <KanbanSearch boardId={kanbanBoard} compact /> : <ThreadSearchInput compact />)}
       </div>
       <div className="flex h-full items-center justify-end">
@@ -111,7 +110,8 @@ function TitleBarTools({ menu, setMenu }: { menu: MenuPosition; setMenu: Dispatc
   const windows = useValue(windowChrome$.platform) === 'windows'
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
-  const compact = isMac || windows
+  // macOS keeps its compact tool buttons.
+  const compact = isMac
   const button = `flex shrink-0 items-center justify-center rounded-lg transition-colors cursor-pointer ${
     compact ? 'h-6 w-6' : 'h-8 w-8'
   }`

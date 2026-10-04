@@ -46,7 +46,8 @@ export function SideNav() {
   const selectedAccount = useValue(ui$.selectedAccount)
   const hasSendableAccount = accounts.some(isSendableAccount)
   // Tasks and the more menu live in Meron's own title bar when there is one.
-  const utilities = !useTitleBar()
+  const titleBar = useTitleBar()
+  const utilities = !titleBar
   // Right-click context menu anchored at the cursor for one account.
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const menuAccount = menu ? accounts.find((acc) => acc.id === menu.id) : null
@@ -146,7 +147,7 @@ export function SideNav() {
 
   return (
     <aside
-      className="flex w-[60px] shrink-0 flex-col items-center bg-sidenav px-0 pt-1 pb-4 max-[768px]:hidden select-none"
+      className={`flex w-[60px] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-1'}`}
       onContextMenu={(event) => {
         if (event.defaultPrevented) return
         event.preventDefault()
@@ -163,7 +164,8 @@ export function SideNav() {
           >
             <SquarePen size={18} />
           </button>
-          {/* 4 + 40 + 3: the divider lands on the 48px header row's bottom border. */}
+          {/* 4 + 40 + 3 aligns with the 48px header's bottom border;
+            the framed layout adds 1px of top padding for its outer border. */}
           <div className={`mt-[3px] ${railDivider}`} />
         </>
       )}

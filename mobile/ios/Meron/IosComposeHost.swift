@@ -16,7 +16,11 @@ private final class IosCloseableHandle: CloseableHandle {
 private final class IosCoreEventStream: CoreEventStream {
     func subscribe(listener: @escaping (CoreEvent) -> Void) -> CloseableHandle {
         RustCoreBridge.setEventHandler { eventJson in
-            listener(MeronCoreKt.parseCoreEventEnvelope(eventJson: eventJson))
+            let event = MeronCoreKt.parseCoreEventEnvelope(eventJson: eventJson)
+            listener(event)
+            if ["ready", "mail.synced", "mail.newMessages"].contains(event.name) {
+                IosUnreadWidgets.refresh()
+            }
         }
         _ = meron_core_emit_ready_event()
         return IosCloseableHandle {
@@ -35,6 +39,9 @@ final class IosMeronCore: MeronCore {
     func invoke(command: String, payloadJson: String, completionHandler: @escaping (String?, Error?) -> Void) {
         let request = CoreRequest(id: 1, method: command, paramsJson: payloadJson)
         completionHandler(RustCoreBridge.invokeJson(request.toJson()), nil)
+        if IosUnreadWidgets.commandChangesSnapshot(command) {
+            IosUnreadWidgets.refresh()
+        }
     }
 
     func protocolVersion(completionHandler: @escaping (KotlinInt?, Error?) -> Void) {
@@ -48,7 +55,7 @@ struct IosComposeHost: UIViewControllerRepresentable {
     let coreInitJson: String
     let incomingMailtoEvents: IncomingMailtoEvents
     let incomingOAuthCallbackUrl: String?
-    let incomingNotificationThreadTarget: NotificationThreadTarget?
+    let incomingThreadEvents: IncomingThreadEvents
     let coreProtocolVersion: Int32
 
     func makeUIViewController(context _: Context) -> UIViewController {
@@ -59,7 +66,8 @@ struct IosComposeHost: UIViewControllerRepresentable {
             incomingMailtoDraft: nil,
             incomingMailtoEvents: incomingMailtoEvents,
             incomingOAuthCallbackUrl: incomingOAuthCallbackUrl,
-            incomingNotificationThreadTarget: incomingNotificationThreadTarget,
+            incomingNotificationThreadTarget: nil,
+            incomingThreadEvents: incomingThreadEvents,
             outlookClientId: Bundle.main.object(forInfoDictionaryKey: "MERON_OUTLOOK_CLIENT_ID") as? String ?? "",
             outlookRedirectUri: Bundle.main.object(forInfoDictionaryKey: "MERON_OUTLOOK_REDIRECT_URI") as? String ?? "",
             googleClientId: Bundle.main.object(forInfoDictionaryKey: "MERON_GOOGLE_CLIENT_ID") as? String ?? "",

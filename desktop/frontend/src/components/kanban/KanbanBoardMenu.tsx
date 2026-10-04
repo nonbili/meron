@@ -46,7 +46,13 @@ const stepperButton = (disabled: boolean) =>
 const stepperRow =
   'flex h-8 w-full items-center gap-2 whitespace-nowrap rounded-lg px-2 text-left text-[0.8125rem] font-normal leading-normal text-primary'
 
-// Inline board-wide filter, shown in the header only when there's room. On narrow
+// Inline board-wide filter, shown in the header only when there's room: 32px,
+// the height and 8px radius of the title bar's search, for balance. The pills
+// stretch to the track's full inner height, so the 2px gap around the selected
+// one is the same on all four sides, and their 6px corners (8 − 2px) run
+// parallel to the track's. Its track is
+// the same recipe as the search's (its surface's text colour at 10%), so the two
+// weigh the same in light, dark and custom themes. On narrow
 // widths it's hidden (@min-[640px]) and the same options live inside BoardMenu.
 export function FilterSwitch({ value, onChange }: { value: FilterMode; onChange: (mode: FilterMode) => void }) {
   const { t } = useTranslation()
@@ -56,11 +62,11 @@ export function FilterSwitch({ value, onChange }: { value: FilterMode; onChange:
     { mode: 'starred', label: t('filters.starred'), icon: <Star size={13} /> },
   ]
   return (
-    <div className="hidden @min-[640px]:flex h-9 shrink-0 items-center gap-0.5 rounded-xl bg-active/70 p-[3px]">
+    <div className="hidden @min-[640px]:flex h-8 shrink-0 items-stretch gap-0.5 rounded-lg bg-primary/10 p-0.5">
       {options.map(({ mode, label, icon }) => (
         <button
           key={mode}
-          className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold cursor-pointer transition-all duration-200 ${
+          className={`flex items-center gap-1.5 rounded-md px-3 text-xs font-semibold cursor-pointer transition-all duration-200 ${
             value === mode ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:bg-hover hover:text-primary'
           }`}
           onClick={() => onChange(mode)}

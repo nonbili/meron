@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux || bindings
 
 package main
 
@@ -6,7 +6,18 @@ import (
 	"context"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+const startWindowHidden = true
+
+func revealStartupWindow(ctx context.Context) {
+	wailsRuntime.WindowShow(ctx)
+}
+
+// WindowShow completes the reveal immediately on these platforms. Keeping
+// force separate prevents the fallback from reopening a window hidden later.
+func forceRevealStartupWindow(ctx context.Context) {}
 
 // startWindowState maximises the window as it opens when the last session
 // ended maximised. Windows and macOS keep a sane restore geometry when a window

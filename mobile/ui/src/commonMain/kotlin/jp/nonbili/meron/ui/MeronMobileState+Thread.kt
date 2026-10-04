@@ -442,8 +442,8 @@ internal suspend fun MeronMobileState.refreshOpenThreadFor(eventAccount: String)
 /** Opens the conversation a tapped notification names, layered over whatever
  *  the user was looking at: the mailbox behind it keeps its account, folder,
  *  search and filter, so backing out returns to the Mail or Kanban view the tap
- *  interrupted rather than to the notification's own folder. The thread list is
- *  loaded only to find the thread and is then discarded. */
+ *  interrupted rather than to the notification's own folder. The thread is
+ *  opened directly by composite id without searching the mailbox. */
 internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -453,57 +453,7 @@ internal fun MeronMobileState.openNotificationThread(target: NotificationThreadT
         openNotificationMailbox(target)
         return
     }
-    scope.launch {
-        val folderReadVersion = folderReadGuard.version
-        runCatching {
-            withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                val accounts =
-                    coreAccounts.takeIf { accounts -> accounts.any { it.id == target.accountId } }
-                        ?: parseAccountListResponse(client.listAccounts())
-                val account =
-                    accounts.firstOrNull { it.id == target.accountId }
-                        ?: error("Account not found: ${target.accountId}")
-                val expectedThreadId = notificationThreadId(target.accountId, target.folder, target.threadKey)
-                var result =
-                    loadAccountInbox(
-                        client = client,
-                        account = account,
-                        requestedFolder = target.folder,
-                        query = "",
-                        filter = FilterMode.All,
-                        syncFirst = false,
-                    )
-                var thread = result.threads.firstOrNull { it.id == expectedThreadId }
-                if (thread == null) {
-                    result =
-                        loadAccountInbox(
-                            client = client,
-                            account = account,
-                            requestedFolder = target.folder,
-                            query = "",
-                            filter = FilterMode.All,
-                            syncFirst = true,
-                        )
-                    thread = result.threads.firstOrNull { it.id == expectedThreadId }
-                }
-                Triple(accounts, result, thread ?: error("Thread not found"))
-            }
-        }.onSuccess { (accounts, result, thread) ->
-            // Only what the thread view itself needs, never the mailbox state:
-            // the account list a cold start has not fetched yet, and the folder
-            // names the notification's account is filed under.
-            if (coreAccounts.isEmpty()) {
-                coreAccounts = accounts
-            }
-            if (result.folders.isNotEmpty()) {
-                foldersByAccount = foldersByAccount + reconcileFolderUnread(result.folders, folderReadVersion).groupBy { it.accountId }
-            }
-            readCoreThread(thread)
-        }.onFailure {
-            status = "Could not open notification: ${it.message}"
-        }
-    }
+    openLinkedThread(notificationThreadId(target.accountId, target.folder, target.threadKey), target.accountId)
 }
 
 /** A group summary names an account and folder but no conversation, so this one

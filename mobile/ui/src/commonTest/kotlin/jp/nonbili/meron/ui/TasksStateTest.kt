@@ -142,6 +142,36 @@ class TasksStateTest {
             coroutineContext.cancelChildren()
         }
 
+    @Test
+    fun oldNotificationThreadOpensDirectlyEvenAfterBeingArchived() =
+        runBlocking {
+            val core = RecordingCore()
+            core.threadMessages = """[{"id":"m1","folder_id":"Archive","subject":"Old unread","from_addr":"ada@example.com","date":7}]"""
+            val state = testState(core, this)
+            state.openNotificationThread(NotificationThreadTarget(accountId = "account", folder = "INBOX", threadKey = "thread"))
+            awaitState { core.commands.count { it == "mail.threadRead" } == 2 }
+            assertEquals(TASK_THREAD_ID, state.selectedCoreThread?.id)
+            assertEquals("Archive", state.selectedCoreThread?.folder)
+            assertEquals("Old unread", state.selectedCoreThread?.subject)
+            assertEquals(Screen.Thread, state.screen)
+            assertEquals(emptyList(), core.commands.filter { it in listOf("mail.threadList", "mail.folderList", "mail.sync") })
+            coroutineContext.cancelChildren()
+        }
+
+    @Test
+    fun missingNotificationThreadPerformsOneDirectReadWithoutScanningOrSyncing() =
+        runBlocking {
+            val core = RecordingCore()
+            val state = testState(core, this)
+            state.openNotificationThread(NotificationThreadTarget(accountId = "account", folder = "INBOX", threadKey = "thread"))
+            awaitState { state.status.isNotBlank() }
+            assertEquals(1, core.commands.count { it == "mail.threadRead" })
+            assertEquals(emptyList(), core.commands.filter { it in listOf("mail.threadList", "mail.folderList", "mail.sync") })
+            assertEquals(null, state.selectedCoreThread)
+            assertEquals("Message no longer available", state.status)
+            coroutineContext.cancelChildren()
+        }
+
     /**
      * Wait for the state a launched open lands in. The tests cancel what is
      * left running afterwards: opening a conversation starts a wait for the
@@ -154,6 +184,7 @@ class TasksStateTest {
     }
 
     private class RecordingCore : MeronCore {
+        val commands = mutableListOf<String>()
         var createdPayload = ""
         var lists = """[{"id":"list-1","title":"First"},{"id":"list-2","title":"Second"}]"""
         var threadMessages = "[]"
@@ -162,6 +193,7 @@ class TasksStateTest {
             command: String,
             payloadJson: String,
         ): String {
+            commands += command
             if (command == "tasks.lists") return """{"lists":$lists,"default_list_id":"list-1"}"""
             if (command == "tasks.create") createdPayload = payloadJson
             if (command == "mail.threadRead") return """{"messages":$threadMessages}"""

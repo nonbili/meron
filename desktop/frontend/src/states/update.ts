@@ -1,6 +1,7 @@
 import { observable } from '@legendapp/state'
 import { checkForUpdate, downloadUpdate, fetchUpdateStatus, installUpdate, type UpdateStatus } from '../lib/update'
 import { settings$ } from './settings'
+import { showToast } from './ui'
 
 // In-app updater state. The Go side owns the state machine and pushes the whole
 // status on every transition (the `update.status` event, wired up in
@@ -31,7 +32,9 @@ export function applyUpdateStatus(status: UpdateStatus | null | undefined) {
 /** Load the current status without hitting the network. */
 export async function loadUpdateStatus() {
   try {
-    applyUpdateStatus(await fetchUpdateStatus())
+    const status = await fetchUpdateStatus()
+    applyUpdateStatus(status)
+    if (status.installError) showToast(status.installError, 'error', 10000)
   } catch {
     // No backend (browser dev) or an old build without the command: stay idle.
   }

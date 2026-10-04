@@ -53,8 +53,8 @@ data class ParsedThreadId(
  * clients — but reopening the thread on mobile needs the folder to load and the
  * key to match against, so the id has to come apart again.
  *
- * Returns null for anything that isn't the three-part shape, including a feed
- * id, whose middle segment is the literal `rss` rather than a folder.
+ * Returns null for anything that is not the three-part shape. Feed ids preserve
+ * their subscription key when the middle segment is `rss`.
  */
 @OptIn(ExperimentalEncodingApi::class)
 fun parseNotificationThreadId(threadId: String): ParsedThreadId? {
@@ -62,17 +62,20 @@ fun parseNotificationThreadId(threadId: String): ParsedThreadId? {
     if (separator <= 0) return null
     val head = threadId.substring(0, separator)
     val key = threadId.substring(separator + 1)
-    val folderSeparator = head.lastIndexOf('#')
+    val folderSeparator = head.indexOf('#')
     if (folderSeparator <= 0) return null
     val accountId = head.substring(0, folderSeparator)
     val folder = head.substring(folderSeparator + 1)
     if (accountId.isBlank() || folder.isBlank() || key.isBlank()) return null
     val threadKey =
-        if (key.startsWith("t.")) {
+        if (accountIdIsRss(accountId) && folder == "rss") {
+            key
+        } else if (key.startsWith("t.")) {
             val padded = key.substring(2).padEnd((key.length - 2 + 3) / 4 * 4, '=')
             runCatching { Base64.UrlSafe.decode(padded).decodeToString() }.getOrNull() ?: return null
         } else {
             "uid:$key"
         }
+    if (threadKey.isBlank()) return null
     return ParsedThreadId(accountId, folder, threadKey)
 }

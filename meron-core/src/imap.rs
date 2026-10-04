@@ -1540,6 +1540,75 @@ pub async fn fetch_raw_messages_for_copy(
     Ok(out)
 }
 
+/// async-imap's APPEND expects the first response to be a continuation, but
+/// selected pooled sessions may receive unsolicited mailbox updates first.
+/// Drain those updates while waiting for the continuation and tagged completion.
+/// Cache reconciliation uses separate sync/IDLE sessions, so these updates do
+/// not need to be applied here.
+async fn append_message(
+    session: &mut Session,
+    folder: &str,
+    flags: Option<&str>,
+    raw: &[u8],
+) -> Result<()> {
+    use async_imap::imap_proto::{Response, Status};
+    use tokio::io::AsyncWriteExt;
+
+    anyhow::ensure!(
+        !folder.contains(['\r', '\n', '\0']),
+        "Invalid APPEND mailbox name"
+    );
+    let mailbox = format!("\"{}\"", folder.replace('\\', "\\\\").replace('"', "\\\""));
+    let flags = flags.map(|flags| format!(" {flags}")).unwrap_or_default();
+    let id = session
+        .run_command(format!("APPEND {mailbox}{flags} {{{}}}", raw.len()))
+        .await?;
+    let mut sent = false;
+    loop {
+        let response = session
+            .read_response()
+            .await?
+            .ok_or(async_imap::error::Error::ConnectionLost)?;
+        match response.parsed() {
+            Response::Continue { .. } if !sent => {
+                session.as_mut().write_all(raw).await?;
+                session.as_mut().write_all(b"\r\n").await?;
+                session.as_mut().flush().await?;
+                sent = true;
+            }
+            Response::Done {
+                tag,
+                status,
+                code,
+                information,
+            } if tag == &id => match status {
+                Status::Ok if sent => return Ok(()),
+                Status::No => {
+                    return Err(async_imap::error::Error::No(format!(
+                        "code: {code:?}, info: {information:?}"
+                    ))
+                    .into());
+                }
+                Status::Bad => {
+                    return Err(async_imap::error::Error::Bad(format!(
+                        "code: {code:?}, info: {information:?}"
+                    ))
+                    .into());
+                }
+                _ => anyhow::bail!("Unexpected APPEND completion: {:?}", response.parsed()),
+            },
+            Response::Data {
+                status: Status::Bye,
+                ..
+            } => {
+                return Err(async_imap::error::Error::ConnectionLost.into());
+            }
+            Response::Continue { .. } => anyhow::bail!("Unexpected APPEND continuation"),
+            _ => {}
+        }
+    }
+}
+
 pub async fn append_copied_message(
     session: &mut Session,
     folder: &str,
@@ -1551,8 +1620,7 @@ pub async fn append_copied_message(
         (false, true) => Some("(\\Flagged)"),
         (false, false) => None,
     };
-    session
-        .append(folder, flags, None, &message.raw)
+    append_message(session, folder, flags, &message.raw)
         .await
         .context("IMAP APPEND copied message")?;
     Ok(())
@@ -1617,8 +1685,7 @@ pub async fn empty_folder(session: &mut Session, folder: &str) -> Result<u32> {
 /// own sent reply appears in Sent without being marked unread. Used after SMTP
 /// send so the message threads back into the conversation on next sync.
 pub async fn append_to_sent(session: &mut Session, folder: &str, raw: &[u8]) -> Result<()> {
-    session
-        .append(folder, Some("(\\Seen)"), None, raw)
+    append_message(session, folder, Some("(\\Seen)"), raw)
         .await
         .context("IMAP APPEND")?;
     Ok(())
@@ -1636,8 +1703,7 @@ pub async fn replace_draft(
     raw: &[u8],
     message_id: &str,
 ) -> Result<()> {
-    session
-        .append(folder, Some("(\\Draft \\Seen)"), None, raw)
+    append_message(session, folder, Some("(\\Draft \\Seen)"), raw)
         .await
         .context("IMAP APPEND to Drafts")?;
     if message_id.trim().is_empty() {
@@ -2861,6 +2927,130 @@ pub async fn move_to_folder_checked(
         expunge_selected_uids(session, uids).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod append_tests {
+    use super::*;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+
+    async fn server(reply: &'static str) -> (Session, tokio::task::JoinHandle<Vec<u8>>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let (reader, mut writer) = socket.into_split();
+            let mut reader = tokio::io::BufReader::new(reader);
+            writer.write_all(b"* OK ready\r\n").await.unwrap();
+            let mut line = String::new();
+            reader.read_line(&mut line).await.unwrap();
+            let tag = line.split_whitespace().next().unwrap();
+            writer
+                .write_all(format!("{tag} OK logged in\r\n").as_bytes())
+                .await
+                .unwrap();
+            line.clear();
+            reader.read_line(&mut line).await.unwrap();
+            let tag = line.split_whitespace().next().unwrap().to_string();
+            assert!(
+                line.contains("APPEND \"a\\\"b\\\\c\" (\\Seen \\Flagged)"),
+                "{line}"
+            );
+            let size: usize = line
+                .split('{')
+                .last()
+                .unwrap()
+                .trim()
+                .trim_end_matches('}')
+                .parse()
+                .unwrap();
+            writer
+                .write_all(reply.replace("{tag}", &tag).as_bytes())
+                .await
+                .unwrap();
+            if !reply.contains("+ ready") {
+                // A rejected APPEND must not send the literal, and the session
+                // must still be usable for the next command.
+                line.clear();
+                reader.read_line(&mut line).await.unwrap();
+                assert!(line.contains("NOOP"), "{line}");
+                let tag = line.split_whitespace().next().unwrap();
+                writer
+                    .write_all(format!("{tag} OK done\r\n").as_bytes())
+                    .await
+                    .unwrap();
+                return Vec::new();
+            }
+            let mut literal = vec![0; size + 2];
+            reader.read_exact(&mut literal).await.unwrap();
+            writer
+                .write_all(format!("* 3 EXISTS\r\n{tag} OK [APPENDUID 42 7] done\r\n").as_bytes())
+                .await
+                .unwrap();
+            literal
+        });
+        let tcp = TcpStream::connect(addr).await.unwrap();
+        let mut client = async_imap::Client::new(Stream::Plain(tcp));
+        client.read_response().await.unwrap().unwrap();
+        let session = client
+            .login("u", "p")
+            .await
+            .map_err(|(err, _)| err)
+            .unwrap();
+        (session, task)
+    }
+
+    #[tokio::test]
+    async fn append_waits_past_mailbox_updates_for_continuation() {
+        for reply in [
+            "+ ready\r\n",
+            "* 2 EXISTS\r\n* 1 EXPUNGE\r\n* 1 FETCH (FLAGS (\\Seen))\r\n* OK update\r\n+ ready\r\n",
+        ] {
+            let (mut session, task) = server(reply).await;
+            let raw = b"Subject: copy\r\n\r\nbody\x00\xff";
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                append_copied_message(
+                    &mut session,
+                    "a\"b\\c",
+                    &RawMessageCopy {
+                        raw: raw.to_vec(),
+                        seen: true,
+                        starred: true,
+                    },
+                ),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(task.await.unwrap(), [raw.as_slice(), b"\r\n"].concat());
+        }
+    }
+
+    #[tokio::test]
+    async fn append_preserves_rejection_without_sending_literal() {
+        for status in ["NO", "BAD"] {
+            let reply = if status == "NO" {
+                "* 2 EXISTS\r\n{tag} NO [TRYCREATE] missing mailbox\r\n"
+            } else {
+                "{tag} BAD invalid append\r\n"
+            };
+            let (mut session, task) = server(reply).await;
+            let err = append_message(&mut session, "a\"b\\c", Some("(\\Seen \\Flagged)"), b"body")
+                .await
+                .unwrap_err();
+            assert!(
+                err.to_string().contains(if status == "NO" {
+                    "missing mailbox"
+                } else {
+                    "invalid append"
+                }),
+                "{err}"
+            );
+            session.noop().await.unwrap();
+            assert!(task.await.unwrap().is_empty());
+        }
+    }
 }
 
 #[cfg(test)]
