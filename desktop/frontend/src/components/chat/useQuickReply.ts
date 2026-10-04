@@ -61,6 +61,9 @@ export function useQuickReply() {
   const composerAttachments = useValue(compose$.composerAttachments)
   const sendShortcut = useValue(settings$.sendShortcut)
   const selectedThreadId = useValue(ui$.selectedThread)
+  // The box's text scales with both text size settings; its height follows.
+  const fontScale = useValue(settings$.fontScale)
+  const messageFontScale = useValue(settings$.messageFontScale)
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const replyFocus = useValue(ui$.replyFocus)
@@ -85,7 +88,7 @@ export function useQuickReply() {
     if (!textarea) return
     textarea.style.height = 'auto'
     textarea.style.height = `${Math.min(textarea.scrollHeight, QUICK_REPLY_MAX_HEIGHT_PX)}px`
-  }, [composer])
+  }, [composer, fontScale, messageFontScale])
 
   // Focus the box when the "r" shortcut fires (ignore the initial 0 value).
   // The caret goes to the end of the user's own text, not the end of the box —

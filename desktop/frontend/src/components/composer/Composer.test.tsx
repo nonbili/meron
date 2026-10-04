@@ -81,6 +81,21 @@ describe('Composer', () => {
   const bodyHtml = () => document.querySelector('.tiptap-body')?.innerHTML ?? ''
   const savedDraftIds = () => calls.filter((c) => c.command === 'mail.saveDraft').map((c) => c.payload.draft_id)
 
+  it('scales the plain-text body with the message text size', () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    const body = view.container.querySelector('textarea')
+    expect(body?.className).toContain('var(--me-message-scale)')
+  })
+
+  it('scales the rich-text body with the message text size', () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', rich: true })!
+    render(<Composer tabId={tabId} />)
+
+    expect(document.querySelector('.tiptap-body')?.className).toContain('var(--me-message-scale)')
+  })
+
   it('allocates one server draft when autosaves overlap', async () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!
     render(<Composer tabId={tabId} />)

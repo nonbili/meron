@@ -78,7 +78,7 @@ export function Composer({ tabId }: { tabId: string }) {
             onPaste={handlePaste}
             placeholder={t('composer.placeholders.message')}
             spellCheck={spellCheck}
-            className="h-full min-h-[240px] w-full resize-none bg-transparent text-[0.875rem] leading-relaxed text-primary placeholder-secondary outline-none"
+            className="h-full min-h-[240px] w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none"
           />
         )}
       </div>

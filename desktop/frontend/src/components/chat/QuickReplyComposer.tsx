@@ -59,6 +59,8 @@ export function QuickReplyComposer() {
             <Maximize2 size={15} />
           </button>
 
+          {/* One line of text sits centred in the 34px row beside the buttons at any
+            message text size: the padding is what the line height leaves over. */}
           <textarea
             ref={textareaRef}
             value={composer}
@@ -66,7 +68,7 @@ export function QuickReplyComposer() {
             placeholder={t('composer.placeholders.quickMessage')}
             rows={1}
             spellCheck={spellCheck}
-            className="flex-1 py-[7px] px-1 max-h-[254px] min-h-8.5 bg-transparent text-[0.9375rem] text-primary resize-none placeholder-secondary border-none outline-none leading-5"
+            className="flex-1 py-[max(0px,calc((2.125rem_-_1.25rem_*_var(--me-message-scale))_/_2))] px-1 max-h-[254px] min-h-8.5 bg-transparent text-[calc(0.9375rem*var(--me-message-scale))] text-primary resize-none placeholder-secondary border-none outline-none leading-[1.3333]"
             onKeyDown={handleComposerKeyDown}
             onPaste={handleComposerPaste}
           />

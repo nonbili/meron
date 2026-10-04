@@ -140,7 +140,9 @@ export function useComposer(tabId: string) {
     content: initialHtml,
     editorProps: {
       attributes: {
-        class: 'tiptap-body focus:outline-none min-h-[240px] text-[0.875rem] leading-relaxed',
+        // Scales with the message text size, like the messages being answered.
+        class:
+          'tiptap-body focus:outline-none min-h-[240px] text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed',
         spellcheck: String(spellCheck),
       },
       handlePaste: (_view, event) => {

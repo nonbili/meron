@@ -81,6 +81,22 @@ describe('useQuickReply draft ownership', () => {
     else (window as any).go = previousGo
   })
 
+  it('re-measures the box when the message text size changes', () => {
+    const { result } = renderHook(() => useQuickReply())
+    const textarea = document.createElement('textarea')
+    let contentHeight = 40
+    Object.defineProperty(textarea, 'scrollHeight', { get: () => contentHeight })
+    result.current.textareaRef.current = textarea
+
+    contentHeight = 60
+    act(() => settings$.messageFontScale.set(150))
+    expect(textarea.style.height).toBe('60px')
+
+    contentHeight = 40
+    act(() => settings$.messageFontScale.set(100))
+    expect(textarea.style.height).toBe('40px')
+  })
+
   it('preserves a draft hydrated before mount and autosaves the next edit', async () => {
     renderHook(() => useQuickReply())
 
