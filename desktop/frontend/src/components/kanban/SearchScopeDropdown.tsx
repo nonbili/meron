@@ -52,14 +52,15 @@ export function SearchScopeDropdown({
   return (
     <div
       ref={containerRef}
-      className={`relative h-full shrink-0 border-l ${compact ? 'border-sidenav-ink/15 group-focus-within:border-border/60' : 'border-border/60'}`}
+      // The title bar's box keeps no divider, so the quiet search reads as one field.
+      className={`relative h-full shrink-0 ${compact ? '' : 'border-l border-border/60'}`}
     >
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`flex h-full items-center gap-1.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer select-none outline-none border-0 ${
           compact
-            ? 'px-2.5 rounded-r-lg text-sidenav-ink/60 hover:text-sidenav-ink group-focus-within:text-secondary group-focus-within:hover:text-primary'
+            ? 'px-2.5 rounded-r-lg text-sidenav-ink/50 hover:text-sidenav-ink group-focus-within:text-secondary group-focus-within:hover:text-primary'
             : 'px-3.5 rounded-r-xl text-secondary hover:text-primary'
         }`}
         title={t('kanban.searchScope.label')}

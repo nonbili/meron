@@ -66,17 +66,17 @@ export function KanbanSearch({ boardId, compact = false }: { boardId: string; co
     <div
       ref={barRef}
       className={clsx(
-        'group flex min-w-0 items-center overflow-visible border border-transparent focus-within:bg-chats',
+        'group flex min-w-0 items-center overflow-visible border focus-within:bg-chats',
         compact
-          ? 'h-full w-full rounded-lg bg-sidenav-ink/10 focus-within:border-accent'
-          : 'h-9 basis-72 shrink rounded-xl bg-hover focus-within:border-accent/40',
+          ? 'h-full w-full rounded-lg border-transparent bg-sidenav-ink/4 hover:not-focus-within:bg-sidenav-ink/8 focus-within:border-accent'
+          : 'h-9 basis-72 shrink rounded-xl border-transparent bg-hover focus-within:border-accent/40',
       )}
     >
       <div className="relative h-full min-w-0 flex-1">
         <Search
           className={clsx(
             'absolute top-1/2 -translate-y-1/2',
-            compact ? 'left-2.5 text-sidenav-ink/60 group-focus-within:text-secondary' : 'left-3 text-secondary',
+            compact ? 'left-2.5 text-sidenav-ink/50 group-focus-within:text-secondary' : 'left-3 text-secondary',
           )}
           size={iconSize}
         />
@@ -94,7 +94,7 @@ export function KanbanSearch({ boardId, compact = false }: { boardId: string; co
           className={clsx(
             'block h-full w-full appearance-none border-0 bg-transparent pr-8 text-xs outline-none transition-all',
             compact
-              ? 'py-0 pl-8 text-sidenav-ink placeholder-sidenav-ink/60 group-focus-within:text-primary group-focus-within:placeholder-secondary'
+              ? 'py-0 pl-8 text-sidenav-ink placeholder-sidenav-ink/50 group-focus-within:text-primary group-focus-within:placeholder-secondary'
               : 'py-1.5 pl-9.5 text-primary placeholder-secondary',
           )}
         />
