@@ -67,6 +67,9 @@ interface ConversationDetailsPanelProps {
   onComposeTo: (person: Participant) => void
   onViewMessagesWith: (person: Participant) => void
   onClose: () => void
+  /** True while the panel slides shut: it is still mounted, but Escape is no
+   * longer its to take. */
+  closing?: boolean
 }
 
 type View = 'overview' | 'media' | 'files'
@@ -83,6 +86,7 @@ export function ConversationDetailsPanel({
   onComposeTo,
   onViewMessagesWith,
   onClose,
+  closing = false,
 }: ConversationDetailsPanelProps) {
   const { t } = useTranslation()
   const [view, setView] = useState<View>('overview')
@@ -93,7 +97,7 @@ export function ConversationDetailsPanel({
   }, [scopeTitle])
 
   // Close the details pane on Escape (matches the gallery/search behavior).
-  useEscapeKey(onClose)
+  useEscapeKey(onClose, !closing)
 
   return (
     <>

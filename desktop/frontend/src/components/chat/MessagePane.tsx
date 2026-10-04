@@ -375,6 +375,7 @@ export function MessagePane() {
                 openCorrespondentMail(activeThread.account_id, activeThread.folder_id, person.email)
               }
               onClose={() => thread$.mediaOpen.set(false)}
+              closing={detailsPhase === 'exiting'}
             />
           </div>
         )}

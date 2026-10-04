@@ -63,6 +63,19 @@ describe('TasksSlide', () => {
     expect(root(view)).toBeNull()
   })
 
+  it('slides the last list out when its content goes away with it', () => {
+    const view = render(slide(true))
+
+    view.rerender(<TasksSlide open={false}>{null}</TasksSlide>)
+    expect(root(view)?.dataset.panePhase).toBe('exiting')
+    expect(view.queryByText('tasks')).not.toBeNull()
+
+    act(() => {
+      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+    })
+    expect(root(view)).toBeNull()
+  })
+
   it('opens and closes at once with reduced motion', () => {
     reducedMotion = true
     const view = render(slide(false))
