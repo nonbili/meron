@@ -687,6 +687,8 @@
   "settings.account.visibility": "Nähtavus",
   "settings.appearance.autoFitMessages": "Kirjade automaatne sobitamine",
   "settings.appearance.autoFitMessagesHint": "Vähenda laiad kirjad vestlusvaatesse mahtuvaks.",
+  "settings.appearance.chatFullMessages": "Näita vestluses sõnumi kogu sisu",
+  "settings.appearance.chatFullMessagesHint": "Pikad sõnumid kasvavad sisu järgi, selle asemel et mullis kerida.",
   "settings.appearance.conversationLayout": "Vestluse paigutus",
   "settings.appearance.conversationLayoutChat": "Vestlus",
   "settings.appearance.conversationLayoutHint": "Vestlus kuvab sõnumeid mullidena. Traditsiooniline laotab need täislaiuses ja ahendab vanemad.",

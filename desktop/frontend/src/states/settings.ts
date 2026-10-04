@@ -124,6 +124,9 @@ export type Settings = {
   sendShortcut: SendShortcut
   /** Chat bubbles or the traditional stacked reading view (desktop only). */
   conversationLayout: ConversationLayout
+  /** Whether chat bubbles grow to fit long bodies instead of scrolling inside a
+   *  capped box, so only the conversation scrolls (desktop only). */
+  chatFullMessages: boolean
   /** Whether native spell checking is requested in composer prose fields. */
   spellCheck: boolean
   /**
@@ -203,6 +206,7 @@ const DB_KEY = {
   showUnreadAccountBadge: 'show_unread_account_badge',
   sendShortcut: 'send_shortcut',
   conversationLayout: 'conversation_layout',
+  chatFullMessages: 'chat_full_messages',
   spellCheck: 'spell_check',
   signature: 'signature',
   remoteImageSenders: 'remote_image_senders',
@@ -413,6 +417,7 @@ export const settings$ = observable<Settings>({
   showUnreadAccountBadge: false,
   sendShortcut: 'mod_enter',
   conversationLayout: 'chat',
+  chatFullMessages: false,
   spellCheck: true,
   signature: '',
   remoteImageSenders: [],
@@ -883,6 +888,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const conversationLayout = prefs[DB_KEY.conversationLayout]
     if (conversationLayout === 'chat' || conversationLayout === 'traditional') {
       settings$.conversationLayout.set(conversationLayout)
+    }
+
+    if (typeof prefs[DB_KEY.chatFullMessages] === 'boolean') {
+      settings$.chatFullMessages.set(prefs[DB_KEY.chatFullMessages] as boolean)
     }
 
     if (typeof prefs[DB_KEY.spellCheck] === 'boolean') {

@@ -687,6 +687,8 @@
   "settings.account.visibility": "可見度",
   "settings.appearance.autoFitMessages": "自動調整郵件寬度",
   "settings.appearance.autoFitMessagesHint": "縮小較寬的郵件，使其符合對話檢視。",
+  "settings.appearance.chatFullMessages": "在聊天中顯示完整郵件內容",
+  "settings.appearance.chatFullMessagesHint": "長郵件隨內容展開，而不是在氣泡內捲動。",
   "settings.appearance.conversationLayout": "對話版面",
   "settings.appearance.conversationLayoutChat": "聊天",
   "settings.appearance.conversationLayoutHint": "聊天以氣泡顯示郵件；傳統版面以整寬堆疊，並摺疊較早的郵件。",

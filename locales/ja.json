@@ -687,6 +687,8 @@
   "settings.account.visibility": "表示設定",
   "settings.appearance.autoFitMessages": "メッセージを自動調整",
   "settings.appearance.autoFitMessagesHint": "幅の広いメールを会話ビューに収まるよう縮小します。",
+  "settings.appearance.chatFullMessages": "チャットでメッセージ全体を表示",
+  "settings.appearance.chatFullMessagesHint": "長いメッセージを吹き出し内でスクロールせず、内容に合わせて広げます。",
   "settings.appearance.conversationLayout": "会話のレイアウト",
   "settings.appearance.conversationLayoutChat": "チャット",
   "settings.appearance.conversationLayoutHint": "チャットはメッセージを吹き出しで表示します。従来型は全幅で積み重ね、古いものを折りたたみます。",

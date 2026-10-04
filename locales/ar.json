@@ -687,6 +687,8 @@
   "settings.account.visibility": "الظهور",
   "settings.appearance.autoFitMessages": "ملاءمة الرسائل تلقائيًا",
   "settings.appearance.autoFitMessagesHint": "تصغير الرسائل العريضة لتناسب عرض المحادثة.",
+  "settings.appearance.chatFullMessages": "عرض محتوى الرسالة كاملًا في الدردشة",
+  "settings.appearance.chatFullMessagesHint": "تتمدّد الرسائل الطويلة لتتسع لمحتواها بدلًا من التمرير داخل فقاعتها.",
   "settings.appearance.conversationLayout": "تخطيط المحادثة",
   "settings.appearance.conversationLayoutChat": "دردشة",
   "settings.appearance.conversationLayoutHint": "تعرض الدردشة الرسائل كفقاعات. أما التقليدي فيرتّبها بعرض كامل ويطوي الأقدم منها.",

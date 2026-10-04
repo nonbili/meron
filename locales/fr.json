@@ -687,6 +687,8 @@
   "settings.account.visibility": "Visibilité",
   "settings.appearance.autoFitMessages": "Ajuster automatiquement les messages",
   "settings.appearance.autoFitMessagesHint": "Réduit les e-mails larges pour qu'ils tiennent dans la vue de conversation.",
+  "settings.appearance.chatFullMessages": "Afficher le contenu complet des messages dans le chat",
+  "settings.appearance.chatFullMessagesHint": "Les messages longs s’agrandissent au lieu de défiler dans leur bulle.",
   "settings.appearance.conversationLayout": "Disposition de la conversation",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "Le chat affiche les messages sous forme de bulles. Le mode traditionnel les empile sur toute la largeur et réduit les plus anciens.",

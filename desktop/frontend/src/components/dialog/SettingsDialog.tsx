@@ -5,6 +5,7 @@ import { useEscapeKey } from '../../lib/useEscapeKey'
 import type { LucideIcon } from 'lucide-react'
 import {
   X,
+  UnfoldVertical,
   Upload,
   Download,
   SlidersHorizontal,
@@ -514,6 +515,7 @@ function MessagesSection() {
   const [remoteSendersOpen, setRemoteSendersOpen] = useState(false)
   const remoteImageSenders = useValue(settings$.remoteImageSenders)
   const conversationLayout = useValue(settings$.conversationLayout)
+  const chatFullMessages = useValue(settings$.chatFullMessages)
   const darkMessageBodies = useValue(settings$.darkMessageBodies)
   const autoFitMessages = useValue(settings$.autoFitMessages)
   const readerBottomActions = useValue(settings$.readerBottomActions)
@@ -529,6 +531,15 @@ function MessagesSection() {
           options={CONVERSATION_LAYOUT_OPTIONS(t)}
           onChange={(value) => settings$.conversationLayout.set(value)}
         />
+        {conversationLayout === 'chat' && (
+          <ToggleRow
+            icon={<UnfoldVertical size={15} />}
+            title={t('settings.appearance.chatFullMessages')}
+            hint={t('settings.appearance.chatFullMessagesHint')}
+            checked={chatFullMessages}
+            onChange={() => settings$.chatFullMessages.set(!chatFullMessages)}
+          />
+        )}
         <ToggleRow
           icon={<Moon size={15} />}
           title={t('settings.appearance.darkMessageBodies')}

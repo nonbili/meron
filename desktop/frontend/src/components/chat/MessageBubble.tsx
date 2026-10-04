@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useValue } from '@legendapp/state/react'
 import type { MouseEvent } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { AlertCircle, Check, ChevronDown, ExternalLink, Loader2, MoreHorizontal, Star } from 'lucide-react'
 
 import { openDraftCompose, openMessageTab } from '../../states/compose'
 import { retrySend } from '../../states/quickReplySend'
+import { settings$ } from '../../states/settings'
 import type { Message } from '../../types'
 import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
@@ -27,15 +29,23 @@ interface MessageBubbleProps {
   galleryOffset: number
   onOpenContextMenu: (state: MessageContextMenuState) => void
   onLinkHover?: (url: string | null) => void
+  onUserScrollIntent?: () => void
 }
 
-export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLinkHover }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  galleryOffset,
+  onOpenContextMenu,
+  onLinkHover,
+  onUserScrollIntent,
+}: MessageBubbleProps) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
   // What a short HTML body needs, so its bubble can hug it (see below): undefined
   // until the frame has reported, null for a body that fills the bubble.
   const [naturalWidth, setNaturalWidth] = useState<number | null | undefined>(undefined)
   const view = useMessageView(message)
+  const fullHeight = useValue(settings$.chatFullMessages)
   const {
     outgoing,
     isDraft,
@@ -221,7 +231,11 @@ export function MessageBubble({ message, galleryOffset, onOpenContextMenu, onLin
           message={message}
           view={view}
           galleryOffset={galleryOffset}
+          fullHeight={fullHeight}
           onLinkHover={onLinkHover}
+          // Only a full-height body hands the wheel on to the pane; a capped
+          // one scrolls itself and leaves the pane where it is.
+          onUserScrollIntent={fullHeight ? onUserScrollIntent : undefined}
           onNaturalWidth={hugsText ? setNaturalWidth : undefined}
         />
       </div>

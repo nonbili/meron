@@ -687,6 +687,8 @@
   "settings.account.visibility": "Ορατότητα",
   "settings.appearance.autoFitMessages": "Αυτόματη προσαρμογή μηνυμάτων",
   "settings.appearance.autoFitMessagesHint": "Σμίκρυνση των φαρδιών μηνυμάτων ώστε να χωρούν στην προβολή συνομιλίας.",
+  "settings.appearance.chatFullMessages": "Πλήρες περιεχόμενο μηνυμάτων στη συνομιλία",
+  "settings.appearance.chatFullMessagesHint": "Τα μεγάλα μηνύματα μεγαλώνουν ώστε να χωρούν, αντί για κύλιση μέσα στο συννεφάκι τους.",
   "settings.appearance.conversationLayout": "Διάταξη συνομιλίας",
   "settings.appearance.conversationLayoutChat": "Συνομιλία",
   "settings.appearance.conversationLayoutHint": "Η συνομιλία εμφανίζει τα μηνύματα ως συννεφάκια. Η παραδοσιακή τα στοιβάζει σε πλήρες πλάτος και συμπτύσσει τα παλαιότερα.",

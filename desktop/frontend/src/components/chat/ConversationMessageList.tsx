@@ -292,6 +292,7 @@ export function ConversationMessageList({
                       galleryOffset={galleryOffsets.get(message.id) ?? 0}
                       onOpenContextMenu={onOpenContextMenu}
                       onLinkHover={setHoveredLink}
+                      onUserScrollIntent={onUserScrollIntent}
                     />
                   )}
                 </div>

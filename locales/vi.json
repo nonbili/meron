@@ -687,6 +687,8 @@
   "settings.account.visibility": "Hiển thị",
   "settings.appearance.autoFitMessages": "Tự động vừa khít thư",
   "settings.appearance.autoFitMessagesHint": "Thu nhỏ email rộng cho vừa khung xem hội thoại.",
+  "settings.appearance.chatFullMessages": "Hiển thị toàn bộ nội dung thư trong trò chuyện",
+  "settings.appearance.chatFullMessagesHint": "Thư dài được mở rộng cho vừa nội dung thay vì cuộn bên trong bong bóng.",
   "settings.appearance.conversationLayout": "Bố cục hội thoại",
   "settings.appearance.conversationLayoutChat": "Trò chuyện",
   "settings.appearance.conversationLayoutHint": "Trò chuyện hiển thị thư dưới dạng bong bóng. Truyền thống xếp chồng toàn chiều rộng và thu gọn các thư cũ.",

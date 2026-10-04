@@ -687,6 +687,8 @@
   "settings.account.visibility": "Sichtbarkeit",
   "settings.appearance.autoFitMessages": "Nachrichten automatisch anpassen",
   "settings.appearance.autoFitMessagesHint": "Breite E-Mails verkleinern, damit sie in die Unterhaltungsansicht passen.",
+  "settings.appearance.chatFullMessages": "Vollständigen Nachrichteninhalt im Chat anzeigen",
+  "settings.appearance.chatFullMessagesHint": "Lange Nachrichten wachsen mit, statt in ihrer Sprechblase zu scrollen.",
   "settings.appearance.conversationLayout": "Konversationsansicht",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "Chat zeigt Nachrichten als Sprechblasen. Traditionell stapelt sie über die volle Breite und klappt ältere ein.",

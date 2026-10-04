@@ -687,6 +687,8 @@
   "settings.account.visibility": "표시 여부",
   "settings.appearance.autoFitMessages": "메시지 자동 맞춤",
   "settings.appearance.autoFitMessagesHint": "넓은 이메일을 대화 보기에 맞게 축소합니다.",
+  "settings.appearance.chatFullMessages": "채팅에서 메시지 전체 내용 표시",
+  "settings.appearance.chatFullMessagesHint": "긴 메시지를 말풍선 안에서 스크롤하지 않고 내용에 맞게 늘립니다.",
   "settings.appearance.conversationLayout": "대화 레이아웃",
   "settings.appearance.conversationLayoutChat": "채팅",
   "settings.appearance.conversationLayoutHint": "채팅은 메시지를 말풍선으로 표시합니다. 전통 방식은 전체 너비로 쌓고 오래된 메시지를 접습니다.",

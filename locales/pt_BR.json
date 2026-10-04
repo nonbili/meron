@@ -687,6 +687,8 @@
   "settings.account.visibility": "Visibilidade",
   "settings.appearance.autoFitMessages": "Ajustar mensagens automaticamente",
   "settings.appearance.autoFitMessagesHint": "Reduz e-mails largos para caberem na visualização da conversa.",
+  "settings.appearance.chatFullMessages": "Mostrar o conteúdo completo da mensagem no chat",
+  "settings.appearance.chatFullMessagesHint": "Mensagens longas crescem para caber em vez de rolar dentro do balão.",
   "settings.appearance.conversationLayout": "Layout da conversa",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "O chat mostra as mensagens como balões. O tradicional empilha as mensagens em toda a largura e recolhe as mais antigas.",

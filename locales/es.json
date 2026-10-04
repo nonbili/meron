@@ -687,6 +687,8 @@
   "settings.account.visibility": "Visibilidad",
   "settings.appearance.autoFitMessages": "Ajustar mensajes automáticamente",
   "settings.appearance.autoFitMessagesHint": "Reduce los correos anchos para que quepan en la vista de conversación.",
+  "settings.appearance.chatFullMessages": "Mostrar el contenido completo del mensaje en el chat",
+  "settings.appearance.chatFullMessagesHint": "Los mensajes largos crecen para ajustarse en lugar de desplazarse dentro de su burbuja.",
   "settings.appearance.conversationLayout": "Diseño de la conversación",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "El chat muestra los mensajes como burbujas. El tradicional los apila a todo el ancho y contrae los más antiguos.",

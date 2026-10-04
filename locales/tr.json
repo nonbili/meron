@@ -687,6 +687,8 @@
   "settings.account.visibility": "Görünürlük",
   "settings.appearance.autoFitMessages": "İletileri otomatik sığdır",
   "settings.appearance.autoFitMessagesHint": "Geniş e-postaları konuşma görünümüne sığacak şekilde küçültür.",
+  "settings.appearance.chatFullMessages": "Sohbette ileti içeriğinin tamamını göster",
+  "settings.appearance.chatFullMessagesHint": "Uzun iletiler balonlarının içinde kaymak yerine içeriğe göre uzar.",
   "settings.appearance.conversationLayout": "Konuşma düzeni",
   "settings.appearance.conversationLayoutChat": "Sohbet",
   "settings.appearance.conversationLayoutHint": "Sohbet iletileri balon olarak gösterir. Geleneksel düzen ise tam genişlikte sıralar ve eskileri daraltır.",

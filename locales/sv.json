@@ -687,6 +687,8 @@
   "settings.account.visibility": "Synlighet",
   "settings.appearance.autoFitMessages": "Anpassa meddelanden automatiskt",
   "settings.appearance.autoFitMessagesHint": "Förminska breda mejl så att de ryms i konversationsvyn.",
+  "settings.appearance.chatFullMessages": "Visa hela meddelandeinnehållet i chatten",
+  "settings.appearance.chatFullMessagesHint": "Långa meddelanden växer för att få plats i stället för att rulla i sin bubbla.",
   "settings.appearance.conversationLayout": "Konversationslayout",
   "settings.appearance.conversationLayoutChat": "Chatt",
   "settings.appearance.conversationLayoutHint": "Chatt visar meddelanden som bubblor. Traditionell staplar dem i full bredd och fäller ihop äldre.",

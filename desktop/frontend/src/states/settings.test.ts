@@ -324,3 +324,27 @@ describe('theme following the system', () => {
     expect(settings$.darkThemeId.get()).toBe('ember')
   })
 })
+
+describe('chat full messages setting', () => {
+  afterEach(() => {
+    settings$.chatFullMessages.set(false)
+  })
+
+  it('scrolls long messages inside the bubble by default', () => {
+    expect(settings$.chatFullMessages.get()).toBe(false)
+  })
+
+  it('hydrates a persisted choice', () => {
+    hydrateSettings({ chat_full_messages: true })
+    expect(settings$.chatFullMessages.get()).toBe(true)
+
+    hydrateSettings({ chat_full_messages: false })
+    expect(settings$.chatFullMessages.get()).toBe(false)
+  })
+
+  it('ignores invalid persisted values', () => {
+    settings$.chatFullMessages.set(true)
+    hydrateSettings({ chat_full_messages: 'false' })
+    expect(settings$.chatFullMessages.get()).toBe(true)
+  })
+})

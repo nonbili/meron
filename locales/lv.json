@@ -687,6 +687,8 @@
   "settings.account.visibility": "Redzamība",
   "settings.appearance.autoFitMessages": "Automātiski pielāgot ziņojumus",
   "settings.appearance.autoFitMessagesHint": "Samazina platus e-pastus, lai tie ietilptu sarunas skatā.",
+  "settings.appearance.chatFullMessages": "Rādīt pilnu ziņojuma saturu tērzēšanā",
+  "settings.appearance.chatFullMessagesHint": "Gari ziņojumi izplešas pēc satura, nevis ritinās savā burbulī.",
   "settings.appearance.conversationLayout": "Sarunas izkārtojums",
   "settings.appearance.conversationLayoutChat": "Tērzēšana",
   "settings.appearance.conversationLayoutHint": "Tērzēšana rāda ziņojumus kā burbuļus. Tradicionālais izkārtojums tos kārto pilnā platumā un sakļauj vecākos.",
