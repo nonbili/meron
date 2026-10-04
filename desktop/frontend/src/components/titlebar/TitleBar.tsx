@@ -46,9 +46,8 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
   const kanbanBoard = useValue(kanban$.activeBoardId)
   const startControls = useValue(windowChrome$.layout.start)
   if (!shown) return null
-  // A 40px bar on every platform. The 28px search and tool buttons leave 6px
-  // above and below, about the share Microsoft's guidance and VS Code give a
-  // title bar search, so the box doesn't fill the bar; at most 28rem wide.
+  // A 40px bar on every platform leaves 4px above and below the 32px search,
+  // which is at most 28rem wide.
   // Windows caption buttons stay flush with the right edge.
   const layout = isMac ? 'px-2' : windows ? 'pl-1.5' : 'px-1.5'
   return (
@@ -82,8 +81,8 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
         )}
       </div>
       {/* The search of whatever is open: the thread list, or a kanban board.
-        28px on every platform. */}
-      <div className="flex h-7 min-w-0 px-2">
+        32px on every platform. */}
+      <div className="flex h-8 min-w-0 px-2">
         {tools && (kanbanBoard ? <KanbanSearch boardId={kanbanBoard} compact /> : <ThreadSearchInput compact />)}
       </div>
       <div className="flex h-full items-center justify-end">
@@ -112,15 +111,11 @@ function TitleBarTools({ menu, setMenu }: { menu: MenuPosition; setMenu: Dispatc
   const windows = useValue(windowChrome$.platform) === 'windows'
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
-  // As tall as the search, so hover highlights line up with it; macOS keeps
-  // its compact tool buttons.
-  const compact = isMac
-  const button = `flex shrink-0 items-center justify-center rounded-lg transition-colors cursor-pointer ${
-    compact ? 'h-6 w-6' : 'h-7 w-7'
-  }`
+  // As tall as the search, so hover highlights line up with it.
+  const button = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors cursor-pointer'
   const idle = 'text-sidenav-ink/60 hover:bg-sidenav-ink/10 hover:text-sidenav-ink'
   const pressed = 'bg-sidenav-ink/15 text-sidenav-ink'
-  const iconSize = compact ? 15 : 16
+  const iconSize = 17
 
   return (
     <div className={`flex items-center gap-1 ${isMac ? '' : windows ? 'mr-2' : 'mr-1.5'}`}>

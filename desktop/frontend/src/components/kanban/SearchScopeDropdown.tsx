@@ -60,7 +60,7 @@ export function SearchScopeDropdown({
         onClick={() => setIsOpen(!isOpen)}
         className={`flex h-full items-center gap-1.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer select-none outline-none border-0 ${
           compact
-            ? 'px-2.5 rounded-r-lg text-sidenav-ink/50 hover:text-sidenav-ink group-focus-within:text-secondary group-focus-within:hover:text-primary'
+            ? 'px-2.5 rounded-r-lg text-sidenav-ink/60 hover:text-sidenav-ink group-focus-within:text-secondary group-focus-within:hover:text-primary'
             : 'px-3.5 rounded-r-xl text-secondary hover:text-primary'
         }`}
         title={t('kanban.searchScope.label')}
