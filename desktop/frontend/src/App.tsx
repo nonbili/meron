@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from './lib/i18n'
 import { ui$ } from './states/ui'
@@ -37,7 +36,6 @@ import { FeedEditDialog } from './components/dialog/FeedEditDialog'
 
 export default function App() {
   const { t } = useTranslation()
-  const mainRef = useRef<HTMLElement | null>(null)
   const system = useValue(ui$.system)
   const accounts = useValue(accounts$)
   const activeBoardId = useValue(kanban$.activeBoardId)
@@ -79,7 +77,7 @@ export default function App() {
       <TitleBar />
       <ConnectivityBanner />
       <UpdateBanner />
-      <main ref={mainRef} className={`flex min-h-0 w-full flex-1 overflow-hidden ${frame ? 'bg-sidenav' : ''}`}>
+      <main className={`flex min-h-0 w-full flex-1 overflow-hidden ${frame ? 'bg-sidenav' : ''}`}>
         <ErrorBoundary label="side navigation">
           <SideNav />
         </ErrorBoundary>
@@ -93,7 +91,7 @@ export default function App() {
                     open={showKanbanMessagePane}
                     widthPercent={kanbanPaneWidth}
                     resizeTitle={t('layout.resizeConversation')}
-                    onResizeStart={(event) => startKanbanResize(event, mainRef.current)}
+                    onResizeStart={startKanbanResize}
                   >
                     <ErrorBoundary label="conversation">
                       <MessagePane />
