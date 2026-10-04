@@ -147,7 +147,7 @@ export function SideNav() {
 
   return (
     <aside
-      className={`flex w-[60px] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-1'}`}
+      className={`flex w-[60px] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-[9px]'}`}
       onContextMenu={(event) => {
         if (event.defaultPrevented) return
         event.preventDefault()
@@ -164,8 +164,9 @@ export function SideNav() {
           >
             <SquarePen size={18} />
           </button>
-          {/* 4 + 40 + 3 aligns with the 48px header's bottom border;
-            the framed layout adds 1px of top padding for its outer border. */}
+          {/* 4 + 40 + 3 aligns with the 48px header's bottom border, plus 1px
+            for the content frame's border, and 4px more under the system
+            title bar, where the frame stands clear of the top edge. */}
           <div className={`mt-[3px] ${railDivider}`} />
         </>
       )}

@@ -53,11 +53,11 @@ export default function App() {
   const editFeed = useValue(ui$.editFeed)
 
   useAppEffects()
-  // With Meron's own title bar, it and the side navigation form one frame
-  // around the content (the L-shaped frame of Slack, Discord, Teams): the
-  // content sits on its own surface with a rounded top-left corner, so the
-  // title bar reads as the window's frame rather than a second toolbar.
-  const frame = useTitleBar()
+  // The side navigation (and Meron's title bar, when there is one) form a
+  // frame around the content, which sits on its own rounded surface (Slack,
+  // Discord, Teams). Under the system title bar the surface also stands clear
+  // of the top edge, so it looks the same in both modes.
+  const titleBar = useTitleBar()
 
   const showKanbanMessagePane = !!kanbanPaneThreadId || composeTabs.some((tab) => tab.id === activeComposeTab)
 
@@ -78,11 +78,11 @@ export default function App() {
       <TitleBar />
       <ConnectivityBanner />
       <UpdateBanner />
-      <main className={`flex min-h-0 w-full flex-1 overflow-hidden ${frame ? 'bg-sidenav' : ''}`}>
+      <main className="flex min-h-0 w-full flex-1 overflow-hidden bg-sidenav">
         <ErrorBoundary label="side navigation">
           <SideNav />
         </ErrorBoundary>
-        <div className={frame ? 'app-frame-content' : 'contents'}>
+        <div className={titleBar ? 'app-frame-content' : 'app-frame-content app-frame-detached'}>
           <ErrorBoundary label="thread list">
             {activeBoardId ? (
               <KanbanView

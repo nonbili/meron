@@ -429,13 +429,13 @@ textarea,
   outline: 2px solid color-mix(in srgb, var(--me-accent) 50%, transparent);
 }
 
-/* The content beside the side navigation and below Meron's title bar (App.tsx),
-   when the title bar is Meron's own: one surface with rounded corners and a
-   hairline edge, set into the frame the title bar and side navigation make
-   (<main> takes their colour behind it). Like Slack, it stops 8px short of the
-   window's right and bottom edges, so the frame shows round all its corners.
-   On a narrow window the side navigation is hidden, so the surface fills the
-   window, square. */
+/* The content beside the side navigation (App.tsx): one surface with rounded
+   corners and a hairline edge, set into the frame the side navigation and
+   Meron's title bar make (<main> takes their colour behind it). Like Slack, it
+   stops 8px short of the window's right and bottom edges, so the frame shows
+   round all its corners; under the system title bar (.app-frame-detached) 4px
+   short of the top, where the native title bar already sets it apart. On a narrow window the side navigation is hidden, so
+   the surface fills the window, square. */
 .app-frame-content {
   position: relative;
   display: flex;
@@ -448,11 +448,21 @@ textarea,
   border-radius: 12px;
 }
 
+.app-frame-content.app-frame-detached {
+  margin-top: 4px;
+}
+
 @media (max-width: 768px) {
   .app-frame-content {
     margin: 0;
     border-width: 1px 0 0;
     border-radius: 0;
+  }
+
+  /* The system title bar draws its own bottom edge. */
+  .app-frame-content.app-frame-detached {
+    margin: 0;
+    border-width: 0;
   }
 }
 
