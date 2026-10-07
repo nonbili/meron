@@ -88,6 +88,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ProxySpec
 import jp.nonbili.meron.shared.SignatureSpec
 import jp.nonbili.meron.shared.StorageUsage
@@ -180,6 +181,9 @@ internal fun SettingsScreen(
     onSaveAccountSignature: (AccountSummary, SignatureSpec) -> Unit,
     onSaveAccountProxy: (AccountSummary, ProxySpec) -> Unit,
     onSaveAccountServerSettings: (AccountSummary, ServerSettingsDraft) -> Unit,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    onRequestAccountFolders: (AccountSummary) -> Unit,
+    onSetFolderNotify: (FolderSummary, Boolean) -> Unit,
     kanbanColumnWidth: Int,
     onCycleKanbanColumnWidth: () -> Unit,
     notificationsNeedPermission: Boolean,
@@ -471,6 +475,9 @@ internal fun SettingsScreen(
                         onMoveDown = { onMoveAccountDown(account) },
                         onRemove = { onRemoveAccount(account) },
                         focusProxy = focusAccountProxy && directOpenRoute == SettingsRoutes.Account,
+                        folders = foldersByAccount[account.id].orEmpty(),
+                        onRequestFolders = { onRequestAccountFolders(account) },
+                        onSetFolderNotify = onSetFolderNotify,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

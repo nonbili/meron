@@ -35,6 +35,7 @@ import {
   deletableFolder,
   deleteFolder,
   setFolderNotify,
+  isNotifiableFolder,
   folderMatches,
 } from '../../states/mailFolders'
 import { exportFolderAsEml } from '../../states/emlExport'
@@ -138,15 +139,10 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   // A whole-folder export needs one real mailbox to list on the server. The
   // folder row only supplies a name: the inbox is selected as "inbox" whatever
   // the server calls it, and the list may not have loaded yet.
-  // Folders other than the inbox (always watched) can be opted in to live sync
-  // and notifications, for mail a server-side rule files straight into them.
   const notifyTarget =
     isStarredView || isRSSAccount || selectedAccount === 'unified'
       ? undefined
-      : folders.find(
-          (folder) =>
-            folder.id === selectedFolder && !['inbox', 'drafts', 'sent', 'trash', 'junk'].includes(folder.role),
-        )
+      : folders.find((folder) => folder.id === selectedFolder && isNotifiableFolder(folder))
   const canExportFolder = !isStarredView && !isRSSAccount && !!activeAccount && !!selectedFolder
   const exportFolderName =
     folders.find((folder) => folderMatches(folder, selectedAccount, selectedFolder))?.name ?? selectedFolder

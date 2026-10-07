@@ -634,6 +634,19 @@ internal fun MailRouteContent(
                                             // out the search field next to it.
                                             modifier = Modifier.widthIn(max = 120.dp),
                                             fontSize = 14.sp,
+                                            onSetFolderNotify =
+                                                if (unifiedMailbox) {
+                                                    null
+                                                } else {
+                                                    { folder, enabled ->
+                                                        setMailFolderNotify(
+                                                            accountId = folder.accountId,
+                                                            folderId = folder.name,
+                                                            folderName = folder.displayName,
+                                                            enabled = enabled,
+                                                        )
+                                                    }
+                                                },
                                         )
                                     }
                                     Box(Modifier.weight(1f)) {

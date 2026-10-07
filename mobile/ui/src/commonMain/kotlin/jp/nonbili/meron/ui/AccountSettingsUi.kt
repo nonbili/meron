@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ProxySpec
 import jp.nonbili.meron.shared.SignatureSpec
 import jp.nonbili.meron.shared.accountSummaryIsRss
@@ -91,9 +93,18 @@ internal fun SettingsAccountDetailPage(
     onMoveDown: () -> Unit,
     onRemove: () -> Unit,
     focusProxy: Boolean = false,
+    /** The account's folders, for the per-folder notification switches. */
+    folders: List<FolderSummary> = emptyList(),
+    onRequestFolders: () -> Unit = {},
+    onSetFolderNotify: (FolderSummary, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val isRss = accountSummaryIsRss(account)
+    LaunchedEffect(account.id) { if (!isRss) onRequestFolders() }
+    // Folders switched off here keep their row until the page is left, so a
+    // mis-tap can be undone where it was made.
+    var keptNotifyFolders by remember(account.id) { mutableStateOf(emptySet<String>()) }
+    var pickNotifyFolder by remember(account.id) { mutableStateOf(false) }
     var displayName by remember(account.id) { mutableStateOf(account.displayName) }
     var senderName by remember(account.id) { mutableStateOf(account.senderName) }
     var avatarUrl by remember(account.id) { mutableStateOf(account.avatarUrl) }
@@ -144,6 +155,18 @@ internal fun SettingsAccountDetailPage(
         )
     }
 
+    if (pickNotifyFolder) {
+        NotifyFolderPickerDialog(
+            folders = folders.filter { it.isNotifiable() },
+            // Only the bootstrap inbox is known until the real list arrives.
+            loading = folders.size <= 1,
+            onPick = { folder ->
+                pickNotifyFolder = false
+                onSetFolderNotify(folder, true)
+            },
+            onDismiss = { pickNotifyFolder = false },
+        )
+    }
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
@@ -327,6 +350,48 @@ internal fun SettingsAccountDetailPage(
                     onValueChange = {
                         intervalText = it.filter(Char::isDigit).take(4)
                         persist()
+                    },
+                )
+            }
+        }
+
+        // Which folders notify about new mail: the inbox always does, the rest
+        // are opted in one by one. Only the opted-in ones are listed, so the
+        // section stays short however many folders the account has; the rest
+        // are a pick away. The same switch as the mailbox menu's.
+        if (!isRss) {
+            val notifiable = folders.filter { it.isNotifiable() }
+            item { SettingsSectionLabel(tr("settings.account.folderNotifications")) }
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Inbox,
+                    title = tr("folders.roles.inbox"),
+                    hint = tr("settings.account.folderNotificationsHint"),
+                    onClick = {},
+                    trailing = { Text(tr("settings.account.folderNotificationsAlways")) },
+                )
+            }
+            notifiable.filter { it.notify || it.name in keptNotifyFolders }.forEach { folder ->
+                item(key = "folder-notify:${folder.name}") {
+                    SettingsToggleRow(
+                        icon = folderIcon(folder),
+                        title = folder.displayName,
+                        checked = folder.notify,
+                    ) {
+                        if (folder.notify) keptNotifyFolders = keptNotifyFolders + folder.name
+                        onSetFolderNotify(folder, !folder.notify)
+                    }
+                }
+            }
+            // Always offered: the folder list is fetched when the page opens and
+            // can take a while (or fail), and the picker shows that for itself.
+            item {
+                SettingsRow(
+                    icon = Icons.Filled.Add,
+                    title = tr("settings.account.folderNotificationsAdd"),
+                    onClick = {
+                        onRequestFolders()
+                        pickNotifyFolder = true
                     },
                 )
             }
@@ -574,4 +639,72 @@ internal fun AccountAvatarEditor(
             }
         }
     }
+}
+
+/**
+ * Picks one more folder to notify about, from the account's folder tree.
+ * Folders already on are shown selected, so the tree reads as the whole
+ * picture rather than a list with holes in it.
+ */
+@Composable
+private fun NotifyFolderPickerDialog(
+    folders: List<FolderSummary>,
+    loading: Boolean,
+    onPick: (FolderSummary) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val needle = query.trim()
+    // Filtering narrows the folder set, then the tree is rebuilt from what's
+    // left, so matches keep the hierarchy they sit in.
+    val rows =
+        remember(folders, needle) {
+            flattenFolderTree(
+                buildFolderTree(folders.filter { needle.isEmpty() || it.displayName.contains(needle, ignoreCase = true) }),
+            )
+        }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("settings.account.folderNotificationsAdd")) },
+        text = {
+            Column {
+                if (folders.size > 8) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text(tr("folders.searchPlaceholder")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    )
+                }
+                val listState = rememberLazyListState()
+                LazyColumn(
+                    Modifier.heightIn(max = 400.dp).appScrollbar(listState),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (rows.isEmpty()) {
+                        item { SettingsEmptyLabel(tr(if (loading) "folders.loading" else "folders.noneAvailable")) }
+                    }
+                    itemsIndexed(rows, key = { index, row -> "$index\n${row.node.folder?.name ?: row.node.name}" }) { _, row ->
+                        val folder = row.node.folder
+                        SidebarLikeDialogRow(
+                            selected = folder?.notify == true,
+                            title = row.node.name.replaceFirstChar { it.uppercase() },
+                            subtitle = null,
+                            onClick = { folder?.let(onPick) },
+                            indent = (row.depth * 16).dp,
+                            // Structural nodes (no folder of their own) are labels only.
+                            enabled = folder != null && !folder.notify,
+                            leadingIcon = folder?.let { folderIcon(it) } ?: folderIcon(row.node.name),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) }
+        },
+    )
 }

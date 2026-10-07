@@ -11,9 +11,12 @@ import {
   setAccountSaveSentCopy,
   setRSSSyncInterval,
 } from '../../states/accounts'
+import { mail$ } from '../../states/mail'
+import { ensureAccountFolders, isNotifiableFolder, setFolderNotify } from '../../states/mailFolders'
 import { settings$, setAccountSideNavHidden } from '../../states/settings'
 import type { Account } from '../../types'
-import { NumberRow, SegmentedRow, SettingsGroup, ToggleRow } from './AccountSettingsRows'
+import { FolderSwitcher } from '../menu/FolderSwitcher'
+import { NumberRow, SegmentedRow, SettingRow, SettingsGroup, ToggleRow } from './AccountSettingsRows'
 
 function sentCopyDefault(account: Account): boolean {
   const host = account.smtp_host.trim().replace(/\.$/, '').toLowerCase()
@@ -29,6 +32,67 @@ function sentCopyDefault(account: Account): boolean {
       'smtp.hotmail.com',
     ].includes(host)
   return !providerSavesSent
+}
+
+// Which of a mail account's folders notify about new mail: the inbox always
+// does, the rest are opted in one by one. Only the opted-in ones are listed, so
+// the group stays short however many folders the account has; the rest are a
+// pick away. The same switch as the folder's own menu, gathered in one place.
+function FolderNotificationsGroup({ accountId }: { accountId: string }) {
+  const { t } = useTranslation()
+  const folders = useValue(mail$.foldersByAccount[accountId]) ?? []
+  // Folders switched off here keep their row until the panel closes, so a
+  // mis-click can be undone where it was made.
+  const [kept, setKept] = useState<string[]>([])
+
+  useEffect(() => {
+    setKept([])
+    void ensureAccountFolders(accountId, { refreshIfBootstrapOnly: true })
+  }, [accountId])
+
+  const notifiable = folders.filter(isNotifiableFolder)
+  const listed = notifiable.filter((folder) => folder.notify || kept.includes(folder.id))
+  const addLabel = t('settings.account.folderNotificationsAdd')
+
+  return (
+    <SettingsGroup title={t('settings.account.folderNotifications')}>
+      <SettingRow
+        title={t('folders.roles.inbox')}
+        hint={t('settings.account.folderNotificationsHint')}
+        control={
+          <span className="text-xs font-normal text-secondary">{t('settings.account.folderNotificationsAlways')}</span>
+        }
+      />
+      {listed.map((folder) => (
+        <ToggleRow
+          key={folder.id}
+          title={folder.name || folder.id}
+          checked={!!folder.notify}
+          onChange={() => {
+            if (folder.notify) setKept((ids) => (ids.includes(folder.id) ? ids : [...ids, folder.id]))
+            void setFolderNotify(accountId, folder.id, !folder.notify, folder.name)
+          }}
+        />
+      ))}
+      {/* Always offered: the picker loads the folder list and reports on it itself. */}
+      <div className="flex min-h-11 items-center px-1.5 py-2">
+        <FolderSwitcher
+          accountId={accountId}
+          folderId=""
+          label={addLabel}
+          title={addLabel}
+          labelClassName="text-xs font-normal text-accent"
+          // Offer only what turning on would change: not the inbox and the
+          // other folders that can't notify, nor the ones already on.
+          takenFolderIds={folders.filter((folder) => !isNotifiableFolder(folder) || folder.notify).map((f) => f.id)}
+          onSelect={(folderId) => {
+            const folder = folders.find((item) => item.id === folderId)
+            void setFolderNotify(accountId, folderId, true, folder?.name)
+          }}
+        />
+      </div>
+    </SettingsGroup>
+  )
 }
 
 // The grouped toggle sections of the account panel: visibility,
@@ -105,6 +169,8 @@ export function AccountTogglesSection({ account, isRSS }: { account: Account; is
           />
         )}
       </SettingsGroup>
+
+      {!isRSS && <FolderNotificationsGroup accountId={account.id} />}
 
       <SettingsGroup title={t('settings.account.content')}>
         <ToggleRow

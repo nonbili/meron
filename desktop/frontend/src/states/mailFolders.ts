@@ -196,6 +196,12 @@ export function deletableFolder(
   return { name: folder.name || folder.id, nested: nested.length }
 }
 
+// Folders other than the inbox (always watched) can be opted in to live sync
+// and notifications, for mail a server-side rule files straight into them.
+export function isNotifiableFolder(folder: Pick<Folder, 'role'>): boolean {
+  return !['inbox', 'drafts', 'sent', 'trash', 'junk'].includes(folder.role)
+}
+
 // Opt a folder in to (or out of) live sync and new-mail notifications. The
 // inbox is always watched; this is for folders server-side rules deliver into.
 export async function setFolderNotify(accountId: string, folderId: string, enabled: boolean, name?: string) {

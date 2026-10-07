@@ -46,6 +46,10 @@ internal fun deletableFolder(
     return folder
 }
 
+/** Whether mail can arrive in this folder unseen: not the inbox (always
+ *  watched) and not a place mail is only ever put by the user. */
+internal fun FolderSummary.isNotifiable(): Boolean = role !in setOf("inbox", "drafts", "sent", "trash", "junk")
+
 /** The folder [folderId] names when it can be opted in to background sync and
  *  new-mail notifications: a real mailbox of one account that is neither the
  *  inbox (always watched) nor a place mail does not arrive in. */
@@ -56,7 +60,7 @@ internal fun notifiableFolder(
 ): FolderSummary? {
     if (accountId == UNIFIED_ACCOUNT_ID) return null
     val folder = folders.firstOrNull { it.accountId == accountId && it.name == folderId } ?: return null
-    return folder.takeUnless { it.role in setOf("inbox", "drafts", "sent", "trash", "junk") }
+    return folder.takeIf { it.isNotifiable() }
 }
 
 /** The folders nested under [folderId], which a delete of it would take along. */

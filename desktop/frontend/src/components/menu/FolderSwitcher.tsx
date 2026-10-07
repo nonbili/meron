@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Bell, BellOff, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { folderIcon } from '../../lib/folderIcon'
 import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
 import { mail$ } from '../../states/mail'
-import { ensureAccountFolders } from '../../states/mailFolders'
+import { ensureAccountFolders, isNotifiableFolder, setFolderNotify } from '../../states/mailFolders'
 import { UNIFIED_ACCOUNT, unifiedFolderLabel, unifiedFolders } from '../../lib/unifiedFolders'
+import type { Folder } from '../../types'
 import { FloatingContextMenu } from './FloatingContextMenu'
+import { MenuItem } from './MenuItem'
 import { menuItemBase } from './menuStyles'
 import { buildFolderTree, type TreeNode } from '../../lib/folderTree'
 
@@ -23,6 +25,7 @@ function FolderNodeRow({
   takenFolderIds,
   nested,
   onPick,
+  onFolderMenu,
 }: {
   node: TreeNode
   depth: number
@@ -31,6 +34,8 @@ function FolderNodeRow({
   /** Whether any row in the tree has children; a flat list drops the expander gutter. */
   nested: boolean
   onPick: (folderId: string) => void
+  /** Right-click on a folder that has actions of its own; absent when none do. */
+  onFolderMenu?: (event: ReactMouseEvent<HTMLElement>, folder: Folder) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0
@@ -67,6 +72,9 @@ function FolderNodeRow({
             !node.folder && 'text-secondary',
           )}
           onClick={() => node.folder && onPick(node.folder.id)}
+          onContextMenu={(event) => {
+            if (node.folder && onFolderMenu && isNotifiableFolder(node.folder)) onFolderMenu(event, node.folder)
+          }}
         >
           {current ? (
             <Check size={13} className="shrink-0 text-accent" />
@@ -87,6 +95,7 @@ function FolderNodeRow({
               takenFolderIds={takenFolderIds}
               nested={nested}
               onPick={onPick}
+              onFolderMenu={onFolderMenu}
             />
           ))}
         </div>
@@ -103,6 +112,7 @@ export function FolderSwitcher({
   folderId,
   label,
   labelClassName,
+  title,
   takenFolderIds,
   onSelect,
 }: {
@@ -110,12 +120,15 @@ export function FolderSwitcher({
   folderId: string
   label: string
   labelClassName?: string
+  /** Tooltip for the trigger, when picking does something other than switch folders. */
+  title?: string
   /** Folders already shown elsewhere (e.g. another column) and so not offered. */
   takenFolderIds?: string[]
   onSelect: (folderId: string) => void
 }) {
   const { t } = useTranslation()
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
   const isUnified = accountId === UNIFIED_ACCOUNT
   // Keep observing the shared cache: when it contains only the bootstrap Inbox,
   // ensureAccountFolders refreshes it in the background.
@@ -150,6 +163,7 @@ export function FolderSwitcher({
 
   const close = () => {
     setMenu(null)
+    setFolderMenu(null)
     setQuery('')
   }
 
@@ -173,6 +187,8 @@ export function FolderSwitcher({
   )
   const nested = tree.some((node) => node.children.length > 0)
   const showFilter = folders.length > FILTER_THRESHOLD
+  // Looked up live so the row's label follows the folder's state.
+  const menuFolder = folderMenu && folders.find((folder) => folder.id === folderMenu.folderId)
 
   return (
     <>
@@ -183,7 +199,7 @@ export function FolderSwitcher({
         // is the caller's to pull back with a negative margin if it wants the label
         // flush with the rest of the header.
         className={clsx('flex h-8 min-w-0 items-center gap-1 rounded px-2 hover:bg-hover', labelClassName)}
-        title={t('kanban.actions.switchFolder')}
+        title={title ?? t('kanban.actions.switchFolder')}
         onClick={open}
         onContextMenu={(event) => event.stopPropagation()}
       >
@@ -233,10 +249,53 @@ export function FolderSwitcher({
                     close()
                     onSelect(picked)
                   }}
+                  onFolderMenu={
+                    isUnified
+                      ? undefined
+                      : (event, folder) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setFolderMenu({ x: event.clientX, y: event.clientY, folderId: folder.id })
+                        }
+                  }
                 />
               ))
             )}
           </div>
+        </FloatingContextMenu>
+      )}
+      {folderMenu && menuFolder && (
+        <FloatingContextMenu
+          x={folderMenu.x}
+          y={folderMenu.y}
+          offset={4}
+          onClose={() => setFolderMenu(null)}
+          overlay
+          className="fixed z-50 min-w-[176px] rounded-xl border border-border bg-chats p-1 shadow-2xl animate-fade-in text-primary"
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        >
+          <MenuItem
+            className="flex-nowrap"
+            icon={
+              menuFolder.notify ? (
+                <BellOff size={13} className="text-secondary shrink-0" />
+              ) : (
+                <Bell size={13} className="text-secondary shrink-0" />
+              )
+            }
+            label={
+              <span className="whitespace-nowrap shrink-0">
+                {menuFolder.notify ? t('folders.notify.disable') : t('folders.notify.enable')}
+              </span>
+            }
+            onClick={() => {
+              setFolderMenu(null)
+              void setFolderNotify(accountId, menuFolder.id, !menuFolder.notify, menuFolder.name)
+            }}
+          />
         </FloatingContextMenu>
       )}
     </>

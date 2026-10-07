@@ -1387,6 +1387,16 @@ private fun MeronMobileScreenContent(
                     onSaveAccountSignature = ::saveAccountSignature,
                     onSaveAccountProxy = ::saveAccountProxy,
                     onSaveAccountServerSettings = ::saveAccountServerSettings,
+                    foldersByAccount = foldersByAccount,
+                    onRequestAccountFolders = { account -> ensureAccountFolders(account.id) },
+                    onSetFolderNotify = { folder, enabled ->
+                        setMailFolderNotify(
+                            accountId = folder.accountId,
+                            folderId = folder.name,
+                            folderName = folder.displayName,
+                            enabled = enabled,
+                        )
+                    },
                     kanbanColumnWidth = kanbanColumnWidth,
                     onCycleKanbanColumnWidth = {
                         val next = nextKanbanColumnWidth(kanbanColumnWidth)
