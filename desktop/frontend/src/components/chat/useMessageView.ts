@@ -121,10 +121,11 @@ export function useMessageView(message: Message) {
     incomingRecipientSummary:
       !outgoing && message.reply?.all_adds_recipients === true ? formatRecipientSummary(toRaw, ccRaw) : '',
     // An outgoing message is us: show the account's own avatar — the image the
-    // side navigation shows — instead of resolving the From address.
+    // side navigation shows — instead of resolving the From address. Without a
+    // picture that is the account's initials, never a Gravatar for its address.
     avatarSrc: outgoing ? account?.avatar_url : undefined,
     avatarName: (outgoing ? account?.display_name : '') || message.from_name || message.from_addr,
-    avatarEmail: (outgoing ? account?.email : '') || message.from_addr,
+    avatarEmail: outgoing ? undefined : message.from_addr,
     fromRaw,
     toRaw,
     ccRaw,
