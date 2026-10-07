@@ -466,7 +466,7 @@ textarea,
   }
 }
 
-/* Custom scrollbars, except on Linux, where WebKitGTK's own overlay
+/* Custom scrollbars, except on Linux and macOS, where the webview's own overlay
    scrollbars match the desktop (html.native-scrollbars, set in main.tsx). */
 html:not(.native-scrollbars) ::-webkit-scrollbar {
   width: 10px;
