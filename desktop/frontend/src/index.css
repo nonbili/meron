@@ -103,6 +103,8 @@
   --me-composer-border: #dde3df;
   --me-bubble-shadow-in: 0 2px 8px -2px rgba(27, 33, 30, 0.08), 0 1px 3px -1px rgba(27, 33, 30, 0.04);
   --me-bubble-shadow-out: 0 2px 8px -2px rgba(14, 122, 88, 0.12), 0 1px 3px -1px rgba(14, 122, 88, 0.06);
+  --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.11);
+  --me-frame-border: none;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 50%, transparent);
 
   color-scheme: light;
@@ -134,6 +136,8 @@
   --me-composer-border: #29352f;
   --me-bubble-shadow-in: 0 4px 12px -3px rgba(0, 0, 0, 0.3), 0 1px 4px -2px rgba(0, 0, 0, 0.2);
   --me-bubble-shadow-out: 0 4px 12px -3px rgba(0, 0, 0, 0.4), 0 1px 4px -2px rgba(0, 0, 0, 0.3);
+  --me-frame-shadow: none;
+  --me-frame-border: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
 
   color-scheme: dark;
@@ -430,9 +434,9 @@ textarea,
 }
 
 /* The content beside the side navigation (App.tsx): one surface with rounded
-   corners and a hairline edge, set into the frame the side navigation and
-   Meron's title bar make (<main> takes their colour behind it). Like Slack, it
-   stops 8px short of the window's right and bottom edges, so the frame shows
+   corners and a soft shadow instead of a hairline edge, lifted off the frame the
+   side navigation and Meron's title bar make (<main> takes their colour behind it). Like Slack, it
+   stops 4px short of the window's right and bottom edges, so the frame shows
    round all its corners; under the system title bar (.app-frame-detached) 4px
    short of the top, where the native title bar already sets it apart. On a narrow window the side navigation is hidden, so
    the surface fills the window, square. */
@@ -442,21 +446,32 @@ textarea,
   flex: 1 1 0%;
   min-width: 0;
   overflow: hidden;
-  margin: 0 8px 8px 0;
+  margin: 0 4px 4px 0;
   background: var(--me-bg-app);
-  border: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
+  /* Light themes lift the surface with a shadow and no border, so the panels
+     inside meet the shadow directly; dark ones keep the hairline, as a dark shadow
+     hardly shows on the darker frame. The light shadow is wide, faint and centred,
+     like Slack's on macOS. */
+  border: var(--me-frame-border);
   border-radius: 12px;
+  box-shadow: var(--me-frame-shadow);
 }
 
+/* The native title bar sits outside the page, so a shadow would stop 4px above
+   the surface: keep the hairline there, in light themes too. */
 .app-frame-content.app-frame-detached {
   margin-top: 4px;
+  border: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
+  box-shadow: none;
 }
 
 @media (max-width: 768px) {
   .app-frame-content {
     margin: 0;
-    border-width: 1px 0 0;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
     border-radius: 0;
+    box-shadow: none;
   }
 
   /* The system title bar draws its own bottom edge. */
