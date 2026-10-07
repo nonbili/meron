@@ -147,7 +147,7 @@ export function SideNav() {
 
   return (
     <aside
-      className={`flex w-[60px] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-[9px]'}`}
+      className={`flex w-[3.75rem] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-[9px]'}`}
       onContextMenu={(event) => {
         if (event.defaultPrevented) return
         event.preventDefault()
