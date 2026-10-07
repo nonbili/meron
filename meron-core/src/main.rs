@@ -27,7 +27,7 @@ use meron_core::engine::{Engine, EngineHost};
 use meron_core::protocol::{Request, ping_response, ready_event};
 use meron_core::{imap, secrets, store};
 use sidecar::dispatch::dispatch;
-use sidecar::idle::start_idle_watch;
+use sidecar::idle::{poll_notify_folders, start_idle_watch, start_notify_folder_watches};
 use sidecar::prefs::activate_pref_session;
 
 /// Shared, serialized writer so responses and events never interleave on stdout.
@@ -112,8 +112,11 @@ async fn main() {
         // Warm the INBOX backlog (unread + recent) so it's readable offline and
         // opens instantly, without waiting for the UI to request the folder.
         spawn_body_prefetch(engine.clone(), account.clone(), "INBOX".to_string());
+        start_notify_folder_watches(&engine, &out, &account);
         start_idle_watch(engine.clone(), out.clone(), account, "INBOX".to_string());
     }
+
+    tokio::spawn(poll_notify_folders(engine.clone(), out.clone()));
 
     emit(&out, "ready", ready_event()).await;
 

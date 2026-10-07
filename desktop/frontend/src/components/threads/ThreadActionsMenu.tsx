@@ -4,6 +4,8 @@ import {
   MoreHorizontal,
   Inbox,
   Mail,
+  Bell,
+  BellOff,
   Star,
   Paperclip,
   Check,
@@ -36,6 +38,9 @@ export type ThreadActionsMenuItemsProps = {
   onDeleteFolder?: () => void
   /** Only wired for a folder of a single mail account; hidden otherwise. */
   onExportFolder?: () => void
+  /** Only wired for a non-inbox folder of a single mail account; hidden otherwise. */
+  onToggleNotify?: () => void
+  notifyEnabled?: boolean
   onSync?: () => void
   syncing?: boolean
   syncLabel?: string
@@ -60,6 +65,8 @@ export function ThreadActionsMenuItems({
   emptyFolderLabel,
   onDeleteFolder,
   onExportFolder,
+  onToggleNotify,
+  notifyEnabled = false,
   onSync,
   syncing = false,
   syncLabel,
@@ -158,7 +165,7 @@ export function ThreadActionsMenuItems({
           }}
         />
       )}
-      {(onSync || onRemove || onDeleteFolder || onExportFolder) && (
+      {(onSync || onRemove || onDeleteFolder || onExportFolder || onToggleNotify) && (
         <>
           <div className="my-1 border-t border-border" />
           {onSync && (
@@ -179,6 +186,27 @@ export function ThreadActionsMenuItems({
               }
               onClick={() => {
                 onSync()
+                closeMenu()
+              }}
+            />
+          )}
+          {onToggleNotify && (
+            <MenuItem
+              className="flex-nowrap"
+              icon={
+                notifyEnabled ? (
+                  <BellOff size={13} className="text-secondary shrink-0" />
+                ) : (
+                  <Bell size={13} className="text-secondary shrink-0" />
+                )
+              }
+              label={
+                <span className="whitespace-nowrap shrink-0">
+                  {notifyEnabled ? t('folders.notify.disable') : t('folders.notify.enable')}
+                </span>
+              }
+              onClick={() => {
+                onToggleNotify()
                 closeMenu()
               }}
             />
@@ -236,6 +264,8 @@ export function ThreadActionsMenu({
   emptyFolderLabel,
   onDeleteFolder,
   onExportFolder,
+  onToggleNotify,
+  notifyEnabled = false,
   onSync,
   syncing = false,
   syncLabel,
@@ -257,6 +287,8 @@ export function ThreadActionsMenu({
   emptyFolderLabel?: string
   onDeleteFolder?: () => void
   onExportFolder?: () => void
+  onToggleNotify?: () => void
+  notifyEnabled?: boolean
   onSync?: () => void
   syncing?: boolean
   syncLabel?: string
@@ -310,6 +342,8 @@ export function ThreadActionsMenu({
             emptyFolderLabel={emptyFolderLabel}
             onDeleteFolder={onDeleteFolder}
             onExportFolder={onExportFolder}
+            onToggleNotify={onToggleNotify}
+            notifyEnabled={notifyEnabled}
             onSync={onSync}
             syncing={syncing}
             syncLabel={syncLabel}

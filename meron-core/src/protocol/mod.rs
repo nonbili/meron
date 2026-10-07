@@ -100,6 +100,7 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "mail.folderList" => Ok(json!({ "folders": [] })),
         "mail.folderCreate" => Ok(json!({ "folders": [] })),
         "mail.folderDelete" => Ok(json!({ "ok": true, "deleted": 0, "folders": [] })),
+        "mail.folderSetNotify" => Ok(json!({ "folders": [] })),
         "mail.threadList" => Ok(json!({ "threads": [] })),
         "mail.threadRead" => Ok(json!({ "messages": [] })),
         "mail.attachmentRead" | "mail.readAttachment" => Ok(json!({ "data": "" })),
@@ -194,6 +195,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "mail.folderList" => list_mobile_folders(data_dir, &req.params),
         "mail.folderCreate" => create_mobile_folder(data_dir, &req.params),
         "mail.folderDelete" => delete_mobile_folder(data_dir, &req.params),
+        "mail.folderSetNotify" => set_mobile_folder_notify(data_dir, &req.params),
         "mail.threadList" => list_mobile_threads(data_dir, &req.params),
         "mail.threadRead" => read_mobile_thread(data_dir, &req.params),
         "mail.attachmentRead" | "mail.readAttachment" => {

@@ -91,6 +91,8 @@ export type Folder = {
   role: string
   delimiter?: string
   unread: number
+  /** The user opted this folder in to live sync and new-mail notifications. */
+  notify?: boolean
 }
 
 /** A correspondent surfaced for recipient autocomplete. */

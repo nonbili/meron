@@ -229,6 +229,10 @@ pub struct Folder {
     /// UI role computed from `special_use` plus core name heuristics.
     #[serde(default)]
     pub role: String,
+    /// The user opted this folder in to live sync and new-mail notifications.
+    /// Populated by `store::get_folders`; INBOX is always watched regardless.
+    #[serde(default)]
+    pub notify: bool,
 }
 
 /// One addressee parsed from an envelope `To`/`Cc` list.
@@ -779,6 +783,7 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
             unread: 0,
             special_use,
             role: String::new(),
+            notify: false,
         });
     }
     Ok(out)

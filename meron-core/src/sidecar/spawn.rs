@@ -135,9 +135,10 @@ pub(crate) fn spawn_message_sync(
                         eprintln!("meron-core: sync {} {account}: {err:#}", sync.role);
                     }
                 }
-                let new_inbox = (!synced.arrivals.is_empty()).then_some(synced.arrivals);
-                if let Some(headers) = new_inbox
-                    && let Some(detail) = new_messages_detail(&engine, &account, &headers).await
+                let arrivals = (!synced.arrivals.is_empty()).then_some(synced.arrivals);
+                if let Some(headers) = arrivals
+                    && let Some(detail) =
+                        new_messages_detail(&engine, &account, &folder, &headers).await
                 {
                     emit(&out, "mail.newMessages", detail).await;
                     return;

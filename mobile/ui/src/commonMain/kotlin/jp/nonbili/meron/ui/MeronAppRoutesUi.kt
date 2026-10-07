@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
@@ -802,6 +803,12 @@ internal fun MailRouteContent(
                                     } else {
                                         deletableFolder(coreFolders, selectedCoreAccountId, selectedCoreFolder)
                                     }
+                                val notifiableMailboxFolder =
+                                    if (selectedAccountIsRss) {
+                                        null
+                                    } else {
+                                        notifiableFolder(coreFolders, selectedCoreAccountId, selectedCoreFolder)
+                                    }
                                 Box {
                                     IconButton(onClick = { mailboxMenuOpen = true }) {
                                         Icon(
@@ -880,6 +887,40 @@ internal fun MailRouteContent(
                                                             folderName = folder.displayName,
                                                             role = folder.role,
                                                         )
+                                                },
+                                            )
+                                        }
+                                        notifiableMailboxFolder?.let { folder ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        tr(
+                                                            if (folder.notify) {
+                                                                "folders.notify.disable"
+                                                            } else {
+                                                                "folders.notify.enable"
+                                                            },
+                                                        ),
+                                                    )
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        if (folder.notify) {
+                                                            Icons.Filled.NotificationsOff
+                                                        } else {
+                                                            Icons.Outlined.NotificationsNone
+                                                        },
+                                                        contentDescription = null,
+                                                    )
+                                                },
+                                                onClick = {
+                                                    mailboxMenuOpen = false
+                                                    setMailFolderNotify(
+                                                        accountId = folder.accountId,
+                                                        folderId = folder.name,
+                                                        folderName = folder.displayName,
+                                                        enabled = !folder.notify,
+                                                    )
                                                 },
                                             )
                                         }

@@ -50,6 +50,7 @@ fn fetch_notification_bodies(
     data_dir: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
+    folder: &str,
     headers: &[crate::imap::MessageHeader],
 ) {
     let uids: Vec<u32> = headers
@@ -61,7 +62,7 @@ fn fetch_notification_bodies(
     let result = crate::ffi::engine_block_on(async {
         tokio::time::timeout(
             std::time::Duration::from_secs(NOTIFY_PREVIEW_TIMEOUT_SECS),
-            crate::engine::fetch_bodies_for_uids(engine, account_id, "INBOX", &uids, media_root),
+            crate::engine::fetch_bodies_for_uids(engine, account_id, folder, &uids, media_root),
         )
         .await
         .map_err(|_| anyhow::anyhow!("timed out"))?
@@ -464,8 +465,6 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         return Err(format!("account needs reconnect: {account_id}"));
     }
     let creds_ms = started.elapsed().as_millis();
-    let is_inbox = folder.eq_ignore_ascii_case("INBOX");
-
     let folders_started = std::time::Instant::now();
     let folders_count = if sync_folders {
         crate::ffi::engine_block_on(crate::engine::sync_folders(&engine, &account_id))?.len()
@@ -481,19 +480,16 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         limit,
     ))?;
     let messages_ms = messages_started.elapsed().as_millis();
-    let new_messages = if is_inbox {
-        (!synced.arrivals.is_empty())
-            .then_some(synced.arrivals)
-            .and_then(|headers| {
-                // Fetch the arrivals' own bodies before building the detail: the
-                // notification shows a snippet of each, and the general prefetch in
-                // the sync tail runs too late (and may be deferred entirely).
-                fetch_notification_bodies(data_dir, &engine, &account_id, &headers);
-                crate::ffi::mobile_new_messages_detail(data_dir, &account_id, &headers)
-            })
-    } else {
-        None
-    };
+    // Arrivals are only reported for INBOX and folders opted in to notifications.
+    let new_messages = (!synced.arrivals.is_empty())
+        .then_some(synced.arrivals)
+        .and_then(|headers| {
+            // Fetch the arrivals' own bodies before building the detail: the
+            // notification shows a snippet of each, and the general prefetch in
+            // the sync tail runs too late (and may be deferred entirely).
+            fetch_notification_bodies(data_dir, &engine, &account_id, &folder, &headers);
+            crate::ffi::mobile_new_messages_detail(data_dir, &account_id, &folder, &headers)
+        });
     crate::mlog!(
         crate::log::Level::Info,
         "mail.sync",
@@ -522,6 +518,9 @@ pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Valu
             return Ok(json!({ "folders": folders }));
         }
         let folders = store::get_folders(&conn, &account_id).map_err(|err| err.to_string())?;
+        let live = store::notify_folder_plan(&conn, &account_id)
+            .map_err(|err| err.to_string())?
+            .live;
         let folders = folders
             .into_iter()
             .map(|folder| {
@@ -542,11 +541,39 @@ pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Valu
                     "role": role,
                     "delimiter": folder.delimiter.unwrap_or_default(),
                     "unread": folder.unread,
+                    "notify": folder.notify,
+                    // Opted in and holding one of the account's IDLE slots;
+                    // the host's live push watches these, core polls the rest.
+                    "notify_live": live.contains(&folder.name),
                 })
             })
             .collect::<Vec<_>>();
         Ok(json!({ "folders": folders }))
     })
+}
+
+/// Opt a folder in to (or out of) background sync and new-mail notifications.
+/// Answers with the refreshed folder list, like the other folder mutations.
+pub(crate) fn set_mobile_folder_notify(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let account_id = req_str(params, "account_id")?;
+    let folder = canon_folder(&req_str(params, "folder_id")?);
+    let enabled = params
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| "enabled is required".to_string())?;
+    with_mobile_db(data_dir, |conn| {
+        if is_rss_account(&conn, &account_id)? {
+            return Err("RSS accounts do not support folders".to_string());
+        }
+        if !store::set_folder_notify(&conn, &account_id, &folder, enabled)
+            .map_err(|err| err.to_string())?
+        {
+            return Err(format!("Folder not found: {folder}"));
+        }
+        Ok(json!({ "ok": true }))
+    })?;
+    crate::ffi::sync_foreground_notify_watch(data_dir, &account_id, &folder, enabled);
+    list_mobile_folders(data_dir, params)
 }
 
 pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
@@ -634,6 +661,13 @@ pub(crate) fn delete_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
         for target in &removed {
             deleted +=
                 store::delete_folder(&conn, &account_id, target).map_err(|err| err.to_string())?;
+            // Nothing is left to watch; a watcher would only fail to SELECT
+            // the mailbox and reconnect forever.
+            crate::ffi::forget_deleted_folder_watch(&account_id, target);
+        }
+        // A deleted opted-in folder may have freed a live slot.
+        if !removed.is_empty() {
+            crate::ffi::start_live_notify_watches(data_dir, &account_id);
         }
         let mut response = list_mobile_folders(data_dir, params)?;
         response["ok"] = json!(warning.is_none());

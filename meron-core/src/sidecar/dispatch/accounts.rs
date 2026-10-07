@@ -214,6 +214,7 @@ pub(crate) async fn dispatch(
                 if start_idle_watch(engine.clone(), out.clone(), id.clone(), "INBOX".to_string()) {
                     spawn_body_prefetch(engine.clone(), id.clone(), "INBOX".to_string());
                 }
+                start_notify_folder_watches(engine, out, &id);
             }
             Ok(json!({ "ok": true, "account": id }))
         }
@@ -487,6 +488,7 @@ pub(crate) async fn dispatch(
                 if start_idle_watch(engine.clone(), out.clone(), id.clone(), "INBOX".to_string()) {
                     spawn_body_prefetch(engine.clone(), id.clone(), "INBOX".to_string());
                 }
+                start_notify_folder_watches(engine, out, &id);
             }
             Ok(json!({ "ok": true }))
         }

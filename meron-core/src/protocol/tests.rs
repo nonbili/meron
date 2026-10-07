@@ -1020,7 +1020,8 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
     drop(conn);
     let dir = data_dir.to_str().unwrap();
 
-    let detail = crate::ffi::mobile_new_messages_detail(dir, "me@example.com", &arrivals).unwrap();
+    let detail =
+        crate::ffi::mobile_new_messages_detail(dir, "me@example.com", "INBOX", &arrivals).unwrap();
     assert_eq!(detail["account"], "me@example.com");
     assert_eq!(detail["accountName"], "me@example.com");
     assert_eq!(detail["folder"], "inbox");
@@ -1118,6 +1119,46 @@ fn mobile_protocol_lists_folders_from_store() {
     assert_eq!(value["result"]["folders"][1]["id"], "INBOX");
     assert_eq!(value["result"]["folders"][1]["role"], "inbox");
     assert_eq!(value["result"]["folders"][1]["unread"], 1);
+    assert_eq!(value["result"]["folders"][0]["notify"], false);
+
+    // Opting a folder in answers with the refreshed list.
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":64,"method":"mail.folderSetNotify","params":{"account_id":"me@example.com","folder_id":"Archive","enabled":true}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(value["result"]["folders"][0]["id"], "Archive");
+    assert_eq!(value["result"]["folders"][0]["notify"], true);
+    assert_eq!(value["result"]["folders"][0]["notify_live"], true);
+    assert_eq!(value["result"]["folders"][1]["notify_live"], false);
+    assert_eq!(value["result"]["folders"][1]["notify"], false);
+    let missing = invoke_mobile_protocol_json(
+        r#"{"id":65,"method":"mail.folderSetNotify","params":{"account_id":"me@example.com","folder_id":"Nope","enabled":true}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert!(
+        missing["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Folder not found")
+    );
+
+    // Arrivals in the opted-in folder are described under its own name, with
+    // snippets read from that folder's cache.
+    let arrival = MessageHeader {
+        uid: 9,
+        subject: "Filed by a rule".to_string(),
+        thread_key: "rule".to_string(),
+        ..Default::default()
+    };
+    let detail = crate::ffi::mobile_new_messages_detail(
+        data_dir.to_str().unwrap(),
+        "me@example.com",
+        "Archive",
+        &[arrival],
+    )
+    .unwrap();
+    assert_eq!(detail["folder"], "Archive");
+    assert_eq!(detail["folderName"], "Archive");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

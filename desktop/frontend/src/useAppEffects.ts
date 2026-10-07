@@ -345,27 +345,30 @@ export function useAppEffects() {
       },
     )
 
-    const offNew = eventsOn('mail.newMessages', (detail: { account?: string; folder?: string; count?: number }) => {
-      // A successful fetch proves connectivity is back for this account.
-      clearSyncErrorFor(detail?.account ?? null)
-      // New mail arrived somewhere, so the tray should reflect unread immediately —
-      // independent of which account/folder is selected. Clearing back to "read" is
-      // handled by the reactive tray effect once the folder cache refreshes.
-      setTrayUnread(true)
-      // Keep the side navigation's per-account (and unified) unread badges honest for
-      // *every* account, not just the selected one. get_folders recomputes unread
-      // live, so this cache-only refresh picks up the new mail even when the
-      // account is only visible as a Kanban column. Without it the badge stays
-      // dark while the column (which falls back to counting loaded cards) shows
-      // the real count. Done before the selection early-return below.
-      if (detail?.account) void refreshAccountFoldersCache(detail.account, false)
-      refreshOpenThread(detail?.account)
-      if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
-      const folder = detail?.folder ?? 'inbox'
-      const count = detail?.count ?? 1
-      showToast(`New mail in ${folder} (+${count})`)
-      if (selectedAccount) void refreshCurrentMailbox().catch(console.error)
-    })
+    const offNew = eventsOn(
+      'mail.newMessages',
+      (detail: { account?: string; folder?: string; folderName?: string; count?: number }) => {
+        // A successful fetch proves connectivity is back for this account.
+        clearSyncErrorFor(detail?.account ?? null)
+        // New mail arrived somewhere, so the tray should reflect unread immediately —
+        // independent of which account/folder is selected. Clearing back to "read" is
+        // handled by the reactive tray effect once the folder cache refreshes.
+        setTrayUnread(true)
+        // Keep the side navigation's per-account (and unified) unread badges honest for
+        // *every* account, not just the selected one. get_folders recomputes unread
+        // live, so this cache-only refresh picks up the new mail even when the
+        // account is only visible as a Kanban column. Without it the badge stays
+        // dark while the column (which falls back to counting loaded cards) shows
+        // the real count. Done before the selection early-return below.
+        if (detail?.account) void refreshAccountFoldersCache(detail.account, false)
+        refreshOpenThread(detail?.account)
+        if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
+        const folder = detail?.folderName || (detail?.folder ?? 'inbox')
+        const count = detail?.count ?? 1
+        showToast(`New mail in ${folder} (+${count})`)
+        if (selectedAccount) void refreshCurrentMailbox().catch(console.error)
+      },
+    )
 
     const offSynced = eventsOn('mail.synced', (detail: { account?: string; folders?: boolean }) => {
       clearSyncErrorFor(detail?.account ?? null)

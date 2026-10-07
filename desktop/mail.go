@@ -94,6 +94,37 @@ func (a *App) folderCreate(payload map[string]any) (any, error) {
 	return foldersJSON(req.AccountID, res), nil
 }
 
+// folderSetNotify opts a folder in to (or out of) live sync and new-mail
+// notifications. The sidecar keeps the flag and the folder's IDLE watch.
+func (a *App) folderSetNotify(payload map[string]any) (any, error) {
+	var req FolderSetNotifyRequest
+	_ = decode(payload, &req)
+	if req.AccountID == "" {
+		return nil, errors.New("account_id is required")
+	}
+	if strings.TrimSpace(req.FolderID) == "" {
+		return nil, errors.New("folder_id is required")
+	}
+	if isRSSAccountID(req.AccountID) {
+		return nil, errors.New("RSS accounts do not support folders")
+	}
+	if req.AccountID == "unified" {
+		return nil, errors.New("Pick a single account to change folder notifications")
+	}
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, a.engineUnavailable()
+	}
+	res, err := a.sidecar.Call("folders.setNotify", map[string]any{
+		"account": req.AccountID,
+		"folder":  req.FolderID,
+		"enabled": req.Enabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return foldersJSON(req.AccountID, res), nil
+}
+
 // folderDelete removes a folder on the server, subfolders included, along with
 // the cached messages under it. The sidecar re-checks that no special-use folder
 // is in that subtree, so a bad payload cannot delete Sent or Archive.

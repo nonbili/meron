@@ -115,7 +115,7 @@ pub fn child_folders(conn: &Connection, account: &str, name: &str) -> Result<Vec
 
 pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT f.name, f.delimiter, f.special_use, {UNREAD_SQL} AS unread
+        "SELECT f.name, f.delimiter, f.special_use, {UNREAD_SQL} AS unread, f.notify <> 0
            FROM folders f WHERE f.account = ?1 ORDER BY f.name",
         UNREAD_SQL = unread_sql("f.account", "f.name"),
     ))?;
@@ -129,9 +129,94 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
             delimiter: row.get(1)?,
             special_use,
             unread: row.get::<_, i64>(3)? as u32,
+            notify: row.get(4)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Opt a folder in to (or out of) live sync and new-mail notifications.
+/// Returns false when the account has no such folder.
+pub fn set_folder_notify(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    enabled: bool,
+) -> Result<bool> {
+    // The flag doubles as the opt-in order (see `notify_folder_plan`), so an
+    // already opted-in folder keeps its place when enabled again.
+    let changed = if enabled {
+        conn.execute(
+            "UPDATE folders SET notify = CASE WHEN notify <> 0 THEN notify ELSE
+               (SELECT COALESCE(MAX(notify), 0) + 1 FROM folders WHERE account = ?1) END
+             WHERE account = ?1 AND name = ?2",
+            params![account, folder],
+        )?
+    } else {
+        conn.execute(
+            "UPDATE folders SET notify = 0 WHERE account = ?1 AND name = ?2",
+            params![account, folder],
+        )?
+    };
+    Ok(changed > 0)
+}
+
+/// Whether new mail in `folder` raises a notification: always for INBOX,
+/// otherwise only when the user opted the folder in.
+pub fn folder_notifies(conn: &Connection, account: &str, folder: &str) -> Result<bool> {
+    if folder.eq_ignore_ascii_case("INBOX") {
+        return Ok(true);
+    }
+    Ok(conn
+        .query_row(
+            "SELECT notify <> 0 FROM folders WHERE account = ?1 AND name = ?2",
+            params![account, folder],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .unwrap_or(false))
+}
+
+/// Whether `folder` holds one of the account's IDLE slots for opted-in folders
+/// (see [`notify_folder_plan`]), and so is watched whether or not a view shows it.
+pub fn folder_notifies_live(conn: &Connection, account: &str, folder: &str) -> Result<bool> {
+    Ok(notify_folder_plan(conn, account)?
+        .live
+        .iter()
+        .any(|name| name == folder))
+}
+
+/// The folders, besides INBOX, the user opted in to live sync and new-mail
+/// notifications, in the order they were opted in.
+pub fn notify_folders(conn: &Connection, account: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT name FROM folders
+          WHERE account = ?1 AND notify <> 0 AND name <> 'INBOX' COLLATE NOCASE
+          ORDER BY notify, name",
+    )?;
+    let rows = stmt.query_map(params![account], |row| row.get::<_, String>(0))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// How many opted-in folders per account get a dedicated IMAP IDLE connection.
+/// IDLE watches one mailbox per connection and providers cap connections per
+/// account (Gmail at 15), so the rest are polled over the session pool.
+pub const NOTIFY_LIVE_MAX: usize = 3;
+
+/// How an account's opted-in folders are kept current.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct NotifyFolderPlan {
+    /// Watched over IMAP IDLE: the first [`NOTIFY_LIVE_MAX`] opted in, so a
+    /// later opt-in never takes a connection away from an earlier one.
+    pub live: Vec<String>,
+    /// Checked on a timer over pooled sessions.
+    pub polled: Vec<String>,
+}
+
+pub fn notify_folder_plan(conn: &Connection, account: &str) -> Result<NotifyFolderPlan> {
+    let mut live = notify_folders(conn, account)?;
+    let polled = live.split_off(live.len().min(NOTIFY_LIVE_MAX));
+    Ok(NotifyFolderPlan { live, polled })
 }
 
 /// Unread total for the folder named by the `account`/`folder` SQL expressions:

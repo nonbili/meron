@@ -7,6 +7,9 @@ use meron_core::protocol::Request;
 use meron_core::{imap, mail_model, rss, store};
 
 use crate::Writer;
+use crate::sidecar::idle::{
+    set_view_watch, start_notify_folder_watches, stop_idle_watch, view_watches,
+};
 use crate::sidecar::params::*;
 use crate::sidecar::spawn::*;
 
@@ -69,6 +72,36 @@ pub(crate) async fn dispatch(
             Ok(json!({ "folders": serde_json::to_value(vec![folder])? }))
         }
 
+        // Opt a folder in to (or out of) live sync and new-mail notifications.
+        // The first few opted in are watched over IDLE and the rest polled
+        // (`store::notify_folder_plan`). Disabling stops the folder's watch
+        // unless a view (a kanban column showing it) still wants it, and may
+        // promote a polled folder into the freed live slot.
+        "folders.setNotify" => {
+            let account = req_str(p, "account")?;
+            if is_rss(engine, &account)? {
+                return Err(anyhow::anyhow!("RSS accounts do not support folders"));
+            }
+            let folder = canon_folder(&req_str(p, "folder")?);
+            let enabled = req_bool(p, "enabled")?;
+            let folders = {
+                let db = engine.db.lock().unwrap();
+                if !store::set_folder_notify(&db, &account, &folder, enabled)? {
+                    return Err(anyhow::anyhow!("Folder not found: {folder}"));
+                }
+                store::get_folders(&db, &account)?
+            };
+            // INBOX is always watched, whatever the flag says.
+            if !enabled && !folder.eq_ignore_ascii_case("INBOX") && !view_watches(&account, &folder)
+            {
+                stop_idle_watch(engine, &account, &folder);
+            }
+            if !engine.is_paused(&account) {
+                start_notify_folder_watches(engine, out, &account);
+            }
+            Ok(json!({ "ok": true, "folders": serde_json::to_value(folders)? }))
+        }
+
         // Delete a folder and everything nested under it on the server, then
         // forget the whole subtree's cache. Unrecoverable, so the special-use
         // gate is re-checked here rather than trusted from the caller.
@@ -115,9 +148,17 @@ pub(crate) async fn dispatch(
                 let mut deleted = 0;
                 for target in &removed {
                     deleted += store::delete_folder(&db, &account, target)?;
+                    // Nothing is left to watch; a watcher would only fail to
+                    // SELECT the mailbox and reconnect forever.
+                    set_view_watch(&account, target, false);
+                    stop_idle_watch(engine, &account, target);
                 }
                 (deleted, store::get_folders(&db, &account)?)
             };
+            // A deleted opted-in folder may have freed a live slot.
+            if !removed.is_empty() && !engine.is_paused(&account) {
+                start_notify_folder_watches(engine, out, &account);
+            }
             Ok(json!({
                 "ok": warning.is_none(),
                 "folder": folder,

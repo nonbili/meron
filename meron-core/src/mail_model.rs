@@ -32,10 +32,12 @@ pub fn new_messages_detail(
     conn: &Connection,
     account_id: &str,
     account_name: &str,
+    folder: &str,
     muted: bool,
     headers: &[MessageHeader],
 ) -> Option<Value> {
     let latest = headers.first()?;
+    let is_inbox = folder.eq_ignore_ascii_case("INBOX");
     let messages: Vec<Value> = headers
         .iter()
         .take(NEW_MESSAGES_DETAIL_MAX)
@@ -44,7 +46,7 @@ pub fn new_messages_detail(
                 "uid": header.uid,
                 "from": display_from(header),
                 "subject": header.subject,
-                "preview": store::cached_body_preview(conn, account_id, "INBOX", header.uid)
+                "preview": store::cached_body_preview(conn, account_id, folder, header.uid)
                     .unwrap_or_default(),
                 "threadKey": store::card_thread_key(header),
                 "date": header.date,
@@ -54,7 +56,11 @@ pub fn new_messages_detail(
     Some(json!({
         "account": account_id,
         "accountName": account_name,
-        "folder": "inbox",
+        // The mailbox the arrivals landed in: "inbox", or the wire name of a
+        // folder the user opted in to notifications. `folderName` is its
+        // readable label, empty for the inbox (clients name that themselves).
+        "folder": if is_inbox { "inbox" } else { folder },
+        "folderName": if is_inbox { String::new() } else { crate::utf7::decode(folder) },
         "count": headers.len(),
         "muted": muted,
         "from": display_from(latest),

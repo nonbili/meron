@@ -232,7 +232,7 @@ func (a *App) openThreadFromNotification(account, threadID string) {
 func (a *App) notifyNewMail(detail any) {
 	labels := a.currentNativeLabels()
 	count := 1
-	var account, accountName, folder, from, subject, preview, threadKey string
+	var account, accountName, folder, folderName, from, subject, preview, threadKey string
 	if m, ok := detail.(map[string]any); ok {
 		// Muted accounts still sync (the UI refreshes), they just don't raise an
 		// OS notification. The sidecar resolves the mute pref onto each event.
@@ -245,6 +245,7 @@ func (a *App) notifyNewMail(detail any) {
 		account, _ = m["account"].(string)
 		accountName, _ = m["accountName"].(string)
 		folder, _ = m["folder"].(string)
+		folderName, _ = m["folderName"].(string)
 		from, _ = m["from"].(string)
 		subject, _ = m["subject"].(string)
 		preview, _ = m["preview"].(string)
@@ -253,6 +254,11 @@ func (a *App) notifyNewMail(detail any) {
 
 	if accountName == "" {
 		accountName = account
+	}
+	// Mail outside the inbox (a folder opted in to notifications) names where
+	// it landed, since that is not where the user would look for it.
+	if folderName != "" {
+		accountName = fmt.Sprintf("%s / %s", accountName, folderName)
 	}
 
 	// Title carries the most identifying info (sender for a single message,

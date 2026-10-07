@@ -540,6 +540,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 15 {
         migrate_v15(&tx)?;
     }
+    if version < 16 {
+        migrate_v16(&tx)?;
+    }
 
     tx.commit()?;
     Ok(())
@@ -822,6 +825,14 @@ fn migrate_v15(conn: &Connection) -> Result<()> {
          );",
     )?;
     conn.execute_batch("PRAGMA user_version = 15;")?;
+    Ok(())
+}
+
+/// Per-folder opt-in to live sync and new-mail notifications. INBOX is always
+/// watched and never consults the flag.
+fn migrate_v16(conn: &Connection) -> Result<()> {
+    conn.execute_batch("ALTER TABLE folders ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;")?;
+    conn.execute_batch("PRAGMA user_version = 16;")?;
     Ok(())
 }
 

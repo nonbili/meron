@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.parseAccountListResponse
+import jp.nonbili.meron.shared.parseFolderListResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -144,7 +145,11 @@ class AndroidMailPushService :
         val response = MeronCoreNative.invokeJson("""{"id":1,"method":"account.list"}""")
         val accounts = parseAccountListResponse(response)
         val active = accounts.filterNot { accountSummaryIsRss(it) || it.paused || it.needsReconnect }
-        val wanted = active.map { watchKey(it.id, INBOX_FOLDER) }.toSet()
+        // INBOX, plus the opted-in folders that hold an IDLE slot: IDLE watches
+        // one mailbox per connection, so core polls the rest of the opted-in
+        // folders for as long as the account is watched here.
+        val foldersByAccount = active.associate { it.id to listOf(INBOX_FOLDER) + liveNotifyFolders(it.id) }
+        val wanted = foldersByAccount.flatMap { (id, folders) -> folders.map { watchKey(id, it) } }.toSet()
         watched
             .filterNot { it in wanted }
             .forEach { key ->
@@ -153,8 +158,8 @@ class AndroidMailPushService :
                 watched.remove(key)
             }
         active.forEach { account ->
-            val key = watchKey(account.id, INBOX_FOLDER)
-            if (key in watched) return@forEach
+            val missing = foldersByAccount[account.id].orEmpty().filterNot { watchKey(account.id, it) in watched }
+            if (missing.isEmpty()) return@forEach
             // Push a fresh AccountManager token into core first: the stored one
             // may be expired, and core has no refresh token for managed accounts.
             val refresh = GoogleAccountManagerAuth.mintAndPushToken(this, account.id)
@@ -162,14 +167,28 @@ class AndroidMailPushService :
                 logWarn(this, "not watching ${account.id}: silent token mint failed, reconnect needed")
                 return@forEach
             }
-            val startError = coreErrorMessage(startWatch(account.id, INBOX_FOLDER))
-            if (startError != null) {
-                logWarn(this, "not watching ${account.id}: $startError")
-            } else {
-                watched.add(key)
+            missing.forEach { folder ->
+                val startError = coreErrorMessage(startWatch(account.id, folder))
+                if (startError != null) {
+                    logWarn(this, "not watching ${account.id}: $startError")
+                } else {
+                    watched.add(watchKey(account.id, folder))
+                }
             }
         }
     }
+
+    /** Opted-in folders besides INBOX that get a live watch (cache-only read). */
+    private fun liveNotifyFolders(accountId: String): List<String> =
+        parseFolderListResponse(
+            MeronCoreNative.invokeJson(
+                JSONObject()
+                    .put("id", 1)
+                    .put("method", "mail.folderList")
+                    .put("params", JSONObject().put("account_id", accountId))
+                    .toString(),
+            ),
+        ).filter { it.notifyLive && !it.name.equals(INBOX_FOLDER, ignoreCase = true) }.map { it.name }
 
     /**
      * While watches run, periodically re-mint managed accounts' access tokens
@@ -181,8 +200,7 @@ class AndroidMailPushService :
             scope.launch {
                 while (true) {
                     delay(TOKEN_REMINT_INTERVAL_MS)
-                    watched.toList().forEach { key ->
-                        val accountId = key.substringBefore('\n')
+                    watched.map { it.substringBefore('\n') }.distinct().forEach { accountId ->
                         GoogleAccountManagerAuth.mintAndPushToken(this@AndroidMailPushService, accountId)
                     }
                 }

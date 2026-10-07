@@ -101,6 +101,11 @@ data class FolderSummary(
     val displayName: String = name,
     /** Hierarchy separator the server reported for this mailbox, if any. */
     val delimiter: String = "",
+    /** The user opted this folder in to background sync and new-mail notifications. */
+    val notify: Boolean = false,
+    /** Opted in and holding one of the account's IMAP IDLE slots. Core polls
+     *  the opted-in folders past those, so only these need a live watch. */
+    val notifyLive: Boolean = false,
 )
 
 data class ThreadSummary(

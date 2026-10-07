@@ -133,10 +133,56 @@ where
     rt.block_on(future)
 }
 
-/// INBOX IDLE watches started by `engine.foreground` (as opposed to the opt-in
-/// live-mail-push feature). Tracked separately so `engine.background` tears down
-/// only its own watches and leaves any background live-push watches running.
+/// IDLE watches the foreground session (`engine.foreground`) wants, as opposed
+/// to the ones the host asked for ([`HOST_WATCHES`], the opt-in live-mail-push
+/// feature). A watch runs while either side wants it, so each consults the
+/// other before stopping one: `engine.background` leaves live-push watches
+/// running, and turning live push off leaves the open app's watches running.
 static ENGINE_OWNED_WATCHES: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+
+/// IDLE watches the host asked for through `watch.start`.
+static HOST_WATCHES: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+
+/// Held across every "start or stop a watch and update who wants it" step.
+/// The two sides run on different threads (the activity backgrounding while
+/// the push service acquires its watches), and without it one could stop a
+/// watch between the other finding it running and recording its interest.
+static WATCH_OWNERSHIP: Mutex<()> = Mutex::new(());
+
+/// Whether the foreground session is up, between `engine.foreground` and
+/// `engine.background`. Read and written under [`WATCH_OWNERSHIP`], so a
+/// watch start that lost the race with backgrounding is skipped rather than
+/// left running with nothing to tear it down.
+static FOREGROUND_SESSION: AtomicBool = AtomicBool::new(false);
+
+/// Record or drop one side's interest in a watch. Returns whether it changed.
+fn set_watch_interest(
+    interests: &Mutex<Vec<(String, String)>>,
+    account: &str,
+    folder: &str,
+    wanted: bool,
+) -> bool {
+    let mut interests = interests.lock().unwrap();
+    let position = interests
+        .iter()
+        .position(|(a, f)| a == account && f == folder);
+    match (position, wanted) {
+        (None, true) => interests.push((account.to_string(), folder.to_string())),
+        (Some(index), false) => {
+            interests.remove(index);
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn watch_interest(interests: &Mutex<Vec<(String, String)>>, account: &str, folder: &str) -> bool {
+    interests
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|(a, f)| a == account && f == folder)
+}
 
 /// Build and host the Engine for the foreground session (idempotent), then start
 /// foreground IMAP IDLE on each active account's INBOX so new mail lands in the
@@ -161,6 +207,11 @@ fn engine_foreground() -> Result<Value, String> {
             *slot = Some(Arc::new(engine));
         }
     }
+    {
+        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+        FOREGROUND_SESSION.store(true, Ordering::SeqCst);
+    }
+    ensure_notify_poller(&data_dir);
     start_foreground_idle(&data_dir);
     Ok(json!({ "ok": true }))
 }
@@ -169,9 +220,15 @@ fn engine_foreground() -> Result<Value, String> {
 /// drop warm pooled sockets (the OS freezes/reclaims them anyway). The Engine
 /// itself (DB + creds) is kept so the next foreground transition resumes fast.
 fn engine_background() -> Result<Value, String> {
-    let owned: Vec<(String, String)> = ENGINE_OWNED_WATCHES.lock().unwrap().drain(..).collect();
-    for (account, folder) in owned {
-        let _ = stop_mobile_idle_watch(&account, &folder);
+    {
+        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+        FOREGROUND_SESSION.store(false, Ordering::SeqCst);
+        let owned: Vec<(String, String)> = ENGINE_OWNED_WATCHES.lock().unwrap().drain(..).collect();
+        for (account, folder) in owned {
+            if !watch_interest(&HOST_WATCHES, &account, &folder) {
+                let _ = stop_mobile_idle_watch(&account, &folder);
+            }
+        }
     }
     if let Some(engine) = ENGINE.lock().unwrap().as_ref() {
         engine.clear_all_pools();
@@ -179,10 +236,11 @@ fn engine_background() -> Result<Value, String> {
     Ok(json!({ "ok": true }))
 }
 
-/// Start IDLE for each active (non-RSS, non-paused) account on both INBOX and the
-/// account's Sent folder — INBOX so received mail appears live, Sent so mail sent
-/// from another client (each IDLE connection watches a single mailbox) also shows
-/// up live in the cross-folder conversation view. Records the watches we actually
+/// Start IDLE for each active (non-RSS, non-paused) account on INBOX, the
+/// account's Sent folder and any folder opted in to notifications — INBOX so
+/// received mail appears live, Sent so mail sent from another client (each IDLE
+/// connection watches a single mailbox) also shows up live in the cross-folder
+/// conversation view. Records the watches we actually
 /// started so `engine_background` stops exactly those, leaving any opt-in
 /// live-push watches alone.
 fn start_foreground_idle(data_dir: &str) {
@@ -191,7 +249,7 @@ fn start_foreground_idle(data_dir: &str) {
         Err(_) => return,
     };
     for (id, _creds) in accounts {
-        let (skip, sent) = match mobile_db(data_dir) {
+        let (skip, sent, notify) = match mobile_db(data_dir) {
             Ok(conn) => {
                 let skip = is_rss_account(&conn, &id).unwrap_or(false)
                     || crate::store::account_paused(&conn, &id).unwrap_or(false);
@@ -203,9 +261,14 @@ fn start_foreground_idle(data_dir: &str) {
                             .map(|folder| folder.name)
                             .find(|name| crate::imap::looks_like_sent(name))
                     });
-                (skip, sent)
+                // The rest of the opted-in folders are polled; see
+                // `poll_notify_folders_once`.
+                let notify = crate::store::notify_folder_plan(&conn, &id)
+                    .map(|plan| plan.live)
+                    .unwrap_or_default();
+                (skip, sent, notify)
             }
-            Err(_) => (true, None),
+            Err(_) => (true, None, Vec::new()),
         };
         if skip {
             continue;
@@ -216,22 +279,194 @@ fn start_foreground_idle(data_dir: &str) {
         {
             start_owned_watch(data_dir, &id, &sent);
         }
+        // Already-running watches (Sent, above) are skipped by the dedupe.
+        for folder in notify {
+            start_owned_watch(data_dir, &id, &folder);
+        }
     }
 }
 
-/// Start one IDLE watch and, if it was newly started (not already running and not
-/// skipped as rss/paused), record it as engine-owned for teardown on background.
-fn start_owned_watch(data_dir: &str, account: &str, folder: &str) {
-    if let Ok(result) = start_mobile_idle_watch(data_dir, account.to_string(), folder.to_string())
-        && result.get("already").and_then(Value::as_bool) != Some(true)
-        && result.get("rss").is_none()
-        && result.get("paused").is_none()
-    {
-        ENGINE_OWNED_WATCHES
+/// Stop watching a folder that no longer exists, whoever wanted the watch.
+pub(crate) fn forget_deleted_folder_watch(account: &str, folder: &str) {
+    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+    set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, false);
+    set_watch_interest(&HOST_WATCHES, account, folder, false);
+    let _ = stop_mobile_idle_watch(account, folder);
+}
+
+/// Apply a folder's notification opt-in to the running foreground session:
+/// start watching it now, or drop the foreground session's interest in it. A
+/// no-op in the background, where the host decides what is watched.
+pub(crate) fn sync_foreground_notify_watch(
+    data_dir: &str,
+    account: &str,
+    folder: &str,
+    enabled: bool,
+) {
+    if folder.eq_ignore_ascii_case("INBOX") {
+        return;
+    }
+    // Sent stays watched for the conversation view whatever its opt-in says.
+    if !enabled && !crate::imap::looks_like_sent(folder) {
+        // A watch the host also wants is the host's to stop once it re-reads the flags.
+        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+        if set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, false)
+            && !watch_interest(&HOST_WATCHES, account, folder)
+        {
+            let _ = stop_mobile_idle_watch(account, folder);
+        }
+    }
+    start_live_notify_watches(data_dir, account);
+}
+
+/// Watch an account's live opted-in folders for the foreground session.
+/// Called whenever the opt-ins change: an enabled folder inside the live set
+/// starts now, and one that was polled moves into a slot a disable or delete
+/// freed. Skipped while the session is in the background.
+pub(crate) fn start_live_notify_watches(data_dir: &str, account: &str) {
+    let live = mobile_db(data_dir)
+        .ok()
+        .and_then(|conn| crate::store::notify_folder_plan(&conn, account).ok())
+        .map(|plan| plan.live)
+        .unwrap_or_default();
+    for folder in live {
+        start_owned_watch(data_dir, account, &folder);
+    }
+}
+
+/// How often opted-in folders past the live set are checked for new mail.
+const NOTIFY_POLL_INTERVAL: Duration = Duration::from_secs(120);
+
+/// Whether the poller thread is up. Flipped off under [`WATCH_OWNERSHIP`], as
+/// the interests that keep it alive are set, so a start cannot be lost to an
+/// exit decided a moment earlier.
+static NOTIFY_POLLER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Make sure the poller runs. Call after recording the interest (foreground
+/// session or host watch) that needs it.
+fn ensure_notify_poller(data_dir: &str) {
+    if NOTIFY_POLLER_RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let data_dir = data_dir.to_string();
+    let spawned = std::thread::Builder::new()
+        .name("meron-notify-poll".to_string())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(NOTIFY_POLL_INTERVAL);
+                {
+                    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+                    if !FOREGROUND_SESSION.load(Ordering::SeqCst)
+                        && HOST_WATCHES.lock().unwrap().is_empty()
+                    {
+                        NOTIFY_POLLER_RUNNING.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                }
+                poll_notify_folders_once(&data_dir);
+            }
+        });
+    if spawned.is_err() {
+        NOTIFY_POLLER_RUNNING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Check the opted-in folders that have no IDLE connection of their own, over
+/// pooled sessions. Covers every active account while the app is in the
+/// foreground, and otherwise the accounts the host (live push) is watching.
+fn poll_notify_folders_once(data_dir: &str) {
+    let Ok(conn) = mobile_db(data_dir) else {
+        return;
+    };
+    let accounts = crate::store::load_accounts(&conn).unwrap_or_default();
+    let mut targets = Vec::new();
+    for (account, _creds) in accounts {
+        if is_rss_account(&conn, &account).unwrap_or(true)
+            || crate::store::account_paused(&conn, &account).unwrap_or(true)
+        {
+            continue;
+        }
+        let wanted = FOREGROUND_SESSION.load(Ordering::SeqCst)
+            || HOST_WATCHES
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(a, _)| *a == account);
+        if !wanted {
+            continue;
+        }
+        let polled = crate::store::notify_folder_plan(&conn, &account)
+            .map(|plan| plan.polled)
+            .unwrap_or_default();
+        targets.extend(polled.into_iter().map(|folder| (account.clone(), folder)));
+    }
+    drop(conn);
+    for (account, folder) in targets {
+        let watched = MOBILE_IDLE_WATCHES
             .lock()
             .unwrap()
-            .push((account.to_string(), folder.to_string()));
+            .as_ref()
+            .is_some_and(|watches| watches.contains_key(&watch_key(&account, &folder)));
+        if watched {
+            continue;
+        }
+        match sync_mobile_folder(data_dir, &account, &folder) {
+            Ok(sync) => emit_mobile_sync_result(&account, &folder, &sync),
+            Err(err) => crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "poll of {account}/{folder} failed: {err}"
+            ),
+        }
     }
+}
+
+/// One folder's `mail.sync`, without relisting the account's folders.
+fn sync_mobile_folder(data_dir: &str, account: &str, folder: &str) -> Result<Value, String> {
+    sync_mobile_mail(
+        data_dir,
+        &json!({
+            "account_id": account,
+            "folder_id": folder,
+            "limit": 50,
+            "folders": false,
+        }),
+    )
+}
+
+/// Tell listeners what a sync found: the arrivals, or just that it ran.
+fn emit_mobile_sync_result(account: &str, folder: &str, sync: &Value) {
+    if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
+        emit_event("mail.newMessages", detail.clone());
+    } else {
+        let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
+        emit_event(
+            "mail.synced",
+            json!({ "account": account, "folder": folder, "synced": synced }),
+        );
+    }
+}
+
+/// Start one IDLE watch for the foreground session and, unless it was skipped
+/// as rss/paused, record the session's interest in it — also when the host
+/// already had it running, so it survives the host letting go. Does nothing
+/// once the session has gone to the background.
+fn start_owned_watch(data_dir: &str, account: &str, folder: &str) {
+    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+    if !FOREGROUND_SESSION.load(Ordering::SeqCst) {
+        return;
+    }
+    if let Ok(result) = start_mobile_idle_watch(data_dir, account.to_string(), folder.to_string())
+        && watch_is_running(&result)
+    {
+        set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, true);
+    }
+}
+
+/// Whether a `start_mobile_idle_watch` answer means the watch is up, rather
+/// than skipped for an RSS or paused account.
+fn watch_is_running(result: &Value) -> bool {
+    result.get("rss").is_none() && result.get("paused").is_none()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -637,8 +872,27 @@ fn dispatch_mobile_watch_request(data_dir: &str, req: &Request) -> Result<Value,
     let folder =
         canon_folder(&req_str(&req.params, "folder").unwrap_or_else(|_| "INBOX".to_string()));
     match req.method.as_str() {
-        "watch.start" => start_mobile_idle_watch(data_dir, account, folder),
-        "watch.stop" => stop_mobile_idle_watch(&account, &folder),
+        "watch.start" => {
+            let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+            let result = start_mobile_idle_watch(data_dir, account.clone(), folder.clone())?;
+            // The host (the live-push service) now counts on this watch, even
+            // one `engine.foreground` started first; going to the background
+            // must not stop it.
+            if watch_is_running(&result) {
+                set_watch_interest(&HOST_WATCHES, &account, &folder, true);
+                ensure_notify_poller(data_dir);
+            }
+            Ok(result)
+        }
+        "watch.stop" => {
+            let _ownership = WATCH_OWNERSHIP.lock().unwrap();
+            set_watch_interest(&HOST_WATCHES, &account, &folder, false);
+            // The open app keeps the watches its foreground session wants.
+            if watch_interest(&ENGINE_OWNED_WATCHES, &account, &folder) {
+                return Ok(json!({ "ok": true, "stopped": false }));
+            }
+            stop_mobile_idle_watch(&account, &folder)
+        }
         _ => Err(format!("unknown watch method: {}", req.method)),
     }
 }
@@ -735,11 +989,17 @@ fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: A
                 }
             }
         }
-        let _ = MOBILE_IDLE_WATCHES
-            .lock()
-            .unwrap()
-            .as_mut()
-            .map(|watches| watches.remove(&watch_key(&account, &folder)));
+        // Only our own entry: a stop followed by a quick restart leaves a
+        // replacement watcher under the same key, which must stay findable.
+        if let Some(watches) = MOBILE_IDLE_WATCHES.lock().unwrap().as_mut() {
+            let key = watch_key(&account, &folder);
+            if watches
+                .get(&key)
+                .is_some_and(|current| Arc::ptr_eq(current, &stop))
+            {
+                watches.remove(&key);
+            }
+        }
     });
 }
 
@@ -775,7 +1035,14 @@ async fn mobile_idle_once(
         handle.init().await?;
         let response = {
             let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
-            idle_fut.await
+            tokio::select! {
+                biased;
+                // Stopped: give the connection back now, without waiting for
+                // DONE. A quiet mailbox would otherwise hold it until the IDLE
+                // timeout, alongside whatever watch replaced this one.
+                _ = wait_for_mobile_watch_stop(stop) => return Ok(()),
+                response = idle_fut => response,
+            }
         };
         session = handle.done().await?;
         if let async_imap::extensions::idle::IdleResponse::NewData(_) = response? {
@@ -785,33 +1052,24 @@ async fn mobile_idle_once(
     Ok(())
 }
 
+/// Resolves once a watch's stop flag is set. The flag is a plain atomic set
+/// from other threads, so it is checked on a short tick.
+async fn wait_for_mobile_watch_stop(stop: &AtomicBool) {
+    while !stop.load(Ordering::SeqCst) {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
 async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> anyhow::Result<()> {
     let data_dir_owned = data_dir.to_string();
     let account_owned = account.to_string();
     let folder_owned = folder.to_string();
     let sync = tokio::task::spawn_blocking(move || {
-        sync_mobile_mail(
-            &data_dir_owned,
-            &json!({
-                "account_id": account_owned,
-                "folder_id": folder_owned,
-                "limit": 50,
-                "folders": false,
-            }),
-        )
+        sync_mobile_folder(&data_dir_owned, &account_owned, &folder_owned)
     })
     .await?
     .map_err(|err| anyhow::anyhow!(err))?;
-    let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
-
-    if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
-        emit_event("mail.newMessages", detail.clone());
-    } else {
-        emit_event(
-            "mail.synced",
-            json!({ "account": account, "folder": folder, "synced": synced }),
-        );
-    }
+    emit_mobile_sync_result(account, folder, &sync);
     Ok(())
 }
 
@@ -822,12 +1080,13 @@ async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> 
 pub(crate) fn mobile_new_messages_detail(
     data_dir: &str,
     account: &str,
+    folder: &str,
     headers: &[crate::imap::MessageHeader],
 ) -> Option<Value> {
     let account_name = mobile_account_label(data_dir, account);
     let muted = mobile_account_muted(data_dir, account);
     let conn = mobile_db(data_dir).ok()?;
-    crate::mail_model::new_messages_detail(&conn, account, &account_name, muted, headers)
+    crate::mail_model::new_messages_detail(&conn, account, &account_name, folder, muted, headers)
 }
 
 /// Inbox messages that arrived between the two `uid_next` snapshots and are
@@ -1027,5 +1286,23 @@ mod tests {
         meron_core_register_event_callback(None, ptr::null_mut());
         CAPTURED_EVENTS.lock().unwrap().clear();
         assert!(!meron_core_emit_ready_event());
+    }
+
+    #[test]
+    fn watch_interest_is_tracked_once_per_folder_and_side() {
+        let app: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+        let host: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+        assert!(set_watch_interest(&app, "acc", "Work", true));
+        // Foregrounding again must not double-count the same watch.
+        assert!(!set_watch_interest(&app, "acc", "Work", true));
+        assert!(set_watch_interest(&host, "acc", "Work", true));
+
+        // The host letting go leaves the open app's interest in place.
+        assert!(set_watch_interest(&host, "acc", "Work", false));
+        assert!(!watch_interest(&host, "acc", "Work"));
+        assert!(watch_interest(&app, "acc", "Work"));
+        assert!(!watch_interest(&app, "acc", "Other"));
+        assert!(set_watch_interest(&app, "acc", "Work", false));
+        assert!(!set_watch_interest(&app, "acc", "Work", false));
     }
 }

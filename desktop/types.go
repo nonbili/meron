@@ -57,6 +57,8 @@ type Folder struct {
 	Role      string `json:"role"`
 	Delimiter string `json:"delimiter"`
 	Unread    uint32 `json:"unread"`
+	// The user opted this folder in to live sync and new-mail notifications.
+	Notify bool `json:"notify"`
 }
 
 type Message struct {
@@ -183,6 +185,12 @@ type FolderCreateRequest struct {
 type FolderDeleteRequest struct {
 	AccountID string `json:"account_id"`
 	FolderID  string `json:"folder_id"`
+}
+
+type FolderSetNotifyRequest struct {
+	AccountID string `json:"account_id"`
+	FolderID  string `json:"folder_id"`
+	Enabled   bool   `json:"enabled"`
 }
 
 type ThreadListRequest struct {

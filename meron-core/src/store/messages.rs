@@ -383,13 +383,26 @@ pub(super) fn record_observed_mail_identities(
     Ok(new_identities)
 }
 
-/// Unread INBOX messages in the UID range that appeared during the last sync,
-/// newest first. Returns the whole batch rather than just its latest message so
-/// notifications can post one entry per arrival; `None` when nothing new and
-/// unread landed.
+/// [`classify_arrivals`] for INBOX.
 pub fn classify_inbox_arrivals(
     conn: &Connection,
     account: &str,
+    before: u32,
+    after: u32,
+    messages: &[MessageHeader],
+) -> Result<Vec<MessageHeader>> {
+    classify_arrivals(conn, account, "INBOX", before, after, messages)
+}
+
+/// Unread messages in `folder` in the UID range that appeared during the last
+/// sync, newest first. Returns the whole batch rather than just its latest
+/// message so notifications can post one entry per arrival; empty when nothing
+/// new and unread landed. A message already observed anywhere in the account
+/// (one the user filed here from INBOX, say) is not an arrival.
+pub fn classify_arrivals(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
     before: u32,
     after: u32,
     messages: &[MessageHeader],
@@ -405,7 +418,7 @@ pub fn classify_inbox_arrivals(
         if message.seen || message.uid < before || message.uid >= after {
             continue;
         }
-        let identity = message_identity(message, "INBOX");
+        let identity = message_identity(message, folder);
         if stmt
             .query_row(params![account, &identity], |_| Ok(()))
             .optional()?

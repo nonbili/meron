@@ -757,8 +757,8 @@ async fn sync_messages_with_policy(
     let folder = folder.as_str();
     let db = crate::log::timed_db_lock(&engine.db, "sync_messages.persist");
     let current = store::get_folder_state(&db, account, folder)?;
-    let arrivals = if folder.eq_ignore_ascii_case("INBOX") && current.is_some_and(|(validity, _)| validity == batch.uidvalidity) {
-        store::classify_inbox_arrivals(&db, account, current.unwrap().1, batch.uid_next, &batch.messages)?
+    let arrivals = if current.is_some_and(|(validity, _)| validity == batch.uidvalidity) && store::folder_notifies(&db, account, folder)? {
+        store::classify_arrivals(&db, account, folder, current.unwrap().1, batch.uid_next, &batch.messages)?
     } else { Vec::new() };
     let persist_started = std::time::Instant::now();
     let phase_started = std::time::Instant::now();

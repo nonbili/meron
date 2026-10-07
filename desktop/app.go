@@ -368,6 +368,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.emptyFolder(payload)
 	case "mail.folderDelete":
 		return a.folderDelete(payload)
+	case "mail.folderSetNotify":
+		return a.folderSetNotify(payload)
 	case "mail.move":
 		return a.mailMove(payload)
 	case "mail.copy":

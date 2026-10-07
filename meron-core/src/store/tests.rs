@@ -1588,6 +1588,87 @@ fn cached_archive_identity_suppresses_inbox_arrival_and_survives_deletion() {
 }
 
 #[test]
+fn folder_notify_opt_in_survives_folder_list_sync() {
+    let conn = test_conn();
+    let folder = Folder {
+        name: "Work".into(),
+        display_name: "Work".into(),
+        ..Default::default()
+    };
+    upsert_folders(&conn, "acct", std::slice::from_ref(&folder)).unwrap();
+    ensure_folder(&conn, "acct", "INBOX").unwrap();
+    assert!(folder_notifies(&conn, "acct", "inbox").unwrap());
+    assert!(!folder_notifies(&conn, "acct", "Work").unwrap());
+    assert!(!set_folder_notify(&conn, "acct", "Missing", true).unwrap());
+
+    assert!(set_folder_notify(&conn, "acct", "Work", true).unwrap());
+    // A later LIST sync rewrites the row's server-owned columns only.
+    upsert_folders(&conn, "acct", &[folder]).unwrap();
+    assert!(folder_notifies(&conn, "acct", "Work").unwrap());
+    assert_eq!(notify_folders(&conn, "acct").unwrap(), vec!["Work"]);
+    let listed = get_folders(&conn, "acct").unwrap();
+    assert!(listed.iter().any(|f| f.name == "Work" && f.notify));
+    assert!(listed.iter().any(|f| f.name == "INBOX" && !f.notify));
+
+    assert!(set_folder_notify(&conn, "acct", "Work", false).unwrap());
+    assert!(notify_folders(&conn, "acct").unwrap().is_empty());
+}
+
+#[test]
+fn notify_plan_gives_idle_slots_to_the_earliest_opt_ins() {
+    let conn = test_conn();
+    // Opted in out of name order: slots follow the opt-in order, not the name.
+    let names = ["Zeta", "Beta", "Mid", "Alpha", "Omega"];
+    for name in names {
+        ensure_folder(&conn, "acct", name).unwrap();
+        assert!(set_folder_notify(&conn, "acct", name, true).unwrap());
+    }
+    let plan = notify_folder_plan(&conn, "acct").unwrap();
+    assert_eq!(plan.live, vec!["Zeta", "Beta", "Mid"]);
+    assert_eq!(plan.polled, vec!["Alpha", "Omega"]);
+    assert!(folder_notifies_live(&conn, "acct", "Mid").unwrap());
+    assert!(!folder_notifies_live(&conn, "acct", "Alpha").unwrap());
+
+    // Enabling again keeps a folder's place; a later opt-in never demotes it.
+    assert!(set_folder_notify(&conn, "acct", "Zeta", true).unwrap());
+    assert_eq!(notify_folder_plan(&conn, "acct").unwrap(), plan);
+
+    // Freeing a slot promotes the longest-waiting polled folder.
+    assert!(set_folder_notify(&conn, "acct", "Beta", false).unwrap());
+    let plan = notify_folder_plan(&conn, "acct").unwrap();
+    assert_eq!(plan.live, vec!["Zeta", "Mid", "Alpha"]);
+    assert_eq!(plan.polled, vec!["Omega"]);
+    assert!(
+        get_folders(&conn, "acct")
+            .unwrap()
+            .iter()
+            .all(|f| f.notify == (f.name != "Beta"))
+    );
+}
+
+#[test]
+fn custom_folder_arrivals_skip_mail_already_seen_elsewhere() {
+    let conn = test_conn();
+    let filed = MessageHeader {
+        uid: 7,
+        message_id: "filed@example.com".into(),
+        ..Default::default()
+    };
+    upsert_messages(&conn, "acct", "INBOX", &[filed.clone()]).unwrap();
+    // The user moved `filed` out of INBOX; a server rule delivered `direct`.
+    let batch = [
+        MessageHeader { uid: 20, ..filed },
+        MessageHeader {
+            uid: 21,
+            message_id: "direct@example.com".into(),
+            ..Default::default()
+        },
+    ];
+    let arrivals = classify_arrivals(&conn, "acct", "Work", 20, 22, &batch).unwrap();
+    assert_eq!(arrivals.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![21]);
+}
+
+#[test]
 fn classified_arrivals_survive_companion_writes_and_later_inbox_sync() {
     let conn = test_conn();
     let arrival = MessageHeader {
@@ -2603,7 +2684,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
 
     for table in [
         "accounts",
@@ -2641,7 +2722,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
 }
 
 #[test]
@@ -2669,7 +2750,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -3509,6 +3590,7 @@ fn collapse_thread_draft_headers_keeps_newest_draft_only() {
             special_use: Some("drafts".into()),
             role: "drafts".into(),
             unread: 0,
+            notify: false,
         }],
     )
     .unwrap();
@@ -4358,7 +4440,7 @@ fn tasks_tables_arrive_on_an_existing_install() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 15);
+    assert_eq!(version, 16);
 
     // Cached mail is untouched, and the new tables are writable.
     let messages: i64 = conn

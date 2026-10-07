@@ -44,6 +44,7 @@ object MobileCommand {
     const val FolderList = "mail.folderList"
     const val FolderCreate = "mail.folderCreate"
     const val FolderDelete = "mail.folderDelete"
+    const val FolderSetNotify = "mail.folderSetNotify"
     const val ContactSuggest = "mail.suggestContacts"
     const val ThreadList = "mail.threadList"
     const val StarredItems = "mail.starredItems"
@@ -596,6 +597,19 @@ data class FolderDeleteParams(
         )
 }
 
+data class FolderSetNotifyParams(
+    val accountId: String,
+    val folderId: String,
+    val enabled: Boolean,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "account_id" to accountId.jsonString(),
+            "folder_id" to folderId.jsonString(),
+            "enabled" to enabled.toString(),
+        )
+}
+
 data class ContactSuggestParams(
     val accountId: String,
     val query: String = "",
@@ -1117,6 +1131,8 @@ class MobileMailCommandClient(
     suspend fun createFolder(params: FolderCreateParams): String = core.invoke(MobileCommand.FolderCreate, params.toJson())
 
     suspend fun deleteFolder(params: FolderDeleteParams): String = core.invoke(MobileCommand.FolderDelete, params.toJson())
+
+    suspend fun setFolderNotify(params: FolderSetNotifyParams): String = core.invoke(MobileCommand.FolderSetNotify, params.toJson())
 
     suspend fun suggestContacts(params: ContactSuggestParams): String = core.invoke(MobileCommand.ContactSuggest, params.toJson())
 

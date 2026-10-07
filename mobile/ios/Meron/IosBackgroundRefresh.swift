@@ -393,19 +393,9 @@ enum IosBackgroundRefresh {
                 refreshed += 1
                 // Arrivals ride back on the sync response: this runs with no live
                 // event listener, and a feed refresh raises no event at all.
-                if let result = response["result"] as? [String: Any],
-                   let detail = result["new_messages"] as? [String: Any],
-                   let batch = iosNewMailBatch(detail)
-                {
-                    IosNotificationService.notifyNewMail(
-                        accountName: batch.accountName,
-                        from: batch.from,
-                        subject: batch.subject,
-                        count: batch.count,
-                        accountId: batch.accountId,
-                        folder: batch.folder,
-                        threadKey: batch.threadKey
-                    )
+                notifyArrivals(response)
+                if request.method == "mail.sync" {
+                    syncNotifyFolders(account: account, accountId: accountId, id: request.id)
                 }
             }
         }
@@ -414,6 +404,52 @@ enum IosBackgroundRefresh {
             "background refresh done: refreshed=\(refreshed) skipped=\(skipped) failed=\(failed)"
         )
         return RefreshResult(refreshed: refreshed, skipped: skipped, failed: failed)
+    }
+
+    private static func notifyArrivals(_ response: [String: Any]) {
+        guard let result = response["result"] as? [String: Any],
+              let detail = result["new_messages"] as? [String: Any],
+              let batch = iosNewMailBatch(detail)
+        else { return }
+        IosNotificationService.notifyNewMail(
+            accountName: batch.accountName,
+            from: batch.from,
+            subject: batch.subject,
+            count: batch.count,
+            accountId: batch.accountId,
+            folder: batch.folder,
+            threadKey: batch.threadKey
+        )
+    }
+
+    /// Sync the folders the user opted in to notifications, after the account's
+    /// inbox sync refreshed the folder list. A failure is logged without failing
+    /// the account, whose inbox did refresh.
+    private static func syncNotifyFolders(account: [String: Any], accountId: String, id: Int64) {
+        let list = invoke(id: id, method: "mail.folderList", params: ["account_id": accountId])
+        guard let result = list["result"] as? [String: Any],
+              let folders = result["folders"] as? [[String: Any]]
+        else { return }
+        for folder in folders {
+            guard folder["notify"] as? Bool == true,
+                  let name = folder["name"] as? String,
+                  name.caseInsensitiveCompare("inbox") != .orderedSame
+            else { continue }
+            let response = invoke(
+                id: id,
+                method: "mail.sync",
+                params: ["account_id": accountId, "folder_id": name, "limit": 50, "folders": false]
+            )
+            if let error = response["error"] as? [String: Any] {
+                let message = error["message"] as? String ?? ""
+                IosSyncDiagnosticLog.append(
+                    "mail.sync of an opted-in folder failed for account \(IosSyncLogRedaction.accountLabel(account)): "
+                        + IosSyncLogRedaction.redactMessage(message)
+                )
+            } else {
+                notifyArrivals(response)
+            }
+        }
     }
 
     private static func invoke(id: Int64, method: String, params: [String: Any]) -> [String: Any] {

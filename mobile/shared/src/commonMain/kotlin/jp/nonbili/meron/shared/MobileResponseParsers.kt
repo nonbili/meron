@@ -192,6 +192,8 @@ fun parseFolderListResponse(responseJson: String): List<FolderSummary> {
             // best label available.
             displayName = item.findJsonStringProperty("display_name")?.takeIf { it.isNotBlank() } ?: name,
             delimiter = item.findJsonStringProperty("delimiter").orEmpty(),
+            notify = item.findJsonBooleanProperty("notify") ?: false,
+            notifyLive = item.findJsonBooleanProperty("notify_live") ?: false,
         )
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.ui.input.key.key
 import jp.nonbili.meron.shared.EmptyFolderParams
 import jp.nonbili.meron.shared.FolderDeleteParams
+import jp.nonbili.meron.shared.FolderSetNotifyParams
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MarkAllReadParams
 import jp.nonbili.meron.shared.MarkReadParams
@@ -26,6 +27,7 @@ import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.mailThreadIdFolder
 import jp.nonbili.meron.shared.parseFolderDeleteResponse
+import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
@@ -1039,6 +1041,9 @@ internal fun MeronMobileState.deleteMailFolder(
             selectedMailThreadIds = emptySet()
             mailSelectionMenuOpen = false
             removed.forEach { removeKanbanColumnsForFolder(accountId, it) }
+            // Core stopped watching the deleted folders; have the live-push
+            // service drop the ones it was counting on.
+            mobileHost.syncLiveMailPush(liveMailPushEnabled)
             // The mailbox view may have been sitting in any folder that just went away.
             if (selectedCoreAccountId == accountId && selectedCoreFolder in removed) {
                 selectCoreMailbox(accountId, INBOX_FOLDER)
@@ -1048,6 +1053,52 @@ internal fun MeronMobileState.deleteMailFolder(
         }.onFailure {
             Log.w("Mail", "delete folder failed", it)
             status = "Delete folder failed: ${it.message}"
+        }
+    }
+}
+
+/** Opt a folder in to (or out of) background sync and new-mail notifications. */
+internal fun MeronMobileState.setMailFolderNotify(
+    accountId: String,
+    folderId: String,
+    folderName: String,
+    enabled: Boolean,
+) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val account = coreAccounts.firstOrNull { it.id == accountId }
+    if (accountId == UNIFIED_ACCOUNT_ID || account == null || accountSummaryIsRss(account)) return
+
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                parseFolderListResponse(
+                    requireCoreOk(
+                        client.setFolderNotify(
+                            FolderSetNotifyParams(accountId = accountId, folderId = folderId, enabled = enabled),
+                        ),
+                    ),
+                )
+            }
+        }.onSuccess { folders ->
+            foldersByAccount = foldersByAccount + (accountId to folders)
+            coreFolders =
+                coreFolders.map {
+                    if (it.accountId == accountId && it.name == folderId) it.copy(notify = enabled) else it
+                }
+            // The live-push service watches opted-in folders; have it re-read them.
+            mobileHost.syncLiveMailPush(liveMailPushEnabled)
+            status =
+                trs(
+                    if (enabled) "folders.notify.enabled" else "folders.notify.disabled",
+                    mapOf("folder" to folderName),
+                )
+        }.onFailure {
+            Log.w("Mail", "set folder notify failed", it)
+            status = it.message ?: trs("folders.notify.failed", mapOf("folder" to folderName))
         }
     }
 }

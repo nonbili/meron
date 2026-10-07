@@ -686,6 +686,10 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.FolderDelete, core.lastCommand)
         assertEquals("""{"account_id":"acc1","folder_id":"Work"}""", core.lastPayloadJson)
 
+        runSuspend { client.setFolderNotify(FolderSetNotifyParams(accountId = "acc1", folderId = "Work", enabled = true)) }
+        assertEquals(MobileCommand.FolderSetNotify, core.lastCommand)
+        assertEquals("""{"account_id":"acc1","folder_id":"Work","enabled":true}""", core.lastPayloadJson)
+
         runSuspend { client.listThreads(ThreadListParams(accountId = "acc1")) }
         assertEquals(MobileCommand.ThreadList, core.lastCommand)
         assertEquals("""{"account_id":"acc1","folder_id":"inbox","query":"","filter":"all","attachments":false,"refresh":false}""", core.lastPayloadJson)

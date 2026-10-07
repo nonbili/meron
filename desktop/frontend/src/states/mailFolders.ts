@@ -196,6 +196,30 @@ export function deletableFolder(
   return { name: folder.name || folder.id, nested: nested.length }
 }
 
+// Opt a folder in to (or out of) live sync and new-mail notifications. The
+// inbox is always watched; this is for folders server-side rules deliver into.
+export async function setFolderNotify(accountId: string, folderId: string, enabled: boolean, name?: string) {
+  if (!accountId || !folderId || accountId === 'unified') return
+  const label = name || folderId
+  try {
+    const res = await invoke<{ folders?: Folder[] }>('mail.folderSetNotify', {
+      account_id: accountId,
+      folder_id: folderId,
+      enabled,
+    })
+    const folders = res?.folders
+    if (folders) {
+      mail$.foldersByAccount[accountId].set(folders)
+      if (ui$.selectedAccount.get() === accountId) mail$.folders.set(folders)
+    } else {
+      void loadFolders(accountId, false)
+    }
+    showToast(t(enabled ? 'folders.notify.enabled' : 'folders.notify.disabled', { folder: label }))
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : t('folders.notify.failed', { folder: label }), 'error')
+  }
+}
+
 // Delete a folder on the server, along with its subfolders, their cached
 // messages and any board column that showed one of them. Confirms first — the
 // mail goes with them and the server keeps no copy. Core re-checks that the
