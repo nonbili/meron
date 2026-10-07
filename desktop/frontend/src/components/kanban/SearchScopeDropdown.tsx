@@ -141,7 +141,6 @@ function ColumnAvatar({ column, size }: { column: KanbanColumn; size: number }) 
   return (
     <Avatar
       name={account ? account.display_name || account.email || account.id : accountLabel(column.accountId, accounts)}
-      email={rss ? undefined : account?.email}
       src={account?.avatar_url}
       size={size}
       className="shrink-0"

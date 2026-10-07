@@ -3,7 +3,6 @@ import type { Folder } from '../types'
 export type AccountGroup = {
   accountId: string
   label: string
-  email?: string
   avatarUrl?: string
   isRSS: boolean
   folders: Folder[]

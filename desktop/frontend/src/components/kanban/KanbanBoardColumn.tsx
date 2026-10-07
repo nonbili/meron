@@ -343,7 +343,6 @@ function KanbanColumnContent({
           <div className="relative shrink-0">
             <Avatar
               name={columnAccountLabel || accountLabel(column.accountId, accounts)}
-              email={isRss ? undefined : columnAccount?.email}
               src={columnAccount?.avatar_url}
               size={26}
               fallback={isRss ? <Rss size={13} /> : undefined}

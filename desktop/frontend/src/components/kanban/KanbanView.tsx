@@ -68,7 +68,6 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
       accounts.map((account) => ({
         accountId: account.id,
         label: account.display_name || account.email || account.id,
-        email: account.email,
         avatarUrl: account.avatar_url,
         isRSS: isRSSAccount(account.id, accounts),
         folders: foldersByAccount[account.id] ?? [],

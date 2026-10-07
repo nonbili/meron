@@ -87,7 +87,7 @@ export function AccountSection({
           title={expanded ? t('accounts.actions.collapseAccount') : t('accounts.actions.expandAccount')}
         >
           <ChevronRight size={13} className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-          <Avatar name={group.label} email={group.email} src={group.avatarUrl} size={18} />
+          <Avatar name={group.label} src={group.avatarUrl} size={18} />
           <span className="truncate">{group.label}</span>
         </button>
         {!group.isRSS && onCreateFolder && (
