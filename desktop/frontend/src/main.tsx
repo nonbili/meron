@@ -5,11 +5,10 @@ import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { windowChromeReady } from './lib/windowChrome'
 import { invoke } from './lib/bridge'
+import { usesNativeScrollbars } from './lib/nativeScrollbars'
 import './index.css'
 
-// WebKitGTK draws GNOME-style overlay scrollbars (no gutter, fade out when
-// idle) unless the page styles them, so index.css leaves them alone on Linux.
-document.documentElement.classList.toggle('native-scrollbars', /linux/i.test(navigator.userAgent))
+document.documentElement.classList.toggle('native-scrollbars', usesNativeScrollbars(navigator.userAgent))
 
 function StartupWindow({ children }: { children: ReactNode }) {
   useEffect(() => {

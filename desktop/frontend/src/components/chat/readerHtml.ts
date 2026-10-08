@@ -1,5 +1,6 @@
 import { type MessageFrameFont } from '../../lib/fonts'
 import { copyText } from '../../lib/native'
+import { usesNativeScrollbars } from '../../lib/nativeScrollbars'
 import {
   DARKENED_CSS,
   DEFAULT_READER_THEME,
@@ -23,7 +24,28 @@ export const DEFAULT_READER_FONT: MessageFrameFont = {
   zoom: 1,
 }
 
-const readerCss = (v: (name: string) => string) => `
+// The styled code-block scrollbar is left out where the webview draws the
+// desktop's own overlay ones (lib/nativeScrollbars), as in index.css.
+const preScrollbarCss = (v: (name: string) => string) => `
+  pre::-webkit-scrollbar {
+    height: 10px;
+  }
+  pre::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  pre::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+    background-color: var(${v('muted')}, #cbd5e1);
+  }
+  pre::-webkit-scrollbar-thumb:hover {
+    background-color: var(${v('muted-strong')}, #94a3b8);
+    border: 2px solid transparent;
+  }
+`
+
+const readerCss = (v: (name: string) => string, nativeScrollbars: boolean) => `
   html {
     background: var(${v('page-bg')}, #f8fafc);
   }
@@ -76,22 +98,7 @@ const readerCss = (v: (name: string) => string) => `
     overflow-y: hidden;
     scrollbar-gutter: stable;
   }
-  pre::-webkit-scrollbar {
-    height: 10px;
-  }
-  pre::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  pre::-webkit-scrollbar-thumb {
-    border: 3px solid transparent;
-    background-clip: padding-box;
-    border-radius: 999px;
-    background-color: var(${v('muted')}, #cbd5e1);
-  }
-  pre::-webkit-scrollbar-thumb:hover {
-    background-color: var(${v('muted-strong')}, #94a3b8);
-    border: 2px solid transparent;
-  }
+  ${nativeScrollbars ? '' : preScrollbarCss(v)}
   pre code {
     display: block;
     min-width: max-content;
@@ -340,7 +347,7 @@ export function applyReaderLayout(
     const prefix = frameVarPrefix(doc)
     const style = doc.createElement('style')
     style.id = READER_STYLE_ID
-    style.textContent = readerCss((name) => frameVar(prefix, name))
+    style.textContent = readerCss((name) => frameVar(prefix, name), usesNativeScrollbars(navigator.userAgent))
     ownStyleElement(style)
     ;(doc.head ?? doc.documentElement).appendChild(style)
   }

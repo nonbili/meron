@@ -71,6 +71,40 @@ export type ScrollMetrics = {
   clientHeight: number
 }
 
+/** The part of a container's geometry a layout change moves and a reader's
+ *  scrolling does not. */
+export type ScrollGeometry = Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>
+
+/**
+ * Whether a scroll event should drop the pin, given that it is not one our own
+ * positioning caused. A settling pin goes on any position we did not set. A
+ * persistent one — an expanded message, whose frame and images can resize it
+ * long after — also needs the container to be the size it was when we last
+ * looked: a body resizing can clamp the view to a position we never set, and
+ * that must not read as the reader leaving. A scrollbar drag, which may reach
+ * us as nothing but scroll events, moves the view inside unchanged geometry.
+ */
+export function scrollReleasesPin({
+  persistent,
+  metrics,
+  expectedScrollTop,
+  settledGeometry,
+}: {
+  persistent: boolean
+  metrics: ScrollMetrics
+  expectedScrollTop: number | null
+  /** Geometry as of our last positioning, resize pass or scroll event. */
+  settledGeometry: ScrollGeometry | null
+}): boolean {
+  if (!isUserScroll(metrics.scrollTop, expectedScrollTop)) return false
+  if (!persistent) return true
+  return (
+    settledGeometry !== null &&
+    metrics.scrollHeight === settledGeometry.scrollHeight &&
+    metrics.clientHeight === settledGeometry.clientHeight
+  )
+}
+
 /**
  * Where to scroll to put a message back where it belongs. `offset` is the gap
  * between the container's top edge and the message's: negative leaves the

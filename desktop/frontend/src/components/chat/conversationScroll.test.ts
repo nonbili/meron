@@ -9,6 +9,7 @@ import {
   isUserScroll,
   resolveOpenScroll,
   resolveResizeScrollTop,
+  scrollReleasesPin,
   type ScrollMetrics,
 } from './conversationScroll'
 
@@ -63,6 +64,39 @@ describe('isUserScroll', () => {
 
   it("treats a scroll before any positioning as the reader's", () => {
     expect(isUserScroll(40, null)).toBe(true)
+  })
+})
+
+describe('scrollReleasesPin', () => {
+  const settled = { scrollHeight: 4000, clientHeight: VIEWPORT }
+  const release = (over: Partial<Parameters<typeof scrollReleasesPin>[0]> = {}) =>
+    scrollReleasesPin({
+      persistent: true,
+      metrics: metrics(2400, 4000),
+      expectedScrollTop: 1276,
+      settledGeometry: settled,
+      ...over,
+    })
+
+  it('keeps the pin through the scroll event our own positioning fires', () => {
+    expect(release({ metrics: metrics(1276, 4000) })).toBe(false)
+    expect(release({ persistent: false, metrics: metrics(1276, 4000) })).toBe(false)
+  })
+
+  // A native overlay scrollbar drag reaches the container as scroll events
+  // only, so the pointer hit test never sees it.
+  it('drops an expanded message pin when the view moves inside unchanged geometry', () => {
+    expect(release()).toBe(true)
+  })
+
+  it('keeps an expanded message pin when a resize moved the view', () => {
+    expect(release({ metrics: metrics(2400, 4600) })).toBe(false)
+    expect(release({ metrics: { scrollTop: 2400, scrollHeight: 4000, clientHeight: 640 } })).toBe(false)
+    expect(release({ settledGeometry: null })).toBe(false)
+  })
+
+  it('drops a settling pin on any position we did not set', () => {
+    expect(release({ persistent: false, metrics: metrics(2400, 4600) })).toBe(true)
   })
 })
 

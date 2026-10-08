@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
+import { scrollbarHitWidth } from '../../lib/nativeScrollbars'
 import { loadMoreMessages } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
@@ -186,7 +187,10 @@ export function ConversationMessageList({
         }}
         onPointerDown={(event) => {
           const container = event.currentTarget
-          const scrollbarWidth = container.offsetWidth - container.clientWidth
+          const scrollbarWidth = scrollbarHitWidth(
+            container,
+            document.documentElement.classList.contains('native-scrollbars'),
+          )
           if (scrollbarWidth > 0 && event.clientX >= container.getBoundingClientRect().right - scrollbarWidth) {
             onUserScrollIntent()
           }

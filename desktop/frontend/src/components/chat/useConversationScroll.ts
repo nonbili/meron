@@ -14,7 +14,9 @@ import {
   pinnedScrollTop,
   resolveOpenScroll,
   resolveResizeScrollTop,
+  scrollReleasesPin,
   type ScrollAnchor,
+  type ScrollGeometry,
   type ScrollMetrics,
 } from './conversationScroll'
 
@@ -111,11 +113,15 @@ export function useConversationScroll(
   // already had).
   const ownScrollPendingRef = useRef(false)
   const ownScrollForgetTimerRef = useRef(0)
+  // Container geometry as of the last positioning, resize pass or scroll event
+  // — see scrollReleasesPin.
+  const settledGeometryRef = useRef<ScrollGeometry | null>(null)
 
   const applyScrollTop = useCallback((container: HTMLElement, scrollTop: number) => {
     const previousScrollTop = container.scrollTop
     container.scrollTop = scrollTop
     viewedScrollHeightRef.current = container.scrollHeight
+    settledGeometryRef.current = readScrollMetrics(container)
     // Read it back: the browser clamps to the scrollable range, and the clamped
     // value is what the scroll event will report.
     expectedScrollTopRef.current = container.scrollTop
@@ -303,16 +309,22 @@ export function useConversationScroll(
     const ours = ownScrollPendingRef.current
     ownScrollPendingRef.current = false
     // The reader moving the view — including by dragging the scrollbar, which
-    // dispatches no mouse events here — outranks the settle-window anchor.
+    // dispatches no mouse events here — outranks the pin.
+    const metrics = container ? readScrollMetrics(container) : null
     if (
-      container &&
+      metrics &&
       pinnedRef.current &&
-      !pinnedRef.current.persistent &&
       !ours &&
-      isUserScroll(container.scrollTop, expectedScrollTopRef.current)
+      scrollReleasesPin({
+        persistent: pinnedRef.current.persistent,
+        metrics,
+        expectedScrollTop: expectedScrollTopRef.current,
+        settledGeometry: settledGeometryRef.current,
+      })
     ) {
       releasePin()
     }
+    if (metrics) settledGeometryRef.current = metrics
     if (container) viewedScrollHeightRef.current = container.scrollHeight
     saveConversationScroll()
     maybeMarkRead()
@@ -374,6 +386,7 @@ export function useConversationScroll(
       if (pinned && !pin?.persistent) armPinRelease()
       lastScrollHeightRef.current = container.scrollHeight
       viewedScrollHeightRef.current = container.scrollHeight
+      settledGeometryRef.current = readScrollMetrics(container)
       maybeMarkRead()
     })
 
