@@ -492,6 +492,10 @@ internal fun MeronMobileState.syncCoreThreads(
                     ?: accountId.takeUnless { candidate -> candidate == UNIFIED_ACCOUNT_ID }
             val message = contextual?.cause?.message ?: it.message ?: "Sync failed"
             syncError = MobileSyncError(failedAccountId, message)
+            // The failing account is named by the request, not read out of the text.
+            if (failedAccountId != null && message.contains("account needs reconnect")) {
+                refreshAccountReconnectState(failedAccountId)
+            }
             errorBanner = null
             status = "Sync failed: ${it.message}"
             Log.w("MailLoad", "sync failed account=$accountId folder=$requestedFolder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", it)

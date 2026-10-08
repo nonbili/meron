@@ -15,6 +15,9 @@ pub(crate) fn is_rss_account(
 }
 
 pub(crate) fn account_needs_reconnect(creds: &Creds) -> bool {
+    if creds.auth_rejected() {
+        return true;
+    }
     if creds.is_oauth() {
         // Healthy when we hold a refresh token (iOS/desktop refresh in-core) OR
         // an access token (Android AccountManager keeps it fresh out-of-core via

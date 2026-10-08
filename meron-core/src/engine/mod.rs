@@ -187,7 +187,33 @@ pub fn pool_debug(account: &str, what: &str) {
     }
 }
 
+/// Whether `err` is core's "this account must sign in again" failure, from any
+/// of the paths that refuse to use missing or rejected credentials. Hosts get
+/// it as an `account.needsReconnect` event; see [`needs_reconnect_event`].
+pub fn is_needs_reconnect_error(err: &anyhow::Error) -> bool {
+    format!("{err:#}").contains("account needs reconnect")
+}
+
+/// The event that tells a host `account` has to be reconnected, when `err` is
+/// that failure. Carries the account id itself so hosts never have to recover
+/// it from the message text.
+pub fn needs_reconnect_event(
+    account: &str,
+    err: &anyhow::Error,
+) -> Option<(&'static str, serde_json::Value)> {
+    is_needs_reconnect_error(err).then(|| {
+        (
+            "account.needsReconnect",
+            serde_json::json!({ "account": account }),
+        )
+    })
+}
+
 pub fn creds_have_required_secret(creds: &imap::Creds) -> bool {
+    // A secret the provider has refused is as good as none.
+    if creds.auth_rejected() {
+        return false;
+    }
     if creds.is_oauth() {
         creds
             .refresh_token
@@ -400,6 +426,10 @@ impl Engine {
         let creds = accounts
             .get_mut(account)
             .ok_or_else(|| anyhow::anyhow!("account needs reconnect: {account}"))?;
+        // Already refused once: asking again only repeats the answer.
+        if creds.auth_rejected() {
+            anyhow::bail!("account needs reconnect: {account}");
+        }
 
         if creds.is_oauth() {
             let now = std::time::SystemTime::now()
@@ -493,7 +523,7 @@ impl Engine {
                 } else {
                     Some(owned_scope.as_str())
                 };
-                let (new_access, expires_in) = imap::refresh_oauth_token(
+                let refreshed = imap::refresh_oauth_token(
                     &token_url,
                     &client_id,
                     &client_secret,
@@ -501,7 +531,31 @@ impl Engine {
                     scope,
                     creds.proxy.resolve(),
                 )
-                .await?;
+                .await;
+                let (new_access, expires_in) = match refreshed {
+                    Ok(tokens) => tokens,
+                    // The grant is dead, not the network: remember it, so the
+                    // account shows as needing a reconnect and every later sync
+                    // stops here instead of asking the provider again.
+                    //
+                    // The verdict is filed under the token that earned it, so
+                    // an account reconnected while we were asking is unaffected.
+                    Err(err) if imap::oauth_grant_rejected(&err) => {
+                        let fingerprint = imap::grant_fingerprint(refresh_token);
+                        if let Err(save_err) = store::set_account_rejected_grant(
+                            &db.lock().unwrap(),
+                            account,
+                            &fingerprint,
+                        ) {
+                            eprintln!(
+                                "meron-core: could not record rejected sign-in for {account}: {save_err:#}"
+                            );
+                        }
+                        creds.rejected_grant = Some(fingerprint);
+                        return Err(err.context(format!("account needs reconnect: {account}")));
+                    }
+                    Err(err) => return Err(err),
+                };
                 creds.access_token = Some(new_access);
                 creds.token_expires_at = now + expires_in;
 

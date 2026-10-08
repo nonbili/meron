@@ -242,6 +242,7 @@ fn creds_to_config(creds: &Creds) -> String {
         "proxy": creds.proxy.to_json(),
         "cert_pin": creds.cert_pin,
         "smtp_cert_pin": creds.smtp_cert_pin,
+        "rejected_grant": creds.rejected_grant,
     })
     .to_string()
 }
@@ -282,6 +283,10 @@ fn config_to_creds(json: &str) -> Creds {
         proxy: crate::proxy::ProxyChoice::from_json(&v["proxy"]),
         cert_pin: config_cert_pin(&v, "cert_pin"),
         smtp_cert_pin: config_cert_pin(&v, "smtp_cert_pin"),
+        rejected_grant: v["rejected_grant"]
+            .as_str()
+            .filter(|fingerprint| !fingerprint.is_empty())
+            .map(str::to_string),
     }
 }
 
@@ -333,6 +338,19 @@ pub fn save_account_config(conn: &Connection, id: &str, creds: &Creds) -> Result
     conn.execute(
         "UPDATE accounts SET config = ?2, updated_at = ?3 WHERE id = ?1",
         params![id, creds_to_config(creds), now_unix()],
+    )?;
+    Ok(())
+}
+
+/// Record the fingerprint of a refresh token the provider refused (see
+/// [`Creds::rejected_grant`]). Touches only that key, so it cannot undo a save
+/// that landed while the refused request was in flight.
+pub fn set_account_rejected_grant(conn: &Connection, id: &str, fingerprint: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE accounts
+            SET config = json_set(config, '$.rejected_grant', ?2), updated_at = ?3
+          WHERE id = ?1",
+        params![id, fingerprint, now_unix()],
     )?;
     Ok(())
 }

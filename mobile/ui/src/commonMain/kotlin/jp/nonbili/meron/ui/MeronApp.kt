@@ -523,6 +523,10 @@ private fun MeronMobileScreenContent(
                                 }
                             }
 
+                            "account.needsReconnect" -> {
+                                refreshAccountReconnectState(event.detailJson.jsonStringValue("account"))
+                            }
+
                             "error" -> {
                                 // Watcher/runtime failures are regular core events,
                                 // not `log` events. Keep them visible in Logcat and

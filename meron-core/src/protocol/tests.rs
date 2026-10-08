@@ -3051,6 +3051,7 @@ fn seed_mobile_account(data_dir: &std::path::Path, email: &str) {
         proxy: crate::proxy::ProxyChoice::Global,
         cert_pin: None,
         smtp_cert_pin: None,
+        rejected_grant: None,
     };
     let meta = AccountMeta {
         engine: "mail".to_string(),

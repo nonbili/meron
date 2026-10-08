@@ -981,6 +981,11 @@ fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: A
             match mobile_idle_once(&data_dir, &account, &folder, &stop).await {
                 Ok(()) => {}
                 Err(err) => {
+                    if let Some((name, detail)) =
+                        crate::engine::needs_reconnect_event(&account, &err)
+                    {
+                        emit_event(name, detail);
+                    }
                     emit_event(
                         "error",
                         json!({ "message": format!("idle {account}/{folder}: {err:#}") }),
