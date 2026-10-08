@@ -120,6 +120,7 @@ pub(crate) async fn dispatch(
                 // that webpki rejects (see `account.probeCert`).
                 cert_pin: cert_pin_param(p, "cert_pin"),
                 smtp_cert_pin: cert_pin_param(p, "smtp_cert_pin"),
+                rejected_grant: None,
             };
             // A reconnect resends the setup form, which has no field for the
             // account's proxy or the certificates it accepted. Carry those over

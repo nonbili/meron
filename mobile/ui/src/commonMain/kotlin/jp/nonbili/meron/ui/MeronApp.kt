@@ -523,6 +523,10 @@ private fun MeronMobileScreenContent(
                                 }
                             }
 
+                            "account.needsReconnect" -> {
+                                refreshAccountReconnectState(event.detailJson.jsonStringValue("account"))
+                            }
+
                             "error" -> {
                                 // Watcher/runtime failures are regular core events,
                                 // not `log` events. Keep them visible in Logcat and
@@ -1158,6 +1162,9 @@ private fun MeronMobileScreenContent(
                 AddAccountScreen(
                     onBack = popAppBack,
                     initialSection = addSection,
+                    // Reconnect pre-fills the address of an account core can no
+                    // longer sign in to; any other address is a new account.
+                    reconnecting = coreAccounts.any { it.needsReconnect && it.email.equals(email.trim(), ignoreCase = true) },
                     displayName = displayName,
                     onDisplayNameChange = { displayName = it },
                     senderName = senderName,

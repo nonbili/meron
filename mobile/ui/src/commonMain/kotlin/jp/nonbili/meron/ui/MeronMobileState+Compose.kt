@@ -1143,9 +1143,11 @@ internal fun threadsWithDraftFlag(
     return if (changed) updated else threads
 }
 
-// Re-open account setup pre-filled so the user can fix credentials. OAuth
-// accounts re-run the browser sign-in; password accounts re-enter the
-// password (the IMAP/SMTP host fields keep their last values).
+// Let the user fix an account's credentials. OAuth accounts go straight to
+// the provider's sign-in for that address — the setup screen would only offer
+// the same button with nothing saying which account it is for. Password
+// accounts re-open account setup pre-filled, to re-enter the password (the
+// IMAP/SMTP host fields keep their last values).
 internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
     val isOAuth = account.authType == "oauth" || account.provider == "gmail" || account.provider == "outlook"
     when {
@@ -1160,6 +1162,9 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
             oauthAuthorizationCode = ""
             addSection = 0
             passwordServerSettingsOpen = false
+            errorBanner = null
+            if (oauthProvider == "gmail") connectGoogleDeviceAccount() else launchOAuthFlow()
+            return
         }
 
         else -> {

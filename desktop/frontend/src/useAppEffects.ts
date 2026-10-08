@@ -8,6 +8,7 @@ import { mail$, loadThreads, loadThread, findLocalThread } from './states/mail'
 import { loadFolders, refreshAccountFoldersCache, inboxUnread } from './states/mailFolders'
 import { openMailtoCompose, openThreadTabById } from './states/compose'
 import { accounts$ } from './states/accounts'
+import type { Account } from './types'
 import { kanban$ } from './states/kanban'
 import { setSyncError, clearSyncErrorFor } from './states/connectivity'
 import { settings$, applyDocumentLanguage, watchSystemAppearance } from './states/settings'
@@ -345,6 +346,20 @@ export function useAppEffects() {
       },
     )
 
+    // Core refused to use this account's sign-in (missing, or rejected by the
+    // provider). Re-read the list so its avatar shows "needs reconnect" without
+    // a restart. Watchers repeat this while they retry, so only the first one
+    // for an account does anything.
+    const offNeedsReconnect = eventsOn('account.needsReconnect', (detail: { account?: string }) => {
+      const flagged = accounts$.get().find((account) => account.id === detail?.account)
+      if (!flagged || flagged.needs_reconnect === true) return
+      void invoke<{ accounts: Account[] }>('account.list')
+        .then((res) => {
+          if (res.accounts.length) accounts$.set(res.accounts)
+        })
+        .catch(console.error)
+    })
+
     const offNew = eventsOn(
       'mail.newMessages',
       (detail: { account?: string; folder?: string; folderName?: string; count?: number }) => {
@@ -401,6 +416,7 @@ export function useAppEffects() {
     return () => {
       if (typeof offError === 'function') offError()
       if (typeof offNew === 'function') offNew()
+      if (typeof offNeedsReconnect === 'function') offNeedsReconnect()
       if (typeof offSynced === 'function') offSynced()
       if (typeof offSentCopy === 'function') offSentCopy()
     }

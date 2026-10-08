@@ -173,6 +173,9 @@ pub(crate) async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String
             break;
         }
         if let Err(e) = idle_once(&engine, &out, &account, &folder).await {
+            if let Some((name, detail)) = meron_core::engine::needs_reconnect_event(&account, &e) {
+                emit(&out, name, detail).await;
+            }
             emit(
                 &out,
                 "error",

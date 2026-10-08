@@ -45,6 +45,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/**
+ * Core reported that it refused to use this account's sign-in (missing, or
+ * rejected by the provider). Take the account's reconnect state from a fresh
+ * account list, so the drawer and the reconnect banner show it now — and so a
+ * report that was overtaken by a reconnect, about credentials already replaced,
+ * changes nothing. Watchers repeat the report while they retry; only an account
+ * not yet flagged is looked up.
+ */
+internal fun MeronMobileState.refreshAccountReconnectState(accountId: String) {
+    if (!coreLoaded || coreAccounts.none { it.id == accountId && !it.needsReconnect }) return
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) { parseAccountListResponse(MobileMailCommandClient(core).listAccounts()) }
+        }.onSuccess { fresh ->
+            if (fresh.any { it.id == accountId && it.needsReconnect }) {
+                coreAccounts = coreAccounts.map { if (it.id == accountId) it.copy(needsReconnect = true) else it }
+            }
+        }
+    }
+}
+
 internal fun MeronMobileState.applyAccounts(
     json: String,
     preferEmail: String? = null,

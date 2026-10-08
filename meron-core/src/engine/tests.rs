@@ -1129,3 +1129,14 @@ async fn transfer_deadline_bounds_connection_coordination() {
     assert!(err.to_string().contains("session preparation timed out"));
     assert!(!err.is::<TransferTimedOut>());
 }
+
+#[test]
+fn only_a_reconnect_failure_becomes_a_reconnect_event() {
+    let refused = anyhow::anyhow!("account needs reconnect: a@example.com").context("sync INBOX");
+    let (name, detail) = super::needs_reconnect_event("a@example.com", &refused).unwrap();
+    assert_eq!(name, "account.needsReconnect");
+    assert_eq!(detail["account"], "a@example.com");
+
+    let offline = anyhow::anyhow!("connection refused");
+    assert!(super::needs_reconnect_event("a@example.com", &offline).is_none());
+}

@@ -3968,6 +3968,7 @@ fn proxy_test_creds(proxy: crate::proxy::ProxyChoice) -> crate::imap::Creds {
         proxy,
         cert_pin: None,
         smtp_cert_pin: None,
+        rejected_grant: None,
     }
 }
 
@@ -3982,6 +3983,43 @@ fn stored_creds(conn: &Connection, id: &str) -> crate::imap::Creds {
 
 fn stored_proxy(conn: &Connection, id: &str) -> crate::proxy::ProxyChoice {
     stored_creds(conn, id).proxy
+}
+
+/// A sign-in the provider refused has to stay refused across a restart, and
+/// saving the account again — which is what reconnecting does — has to lift it.
+#[test]
+fn rejected_sign_in_persists_until_the_account_is_saved_again() {
+    let conn = test_conn();
+    let creds = proxy_test_creds(crate::proxy::ProxyChoice::Global);
+    let meta = AccountMeta {
+        engine: "mail".to_string(),
+        provider: "custom".to_string(),
+        email: "user@example.com".to_string(),
+        display_name: String::new(),
+        avatar_url: String::new(),
+        sender_name: String::new(),
+    };
+    upsert_account(&conn, "acct", &meta, &creds).unwrap();
+    assert_eq!(stored_creds(&conn, "acct").rejected_grant, None);
+
+    let refused = crate::imap::grant_fingerprint("old-token");
+    set_account_rejected_grant(&conn, "acct", &refused).unwrap();
+    let mut stored = stored_creds(&conn, "acct");
+    assert_eq!(stored.rejected_grant.as_deref(), Some(refused.as_str()));
+    // Nothing else in the config moved.
+    assert_eq!(stored.host, creds.host);
+    assert_eq!(stored.token_expires_at, creds.token_expires_at);
+
+    // The verdict is on that token alone (secrets are applied after loading).
+    stored.refresh_token = Some("old-token".to_string());
+    assert!(stored.auth_rejected());
+    stored.refresh_token = Some("new-token".to_string());
+    assert!(!stored.auth_rejected());
+    stored.refresh_token = None;
+    assert!(!stored.auth_rejected());
+
+    upsert_account(&conn, "acct", &meta, &creds).unwrap();
+    assert_eq!(stored_creds(&conn, "acct").rejected_grant, None);
 }
 
 /// The pin an account carries for a server whose certificate webpki refuses

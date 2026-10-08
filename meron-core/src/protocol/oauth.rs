@@ -86,6 +86,7 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         proxy: crate::proxy::ProxyChoice::from_json(params.get("proxy").unwrap_or(&Value::Null)),
         cert_pin: None,
         smtp_cert_pin: None,
+        rejected_grant: None,
     };
     let id = account_id(&email);
     let meta = AccountMeta {
@@ -144,6 +145,7 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
         // refresh token must not be reused by core.
         creds.refresh_token = None;
         creds.token_expires_at = token_expires_at;
+        creds.rejected_grant = None;
         store::save_account_config(&conn, &id, &creds).map_err(|err| err.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)

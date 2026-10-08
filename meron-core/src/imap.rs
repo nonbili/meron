@@ -155,6 +155,24 @@ pub struct Creds {
     /// different daemons with different certificates — a local bridge serves one
     /// certificate on both ports, but nothing guarantees that in general.
     pub smtp_cert_pin: Option<String>,
+    /// Fingerprint ([`grant_fingerprint`]) of a refresh token the provider
+    /// refused outright (an expired or revoked OAuth grant). Persisted, so the
+    /// account reads as needing a reconnect across restarts instead of failing
+    /// the same refresh on every sync. It names the token rather than the
+    /// account on purpose: once the account holds any other token — however
+    /// and whenever a reconnect's writes land — the verdict no longer applies.
+    /// See [`Creds::auth_rejected`].
+    pub rejected_grant: Option<String>,
+}
+
+/// A stable, non-reversible name for a refresh token, to remember which one a
+/// provider refused without storing the token outside the secret store.
+pub fn grant_fingerprint(refresh_token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(refresh_token.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Which settings a save left out of its parameters, and so must be carried
@@ -182,6 +200,20 @@ impl OmittedSettings {
 }
 
 impl Creds {
+    /// Whether the provider has refused the refresh token these credentials
+    /// hold, so that nothing short of signing in again will work.
+    pub fn auth_rejected(&self) -> bool {
+        match (
+            self.rejected_grant.as_deref(),
+            self.refresh_token.as_deref(),
+        ) {
+            (Some(rejected), Some(token)) if !token.is_empty() => {
+                rejected == grant_fingerprint(token)
+            }
+            _ => false,
+        }
+    }
+
     /// Copy the omitted settings across from the account as it is stored today.
     pub fn carry_over(&mut self, stored: &Creds, omitted: OmittedSettings) {
         if omitted.proxy {
@@ -694,6 +726,46 @@ struct TokenResponse {
     expires_in: Option<i64>,
 }
 
+/// A token endpoint's refusal of the refresh token itself: its `error` field
+/// is `invalid_grant`, which RFC 6749 §5.2 reserves for a grant that is
+/// expired, revoked or otherwise no longer valid. Retrying cannot succeed.
+/// Displays like any other failed refresh.
+#[derive(Debug)]
+pub struct OAuthGrantRejected {
+    status: String,
+    body: String,
+}
+
+impl std::fmt::Display for OAuthGrantRejected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "oauth refresh failed ({}): {}", self.status, self.body)
+    }
+}
+
+impl std::error::Error for OAuthGrantRejected {}
+
+/// Whether a failed [`refresh_oauth_token`] means the grant itself is dead
+/// rather than the request having failed in transit or on the server's side.
+pub fn oauth_grant_rejected(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| cause.is::<OAuthGrantRejected>())
+}
+
+/// The error for a non-2xx token response. Only a body whose own `error` field
+/// says `invalid_grant` is a rejection; the text turning up anywhere else (a
+/// description, a gateway's error page) is not.
+fn oauth_refresh_error(status: &str, body: &str) -> anyhow::Error {
+    let code = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|json| json["error"].as_str().map(str::to_string));
+    if code.as_deref() == Some("invalid_grant") {
+        return anyhow::Error::new(OAuthGrantRejected {
+            status: status.to_string(),
+            body: body.to_string(),
+        });
+    }
+    anyhow!("oauth refresh failed ({status}): {body}")
+}
+
 /// Exchange a refresh token for a fresh access token via an OAuth token
 /// endpoint. Uses `ureq` (a minimal blocking HTTP client over the same rustls
 /// stack as IMAP/SMTP) on a blocking task, so we get correct HTTP framing —
@@ -747,7 +819,7 @@ pub async fn refresh_oauth_token(
             .read_to_string()
             .context("read oauth response")?;
         if !status.is_success() {
-            return Err(anyhow!("oauth refresh failed ({status}): {body}"));
+            return Err(oauth_refresh_error(&status.to_string(), &body));
         }
         serde_json::from_str(&body).context("parse oauth response JSON")
     })
@@ -2401,6 +2473,33 @@ fn first_message_id(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::tcp_looks_open;
+
+    #[test]
+    fn only_a_refused_grant_counts_as_rejected() {
+        let refused = super::oauth_refresh_error(
+            "400 Bad Request",
+            r#"{"error":"invalid_grant","error_description":"expired"}"#,
+        );
+        assert!(super::oauth_grant_rejected(&refused));
+        assert!(
+            refused
+                .to_string()
+                .starts_with("oauth refresh failed (400 Bad Request)")
+        );
+        // Wrapped the way callers add context.
+        assert!(super::oauth_grant_rejected(&refused.context("sync INBOX")));
+
+        // The text alone is not the verdict: it has to be the error code.
+        let mentioned = super::oauth_refresh_error(
+            "500 Internal Server Error",
+            r#"{"error":"server_error","error_description":"invalid_grant lookup failed"}"#,
+        );
+        assert!(!super::oauth_grant_rejected(&mentioned));
+        let gateway = super::oauth_refresh_error("502 Bad Gateway", "<html>invalid_grant</html>");
+        assert!(!super::oauth_grant_rejected(&gateway));
+        let offline = anyhow::anyhow!("oauth refresh request: connection refused");
+        assert!(!super::oauth_grant_rejected(&offline));
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn tcp_looks_open_spots_a_connection_the_peer_closed() {
