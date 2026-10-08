@@ -342,7 +342,8 @@ async function printMails(
   }
   const beforePrint = () => measureFrames()
   // WebKitGTK prints iframes blank while it draws its own overlay scrollbars
-  // (html.native-scrollbars, main.tsx); the styled ones are restored to print.
+  // (html.native-scrollbars, lib/nativeScrollbars); the styled ones are restored
+  // to print. macOS has the class too and takes the same path, harmlessly.
   const nativeScrollbars = document.documentElement.classList.contains('native-scrollbars')
   const printPage = (win: Window) => {
     document.documentElement.classList.remove('native-scrollbars')

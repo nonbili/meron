@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test'
-import { usesNativeScrollbars } from './nativeScrollbars'
+import { scrollbarHitWidth, usesNativeScrollbars } from './nativeScrollbars'
 
 const LINUX = 'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/605.1.15 (KHTML, like Gecko)'
 // WKWebView reports an Intel Mac on Apple silicon too.
@@ -19,4 +19,22 @@ it('leaves scrollbars to WKWebView on macOS', () => {
 
 it('keeps the styled scrollbars on Windows', () => {
   expect(usesNativeScrollbars(WINDOWS)).toBe(false)
+})
+
+const box = (offsetWidth: number, clientWidth: number, scrollHeight: number) => ({
+  offsetWidth,
+  clientWidth,
+  scrollHeight,
+  clientHeight: 400,
+})
+
+it('measures a styled scrollbar from the space it takes', () => {
+  expect(scrollbarHitWidth(box(300, 290, 900), false)).toBe(10)
+})
+
+// An overlay scrollbar takes no layout space, so measuring it finds nothing.
+it('gives an overlay scrollbar a nominal width while the container scrolls', () => {
+  expect(scrollbarHitWidth(box(300, 300, 900), true)).toBe(16)
+  expect(scrollbarHitWidth(box(300, 300, 400), true)).toBe(0)
+  expect(scrollbarHitWidth(box(300, 300, 900), false)).toBe(0)
 })
