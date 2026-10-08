@@ -63,6 +63,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.4.3" date="2026-10-09">
+      <description>
+        <ul>
+          <li>Per-folder background sync and notifications for custom folders</li>
+          <li>Show message bodies without a second download or HTML parse</li>
+          <li>Use macOS's own overlay scrollbars</li>
+          <li>Show an account's initials, not its Gravatar, when it has no picture</li>
+          <li>Fix kanban column reorder drag axis, highlight, keyboard and grab area</li>
+          <li>Flag accounts whose OAuth sign-in was refused as needing reconnect</li>
+          <li>Size the side rail in rem so its tiles keep their gap to the indicator</li>
+          <li>Show the decodable part of a truncated base64 body</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-10-05">
       <description>
         <ul>

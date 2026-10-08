@@ -1,0 +1,8 @@
+- Per-folder background sync and notifications for custom folders
+- Show message bodies without a second download or HTML parse
+- Use macOS's own overlay scrollbars
+- Show an account's initials, not its Gravatar, when it has no picture
+- Fix kanban column reorder drag axis, highlight, keyboard and grab area
+- Flag accounts whose OAuth sign-in was refused as needing reconnect
+- Size the side rail in rem so its tiles keep their gap to the indicator
+- Show the decodable part of a truncated base64 body
