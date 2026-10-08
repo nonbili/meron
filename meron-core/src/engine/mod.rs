@@ -532,7 +532,7 @@ impl Engine {
                     creds.proxy.resolve(),
                 )
                 .await;
-                let (new_access, expires_in) = match refreshed {
+                let refreshed = match refreshed {
                     Ok(tokens) => tokens,
                     // The grant is dead, not the network: remember it, so the
                     // account shows as needing a reconnect and every later sync
@@ -556,11 +556,16 @@ impl Engine {
                     }
                     Err(err) => return Err(err),
                 };
-                creds.access_token = Some(new_access);
-                creds.token_expires_at = now + expires_in;
+                creds.access_token = Some(refreshed.access_token);
+                creds.token_expires_at = now + refreshed.expires_in;
+                // A rotated refresh token replaces the one just used; without
+                // it the old one stays, as for providers that never rotate.
+                if let Some(rotated) = refreshed.refresh_token {
+                    creds.refresh_token = Some(rotated);
+                }
 
-                // Persist: token_expires_at to SQLite, the new access token to
-                // the host's secret store (keychain on desktop, keyed DB on mobile).
+                // Persist: token_expires_at to SQLite, the new tokens to the
+                // host's secret store (keychain on desktop, keyed DB on mobile).
                 {
                     let db = db.lock().unwrap();
                     store::save_account_config(&db, account, creds)?;

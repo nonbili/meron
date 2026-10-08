@@ -724,6 +724,32 @@ async fn connect_inner(creds: &Creds) -> Result<Session> {
 struct TokenResponse {
     access_token: String,
     expires_in: Option<i64>,
+    refresh_token: Option<String>,
+}
+
+/// What a successful [`refresh_oauth_token`] hands back.
+pub struct RefreshedToken {
+    pub access_token: String,
+    /// Seconds until `access_token` expires.
+    pub expires_in: i64,
+    /// A replacement refresh token, when the provider rotates them. Microsoft
+    /// issues one on every refresh and each has its own fixed lifetime, so the
+    /// caller must keep this one: holding on to the token it sent would see the
+    /// account's sign-in expire that long after it was first connected, however
+    /// often it refreshed. Google usually sends none.
+    pub refresh_token: Option<String>,
+}
+
+impl From<TokenResponse> for RefreshedToken {
+    fn from(response: TokenResponse) -> Self {
+        RefreshedToken {
+            access_token: response.access_token,
+            expires_in: response.expires_in.unwrap_or(3600),
+            refresh_token: response
+                .refresh_token
+                .filter(|token| !token.trim().is_empty()),
+        }
+    }
 }
 
 /// A token endpoint's refusal of the refresh token itself: its `error` field
@@ -783,7 +809,7 @@ pub async fn refresh_oauth_token(
     refresh_token: &str,
     scope: Option<&str>,
     proxy: Option<crate::proxy::ProxyConfig>,
-) -> Result<(String, i64)> {
+) -> Result<RefreshedToken> {
     let token_url = token_url.to_string();
     let client_id = client_id.to_string();
     let client_secret = client_secret.to_string();
@@ -826,7 +852,7 @@ pub async fn refresh_oauth_token(
     .await
     .context("oauth refresh task")??;
 
-    Ok((parsed.access_token, parsed.expires_in.unwrap_or(3600)))
+    Ok(parsed.into())
 }
 
 pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
@@ -2473,6 +2499,27 @@ fn first_message_id(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::tcp_looks_open;
+
+    #[test]
+    fn a_rotated_refresh_token_is_kept_and_an_absent_one_is_not_invented() {
+        let rotated: super::TokenResponse = serde_json::from_str(
+            r#"{"access_token":"a2","expires_in":1800,"refresh_token":"r2","scope":"x"}"#,
+        )
+        .unwrap();
+        let rotated = super::RefreshedToken::from(rotated);
+        assert_eq!(rotated.access_token, "a2");
+        assert_eq!(rotated.expires_in, 1800);
+        assert_eq!(rotated.refresh_token.as_deref(), Some("r2"));
+
+        let plain: super::TokenResponse = serde_json::from_str(r#"{"access_token":"a2"}"#).unwrap();
+        let plain = super::RefreshedToken::from(plain);
+        assert_eq!(plain.expires_in, 3600);
+        assert_eq!(plain.refresh_token, None);
+
+        let blank: super::TokenResponse =
+            serde_json::from_str(r#"{"access_token":"a2","refresh_token":" "}"#).unwrap();
+        assert_eq!(super::RefreshedToken::from(blank).refresh_token, None);
+    }
 
     #[test]
     fn only_a_refused_grant_counts_as_rejected() {
