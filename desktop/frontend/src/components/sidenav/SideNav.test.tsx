@@ -12,5 +12,8 @@ it('sizes the rail in rem, like the tiles and indicator inside it', () => {
   const view = render(<SideNav />)
   const rail = view.container.querySelector('aside')
   expect(rail).not.toBeNull()
-  expect(rail!.className).toMatch(/(^|\s)w-\[[0-9.]+rem\](\s|$)/)
+  // happy-dom has no layout, so check the class: a spacing-scale width (w-15)
+  // or an arbitrary rem one both scale; a px width is what must not come back.
+  const width = rail!.className.split(/\s+/).find((name) => name.startsWith('w-'))
+  expect(width).toMatch(/^w-(\d+(\.\d+)?|\[[0-9.]+rem\])$/)
 })

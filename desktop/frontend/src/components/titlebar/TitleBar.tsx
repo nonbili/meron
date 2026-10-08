@@ -70,7 +70,8 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
         <WindowControls side="start" />
         {/* Weight for the left end, across from the buttons on the right, when no
           window controls sit there. macOS has its traffic lights. Centred over
-          the 60px side navigation's tiles: 6px row padding + margin + half the logo. */}
+          the 3.75rem side navigation's tiles: row padding + margin + half the logo,
+          all in rem so the two stay aligned at any text size. */}
         {!isMac && startControls.length === 0 && (
           <img
             src={logo}
