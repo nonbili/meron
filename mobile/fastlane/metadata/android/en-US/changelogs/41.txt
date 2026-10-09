@@ -1,0 +1,5 @@
+- Per-folder background sync and notifications for custom folders
+- Show message bodies without a second download or HTML parse
+- Option to show full message content in chat
+- Keep older thread pages on refresh, show loading for bodies still downloading
+- Flag accounts whose OAuth sign-in was refused as needing reconnect

@@ -32,8 +32,7 @@ class AndroidLocaleController(
     // choice instead of the device's.
     override fun deviceLanguageTag(): String {
         val configuration = Resources.getSystem().configuration
-        // Configuration.locales arrived in API 24 and minSdk is 23, so the older
-        // single-locale field is still needed rather than a crash on 23.
+        // Configuration.locales arrived in API 24 (the project's minSdk).
         val locale =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 configuration.locales.takeIf { !it.isEmpty }?.get(0)

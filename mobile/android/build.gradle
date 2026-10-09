@@ -13,8 +13,8 @@ def releaseProp = { String name, String envName = null, String fallback = "" ->
     return fallback
 }
 
-def releaseVersionCode = 40
-def releaseVersionName = "0.4.2"
+def releaseVersionCode = 41
+def releaseVersionName = "0.4.3"
 def outlookClientId = releaseProp("outlookClientId", "MERON_OUTLOOK_CLIENT_ID", "7af51167-6eda-4f66-8514-e5163e4069eb")
 // Gmail uses native Android OAuth clients. An Android OAuth client is bound to
 // package + signing-cert SHA-1, so each signing key is a *separate* client with
@@ -75,7 +75,7 @@ android {
 
     defaultConfig {
         applicationId "jp.nonbili.meron"
-        minSdk 23
+        minSdk 24
         targetSdk 36
         versionCode releaseVersionCode
         versionName releaseVersionName
