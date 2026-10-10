@@ -43,7 +43,21 @@ export function QuickReplyComposer() {
         </div>
         <QuickReplyAttachments attachments={composerAttachments} />
 
-        <div className="flex items-end gap-2 w-full">
+        {/* The text gets the box's full width on its own row; the buttons share a
+            toolbar row below it, attach and full editor on the left, send on the right. */}
+        <textarea
+          ref={textareaRef}
+          value={composer}
+          onChange={(event) => compose$.composer.set(event.target.value)}
+          placeholder={t('composer.placeholders.quickMessage')}
+          rows={1}
+          spellCheck={spellCheck}
+          className="block w-full px-1.5 py-1 max-h-[254px] bg-transparent text-[calc(0.9375rem*var(--me-message-scale))] text-primary resize-none placeholder-secondary border-none outline-none leading-[1.3333]"
+          onKeyDown={handleComposerKeyDown}
+          onPaste={handleComposerPaste}
+        />
+
+        <div className="flex w-full items-center gap-2">
           <button
             onClick={() => void pickAttachmentFiles()}
             className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active transition-colors cursor-pointer"
@@ -58,21 +72,7 @@ export function QuickReplyComposer() {
           >
             <Maximize2 size={15} />
           </button>
-
-          {/* One line of text sits centred in the 34px row beside the buttons at any
-            message text size: the padding is what the line height leaves over. */}
-          <textarea
-            ref={textareaRef}
-            value={composer}
-            onChange={(event) => compose$.composer.set(event.target.value)}
-            placeholder={t('composer.placeholders.quickMessage')}
-            rows={1}
-            spellCheck={spellCheck}
-            className="flex-1 py-[max(0px,calc((2.125rem_-_1.25rem_*_var(--me-message-scale))_/_2))] px-1 max-h-[254px] min-h-8.5 bg-transparent text-[calc(0.9375rem*var(--me-message-scale))] text-primary resize-none placeholder-secondary border-none outline-none leading-[1.3333]"
-            onKeyDown={handleComposerKeyDown}
-            onPaste={handleComposerPaste}
-          />
-
+          <div className="flex-1" />
           <button
             onClick={handleSendReply}
             disabled={!canSend}
