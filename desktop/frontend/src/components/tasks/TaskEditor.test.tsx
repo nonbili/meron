@@ -87,6 +87,44 @@ it('saves the focused title when Escape closes the row', async () => {
   await waitFor(() => expect(updates).toEqual([{ task_id: task.id, title: 'New title' }]))
 })
 
+it('saves the focused title and closes on a click outside the row', async () => {
+  const view = render(
+    <>
+      <div data-task-row>
+        <span>row padding</span>
+        <EditableEditor />
+      </div>
+      <p>elsewhere</p>
+    </>,
+  )
+  const title = view.getAllByRole('textbox')[0]
+  fireEvent.change(title, { target: { value: 'New title' } })
+  fireEvent.click(view.getByText('row padding'))
+  expect(view.queryAllByRole('textbox')).toHaveLength(2)
+  fireEvent.click(view.getByText('elsewhere'))
+  expect(view.queryAllByRole('textbox')).toHaveLength(0)
+  await waitFor(() => expect(updates).toEqual([{ task_id: task.id, title: 'New title' }]))
+})
+
+it('closes when focus moves outside the row, but waits for the click during a press', () => {
+  const view = render(
+    <>
+      <EditableEditor />
+      <button type="button">elsewhere</button>
+    </>,
+  )
+  const outside = view.getByRole('button', { name: 'elsewhere' })
+  fireEvent.mouseDown(outside)
+  fireEvent.focusIn(outside)
+  expect(view.queryAllByRole('textbox')).toHaveLength(2)
+  fireEvent.mouseUp(outside)
+  fireEvent.focusIn(view.getAllByRole('textbox')[1])
+  expect(view.queryAllByRole('textbox')).toHaveLength(2)
+  act(() => outside.focus())
+  expect(view.queryAllByRole('textbox')).toHaveLength(0)
+  expect(document.activeElement).toBe(outside)
+})
+
 it('keeps one resize observer while typing and remeasures when width changes', () => {
   const originalObserver = globalThis.ResizeObserver
   let observers = 0

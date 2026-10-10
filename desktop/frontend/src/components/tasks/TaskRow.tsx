@@ -57,6 +57,7 @@ export function TaskRow({
   return (
     <div
       ref={setNodeRef}
+      data-task-row
       style={{
         transform: CSS.Translate.toString(transform),
         transition: isDragging ? 'none' : transition,

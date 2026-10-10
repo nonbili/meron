@@ -25,6 +25,7 @@ export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskLi
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes)
   const notesRef = useRef<HTMLTextAreaElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const [addingDueDate, setAddingDueDate] = useState(false)
 
   useLayoutEffect(() => {
@@ -55,14 +56,51 @@ export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskLi
   }, [task.id])
 
   function finishEditing() {
-    // Save the focused field before removing it from the row.
+    // Save the focused field before removing it from the row. Focus that has
+    // already moved elsewhere stays where the user put it.
     const active = document.activeElement
-    if (active instanceof HTMLElement) active.blur()
+    if (active instanceof HTMLElement && rootRef.current?.contains(active)) active.blur()
     tasks$.editingId.set('')
   }
 
+  // Leaving the row is the same as Done. Watching clicks and focus moves rather
+  // than the fields' own blur keeps the row open when the window is deactivated
+  // and when WebKit declines to focus a clicked button.
+  useEffect(() => {
+    const isOutside = (target: EventTarget | null) => {
+      const row = rootRef.current?.closest('[data-task-row]') ?? rootRef.current
+      return target instanceof Node && !!row && !row.contains(target)
+    }
+    let pressing = false
+    const onMouseDown = () => {
+      pressing = true
+    }
+    const onMouseUp = () => {
+      pressing = false
+    }
+    const onClick = (event: MouseEvent) => {
+      if (isOutside(event.target)) finishEditing()
+    }
+    const onFocusIn = (event: FocusEvent) => {
+      // A press closes on click instead: collapsing the row at mousedown would
+      // move whatever the pointer is about to release on.
+      if (!pressing && isOutside(event.target)) finishEditing()
+    }
+    document.addEventListener('mousedown', onMouseDown, true)
+    document.addEventListener('mouseup', onMouseUp, true)
+    document.addEventListener('click', onClick, true)
+    document.addEventListener('focusin', onFocusIn)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown, true)
+      document.removeEventListener('mouseup', onMouseUp, true)
+      document.removeEventListener('click', onClick, true)
+      document.removeEventListener('focusin', onFocusIn)
+    }
+  }, [])
+
   return (
     <div
+      ref={rootRef}
       className="flex min-w-0 flex-col gap-1 py-0.5"
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return

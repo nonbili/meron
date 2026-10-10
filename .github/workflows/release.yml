@@ -142,7 +142,16 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         shell: pwsh
         run: |
-          choco install nsis --no-progress -y
+          # The community feed times out now and then, and choco still exits 0
+          # when it does, so retry and check for makensis ourselves rather
+          # than let the build silently skip the installer.
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          foreach ($attempt in 1..4) {
+            choco install nsis --no-progress -y
+            if (Test-Path $makensis) { break }
+            if ($attempt -eq 4) { throw "NSIS install failed after $attempt attempts" }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
           # choco updates the machine PATH, but the running job won't pick that up
           # in later steps; expose makensis to the build step explicitly.
           "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
@@ -361,8 +370,16 @@ jobs:
           Copy-Item desktop/build/sidecar/meron-core (Join-Path $stage 'meron-core.exe')
 
           # Generate the tile/logo assets from the 1024px app icon.
-          choco install imagemagick.app --no-progress -y | Out-Null
+          # Same retry as the NSIS install: choco exits 0 when the feed times out.
           $magick = "magick"
+          foreach ($attempt in 1..4) {
+            choco install imagemagick.app --no-progress -y | Out-Null
+            # Pick up the PATH entry the installer just added to the machine.
+            $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+            if (Get-Command $magick -ErrorAction SilentlyContinue) { break }
+            if ($attempt -eq 4) { throw "ImageMagick install failed after $attempt attempts" }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
           $sizes = @{
             'Square44x44Logo.png'   = '44x44';
             'Square71x71Logo.png'   = '71x71';
