@@ -79,7 +79,7 @@ export default function App() {
       <TitleBar />
       <ConnectivityBanner />
       <UpdateBanner />
-      <main className="flex min-h-0 w-full flex-1 overflow-hidden bg-sidenav">
+      <main className="flex min-h-0 w-full flex-1 bg-sidenav">
         <ErrorBoundary label="side navigation">
           <SideNav />
         </ErrorBoundary>
