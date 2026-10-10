@@ -20,12 +20,24 @@ function measureNotes(textarea: HTMLTextAreaElement) {
  * button: a task is a scrap of text, and asking the user to confirm each scrap
  * is more ceremony than the content deserves.
  */
-export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskList[]; actions?: ReactNode }) {
+export function TaskEditor({
+  task,
+  lists,
+  actions,
+  focusDueDate = false,
+}: {
+  task: Task
+  lists: TaskList[]
+  actions?: ReactNode
+  /** Open on the due date rather than the title, with its picker showing. */
+  focusDueDate?: boolean
+}) {
   const { t } = useTranslation()
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes)
   const notesRef = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const dueRef = useRef<HTMLInputElement>(null)
   const [addingDueDate, setAddingDueDate] = useState(false)
 
   useLayoutEffect(() => {
@@ -45,6 +57,15 @@ export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskLi
     })
     observer.observe(textarea)
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!focusDueDate) return
+    try {
+      dueRef.current?.showPicker?.()
+    } catch {
+      // Not every webview opens the picker from script; the field is focused either way.
+    }
   }, [])
 
   // Re-seed when the pane switches to a different task, so the fields don't
@@ -110,7 +131,7 @@ export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskLi
     >
       <div className="flex min-w-0 items-start gap-1.5">
         <input
-          autoFocus
+          autoFocus={!focusDueDate}
           aria-label={t('tasks.titlePlaceholder')}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -165,7 +186,8 @@ export function TaskEditor({ task, lists, actions }: { task: Task; lists: TaskLi
           <div className="flex min-w-0 items-center gap-1 rounded-lg bg-raised px-2 ring-1 ring-border focus-within:ring-accent">
             <CalendarDays size={14} className="shrink-0 text-secondary" aria-hidden="true" />
             <input
-              autoFocus={addingDueDate}
+              ref={dueRef}
+              autoFocus={addingDueDate || focusDueDate}
               type="date"
               aria-label={t('tasks.dueDate')}
               value={toDateInputValue(task.due_at)}

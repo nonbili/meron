@@ -184,7 +184,9 @@ export function TasksPanel({ listId }: { listId: string }) {
                   onOpen={() => tasks$.editingId.set(task.id)}
                   onDelete={() => void deleteTask(task.id)}
                   onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
-                  renderEditor={(actions) => <TaskEditor task={task} lists={lists} actions={actions} />}
+                  renderEditor={(actions, focusDueDate) => (
+                    <TaskEditor task={task} lists={lists} actions={actions} focusDueDate={focusDueDate} />
+                  )}
                 />
               ))}
             </SortableContext>
@@ -218,7 +220,9 @@ export function TasksPanel({ listId }: { listId: string }) {
                   onOpen={() => tasks$.editingId.set(task.id)}
                   onDelete={() => void deleteTask(task.id)}
                   onOpenMessage={task.thread_id ? () => void openTaskMail(task.thread_id) : undefined}
-                  renderEditor={(actions) => <TaskEditor task={task} lists={lists} actions={actions} />}
+                  renderEditor={(actions, focusDueDate) => (
+                    <TaskEditor task={task} lists={lists} actions={actions} focusDueDate={focusDueDate} />
+                  )}
                 />
               ))}
             </div>
