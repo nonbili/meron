@@ -26,6 +26,7 @@ import {
   ConversationScrollIntentContext,
   useConversationScroll,
 } from './useConversationScroll'
+import { COMPOSER_OVERLAP_VAR } from './conversationScroll'
 import { ArrowRight } from 'lucide-react'
 import { usePresence } from '../../lib/usePresence'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
@@ -140,6 +141,7 @@ export function MessagePane() {
   const { threadSearchOpen, searchMatches, activeSearchId } = useThreadSearch(displayMessages, activeThread?.account_id)
   const conversationScroll = useConversationScroll(activeThreadId, displayMessages, conversationActiveTab, unreadKey)
   const { scrollRef } = conversationScroll
+  const composerRef = useRef<HTMLDivElement | null>(null)
 
   const contextMenu = useValue(thread$.messageContextMenu)
 
@@ -152,6 +154,29 @@ export function MessagePane() {
   useEffect(() => {
     resetThreadView()
   }, [activeThreadId])
+
+  // The composer floats over the bottom of the message list, so messages scroll
+  // on behind its rounded box instead of ending at a straight edge above it. The
+  // list pads its end by the composer's height (COMPOSER_OVERLAP_VAR) so the
+  // newest message still clears it, and a reader at the bottom stays there when
+  // the composer grows with a longer reply or an attachment.
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    const composer = composerRef.current
+    if (!container || !composer) return
+    const apply = () => {
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 1
+      container.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
+      if (atBottom) container.scrollTop = container.scrollHeight
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(composer)
+    return () => {
+      observer.disconnect()
+      container.style.removeProperty(COMPOSER_OVERLAP_VAR)
+    }
+  }, [activeThreadId, isRSS, scrollRef])
 
   useLayoutEffect(() => {
     return () => {
@@ -269,7 +294,11 @@ export function MessagePane() {
         </ConversationScrollIntentContext>
       </ConversationScrollContext>
 
-      {!isRSS && <QuickReplyComposer />}
+      {!isRSS && (
+        <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+          <QuickReplyComposer />
+        </div>
+      )}
     </>
   ) : (
     <div

@@ -7,6 +7,7 @@ import {
   ANCHOR_GAP_PX,
   anchorScrollTop,
   collectManualUnreadIds,
+  COMPOSER_OVERLAP_VAR,
   isAtBottom,
   isMessageRead,
   isUserScroll,
@@ -18,6 +19,7 @@ import {
   type ScrollAnchor,
   type ScrollGeometry,
   type ScrollMetrics,
+  visibleBounds,
 } from './conversationScroll'
 
 /** How long an assignment of ours waits for its scroll event before we stop
@@ -269,7 +271,11 @@ export function useConversationScroll(
     // marked once the body arrives and resizes the list.
     const bodyMissingIds = new Set(messages.filter((message) => message.body_missing).map((message) => message.id))
 
-    const containerRect = container.getBoundingClientRect()
+    // Messages behind the floating composer are not in view yet.
+    const containerRect = visibleBounds(
+      container.getBoundingClientRect(),
+      parseFloat(container.style.getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0,
+    )
     const isVisible = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect()
       return rect.top < containerRect.bottom && rect.bottom > containerRect.top

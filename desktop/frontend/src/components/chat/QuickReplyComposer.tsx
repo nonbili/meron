@@ -31,8 +31,13 @@ export function QuickReplyComposer() {
   const canSend = !sendingReply && !isQuickReplyBlank()
 
   return (
-    <footer className="px-3.5 pb-3.5 pt-1 bg-chat z-10 flex flex-col items-center justify-center">
-      <div className="flex flex-col gap-2 w-full bg-chats p-2 rounded-2xl border border-border/60 shadow-sm focus-within:ring-1 focus-within:ring-accent transition-all duration-150">
+    // The footer floats over the message list (MessagePane). Its top stays
+    // clear down to the end of the box's rounded corners (pt-1 + rounded-2xl),
+    // so messages scroll away behind those corners; below that it is solid, so
+    // nothing shows beside or under the box. The box's halo in the chat colour
+    // fades messages out just before they reach it.
+    <footer className="px-3.5 pb-3.5 pt-1 bg-[linear-gradient(to_bottom,transparent_1.25rem,var(--me-bg-chat)_1.25rem)] flex flex-col items-center justify-center">
+      <div className="pointer-events-auto flex flex-col gap-2 w-full bg-chats p-2 rounded-2xl border border-border/60 shadow-[0_0_12px_6px_var(--me-bg-chat),0_1px_2px_0_rgb(0_0_0/0.05)] focus-within:ring-1 focus-within:ring-accent transition-all duration-150">
         {/* One line, not two: From and To are both single-address disclosures,
             and stacking them pushed the box itself down the window. Recipients
             lead — they are what changes from thread to thread — and the send-as

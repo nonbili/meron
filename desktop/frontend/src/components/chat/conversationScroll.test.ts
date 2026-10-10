@@ -11,6 +11,7 @@ import {
   resolveResizeScrollTop,
   scrollReleasesPin,
   type ScrollMetrics,
+  visibleBounds,
 } from './conversationScroll'
 
 const CONTAINER_TOP = 100
@@ -337,5 +338,23 @@ describe('isMessageRead', () => {
 
   it('counts a message exactly filling the viewport', () => {
     expect(isMessageRead({ top: 0, bottom: 800 }, container)).toBe(true)
+  })
+})
+
+describe('visibleBounds', () => {
+  const container = { top: 0, bottom: 800 }
+
+  it('raises the bottom edge by the composer floating over it', () => {
+    expect(visibleBounds(container, 120)).toEqual({ top: 0, bottom: 680 })
+  })
+
+  it('leaves the bounds alone without a composer', () => {
+    expect(visibleBounds(container, 0)).toEqual(container)
+  })
+
+  it('does not count a message hidden behind the composer as read', () => {
+    // Its bottom is inside the container but under the 120px composer.
+    expect(isMessageRead({ top: 600, bottom: 760 }, visibleBounds(container, 120))).toBe(false)
+    expect(isMessageRead({ top: 600, bottom: 760 }, container)).toBe(true)
   })
 })
