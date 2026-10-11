@@ -36,6 +36,7 @@ export type ShortcutId =
   | 'thread.unread'
   | 'thread.delete'
   | 'thread.details'
+  | 'thread.viewMode'
   | 'reply.focus'
   | 'app.quit'
   | RailShortcutId
@@ -100,6 +101,8 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutId, Chord> = {
   'thread.unread': { key: 'u' },
   'thread.delete': { shift: true, key: '#' },
   'thread.details': { key: 'i' },
+  // H for HTML: switches the open conversation between HTML and plain text.
+  'thread.viewMode': { key: 'h' },
   'reply.focus': { key: 'r' },
 }
 
@@ -215,6 +218,7 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   'thread.unread': 'Mark unread',
   'thread.delete': 'Delete thread',
   'thread.details': 'Toggle details sidebar',
+  'thread.viewMode': 'Toggle HTML / plain text',
   'app.quit': 'Quit Meron',
 }
 
@@ -237,6 +241,7 @@ export const SHORTCUT_GROUPS: { title: string; ids: ShortcutId[] }[] = [
       'thread.unread',
       'thread.delete',
       'thread.details',
+      'thread.viewMode',
     ],
   },
   {

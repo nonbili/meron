@@ -58,6 +58,12 @@ describe('matchShortcut', () => {
     expect(matchShortcut(keydown('q', modKey))).toBe('app.quit')
     expect(shortcutConflict('app.quit', DEFAULT_SHORTCUTS['app.quit'])).toBeNull()
   })
+
+  it('matches bare H as the HTML / plain text switch, a key no other default uses', () => {
+    expect(matchShortcut(keydown('h'))).toBe('thread.viewMode')
+    expect(shortcutConflict('thread.viewMode', DEFAULT_SHORTCUTS['thread.viewMode'])).toBeNull()
+    expect(SHORTCUT_GROUPS.find((group) => group.title === 'Threads')?.ids).toContain('thread.viewMode')
+  })
 })
 
 describe('isBareKeystroke', () => {

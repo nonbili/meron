@@ -21,7 +21,7 @@ import {
   kanbanPaneThreadId,
 } from '../../states/kanban'
 import { openThreadSearch, thread$ } from '../../states/thread'
-import { syncMail, selectAdjacentThread } from '../../states/mail'
+import { getActiveThread, syncMail, selectAdjacentThread } from '../../states/mail'
 import {
   toggleStarWithUndo,
   markUnreadWithUndo,
@@ -32,6 +32,7 @@ import { archiveThread, deleteThread, bulkArchiveSelected, bulkDeleteSelected } 
 import { openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { handleEditUndoKeyDown } from '../../lib/editUndo'
+import { toggleConversationMode } from '../chat/useMessageView'
 import {
   isBareKeystroke,
   isMac,
@@ -357,6 +358,13 @@ export function AppHotkeys() {
           if (!threadSearchVisible()) return
           event.preventDefault()
           thread$.mediaOpen.set(!thread$.mediaOpen.peek())
+          break
+        case 'thread.viewMode':
+          // A reader tab has its own HTML / plain switch, so it counts even
+          // when no conversation is open behind it.
+          if (!compose$.activeTab.peek() && !threadSearchVisible()) return
+          if (!toggleConversationMode(getActiveThread()?.account_id)) return
+          event.preventDefault()
           break
         case 'reply.focus':
           if (!threadSearchVisible()) return
