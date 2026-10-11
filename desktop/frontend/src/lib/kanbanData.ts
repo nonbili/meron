@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from './bridge'
+import { folderLeafName } from './folderTree'
 import { accounts$, unifiedAccounts } from '../states/accounts'
 import {
   getAllKanbanColumns,
@@ -190,11 +191,15 @@ export function folderLabel(
   // says whose mail it is. Anywhere a column or header stands beside a single
   // account's, the qualified name is the one that reads unambiguously.
   if (column.accountId === 'unified') return unifiedFolderLabel(column.folderId, t)
-  if (isInbox) return isRSSAccount(column.accountId, accounts) ? 'Feed' : 'Inbox'
-  return (
-    folders.find((folder) => folder.account_id === column.accountId && folder.id === column.folderId)?.name ||
-    column.folderId
-  )
+  const isRSS = isRSSAccount(column.accountId, accounts)
+  if (isInbox) return isRSS ? 'Feed' : 'Inbox'
+  const accountFolders = folders.filter((folder) => folder.account_id === column.accountId)
+  const found = accountFolders.find((folder) => folder.id === column.folderId)
+  if (!found?.name) return column.folderId
+  // A column names its folder without the path above it ("Now", not
+  // "[Gmail]/Now"); the folder switcher's tree still shows where it sits. Feed
+  // titles are not paths, so a "/" in one stays.
+  return isRSS ? found.name : folderLeafName(found, accountFolders)
 }
 
 export function searchColumnLabel(

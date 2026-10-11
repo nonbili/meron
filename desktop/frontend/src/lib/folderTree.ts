@@ -25,6 +25,15 @@ export function pickDelimiter(folders: Folder[]): string {
   return '/'
 }
 
+/** A folder's own name, without the parent path it is nested under ("Now" for
+ *  "[Gmail]/Now"), as the folder tree labels it. `folders` are the account's
+ *  folders, to infer the delimiter when the server reported none. */
+export function folderLeafName(folder: Folder, folders: Folder[]): string {
+  const delimiter = folder.delimiter || pickDelimiter(folders)
+  const segments = folder.name.split(delimiter).filter(Boolean)
+  return segments[segments.length - 1] ?? folder.name
+}
+
 export function buildFolderTree(folders: Folder[]): TreeNode[] {
   const delimiter = pickDelimiter(folders)
   const roots: TreeNode[] = []
