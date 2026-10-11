@@ -13,6 +13,9 @@ import { Gallery } from './Gallery'
 import { ConversationDetailsPanel } from './ConversationDetailsPanel'
 import { EmptyState } from '../empty-state/EmptyState'
 import { QuickReplyComposer } from './QuickReplyComposer'
+import { addQuickReplyAttachments } from './useQuickReply'
+import { DropOverlay } from './DropOverlay'
+import { useFileDrop } from '../../lib/useFileDrop'
 import { ConversationTabs } from './ConversationTabs'
 import { ReaderTabView } from './ReaderTabView'
 import { ConversationHeader } from './ConversationHeader'
@@ -142,6 +145,13 @@ export function MessagePane() {
   const { scrollRef } = conversationScroll
 
   const contextMenu = useValue(thread$.messageContextMenu)
+
+  // Files dropped anywhere on the open conversation go to the reply as
+  // attachments; feeds have no reply box, and a reader tab in front isn't the
+  // conversation.
+  const { dragging: fileDragging, dropHandlers } = useFileDrop(addQuickReplyAttachments, {
+    enabled: !!activeThread && !isRSS && !activeDocumentTab,
+  })
 
   const showMessageInConversation = useCallback((messageId: string) => {
     thread$.pendingScrollMessageId.set(messageId)
@@ -297,8 +307,10 @@ export function MessagePane() {
             className={`relative flex min-h-0 flex-1 flex-col ${
               activeDocumentTab ? 'pointer-events-none invisible' : ''
             }`}
+            {...dropHandlers}
           >
             {conversationContent}
+            {fileDragging && <DropOverlay />}
           </div>
           {activeDocumentTab && (
             <div className="absolute inset-0 z-20 flex flex-col bg-chat">

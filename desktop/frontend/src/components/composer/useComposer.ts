@@ -17,6 +17,7 @@ import {
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
 import { invoke } from '../../lib/bridge'
+import { isExternalFileDrop } from '../../lib/useFileDrop'
 import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
 import { discardSentDraft } from '../../states/quickReply'
@@ -164,6 +165,13 @@ export function useComposer(tabId: string) {
           if (imageFiles.length > 0) {
             event.preventDefault()
             addFiles(imageFiles, { inline: true })
+            return true
+          }
+          // On Linux a file from the file manager arrives as its file:// address
+          // only; Composer attaches the file itself (useFileDrop), so keep the
+          // address out of the body.
+          if (isExternalFileDrop(event.dataTransfer)) {
+            event.preventDefault()
             return true
           }
         }
@@ -410,7 +418,20 @@ export function useComposer(tabId: string) {
     }
   }
 
-  const addFiles = (files: ArrayLike<File>, options: { inline?: boolean } = {}) => {
+  // Inline images replace the selection; with `afterSelection` (a drop) they go
+  // in after it, one after another, so a dropped image never replaces one that
+  // is still selected from the last insertion.
+  const addFiles = (files: ArrayLike<File>, options: { inline?: boolean; afterSelection?: boolean } = {}) => {
+    let insertPos: number | null = null
+    const insertImage = (src: string, alt: string) => {
+      if (!options.afterSelection) {
+        editor!.chain().focus().setImage({ src, alt }).run()
+        return
+      }
+      insertPos ??= editor!.state.selection.to
+      editor!.chain().focus().insertContentAt(insertPos, { type: ResizableImage.name, attrs: { src, alt } }).run()
+      insertPos = editor!.state.selection.to
+    }
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       const reader = new FileReader()
@@ -433,12 +454,10 @@ export function useComposer(tabId: string) {
         })
         if (shouldInline) {
           invoke<string>('composer.writeMediaFile', { data: base64Data, filename })
-            .then((url) => {
-              editor!.chain().focus().setImage({ src: url, alt: filename }).run()
-            })
+            .then((url) => insertImage(url, filename))
             .catch((err) => {
               console.error('Failed to write media file:', err)
-              editor!.chain().focus().setImage({ src: dataUrl, alt: filename }).run()
+              insertImage(dataUrl, filename)
             })
         }
       }

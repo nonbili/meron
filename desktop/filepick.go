@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -72,19 +71,14 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 
 	files := make([]any, 0, len(paths))
 	for _, path := range paths {
-		data, err := os.ReadFile(path)
+		file, err := readPickedFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read file: %w", err)
+			return nil, err
 		}
-		mime := http.DetectContentType(data)
-		if imagesOnly && !strings.HasPrefix(mime, "image/") {
+		if mime, _ := file["mime"].(string); imagesOnly && !strings.HasPrefix(mime, "image/") {
 			return nil, errors.New("selected file is not an image")
 		}
-		files = append(files, map[string]any{
-			"name": filepath.Base(path),
-			"mime": mime,
-			"data": "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data),
-		})
+		files = append(files, file)
 	}
 
 	if !usedPortal {

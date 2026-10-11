@@ -58,6 +58,8 @@ func main() {
 			Handler:    mediaHandler(),
 			Middleware: cspMiddleware,
 		},
+		// Linux only: see filedrop.go.
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: nativeFileDrop},
 		Linux: &linux.Options{
 			Icon:                appIconPNG,
 			WindowIsTranslucent: roundedWindowCorners,

@@ -9,7 +9,7 @@ export type PickedFile = {
 // Decode the `data:<mime>;base64,<payload>` URL the native picker returns into a
 // File. We parse it by hand rather than `fetch(dataUrl)` because the app's CSP
 // `connect-src` doesn't allow `data:`, which makes fetch throw "Load failed".
-function pickedToFile(picked: PickedFile): File {
+export function pickedToFile(picked: PickedFile): File {
   const comma = picked.data.indexOf(',')
   const base64 = comma >= 0 ? picked.data.slice(comma + 1) : picked.data
   const binary = atob(base64)

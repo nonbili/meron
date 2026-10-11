@@ -55,6 +55,37 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
 // autosave, attachment handling (file picker + sync/async/native paste), the
 // auto-growing textarea, the reply-focus shortcut and send. The component renders
 // the returned values.
+/** Adds files to the chat reply as attachments: from the file picker, a pasted
+ *  image, or files dropped onto the conversation (MessagePane). */
+export function addQuickReplyAttachments(files: ArrayLike<File>) {
+  logComposerPaste(
+    'adding attachments',
+    Array.from(files).map((file) => ({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    })),
+  )
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64Data = result.split(',')[1]
+      const ext = file.type.startsWith('image/') ? file.type.slice(6) : ''
+      const filename = file.name || (ext ? `pasted-image-${Date.now()}.${ext}` : `pasted-${Date.now()}`)
+      compose$.composerAttachments.push({
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        filename,
+        mime: file.type || 'application/octet-stream',
+        size: file.size,
+        data: base64Data,
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
 export function useQuickReply() {
   const { t } = useTranslation()
   const composer = useValue(compose$.composer)
@@ -167,34 +198,7 @@ export function useQuickReply() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composerAttachments])
 
-  const addAttachmentFiles = (files: ArrayLike<File>) => {
-    logComposerPaste(
-      'adding attachments',
-      Array.from(files).map((file) => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      })),
-    )
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result as string
-        const base64Data = result.split(',')[1]
-        const ext = file.type.startsWith('image/') ? file.type.slice(6) : ''
-        const filename = file.name || (ext ? `pasted-image-${Date.now()}.${ext}` : `pasted-${Date.now()}`)
-        compose$.composerAttachments.push({
-          id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          filename,
-          mime: file.type || 'application/octet-stream',
-          size: file.size,
-          data: base64Data,
-        })
-      }
-      reader.readAsDataURL(file)
-    }
-  }
+  const addAttachmentFiles = addQuickReplyAttachments
 
   const pickAttachmentFiles = async () => {
     try {
