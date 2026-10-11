@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
+import { invoke } from './bridge'
 import { pickedToFile, type PickedFile } from './nativeFilePicker'
 
 /** Which drop area the drop landed in (from `zoneOf`, decided at the drop), and
@@ -10,29 +11,62 @@ type FilesHandler = (files: File[], drop: FileDropInfo) => void
 // A drag that starts inside the page (a link or an image in a message) is never
 // a file drop. Cards and columns use pointer events, not HTML drag and drop.
 let internalDrag = false
-let internalDragListening = false
+const internalDragTargets = new WeakSet<Window | Document>()
 
-function listenForInternalDrags() {
-  if (internalDragListening || typeof window === 'undefined') return
-  internalDragListening = true
-  window.addEventListener('dragstart', () => (internalDrag = true), true)
-  window.addEventListener('dragend', () => (internalDrag = false), true)
+/** Watches a document for drags that start in it. The page's own window is
+ *  watched by useFileDrop; message bodies live in iframes, whose drag events
+ *  never reach it, so HtmlFrame adds each frame's document. */
+export function trackInternalDrags(target: Window | Document) {
+  if (internalDragTargets.has(target)) return
+  internalDragTargets.add(target)
+  const ended = () => (internalDrag = false)
+  target.addEventListener('dragstart', () => (internalDrag = true), true)
+  target.addEventListener('dragend', ended, true)
+  // Not capturing: the drop handlers below still need to see it as internal.
+  target.addEventListener('drop', ended)
+  // `dragend` is lost when the dragged element is removed mid-drag. The mouse
+  // doesn't move the page during a drag, so once it does, the drag is over.
+  target.addEventListener('mousemove', ended, { capture: true, passive: true })
 }
 
+// WebKitGTK on Linux announces a file from the file manager only as its file://
+// address (`text/uri-list`). Elsewhere that type means a link dragged in from
+// another app, which is not a file drop.
+let fileAddressDrops = typeof navigator !== 'undefined' && /linux/i.test(navigator.userAgent)
+
 /** Whether a drag carries files from outside the page (the file manager). macOS
- *  and Windows announce them as `Files`. WebKitGTK on Linux announces a file from
- *  the file manager only as its file:// address (`text/uri-list`); the file
- *  itself then comes from Go (filedrop.go, deliverNativeDrop). */
+ *  and Windows announce them as `Files`; Linux as their addresses, and the files
+ *  themselves then come from Go (filedrop.go, readNativeDrop). A link dragged in
+ *  on Linux looks the same until the drop (see droppedFileAddresses). */
 function carriesFiles(data: DataTransfer | null | undefined): boolean {
   if (internalDrag || !data) return false
   const types = Array.from(data.types ?? [])
-  return types.includes('Files') || types.includes('text/uri-list')
+  return types.includes('Files') || (fileAddressDrops && types.includes('text/uri-list'))
+}
+
+/** The file:// addresses of a Linux file manager drop, readable only at the
+ *  drop itself. Null when the drop holds addresses but none of a file: a link
+ *  from another app. Empty when the webview doesn't tell. */
+function droppedFileAddresses(data: DataTransfer): string[] | null {
+  let list = ''
+  try {
+    list = data.getData?.('text/uri-list') ?? ''
+  } catch {
+    // Not readable: leave it to Go, which knows what was dropped.
+  }
+  const addresses = list
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+  const files = addresses.filter((address) => /^file:/i.test(address))
+  return addresses.length > 0 && files.length === 0 ? null : files
 }
 
 /** A Linux file manager drop: file addresses but no files, which arrive from Go
  *  instead. The composer body's editor must not paste the address as text. */
 export function isExternalFileDrop(data: DataTransfer): boolean {
-  return carriesFiles(data) && !(data.files && data.files.length > 0)
+  if (!carriesFiles(data) || (data.files && data.files.length > 0)) return false
+  return droppedFileAddresses(data) !== null
 }
 
 /** Whether a drag may hold images, for offering to insert them inline. Windows
@@ -46,54 +80,22 @@ export function dragMayHoldImages(data: DataTransfer | null | undefined): boolea
   return fileTypes.some((type) => type === '' || type.startsWith('image/'))
 }
 
-// On Linux the page's drop event and Go's files.dropped event arrive in either
-// order; whichever comes second completes the drop, if within this window.
-const NATIVE_DROP_WINDOW_MS = 3000
-let pendingDrop: { onFiles: FilesHandler; zone: string | null; at: number } | null = null
-let pendingFiles: { files: File[]; at: number } | null = null
-let nativeDropListening = false
-
-/** Files Go read from a native drop (Linux). They go to the drop area the drop
- *  event landed on; the composer body never got them, so nothing was inlined. */
-export function deliverNativeDrop(files: File[]) {
-  const now = Date.now()
-  if (pendingDrop && now - pendingDrop.at <= NATIVE_DROP_WINDOW_MS) {
-    const { onFiles, zone } = pendingDrop
-    pendingDrop = null
-    onFiles(files, { handledByChild: false, zone })
-    return
+/** The files of a Linux file manager drop, read by Go. Go got the same paths
+ *  from GTK and reads only those, and only now that the drop landed on a drop
+ *  area (filedrop.go). */
+async function readNativeDrop(addresses: string[]): Promise<File[]> {
+  try {
+    const result = await invoke<{ files?: PickedFile[] }>('system.readDroppedFiles', { uris: addresses })
+    return (result?.files ?? []).map(pickedToFile)
+  } catch (error) {
+    console.error('Failed to read dropped files:', error)
+    return []
   }
-  pendingDrop = null
-  pendingFiles = { files, at: now }
 }
 
-function awaitNativeDrop(onFiles: FilesHandler, zone: string | null) {
-  const now = Date.now()
-  if (pendingFiles && now - pendingFiles.at <= NATIVE_DROP_WINDOW_MS) {
-    const { files } = pendingFiles
-    pendingFiles = null
-    onFiles(files, { handledByChild: false, zone })
-    return
-  }
-  pendingFiles = null
-  pendingDrop = { onFiles, zone, at: now }
-}
-
-function listenForNativeDrops() {
-  if (nativeDropListening) return
-  const eventsOn = (window as any).runtime?.EventsOn
-  if (typeof eventsOn !== 'function') return
-  nativeDropListening = true
-  eventsOn('files.dropped', (payload: { files?: PickedFile[] }) => {
-    const files = (payload?.files ?? []).map(pickedToFile)
-    if (files.length > 0) deliverNativeDrop(files)
-  })
-}
-
-export function resetFileDropStateForTests() {
+export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean } = {}) {
   internalDrag = false
-  pendingDrop = null
-  pendingFiles = null
+  fileAddressDrops = options.fileAddressDrops ?? false
 }
 
 /**
@@ -101,7 +103,7 @@ export function resetFileDropStateForTests() {
  * held over the element, for a drop overlay, and `mayHoldImages` says whether
  * they might be images; `onFiles` receives what was dropped and where: `zoneOf`
  * names the drop area from the drop's target, at the drop itself, since on Linux
- * the files arrive only after the overlay they were dropped on is gone.
+ * the files arrive from Go only after the overlay they were dropped on is gone.
  *
  * Every other drag passes through untouched. Child elements fire their own
  * enter/leave pairs as the pointer moves across them, so a depth count keeps the
@@ -115,10 +117,7 @@ export function useFileDrop(
   const [mayHoldImages, setMayHoldImages] = useState(true)
   const depthRef = useRef(0)
 
-  useEffect(() => {
-    listenForInternalDrags()
-    listenForNativeDrops()
-  }, [])
+  useEffect(() => trackInternalDrags(window), [])
 
   const onDragEnter = useCallback(
     (event: DragEvent<HTMLElement>) => {
@@ -161,8 +160,17 @@ export function useFileDrop(
       const handledByChild = event.defaultPrevented
       const zone = zoneOf ? zoneOf(event.target) : null
       event.preventDefault()
-      if (files.length > 0) onFiles(files, { handledByChild, zone })
-      else awaitNativeDrop(onFiles, zone)
+      if (files.length > 0) {
+        onFiles(files, { handledByChild, zone })
+        return
+      }
+      // Linux: addresses only. The composer body never got the files, so
+      // nothing was inlined.
+      const addresses = droppedFileAddresses(event.dataTransfer)
+      if (addresses === null) return
+      void readNativeDrop(addresses).then((read) => {
+        if (read.length > 0) onFiles(read, { handledByChild: false, zone })
+      })
     },
     [enabled, onFiles, zoneOf],
   )

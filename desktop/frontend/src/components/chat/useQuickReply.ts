@@ -51,10 +51,6 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
   return attachments.map((attachment) => ({ ...attachment }))
 }
 
-// State and behaviour for the quick-reply box: per-thread draft hydration and
-// autosave, attachment handling (file picker + sync/async/native paste), the
-// auto-growing textarea, the reply-focus shortcut and send. The component renders
-// the returned values.
 /** Adds files to the chat reply as attachments: from the file picker, a pasted
  *  image, or files dropped onto the conversation (MessagePane). */
 export function addQuickReplyAttachments(files: ArrayLike<File>) {
@@ -86,6 +82,10 @@ export function addQuickReplyAttachments(files: ArrayLike<File>) {
   }
 }
 
+// State and behaviour for the quick-reply box: per-thread draft hydration and
+// autosave, attachment handling (file picker + sync/async/native paste), the
+// auto-growing textarea, the reply-focus shortcut and send. The component renders
+// the returned values.
 export function useQuickReply() {
   const { t } = useTranslation()
   const composer = useValue(compose$.composer)

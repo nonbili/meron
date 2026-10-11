@@ -3,6 +3,7 @@ import type { CSSProperties, Ref } from 'react'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { chordFromEvent } from '../../lib/shortcuts'
 import { openExternal } from '../../lib/native'
+import { trackInternalDrags } from '../../lib/useFileDrop'
 
 const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
 
@@ -169,6 +170,8 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
     docRef.current = doc
     winRef.current = win
+    // A link or image dragged out of the message is not a file drop.
+    trackInternalDrags(doc)
     if (!doc.documentElement.dataset.meronFrameScrollIntentWired) {
       doc.documentElement.dataset.meronFrameScrollIntentWired = '1'
       doc.addEventListener('wheel', () => onUserScrollIntentRef.current?.(), { passive: true })

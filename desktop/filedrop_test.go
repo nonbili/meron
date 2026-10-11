@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestReadDroppedFilesReadsFilesAndSkipsTheRest(t *testing.T) {
@@ -34,44 +35,118 @@ func TestReadDroppedFilesReadsFilesAndSkipsTheRest(t *testing.T) {
 	}
 }
 
-func TestSetupFileDropSendsReadFilesToThePage(t *testing.T) {
+func TestReadDroppedFilesSkipsOversizedFiles(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "big.bin")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sparse: the size counts, nothing is written.
+	if err := f.Truncate(maxDroppedFileBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer func(old func(*App, string, ...any)) { fileDropLog = old }(fileDropLog)
+	logged := 0
+	fileDropLog = func(*App, string, ...any) { logged++ }
+
+	if files := (&App{}).readDroppedFiles([]string{big}); len(files) != 0 || logged != 1 {
+		t.Fatalf("got %d files and %d log lines, want the file skipped and logged", len(files), logged)
+	}
+}
+
+// droppedNames runs system.readDroppedFiles and lists the names it returns.
+func droppedNames(t *testing.T, a *App, uris ...any) []string {
+	t.Helper()
+	res, err := a.readDroppedFilesCommand(map[string]any{"uris": uris})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	for _, file := range res.(map[string]any)["files"].([]any) {
+		names = append(names, file.(map[string]any)["name"].(string))
+	}
+	return names
+}
+
+func TestDroppedFilesAreReadOnlyWhenThePageAsksForThem(t *testing.T) {
 	defer func(old bool) { nativeFileDrop = old }(nativeFileDrop)
 	defer func(old func(context.Context, func(int, int, []string))) { onFileDrop = old }(onFileDrop)
-	defer func(old func(context.Context, string, ...any)) { eventsEmit = old }(eventsEmit)
-
 	nativeFileDrop = true
 	var drop func(int, int, []string)
 	onFileDrop = func(_ context.Context, callback func(int, int, []string)) { drop = callback }
-	var emitted []any
-	eventsEmit = func(_ context.Context, name string, data ...any) {
-		if name == "files.dropped" {
-			emitted = append(emitted, data...)
-		}
-	}
 
-	(&App{}).setupFileDrop(context.Background())
+	a := &App{}
+	a.setupFileDrop(context.Background())
 	if drop == nil {
 		t.Fatal("no file drop callback registered")
 	}
 
 	dir := t.TempDir()
+	note := filepath.Join(dir, "my note.txt")
+	other := filepath.Join(dir, "other.txt")
+	for _, path := range []string{note, other} {
+		if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	noteURI := "file://" + filepath.ToSlash(dir) + "/my%20note.txt"
+
+	// A drop that landed nowhere, then the one the page asks about.
+	drop(0, 0, []string{other})
+	drop(10, 20, []string{note})
+	if names := droppedNames(t, a, noteURI); len(names) != 1 || names[0] != "my note.txt" {
+		t.Fatalf("got %v, want the dropped note", names)
+	}
+	// Handed out once.
+	if names := a.readDroppedFiles(a.takeDroppedPaths(nil, 0)); len(names) != 0 {
+		t.Fatalf("the drop was handed out twice: %v", names)
+	}
+}
+
+func TestDroppedFilesAreLimitedToWhatWasDropped(t *testing.T) {
+	dir := t.TempDir()
+	dropped := filepath.Join(dir, "dropped.txt")
+	secret := filepath.Join(dir, "secret.txt")
+	for _, path := range []string{dropped, secret} {
+		if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &App{}
+	a.noteDroppedPaths([]string{dropped})
+	if paths := a.takeDroppedPaths([]string{secret}, 0); len(paths) != 0 {
+		t.Fatalf("handed out a file that was not dropped: %v", paths)
+	}
+	// The page could not read the addresses: the latest drop, whole.
+	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 1 || paths[0] != dropped {
+		t.Fatalf("got %v, want the latest drop", paths)
+	}
+}
+
+func TestDroppedFilesWaitForTheNativeReport(t *testing.T) {
+	dir := t.TempDir()
 	note := filepath.Join(dir, "note.txt")
 	if err := os.WriteFile(note, []byte("hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	drop(10, 20, []string{note})
-	if len(emitted) != 1 {
-		t.Fatalf("emitted %d payloads, want 1", len(emitted))
+	a := &App{}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		a.noteDroppedPaths([]string{note})
+	}()
+	if paths := a.takeDroppedPaths([]string{note}, 2*time.Second); len(paths) != 1 {
+		t.Fatalf("got %v, want the path reported after the page asked", paths)
 	}
-	files := emitted[0].(map[string]any)["files"].([]any)
-	if len(files) != 1 || files[0].(map[string]any)["name"] != "note.txt" {
-		t.Fatalf("unexpected payload: %v", emitted[0])
-	}
+}
 
-	emitted = nil
-	drop(0, 0, []string{""})
-	if len(emitted) != 0 {
-		t.Fatal("a drop without readable files should send nothing")
+func TestDroppedPathsExpire(t *testing.T) {
+	a := &App{}
+	a.noteDroppedPaths([]string{"/tmp/old.txt"})
+	a.droppedAt = time.Now().Add(-droppedPathsTTL - time.Second)
+	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 0 {
+		t.Fatalf("handed out an expired drop: %v", paths)
 	}
 }
 
