@@ -31,16 +31,21 @@ const tab = (kind: MessageTab['kind'], extra: Partial<MessageTab> = {}): Message
   ...extra,
 })
 
-beforeEach(() => {
-  accounts$.set([account('html-acc'), account('plain-acc', { conversation_html: false })])
-})
-
-afterEach(() => {
+// Other test files leave tabs and overrides behind, so start from a clean
+// slate as well as leaving one.
+function resetState() {
   accounts$.set([])
   thread$.conversationModeOverrides.set({})
   compose$.tabs.set([])
   compose$.activeTab.set('')
+}
+
+beforeEach(() => {
+  resetState()
+  accounts$.set([account('html-acc'), account('plain-acc', { conversation_html: false })])
 })
+
+afterEach(resetState)
 
 it('flips an HTML account to plain text and back', () => {
   expect(toggleConversationMode('html-acc')).toBe(true)
