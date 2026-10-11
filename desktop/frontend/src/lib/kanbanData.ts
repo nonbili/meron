@@ -193,13 +193,12 @@ export function folderLabel(
   if (column.accountId === 'unified') return unifiedFolderLabel(column.folderId, t)
   const isRSS = isRSSAccount(column.accountId, accounts)
   if (isInbox) return isRSS ? 'Feed' : 'Inbox'
-  const accountFolders = folders.filter((folder) => folder.account_id === column.accountId)
-  const found = accountFolders.find((folder) => folder.id === column.folderId)
+  const found = folders.find((folder) => folder.account_id === column.accountId && folder.id === column.folderId)
   if (!found?.name) return column.folderId
   // A column names its folder without the path above it ("Now", not
   // "[Gmail]/Now"); the folder switcher's tree still shows where it sits. Feed
   // titles are not paths, so a "/" in one stays.
-  return isRSS ? found.name : folderLeafName(found, accountFolders)
+  return isRSS ? found.name : folderLeafName(found)
 }
 
 export function searchColumnLabel(

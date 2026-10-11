@@ -43,21 +43,23 @@ describe('folderLeafName', () => {
   })
 
   it('names a nested folder by its last segment', () => {
-    expect(folderLeafName(named('[Gmail]/Now', '/'), [])).toBe('Now')
-    expect(folderLeafName(named('INBOX.Sent', '.'), [])).toBe('Sent')
+    expect(folderLeafName(named('[Gmail]/Now', '/'))).toBe('Now')
+    expect(folderLeafName(named('INBOX.Sent', '.'))).toBe('Sent')
   })
 
-  it('infers the delimiter from the account folders when the server reported none', () => {
-    const folders = [named('Work/Clients'), named('Work/Done')]
-    expect(folderLeafName(named('Work/Done'), folders)).toBe('Done')
+  it('keeps the full name when the server reported no delimiter', () => {
+    // A NIL delimiter means a flat mailbox: punctuation is part of the name.
+    expect(folderLeafName(named('Flat/Independent'))).toBe('Flat/Independent')
+    expect(folderLeafName(named('example.com'))).toBe('example.com')
+    expect(folderLeafName(named('v1.2', ''))).toBe('v1.2')
   })
 
   it('leaves a top-level folder alone', () => {
-    expect(folderLeafName(named('Receipts', '/'), [])).toBe('Receipts')
+    expect(folderLeafName(named('Receipts', '/'))).toBe('Receipts')
   })
 
   it('skips empty segments and falls back to the full name', () => {
-    expect(folderLeafName(named('Work/', '/'), [])).toBe('Work')
-    expect(folderLeafName(named('/', '/'), [])).toBe('/')
+    expect(folderLeafName(named('Work/', '/'))).toBe('Work')
+    expect(folderLeafName(named('/', '/'))).toBe('/')
   })
 })

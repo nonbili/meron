@@ -26,11 +26,12 @@ export function pickDelimiter(folders: Folder[]): string {
 }
 
 /** A folder's own name, without the parent path it is nested under ("Now" for
- *  "[Gmail]/Now"), as the folder tree labels it. `folders` are the account's
- *  folders, to infer the delimiter when the server reported none. */
-export function folderLeafName(folder: Folder, folders: Folder[]): string {
-  const delimiter = folder.delimiter || pickDelimiter(folders)
-  const segments = folder.name.split(delimiter).filter(Boolean)
+ *  "[Gmail]/Now"), as the folder tree labels it. Only the folder's own
+ *  server-reported delimiter splits it: without one the server exposed no
+ *  hierarchy, so a "/" or "." in the name is ordinary punctuation. */
+export function folderLeafName(folder: Folder): string {
+  if (!folder.delimiter) return folder.name
+  const segments = folder.name.split(folder.delimiter).filter(Boolean)
   return segments[segments.length - 1] ?? folder.name
 }
 
