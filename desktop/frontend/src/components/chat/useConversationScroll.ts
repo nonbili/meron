@@ -274,7 +274,7 @@ export function useConversationScroll(
     // Messages behind the floating composer are not in view yet.
     const containerRect = visibleBounds(
       container.getBoundingClientRect(),
-      parseFloat(container.style.getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0,
+      parseFloat(getComputedStyle(container).getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0,
     )
     const isVisible = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect()

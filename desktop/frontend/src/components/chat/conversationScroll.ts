@@ -53,16 +53,9 @@ export type VerticalBounds = {
   bottom: number
 }
 
-/**
- * Whether a message counts as read from where the view sits. Two ways to have
- * read it: its bottom came into view, so all of it has been on screen, or its
- * top has passed above the container's edge, so the reader scrolled through it
- * — the case for a message taller than the viewport, which would otherwise
- * never show its bottom. Merely peeking in from below is not reading: that is
- * the next message waiting its turn.
- */
-/** CSS variable on the scroll container holding the height of the composer that
- *  floats over its bottom (MessagePane); unset when there is no composer. */
+/** CSS variable holding the height of the composer that floats over the bottom
+ *  of the scroll container. MessagePane sets it on the conversation, so the
+ *  list and what sits beside it inherit it; unset when there is no composer. */
 export const COMPOSER_OVERLAP_VAR = '--me-composer-overlap'
 
 /** The part of the scroll container the reader can actually see: its bottom
@@ -71,6 +64,14 @@ export function visibleBounds(container: VerticalBounds, composerOverlap: number
   return { top: container.top, bottom: container.bottom - Math.max(0, composerOverlap) }
 }
 
+/**
+ * Whether a message counts as read from where the view sits. Two ways to have
+ * read it: its bottom came into view, so all of it has been on screen, or its
+ * top has passed above the container's edge, so the reader scrolled through it
+ * — the case for a message taller than the viewport, which would otherwise
+ * never show its bottom. Merely peeking in from below is not reading: that is
+ * the next message waiting its turn.
+ */
 export function isMessageRead(message: VerticalBounds, container: VerticalBounds): boolean {
   return message.top < container.top || message.bottom <= container.bottom
 }

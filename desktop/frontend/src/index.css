@@ -915,6 +915,28 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   background-size: cover;
 }
 
+/* The quick-reply composer floats over the end of the list (MessagePane), which
+   pads itself by the composer's height. Everything under the composer is cut
+   away rather than covered, so the wallpaper behind the list shows through
+   there: the cut starts where the box's rounded corners end (the footer's pt-1
+   plus rounded-2xl), which lets messages scroll off behind those corners, and
+   stops short of the right edge (the footer's px-3.5, inside the list's own
+   px-4) so the scrollbar stays in view down to the bottom. Paging and
+   scrolling a match or a focused link into view treat the covered part as out
+   of view. */
+.message-scroll {
+  --me-composer-cut: calc(100% - var(--me-composer-overlap, 0px) + 1.25rem);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    calc(100% - 0.875rem) 100%,
+    calc(100% - 0.875rem) var(--me-composer-cut),
+    0 var(--me-composer-cut)
+  );
+  scroll-padding-bottom: var(--me-composer-overlap, 0px);
+}
+
 .message-scroll > * {
   overflow-anchor: none;
 }
