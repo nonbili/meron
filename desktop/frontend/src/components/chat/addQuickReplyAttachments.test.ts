@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { compose$ } from '../../states/composeState'
+import { ui$ } from '../../states/ui'
 import { addQuickReplyAttachments } from './useQuickReply'
 
 // FileReader reports asynchronously.
@@ -25,5 +26,15 @@ describe('addQuickReplyAttachments', () => {
       ['report.pdf', 'application/pdf', 6],
       ['photo.png', 'image/png', 3],
     ])
+  })
+
+  it('leaves out files still being read when the reader moves to another conversation', async () => {
+    const before = ui$.selectedThread.peek()
+    ui$.selectedThread.set('thread-a')
+    addQuickReplyAttachments([new File(['report'], 'report.pdf', { type: 'application/pdf' })])
+    ui$.selectedThread.set('thread-b')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(compose$.composerAttachments.get()).toEqual([])
+    ui$.selectedThread.set(before)
   })
 })

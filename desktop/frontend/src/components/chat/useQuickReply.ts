@@ -52,8 +52,11 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
 }
 
 /** Adds files to the chat reply as attachments: from the file picker, a pasted
- *  image, or files dropped onto the conversation (MessagePane). */
+ *  image, or files dropped onto the conversation (MessagePane). Reading a file
+ *  takes a moment; one read after the reader moved to another conversation is
+ *  left out, not attached to that conversation's reply. */
 export function addQuickReplyAttachments(files: ArrayLike<File>) {
+  const thread = ui$.selectedThread.peek()
   logComposerPaste(
     'adding attachments',
     Array.from(files).map((file) => ({
@@ -66,6 +69,7 @@ export function addQuickReplyAttachments(files: ArrayLike<File>) {
     const file = files[i]
     const reader = new FileReader()
     reader.onload = () => {
+      if (ui$.selectedThread.peek() !== thread) return
       const result = reader.result as string
       const base64Data = result.split(',')[1]
       const ext = file.type.startsWith('image/') ? file.type.slice(6) : ''

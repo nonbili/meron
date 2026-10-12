@@ -93,6 +93,11 @@ async function readNativeDrop(addresses: string[]): Promise<File[]> {
   }
 }
 
+function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return !!target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])')
+}
+
 export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean } = {}) {
   internalDrag = false
   fileAddressDrops = options.fileAddressDrops ?? false
@@ -104,6 +109,13 @@ export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean
  * they might be images; `onFiles` receives what was dropped and where: `zoneOf`
  * names the drop area from the drop's target, at the drop itself, since on Linux
  * the files arrive from Go only after the overlay they were dropped on is gone.
+ * `scope` names what the files are for (the open conversation): if it changed
+ * by the time they arrive, or the element is gone, they are dropped rather than
+ * attached to something the reader didn't drop them on.
+ *
+ * `mayBeLink` is true for a Linux drag that announces only addresses, which a
+ * link from another app does too: the overlay then must not cover a text field,
+ * so that the link can still be dropped into it.
  *
  * Every other drag passes through untouched. Child elements fire their own
  * enter/leave pairs as the pointer moves across them, so a depth count keeps the
@@ -111,19 +123,34 @@ export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean
  */
 export function useFileDrop(
   onFiles: FilesHandler,
-  { enabled = true, zoneOf }: { enabled?: boolean; zoneOf?: (target: EventTarget | null) => string | null } = {},
+  {
+    enabled = true,
+    zoneOf,
+    scope,
+  }: { enabled?: boolean; zoneOf?: (target: EventTarget | null) => string | null; scope?: unknown } = {},
 ) {
   const [dragging, setDragging] = useState(false)
   const [mayHoldImages, setMayHoldImages] = useState(true)
+  const [mayBeLink, setMayBeLink] = useState(false)
   const depthRef = useRef(0)
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const mountedRef = useRef(true)
 
-  useEffect(() => trackInternalDrags(window), [])
+  useEffect(() => {
+    trackInternalDrags(window)
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const onDragEnter = useCallback(
     (event: DragEvent<HTMLElement>) => {
       if (!enabled || !carriesFiles(event.dataTransfer)) return
       depthRef.current += 1
       setMayHoldImages(dragMayHoldImages(event.dataTransfer))
+      setMayBeLink(!Array.from(event.dataTransfer.types ?? []).includes('Files'))
       setDragging(true)
     },
     [enabled],
@@ -159,23 +186,32 @@ export function useFileDrop(
       // has already prevented the default; read that before preventing it here.
       const handledByChild = event.defaultPrevented
       const zone = zoneOf ? zoneOf(event.target) : null
-      event.preventDefault()
       if (files.length > 0) {
+        event.preventDefault()
         onFiles(files, { handledByChild, zone })
         return
       }
-      // Linux: addresses only. The composer body never got the files, so
-      // nothing was inlined.
+      // Linux: addresses only.
       const addresses = droppedFileAddresses(event.dataTransfer)
-      if (addresses === null) return
+      if (addresses === null) {
+        // A link after all. A text field takes it as usual; anywhere else the
+        // webview would open it.
+        if (!isEditable(event.target)) event.preventDefault()
+        return
+      }
+      event.preventDefault()
+      // The composer body never got the files, so nothing was inlined. Go takes
+      // a moment: the files still belong where they were dropped.
+      const droppedOn = scopeRef.current
       void readNativeDrop(addresses).then((read) => {
-        if (read.length > 0) onFiles(read, { handledByChild: false, zone })
+        if (read.length === 0 || !mountedRef.current || scopeRef.current !== droppedOn) return
+        onFiles(read, { handledByChild: false, zone })
       })
     },
     [enabled, onFiles, zoneOf],
   )
 
-  return { dragging, mayHoldImages, dropHandlers: { onDragEnter, onDragOver, onDragLeave, onDrop } }
+  return { dragging, mayHoldImages, mayBeLink, dropHandlers: { onDragEnter, onDragOver, onDragLeave, onDrop } }
 }
 
 const isImage = (file: File) => file.type.toLowerCase().startsWith('image/')

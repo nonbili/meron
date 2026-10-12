@@ -187,6 +187,50 @@ describe('useFileDrop on Linux (WebKitGTK)', () => {
     expect(onFiles).not.toHaveBeenCalled()
   })
 
+  it('drops files that arrive after the reader moved to another conversation', async () => {
+    const onFiles = jest.fn()
+    const { result, rerender } = renderHook(({ scope }) => useFileDrop(onFiles, { scope }), {
+      initialProps: { scope: 'thread-a' },
+    })
+    act(() => result.current.dropHandlers.onDrop(dragEvent(['text/uri-list'], [], false, NOTE)))
+    rerender({ scope: 'thread-b' })
+    await settled()
+    expect(requests).toHaveLength(1)
+    expect(onFiles).not.toHaveBeenCalled()
+  })
+
+  it('drops files that arrive after the drop area is gone', async () => {
+    const onFiles = jest.fn()
+    const { result, unmount } = renderHook(() => useFileDrop(onFiles))
+    act(() => result.current.dropHandlers.onDrop(dragEvent(['text/uri-list'], [], false, NOTE)))
+    unmount()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(onFiles).not.toHaveBeenCalled()
+  })
+
+  it('lets a text field take a link dropped from another app, and cancels it elsewhere', () => {
+    const { result } = renderHook(() => useFileDrop(() => {}))
+    const field = document.createElement('textarea')
+    const onField = Object.assign(dragEvent(['text/uri-list'], [], false, 'https://example.com/'), { target: field })
+    const elsewhere = Object.assign(dragEvent(['text/uri-list'], [], false, 'https://example.com/'), {
+      target: document.createElement('div'),
+    })
+    act(() => {
+      result.current.dropHandlers.onDrop(onField)
+      result.current.dropHandlers.onDrop(elsewhere)
+    })
+    expect(onField.preventDefault).not.toHaveBeenCalled()
+    expect(elsewhere.preventDefault).toHaveBeenCalled()
+  })
+
+  it('says when a drag may be a link, so the overlay leaves text fields reachable', () => {
+    const { result } = renderHook(() => useFileDrop(() => {}))
+    act(() => result.current.dropHandlers.onDragEnter(dragEvent(['text/uri-list'])))
+    expect(result.current.mayBeLink).toBe(true)
+    act(() => result.current.dropHandlers.onDragEnter(dragEvent(['Files'])))
+    expect(result.current.mayBeLink).toBe(false)
+  })
+
   it('does not ask Go about a link dropped from another app', async () => {
     const onFiles = jest.fn()
     const { result } = renderHook(() => useFileDrop(onFiles))

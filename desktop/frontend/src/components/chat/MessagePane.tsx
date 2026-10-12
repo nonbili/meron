@@ -148,9 +148,18 @@ export function MessagePane() {
 
   // Files dropped anywhere on the open conversation go to the reply as
   // attachments; feeds have no reply box, and a reader tab in front isn't the
-  // conversation.
-  const { dragging: fileDragging, dropHandlers } = useFileDrop(addQuickReplyAttachments, {
+  // conversation. Files that arrive late (Linux) are for the conversation they
+  // were dropped on, not the one open by then. A drag that may be a link
+  // (Linux) must still reach the reply box, so the overlay is only drawn; the
+  // message bodies' frames, which would swallow the drop, then let it through
+  // to the pane.
+  const {
+    dragging: fileDragging,
+    mayBeLink,
+    dropHandlers,
+  } = useFileDrop(addQuickReplyAttachments, {
     enabled: !!activeThread && !isRSS && !activeDocumentTab,
+    scope: activeThreadId,
   })
 
   const showMessageInConversation = useCallback((messageId: string) => {
@@ -306,11 +315,11 @@ export function MessagePane() {
             aria-hidden={!!activeDocumentTab}
             className={`relative flex min-h-0 flex-1 flex-col ${
               activeDocumentTab ? 'pointer-events-none invisible' : ''
-            }`}
+            } ${fileDragging && mayBeLink ? '[&_iframe]:pointer-events-none' : ''}`}
             {...dropHandlers}
           >
             {conversationContent}
-            {fileDragging && <DropOverlay />}
+            {fileDragging && <DropOverlay passThrough={mayBeLink} />}
           </div>
           {activeDocumentTab && (
             <div className="absolute inset-0 z-20 flex flex-col bg-chat">

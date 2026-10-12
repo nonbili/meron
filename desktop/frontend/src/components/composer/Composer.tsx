@@ -38,11 +38,13 @@ export function Composer({ tabId }: { tabId: string }) {
 
   // Two drop areas while files are dragged in: the message body, where images go
   // inline (rich text only), and the rest of the composer, which attaches them.
-  // Files that can't be shown inline are attached wherever they land.
+  // Files that can't be shown inline are attached wherever they land. A drag
+  // that may be a link (Linux) lands on the body and the fields themselves.
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const {
     dragging: fileDragging,
     mayHoldImages,
+    mayBeLink,
     dropHandlers,
   } = useFileDrop(
     (files, { handledByChild, zone }) => {
@@ -114,7 +116,7 @@ export function Composer({ tabId }: { tabId: string }) {
             />
           )}
         </div>
-        {showInlineDrop && <DropOverlay kind="inline" className="inset-2" />}
+        {showInlineDrop && <DropOverlay kind="inline" className="inset-2" passThrough={mayBeLink} />}
       </div>
 
       {showInlineDrop && (
@@ -142,7 +144,7 @@ export function Composer({ tabId }: { tabId: string }) {
         onDiscard={() => void closeMessageTab(tabId)}
         onSubmit={submit}
       />
-      {fileDragging && !showInlineDrop && <DropOverlay />}
+      {fileDragging && !showInlineDrop && <DropOverlay passThrough={mayBeLink} />}
     </div>
   )
 }
