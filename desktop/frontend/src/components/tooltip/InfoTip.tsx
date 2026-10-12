@@ -27,7 +27,7 @@ export function InfoTip({ hint }: { hint?: string }) {
       {pos && (
         <span
           role="tooltip"
-          className="fixed z-[60] w-max max-w-[280px] -translate-x-1/2 -translate-y-full whitespace-normal rounded-xl border border-border bg-raised px-3 py-2 text-[0.6875rem] font-normal leading-snug text-primary shadow-lg pointer-events-none"
+          className="fixed z-[60] w-max max-w-[280px] -translate-x-1/2 -translate-y-full whitespace-normal rounded-xl border border-border bg-chats px-3 py-2 text-[0.6875rem] font-normal leading-snug text-primary shadow-lg pointer-events-none"
           style={{ left: pos.x, top: pos.y - 6 }}
         >
           {hint}

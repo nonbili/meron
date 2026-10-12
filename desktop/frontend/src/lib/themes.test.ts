@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { isValidColor, luminance, toOklch } from './color'
+import { isValidColor, luminance, parseColor, toOklch } from './color'
 import {
   BUILTIN_THEMES,
   DEFAULT_DARK_ID,
@@ -107,6 +107,22 @@ describe('BUILTIN_THEMES', () => {
     for (const id of ids) expect(isCustomThemeId(id)).toBe(false)
     expect(BUILTIN_THEMES.filter((t) => t.appearance === 'light')).toHaveLength(7)
     expect(BUILTIN_THEMES.filter((t) => t.appearance === 'dark')).toHaveLength(7)
+  })
+})
+
+// Tooltips and floating panels paint the surface (bg-chats) over other content,
+// so it must be opaque in every theme; bgRaised is translucent in dark themes.
+describe('surface opacity', () => {
+  it('keeps the surface opaque in every built-in theme', () => {
+    for (const theme of BUILTIN_THEMES) {
+      expect({ id: theme.id, alpha: parseColor(theme.tokens.bgChats)?.a }).toEqual({ id: theme.id, alpha: 1 })
+    }
+  })
+
+  it('keeps the surface opaque in derived light and dark themes', () => {
+    for (const appearance of ['light', 'dark'] as const) {
+      expect(parseColor(deriveThemeTokens({ ...SAMPLE_INPUT, appearance }).bgChats)?.a).toBe(1)
+    }
   })
 })
 
