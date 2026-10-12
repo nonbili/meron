@@ -11,6 +11,7 @@ import {
   newCustomThemeId,
   parseThemeSource,
   serializeThemeSource,
+  withOpaqueSurface,
   type Appearance,
   type CustomTheme,
   type CustomThemeInput,
@@ -90,16 +91,18 @@ export function ThemeEditorDialog({
   }
 
   const valid = COLOR_FIELDS.every(({ key }) => isValidColor(input[key]))
-  const tokens = valid ? deriveThemeTokens(input) : null
+  // Preview and save what a reload would produce: a translucent surface flattened.
+  const source = withOpaqueSurface(input)
+  const tokens = valid ? deriveThemeTokens(source) : null
 
   const save = () => {
     if (!tokens) return
     upsertCustomTheme({
       id: initial?.id ?? newCustomThemeId(),
       name: name.trim() || t('theme.customTheme'),
-      appearance: input.appearance,
+      appearance: source.appearance,
       tokens,
-      source: input,
+      source,
     })
     onClose()
   }

@@ -736,6 +736,15 @@ function sanitizeTokens(raw: unknown): ThemeTokens | null {
   return out
 }
 
+/**
+ * The surface paints menus, dialogs and tooltips over other content, so a
+ * translucent one is composited over the background it would have shown.
+ */
+export function withOpaqueSurface(source: CustomThemeInput): CustomThemeInput {
+  if ((parseColor(source.surface)?.a ?? 1) >= 1) return source
+  return { ...source, surface: flatten(source.surface, source.bgApp) }
+}
+
 const SOURCE_COLOR_KEYS = ['bgApp', 'surface', 'sideNav', 'accent', 'text'] as const
 
 function sanitizeSource(raw: unknown): CustomThemeInput | null {
@@ -749,7 +758,7 @@ function sanitizeSource(raw: unknown): CustomThemeInput | null {
     if (typeof value !== 'string' || !isValidColor(value)) return null
     colors[key] = value
   }
-  return { appearance, ...colors }
+  return withOpaqueSurface({ appearance, ...colors })
 }
 
 /**
@@ -781,8 +790,8 @@ export function parseThemeSource(text: string): CustomThemeInput | null {
 
 /**
  * Validate the persisted `custom_themes` JSON. Entries with a valid source but
- * missing/corrupt tokens are re-derived; entries without a valid source are
- * dropped. Follows the sanitizeKanbanBoards convention: null = unusable input.
+ * missing/corrupt tokens, or tokens derived from a surface that has since been
+ * flattened, are re-derived; entries without a valid source are dropped. Follows the sanitizeKanbanBoards convention: null = unusable input.
  */
 export function sanitizeCustomThemes(raw: unknown): CustomTheme[] | null {
   if (!Array.isArray(raw)) return null
@@ -795,7 +804,8 @@ export function sanitizeCustomThemes(raw: unknown): CustomTheme[] | null {
     const source = sanitizeSource(obj.source)
     if (!source) continue
     const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : 'Custom theme'
-    const tokens = sanitizeTokens(obj.tokens) ?? deriveThemeTokens(source)
+    const flattened = source.surface !== (obj.source as Record<string, unknown>).surface
+    const tokens = (flattened ? null : sanitizeTokens(obj.tokens)) ?? deriveThemeTokens(source)
     seen.add(obj.id)
     out.push({ id: obj.id, name, appearance: source.appearance, tokens, source })
   }

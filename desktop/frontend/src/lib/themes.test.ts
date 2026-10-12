@@ -23,6 +23,7 @@ import {
   serializeThemeSource,
   sideNavInkColor,
   whiteLabelAccent,
+  withOpaqueSurface,
   type CustomThemeInput,
 } from './themes'
 
@@ -316,6 +317,21 @@ describe('sanitizeCustomThemes', () => {
       { ...valid, id: newCustomThemeId(), source: { ...SAMPLE_INPUT, accent: 'tomato' } },
     ])
     expect(out).toHaveLength(1)
+  })
+
+  it('flattens a translucent surface over the background and re-derives the tokens', () => {
+    const source = { ...SAMPLE_INPUT, appearance: 'dark', bgApp: '#000000', surface: 'rgba(255, 255, 255, 0.5)' }
+    const out = sanitizeCustomThemes([{ ...valid, source, tokens: deriveThemeTokens(source as never) }])
+    expect(out).toHaveLength(1)
+    expect(out![0].source.surface).toBe('#808080')
+    expect(out![0].tokens).toEqual(deriveThemeTokens({ ...source, surface: '#808080' } as never))
+    expect(parseColor(out![0].tokens.bgChats)?.a).toBe(1)
+  })
+
+  it('leaves an opaque surface alone and flattens a translucent one', () => {
+    expect(withOpaqueSurface(SAMPLE_INPUT)).toBe(SAMPLE_INPUT)
+    const translucent = { ...SAMPLE_INPUT, bgApp: '#000000', surface: '#ffffff80' }
+    expect(withOpaqueSurface(translucent)).toEqual({ ...translucent, surface: '#808080' })
   })
 
   it('returns null for non-array input', () => {
