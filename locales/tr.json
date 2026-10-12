@@ -171,6 +171,7 @@
   "chat.feedUrl": "Besleme URL'si",
   "chat.fileItems": "{count, plural, one {{count} dosya} other {{count} dosya}}",
   "chat.files": "Dosyalar",
+  "chat.filesNotAttached": "Bazı dosyalar eklenemedi",
   "chat.hideDetails": "Detayları gizle",
   "chat.hideQuotedText": "Alıntılanan metni gizle",
   "chat.htmlView": "HTML görünümü",

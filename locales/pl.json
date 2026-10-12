@@ -171,6 +171,7 @@
   "chat.feedUrl": "Adres URL kanału",
   "chat.fileItems": "{count, plural, one {{count} plik} other {{count} plików}}",
   "chat.files": "Pliki",
+  "chat.filesNotAttached": "Nie udało się załączyć niektórych plików",
   "chat.hideDetails": "Ukryj szczegóły",
   "chat.hideQuotedText": "Ukryj cytowany tekst",
   "chat.htmlView": "Widok HTML",

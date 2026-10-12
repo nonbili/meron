@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { invoke } from './bridge'
+import { reportUnattachedFiles } from './attachFiles'
 import { pickedToFile, type PickedFile } from './nativeFilePicker'
 
 /** Which drop area the drop landed in (from `zoneOf`, decided at the drop), and
@@ -13,20 +14,64 @@ type FilesHandler = (files: File[], drop: FileDropInfo) => void
 let internalDrag = false
 const internalDragTargets = new WeakSet<Window | Document>()
 
-/** Watches a document for drags that start in it. The page's own window is
- *  watched by useFileDrop; message bodies live in iframes, whose drag events
- *  never reach it, so HtmlFrame adds each frame's document. */
-export function trackInternalDrags(target: Window | Document) {
+// What the drop areas (useFileDrop) need to hear from the documents watched
+// below: a file drag over a message frame, whose events never reach the pane
+// around it, and that no drag is under way any more.
+const frameDragListeners = new Set<(frame: Element, data: DataTransfer) => void>()
+const dragOverListeners = new Set<() => void>()
+let fileDragSeen = false
+
+/** Watches a document's drags. The page's own window is watched by useFileDrop;
+ *  message bodies live in iframes, whose drag events never reach it, so
+ *  HtmlFrame adds each frame's document, with the `frame` element showing it.
+ *
+ *  Drags that start in it are marked internal. File drags over anything that is
+ *  not a drop area (the handlers below accept those first) are refused, or the
+ *  webview would open the dropped file in place of the app. */
+export function trackInternalDrags(target: Window | Document, frame?: Element | null) {
   if (internalDragTargets.has(target)) return
   internalDragTargets.add(target)
   const ended = () => (internalDrag = false)
   target.addEventListener('dragstart', () => (internalDrag = true), true)
   target.addEventListener('dragend', ended, true)
-  // Not capturing: the drop handlers below still need to see it as internal.
+  // `dragend` is lost when the dragged element is removed mid-drag, and a drag
+  // that leaves the window may report nothing more. A mouse that moves or is
+  // pressed with no button held from before says no drag is under way: the
+  // mark is cleared, and drop areas put their overlays away.
+  target.addEventListener('mousedown', ended, true)
+  target.addEventListener(
+    'mousemove',
+    (event) => {
+      if ((event as MouseEvent).buttons !== 0) return
+      internalDrag = false
+      if (!fileDragSeen) return
+      fileDragSeen = false
+      dragOverListeners.forEach((listener) => listener())
+    },
+    { capture: true, passive: true },
+  )
+  if (frame) {
+    const overFrame = (event: Event) => {
+      const data = (event as globalThis.DragEvent).dataTransfer
+      if (data && carriesFiles(data)) frameDragListeners.forEach((listener) => listener(frame, data))
+    }
+    target.addEventListener('dragenter', overFrame, true)
+    target.addEventListener('dragover', overFrame, true)
+  }
+  const refuse = (event: Event) => {
+    const drag = event as globalThis.DragEvent
+    if (drag.defaultPrevented || !carriesFiles(drag.dataTransfer)) return
+    // A Linux drag of addresses may be a link, which a text field takes.
+    const mayBeLink = !Array.from(drag.dataTransfer?.types ?? []).includes('Files')
+    if (mayBeLink && isEditable(drag.target)) return
+    drag.preventDefault()
+    if (drag.type === 'dragover' && drag.dataTransfer) drag.dataTransfer.dropEffect = 'none'
+  }
+  target.addEventListener('dragover', refuse)
+  // After `refuse`, which still needs to see the drop as internal. Not
+  // capturing either, for the drop handlers below.
+  target.addEventListener('drop', refuse)
   target.addEventListener('drop', ended)
-  // `dragend` is lost when the dragged element is removed mid-drag. The mouse
-  // doesn't move the page during a drag, so once it does, the drag is over.
-  target.addEventListener('mousemove', ended, { capture: true, passive: true })
 }
 
 // WebKitGTK on Linux announces a file from the file manager only as its file://
@@ -85,21 +130,39 @@ export function dragMayHoldImages(data: DataTransfer | null | undefined): boolea
  *  area (filedrop.go). */
 async function readNativeDrop(addresses: string[]): Promise<File[]> {
   try {
-    const result = await invoke<{ files?: PickedFile[] }>('system.readDroppedFiles', { uris: addresses })
+    const result = await invoke<{ files?: PickedFile[]; skipped?: number }>('system.readDroppedFiles', {
+      uris: addresses,
+    })
+    if ((result?.skipped ?? 0) > 0) reportUnattachedFiles()
     return (result?.files ?? []).map(pickedToFile)
   } catch (error) {
     console.error('Failed to read dropped files:', error)
+    reportUnattachedFiles()
     return []
   }
 }
 
 function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false
-  return !!target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])')
+  // Not `instanceof Element`: a target in a message frame is of another realm.
+  const closest = (target as Element | null)?.closest
+  if (typeof closest !== 'function') return false
+  return !!closest.call(target, 'input, textarea, [contenteditable]:not([contenteditable="false"])')
+}
+
+/** Whether a drag left the element: the pointer of a `dragleave` is outside it.
+ *  Leaves fired while crossing its children are inside. */
+function leftElement(event: DragEvent<HTMLElement>): boolean {
+  const element = event.currentTarget
+  if (typeof element?.getBoundingClientRect !== 'function' || typeof event.clientX !== 'number') return false
+  const box = element.getBoundingClientRect()
+  return (
+    event.clientX <= box.left || event.clientX >= box.right || event.clientY <= box.top || event.clientY >= box.bottom
+  )
 }
 
 export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean } = {}) {
   internalDrag = false
+  fileDragSeen = false
   fileAddressDrops = options.fileAddressDrops ?? false
 }
 
@@ -119,7 +182,11 @@ export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean
  *
  * Every other drag passes through untouched. Child elements fire their own
  * enter/leave pairs as the pointer moves across them, so a depth count keeps the
- * overlay from flickering.
+ * overlay from flickering. The count alone can be left too high (a child removed
+ * mid-drag never reports its leave), so a leave outside the element, and a mouse
+ * that moves with no drag under way, also put the overlay away. `dropHandlers`
+ * carries a ref to the element: a file drag over a message frame inside it
+ * reports to the frame's document only (trackInternalDrags).
  */
 export function useFileDrop(
   onFiles: FilesHandler,
@@ -135,25 +202,61 @@ export function useFileDrop(
   const depthRef = useRef(0)
   const scopeRef = useRef(scope)
   scopeRef.current = scope
+  // Read when the drop is handled, which on Linux is after Go answered: the
+  // caller's handler of that moment, not of the render the drop happened in.
+  const onFilesRef = useRef(onFiles)
+  onFilesRef.current = onFiles
+  const zoneOfRef = useRef(zoneOf)
+  zoneOfRef.current = zoneOf
   const mountedRef = useRef(true)
+  const enabledRef = useRef(enabled)
+  enabledRef.current = enabled
+  const elementRef = useRef<HTMLElement | null>(null)
+  const ref = useCallback((element: HTMLElement | null) => {
+    elementRef.current = element
+  }, [])
+
+  const show = useCallback((data: DataTransfer) => {
+    fileDragSeen = true
+    setMayHoldImages(dragMayHoldImages(data))
+    setMayBeLink(!Array.from(data.types ?? []).includes('Files'))
+    setDragging(true)
+  }, [])
 
   useEffect(() => {
     trackInternalDrags(window)
     mountedRef.current = true
+    const overFrame = (frame: Element, data: DataTransfer) => {
+      if (enabledRef.current && elementRef.current?.contains(frame)) show(data)
+    }
+    const dragOver = () => {
+      depthRef.current = 0
+      setDragging(false)
+    }
+    frameDragListeners.add(overFrame)
+    dragOverListeners.add(dragOver)
     return () => {
       mountedRef.current = false
+      frameDragListeners.delete(overFrame)
+      dragOverListeners.delete(dragOver)
     }
-  }, [])
+  }, [show])
+
+  // Turned off mid-drag (a reader tab opened in front, the conversation went
+  // away): no leave or drop will be taken to put the overlay away.
+  useEffect(() => {
+    if (enabled) return
+    depthRef.current = 0
+    setDragging(false)
+  }, [enabled])
 
   const onDragEnter = useCallback(
     (event: DragEvent<HTMLElement>) => {
       if (!enabled || !carriesFiles(event.dataTransfer)) return
       depthRef.current += 1
-      setMayHoldImages(dragMayHoldImages(event.dataTransfer))
-      setMayBeLink(!Array.from(event.dataTransfer.types ?? []).includes('Files'))
-      setDragging(true)
+      show(event.dataTransfer)
     },
-    [enabled],
+    [enabled, show],
   )
 
   const onDragOver = useCallback(
@@ -163,14 +266,16 @@ export function useFileDrop(
       // webview opens the dropped file itself.
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
+      // Also when the enter was missed: the drag came in over a message frame.
+      show(event.dataTransfer)
     },
-    [enabled],
+    [enabled, show],
   )
 
   const onDragLeave = useCallback(
     (event: DragEvent<HTMLElement>) => {
       if (!enabled || !carriesFiles(event.dataTransfer)) return
-      depthRef.current = Math.max(0, depthRef.current - 1)
+      depthRef.current = leftElement(event) ? 0 : Math.max(0, depthRef.current - 1)
       if (depthRef.current === 0) setDragging(false)
     },
     [enabled],
@@ -185,10 +290,17 @@ export function useFileDrop(
       // A child that took the drop (the composer body placing an image inline)
       // has already prevented the default; read that before preventing it here.
       const handledByChild = event.defaultPrevented
-      const zone = zoneOf ? zoneOf(event.target) : null
+      const zone = zoneOfRef.current ? zoneOfRef.current(event.target) : null
       if (files.length > 0) {
         event.preventDefault()
-        onFiles(files, { handledByChild, zone })
+        onFilesRef.current(files, { handledByChild, zone })
+        return
+      }
+      if (!fileAddressDrops) {
+        // Files announced but none handed over (an item another app only
+        // promises, on macOS). Asking Go is for Linux.
+        event.preventDefault()
+        reportUnattachedFiles()
         return
       }
       // Linux: addresses only.
@@ -204,14 +316,19 @@ export function useFileDrop(
       // a moment: the files still belong where they were dropped.
       const droppedOn = scopeRef.current
       void readNativeDrop(addresses).then((read) => {
-        if (read.length === 0 || !mountedRef.current || scopeRef.current !== droppedOn) return
-        onFiles(read, { handledByChild: false, zone })
+        if (read.length === 0) return
+        // No longer what they were dropped on: not attached, and said so.
+        // Nor still a drop area: something opened in front of it meanwhile.
+        if (!mountedRef.current || !enabledRef.current || scopeRef.current !== droppedOn) {
+          return reportUnattachedFiles()
+        }
+        onFilesRef.current(read, { handledByChild: false, zone })
       })
     },
-    [enabled, onFiles, zoneOf],
+    [enabled],
   )
 
-  return { dragging, mayHoldImages, mayBeLink, dropHandlers: { onDragEnter, onDragOver, onDragLeave, onDrop } }
+  return { dragging, mayHoldImages, mayBeLink, dropHandlers: { ref, onDragEnter, onDragOver, onDragLeave, onDrop } }
 }
 
 const isImage = (file: File) => file.type.toLowerCase().startsWith('image/')

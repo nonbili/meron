@@ -37,4 +37,31 @@ describe('addQuickReplyAttachments', () => {
     expect(compose$.composerAttachments.get()).toEqual([])
     ui$.selectedThread.set(before)
   })
+
+  it('leaves out what goes over the size limits, counting what is already attached', async () => {
+    const sized = (name: string, megabytes: number) =>
+      Object.defineProperty(new File(['x'], name), 'size', { value: megabytes * 1024 * 1024 })
+    compose$.composerAttachments.set([{ id: '1', filename: 'old.bin', mime: '', size: 90 * 1024 * 1024, data: '' }])
+    ui$.toast.set('')
+    addQuickReplyAttachments([sized('huge.bin', 101), sized('fits.bin', 50), sized('over-total.bin', 50)])
+    const attachments = await attachmentsSettled(2)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(attachments.map((a) => a.filename)).toEqual(['old.bin', 'fits.bin'])
+    expect(ui$.toast.get()).not.toBe('')
+    ui$.toast.set('')
+  })
+
+  it('counts files still being read, so two goes cannot each fill the message', async () => {
+    const sized = (name: string) => Object.defineProperty(new File(['x'], name), 'size', { value: 90 * 1024 * 1024 })
+    addQuickReplyAttachments([sized('first.bin')])
+    addQuickReplyAttachments([sized('second.bin')])
+    await attachmentsSettled(1)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(compose$.composerAttachments.get().map((a) => a.filename)).toEqual(['first.bin'])
+    // And the room is free again once they have landed.
+    compose$.composerAttachments.set([])
+    addQuickReplyAttachments([sized('third.bin')])
+    expect((await attachmentsSettled(1)).map((a) => a.filename)).toEqual(['third.bin'])
+    ui$.toast.set('')
+  })
 })

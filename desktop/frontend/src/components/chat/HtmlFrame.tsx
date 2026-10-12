@@ -170,8 +170,9 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
     docRef.current = doc
     winRef.current = win
-    // A link or image dragged out of the message is not a file drop.
-    trackInternalDrags(doc)
+    // A link or image dragged out of the message is not a file drop; a file
+    // dragged in over it is one for the pane around this frame.
+    trackInternalDrags(doc, iframe)
     if (!doc.documentElement.dataset.meronFrameScrollIntentWired) {
       doc.documentElement.dataset.meronFrameScrollIntentWired = '1'
       doc.addEventListener('wheel', () => onUserScrollIntentRef.current?.(), { passive: true })

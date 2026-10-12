@@ -171,6 +171,7 @@
   "chat.feedUrl": "フィードURL",
   "chat.fileItems": "{count, plural, one {{count}件のファイル} other {{count}件のファイル}}",
   "chat.files": "ファイル",
+  "chat.filesNotAttached": "一部のファイルを添付できませんでした",
   "chat.hideDetails": "詳細を非表示",
   "chat.hideQuotedText": "引用テキストを非表示",
   "chat.htmlView": "HTML表示",

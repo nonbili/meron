@@ -171,6 +171,7 @@
   "chat.feedUrl": "Plūsmas URL",
   "chat.fileItems": "{count, plural, one {{count} fails} other {{count} faili}}",
   "chat.files": "Faili",
+  "chat.filesNotAttached": "Dažus failus neizdevās pievienot",
   "chat.hideDetails": "Slēpt informāciju",
   "chat.hideQuotedText": "Slēpt citēto tekstu",
   "chat.htmlView": "HTML skats",

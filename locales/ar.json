@@ -171,6 +171,7 @@
   "chat.feedUrl": "رابط الخلاصة",
   "chat.fileItems": "{count, plural, one {{count} ملف} other {{count} ملفات}}",
   "chat.files": "الملفات",
+  "chat.filesNotAttached": "تعذّر إرفاق بعض الملفات",
   "chat.hideDetails": "إخفاء التفاصيل",
   "chat.hideQuotedText": "إخفاء النص المقتبس",
   "chat.htmlView": "عرض HTML",

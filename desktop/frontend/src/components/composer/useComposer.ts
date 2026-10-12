@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '@tiptap/react'
+import { TextSelection } from '@tiptap/pm/state'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -18,6 +19,12 @@ import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
 import { invoke } from '../../lib/bridge'
 import { isExternalFileDrop } from '../../lib/useFileDrop'
+import {
+  readAttachment,
+  reportUnattachedFiles,
+  settleAttachment,
+  takeWithinAttachmentLimits,
+} from '../../lib/attachFiles'
 import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
 import { discardSentDraft } from '../../states/quickReply'
@@ -159,23 +166,25 @@ export function useComposer(tabId: string) {
         addFiles(imageFiles, { inline: true })
         return true
       },
-      handleDrop: (_view, event, _slice, moved) => {
-        if (!moved && event.dataTransfer) {
-          const imageFiles = extractClipboardImages(event.dataTransfer)
-          if (imageFiles.length > 0) {
-            event.preventDefault()
-            addFiles(imageFiles, { inline: true })
-            return true
-          }
-          // On Linux a file from the file manager arrives as its file:// address
-          // only; Composer attaches the file itself (useFileDrop), so keep the
-          // address out of the body.
-          if (isExternalFileDrop(event.dataTransfer)) {
-            event.preventDefault()
-            return true
-          }
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved || !event.dataTransfer) return false
+        // Files from outside. On Linux they arrive as their file:// addresses
+        // only, and Composer gets the files themselves (useFileDrop).
+        const hasFiles = (event.dataTransfer.files?.length ?? 0) > 0
+        if (!hasFiles && !isExternalFileDrop(event.dataTransfer)) return false
+        // Nothing of the drop goes into the body as text. Images go in where
+        // they were dropped: the caret is put there for them, here or when
+        // Composer has them. Other files Composer attaches.
+        event.preventDefault()
+        const imageFiles = extractClipboardImages(event.dataTransfer)
+        // Only for images, or files not known yet (Linux): a file that is just
+        // attached leaves the selection where it was.
+        if (imageFiles.length > 0 || !hasFiles) {
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY })
+          if (at) view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(at.pos))))
         }
-        return false
+        if (imageFiles.length > 0) addFiles(imageFiles, { inline: true, afterSelection: true })
+        return true
       },
     },
     autofocus: focusBody ? focusAt : false,
@@ -419,49 +428,65 @@ export function useComposer(tabId: string) {
   }
 
   // Inline images replace the selection; with `afterSelection` (a drop) they go
-  // in after it, one after another, so a dropped image never replaces one that
-  // is still selected from the last insertion.
+  // in after it, so a dropped image never replaces one that is still selected
+  // from the last insertion. The selection is read when each image is ready:
+  // the body may have been edited while its file was written.
   const addFiles = (files: ArrayLike<File>, options: { inline?: boolean; afterSelection?: boolean } = {}) => {
-    let insertPos: number | null = null
-    const insertImage = (src: string, alt: string) => {
-      if (!options.afterSelection) {
-        editor!.chain().focus().setImage({ src, alt }).run()
-        return
+    const attachmentsNow = () => compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []
+    const insertImage = (src: string, alt: string, attachmentId: string) => {
+      try {
+        const chain = editor!.chain().focus()
+        const placed = options.afterSelection
+          ? chain.insertContentAt(editor!.state.selection.to, { type: ResizableImage.name, attrs: { src, alt } }).run()
+          : chain.setImage({ src, alt }).run()
+        if (placed) return
+      } catch (err) {
+        console.error('Failed to insert inline image:', err)
       }
-      insertPos ??= editor!.state.selection.to
-      editor!.chain().focus().insertContentAt(insertPos, { type: ResizableImage.name, attrs: { src, alt } }).run()
-      insertPos = editor!.state.selection.to
+      // Not in the body: keep it as an ordinary attachment, not an inline part
+      // nothing refers to.
+      update({
+        attachments: attachmentsNow().map((a) => (a.id === attachmentId ? { ...a, inlineId: undefined } : a)),
+      })
     }
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        const base64Data = dataUrl.split(',')[1]
-        const ext = file.type.startsWith('image/') ? file.type.slice(6) : ''
-        const filename = file.name || (ext ? `pasted-image-${Date.now()}.${ext}` : `pasted-${Date.now()}`)
+    const taken = takeWithinAttachmentLimits(
+      tabId,
+      Array.from(files),
+      attachmentsNow().reduce((bytes, attachment) => bytes + attachment.size, 0),
+    )
+    if (taken.length < files.length) reportUnattachedFiles()
+    // Every file is read and attached as soon as it can be; only placing the
+    // inline images waits its turn, so they keep the order they came in.
+    let placing: Promise<void> = Promise.resolve()
+    for (const file of taken) {
+      const ready = readAttachment(file).then(async ({ attachment, dataUrl }) => {
         const shouldInline = !!options.inline && file.type.toLowerCase().startsWith('image/') && !!editor
-        const next: ComposerAttachment = {
-          id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          filename,
-          mime: file.type || 'application/octet-stream',
-          size: file.size,
-          data: base64Data,
-          inlineId: shouldInline ? createInlineId() : undefined,
-        }
-        update({
-          attachments: [...(compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []), next],
+        const next: ComposerAttachment = { ...attachment, inlineId: shouldInline ? createInlineId() : undefined }
+        update({ attachments: [...attachmentsNow(), next] })
+        settleAttachment(tabId, file)
+        if (!shouldInline) return null
+        const src = await invoke<string>('composer.writeMediaFile', {
+          data: next.data,
+          filename: next.filename,
+        }).catch((err) => {
+          console.error('Failed to write media file:', err)
+          return dataUrl
         })
-        if (shouldInline) {
-          invoke<string>('composer.writeMediaFile', { data: base64Data, filename })
-            .then((url) => insertImage(url, filename))
-            .catch((err) => {
-              console.error('Failed to write media file:', err)
-              insertImage(dataUrl, filename)
-            })
-        }
-      }
-      reader.readAsDataURL(file)
+        return { src, next }
+      })
+      // Reported when its turn comes below; until then a failure is not one
+      // nobody handles. A file that never attached is settled here.
+      ready.catch(() => settleAttachment(tabId, file))
+      placing = placing
+        .then(() => ready)
+        .then((image) => {
+          if (image) insertImage(image.src, image.next.filename, image.next.id)
+        })
+        .catch((err) => {
+          // A folder, or a file that can't be read.
+          console.error('Failed to attach file:', err)
+          reportUnattachedFiles()
+        })
     }
   }
 

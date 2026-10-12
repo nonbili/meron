@@ -15,6 +15,12 @@ import {
 } from '../../states/quickReply'
 import { sendReply } from '../../states/quickReplySend'
 import { showToast, ui$ } from '../../states/ui'
+import {
+  readAttachment,
+  reportUnattachedFiles,
+  settleAttachment,
+  takeWithinAttachmentLimits,
+} from '../../lib/attachFiles'
 import { settings$, isSendKey } from '../../states/settings'
 import type { ComposerAttachment } from '../../types'
 import { pickFiles } from '../../lib/nativeFilePicker'
@@ -54,7 +60,8 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
 /** Adds files to the chat reply as attachments: from the file picker, a pasted
  *  image, or files dropped onto the conversation (MessagePane). Reading a file
  *  takes a moment; one read after the reader moved to another conversation is
- *  left out, not attached to that conversation's reply. */
+ *  left out, not attached to that conversation's reply. So is what goes over
+ *  the size limits. The reader is told. */
 export function addQuickReplyAttachments(files: ArrayLike<File>) {
   const thread = ui$.selectedThread.peek()
   logComposerPaste(
@@ -65,24 +72,17 @@ export function addQuickReplyAttachments(files: ArrayLike<File>) {
       size: file.size,
     })),
   )
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (ui$.selectedThread.peek() !== thread) return
-      const result = reader.result as string
-      const base64Data = result.split(',')[1]
-      const ext = file.type.startsWith('image/') ? file.type.slice(6) : ''
-      const filename = file.name || (ext ? `pasted-image-${Date.now()}.${ext}` : `pasted-${Date.now()}`)
-      compose$.composerAttachments.push({
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        filename,
-        mime: file.type || 'application/octet-stream',
-        size: file.size,
-        data: base64Data,
-      })
-    }
-    reader.readAsDataURL(file)
+  const attached = compose$.composerAttachments.peek().reduce((bytes, attachment) => bytes + attachment.size, 0)
+  const key = `reply:${thread}`
+  const taken = takeWithinAttachmentLimits(key, Array.from(files), attached)
+  if (taken.length < files.length) reportUnattachedFiles()
+  for (const file of taken) {
+    readAttachment(file)
+      .then(({ attachment }) => {
+        if (ui$.selectedThread.peek() !== thread) return reportUnattachedFiles()
+        compose$.composerAttachments.push(attachment)
+      }, reportUnattachedFiles)
+      .finally(() => settleAttachment(key, file))
   }
 }
 

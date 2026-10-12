@@ -171,6 +171,7 @@
   "chat.feedUrl": "Voo URL",
   "chat.fileItems": "{count, plural, one {{count} fail} other {{count} faili}}",
   "chat.files": "Failid",
+  "chat.filesNotAttached": "Mõnda faili ei õnnestunud manustada",
   "chat.hideDetails": "Peida üksikasjad",
   "chat.hideQuotedText": "Peida tsiteeritud tekst",
   "chat.htmlView": "HTML-vaade",

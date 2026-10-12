@@ -18,7 +18,10 @@ func TestReadDroppedFilesReadsFilesAndSkipsTheRest(t *testing.T) {
 	defer func(old func(*App, string, ...any)) { fileDropLog = old }(fileDropLog)
 	fileDropLog = func(*App, string, ...any) { logged++ }
 
-	files := (&App{}).readDroppedFiles([]string{pdf, dir, filepath.Join(dir, "missing.txt"), ""})
+	files, skipped := (&App{}).readDroppedFiles([]string{pdf, dir, filepath.Join(dir, "missing.txt"), ""})
+	if skipped != 2 {
+		t.Fatalf("counted %d skipped, want 2", skipped)
+	}
 
 	if len(files) != 1 {
 		t.Fatalf("got %d files, want 1: %v", len(files), files)
@@ -32,6 +35,52 @@ func TestReadDroppedFilesReadsFilesAndSkipsTheRest(t *testing.T) {
 	}
 	if logged != 2 {
 		t.Fatalf("logged %d skips, want 2 (the folder and the missing file)", logged)
+	}
+}
+
+func TestDroppedFilesAreTypedByTheirName(t *testing.T) {
+	dir := t.TempDir()
+	svg := filepath.Join(dir, "logo.svg")
+	if err := os.WriteFile(svg, []byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	files, _ := (&App{}).readDroppedFiles([]string{svg})
+	if len(files) != 1 || files[0].(map[string]any)["mime"] != "image/svg+xml" {
+		t.Fatalf("got %v, want an SVG image", files)
+	}
+	// The picker keeps sniffing: its image filter trusts content, not names.
+	picked, err := readPickedFile(svg)
+	if err != nil || picked["mime"] == "image/svg+xml" {
+		t.Fatalf("picker typed the file by name: %v, %v", picked["mime"], err)
+	}
+}
+
+func TestPathsLeftOutOfAPartlyMatchingReportAreCounted(t *testing.T) {
+	dir := t.TempDir()
+	note := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(note, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{}
+	a.noteDroppedPaths([]string{note, filepath.Join(dir, "spelled-one-way.txt")})
+	res, err := a.readDroppedFilesCommand(map[string]any{
+		"uris": []any{"file://" + filepath.ToSlash(note), "file://" + filepath.ToSlash(dir) + "/spelled-another-way.txt"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := res.(map[string]any)
+	if len(got["files"].([]any)) != 1 || got["skipped"] != 1 {
+		t.Fatalf("got %d files, %v skipped, want the note and one skipped", len(got["files"].([]any)), got["skipped"])
+	}
+}
+
+func TestAnEmptyNativeDropIsReportedAsSkipped(t *testing.T) {
+	defer func(old time.Duration) { droppedPathsWait = old }(droppedPathsWait)
+	droppedPathsWait = 0
+	res, err := (&App{}).readDroppedFilesCommand(map[string]any{})
+	if err != nil || res.(map[string]any)["skipped"] != 1 {
+		t.Fatalf("got %v, %v, want one skipped entry", res, err)
 	}
 }
 
@@ -51,8 +100,32 @@ func TestReadDroppedFilesSkipsOversizedFiles(t *testing.T) {
 	logged := 0
 	fileDropLog = func(*App, string, ...any) { logged++ }
 
-	if files := (&App{}).readDroppedFiles([]string{big}); len(files) != 0 || logged != 1 {
-		t.Fatalf("got %d files and %d log lines, want the file skipped and logged", len(files), logged)
+	if files, skipped := (&App{}).readDroppedFiles([]string{big}); len(files) != 0 || skipped != 1 || logged != 1 {
+		t.Fatalf("got %d files, %d skipped, %d log lines, want the file skipped and logged", len(files), skipped, logged)
+	}
+}
+
+func TestReadDroppedFilesStopsAtTheTotalLimit(t *testing.T) {
+	dir := t.TempDir()
+	var paths []string
+	for _, name := range []string{"a.bin", "b.bin"} {
+		path := filepath.Join(dir, name)
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Each fits alone; together they are over the total.
+		if err := f.Truncate(maxDroppedTotalBytes/2 + 1); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		paths = append(paths, path)
+	}
+	defer func(old func(*App, string, ...any)) { fileDropLog = old }(fileDropLog)
+	fileDropLog = func(*App, string, ...any) {}
+
+	if files, skipped := (&App{}).readDroppedFiles(paths); len(files) != 1 || skipped != 1 {
+		t.Fatalf("got %d files and %d skipped, want the second file left out", len(files), skipped)
 	}
 }
 
@@ -100,28 +173,55 @@ func TestDroppedFilesAreReadOnlyWhenThePageAsksForThem(t *testing.T) {
 		t.Fatalf("got %v, want the dropped note", names)
 	}
 	// Handed out once.
-	if names := a.readDroppedFiles(a.takeDroppedPaths(nil, 0)); len(names) != 0 {
-		t.Fatalf("the drop was handed out twice: %v", names)
+	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 0 {
+		t.Fatalf("the drop was handed out twice: %v", paths)
 	}
 }
 
-func TestDroppedFilesAreLimitedToWhatWasDropped(t *testing.T) {
-	dir := t.TempDir()
-	dropped := filepath.Join(dir, "dropped.txt")
-	secret := filepath.Join(dir, "secret.txt")
-	for _, path := range []string{dropped, secret} {
-		if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+func TestAnEarlierDropIsNotHandedOutForALaterOne(t *testing.T) {
 	a := &App{}
-	a.noteDroppedPaths([]string{dropped})
-	if paths := a.takeDroppedPaths([]string{secret}, 0); len(paths) != 0 {
-		t.Fatalf("handed out a file that was not dropped: %v", paths)
+	// Dropped on the sidebar a few seconds ago: recorded, never asked for.
+	a.noteDroppedPaths([]string{"/home/me/private.txt"})
+	a.droppedAt = time.Now().Add(-3 * time.Second)
+
+	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 0 {
+		t.Fatalf("handed out an earlier drop to a page that named no files: %v", paths)
 	}
-	// The page could not read the addresses: the latest drop, whole.
-	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 1 || paths[0] != dropped {
-		t.Fatalf("got %v, want the latest drop", paths)
+	if paths := a.takeDroppedPaths([]string{"/home/me/other.txt"}, 0); len(paths) != 0 {
+		t.Fatalf("handed out an earlier drop for other files: %v", paths)
+	}
+	// Still there for the page that names it.
+	if paths := a.takeDroppedPaths([]string{"/home/me/private.txt"}, 0); len(paths) != 1 {
+		t.Fatalf("got %v, want the named file", paths)
+	}
+}
+
+func TestAnEarlierDropThatSharesAFileIsNotHandedOut(t *testing.T) {
+	a := &App{}
+	// [a, b] landed on the sidebar; [a, c] is dropped on a conversation and the
+	// page asks before GTK has reported it.
+	a.noteDroppedPaths([]string{"/home/me/a.pdf", "/home/me/b.pdf"})
+	a.droppedAt = time.Now().Add(-3 * time.Second)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		a.noteDroppedPaths([]string{"/home/me/a.pdf", "/home/me/c.pdf"})
+	}()
+	paths := a.takeDroppedPaths([]string{"/home/me/a.pdf", "/home/me/c.pdf"}, 2*time.Second)
+	if len(paths) != 2 || paths[1] != "/home/me/c.pdf" {
+		t.Fatalf("got %v, want both files of the later drop", paths)
+	}
+}
+
+func TestTheDropJustReportedIsHandedOutWhenThePageCannotNameIt(t *testing.T) {
+	a := &App{}
+	a.noteDroppedPaths([]string{"/home/me/note.txt"})
+	if paths := a.takeDroppedPaths(nil, 0); len(paths) != 1 || paths[0] != "/home/me/note.txt" {
+		t.Fatalf("got %v, want the drop GTK just reported", paths)
+	}
+	// Likewise when the page's address doesn't spell the path the way GTK does.
+	a.noteDroppedPaths([]string{"/home/me/note.txt"})
+	if paths := a.takeDroppedPaths([]string{"/home/me/link-to-note.txt"}, 0); len(paths) != 1 {
+		t.Fatalf("got %v, want the drop GTK just reported", paths)
 	}
 }
 

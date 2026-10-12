@@ -171,6 +171,7 @@
   "chat.feedUrl": "URL nguồn tin",
   "chat.fileItems": "{count, plural, one {{count} tệp} other {{count} tệp}}",
   "chat.files": "Tệp",
+  "chat.filesNotAttached": "Không thể đính kèm một số tệp",
   "chat.hideDetails": "Ẩn chi tiết",
   "chat.hideQuotedText": "Ẩn văn bản trích dẫn",
   "chat.htmlView": "Chế độ xem HTML",

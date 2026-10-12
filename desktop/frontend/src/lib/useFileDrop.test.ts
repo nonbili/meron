@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, renderHook } from '@testing-library/react'
 import type { DragEvent } from 'react'
+import { ui$ } from '../states/ui'
 import {
   dragMayHoldImages,
   isExternalFileDrop,
@@ -83,6 +84,87 @@ describe('useFileDrop', () => {
     expect(onFiles).toHaveBeenCalledWith(files, expect.objectContaining({ handledByChild: true }))
   })
 
+  it('puts the overlay away when a leave is outside the element, whatever the count says', () => {
+    const { result } = renderHook(() => useFileDrop(() => {}))
+    const element = { getBoundingClientRect: () => ({ left: 100, top: 100, right: 500, bottom: 500 }) }
+    const leave = (clientX: number, clientY: number) =>
+      Object.assign(dragEvent(['Files']), { currentTarget: element, clientX, clientY })
+    act(() => {
+      // Three enters, two of them from children that were then removed.
+      result.current.dropHandlers.onDragEnter(dragEvent(['Files']))
+      result.current.dropHandlers.onDragEnter(dragEvent(['Files']))
+      result.current.dropHandlers.onDragEnter(dragEvent(['Files']))
+      result.current.dropHandlers.onDragLeave(leave(300, 300))
+    })
+    expect(result.current.dragging).toBe(true)
+    act(() => result.current.dropHandlers.onDragLeave(leave(0, 0)))
+    expect(result.current.dragging).toBe(false)
+  })
+
+  it('puts the overlay away once the mouse moves with no drag under way', () => {
+    const { result } = renderHook(() => useFileDrop(() => {}))
+    act(() => result.current.dropHandlers.onDragEnter(dragEvent(['Files'])))
+    expect(result.current.dragging).toBe(true)
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { buttons: 0 }))
+    })
+    expect(result.current.dragging).toBe(false)
+  })
+
+  it('shows the overlay for a drag that comes in over a message frame inside it', () => {
+    const pane = document.createElement('div')
+    const frame = document.createElement('iframe')
+    pane.append(frame)
+    document.body.append(pane)
+    const doc = frame.contentDocument!
+    trackInternalDrags(doc, frame)
+    const inside = renderHook(() => useFileDrop(() => {}))
+    const elsewhere = renderHook(() => useFileDrop(() => {}))
+    inside.result.current.dropHandlers.ref(pane)
+    elsewhere.result.current.dropHandlers.ref(document.createElement('div'))
+    act(() => {
+      const enter = new Event('dragenter', { bubbles: true, cancelable: true })
+      Object.assign(enter, { dataTransfer: { types: ['Files'], files: [] } })
+      doc.dispatchEvent(enter)
+    })
+    expect(inside.result.current.dragging).toBe(true)
+    expect(elsewhere.result.current.dragging).toBe(false)
+    pane.remove()
+  })
+
+  it('puts the overlay away when turned off in the middle of a drag', () => {
+    const { result, rerender } = renderHook(({ enabled }) => useFileDrop(() => {}, { enabled }), {
+      initialProps: { enabled: true },
+    })
+    act(() => result.current.dropHandlers.onDragEnter(dragEvent(['Files'])))
+    expect(result.current.dragging).toBe(true)
+    rerender({ enabled: false })
+    expect(result.current.dragging).toBe(false)
+    // And the count starts over: one enter and one leave, not a stuck overlay.
+    rerender({ enabled: true })
+    act(() => {
+      result.current.dropHandlers.onDragEnter(dragEvent(['Files']))
+      result.current.dropHandlers.onDragLeave(dragEvent(['Files']))
+    })
+    expect(result.current.dragging).toBe(false)
+  })
+
+  it('says so when files are announced but none handed over (a promised item on macOS)', () => {
+    const onFiles = jest.fn()
+    ui$.toast.set('')
+    ;(window as any).go = { main: { App: { Invoke: jest.fn(async () => ({})) } } }
+    const { result } = renderHook(() => useFileDrop(onFiles))
+    const drop = dragEvent(['Files'])
+    act(() => result.current.dropHandlers.onDrop(drop))
+    expect(drop.preventDefault).toHaveBeenCalled()
+    // Go is asked on Linux only.
+    expect((window as any).go.main.App.Invoke).not.toHaveBeenCalled()
+    expect(onFiles).not.toHaveBeenCalled()
+    expect(ui$.toast.get()).not.toBe('')
+    ui$.toast.set('')
+    delete (window as any).go
+  })
+
   it('ignores drags entirely when disabled', () => {
     const onFiles = jest.fn()
     const { result } = renderHook(() => useFileDrop(onFiles, { enabled: false }))
@@ -94,6 +176,46 @@ describe('useFileDrop', () => {
     expect(result.current.dragging).toBe(false)
     expect(onFiles).not.toHaveBeenCalled()
     expect(drop.preventDefault).not.toHaveBeenCalled()
+  })
+})
+
+describe('file drags outside any drop area', () => {
+  afterEach(() => resetFileDropStateForTests())
+
+  // Dispatched on the body, they reach the window's listeners as in the page.
+  function windowDrag(type: string, types: string[], target: Element = document.body) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    const dataTransfer = { types, files: [], dropEffect: 'copy', getData: () => '' }
+    Object.assign(event, { dataTransfer })
+    target.dispatchEvent(event)
+    return { event, dataTransfer }
+  }
+
+  it('are refused, so the webview does not open the file in place of the app', () => {
+    renderHook(() => useFileDrop(() => {}))
+    const over = windowDrag('dragover', ['Files'])
+    expect(over.event.defaultPrevented).toBe(true)
+    expect(over.dataTransfer.dropEffect).toBe('none')
+    expect(windowDrag('drop', ['Files']).event.defaultPrevented).toBe(true)
+  })
+
+  it('are refused over a text field too, which would take the file path as text', () => {
+    renderHook(() => useFileDrop(() => {}))
+    const field = document.createElement('textarea')
+    document.body.append(field)
+    expect(windowDrag('dragover', ['Files'], field).event.defaultPrevented).toBe(true)
+    field.remove()
+  })
+
+  it('leaves other drags alone, and a text field its link (Linux)', () => {
+    renderHook(() => useFileDrop(() => {}))
+    expect(windowDrag('dragover', ['text/plain']).event.defaultPrevented).toBe(false)
+    resetFileDropStateForTests({ fileAddressDrops: true })
+    const field = document.createElement('textarea')
+    document.body.append(field)
+    expect(windowDrag('dragover', ['text/uri-list'], field).event.defaultPrevented).toBe(false)
+    expect(windowDrag('dragover', ['text/uri-list']).event.defaultPrevented).toBe(true)
+    field.remove()
   })
 })
 
@@ -199,6 +321,17 @@ describe('useFileDrop on Linux (WebKitGTK)', () => {
     expect(onFiles).not.toHaveBeenCalled()
   })
 
+  it('drops files that arrive after something opened in front of the drop area', async () => {
+    const onFiles = jest.fn()
+    const { result, rerender } = renderHook(({ enabled }) => useFileDrop(onFiles, { enabled }), {
+      initialProps: { enabled: true },
+    })
+    act(() => result.current.dropHandlers.onDrop(dragEvent(['text/uri-list'], [], false, NOTE)))
+    rerender({ enabled: false })
+    await settled()
+    expect(onFiles).not.toHaveBeenCalled()
+  })
+
   it('drops files that arrive after the drop area is gone', async () => {
     const onFiles = jest.fn()
     const { result, unmount } = renderHook(() => useFileDrop(onFiles))
@@ -229,6 +362,29 @@ describe('useFileDrop on Linux (WebKitGTK)', () => {
     expect(result.current.mayBeLink).toBe(true)
     act(() => result.current.dropHandlers.onDragEnter(dragEvent(['Files'])))
     expect(result.current.mayBeLink).toBe(false)
+  })
+
+  it('tells the reader when Go left part of the drop out', async () => {
+    answer = { files: [], skipped: 1 }
+    ui$.toast.set('')
+    const { result } = renderHook(() => useFileDrop(() => {}))
+    act(() => result.current.dropHandlers.onDrop(dragEvent(['text/uri-list'], [], false, NOTE)))
+    await settled()
+    expect(ui$.toast.get()).not.toBe('')
+    ui$.toast.set('')
+  })
+
+  it('hands late files to the handler of the moment, not of the drop', async () => {
+    const atDrop = jest.fn()
+    const later = jest.fn()
+    const { result, rerender } = renderHook(({ onFiles }) => useFileDrop(onFiles), {
+      initialProps: { onFiles: atDrop },
+    })
+    act(() => result.current.dropHandlers.onDrop(dragEvent(['text/uri-list'], [], false, NOTE)))
+    rerender({ onFiles: later })
+    await settled()
+    expect(atDrop).not.toHaveBeenCalled()
+    expect(later).toHaveBeenCalledTimes(1)
   })
 
   it('does not ask Go about a link dropped from another app', async () => {
@@ -263,11 +419,11 @@ describe('useFileDrop on Linux (WebKitGTK)', () => {
     frame.remove()
   })
 
-  it('takes file drags again once the mouse moves, though the drag never reported its end', () => {
+  it('takes file drags again once the mouse is free, though the drag never reported its end', () => {
     const { result } = renderHook(() => useFileDrop(() => {}))
     act(() => {
       window.dispatchEvent(new Event('dragstart'))
-      window.dispatchEvent(new Event('mousemove'))
+      window.dispatchEvent(new MouseEvent('mousemove', { buttons: 0 }))
       result.current.dropHandlers.onDragEnter(dragEvent(['text/uri-list']))
     })
     expect(result.current.dragging).toBe(true)

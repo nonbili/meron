@@ -171,6 +171,7 @@
   "chat.feedUrl": "Διεύθυνση URL ροής",
   "chat.fileItems": "{count, plural, one {{count} αρχείο} other {{count} αρχεία}}",
   "chat.files": "Αρχεία",
+  "chat.filesNotAttached": "Ορισμένα αρχεία δεν ήταν δυνατό να επισυναφθούν",
   "chat.hideDetails": "Απόκρυψη λεπτομερειών",
   "chat.hideQuotedText": "Απόκρυψη κειμένου σε παράθεση",
   "chat.htmlView": "Προβολή HTML",

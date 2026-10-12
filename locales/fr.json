@@ -171,6 +171,7 @@
   "chat.feedUrl": "URL du flux",
   "chat.fileItems": "{count, plural, one {{count} fichier} other {{count} fichiers}}",
   "chat.files": "Fichiers",
+  "chat.filesNotAttached": "Certains fichiers n’ont pas pu être joints",
   "chat.hideDetails": "Masquer les détails",
   "chat.hideQuotedText": "Masquer le texte cité",
   "chat.htmlView": "Vue HTML",

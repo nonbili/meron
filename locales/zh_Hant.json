@@ -171,6 +171,7 @@
   "chat.feedUrl": "訂閱源網址",
   "chat.fileItems": "{count, plural, one {{count} 個檔案} other {{count} 個檔案}}",
   "chat.files": "檔案",
+  "chat.filesNotAttached": "部分檔案無法加入為附件",
   "chat.hideDetails": "隱藏詳細資訊",
   "chat.hideQuotedText": "隱藏引用內容",
   "chat.htmlView": "HTML 檢視",

@@ -171,6 +171,7 @@
   "chat.feedUrl": "Feed URL",
   "chat.fileItems": "{count, plural, one {{count} file} other {{count} files}}",
   "chat.files": "Files",
+  "chat.filesNotAttached": "Some files could not be attached",
   "chat.hideDetails": "Hide details",
   "chat.hideQuotedText": "Hide quoted text",
   "chat.htmlView": "HTML view",

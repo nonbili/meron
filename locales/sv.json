@@ -171,6 +171,7 @@
   "chat.feedUrl": "Flödes-URL",
   "chat.fileItems": "{count, plural, one {{count} fil} other {{count} filer}}",
   "chat.files": "Filer",
+  "chat.filesNotAttached": "Vissa filer kunde inte bifogas",
   "chat.hideDetails": "Dölj detaljer",
   "chat.hideQuotedText": "Dölj citerad text",
   "chat.htmlView": "HTML-vy",
