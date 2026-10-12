@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { accounts$ } from '../../states/accounts'
-import { compose$ } from '../../states/composeState'
-import { thread$ } from '../../states/thread'
-import type { Account, MessageTab } from '../../types'
-import { toggleConversationMode } from './useMessageView'
+import { accounts$ } from './accounts'
+import { compose$ } from './composeState'
+import { thread$ } from './thread'
+import type { Account, MessageTab } from '../types'
+import { toggleConversationMode } from './compose'
 
 const account = (id: string, extra: Partial<Account> = {}): Account => ({
   id,
@@ -66,13 +66,21 @@ it('does nothing without a known account', () => {
 })
 
 it('flips the reader tab in front instead of the conversation', () => {
-  compose$.tabs.set([tab('reader')])
+  compose$.tabs.set([tab('reader', { bodyHtml: '<p>Body</p>' })])
   compose$.activeTab.set('reader-tab')
   expect(toggleConversationMode('html-acc')).toBe(true)
   expect(compose$.tabs.peek()[0].viewMode).toBe('plain')
   expect(thread$.conversationModeOverrides.peek()).toEqual({})
   toggleConversationMode('html-acc')
   expect(compose$.tabs.peek()[0].viewMode).toBe('html')
+})
+
+it('leaves a reader tab with no HTML body alone', () => {
+  compose$.tabs.set([tab('reader', { viewMode: 'plain' })])
+  compose$.activeTab.set('reader-tab')
+  expect(toggleConversationMode('html-acc')).toBe(false)
+  expect(compose$.tabs.peek()[0].viewMode).toBe('plain')
+  expect(thread$.conversationModeOverrides.peek()).toEqual({})
 })
 
 it("uses a thread tab's own account", () => {

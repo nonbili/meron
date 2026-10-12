@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { clearMediaSession } from '../../lib/mediaSession'
-import { chordFromEvent } from '../../lib/shortcuts'
+import { chordFromEvent, shortcutForChord } from '../../lib/shortcuts'
 import { openExternal } from '../../lib/native'
 
 const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
@@ -277,15 +277,19 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       doc.addEventListener('keydown', (event) => {
         // Forward the chords the app can act on: ⌘/Ctrl (or Alt) shortcuts such
         // as ⌘/Ctrl+F, which the parent's keydown listener never sees while
-        // focus is in the frame, plus bare Up/Down for list navigation.
+        // focus is in the frame, plus bare Up/Down for list navigation and the
+        // single-key shortcuts (H, R, …), so they keep working after a click
+        // into the message.
         const chord = chordFromEvent(event)
         if (!chord) return
         const isBareArrow =
           !chord.mod && !chord.alt && !chord.shift && (chord.key === 'ArrowDown' || chord.key === 'ArrowUp')
-        if (!chord.mod && !chord.alt && !isBareArrow) return
-        // Only the unmodified arrows must stand down for a field inside the
-        // message (they move the caret); ⌘/Ctrl chords still belong to the app.
-        if (isBareArrow && isEditableFrameTarget(event.target)) return
+        const isBare = !chord.mod && !chord.alt
+        if (isBare && !isBareArrow && !shortcutForChord(chord)) return
+        // Only the unmodified keys must stand down for a field inside the
+        // message (they type, or move the caret); ⌘/Ctrl chords still belong
+        // to the app.
+        if (isBare && isEditableFrameTarget(event.target)) return
 
         const forwarded = new CustomEvent('meron.frameKeyDown', {
           cancelable: true,

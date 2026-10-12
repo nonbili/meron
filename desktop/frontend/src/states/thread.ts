@@ -1,5 +1,5 @@
 import { observable } from '@legendapp/state'
-import type { Message } from '../types'
+import type { Account, Message } from '../types'
 
 export type ConversationMode = 'plain' | 'html'
 
@@ -86,4 +86,16 @@ export function resetThreadView() {
   thread$.galleryIndex.set(null)
   thread$.hoveredLink.set(null)
   thread$.messageContextMenu.set(null)
+}
+
+/** The render mode for an account: the session override when the user flipped
+ *  it in the header, otherwise the account setting. */
+export function resolveConversationMode(
+  accounts: Account[],
+  modeOverrides: Record<string, ConversationMode>,
+  accountId: string | undefined,
+): ConversationMode {
+  const account = accountId ? accounts.find((acc) => acc.id === accountId) : null
+  if (!account) return 'plain'
+  return modeOverrides[account.id] ?? ((account.conversation_html ?? true) ? 'html' : 'plain')
 }

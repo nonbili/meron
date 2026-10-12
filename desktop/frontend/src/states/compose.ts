@@ -23,7 +23,7 @@ import {
   type SignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
-import { revealRemote, thread$ } from './thread'
+import { resolveConversationMode, revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import { closeComposeSession, forgetComposeSession, pruneComposeSessions } from './composeSessions'
 import {
@@ -931,6 +931,28 @@ export function revealMessageRemote(messageId: string) {
 
 export function setTabViewMode(id: string, mode: 'html' | 'plain') {
   compose$.tabs.set(compose$.tabs.get().map((tab) => (tab.id === id ? { ...tab, viewMode: mode } : tab)))
+}
+
+/** Switches what's in front between HTML and plain text, for the shortcut:
+ *  a reader tab flips its own view, a conversation flips its account's
+ *  session override, as the header's "View as" menu does. A thread tab's
+ *  account comes from the tab. Returns false when there was nothing to switch. */
+export function toggleConversationMode(accountId: string | undefined): boolean {
+  const activeTabId = compose$.activeTab.peek()
+  const tab = activeTabId ? compose$.tabs.peek().find((candidate) => candidate.id === activeTabId) : undefined
+  if (tab?.kind === 'reader') {
+    // A message with no HTML part reads the same either way.
+    if (!tab.bodyHtml) return false
+    setTabViewMode(tab.id, tab.viewMode === 'html' ? 'plain' : 'html')
+    return true
+  }
+  if (tab?.kind === 'compose') return false
+  const id = tab?.kind === 'thread' && tab.accountId ? tab.accountId : accountId
+  const accounts = accounts$.peek()
+  if (!id || !accounts.some((account) => account.id === id)) return false
+  const current = resolveConversationMode(accounts, thread$.conversationModeOverrides.peek(), id)
+  thread$.conversationModeOverrides[id].set(current === 'html' ? 'plain' : 'html')
+  return true
 }
 
 // Send a composed message via the same mail.send path used by replies. When

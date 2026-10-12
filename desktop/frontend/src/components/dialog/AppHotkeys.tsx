@@ -29,10 +29,9 @@ import {
   bulkStarSelected,
 } from '../../states/mailFlags'
 import { archiveThread, deleteThread, bulkArchiveSelected, bulkDeleteSelected } from '../../states/mailMoves'
-import { openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
+import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { handleEditUndoKeyDown } from '../../lib/editUndo'
-import { toggleConversationMode } from '../chat/useMessageView'
 import {
   isBareKeystroke,
   isMac,
@@ -375,8 +374,9 @@ export function AppHotkeys() {
     }
 
     // Keys forwarded out of an HTML message iframe, which the global keydown
-    // listener never sees: ⌘/Ctrl (or Alt) chords such as ⌘/Ctrl+F, plus bare
-    // ArrowUp/ArrowDown. The detail is the chord HtmlFrame reconstructed.
+    // listener never sees: ⌘/Ctrl (or Alt) chords such as ⌘/Ctrl+F, bare
+    // single-key shortcuts, plus bare ArrowUp/ArrowDown. The detail is the
+    // chord HtmlFrame reconstructed.
     const onFrameKeyDown = (event: Event) => {
       const chord = (event as CustomEvent<Chord | undefined>).detail
       if (!chord?.key) return

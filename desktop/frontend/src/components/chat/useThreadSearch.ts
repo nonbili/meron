@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'
-import { thread$ } from '../../states/thread'
+import { resolveConversationMode, thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 import { messageSearchText } from './messageHelpers'
 import { messageMatchCount } from './threadSearchMatches'
-import { resolveConversationMode } from './useMessageView'
 
 /** One highlighted occurrence: the message it sits in, and which of that
  *  message's occurrences it is (-1 for a message that matches only in its

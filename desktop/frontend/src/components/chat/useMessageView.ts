@@ -1,11 +1,9 @@
 import { useValue } from '@legendapp/state/react'
 import { accountIdentities, accounts$ } from '../../states/accounts'
-import { setTabViewMode } from '../../states/compose'
-import { compose$ } from '../../states/composeState'
 import { getActiveThread } from '../../states/mail'
 import { isDraftFolder } from '../../states/mailFolders'
 import { settings$ } from '../../states/settings'
-import { thread$ } from '../../states/thread'
+import { resolveConversationMode, thread$ } from '../../states/thread'
 import type { ConversationMode } from '../../states/thread'
 import type { Account, Message } from '../../types'
 import {
@@ -18,38 +16,6 @@ import {
 } from './messageHelpers'
 
 export type MessageView = ReturnType<typeof useMessageView>
-
-/** The render mode for an account: the session override when the user flipped
- *  it in the header, otherwise the account setting. */
-export function resolveConversationMode(
-  accounts: Account[],
-  modeOverrides: Record<string, ConversationMode>,
-  accountId: string | undefined,
-): ConversationMode {
-  const account = accountId ? accounts.find((acc) => acc.id === accountId) : null
-  if (!account) return 'plain'
-  return modeOverrides[account.id] ?? ((account.conversation_html ?? true) ? 'html' : 'plain')
-}
-
-/** Switches what's in front between HTML and plain text, for the shortcut:
- *  a reader tab flips its own view, a conversation flips its account's
- *  session override, as the header's "View as" menu does. A thread tab's
- *  account comes from the tab. Returns false when there was nothing to switch. */
-export function toggleConversationMode(accountId: string | undefined): boolean {
-  const activeTabId = compose$.activeTab.peek()
-  const tab = activeTabId ? compose$.tabs.peek().find((candidate) => candidate.id === activeTabId) : undefined
-  if (tab?.kind === 'reader') {
-    setTabViewMode(tab.id, tab.viewMode === 'html' ? 'plain' : 'html')
-    return true
-  }
-  if (tab?.kind === 'compose') return false
-  const id = tab?.kind === 'thread' && tab.accountId ? tab.accountId : accountId
-  const accounts = accounts$.peek()
-  if (!id || !accounts.some((account) => account.id === id)) return false
-  const current = resolveConversationMode(accounts, thread$.conversationModeOverrides.peek(), id)
-  thread$.conversationModeOverrides[id].set(current === 'html' ? 'plain' : 'html')
-  return true
-}
 
 /** The render mode the open thread's account is on: the session override when
  *  the user flipped it in the header, otherwise the account setting. Callers
