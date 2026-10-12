@@ -313,6 +313,7 @@ export type MessageTab = {
 
 export type SystemCheck = {
   platform: string
+  tray_monochrome?: boolean
   mail_engine: 'meron_mail'
   meron_mail: {
     configured: boolean

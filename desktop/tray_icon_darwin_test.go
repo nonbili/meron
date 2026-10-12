@@ -8,15 +8,14 @@ import (
 )
 
 func TestDarwinTrayBadgeIsSeparateFromTemplate(t *testing.T) {
-	setIcon, setTemplate, setBadge := traySetIcon, traySetTemplateIcon, traySetUnreadBadge
+	setIcon, setTemplate := traySetIcon, traySetTemplateIconWithBadge
 	t.Cleanup(func() {
-		traySetIcon, traySetTemplateIcon, traySetUnreadBadge = setIcon, setTemplate, setBadge
+		traySetIcon, traySetTemplateIconWithBadge = setIcon, setTemplate
 	})
 	var template, regular []byte
 	var badge bool
-	traySetIcon = func(icon []byte) { template, regular = nil, icon }
-	traySetTemplateIcon = func(icon, fallback []byte) { template, regular = icon, fallback }
-	traySetUnreadBadge = func(unread bool) { badge = unread }
+	traySetIcon = func(icon []byte) { template, regular, badge = nil, icon, false }
+	traySetTemplateIconWithBadge = func(icon []byte, unread bool) { template, regular, badge = icon, nil, unread }
 	for _, state := range []struct{ unread, monochrome bool }{
 		{true, true}, {false, true}, {true, true}, {true, false}, {false, false},
 	} {
@@ -27,7 +26,7 @@ func TestDarwinTrayBadgeIsSeparateFromTemplate(t *testing.T) {
 			t.Fatalf("%+v: incorrect badge visibility", state)
 		}
 		if state.monochrome {
-			if !bytes.Equal(template, trayIconMonoPNG) || !bytes.Equal(regular, trayIcon(false)) {
+			if !bytes.Equal(template, trayIconMonoPNG) || regular != nil {
 				t.Fatalf("%+v: template should contain only the base icon", state)
 			}
 		} else if template != nil || !bytes.Equal(regular, trayIcon(state.unread)) {

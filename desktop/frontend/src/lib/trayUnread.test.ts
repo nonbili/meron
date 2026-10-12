@@ -91,4 +91,20 @@ describe('tray unread updater', () => {
 
     expect(sent).toEqual([true, true])
   })
+
+  test('coalesces in-flight duplicates and forwards later refreshes for cache repair', async () => {
+    const first = deferred()
+    const sent: boolean[] = []
+    const update = createTrayUnreadUpdater(async (unread) => {
+      sent.push(unread)
+      await first.promise
+    })
+    update(true)
+    update(true)
+    first.resolve()
+    await tick()
+    update(true)
+    await tick()
+    expect(sent).toEqual([true, true])
+  })
 })

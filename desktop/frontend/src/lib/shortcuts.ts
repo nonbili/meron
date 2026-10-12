@@ -4,6 +4,8 @@
 // setShortcutOverrides. `mod` is ⌘ on macOS and Ctrl elsewhere — the
 // platform-native "command" modifier.
 
+import { isMacPlatform } from './platform'
+
 export const RAIL_SHORTCUT_IDS = [
   'view.rail1',
   'view.rail2',
@@ -222,7 +224,7 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   'app.quit': 'Quit Meron',
 }
 
-export const isMac = /mac|iphone|ipad|ipod/i.test(navigator.userAgent + ' ' + (navigator.platform ?? ''))
+export const isMac = isMacPlatform(navigator.userAgent, navigator.platform ?? '')
 
 /** Grouping for the help overlay, in display order. */
 export const SHORTCUT_GROUPS: { title: string; ids: ShortcutId[] }[] = [

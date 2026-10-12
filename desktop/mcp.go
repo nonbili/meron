@@ -118,22 +118,7 @@ func (s *mcpService) save(config mcpConfig) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(s.path), ".mcp-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Rename(f.Name(), s.path); err != nil {
+	if err := writeFileAtomic(s.path, data, 0o600, 0o700); err != nil {
 		return err
 	}
 	s.config = config

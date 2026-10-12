@@ -21,15 +21,15 @@ type App struct {
 	sidecar       *Sidecar
 	logger        *log.Logger
 	logFile       *os.File
-	trayMu        sync.Mutex
-	trayHasUnread bool
+	tray          trayRenderer
+	trayInit      sync.Once
+	trayStylePath string
+	trayStyleMu   sync.Mutex
 	trayStop      func()
 	trayStopOnce  sync.Once
-	// closeToTray and trayMonochrome are pushed by the frontend from its
-	// settings; until then the close button keeps its long-standing behaviour
-	// of hiding to the tray, and the tray icon uses its platform default.
+	// closeToTray is pushed by the frontend. Tray style is restored from
+	// native storage before publication.
 	closeToTray     atomic.Bool
-	trayMonochrome  atomic.Bool
 	quitting        atomic.Bool
 	closing         atomic.Bool
 	windowHidden    atomic.Bool
@@ -107,7 +107,8 @@ func NewApp() *App {
 	app.window = loadWindowState(app.windowStatePath)
 	app.windowSaved = app.window
 	app.closeToTray.Store(true)
-	app.trayMonochrome.Store(trayMonochromeDefault)
+	app.trayStylePath = filepath.Join(appConfigDir(), "tray.json")
+	app.tray.desired.monochrome = loadTrayStyle(app.trayStylePath)
 	return app
 }
 
@@ -231,6 +232,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.appPrefsSet(payload)
 	case "tray.setUnread":
 		return a.traySetUnread(payload)
+	case "tray.getStyle":
+		return a.trayGetStyle(), nil
 	case "tray.setStyle":
 		return a.traySetStyle(payload)
 	case "window.resized":
@@ -449,8 +452,9 @@ func (a *App) appPrefsSet(payload map[string]any) (any, error) {
 func (a *App) systemCheck() (any, error) {
 	dbPath := filepath.Join(appConfigDir(), "meron.db")
 	return map[string]any{
-		"platform":    runtime.GOOS,
-		"mail_engine": "meron_mail",
+		"platform":        runtime.GOOS,
+		"tray_monochrome": a.trayState().state().monochrome,
+		"mail_engine":     "meron_mail",
 		"meron_mail": map[string]any{
 			"configured":  coreBinaryPath() != "",
 			"available":   fileExists(coreBinaryPath()),

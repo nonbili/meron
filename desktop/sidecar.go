@@ -316,27 +316,7 @@ func extractEmbeddedSidecar() (string, error) {
 	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(embeddedSidecar)) {
 		return path, nil
 	}
-	tmp, err := os.CreateTemp(dir, name+".tmp-*")
-	if err != nil {
-		return "", err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(embeddedSidecar); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return "", err
-	}
-	if err := tmp.Chmod(0o755); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return "", err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return "", err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+	if err := writeFileAtomic(path, embeddedSidecar, 0o755, 0o755); err != nil {
 		return "", err
 	}
 	return path, nil

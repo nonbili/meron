@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 type trayIconCalls struct {
@@ -23,14 +25,15 @@ type trayIconCalls struct {
 func stubTrayIconCalls(t *testing.T) *trayIconCalls {
 	t.Helper()
 	calls := &trayIconCalls{}
-	setIcon, setName, setThemePath, dir := traySetIcon, traySetIconName, traySetIconThemePath, trayIconDir
-	traySetIcon = func(icon []byte) { calls.icon, calls.iconSet = icon, true }
-	traySetIconName = func(name string) { calls.name, calls.nameSet = name, true }
-	traySetIconThemePath = func(path string) { calls.themePath = path }
+	setIcon, dir := traySetIconWithName, trayIconDir
+	traySetIconWithName = func(icon []byte, name, path string) {
+		calls.icon, calls.iconSet = icon, true
+		calls.name, calls.nameSet, calls.themePath = name, true, path
+	}
 	iconDir := t.TempDir()
 	trayIconDir = func() string { return iconDir }
 	t.Cleanup(func() {
-		traySetIcon, traySetIconName, traySetIconThemePath, trayIconDir = setIcon, setName, setThemePath, dir
+		traySetIconWithName, trayIconDir = setIcon, dir
 	})
 	return calls
 }
@@ -41,7 +44,7 @@ func TestMonochromeTrayIconIsASymbolicIconTheShellCanRecolour(t *testing.T) {
 	if err := applyPlatformTrayIcon(false, true); err != nil {
 		t.Fatal(err)
 	}
-	if calls.themePath != trayIconDir() || calls.name != trayIconName {
+	if calls.themePath != filepath.Join(trayIconDir(), trayIconFilesVersion) || calls.name != trayIconName {
 		t.Fatalf("theme path %q, name %q", calls.themePath, calls.name)
 	}
 	files := map[string][]byte{
@@ -51,7 +54,7 @@ func TestMonochromeTrayIconIsASymbolicIconTheShellCanRecolour(t *testing.T) {
 		trayColourUnreadIconName + ".png": trayIconUnreadPNG,
 	}
 	for file, want := range files {
-		got, err := os.ReadFile(filepath.Join(trayIconDir(), file))
+		got, err := os.ReadFile(filepath.Join(calls.themePath, file))
 		if err != nil || !bytes.Equal(got, want) {
 			t.Fatalf("%s not written as embedded: %v", file, err)
 		}
@@ -65,22 +68,22 @@ func TestMonochromeTrayIconIsASymbolicIconTheShellCanRecolour(t *testing.T) {
 	}
 }
 
-// The colour icon is named too: a picture, once set, can't be taken off the
-// tray item again, and GNOME keeps showing it over the symbolic name.
-func TestColourTrayIconIsNamedAndSetsNoPicture(t *testing.T) {
+// Both forms update together, so hosts choosing the pixmap cannot keep a
+// stale unread state or style.
+func TestColourTrayIconIsNamedAndUpdatesItsPixmap(t *testing.T) {
 	calls := stubTrayIconCalls(t)
 
 	if err := applyPlatformTrayIcon(true, false); err != nil {
 		t.Fatal(err)
 	}
-	if calls.name != trayColourUnreadIconName || calls.themePath != trayIconDir() {
+	if calls.name != trayColourUnreadIconName || calls.themePath != filepath.Join(trayIconDir(), trayIconFilesVersion) {
 		t.Fatalf("theme path %q, name %q", calls.themePath, calls.name)
 	}
 	if err := applyPlatformTrayIcon(false, true); err != nil {
 		t.Fatal(err)
 	}
-	if calls.iconSet {
-		t.Fatal("a picture was set")
+	if !calls.iconSet || !bytes.Equal(calls.icon, trayFallbackMonoPNG) {
+		t.Fatal("the fallback pixmap did not switch to monochrome")
 	}
 }
 
@@ -95,35 +98,160 @@ func TestTrayIconFallsBackToAPictureWhenTheIconsCannotBeWritten(t *testing.T) {
 	if err := applyPlatformTrayIcon(false, true); err == nil {
 		t.Fatal("expected the write error")
 	}
-	if calls.name != "" || !bytes.Equal(calls.icon, trayIconPNG) {
-		t.Fatalf("no colour fallback: name %q", calls.name)
+	if calls.name != "" || !bytes.Equal(calls.icon, trayFallbackMonoPNG) {
+		t.Fatalf("no monochrome fallback: name %q", calls.name)
 	}
 }
 
 func TestTraySetStyleSwitchesTheIcon(t *testing.T) {
 	calls := stubTrayIconCalls(t)
 	app := &App{}
-	app.trayMonochrome.Store(trayMonochromeDefault)
-	if !app.trayMonochrome.Load() {
+	t.Cleanup(func() { app.stopTray(); app.waitForTrayIcon() })
+	app.tray.desired.monochrome = trayMonochromeDefault
+	if !app.trayState().state().monochrome {
 		t.Fatal("monochrome should be the default on Linux")
 	}
 
 	if _, err := app.traySetStyle(map[string]any{"monochrome": false}); err != nil {
 		t.Fatal(err)
 	}
-	if app.trayMonochrome.Load() || calls.name != trayColourIconName {
+	app.waitForTrayIcon()
+	if app.trayState().state().monochrome || calls.name != trayColourIconName {
 		t.Fatalf("switching to colour did not apply the colour icon: %q", calls.name)
 	}
 
 	if _, err := app.traySetStyle(map[string]any{"monochrome": true}); err != nil {
 		t.Fatal(err)
 	}
+	app.waitForTrayIcon()
 	if calls.name != trayIconName {
 		t.Fatalf("switching back did not apply the symbolic icon: %q", calls.name)
 	}
 
 	if _, err := app.traySetStyle(map[string]any{}); err == nil {
 		t.Fatal("expected an error without a monochrome flag")
+	}
+}
+
+func TestTrayIconRecoversFromWriteFailureWithCurrentState(t *testing.T) {
+	calls := stubTrayIconCalls(t)
+	root := filepath.Join(t.TempDir(), "blocked")
+	if err := os.WriteFile(root, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	trayIconDir = func() string { return root }
+	if err := applyPlatformTrayIcon(false, false); err == nil {
+		t.Fatal("expected an installation error")
+	}
+	if calls.name != "" || !bytes.Equal(calls.icon, trayIconPNG) {
+		t.Fatal("failed installation did not publish the current fallback")
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyPlatformTrayIcon(true, true); err != nil {
+		t.Fatal(err)
+	}
+	if calls.name != trayUnreadIconName || !bytes.Equal(calls.icon, trayFallbackMonoUnreadPNG) {
+		t.Fatal("recovery kept the earlier pixmap instead of the current unread/style state")
+	}
+}
+
+func TestTrayIconRepairsClearedCacheWhileMailboxIsIdle(t *testing.T) {
+	calls := stubTrayIconCalls(t)
+	app := &App{tray: trayRenderer{desired: trayIconState{monochrome: true}}}
+	clock := configureTrayClock(&app.tray)
+	t.Cleanup(func() { app.stopTray(); app.waitForTrayIcon() })
+	app.setTrayUnread(true)
+	app.waitForTrayIcon()
+	if err := os.RemoveAll(calls.themePath); err != nil {
+		t.Fatal(err)
+	}
+	if !platformTrayIconNeedsRepair() {
+		t.Fatal("deleted cache was considered valid")
+	}
+	clock.advance(trayHealthInterval)
+	app.waitForTrayIcon()
+	if !trayIconFilesExist(calls.themePath) {
+		t.Fatal("health timer did not repair the deleted icon files")
+	}
+}
+
+func TestTrayCacheKeepsOnlyCurrentAndPreviousVersions(t *testing.T) {
+	root := t.TempDir()
+	current := filepath.Join(root, strings.Repeat("a", 24))
+	for _, file := range trayIconAssets {
+		if err := os.WriteFile(filepath.Join(root, file.name), []byte("old flat icon"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, name := range []string{strings.Repeat("a", 24), strings.Repeat("b", 24), strings.Repeat("c", 24), strings.Repeat("d", 24), "unrelated"} {
+		path := filepath.Join(root, name)
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Unix(int64(i), 0)
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pruneTrayIconDirectories(root, current)
+	for _, file := range trayIconAssets {
+		if _, err := os.Stat(filepath.Join(root, file.name)); !os.IsNotExist(err) {
+			t.Fatal("legacy flat icon survived pruning")
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("kept %d directories, want current, previous and unrelated", len(entries))
+	}
+	for _, name := range []string{strings.Repeat("a", 24), strings.Repeat("d", 24), "unrelated"} {
+		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestColourTrayPixmapsAreSizedForPanels(t *testing.T) {
+	for _, data := range [][]byte{trayIconPNG, trayIconUnreadPNG} {
+		config, err := png.DecodeConfig(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.Width > 128 || config.Height > 128 {
+			t.Fatalf("oversized pixmap: %dx%d", config.Width, config.Height)
+		}
+	}
+}
+
+func TestTrayIconAtomicWriteKeepsExistingFileOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "icon.svg")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Renaming over a directory fails; the previous entry must remain intact,
+	// and the temporary file must be removed.
+	blocked := filepath.Join(dir, "blocked")
+	if err := os.Mkdir(blocked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileAtomic(blocked, []byte("new"), 0o644, 0o755); err == nil {
+		t.Fatal("expected a rename failure")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("temporary files remain: %v, %v", entries, err)
+	}
+	if err := writeFileAtomic(path, []byte("replacement"), 0o644, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "replacement" {
+		t.Fatalf("icon was not replaced: %q, %v", data, err)
 	}
 }
 
@@ -138,21 +266,24 @@ func TestSymbolicTrayIconsAreRecolourableSVGs(t *testing.T) {
 					Text string `xml:",chardata"`
 				} `xml:"style"`
 			} `xml:"defs"`
-			Rect struct {
+			Path struct {
 				Class string `xml:"class,attr"`
 				Fill  string `xml:"fill,attr"`
-			} `xml:"rect"`
+			} `xml:"path"`
 			Circles []struct {
 				Class string `xml:"class,attr"`
 				Fill  string `xml:"fill,attr"`
 			} `xml:"circle"`
+		}
+		if bytes.Contains(svg, []byte("<mask")) || bytes.Contains(svg, []byte("<image")) {
+			t.Fatalf("%s must use vector paths without masks or raster images", name)
 		}
 		if err := xml.Unmarshal(svg, &document); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if document.Defs.Style.ID != "current-color-scheme" ||
 			!bytes.Contains([]byte(document.Defs.Style.Text), []byte(".ColorScheme-Text")) ||
-			document.Rect.Class != "ColorScheme-Text" || document.Rect.Fill != "currentColor" {
+			document.Path.Class != "ColorScheme-Text" || document.Path.Fill != "currentColor" {
 			t.Errorf("%s does not use the panel colour", name)
 		}
 		if name == "tray-unread-symbolic.svg" {

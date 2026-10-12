@@ -4,6 +4,8 @@ import {
   deleteCustomTheme,
   EMPTY_PROXY,
   hydrateSettings,
+  hydrateTrayStyle,
+  SETTINGS_DB_KEYS,
   isProxyUsable,
   normalizeSenderAddr,
   sanitizeKanbanBoards,
@@ -349,23 +351,56 @@ describe('chat full messages setting', () => {
   })
 })
 
-describe('monochrome tray icon setting', () => {
+describe('native monochrome tray icon setting', () => {
   const initial = settings$.monochromeTrayIcon.get()
-  afterEach(() => {
-    settings$.monochromeTrayIcon.set(initial)
-  })
+  afterEach(() => hydrateTrayStyle(initial))
 
-  it('hydrates a persisted choice', () => {
-    hydrateSettings({ monochrome_tray_icon: false })
+  it('hydrates the native choice', () => {
+    hydrateTrayStyle(false)
     expect(settings$.monochromeTrayIcon.get()).toBe(false)
-
-    hydrateSettings({ monochrome_tray_icon: true })
+    hydrateTrayStyle(true)
     expect(settings$.monochromeTrayIcon.get()).toBe(true)
   })
 
-  it('ignores invalid persisted values', () => {
-    settings$.monochromeTrayIcon.set(false)
-    hydrateSettings({ monochrome_tray_icon: 'true' })
+  it('ignores stale core preferences', () => {
+    hydrateTrayStyle(false)
+    hydrateSettings({ monochrome_tray_icon: true })
     expect(settings$.monochromeTrayIcon.get()).toBe(false)
+    hydrateTrayStyle(true)
+    hydrateSettings({ monochrome_tray_icon: false })
+    expect(settings$.monochromeTrayIcon.get()).toBe(true)
+    expect(SETTINGS_DB_KEYS).not.toContain('monochrome_tray_icon')
+  })
+
+  it('does not write during hydration and sends user changes only to native storage', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const wails = (window as any).go
+    const calls: { command: string; payload: any }[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    try {
+      hydrateTrayStyle(true)
+      hydrateSettings({ monochrome_tray_icon: false })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(calls.filter((call) => call.command === 'tray.setStyle')).toEqual([])
+      settings$.monochromeTrayIcon.set(false)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      settings$.monochromeTrayIcon.set(true)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(calls.filter((call) => call.command === 'tray.setStyle').at(-1)?.payload).toEqual({ monochrome: true })
+      expect(calls.some((call) => call.command === 'app.prefsSet' && call.payload.key === 'monochrome_tray_icon')).toBe(
+        false,
+      )
+    } finally {
+      ;(window as any).go = wails
+    }
   })
 })

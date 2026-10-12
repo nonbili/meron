@@ -80,14 +80,7 @@ func saveWindowState(path string, state windowState) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFileAtomic(path, data, 0o600, 0o700)
 }
 
 // windowSaveDelay is how long a resize-driven save waits for the window to

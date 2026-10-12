@@ -751,7 +751,7 @@ function TrayIconRow() {
   const { t } = useTranslation()
   const monochromeTrayIcon = useValue(settings$.monochromeTrayIcon)
 
-  if (!offersMonochromeTrayIcon(navigator.userAgent)) return null
+  if (!offersMonochromeTrayIcon(navigator.userAgent, navigator.platform ?? '')) return null
 
   return (
     <ToggleRow

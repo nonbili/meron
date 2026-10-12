@@ -2,6 +2,9 @@ module meron
 
 go 1.25.0
 
+// Local tray APIs for atomic Linux icon updates and native macOS badges.
+replace fyne.io/systray => ./third_party/systray
+
 require (
 	fyne.io/systray v1.12.3-0.20260913152509-528cad23fade
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3

@@ -1,6 +1,6 @@
 import type { Account, SystemCheck } from './types'
 import { invoke, invokeRetryingTimeout } from './lib/bridge'
-import { hydrateSettings, SETTINGS_DB_KEYS, WRITE_SESSION } from './states/settings'
+import { hydrateSettings, hydrateTrayStyle, SETTINGS_DB_KEYS, WRITE_SESSION } from './states/settings'
 import { restoreUiSession, UI_SESSION_KEYS, ui$ } from './states/ui'
 import { ensureDefaultKanbanBoard, restoreKanbanSession, KANBAN_SESSION_KEYS } from './states/kanban'
 import { restoreTasksSession, TASKS_SESSION_KEYS } from './states/tasks'
@@ -14,7 +14,7 @@ import { openMailtoCompose, pruneComposerMedia } from './states/compose'
 // which a first start after an upgrade may hold for a while (migrations), and a
 // window booted without them stays empty until restarted.
 export async function boot() {
-  const [systemResult, accountResult, prefsResult] = await Promise.all([
+  const [systemResult, accountResult, prefsResult, trayStyle] = await Promise.all([
     invoke<SystemCheck>('system.check'),
     invokeRetryingTimeout<{ accounts: Account[] }>('account.list'),
     invokeRetryingTimeout<{ prefs: Record<string, unknown> }>('app.prefsGet', {
@@ -23,9 +23,11 @@ export async function boot() {
       // whatever session ran before it (see `activate_pref_session` in core).
       session: WRITE_SESSION,
     }).catch(() => ({ prefs: {} })),
+    invoke<{ monochrome: boolean }>('tray.getStyle').catch(() => null),
   ])
-  const prefs = prefsResult.prefs || {}
+  const prefs: Record<string, unknown> = prefsResult.prefs || {}
   hydrateSettings(prefs)
+  hydrateTrayStyle(trayStyle?.monochrome ?? systemResult.tray_monochrome ?? systemResult.platform !== 'windows')
   ui$.system.set(systemResult)
   accounts$.set(accountResult.accounts)
   restoreUiSession(prefs, accountResult.accounts)

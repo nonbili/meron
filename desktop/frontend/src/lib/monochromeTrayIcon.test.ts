@@ -9,4 +9,7 @@ it('offers the monochrome tray icon where the bar draws one-colour icons', () =>
   expect(offersMonochromeTrayIcon(LINUX)).toBe(true)
   expect(offersMonochromeTrayIcon(MAC)).toBe(true)
   expect(offersMonochromeTrayIcon(WINDOWS)).toBe(false)
+  expect(offersMonochromeTrayIcon('reduced user agent', 'MacIntel')).toBe(true)
+  expect(offersMonochromeTrayIcon('reduced user agent', 'Linux x86_64')).toBe(true)
+  expect(offersMonochromeTrayIcon('reduced user agent', 'Win32')).toBe(false)
 })
