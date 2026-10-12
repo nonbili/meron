@@ -1,6 +1,14 @@
-import { afterEach, expect, it } from 'bun:test'
+import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { cleanup, render } from '@testing-library/react'
+import { compose$ } from '../../states/composeState'
 import { QuickReplyComposer } from './QuickReplyComposer'
+
+// The test relies on an empty reply (its send button is the disabled one), and
+// other test files can leave text or attachments behind.
+beforeEach(() => {
+  compose$.composer.set('')
+  compose$.composerAttachments.set([])
+})
 
 afterEach(cleanup)
 
