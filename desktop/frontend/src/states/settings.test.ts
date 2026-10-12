@@ -348,3 +348,24 @@ describe('chat full messages setting', () => {
     expect(settings$.chatFullMessages.get()).toBe(true)
   })
 })
+
+describe('monochrome tray icon setting', () => {
+  const initial = settings$.monochromeTrayIcon.get()
+  afterEach(() => {
+    settings$.monochromeTrayIcon.set(initial)
+  })
+
+  it('hydrates a persisted choice', () => {
+    hydrateSettings({ monochrome_tray_icon: false })
+    expect(settings$.monochromeTrayIcon.get()).toBe(false)
+
+    hydrateSettings({ monochrome_tray_icon: true })
+    expect(settings$.monochromeTrayIcon.get()).toBe(true)
+  })
+
+  it('ignores invalid persisted values', () => {
+    settings$.monochromeTrayIcon.set(false)
+    hydrateSettings({ monochrome_tray_icon: 'true' })
+    expect(settings$.monochromeTrayIcon.get()).toBe(false)
+  })
+})

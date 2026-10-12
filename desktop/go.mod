@@ -3,7 +3,7 @@ module meron
 go 1.25.0
 
 require (
-	fyne.io/systray v1.12.1
+	fyne.io/systray v1.12.3-0.20260913152509-528cad23fade
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/gen2brain/beeep v0.11.2
 	github.com/godbus/dbus/v5 v5.1.0

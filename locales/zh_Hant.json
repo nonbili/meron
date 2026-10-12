@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "郵件文字大小",
   "settings.appearance.messageTextSizeHint": "在應用程式文字大小的基礎上調整郵件內文大小。",
   "settings.appearance.messageTextSizeSystemHint": "調整郵件內文大小。其他文字依系統文字大小。",
+  "settings.appearance.monochromeTrayIcon": "單色系統匣圖示",
+  "settings.appearance.monochromeTrayIconHint": "與列上的其他圖示一致，顯示為黑色或白色。",
   "settings.appearance.readerBottomActions": "郵件動作置於底部",
   "settings.appearance.readerBottomActionsHint": "在郵件閱讀器底部的操作列中顯示回覆、轉寄與刪除。",
   "settings.appearance.showSenderImages": "顯示寄件者圖片",

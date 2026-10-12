@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "メッセージの文字サイズ",
   "settings.appearance.messageTextSizeHint": "アプリの文字サイズに加えて、メッセージ本文の大きさを調整します。",
   "settings.appearance.messageTextSizeSystemHint": "メッセージ本文の大きさを調整します。その他の文字はシステムの文字サイズに従います。",
+  "settings.appearance.monochromeTrayIcon": "モノクロのトレイアイコン",
+  "settings.appearance.monochromeTrayIconHint": "バーの他のアイコンに合わせて黒または白で表示されます。",
   "settings.appearance.readerBottomActions": "メッセージ操作を下部に表示",
   "settings.appearance.readerBottomActionsHint": "返信・転送・削除をメッセージリーダー下部のバーに表示します。",
   "settings.appearance.showSenderImages": "送信者の画像を表示",

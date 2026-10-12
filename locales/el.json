@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Μέγεθος κειμένου μηνυμάτων",
   "settings.appearance.messageTextSizeHint": "Κλιμακώνει το σώμα των μηνυμάτων πάνω από το μέγεθος κειμένου της εφαρμογής.",
   "settings.appearance.messageTextSizeSystemHint": "Κλιμακώνει το σώμα των μηνυμάτων. Το υπόλοιπο κείμενο ακολουθεί το μέγεθος κειμένου του συστήματος.",
+  "settings.appearance.monochromeTrayIcon": "Μονόχρωμο εικονίδιο στην περιοχή ειδοποιήσεων",
+  "settings.appearance.monochromeTrayIconHint": "Ταιριάζει με τα άλλα εικονίδια της γραμμής, σε μαύρο ή λευκό.",
   "settings.appearance.readerBottomActions": "Ενέργειες μηνύματος στο κάτω μέρος",
   "settings.appearance.readerBottomActionsHint": "Εμφάνιση απάντησης, προώθησης και διαγραφής σε μια γραμμή στο κάτω μέρος της προβολής μηνύματος.",
   "settings.appearance.showSenderImages": "Εμφάνιση εικόνων αποστολέα",

@@ -36,6 +36,7 @@ import {
 } from '../lib/shortcuts'
 import type { Account, ChatWallpaper } from '../types'
 import { normalizeI18nLanguage, resolveI18nLanguageFromWebLocale, type SupportedI18nLanguage } from '../lib/i18n'
+import { offersMonochromeTrayIcon } from '../lib/monochromeTrayIcon'
 
 // Persisted user settings. This module maps 1:1 to the `settings` DB table: each
 // field is one row, keyed by `DB_KEY`. Persistence is centralized here (a single
@@ -169,6 +170,7 @@ export type Settings = {
    * quitting (Linux and Windows; macOS keeps its own close/quit split).
    */
   closeToTray: boolean
+  monochromeTrayIcon: boolean
   /** Whether to poll for new releases in the background (see states/update.ts). */
   autoUpdateCheck: boolean
   /** Version whose update banner the user dismissed, so it doesn't nag. */
@@ -220,6 +222,7 @@ const DB_KEY = {
   showUnifiedInboxInSideNav: 'show_unified_inbox_in_sidenav',
   tasksEnabled: 'tasks_enabled',
   closeToTray: 'close_to_tray',
+  monochromeTrayIcon: 'monochrome_tray_icon',
   autoUpdateCheck: 'auto_update_check',
   dismissedUpdateVersion: 'dismissed_update_version',
   language: 'language',
@@ -431,6 +434,7 @@ export const settings$ = observable<Settings>({
   showUnifiedInboxInSideNav: true,
   tasksEnabled: true,
   closeToTray: true,
+  monochromeTrayIcon: offersMonochromeTrayIcon(navigator.userAgent),
   autoUpdateCheck: true,
   dismissedUpdateVersion: null,
   language: null,
@@ -442,6 +446,12 @@ export const settings$ = observable<Settings>({
 // default matches ours, so only a change (hydration included) needs sending.
 settings$.closeToTray.onChange(({ value }) => {
   void invoke('window.setCloseToTray', { enabled: value }).catch(() => {})
+})
+
+// Same for the tray icon: the backend's default is ours (monochrome on macOS
+// and Linux), so only a change needs sending.
+settings$.monochromeTrayIcon.onChange(({ value }) => {
+  void invoke('tray.setStyle', { monochrome: value }).catch(() => {})
 })
 
 // lib/shortcuts resolves chords from a local mirror, so keep it in step with the
@@ -957,6 +967,9 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.closeToTray] === 'boolean') {
       settings$.closeToTray.set(prefs[DB_KEY.closeToTray] as boolean)
+    }
+    if (typeof prefs[DB_KEY.monochromeTrayIcon] === 'boolean') {
+      settings$.monochromeTrayIcon.set(prefs[DB_KEY.monochromeTrayIcon] as boolean)
     }
 
     if (typeof prefs[DB_KEY.autoUpdateCheck] === 'boolean') {

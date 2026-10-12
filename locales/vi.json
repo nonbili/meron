@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Cỡ chữ tin nhắn",
   "settings.appearance.messageTextSizeHint": "Điều chỉnh nội dung tin nhắn ngoài cỡ chữ của ứng dụng.",
   "settings.appearance.messageTextSizeSystemHint": "Điều chỉnh nội dung tin nhắn. Phần chữ còn lại theo cỡ chữ hệ thống.",
+  "settings.appearance.monochromeTrayIcon": "Biểu tượng khay hệ thống đơn sắc",
+  "settings.appearance.monochromeTrayIconHint": "Khớp với các biểu tượng khác trên thanh, màu đen hoặc trắng.",
   "settings.appearance.readerBottomActions": "Thao tác thư ở dưới cùng",
   "settings.appearance.readerBottomActionsHint": "Hiển thị trả lời, chuyển tiếp và xóa trên một thanh ở cuối trình đọc thư.",
   "settings.appearance.showSenderImages": "Hiển thị ảnh người gửi",

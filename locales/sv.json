@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Textstorlek för meddelanden",
   "settings.appearance.messageTextSizeHint": "Skalar meddelandetexten utöver appens textstorlek.",
   "settings.appearance.messageTextSizeSystemHint": "Skalar meddelandetexten. Övrig text följer systemets textstorlek.",
+  "settings.appearance.monochromeTrayIcon": "Enfärgad ikon i systemfältet",
+  "settings.appearance.monochromeTrayIconHint": "Matchar de andra ikonerna i fältet, i svart eller vitt.",
   "settings.appearance.readerBottomActions": "Meddelandeåtgärder längst ned",
   "settings.appearance.readerBottomActionsHint": "Visa svara, vidarebefordra och radera i ett fält längst ned i meddelandeläsaren.",
   "settings.appearance.showSenderImages": "Visa avsändarbilder",

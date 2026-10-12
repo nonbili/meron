@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Tamanho do texto das mensagens",
   "settings.appearance.messageTextSizeHint": "Ajusta o corpo das mensagens além do tamanho de texto da aplicação.",
   "settings.appearance.messageTextSizeSystemHint": "Ajusta o corpo das mensagens. O restante do texto segue o tamanho de texto do sistema.",
+  "settings.appearance.monochromeTrayIcon": "Ícone monocromático na área de notificação",
+  "settings.appearance.monochromeTrayIconHint": "Combina com os outros ícones da barra, a preto ou branco.",
   "settings.appearance.readerBottomActions": "Ações da mensagem em baixo",
   "settings.appearance.readerBottomActionsHint": "Mostra responder, reencaminhar e eliminar numa barra na parte inferior do leitor de mensagens.",
   "settings.appearance.showSenderImages": "Mostrar imagens do remetente",

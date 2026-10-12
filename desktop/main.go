@@ -25,6 +25,12 @@ var trayIconPNG []byte
 //go:embed build/trayicon-unread.png
 var trayIconUnreadPNG []byte
 
+//go:embed build/trayicon-mono.png
+var trayIconMonoPNG []byte
+
+//go:embed build/trayicon-mono-unread.png
+var trayIconMonoUnreadPNG []byte
+
 //go:embed build/trayicon.ico
 var trayIconICO []byte
 

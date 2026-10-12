@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Sõnumite teksti suurus",
   "settings.appearance.messageTextSizeHint": "Muudab sõnumite sisu suurust rakenduse teksti suuruse peal.",
   "settings.appearance.messageTextSizeSystemHint": "Muudab sõnumite sisu suurust. Muu tekst järgib süsteemi teksti suurust.",
+  "settings.appearance.monochromeTrayIcon": "Ühevärviline salve ikoon",
+  "settings.appearance.monochromeTrayIconHint": "Sobib riba teiste ikoonidega, mustas või valges.",
   "settings.appearance.readerBottomActions": "Kirja toimingud all",
   "settings.appearance.readerBottomActionsHint": "Näita vastamist, edasisaatmist ja kustutamist kirja lugeja allservas oleval ribal.",
   "settings.appearance.showSenderImages": "Näita saatja pilte",

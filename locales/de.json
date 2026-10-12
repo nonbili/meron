@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Textgröße für Nachrichten",
   "settings.appearance.messageTextSizeHint": "Skaliert Nachrichtentexte zusätzlich zur App-Textgröße.",
   "settings.appearance.messageTextSizeSystemHint": "Skaliert Nachrichtentexte. Anderer Text folgt der Textgröße deines Systems.",
+  "settings.appearance.monochromeTrayIcon": "Einfarbiges Symbol im Infobereich",
+  "settings.appearance.monochromeTrayIconHint": "Passt zu den anderen Symbolen in der Leiste, in Schwarz oder Weiß.",
   "settings.appearance.readerBottomActions": "Nachrichtenaktionen unten",
   "settings.appearance.readerBottomActionsHint": "Antworten, Weiterleiten und Löschen in einer Leiste unten im Nachrichtenleser anzeigen.",
   "settings.appearance.showSenderImages": "Absenderbilder anzeigen",

@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "邮件文字大小",
   "settings.appearance.messageTextSizeHint": "在应用文字大小的基础上调整邮件正文大小。",
   "settings.appearance.messageTextSizeSystemHint": "调整邮件正文大小。其他文字跟随系统文字大小。",
+  "settings.appearance.monochromeTrayIcon": "单色托盘图标",
+  "settings.appearance.monochromeTrayIconHint": "与栏中的其他图标保持一致，显示为黑色或白色。",
   "settings.appearance.readerBottomActions": "邮件操作置于底部",
   "settings.appearance.readerBottomActionsHint": "在邮件阅读器底部的操作栏中显示回复、转发和删除。",
   "settings.appearance.showSenderImages": "显示发件人头像",

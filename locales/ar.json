@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "حجم نص الرسائل",
   "settings.appearance.messageTextSizeHint": "يحدد حجم نص الرسائل فوق حجم نص التطبيق.",
   "settings.appearance.messageTextSizeSystemHint": "يحدد حجم نص الرسائل. يتبع باقي النص حجم النص في نظامك.",
+  "settings.appearance.monochromeTrayIcon": "أيقونة علبة النظام أحادية اللون",
+  "settings.appearance.monochromeTrayIconHint": "تطابق الأيقونات الأخرى في الشريط، بالأبيض أو الأسود.",
   "settings.appearance.readerBottomActions": "إجراءات الرسالة في الأسفل",
   "settings.appearance.readerBottomActionsHint": "إظهار الرد وإعادة التوجيه والحذف في شريط أسفل قارئ الرسائل.",
   "settings.appearance.showSenderImages": "إظهار صور المرسلين",

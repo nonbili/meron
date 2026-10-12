@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "메시지 글자 크기",
   "settings.appearance.messageTextSizeHint": "앱 글자 크기에 더해 메시지 본문 크기를 조절합니다.",
   "settings.appearance.messageTextSizeSystemHint": "메시지 본문 크기를 조절합니다. 나머지 텍스트는 시스템 글자 크기를 따릅니다.",
+  "settings.appearance.monochromeTrayIcon": "단색 트레이 아이콘",
+  "settings.appearance.monochromeTrayIconHint": "막대의 다른 아이콘에 맞춰 검은색 또는 흰색으로 표시됩니다.",
   "settings.appearance.readerBottomActions": "하단에 메시지 작업 표시",
   "settings.appearance.readerBottomActionsHint": "메시지 리더 하단의 막대에 답장, 전달, 삭제를 표시합니다.",
   "settings.appearance.showSenderImages": "보내는 사람 이미지 표시",

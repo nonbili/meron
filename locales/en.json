@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Message text size",
   "settings.appearance.messageTextSizeHint": "Sizes message bodies on top of the app text size.",
   "settings.appearance.messageTextSizeSystemHint": "Sizes message bodies. Other text follows your system text size.",
+  "settings.appearance.monochromeTrayIcon": "Monochrome tray icon",
+  "settings.appearance.monochromeTrayIconHint": "Matches the other icons in the bar, in black or white.",
   "settings.appearance.readerBottomActions": "Message actions at the bottom",
   "settings.appearance.readerBottomActionsHint": "Show reply, forward and delete in a bar at the bottom of the message reader.",
   "settings.appearance.showSenderImages": "Show sender images",

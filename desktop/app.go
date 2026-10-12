@@ -25,9 +25,11 @@ type App struct {
 	trayHasUnread bool
 	trayStop      func()
 	trayStopOnce  sync.Once
-	// closeToTray is pushed by the frontend from its settings; until then the
-	// close button keeps its long-standing behaviour of hiding to the tray.
+	// closeToTray and trayMonochrome are pushed by the frontend from its
+	// settings; until then the close button keeps its long-standing behaviour
+	// of hiding to the tray, and the tray icon uses its platform default.
 	closeToTray     atomic.Bool
+	trayMonochrome  atomic.Bool
 	quitting        atomic.Bool
 	closing         atomic.Bool
 	windowHidden    atomic.Bool
@@ -105,6 +107,7 @@ func NewApp() *App {
 	app.window = loadWindowState(app.windowStatePath)
 	app.windowSaved = app.window
 	app.closeToTray.Store(true)
+	app.trayMonochrome.Store(trayMonochromeDefault)
 	return app
 }
 
@@ -228,6 +231,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.appPrefsSet(payload)
 	case "tray.setUnread":
 		return a.traySetUnread(payload)
+	case "tray.setStyle":
+		return a.traySetStyle(payload)
 	case "window.resized":
 		return a.windowResized()
 	case "window.ready":

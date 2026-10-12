@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Ziņojumu teksta izmērs",
   "settings.appearance.messageTextSizeHint": "Maina ziņojumu teksta izmēru papildus lietotnes teksta izmēram.",
   "settings.appearance.messageTextSizeSystemHint": "Maina ziņojumu teksta izmēru. Pārējais teksts seko sistēmas teksta izmēram.",
+  "settings.appearance.monochromeTrayIcon": "Vienkrāsaina paziņojumu joslas ikona",
+  "settings.appearance.monochromeTrayIconHint": "Atbilst pārējām joslas ikonām, melnā vai baltā krāsā.",
   "settings.appearance.readerBottomActions": "Ziņojuma darbības apakšā",
   "settings.appearance.readerBottomActionsHint": "Rāda atbildēšanu, pārsūtīšanu un dzēšanu joslā ziņojuma lasītāja apakšā.",
   "settings.appearance.showSenderImages": "Rādīt sūtītāja attēlus",

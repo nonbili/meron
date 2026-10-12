@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Mesaj metin boyutu",
   "settings.appearance.messageTextSizeHint": "Mesaj gövdesini, uygulama metin boyutunun üzerine ölçekler.",
   "settings.appearance.messageTextSizeSystemHint": "Mesaj gövdesini ölçekler. Diğer metinler sistem metin boyutunu izler.",
+  "settings.appearance.monochromeTrayIcon": "Tek renkli sistem tepsisi simgesi",
+  "settings.appearance.monochromeTrayIconHint": "Çubuktaki diğer simgelerle uyumlu olarak siyah veya beyaz görünür.",
   "settings.appearance.readerBottomActions": "İleti eylemleri altta",
   "settings.appearance.readerBottomActionsHint": "Yanıtla, ilet ve sil seçeneklerini ileti okuyucusunun altındaki bir çubukta gösterir.",
   "settings.appearance.showSenderImages": "Gönderen Resimlerini Göster",

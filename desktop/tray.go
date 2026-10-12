@@ -2,11 +2,22 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 
 	"fyne.io/systray"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// Monochrome by default where the bar draws one-colour icons (macOS, Linux);
+// the frontend pushes the user's choice (tray.setStyle).
+var trayMonochromeDefault = runtime.GOOS != "windows"
+
+// Routed through package vars so tests can see which icon was set.
+var (
+	traySetIcon         = systray.SetIcon
+	traySetTemplateIcon = systray.SetTemplateIcon
 )
 
 var (
@@ -21,6 +32,14 @@ func (a *App) startTrayPhysical() {
 		return
 	}
 
+	if runtime.GOOS == "linux" {
+		// The tray item is published while trayReady already runs, from what
+		// was set before: a title or icon name set in between is lost. So set
+		// them up front; trayReady sets them again for the other platforms.
+		a.applyTrayIcon()
+		systray.SetTitle(appTitle())
+		systray.SetTooltip(appTitle())
+	}
 	start, stop := trayLoop(a.trayReady, func() {
 		a.logf("tray stopped")
 	})
@@ -44,7 +63,7 @@ func (a *App) stopTray() {
 }
 
 func (a *App) trayReady() {
-	systray.SetIcon(trayIcon(a.currentTrayUnread()))
+	a.applyTrayIcon()
 	if runtime.GOOS != "darwin" {
 		// On macOS the title renders as text beside the menu bar icon.
 		systray.SetTitle(appTitle())
@@ -143,13 +162,37 @@ func (a *App) setTrayUnread(unread bool) {
 	a.trayHasUnread = unread
 	a.trayMu.Unlock()
 
-	systray.SetIcon(trayIcon(unread))
+	a.applyTrayIcon()
+}
+
+func (a *App) traySetStyle(payload map[string]any) (any, error) {
+	monochrome, ok := payload["monochrome"].(bool)
+	if !ok {
+		return nil, fmt.Errorf("tray.setStyle: monochrome must be a boolean")
+	}
+	if a.trayMonochrome.Swap(monochrome) != monochrome {
+		a.applyTrayIcon()
+	}
+	return map[string]any{"ok": true}, nil
+}
+
+func (a *App) applyTrayIcon() {
+	if err := applyPlatformTrayIcon(a.currentTrayUnread(), a.trayMonochrome.Load()); err != nil {
+		a.logf("tray: icon files unavailable, showing the colour picture: %v", err)
+	}
 }
 
 func (a *App) currentTrayUnread() bool {
 	a.trayMu.Lock()
 	defer a.trayMu.Unlock()
 	return a.trayHasUnread
+}
+
+func trayMonoIcon(unread bool) []byte {
+	if unread {
+		return trayIconMonoUnreadPNG
+	}
+	return trayIconMonoPNG
 }
 
 func trayIcon(unread bool) []byte {

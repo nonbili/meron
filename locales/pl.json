@@ -726,6 +726,8 @@
   "settings.appearance.messageTextSize": "Rozmiar tekstu wiadomości",
   "settings.appearance.messageTextSizeHint": "Skaluje treść wiadomości ponad rozmiar tekstu aplikacji.",
   "settings.appearance.messageTextSizeSystemHint": "Skaluje treść wiadomości. Pozostały tekst korzysta z systemowego rozmiaru tekstu.",
+  "settings.appearance.monochromeTrayIcon": "Monochromatyczna ikona w zasobniku",
+  "settings.appearance.monochromeTrayIconHint": "Pasuje do pozostałych ikon na pasku, w kolorze czarnym lub białym.",
   "settings.appearance.readerBottomActions": "Akcje wiadomości na dole",
   "settings.appearance.readerBottomActionsHint": "Pokazuje odpowiedz, przekaż i usuń na pasku na dole czytnika wiadomości.",
   "settings.appearance.showSenderImages": "Pokaż zdjęcia nadawców",

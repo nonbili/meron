@@ -35,6 +35,7 @@ import {
   Shrink,
   PanelBottom,
   SquarePen,
+  Contrast,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -77,6 +78,7 @@ import { RemoteSendersDialog } from './RemoteSendersDialog'
 import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
+import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { setIntegratedTitlebar, windowChrome$ } from '../../lib/windowChrome'
 
@@ -426,6 +428,7 @@ function GeneralSection() {
           checked={showRealAvatars}
           onChange={() => settings$.showRealAvatars.set(!showRealAvatars)}
         />
+        <TrayIconRow />
       </SettingsGroup>
 
       <SettingsGroup title={t('settings.sections.typography')}>
@@ -740,6 +743,24 @@ function BackupRow() {
           document.body,
         )}
     </>
+  )
+}
+
+// macOS and Linux only: Windows keeps the colour icon.
+function TrayIconRow() {
+  const { t } = useTranslation()
+  const monochromeTrayIcon = useValue(settings$.monochromeTrayIcon)
+
+  if (!offersMonochromeTrayIcon(navigator.userAgent)) return null
+
+  return (
+    <ToggleRow
+      icon={<Contrast size={15} />}
+      title={t('settings.appearance.monochromeTrayIcon')}
+      hint={t('settings.appearance.monochromeTrayIconHint')}
+      checked={monochromeTrayIcon}
+      onChange={() => settings$.monochromeTrayIcon.set(!monochromeTrayIcon)}
+    />
   )
 }
 
