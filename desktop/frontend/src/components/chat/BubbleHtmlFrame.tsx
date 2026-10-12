@@ -51,7 +51,7 @@ export function BubbleHtmlFrame({
   html: string
   /** Which bubble the frame sits in: its colors are the ones the frame paints with. */
   outgoing?: boolean
-  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  /** A chat bubble, a draft's, or a traditional layout's row: what a darkened body blends onto. */
   surface?: FrameSurface
   /** Loosen the baked CSP so this message's remote content loads. */
   allowRemote?: boolean

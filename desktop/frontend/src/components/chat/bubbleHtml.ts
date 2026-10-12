@@ -4,10 +4,11 @@ import { allowRemoteContent, allowRemoteInCsp, blockRemoteContent, blockRemoteIn
 import {
   DARKENED_ATTR,
   FRAME_STYLE_MARKER,
-  DARKENED_CSS,
   DEFAULT_BUBBLE_THEME,
   LIGHT_ON_DARK_TEXT,
   colorTone,
+  darkenedCss,
+  darkenedFloor,
   darkensCanvas,
   disownStyleElements,
   frameCanvas,
@@ -430,11 +431,12 @@ export function prepareBubbleHtml(
         background: #fcd34d;
         color: #000000;
       }
-      ${DARKENED_CSS}
+      ${darkenedCss(v)}
       /* The root above is transparent, so a darkened body's background would
          propagate to the canvas, outside the body's filter, and stay light
-         while the text inverted to light on it. One alpha step of background
-         on the root keeps it on the body. */
+         while the text inverted to light on it. A background of the root's
+         own keeps it on the body: the surface the frame sits on, which is
+         what the body's inverted white comes out as too. */
       html[${DARKENED_ATTR}] {
         background: var(${v('darkened-backdrop')}, rgba(0, 0, 0, 0.004)) !important;
       }
@@ -503,13 +505,16 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
   } = preparedCanvas ?? frameCanvas(doc, theme.appearance, LIGHT_ON_DARK_TEXT, needsCanvas)
   const palette = canvas && colorTone(canvas) !== 'dark' ? DEFAULT_BUBBLE_THEME : theme
   const text = declaredText ?? palette.text
+  const darkened = darkensCanvas(theme.appearance, theme.darkenStyled, canvas)
+  // A darkened canvas blends into the bubble, so there is no card left to inset.
+  const inset = framePaints && !darkened
 
   const vars: Array<[string, string | null]> = [
     // The canvas itself is painted on the body by `frameCanvas`; a canvas of
     // the frame's own also reads as a card, inset from the bubble's edges,
     // while the message's own design keeps its own box.
-    [v('canvas-pad'), framePaints ? '10px' : null],
-    [v('canvas-radius'), framePaints ? '8px' : null],
+    [v('canvas-pad'), inset ? '10px' : null],
+    [v('canvas-radius'), inset ? '8px' : null],
     [v('text'), text],
     [v('link'), palette.link],
     [v('surface'), palette.surface],
@@ -521,6 +526,7 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
     [v('muted'), palette.muted],
     [v('highlight-text'), palette.highlightText],
     [v('darkened-backdrop'), theme.darkenedBackdrop],
+    [v('darkened-floor'), darkenedFloor(theme.darkenedBackdrop)],
   ]
   for (const [name, value] of vars) {
     if (value === null) style.removeProperty(name)
@@ -531,7 +537,7 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
   // an opaque white backdrop from the engine, and the dark palette above ends
   // up as light text on white. Important, so a sender's `:root` can't undo it.
   style.setProperty('color-scheme', theme.appearance, 'important')
-  if (!preparedCanvas) setDarkened(doc, darkensCanvas(theme.appearance, theme.darkenStyled, canvas))
+  if (!preparedCanvas) setDarkened(doc, darkened, darkenedFloor(theme.darkenedBackdrop))
 }
 
 /** Theme large documents in small batches before the first visible measurement. */
@@ -542,5 +548,10 @@ export async function applyBubbleThemeAsync(doc: Document, theme: BubbleTheme, c
   const canvas = await frameCanvasAsync(doc, theme.appearance, LIGHT_ON_DARK_TEXT, needsCanvas, cancelled)
   if (!canvas || cancelled()) return
   applyBubbleTheme(doc, theme, canvas)
-  await setDarkenedAsync(doc, darkensCanvas(theme.appearance, theme.darkenStyled, canvas.background), cancelled)
+  await setDarkenedAsync(
+    doc,
+    darkensCanvas(theme.appearance, theme.darkenStyled, canvas.background),
+    darkenedFloor(theme.darkenedBackdrop),
+    cancelled,
+  )
 }

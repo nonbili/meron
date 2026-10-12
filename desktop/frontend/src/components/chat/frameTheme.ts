@@ -1,4 +1,4 @@
-import { luminance, parseColor } from '../../lib/color'
+import { formatColor, luminance, mix, parseColor, type Rgba } from '../../lib/color'
 import type { Appearance, ThemeTokens } from '../../lib/themes'
 
 // A message body renders in its own document, so it inherits none of the app's
@@ -108,8 +108,20 @@ export const DEFAULT_BUBBLE_THEME: BubbleTheme = {
   darkenedBackdrop: '#000000',
 }
 
-/** What a message body frame sits on: a chat bubble, or a traditional layout's row. */
-export type FrameSurface = 'bubble' | 'row'
+/** What a message body frame sits on: a chat bubble, a draft's bubble, or a traditional layout's row. */
+export type FrameSurface = 'bubble' | 'draft' | 'row'
+
+/** How much of the outgoing colour a draft's bubble is painted with (`bg-bubble-out/55`). */
+const DRAFT_BUBBLE_OPACITY = 0.55
+
+/** The colour of the surface a frame sits on, for a darkened body to blend onto. */
+function surfaceColor(tokens: ThemeTokens, outgoing: boolean, surface: FrameSurface): string {
+  if (surface === 'row') return tokens.bgChats
+  // A draft's bubble is see-through; over the conversation's own background it
+  // comes out as this. A wallpaper behind it can't be matched from in here.
+  if (surface === 'draft') return mix(tokens.bgChat, tokens.bubbleOut, DRAFT_BUBBLE_OPACITY)
+  return outgoing ? tokens.bubbleOut : tokens.bubbleIn
+}
 
 /** Map the active theme's tokens onto a bubble frame's palette. */
 export function bubbleThemeFromTokens(
@@ -135,7 +147,7 @@ export function bubbleThemeFromTokens(
     raisedHover: tokens.bgActive,
     // The highlight keeps its yellow in both appearances, so its text can't.
     highlightText: '#0f172a',
-    darkenedBackdrop: surface === 'row' ? tokens.bgChats : outgoing ? tokens.bubbleOut : tokens.bubbleIn,
+    darkenedBackdrop: surfaceColor(tokens, outgoing, surface),
   }
 }
 
@@ -580,22 +592,58 @@ export const DARKENED_ATTR = 'data-meron-darkened'
 /** Set by `setDarkened` on an element that is a background picture and nothing else. */
 export const PICTURE_ATTR = 'data-meron-picture'
 
+/** `hue-rotate(180deg)` as the matrix the engine applies, row by row. */
+const HUE_TURN = [
+  [-0.574, 1.43, 0.144],
+  [0.426, 0.43, 0.144],
+  [0.426, 1.43, -0.856],
+]
+
+/**
+ * The color a darkened body has to be painted with to come out as `surface`:
+ * the darkening filter run backwards. The filter can't reach every color — a
+ * very saturated surface falls outside what it produces — and then this is the
+ * nearest it gets to, a shade duller than the surface itself.
+ */
+export function darkenedFloor(surface: string): string {
+  const color = parseColor(surface)
+  if (!color) return '#ffffff'
+  const channels = [color.r, color.g, color.b]
+  const [r, g, b] = HUE_TURN.map((row) => 255 - row.reduce((sum, weight, i) => sum + weight * channels[i], 0))
+  return formatColor({ r, g, b, a: 1 })
+}
+
 /**
  * The rules that draw a darkened body: inverted, with the hue turned back so
  * links and brand colors stay recognisable, and pictures inverted a second time
  * so they come out as sent — once only, so an image inside a re-inverted
  * background picture is left alone. The search highlight keeps its yellow too.
+ *
+ * Inverted white is black, not the surface the frame sits on, so a layer over
+ * the body caps how light it gets before the filter runs: at the color that
+ * inverts to that surface (see `darkenedFloor`). The layer is the first thing
+ * positioned in the body, above everything in the flow and below whatever
+ * comes after it with a filter of its own — the pictures, which a cap applied
+ * to the whole body would tint with the surface instead. Whatever else paints
+ * above it — a box the sender positioned, and all that is in one — has its
+ * background capped one element at a time (see `cappedBackground`).
  */
-export const DARKENED_CSS = `
-  html[${DARKENED_ATTR}] body {
-    mix-blend-mode: lighten;
-  }
+export const darkenedCss = (v: (name: string) => string) => `
   html[${DARKENED_ATTR}] body,
   html[${DARKENED_ATTR}] body :is(img, video, [${PICTURE_ATTR}], mark.meron-search-hit) {
     filter: invert(1) hue-rotate(180deg);
   }
   html[${DARKENED_ATTR}] body [${PICTURE_ATTR}] img {
     filter: none;
+  }
+  html[${DARKENED_ATTR}] body::before {
+    content: '' !important;
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    background: var(${v('darkened-floor')}, #ffffff) !important;
+    mix-blend-mode: darken !important;
+    pointer-events: none !important;
   }
 `
 
@@ -625,26 +673,87 @@ function isBackgroundPicture(el: HTMLElement): boolean {
   return /url\(/i.test(image) || (!win && !!el.getAttribute('background')?.trim())
 }
 
-/** Mark or unmark a frame's document as darkened (see `DARKENED_CSS`). */
-function* darkenedWalk(doc: Document, darkened: boolean): Generator<void, void> {
+/**
+ * Set by `setDarkened` on an element whose background color it capped, holding
+ * the inline declaration that was there before: its priority, a bar, its value.
+ */
+export const CAPPED_ATTR = 'data-meron-capped'
+
+/** Elements that are turned back to their own colors, which a cap would then show through. */
+const UNCAPPED_SELECTOR = `img, video, mark.meron-search-hit, [${PICTURE_ATTR}], [${PICTURE_ATTR}] *`
+
+/**
+ * An element's background color held to the floor, or null if it is under it
+ * already. The layer over the body (see `darkenedCss`) caps what is in the
+ * flow, but a positioned box paints above that layer, and so does everything
+ * inside one: its white would invert to black, not to the surface.
+ */
+function cappedBackground(el: HTMLElement, floor: Rgba): string | null {
+  if (el.matches(UNCAPPED_SELECTOR)) return null
+  const win = el.ownerDocument.defaultView
+  const declared = win
+    ? win.getComputedStyle(el).backgroundColor
+    : el.style.backgroundColor || el.getAttribute('bgcolor') || ''
+  const color = parseColor(declared)
+  if (!color || color.a === 0) return null
+  if (color.r <= floor.r && color.g <= floor.g && color.b <= floor.b) return null
+  return formatColor({
+    r: Math.min(color.r, floor.r),
+    g: Math.min(color.g, floor.g),
+    b: Math.min(color.b, floor.b),
+    a: color.a,
+  })
+}
+
+/** Put back the inline background an element had before it was capped. */
+function uncapBackground(el: HTMLElement) {
+  const saved = el.getAttribute(CAPPED_ATTR) ?? ''
+  const bar = saved.indexOf('|')
+  const value = saved.slice(bar + 1)
+  if (value) el.style.setProperty('background-color', value, saved.slice(0, bar))
+  else el.style.removeProperty('background-color')
+  el.removeAttribute(CAPPED_ATTR)
+}
+
+/** Mark or unmark a frame's document as darkened (see `darkenedCss`). */
+function* darkenedWalk(doc: Document, darkened: boolean, floor: string): Generator<void, void> {
   doc.documentElement.toggleAttribute(DARKENED_ATTR, darkened)
   for (const el of doc.querySelectorAll(`[${PICTURE_ATTR}]`)) {
     el.removeAttribute(PICTURE_ATTR)
     yield
   }
+  for (const el of doc.querySelectorAll<HTMLElement>(`[${CAPPED_ATTR}]`)) {
+    uncapBackground(el)
+    yield
+  }
   if (!darkened || !doc.body) return
+  const cap = parseColor(floor)
+  // Written once the walk has read every element: a write in between would
+  // have the engine resolve the document's styles again for the next read.
+  const capped: Array<[HTMLElement, string]> = []
   for (const el of doc.body.querySelectorAll<HTMLElement>('*')) {
     if (isBackgroundPicture(el)) el.setAttribute(PICTURE_ATTR, '')
+    const background = cap && cappedBackground(el, cap)
+    if (background) capped.push([el, background])
     yield
+  }
+  for (const [el, background] of capped) {
+    const { style } = el
+    el.setAttribute(
+      CAPPED_ATTR,
+      `${style.getPropertyPriority('background-color')}|${style.getPropertyValue('background-color')}`,
+    )
+    style.setProperty('background-color', background, 'important')
   }
 }
 
-export function setDarkened(doc: Document, darkened: boolean) {
-  for (const _ of darkenedWalk(doc, darkened)) {
+/** `floor` is the color a darkened body is capped at (see `darkenedFloor`). */
+export function setDarkened(doc: Document, darkened: boolean, floor: string) {
+  for (const _ of darkenedWalk(doc, darkened, floor)) {
     /* finish synchronously for reader callers */
   }
 }
 
-export async function setDarkenedAsync(doc: Document, darkened: boolean, cancelled: () => boolean) {
-  await runThemeWalk(darkenedWalk(doc, darkened), cancelled)
+export async function setDarkenedAsync(doc: Document, darkened: boolean, floor: string, cancelled: () => boolean) {
+  await runThemeWalk(darkenedWalk(doc, darkened, floor), cancelled)
 }

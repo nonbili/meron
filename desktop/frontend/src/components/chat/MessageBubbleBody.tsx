@@ -41,7 +41,7 @@ export function MessageBubbleBody({
   /** Whether this message sits in an outgoing bubble; its HTML frame is painted
    *  with that bubble's colors. */
   outgoing?: boolean
-  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  /** A chat bubble, a draft's, or a traditional layout's row: what a darkened body blends onto. */
   surface?: FrameSurface
   /** Whether this message's remote content may load (account setting, allowed
    *  sender, or a reveal the user just made). */

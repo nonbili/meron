@@ -9,15 +9,18 @@ import {
   applyBubbleThemeAsync,
 } from './bubbleHtml'
 import {
+  CAPPED_ATTR,
   DARKENED_ATTR,
   DEFAULT_BUBBLE_THEME,
   FRAME_STYLE_MARKER,
   PICTURE_ATTR,
   bubbleThemeFromTokens,
+  darkenedFloor,
   frameVar,
   frameVarPrefix,
   type BubbleTheme,
 } from './frameTheme'
+import { formatColor, mix, parseColor, toHex } from '../../lib/color'
 import { builtinTheme } from '../../lib/themes'
 
 const DARK_TOKENS = builtinTheme('dark')!.tokens
@@ -414,6 +417,44 @@ describe('dark message bodies in a bubble', () => {
     expect(picture('picture')).toBe(false)
   })
 
+  // A positioned box paints above the layer that caps the body, so its white
+  // would invert to black; its background is capped on the element instead.
+  it('caps a background the layer over the body cannot reach', () => {
+    const doc = new DOMParser().parseFromString(
+      prepareBubbleHtml(
+        '<p style="color:#333">hi</p>' +
+          '<div id="panel" style="position:relative;background-color:#ffffff !important">panel</div>' +
+          '<table><tr><td id="cell" style="background:#ffffff">cell</td></tr></table>' +
+          '<div id="dark" style="position:relative;background-color:#102030">dark</div>' +
+          '<div id="clear" style="position:relative">clear</div>' +
+          '<div id="picture" style="background-color:#ffffff;background-image:url(https://example.com/banner.png)"></div>',
+      ),
+      'text/html',
+    )
+    const background = (id: string) => doc.getElementById(id)!.style.getPropertyValue('background-color')
+    const priority = (id: string) => doc.getElementById(id)!.style.getPropertyPriority('background-color')
+    const floor = darkenedFloor(DARK_TOKENS.bubbleIn)
+
+    applyBubbleTheme(doc, DARKENING)
+    expect(toHex(background('panel'))).toBe(floor)
+    expect(toHex(background('cell'))).toBe(floor)
+    // Already under the floor, nothing to paint, and a picture turned back to its own colors.
+    expect(toHex(background('dark'))).toBe('#102030')
+    expect(background('clear')).toBe('')
+    expect(toHex(background('picture'))).toBe('#ffffff')
+
+    // A second pass caps from what the message declared, not from the last cap.
+    applyBubbleTheme(doc, bubbleThemeFromTokens('dark', DARK_TOKENS, true, true))
+    expect(toHex(background('panel'))).toBe(darkenedFloor(DARK_TOKENS.bubbleOut))
+
+    applyBubbleTheme(doc, DARK_IN)
+    expect(toHex(background('panel'))).toBe('#ffffff')
+    expect(priority('panel')).toBe('important')
+    expect(toHex(background('cell'))).toBe('#ffffff')
+    expect(priority('cell')).toBe('')
+    expect(doc.querySelector(`[${CAPPED_ATTR}]`)).toBeNull()
+  })
+
   // A frame on the default light scheme under a dark app gets an opaque white
   // backdrop from the engine, which put unstyled mail's light text on white.
   it("follows the theme's color scheme so the frame stays transparent", () => {
@@ -432,7 +473,7 @@ describe('dark message bodies in a bubble', () => {
 
   // Under a fully transparent root the body's background propagates to the
   // canvas, outside the body's invert filter, so a white body stayed white.
-  // The root now paints the surface the darkened body blends onto.
+  // The root now paints the surface the darkened body comes out as.
   it('paints a darkened root with the surface the frame sits on', () => {
     const css = frameStyle(prepareBubbleHtml(styled))
     const rule = css.match(new RegExp(`html\\[${DARKENED_ATTR}\\]\\s*\\{([^}]*)\\}`))
@@ -444,12 +485,69 @@ describe('dark message bodies in a bubble', () => {
     expect(backdrop).toBe(DARK_TOKENS.bubbleIn)
   })
 
-  // Inverted white turns black; blending it lighten onto that surface makes
-  // everything darker than the surface the surface itself, and leaves text alone.
-  it('blends the darkened body onto the root', () => {
-    expect(frameStyle(prepareBubbleHtml(styled))).toMatch(
-      new RegExp(`html\\[${DARKENED_ATTR}\\] body \\{\\s*mix-blend-mode: lighten;`),
-    )
+  // Inverted white turns black, so a layer over the body caps it first at the
+  // color that inverts to the surface. Pictures paint above the layer, uncapped.
+  it('caps the darkened body at the color that inverts to the surface', () => {
+    const css = frameStyle(prepareBubbleHtml(styled))
+    const rule = css.match(new RegExp(`html\\[${DARKENED_ATTR}\\] body::before\\s*\\{([^}]*)\\}`))
+    expect(rule?.[1]).toMatch(/background:\s*var\(--meron-[a-z0-9]+-darkened-floor, #ffffff\) !important/)
+    expect(rule?.[1]).toMatch(/mix-blend-mode:\s*darken !important/)
+    // Blending the body itself would cap the pictures in it as well.
+    expect(css).not.toMatch(new RegExp(`html\\[${DARKENED_ATTR}\\] body\\s*\\{[^}]*mix-blend-mode`))
+
+    const doc = new DOMParser().parseFromString(prepareBubbleHtml(styled), 'text/html')
+    applyBubbleTheme(doc, DARKENING)
+    const floor = doc.documentElement.style.getPropertyValue(frameVar(frameVarPrefix(doc), 'darkened-floor'))
+    expect(floor).toBe(darkenedFloor(DARK_TOKENS.bubbleIn))
+  })
+
+  // The frame's own white canvas is a card inset from the bubble's edges; once
+  // it has blended into the bubble, the inset would only indent the text.
+  it('drops the card inset from a darkened canvas', () => {
+    const inset = (theme: BubbleTheme) => {
+      const doc = new DOMParser().parseFromString(prepareBubbleHtml(styled), 'text/html')
+      applyBubbleTheme(doc, theme)
+      return doc.documentElement.style.getPropertyValue(frameVar(frameVarPrefix(doc), 'canvas-pad'))
+    }
+    expect(inset(DARK_IN)).toBe('10px')
+    expect(inset(DARKENING)).toBe('')
+  })
+})
+
+describe('the color a darkened body is capped at', () => {
+  // The darkening filter, run forwards: invert, then hue-rotate(180deg).
+  const darkenedTo = (color: string) => {
+    const { r, g, b } = parseColor(color)!
+    const [ir, ig, ib] = [255 - r, 255 - g, 255 - b]
+    return formatColor({
+      r: -0.574 * ir + 1.43 * ig + 0.144 * ib,
+      g: 0.426 * ir + 0.43 * ig + 0.144 * ib,
+      b: 0.426 * ir + 1.43 * ig - 0.856 * ib,
+      a: 1,
+    })
+  }
+  const near = (a: string, b: string, tolerance: number) => {
+    const [x, y] = [parseColor(a)!, parseColor(b)!]
+    return Math.max(Math.abs(x.r - y.r), Math.abs(x.g - y.g), Math.abs(x.b - y.b)) <= tolerance
+  }
+
+  it('darkens back to the surface', () => {
+    for (const surface of [DARK_TOKENS.bubbleIn, DARK_TOKENS.bubbleOut, DARK_TOKENS.bgChats]) {
+      expect(near(darkenedTo(darkenedFloor(surface)), surface, 2)).toBe(true)
+    }
+    expect(darkenedFloor('#000000')).toBe('#ffffff')
+  })
+
+  // A surface this saturated is outside what the filter can produce.
+  it('gets as near as the filter reaches for a saturated surface', () => {
+    const indigo = builtinTheme('indigo-dark')!.tokens.bubbleOut
+    const reached = darkenedTo(darkenedFloor(indigo))
+    expect(near(reached, indigo, 2)).toBe(false)
+    expect(near(reached, indigo, 32)).toBe(true)
+  })
+
+  it('caps nothing for a color it cannot read', () => {
+    expect(darkenedFloor('nonsense')).toBe('#ffffff')
   })
 })
 
@@ -462,6 +560,13 @@ describe('the surface a darkened body blends onto', () => {
   it('is the row colour in the traditional layout, whichever the direction', () => {
     expect(bubbleThemeFromTokens('dark', DARK_TOKENS, false, true, 'row').darkenedBackdrop).toBe(DARK_TOKENS.bgChats)
     expect(bubbleThemeFromTokens('dark', DARK_TOKENS, true, true, 'row').darkenedBackdrop).toBe(DARK_TOKENS.bgChats)
+  })
+
+  // A draft's bubble is the outgoing colour at part strength over the conversation.
+  it('is the see-through outgoing colour over the conversation for a draft', () => {
+    const backdrop = bubbleThemeFromTokens('dark', DARK_TOKENS, true, true, 'draft').darkenedBackdrop
+    expect(backdrop).toBe(mix(DARK_TOKENS.bgChat, DARK_TOKENS.bubbleOut, 0.55))
+    expect(backdrop).not.toBe(DARK_TOKENS.bubbleOut)
   })
 })
 

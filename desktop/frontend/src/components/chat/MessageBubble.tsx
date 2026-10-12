@@ -232,6 +232,7 @@ export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
           view={view}
           galleryOffset={galleryOffset}
           fullHeight={fullHeight}
+          surface={isDraft ? 'draft' : 'bubble'}
           onNaturalWidth={hugsText ? setNaturalWidth : undefined}
         />
       </div>

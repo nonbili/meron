@@ -28,7 +28,7 @@ export function MessageContent({
   galleryOffset: number
   /** Let the body grow instead of scrolling inside its own box. */
   fullHeight?: boolean
-  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  /** A chat bubble, a draft's, or a traditional layout's row: what a darkened body blends onto. */
   surface?: FrameSurface
   onNaturalWidth?: (width: number | null) => void
 }) {

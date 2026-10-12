@@ -2,9 +2,10 @@ import { type MessageFrameFont } from '../../lib/fonts'
 import { copyText } from '../../lib/native'
 import { usesNativeScrollbars } from '../../lib/nativeScrollbars'
 import {
-  DARKENED_CSS,
   DEFAULT_READER_THEME,
   LIGHT_ON_DARK_TEXT,
+  darkenedCss,
+  darkenedFloor,
   darkensCanvas,
   disownStyleElements,
   frameCanvas,
@@ -164,7 +165,7 @@ const readerCss = (v: (name: string) => string, nativeScrollbars: boolean) => `
     width: 15px;
     height: 15px;
   }
-  ${DARKENED_CSS}
+  ${darkenedCss(v)}
 `
 
 /**
@@ -188,6 +189,7 @@ export function applyReaderTheme(doc: Document, theme: ReaderTheme) {
   // seam around the body. In a dark one the gutter stays dark and the canvas is
   // confined to the reader column, so the message reads as a card on it.
   style.setProperty(v('page-bg'), canvas && theme.appearance === 'light' ? canvas : theme.pageBg)
+  style.setProperty(v('darkened-floor'), darkenedFloor(theme.pageBg))
 
   const vars: Array<[string, string]> = [
     [v('text'), theme.text],
@@ -212,8 +214,8 @@ export function applyReaderTheme(doc: Document, theme: ReaderTheme) {
   if (canvasText) style.setProperty(v('text'), canvasText)
 
   // The canvas is confined to the reader column in a dark appearance, so
-  // inverting the body turns that light card dark and leaves the gutter be.
-  setDarkened(doc, darkensCanvas(theme.appearance, theme.darkenStyled, canvas))
+  // inverting the body turns that light card into the gutter's own color.
+  setDarkened(doc, darkensCanvas(theme.appearance, theme.darkenStyled, canvas), darkenedFloor(theme.pageBg))
 }
 
 /**
