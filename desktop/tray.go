@@ -188,13 +188,6 @@ func (a *App) currentTrayUnread() bool {
 	return a.trayHasUnread
 }
 
-func trayMonoIcon(unread bool) []byte {
-	if unread {
-		return trayIconMonoUnreadPNG
-	}
-	return trayIconMonoPNG
-}
-
 func trayIcon(unread bool) []byte {
 	if runtime.GOOS == "windows" {
 		if unread {
