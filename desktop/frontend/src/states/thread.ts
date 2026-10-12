@@ -36,6 +36,10 @@ export const thread$ = observable({
   // actions such as starred items and shared media, consumed once by
   // useConversationScroll.
   pendingScrollMessageId: '',
+  // Id of the bubble a send just put in the open conversation. The reader
+  // wrote it, so the view follows it wherever they had scrolled to — consumed
+  // once by useConversationScroll.
+  pendingOwnSendId: '',
   // Message id briefly ring-highlighted after such a jump.
   flashMessageId: '',
   // Message ids whose remote images the user revealed for this session.

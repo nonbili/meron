@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { Folder } from '../types'
-import { buildFolderTree, selectableFolderIds, type TreeNode } from './folderTree'
+import { buildFolderTree, folderLeafName, selectableFolderIds, type TreeNode } from './folderTree'
 
 const folder = (id: string): Folder => ({
   id,
@@ -29,5 +29,37 @@ describe('folder tree selection', () => {
     }
 
     expect(selectableFolderIds(structural)).toEqual(['t2/one', 't2/two'])
+  })
+})
+
+describe('folderLeafName', () => {
+  const named = (name: string, delimiter?: string): Folder => ({
+    id: name,
+    account_id: 'account',
+    name,
+    role: '',
+    unread: 0,
+    delimiter,
+  })
+
+  it('names a nested folder by its last segment', () => {
+    expect(folderLeafName(named('[Gmail]/Now', '/'))).toBe('Now')
+    expect(folderLeafName(named('INBOX.Sent', '.'))).toBe('Sent')
+  })
+
+  it('keeps the full name when the server reported no delimiter', () => {
+    // A NIL delimiter means a flat mailbox: punctuation is part of the name.
+    expect(folderLeafName(named('Flat/Independent'))).toBe('Flat/Independent')
+    expect(folderLeafName(named('example.com'))).toBe('example.com')
+    expect(folderLeafName(named('v1.2', ''))).toBe('v1.2')
+  })
+
+  it('leaves a top-level folder alone', () => {
+    expect(folderLeafName(named('Receipts', '/'))).toBe('Receipts')
+  })
+
+  it('skips empty segments and falls back to the full name', () => {
+    expect(folderLeafName(named('Work/', '/'))).toBe('Work')
+    expect(folderLeafName(named('/', '/'))).toBe('/')
   })
 })

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'r
 import { useValue } from '@legendapp/state/react'
 import {
   Archive,
-  CheckSquare,
+  SquareDashedMousePointer,
   ChevronRight,
   Copy,
   Download,
@@ -417,7 +417,7 @@ export function ThreadContextMenu({
       />
       {onSelectThread && (
         <MenuItem
-          icon={<CheckSquare size={13} className="text-secondary" />}
+          icon={<SquareDashedMousePointer size={13} className="text-secondary" />}
           label={t('buttons.select', { defaultValue: 'Select' })}
           onClick={() => {
             const threadId = menu.threadId

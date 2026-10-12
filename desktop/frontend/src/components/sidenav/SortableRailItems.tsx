@@ -32,14 +32,14 @@ function sortableStyle(
 export const railIndicator = (active: boolean) => (
   <div
     className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r bg-accent transition-[height] duration-200 ease-out ${
-      active ? 'h-9' : 'h-0 group-hover:h-5'
+      active ? 'h-8' : 'h-0 group-hover:h-5'
     }`}
   />
 )
 
 /** Rail tiles are round at rest and square up when hovered or active. */
 export const railTileShape = (active: boolean) =>
-  `transition-all duration-200 ease-out ${active ? 'rounded-2xl' : 'rounded-[22px] group-hover:rounded-2xl'}`
+  `transition-all duration-200 ease-out ${active ? 'rounded-2xl' : 'rounded-[20px] group-hover:rounded-2xl'}`
 
 interface SortableBoardProps {
   shortcut?: string
@@ -66,15 +66,15 @@ export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut
       {railIndicator(active)}
       {board.avatarUrl ? (
         <div
-          className={`flex h-11 w-11 items-center justify-center overflow-hidden ${railTileShape(active)} ${
+          className={`flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
             active ? '' : 'opacity-75 group-hover:opacity-100'
           }`}
         >
-          <Avatar name={board.name} src={board.avatarUrl} size={44} className="!rounded-none pointer-events-none" />
+          <Avatar name={board.name} src={board.avatarUrl} size={40} className="!rounded-none pointer-events-none" />
         </div>
       ) : (
         <div
-          className={`flex h-11 w-11 items-center justify-center ${railTileShape(active)} ${
+          className={`flex h-10 w-10 items-center justify-center ${railTileShape(active)} ${
             active
               ? 'bg-accent text-accent-label'
               : 'bg-sidenav-ink/10 text-sidenav-ink/60 group-hover:bg-sidenav-ink/20 group-hover:text-sidenav-ink'
@@ -141,14 +141,14 @@ export function SortableAccount({
           other badges). */}
       <div className="relative">
         <div
-          className={`relative flex h-11 w-11 items-center justify-center overflow-hidden ${railTileShape(active)} ${
+          className={`relative flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
             active || isPaused || needsReconnect ? '' : 'opacity-75 group-hover:opacity-100'
           }`}
         >
           <Avatar
             name={accountLabel(account)}
             src={account.avatar_url}
-            size={44}
+            size={40}
             fallback={isRSS ? <Rss size={20} /> : undefined}
             className={`!rounded-none pointer-events-none transition-all ${
               isPaused || needsReconnect ? 'grayscale opacity-40' : ''

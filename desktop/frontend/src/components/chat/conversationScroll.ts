@@ -53,6 +53,17 @@ export type VerticalBounds = {
   bottom: number
 }
 
+/** CSS variable holding the height of the composer that floats over the bottom
+ *  of the scroll container. MessagePane sets it on the conversation, so the
+ *  list and what sits beside it inherit it; unset when there is no composer. */
+export const COMPOSER_OVERLAP_VAR = '--me-composer-overlap'
+
+/** The part of the scroll container the reader can actually see: its bottom
+ *  edge raised by the composer floating over it. */
+export function visibleBounds(container: VerticalBounds, composerOverlap: number): VerticalBounds {
+  return { top: container.top, bottom: container.bottom - Math.max(0, composerOverlap) }
+}
+
 /**
  * Whether a message counts as read from where the view sits. Two ways to have
  * read it: its bottom came into view, so all of it has been on screen, or its
@@ -187,14 +198,15 @@ export type OpenScrollPlan = {
 }
 
 /**
- * Where the view belongs when a thread renders: a restored position when
- * returning to a thread, the first unread on a fresh open, the top of the
- * newest message when everything is read, and nothing at all when messages
- * merely re-render.
+ * Where the view belongs when a thread renders: the end of the thread after
+ * the reader's own send, a restored position when returning to a thread, the
+ * first unread on a fresh open, the top of the newest message when everything
+ * is read, and nothing at all when messages merely re-render.
  */
 export function resolveOpenScroll({
   isNewThread,
   grew,
+  ownSend = false,
   savedScrollTop,
   savedAtBottom,
   metrics,
@@ -207,6 +219,8 @@ export function resolveOpenScroll({
   isNewThread: boolean
   /** Whether the message count grew since the last positioning. */
   grew: boolean
+  /** Whether the reader's own just-sent message was rendered by this pass. */
+  ownSend?: boolean
   /** Position saved when leaving this thread, or null when not restoring. */
   savedScrollTop: number | null
   /** Whether that saved position was at the end of the thread. */
@@ -222,6 +236,11 @@ export function resolveOpenScroll({
   /** offsetTop of the newest message, or null when none is rendered. */
   lastMessageOffsetTop: number | null
 }): OpenScrollPlan {
+  // The reader's own reply outranks everything else: they just wrote it, so
+  // wherever they were — partway through the message they answered, or coming
+  // back from the full editor to a saved position — the view goes to it.
+  if (ownSend) return { scrollTop: metrics.scrollHeight, pin: null }
+
   const unreadAnchor = firstUnreadOffsetTop === null ? null : anchorScrollTop(firstUnreadOffsetTop, containerOffsetTop)
 
   if (savedScrollTop !== null) {

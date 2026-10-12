@@ -7,6 +7,7 @@ import {
   ANCHOR_GAP_PX,
   anchorScrollTop,
   collectManualUnreadIds,
+  COMPOSER_OVERLAP_VAR,
   isAtBottom,
   isMessageRead,
   isUserScroll,
@@ -18,6 +19,7 @@ import {
   type ScrollAnchor,
   type ScrollGeometry,
   type ScrollMetrics,
+  visibleBounds,
 } from './conversationScroll'
 
 /** How long an assignment of ours waits for its scroll event before we stop
@@ -214,6 +216,7 @@ export function useConversationScroll(
   )
 
   const pendingScrollMessageId = useValue(thread$.pendingScrollMessageId)
+  const pendingOwnSendId = useValue(thread$.pendingOwnSendId)
 
   // Messages the reader turned unread by hand while the thread was open, and the
   // unread flags of the last render they were derived from. Declared as a layout
@@ -269,7 +272,11 @@ export function useConversationScroll(
     // marked once the body arrives and resizes the list.
     const bodyMissingIds = new Set(messages.filter((message) => message.body_missing).map((message) => message.id))
 
-    const containerRect = container.getBoundingClientRect()
+    // Messages behind the floating composer are not in view yet.
+    const containerRect = visibleBounds(
+      container.getBoundingClientRect(),
+      parseFloat(getComputedStyle(container).getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0,
+    )
     const isVisible = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect()
       return rect.top < containerRect.bottom && rect.bottom > containerRect.top
@@ -399,6 +406,15 @@ export function useConversationScroll(
     if (activeTab !== '' || !container || !activeThreadId || messages.length === 0) return
     if (messages.some((message) => message.thread_id !== activeThreadId)) return
 
+    // The reader's own send, consumed exactly once like the jump below. A
+    // bubble that is not here — its send was aborted, or the reader has moved
+    // to another thread — has nothing to follow.
+    let ownSend = false
+    if (pendingOwnSendId) {
+      thread$.pendingOwnSendId.set('')
+      ownSend = !!container.querySelector(`[data-message-id="${CSS.escape(pendingOwnSendId)}"]`)
+    }
+
     // A direct jump (for example, from starred items or shared media): scroll
     // to the requested message and flash its ring.
     // Consumed exactly once; if the message isn't in the loaded page (older than
@@ -445,6 +461,7 @@ export function useConversationScroll(
     const plan = resolveOpenScroll({
       isNewThread,
       grew,
+      ownSend,
       savedScrollTop,
       savedAtBottom: savedAnchor?.atBottom ?? false,
       metrics: readScrollMetrics(container),
@@ -489,6 +506,7 @@ export function useConversationScroll(
     unreadKey,
     maybeMarkRead,
     pendingScrollMessageId,
+    pendingOwnSendId,
     pinMessage,
     releasePin,
     applyScrollTop,

@@ -9,6 +9,7 @@ import { retrySend } from '../../states/quickReplySend'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
+import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
@@ -32,6 +33,14 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
+  // The overlay below only reaches as far as the list, which clips itself under
+  // the composer (index.css, .message-scroll) and its fixed children with it; a
+  // click anywhere else in the window has to close the panel from here.
+  useDismissOnOutside(
+    metaOpen,
+    (target) => targetWithin(target, '.message-scroll'),
+    () => setMetaOpen(false),
+  )
   // What a short HTML body needs, so its bubble can hug it (see below): undefined
   // until the frame has reported, null for a body that fills the bubble.
   const [naturalWidth, setNaturalWidth] = useState<number | null | undefined>(undefined)

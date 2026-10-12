@@ -2,6 +2,7 @@ import { t } from '../lib/i18n'
 import type { Attachment, ComposerAttachment, Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { ui$, showToast } from './ui'
+import { thread$ } from './thread'
 import { accounts$ } from './accounts'
 import { mail$, getActiveThread, loadThread, normalizeMessageId } from './mail'
 import { isDraftFolder } from './mailFolders'
@@ -197,6 +198,7 @@ export async function sendReply() {
     })),
   }
   mail$.messages.push(sent)
+  thread$.pendingOwnSendId.set(tempId)
 
   // Clear the composer optimistically, in the same tick as the click: nothing
   // has happened since that could make the box anyone else's. On a failed SMTP

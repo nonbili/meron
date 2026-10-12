@@ -104,7 +104,7 @@
   --me-bubble-shadow-in: 0 2px 8px -2px rgba(27, 33, 30, 0.08), 0 1px 3px -1px rgba(27, 33, 30, 0.04);
   --me-bubble-shadow-out: 0 2px 8px -2px rgba(14, 122, 88, 0.12), 0 1px 3px -1px rgba(14, 122, 88, 0.06);
   --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.11);
-  --me-frame-border: none;
+  --me-frame-border-width: 0px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 50%, transparent);
 
   color-scheme: light;
@@ -137,7 +137,7 @@
   --me-bubble-shadow-in: 0 4px 12px -3px rgba(0, 0, 0, 0.3), 0 1px 4px -2px rgba(0, 0, 0, 0.2);
   --me-bubble-shadow-out: 0 4px 12px -3px rgba(0, 0, 0, 0.4), 0 1px 4px -2px rgba(0, 0, 0, 0.3);
   --me-frame-shadow: none;
-  --me-frame-border: 1px solid color-mix(in srgb, var(--me-border) 70%, transparent);
+  --me-frame-border-width: 1px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
 
   color-scheme: dark;
@@ -452,7 +452,7 @@ textarea,
      inside meet the shadow directly; dark ones keep the hairline, as a dark shadow
      hardly shows on the darker frame. The light shadow is wide, faint and centred,
      like Slack's on macOS. */
-  border: var(--me-frame-border);
+  border: var(--me-frame-border-width) solid color-mix(in srgb, var(--me-border) 70%, transparent);
   border-radius: 12px;
   box-shadow: var(--me-frame-shadow);
 }
@@ -913,6 +913,28 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   background-color: var(--me-bg-chat);
   background-position: center;
   background-size: cover;
+}
+
+/* The quick-reply composer floats over the end of the list (MessagePane), which
+   pads itself by the composer's height. Everything under the composer is cut
+   away rather than covered, so the wallpaper behind the list shows through
+   there: the cut starts where the box's rounded corners end (the footer's pt-1
+   plus rounded-2xl), which lets messages scroll off behind those corners, and
+   stops short of the right edge (the footer's px-3.5, inside the list's own
+   px-4) so the scrollbar stays in view down to the bottom. Paging and
+   scrolling a match or a focused link into view treat the covered part as out
+   of view. */
+.message-scroll {
+  --me-composer-cut: calc(100% - var(--me-composer-overlap, 0px) + 1.25rem);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    calc(100% - 0.875rem) 100%,
+    calc(100% - 0.875rem) var(--me-composer-cut),
+    0 var(--me-composer-cut)
+  );
+  scroll-padding-bottom: var(--me-composer-overlap, 0px);
 }
 
 .message-scroll > * {

@@ -826,6 +826,23 @@ describe('labels', () => {
     expect(folderLabel({ accountId: 'acc1', folderId: 'f2' }, folders, accs)).toBe('f2')
   })
 
+  it('folderLabel names a nested folder by its last path segment', () => {
+    const folders = [
+      { account_id: 'acc1', id: '[Gmail]/Now', name: '[Gmail]/Now', delimiter: '/' } as Folder,
+      { account_id: 'acc1', id: 'INBOX.Later', name: 'INBOX.Later', delimiter: '.' } as Folder,
+    ]
+    const accs = [account('acc1')]
+    expect(folderLabel({ accountId: 'acc1', folderId: '[Gmail]/Now' }, folders, accs)).toBe('Now')
+    expect(folderLabel({ accountId: 'acc1', folderId: 'INBOX.Later' }, folders, accs)).toBe('Later')
+    expect(searchColumnLabel({ accountId: 'acc1', folderId: '[Gmail]/Now' }, folders, accs)).toBe('acc1 / Now')
+  })
+
+  it('folderLabel keeps an RSS feed title whole', () => {
+    // Feed titles are not IMAP paths: a "/" in one is part of the name.
+    const folders = [{ account_id: 'rss-1', id: 'feed1', name: 'News / Tech' } as Folder]
+    expect(folderLabel({ accountId: 'rss-1', folderId: 'feed1' }, folders, [])).toBe('News / Tech')
+  })
+
   it('searchColumnLabel names a unified column by its role', () => {
     const accs = [account('acc1')]
     expect(searchColumnLabel({ accountId: 'unified', folderId: 'sent' }, [], accs, t)).toBe('Unified sent')

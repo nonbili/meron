@@ -285,7 +285,20 @@ internal fun ThreadScreen(
     val currentMessages by rememberUpdatedState(messages)
     val currentHeaderItemCount by rememberUpdatedState(threadHeaderItemCount(canLoadOlder || loadingOlder))
 
+    // The one list item the conversation holds at the top of the viewport, and
+    // the sole owner of the scroll while it does. Both the open positioning and
+    // an expanded message publish their target here rather than driving the
+    // list themselves: a single slot means expanding a message during the open
+    // settle window supersedes that positioning — cancelling it outright —
+    // instead of the two pulling the list in different directions on every
+    // layout change. Cleared once the anchor is released.
+    var anchorItem by remember(thread?.id) { mutableStateOf<ThreadListAnchor?>(null) }
+
     fun requestEndFollow() {
+        // Following the end takes the list over from whatever message was being
+        // held at the top; left running, the two would pull it opposite ways on
+        // every layout change.
+        anchorItem = null
         endFollowRequest += 1
     }
 
@@ -350,14 +363,6 @@ internal fun ThreadScreen(
     // place leaves the body wherever the tap happened to be; bring its header
     // to the top of the viewport so the message reads from its beginning.
     var scrollToExpandedId by remember(thread?.id) { mutableStateOf<String?>(null) }
-    // The one list item the conversation holds at the top of the viewport, and
-    // the sole owner of the scroll while it does. Both the open positioning and
-    // an expanded message publish their target here rather than driving the
-    // list themselves: a single slot means expanding a message during the open
-    // settle window supersedes that positioning — cancelling it outright —
-    // instead of the two pulling the list in different directions on every
-    // layout change. Cleared once the anchor is released.
-    var anchorItem by remember(thread?.id) { mutableStateOf<ThreadListAnchor?>(null) }
     LaunchedEffect(anchorItem) {
         val anchorTo = anchorItem ?: return@LaunchedEffect
         // Resolved fresh on every scroll rather than captured once: loading an
@@ -1018,7 +1023,9 @@ internal fun ThreadScreen(
                         },
                         onSend = {
                             keyboardAnchor = null
-                            followNextLocalSend = !listState.canScrollForward
+                            // The reader's own reply is followed from wherever
+                            // they had scrolled to, unlike mail that arrives.
+                            followNextLocalSend = true
                             onSendReply()
                         },
                         onRetry = onRetryReply,

@@ -11,6 +11,7 @@ import {
   resolveResizeScrollTop,
   scrollReleasesPin,
   type ScrollMetrics,
+  visibleBounds,
 } from './conversationScroll'
 
 const CONTAINER_TOP = 100
@@ -192,6 +193,24 @@ describe('resolveOpenScroll on an already-open thread', () => {
     ).toEqual({ scrollTop: 3600, pin: null })
   })
 
+  it("follows the reader's own send from wherever they had scrolled to", () => {
+    // Replying from the head of a long message: nowhere near the bottom, and
+    // the reply used to land out of sight below it.
+    expect(reopen({ grew: true, ownSend: true, metrics: metrics(200, 3400) })).toEqual({ scrollTop: 3400, pin: null })
+  })
+
+  it("follows the reader's own send over a saved position and unread above it", () => {
+    expect(
+      reopen({
+        ownSend: true,
+        savedScrollTop: 640,
+        hasUnread: true,
+        firstUnreadOffsetTop: 300,
+        metrics: metrics(640, 3400),
+      }),
+    ).toEqual({ scrollTop: 3400, pin: null })
+  })
+
   it('holds the restored position against bodies still settling', () => {
     // The saved position was measured against settled bodies. Restoring it
     // while they are placeholder-sized and then leaving it unpinned is how a
@@ -337,5 +356,23 @@ describe('isMessageRead', () => {
 
   it('counts a message exactly filling the viewport', () => {
     expect(isMessageRead({ top: 0, bottom: 800 }, container)).toBe(true)
+  })
+})
+
+describe('visibleBounds', () => {
+  const container = { top: 0, bottom: 800 }
+
+  it('raises the bottom edge by the composer floating over it', () => {
+    expect(visibleBounds(container, 120)).toEqual({ top: 0, bottom: 680 })
+  })
+
+  it('leaves the bounds alone without a composer', () => {
+    expect(visibleBounds(container, 0)).toEqual(container)
+  })
+
+  it('does not count a message hidden behind the composer as read', () => {
+    // Its bottom is inside the container but under the 120px composer.
+    expect(isMessageRead({ top: 600, bottom: 760 }, visibleBounds(container, 120))).toBe(false)
+    expect(isMessageRead({ top: 600, bottom: 760 }, container)).toBe(true)
   })
 })

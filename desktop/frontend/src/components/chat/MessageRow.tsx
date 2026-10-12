@@ -7,6 +7,7 @@ import { openDraftCompose, openMessageTab } from '../../states/compose'
 import { retrySend } from '../../states/quickReplySend'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
+import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { Avatar } from '../avatar/Avatar'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
@@ -40,6 +41,14 @@ export function MessageRow({
 }) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
+  // The overlay below only reaches as far as the list, which clips itself under
+  // the composer (index.css, .message-scroll) and its fixed children with it; a
+  // click anywhere else in the window has to close the panel from here.
+  useDismissOnOutside(
+    metaOpen,
+    (target) => targetWithin(target, '.message-scroll'),
+    () => setMetaOpen(false),
+  )
   const view = useMessageView(message)
   const {
     outgoing,
@@ -171,7 +180,7 @@ export function MessageRow({
           carries no padding of its own: the header has to be a flush child so
           it pins to the very top, and its own border and shadow keep it apart
           from the body sliding underneath. The negative offset cancels the
-          scroller's py-6: a sticky box pins to the scroller's content box, so
+          scroller's pt-6: a sticky box pins to the scroller's content box, so
           top-0 would park the header a padding's width down the viewport and
           let the body scroll past above it. */}
       <div

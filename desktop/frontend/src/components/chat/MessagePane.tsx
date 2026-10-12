@@ -29,6 +29,7 @@ import {
   ConversationScrollIntentContext,
   useConversationScroll,
 } from './useConversationScroll'
+import { COMPOSER_OVERLAP_VAR } from './conversationScroll'
 import { ArrowRight } from 'lucide-react'
 import { usePresence } from '../../lib/usePresence'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
@@ -141,8 +142,27 @@ export function MessagePane() {
   const desktopThreadSearchInputRef = useRef<HTMLInputElement | null>(null)
   const mobileThreadSearchInputRef = useRef<HTMLInputElement | null>(null)
   const { threadSearchOpen, searchMatches, activeSearchId } = useThreadSearch(displayMessages, activeThread?.account_id)
+  const conversationRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLDivElement | null>(null)
+  const hasConversation = !!activeThread
+  // The composer floats over the bottom of the message list, so messages scroll
+  // on behind its rounded box instead of ending at a straight edge above it. The
+  // list pads its end by the composer's height (COMPOSER_OVERLAP_VAR) so the
+  // newest message still clears it. Measured ahead of useConversationScroll,
+  // whose layout effects run in order after this one: its first positioning and
+  // read-marking pass on a pane that mounts with its messages already loaded
+  // would otherwise count the ones behind the composer as seen.
+  useLayoutEffect(() => {
+    const host = conversationRef.current
+    const composer = composerRef.current
+    if (!host || !composer) return
+    host.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
+    return () => {
+      host.style.removeProperty(COMPOSER_OVERLAP_VAR)
+    }
+  }, [hasConversation, isRSS])
   const conversationScroll = useConversationScroll(activeThreadId, displayMessages, conversationActiveTab, unreadKey)
-  const { scrollRef } = conversationScroll
+  const { scrollRef, setScrollTop } = conversationScroll
 
   const contextMenu = useValue(thread$.messageContextMenu)
 
@@ -156,11 +176,19 @@ export function MessagePane() {
   const {
     dragging: fileDragging,
     mayBeLink,
-    dropHandlers,
+    dropHandlers: { ref: dropRef, ...dropHandlers },
   } = useFileDrop(addQuickReplyAttachments, {
     enabled: !!activeThread && !isRSS && !activeDocumentTab,
     scope: activeThreadId,
   })
+  // The conversation element is both the drop area and `conversationRef`.
+  const setConversationElement = useCallback(
+    (element: HTMLDivElement | null) => {
+      conversationRef.current = element
+      dropRef(element)
+    },
+    [dropRef],
+  )
 
   const showMessageInConversation = useCallback((messageId: string) => {
     thread$.pendingScrollMessageId.set(messageId)
@@ -171,6 +199,24 @@ export function MessagePane() {
   useEffect(() => {
     resetThreadView()
   }, [activeThreadId])
+
+  // Keeps the overlap in step as the composer grows with a longer reply or an
+  // attachment, and a reader at the bottom parked there. That goes through the
+  // scroll controller like any other positioning of ours, or the scroll it
+  // causes would read as the reader's and drop a settling pin.
+  useLayoutEffect(() => {
+    const host = conversationRef.current
+    const container = scrollRef.current
+    const composer = composerRef.current
+    if (!host || !container || !composer) return
+    const observer = new ResizeObserver(() => {
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 1
+      host.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
+      if (atBottom) setScrollTop(container.scrollHeight)
+    })
+    observer.observe(composer)
+    return () => observer.disconnect()
+  }, [hasConversation, isRSS, scrollRef, setScrollTop])
 
   useLayoutEffect(() => {
     return () => {
@@ -288,7 +334,16 @@ export function MessagePane() {
         </ConversationScrollIntentContext>
       </ConversationScrollContext>
 
-      {!isRSS && <QuickReplyComposer />}
+      {!isRSS && (
+        <div
+          ref={composerRef}
+          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 ${
+            conversationWallpaper.className === 'wallpaper-preset-plain' ? '[--me-composer-halo:var(--me-bg-chat)]' : ''
+          }`}
+        >
+          <QuickReplyComposer />
+        </div>
+      )}
     </>
   ) : (
     <div
@@ -312,6 +367,7 @@ export function MessagePane() {
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <section className="relative flex flex-1 flex-col overflow-hidden bg-chat">
           <div
+            ref={setConversationElement}
             aria-hidden={!!activeDocumentTab}
             className={`relative flex min-h-0 flex-1 flex-col ${
               activeDocumentTab ? 'pointer-events-none invisible' : ''

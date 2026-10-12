@@ -1029,6 +1029,7 @@ export function appendSentMessage(args: {
     })),
   }
   mail$.messages.push(sent)
+  thread$.pendingOwnSendId.set(sent.id)
 }
 
 // Save a composed draft message to the drafts folder on the server.

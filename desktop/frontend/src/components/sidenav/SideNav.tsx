@@ -28,7 +28,7 @@ import { useTitleBar } from '../titlebar/TitleBar'
 import type { Account } from '../../types'
 
 // Every rail divider sits 9px from its neighbours, except the compose button's,
-// which is tucked under the button to line up with the 48px header borders.
+// which lines up with the 48px header borders and so sits 6px under the button.
 const railDivider = 'h-px w-8 shrink-0 bg-sidenav-ink/10'
 
 export function SideNav() {
@@ -147,7 +147,7 @@ export function SideNav() {
 
   return (
     <aside
-      className={`flex w-[3.75rem] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[5px]' : 'pt-[9px]'}`}
+      className={`flex w-[3.75rem] shrink-0 flex-col items-center bg-sidenav px-0 pb-4 max-[768px]:hidden select-none ${titleBar ? 'pt-[calc(5px+var(--me-frame-border-width))]' : 'pt-[10px]'}`}
       onContextMenu={(event) => {
         if (event.defaultPrevented) return
         event.preventDefault()
@@ -157,17 +157,20 @@ export function SideNav() {
       {hasSendableAccount && (
         <>
           <button
-            className="relative isolate flex h-10 w-10 shrink-0 transform-gpu items-center justify-center overflow-hidden rounded-[20px] bg-accent text-accent-label transition-all duration-200 ease-out hover:rounded-2xl hover:bg-accent-hover hover:text-accent-hover-label cursor-pointer"
+            // An action, not a destination: it stays round where the rail's
+            // tiles square up, and lifts on hover instead.
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-label transition-[background-color,color,box-shadow] duration-200 ease-out hover:bg-accent-hover hover:text-accent-hover-label hover:shadow-md cursor-pointer"
             onClick={() => openComposeTab()}
             title={`${t('composer.actions.newMessage')} (${formatShortcut('compose.new').join(isMac ? '' : '+')})`}
             aria-label={t('composer.actions.newMessage')}
           >
             <SquarePen size={18} />
           </button>
-          {/* 4 + 40 + 3 aligns with the 48px header's bottom border, plus 1px
-            for the content frame's border, and 4px more under the system
-            title bar, where the frame stands clear of the top edge. */}
-          <div className={`mt-[3px] ${railDivider}`} />
+          {/* 5 + 36 + 6 aligns with the 48px header's bottom border, plus the
+            content frame's border where the theme draws one, and 4px more
+            under the system title bar, where the frame stands clear of the
+            top edge and always has its border. */}
+          <div className={`mt-[6px] ${railDivider}`} />
         </>
       )}
       <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto no-scrollbar py-[9px]">
@@ -177,7 +180,7 @@ export function SideNav() {
             {railIndicator(isUnifiedActive)}
             <div className="relative">
               <button
-                className={`flex h-11 w-11 items-center justify-center cursor-pointer ${railTileShape(isUnifiedActive)} ${
+                className={`flex h-10 w-10 items-center justify-center cursor-pointer ${railTileShape(isUnifiedActive)} ${
                   isUnifiedActive
                     ? 'bg-accent text-accent-label'
                     : 'bg-sidenav-ink/10 text-sidenav-ink/60 group-hover:bg-sidenav-ink/20 group-hover:text-sidenav-ink'

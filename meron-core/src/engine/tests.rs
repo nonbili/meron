@@ -875,6 +875,20 @@ async fn transfer_deadline_bounds_credential_wait_without_cancelling_refresh() {
             stream.read_exact(&mut byte).unwrap();
             headers.push(byte[0]);
         }
+        let content_length = std::str::from_utf8(&headers)
+            .unwrap()
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+            .expect("OAuth request must have Content-Length")
+            .1
+            .trim()
+            .parse::<usize>()
+            .unwrap();
+        // Closing with unread POST data can reset the connection before the
+        // client finishes reading the response, making persistence time out.
+        let mut request_body = vec![0; content_length];
+        stream.read_exact(&mut request_body).unwrap();
         started_tx.send(()).unwrap();
         release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let body = r#"{"access_token":"refreshed","expires_in":3600}"#;
