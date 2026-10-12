@@ -20,6 +20,7 @@ import { frameMetrics, measureFrameHeight } from './frameHeight'
 import { useMessageFrameFont } from './useMessageFrameFont'
 import { installFrameQuoteFold, isInFoldedQuote } from './quoteFold'
 import { useBubbleTheme } from './useFrameTheme'
+import type { FrameSurface } from './frameTheme'
 import { settings$ } from '../../states/settings'
 
 const DEFAULT_FRAME_HEIGHT = 120
@@ -38,6 +39,7 @@ const NON_TEXT_SELECTOR = 'table, img, video, iframe, svg, pre, [width], [style*
 export function BubbleHtmlFrame({
   html,
   outgoing = false,
+  surface = 'bubble',
   allowRemote = false,
   mediaMissing = 0,
   searchQuery = '',
@@ -49,6 +51,8 @@ export function BubbleHtmlFrame({
   html: string
   /** Which bubble the frame sits in: its colors are the ones the frame paints with. */
   outgoing?: boolean
+  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  surface?: FrameSurface
   /** Loosen the baked CSP so this message's remote content loads. */
   allowRemote?: boolean
   /** How many attachment files this message refers to are not on disk yet. */
@@ -64,7 +68,7 @@ export function BubbleHtmlFrame({
 }) {
   const { t } = useTranslation()
   const messageFont = useMessageFrameFont()
-  const bubbleTheme = useBubbleTheme(outgoing)
+  const bubbleTheme = useBubbleTheme(outgoing, surface)
   const autoFit = useValue(settings$.autoFitMessages)
   const onNaturalWidthRef = useRef(onNaturalWidth)
   onNaturalWidthRef.current = onNaturalWidth

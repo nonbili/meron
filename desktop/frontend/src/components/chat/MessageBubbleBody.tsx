@@ -18,6 +18,7 @@ import { BubbleHtmlFrame } from './BubbleHtmlFrame'
 import { matchRanges } from './frameSearchHighlight'
 import { isQuoteUnfolded, setQuoteUnfolded, splitQuotedBody } from './quoteFold'
 import { ConversationScrollIntentContext } from './useConversationScroll'
+import type { FrameSurface } from './frameTheme'
 
 const setHoveredLink = (url: string | null) => thread$.hoveredLink.set(url)
 
@@ -28,6 +29,7 @@ export function MessageBubbleBody({
   message,
   useHtmlBody,
   outgoing = false,
+  surface = 'bubble',
   allowRemote = false,
   normalizedSearchQuery,
   activeSearchOffset,
@@ -39,6 +41,8 @@ export function MessageBubbleBody({
   /** Whether this message sits in an outgoing bubble; its HTML frame is painted
    *  with that bubble's colors. */
   outgoing?: boolean
+  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  surface?: FrameSurface
   /** Whether this message's remote content may load (account setting, allowed
    *  sender, or a reveal the user just made). */
   allowRemote?: boolean
@@ -78,6 +82,7 @@ export function MessageBubbleBody({
         <BubbleHtmlFrame
           html={message.body_html!}
           outgoing={outgoing}
+          surface={surface}
           allowRemote={allowRemote}
           mediaMissing={message.media_missing ?? 0}
           searchQuery={normalizedSearchQuery}

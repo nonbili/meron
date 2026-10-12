@@ -450,6 +450,17 @@ describe('dark message bodies', () => {
     expect(darkened(styled)).toBe(false)
   })
 
+  // Inverted white turns black; blended lighten onto the tab background, the
+  // message becomes that background instead, one continuous dark page.
+  it('blends the darkened message onto the tab background', () => {
+    const doc = parse('<meta name="meron-body-bg" content="#f5f4f2"><p style="color:#333">hi</p>')
+    applyReaderLayout(doc, undefined, DARKENING)
+    expect(darkened(doc)).toBe(true)
+    const css = [...doc.querySelectorAll('style')].map((style) => style.textContent ?? '').join('\n')
+    expect(css).toMatch(new RegExp(`html\\[${DARKENED_ATTR}\\] body \\{\\s*mix-blend-mode: lighten;`))
+    expect(vars(doc).getPropertyValue('page-bg')).toBe(DARK.pageBg)
+  })
+
   it('undoes the inversion when the theme turns light', () => {
     const doc = parse('<meta name="meron-body-bg" content="#f5f4f2"><p style="color:#333">hi</p>')
     applyReaderTheme(doc, DARKENING)

@@ -432,10 +432,36 @@ describe('dark message bodies in a bubble', () => {
 
   // Under a fully transparent root the body's background propagates to the
   // canvas, outside the body's invert filter, so a white body stayed white.
-  it('keeps a darkened root off transparent so the body background stays inside the filter', () => {
+  // The root now paints the surface the darkened body blends onto.
+  it('paints a darkened root with the surface the frame sits on', () => {
     const css = frameStyle(prepareBubbleHtml(styled))
     const rule = css.match(new RegExp(`html\\[${DARKENED_ATTR}\\]\\s*\\{([^}]*)\\}`))
-    expect(rule?.[1]).toMatch(/background:\s*rgba\(0,\s*0,\s*0,\s*0\.\d+\)\s*!important/)
+    expect(rule?.[1]).toMatch(/background:\s*var\(--meron-[a-z0-9]+-darkened-backdrop,[^)]*\)+\s*!important/)
+
+    const doc = new DOMParser().parseFromString(prepareBubbleHtml(styled), 'text/html')
+    applyBubbleTheme(doc, DARKENING)
+    const backdrop = doc.documentElement.style.getPropertyValue(frameVar(frameVarPrefix(doc), 'darkened-backdrop'))
+    expect(backdrop).toBe(DARK_TOKENS.bubbleIn)
+  })
+
+  // Inverted white turns black; blending it lighten onto that surface makes
+  // everything darker than the surface the surface itself, and leaves text alone.
+  it('blends the darkened body onto the root', () => {
+    expect(frameStyle(prepareBubbleHtml(styled))).toMatch(
+      new RegExp(`html\\[${DARKENED_ATTR}\\] body \\{\\s*mix-blend-mode: lighten;`),
+    )
+  })
+})
+
+describe('the surface a darkened body blends onto', () => {
+  it('is the bubble colour in the chat layout, per direction', () => {
+    expect(bubbleThemeFromTokens('dark', DARK_TOKENS, false, true).darkenedBackdrop).toBe(DARK_TOKENS.bubbleIn)
+    expect(bubbleThemeFromTokens('dark', DARK_TOKENS, true, true).darkenedBackdrop).toBe(DARK_TOKENS.bubbleOut)
+  })
+
+  it('is the row colour in the traditional layout, whichever the direction', () => {
+    expect(bubbleThemeFromTokens('dark', DARK_TOKENS, false, true, 'row').darkenedBackdrop).toBe(DARK_TOKENS.bgChats)
+    expect(bubbleThemeFromTokens('dark', DARK_TOKENS, true, true, 'row').darkenedBackdrop).toBe(DARK_TOKENS.bgChats)
   })
 })
 

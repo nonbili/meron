@@ -297,7 +297,7 @@ export function MessageRow({
       </div>
 
       <div className="px-4 pb-3 pt-2.5">
-        <MessageContent message={message} view={view} galleryOffset={galleryOffset} fullHeight />
+        <MessageContent message={message} view={view} galleryOffset={galleryOffset} fullHeight surface="row" />
       </div>
     </div>
   )

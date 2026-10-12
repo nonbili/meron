@@ -85,6 +85,8 @@ export interface BubbleTheme {
   raisedHover: string
   /** Text on a search hit's yellow highlight, which never follows the theme. */
   highlightText: string
+  /** What a darkened body turns its white into: the surface the frame sits on. */
+  darkenedBackdrop: string
 }
 
 /** The foreground for a canvas that turned out to be dark and declared no text color. */
@@ -103,7 +105,11 @@ export const DEFAULT_BUBBLE_THEME: BubbleTheme = {
   raised: 'rgba(255, 255, 255, 0.92)',
   raisedHover: '#ffffff',
   highlightText: 'inherit',
+  darkenedBackdrop: '#000000',
 }
+
+/** What a message body frame sits on: a chat bubble, or a traditional layout's row. */
+export type FrameSurface = 'bubble' | 'row'
 
 /** Map the active theme's tokens onto a bubble frame's palette. */
 export function bubbleThemeFromTokens(
@@ -111,6 +117,7 @@ export function bubbleThemeFromTokens(
   tokens: ThemeTokens,
   outgoing: boolean,
   darkenStyled = false,
+  surface: FrameSurface = 'bubble',
 ): BubbleTheme {
   // Light bubbles are already the palette these frames were drawn for.
   if (appearance === 'light') return DEFAULT_BUBBLE_THEME
@@ -128,6 +135,7 @@ export function bubbleThemeFromTokens(
     raisedHover: tokens.bgActive,
     // The highlight keeps its yellow in both appearances, so its text can't.
     highlightText: '#0f172a',
+    darkenedBackdrop: surface === 'row' ? tokens.bgChats : outgoing ? tokens.bubbleOut : tokens.bubbleIn,
   }
 }
 
@@ -579,6 +587,9 @@ export const PICTURE_ATTR = 'data-meron-picture'
  * background picture is left alone. The search highlight keeps its yellow too.
  */
 export const DARKENED_CSS = `
+  html[${DARKENED_ATTR}] body {
+    mix-blend-mode: lighten;
+  }
   html[${DARKENED_ATTR}] body,
   html[${DARKENED_ATTR}] body :is(img, video, [${PICTURE_ATTR}], mark.meron-search-hit) {
     filter: invert(1) hue-rotate(180deg);

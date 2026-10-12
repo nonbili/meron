@@ -8,6 +8,7 @@ import { MessageBubbleBody } from './MessageBubbleBody'
 import { RetryWhenRestored } from './RetryWhenRestored'
 import { VideoAttachment } from './VideoAttachment'
 import type { MessageView } from './useMessageView'
+import type { FrameSurface } from './frameTheme'
 
 // Everything below a message's header: image attachments, videos, the body and
 // the file attachment list. Blocked remote content is revealed from the
@@ -18,6 +19,7 @@ export function MessageContent({
   view,
   galleryOffset,
   fullHeight = false,
+  surface = 'bubble',
   onNaturalWidth,
 }: {
   message: Message
@@ -26,6 +28,8 @@ export function MessageContent({
   galleryOffset: number
   /** Let the body grow instead of scrolling inside its own box. */
   fullHeight?: boolean
+  /** A chat bubble or a traditional layout's row: what a darkened body blends onto. */
+  surface?: FrameSurface
   onNaturalWidth?: (width: number | null) => void
 }) {
   const { t } = useTranslation()
@@ -115,6 +119,7 @@ export function MessageContent({
         message={message}
         useHtmlBody={view.useHtmlBody}
         outgoing={view.outgoing}
+        surface={surface}
         allowRemote={view.remoteVisible}
         normalizedSearchQuery={view.normalizedSearchQuery}
         activeSearchOffset={view.activeSearchOffset}

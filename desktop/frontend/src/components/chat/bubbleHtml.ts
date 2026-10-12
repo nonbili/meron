@@ -436,7 +436,7 @@ export function prepareBubbleHtml(
          while the text inverted to light on it. One alpha step of background
          on the root keeps it on the body. */
       html[${DARKENED_ATTR}] {
-        background: rgba(0, 0, 0, 0.004) !important;
+        background: var(${v('darkened-backdrop')}, rgba(0, 0, 0, 0.004)) !important;
       }
     `
     // A self-sizing frame needs its document boxes to follow the message.
@@ -520,6 +520,7 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
     [v('raised-hover'), palette.raisedHover],
     [v('muted'), palette.muted],
     [v('highlight-text'), palette.highlightText],
+    [v('darkened-backdrop'), theme.darkenedBackdrop],
   ]
   for (const [name, value] of vars) {
     if (value === null) style.removeProperty(name)
