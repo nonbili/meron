@@ -2,8 +2,8 @@ module meron
 
 go 1.25.0
 
-// Local tray APIs for atomic Linux icon updates and native macOS badges.
-replace fyne.io/systray => ./third_party/systray
+// Fork adds atomic Linux icon updates and native macOS unread badges.
+replace fyne.io/systray => github.com/nonbili/systray v0.0.0-20261012131303-fbcb8f07c463
 
 require (
 	fyne.io/systray v1.12.3-0.20260913152509-528cad23fade
