@@ -1,4 +1,4 @@
-import { Columns3, Pause, BellOff, HardDrive, KeyRound, Rss } from 'lucide-react'
+import { Columns3, Pause, BellOff, KeyRound, Rss } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
@@ -10,6 +10,7 @@ import { settings$ } from '../../states/settings'
 import { mail$ } from '../../states/mail'
 import { inboxUnread } from '../../states/mailFolders'
 import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { UnreadCountBadge } from './UnreadCountBadge'
 
 function accountLabel(account: { display_name: string; email: string }) {
@@ -151,11 +152,12 @@ export function SortableAccount({
             active || isPaused || needsReconnect ? '' : 'opacity-75 group-hover:opacity-100'
           }`}
         >
-          <Avatar
+          <AccountAvatar
+            accountId={account.id}
             name={accountLabel(account)}
             src={account.avatar_url}
             size={40}
-            fallback={isRSS ? <Rss size={20} /> : isLocal ? <HardDrive size={20} /> : undefined}
+            fallback={isRSS ? <Rss size={20} /> : undefined}
             className={`!rounded-none pointer-events-none transition-all ${
               isPaused || needsReconnect ? 'grayscale opacity-40' : ''
             }`}

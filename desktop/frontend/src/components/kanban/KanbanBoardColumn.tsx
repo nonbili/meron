@@ -60,7 +60,7 @@ import {
 import { openThreadTab } from '../../states/compose'
 import { ThreadActionsMenu, ThreadActionsMenuItems } from '../threads/ThreadActionsMenu'
 import { ThreadContextMenu, type ThreadContextMenuController } from '../threads/ThreadContextMenu'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderSwitcher } from '../menu/FolderSwitcher'
@@ -429,7 +429,8 @@ function KanbanColumnContent({
           {...dragHandleProps(wrapper.dragHandle)}
         >
           <div className="relative shrink-0">
-            <Avatar
+            <AccountAvatar
+              accountId={column.accountId}
               name={columnAccountLabel || accountLabel(column.accountId, accounts)}
               src={columnAccount?.avatar_url}
               size={26}

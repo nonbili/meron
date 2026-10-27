@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { ChevronRight, Copy, FolderInput, HardDrive, History } from 'lucide-react'
+import { ChevronRight, Copy, FolderInput, History } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { accounts$, isLocalAccountId, isMailFolderAccount } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { ensureAccountFolders } from '../../states/mailFolders'
 import { copyThreadToFolder, moveThreadToFolder } from '../../states/mailMoves'
 import { recentThreadTransfers$, type RecentThreadTransfer } from '../../states/recentThreadTransfers'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderMenuTree } from '../menu/FolderMenuTree'
 import { MenuItem } from '../menu/MenuItem'
@@ -325,13 +325,7 @@ function AccountFolderItem({
     <div ref={anchorRef} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <MenuItem
         icon={
-          <Avatar
-            name={label}
-            src={account.avatar_url}
-            size={18}
-            className="shrink-0"
-            fallback={isLocalAccountId(account.id) ? <HardDrive size={11} /> : undefined}
-          />
+          <AccountAvatar accountId={account.id} name={label} src={account.avatar_url} size={18} className="shrink-0" />
         }
         label={
           <span

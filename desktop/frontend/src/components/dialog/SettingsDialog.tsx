@@ -38,7 +38,6 @@ import {
   PanelBottom,
   SquarePen,
   Contrast,
-  HardDrive,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -64,7 +63,7 @@ import { createKanbanBoard } from '../../states/kanban'
 import { loadFolders } from '../../states/mailFolders'
 import { update$ } from '../../states/update'
 import type { Account } from '../../types'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { IconButton } from '../button/IconButton'
 import { NumberRow, SegmentedRow, SettingRow, SettingsGroup, ToggleRow, SelectRow } from './AccountSettingsRows'
 import { supportedI18nLanguages, languageNativeNames, type SupportedI18nLanguage } from '../../lib/i18n'
@@ -345,12 +344,12 @@ function AccountNavAvatar({ account, displayName }: { account: Account; displayN
 
   return (
     <span className="relative shrink-0">
-      <Avatar
+      <AccountAvatar
+        accountId={account.id}
         name={displayName}
         src={account.avatar_url}
         size={20}
         className={`!rounded-md transition-all ${isPaused ? 'grayscale opacity-40' : ''}`}
-        fallback={isLocalAccountId(account.id) ? <HardDrive size={12} /> : undefined}
       />
       {(isPaused || isMuted) && (
         <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-white/80 ring-2 ring-raised">
@@ -1121,12 +1120,12 @@ export function AccountPanel({ account }: { account: Account }) {
             onClick={() => void pickAvatarFile()}
             className="relative block rounded-2xl disabled:cursor-default cursor-pointer"
           >
-            <Avatar
+            <AccountAvatar
+              accountId={account.id}
               name={displayName}
               src={account.avatar_url}
               size={40}
               className="!rounded-2xl"
-              fallback={isLocal ? <HardDrive size={20} /> : undefined}
             />
             <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera size={15} className="text-white" />

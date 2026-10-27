@@ -2,6 +2,7 @@ import type { DragEvent, MouseEvent, Ref } from 'react'
 import { Check, Star } from 'lucide-react'
 import type { Account, Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { formatThreadDate } from '../../lib/date'
 import { clsx } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
@@ -99,7 +100,8 @@ export function ThreadListItem({
             />
             {badgeAccount && (
               <div className="absolute -bottom-1 -left-1 rounded-full ring-2 ring-chats overflow-hidden">
-                <Avatar
+                <AccountAvatar
+                  accountId={badgeAccount.id}
                   name={badgeAccount.display_name || badgeAccount.email}
                   src={badgeAccount.avatar_url}
                   size={16}

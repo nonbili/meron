@@ -7,7 +7,7 @@ import { mail$ } from '../../states/mail'
 import type { KanbanColumn } from '../../states/kanban'
 import { accountLabel, folderLabel, mergeLabelFolders, useFoldersByAccount } from '../../lib/kanbanData'
 import { isRssAccount } from '../../lib/threadActions'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 
 /** A column's folder and account names, as the search scope shows them. A saved
  * search shares its folder's name, so its query tells the two apart. */
@@ -41,7 +41,8 @@ export function ColumnAvatar({ column, size }: { column: KanbanColumn; size: num
   const account = column.accountId !== 'unified' ? accounts.find((a) => a.id === column.accountId) : undefined
   const rss = isRssAccount(account, column.accountId)
   return (
-    <Avatar
+    <AccountAvatar
+      accountId={column.accountId}
       name={account ? account.display_name || account.email || account.id : accountLabel(column.accountId, accounts)}
       src={account?.avatar_url}
       size={size}

@@ -20,7 +20,7 @@ import {
   useFoldersByAccount,
 } from '../../lib/kanbanData'
 import { isRssAccount } from '../../lib/threadActions'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import type { ColumnWrapper } from './KanbanBoardColumn'
 import { boardWallpaper } from '../../lib/wallpapers'
 
@@ -109,7 +109,8 @@ export function KanbanColumnMinimized({
       }}
     >
       <div className="relative shrink-0">
-        <Avatar
+        <AccountAvatar
+          accountId={column.accountId}
           name={columnAccountLabel || accountLabel(column.accountId, accounts)}
           src={columnAccount?.avatar_url}
           size={26}

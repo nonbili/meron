@@ -4,7 +4,7 @@ import { ChevronRight, CornerDownRight, Loader2, Plus, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import type { Folder } from '../../types'
 import { kanbanColumnKey } from '../../states/kanban'
-import { Avatar } from '../avatar/Avatar'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { IconButton } from '../button/IconButton'
 import { TextInput } from '../field/Field'
 import { FolderTreeRow } from './FolderTreeRow'
@@ -87,7 +87,7 @@ export function AccountSection({
           title={expanded ? t('accounts.actions.collapseAccount') : t('accounts.actions.expandAccount')}
         >
           <ChevronRight size={13} className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-          <Avatar name={group.label} src={group.avatarUrl} size={18} />
+          <AccountAvatar accountId={group.accountId} name={group.label} src={group.avatarUrl} size={18} />
           <span className="truncate">{group.label}</span>
         </button>
         {!group.isRSS && onCreateFolder && (
