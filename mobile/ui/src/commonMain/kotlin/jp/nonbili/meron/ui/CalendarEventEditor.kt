@@ -1,5 +1,6 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.Email
@@ -33,16 +36,19 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.shared.CalendarEventParams
 import jp.nonbili.meron.shared.CalendarItem
+import kotlinx.coroutines.delay
 
 /** What the event editor was opened on: a new event on a day, or an item. */
 internal sealed interface CalendarEditorTarget {
@@ -165,7 +171,7 @@ internal fun CalendarEventEditor(
                         formatEventRange(item.start, item.end, item.allDay) + if (item.allDay) " · ${tr("invite.allDay")}" else "",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (item.location.isNotBlank()) Text(item.location, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (item.location.isNotBlank()) InviteLocation(item.location)
                 } else {
                     OutlinedTextField(
                         value = title,
@@ -222,8 +228,8 @@ internal fun CalendarEventEditor(
                     value = notes,
                     onValueChange = { notes = it },
                     placeholder = { Text(tr("calendar.fields.notes")) },
-                    minLines = 3,
-                    maxLines = 6,
+                    minLines = if (invite) 8 else 3,
+                    maxLines = if (invite) 12 else 6,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (item != null) {
@@ -306,6 +312,47 @@ internal fun CalendarEventEditor(
         }
 
         null -> {}
+    }
+}
+
+private val urlPattern = Regex("^https?://\\S+$")
+
+/** An invitation's location is often its meeting link: open it, or copy it. */
+@Composable
+private fun InviteLocation(location: String) {
+    val url = location.trim()
+    if (!urlPattern.matches(url)) {
+        Text(location, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val platform = LocalPlatformServices.current
+    val copyLabel = tr("chat.actions.copyLinkAddress")
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1500)
+            copied = false
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            url,
+            color = MaterialTheme.colorScheme.primary,
+            textDecoration = TextDecoration.Underline,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).clickable { platform.openUrl(url) },
+        )
+        IconButton(onClick = {
+            platform.copyText(copyLabel, url)
+            copied = true
+        }) {
+            Icon(
+                if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                contentDescription = if (copied) tr("common.copied") else copyLabel,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

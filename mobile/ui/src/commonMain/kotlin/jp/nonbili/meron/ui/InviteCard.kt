@@ -128,11 +128,10 @@ internal fun InviteCard(
                         FilterChip(
                             selected = invite.response == response,
                             onClick = { if (invite.response != response) onRespond(response) },
-                            label = { Text(tr(label)) },
+                            label = { Text(tr(if (invite.response == response) ownResponse.getValue(response) else label)) },
                         )
                     }
                 }
-                ownResponse[invite.response]?.let { key -> Text(tr(key), fontSize = 12.sp, color = secondary) }
                 // Answered, but its event was deleted since.
                 if (invite.response != "" && invite.response != "declined" && invite.eventId.isBlank()) {
                     TextButton(onClick = onAddToCalendar, contentPadding = PaddingValues(horizontal = 4.dp)) {

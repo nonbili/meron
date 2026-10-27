@@ -120,10 +120,9 @@ export function InviteCard({ message, invite }: { message: Message; invite: Invi
                   aria-pressed={invite.response === response}
                   onClick={() => invite.response !== response && respond(response)}
                 >
-                  {t(label)}
+                  {t(invite.response === response ? OWN_RESPONSE[response] : label)}
                 </Button>
               ))}
-              {invite.response && <span className="ml-1 text-secondary">{t(OWN_RESPONSE[invite.response])}</span>}
               {invite.response && invite.response !== 'declined' && !invite.event_id && (
                 <Button
                   size="sm"

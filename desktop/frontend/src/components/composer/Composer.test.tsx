@@ -4,6 +4,7 @@ import { accounts$ } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
 import { closeMessageTab, openComposeTab, updateComposeDraft } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
+import { kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
 import type { Account } from '../../types'
 import { Composer } from './Composer'
@@ -45,6 +46,11 @@ describe('Composer', () => {
     pendingDiscard = null
     compose$.tabs.set([])
     compose$.activeTab.set('')
+    // Other files can leave a conversation behind the tabs, which adds the
+    // Current tab and a second "Close tab" button to the strip.
+    compose$.conversationThread.set('')
+    kanban$.activeBoardId.set('')
+    kanban$.paneThreadId.set('')
     settings$.signature.set('')
     ui$.selectedAccount.set('a')
     accounts$.set([account('a', '<p>From A</p>'), account('b', '<p>From B</p>')])

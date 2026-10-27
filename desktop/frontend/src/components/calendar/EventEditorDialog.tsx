@@ -1,9 +1,10 @@
-import { CalendarDays, Mail, Trash2, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Mail, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { dateValue, localInstant, parseDateValue, timeValue, utcDate, utcDateValue } from '../../lib/calendarGrid'
 import { formatEventRange } from '../../lib/date'
 import { Dialog } from '../dialog/Dialog'
 import { useTranslation } from '../../lib/i18n'
+import { copyText, openExternal } from '../../lib/native'
 import {
   calendar$,
   createEvent,
@@ -98,6 +99,41 @@ function toInput(form: Form): EventInput {
   }
 }
 
+// An invitation's location is often its meeting link: open it, or copy it.
+function InviteLocation({ location }: { location: string }) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  if (!/^https?:\/\/\S+$/.test(location.trim())) return <span>{location}</span>
+  const url = location.trim()
+  const copy = async () => {
+    await copyText(url).catch(() => undefined)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <a
+        href={url}
+        className="min-w-0 truncate text-accent hover:underline"
+        title={url}
+        onClick={(event) => {
+          event.preventDefault()
+          openExternal(url)
+        }}
+      >
+        {url}
+      </a>
+      <IconButton
+        icon={copied ? Check : Copy}
+        iconSize={12}
+        label={copied ? t('common.copied') : t('chat.actions.copyLinkAddress')}
+        size="sm"
+        onClick={() => void copy()}
+      />
+    </span>
+  )
+}
+
 // Create or change an event made here. An accepted invitation opens read-only
 // but for its notes: its time and title are the organizer's to change. Mirrors
 // mobile's EventEditorSheet.
@@ -172,7 +208,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               {formatEventRange(item.start, item.end, item.all_day)}
               {item.all_day && ` · ${t('invite.allDay')}`}
             </span>
-            {item.location && <span>{item.location}</span>}
+            {item.location && <InviteLocation location={item.location} />}
             {item.response === 'tentative' && <span>{t('invite.youTentative')}</span>}
           </div>
         ) : (
@@ -249,7 +285,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
         )}
 
         <textarea
-          className="min-h-20 resize-y rounded-lg border border-border bg-chats px-2.5 py-1.5 text-xs text-primary placeholder-secondary outline-none transition-colors focus:border-accent select-text"
+          className={`${invite ? 'min-h-48' : 'min-h-20'} resize-y rounded-lg border border-border bg-chats px-2.5 py-1.5 text-xs text-primary placeholder-secondary outline-none transition-colors focus:border-accent select-text`}
           placeholder={t('calendar.fields.notes')}
           aria-label={t('calendar.fields.notes')}
           value={form.notes}
