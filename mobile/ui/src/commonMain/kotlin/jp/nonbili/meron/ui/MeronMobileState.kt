@@ -515,6 +515,16 @@ internal class MeronMobileState(
     // this first and re-reads the row inside it, making the pair one step.
     val remoteImageSendersWrites = Mutex()
 
+    // Default event alerts (timed minutes and all-day days, or NO_ALERT), from
+    // the core `settings` rows desktop shares.
+    var reminderLeadMinutes by mutableStateOf(DEFAULT_ALERT_MINUTES)
+    var reminderAllDayDays by mutableStateOf(DEFAULT_ALL_DAY_ALERT_DAYS)
+    var reminderLeadLoadGeneration = 0
+
+    // `app.prefsSet` applies writes in arrival order, so two quick picks must
+    // reach the core in the order they were made: each save takes this first.
+    val alertDefaultWrites = Mutex()
+
     // What the compose body knows about the signature in it, so changing the From
     // identity can swap it for the new account's. Null means unmanaged — a body
     // this app did not compose (see SignatureTracking).

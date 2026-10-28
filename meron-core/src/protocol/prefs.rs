@@ -34,6 +34,11 @@ pub(crate) fn set_mobile_pref(data_dir: &str, params: &Value) -> Result<Value, S
         if key == crate::proxy::SETTING_KEY {
             crate::proxy::set_global(crate::proxy::parse_global(&value));
         }
+        // Mobile hosts reschedule reminders on calendar changes.
+        if key == crate::reminders::LEAD_SETTING_KEY || key == crate::reminders::ALL_DAY_SETTING_KEY
+        {
+            crate::ffi::emit_event("calendar.changed", json!({ "method": "app.prefsSet" }));
+        }
         Ok(json!({ "ok": true }))
     })
 }

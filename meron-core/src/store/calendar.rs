@@ -121,6 +121,10 @@ pub struct CalendarEvent {
     pub ics: String,
     pub created_at: i64,
     pub updated_at: i64,
+    /// At most two alerts: minutes before a timed start, or for an all-day
+    /// event days before it, at 09:00. `None` follows the app-wide default and
+    /// an empty list means no alert.
+    pub alerts: Option<Vec<i64>>,
     /// Local schedule-change metadata; excluded from backups and undo payloads.
     #[serde(skip)]
     pub reminder_after: i64,
@@ -128,7 +132,7 @@ pub struct CalendarEvent {
 
 const EVENT_COLUMNS: &str = "id, title, notes, location, start_at, end_at, all_day, recurring,
     rrule, tzid, account, thread_id, message_id, invite_uid, response, ics, created_at, updated_at,
-    recurrence_id, COALESCE(json_extract(json, '$.reminder_after'), created_at)";
+    recurrence_id, COALESCE(json_extract(json, '$.reminder_after'), created_at), alerts";
 
 fn read_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarEvent> {
     Ok(CalendarEvent {
@@ -152,6 +156,9 @@ fn read_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarEvent> {
         updated_at: row.get(17)?,
         recurrence_id: row.get(18)?,
         reminder_after: row.get(19)?,
+        alerts: row
+            .get::<_, Option<String>>(20)?
+            .and_then(|alerts| serde_json::from_str(&alerts).ok()),
     })
 }
 
@@ -253,8 +260,8 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
     conn.execute(
         "INSERT INTO events (id, title, notes, location, start_at, end_at, all_day, recurring,
            rrule, tzid, account, thread_id, message_id, invite_uid, response, ics, created_at, updated_at,
-           recurrence_id, json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17))
+           recurrence_id, json, alerts)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17), ?20)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title, notes = excluded.notes, location = excluded.location,
            start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
@@ -262,9 +269,10 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
            account = excluded.account, thread_id = excluded.thread_id,
            message_id = excluded.message_id, invite_uid = excluded.invite_uid,
            response = excluded.response, ics = excluded.ics, updated_at = excluded.updated_at,
-           recurrence_id = excluded.recurrence_id,
+           recurrence_id = excluded.recurrence_id, alerts = excluded.alerts,
            json = CASE WHEN events.start_at <> excluded.start_at OR events.all_day <> excluded.all_day
                          OR events.rrule <> excluded.rrule OR events.tzid <> excluded.tzid OR ?19
+                         OR events.alerts IS NOT excluded.alerts
                   THEN json_set(events.json, '$.reminder_after', excluded.updated_at)
                   ELSE events.json END",
         params![
@@ -287,6 +295,10 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
             now,
             event.recurrence_id,
             invite_schedule_changed,
+            event
+                .alerts
+                .as_ref()
+                .map(|alerts| serde_json::to_string(alerts).unwrap_or_default()),
         ],
     )?;
     Ok(self::event(conn, &event.id)?.unwrap_or_else(|| event.clone()))

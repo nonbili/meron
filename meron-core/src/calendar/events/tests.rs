@@ -1693,3 +1693,37 @@ fn an_occurrence_update_does_not_pin_the_series_answer_to_that_date() {
         .collect();
     assert_eq!(responses, vec!["tentative"; 3], "{payload}");
 }
+
+#[test]
+fn an_invitation_turned_all_day_drops_alerts_counted_in_minutes() {
+    let conn = conn();
+    let timed = crate::calendar::parse_invite(
+        "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:inv-2\r\n\
+         DTSTART:20261008T170000Z\r\nDTEND:20261008T180000Z\r\nSUMMARY:Offsite\r\n\
+         ORGANIZER:mailto:maya@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    )
+    .unwrap();
+    record_invite_event(&conn, "acct", "", "inv@x", &timed, Response::Accepted).unwrap();
+    let event = store::invite_event(&conn, "acct", "inv-2")
+        .unwrap()
+        .unwrap();
+    let alerts = EventInput {
+        alerts: Some(Some(vec![60])),
+        ..input("Ignored", 1, 2)
+    };
+    let value = update_event(&conn, &event.id, &alerts).unwrap();
+    assert_eq!(value["event"]["alerts"], json!([60]));
+    let all_day = crate::calendar::parse_invite(
+        "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:inv-2\r\nSEQUENCE:1\r\n\
+         DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261009\r\nSUMMARY:Offsite\r\n\
+         ORGANIZER:mailto:maya@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    )
+    .unwrap();
+    assert!(all_day.all_day);
+    record_invite_event(&conn, "acct", "", "inv@x", &all_day, Response::Accepted).unwrap();
+    let event = store::invite_event(&conn, "acct", "inv-2")
+        .unwrap()
+        .unwrap();
+    assert!(event.all_day);
+    assert_eq!(event.alerts, None);
+}

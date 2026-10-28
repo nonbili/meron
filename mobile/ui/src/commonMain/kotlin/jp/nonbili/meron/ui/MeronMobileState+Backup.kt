@@ -204,7 +204,8 @@ private suspend fun MeronMobileState.awaitBackupReloads(restoreGeneration: Int) 
         val signatureJob = loadAppSignature()
         val signatureGeneration = appSignatureLoadGeneration
         val remoteSendersJob = loadRemoteImageSenders()
-        listOfNotNull(accountJob, proxyJob, signatureJob, remoteSendersJob).joinAll()
+        val reminderLeadJob = loadAlertDefaults()
+        listOfNotNull(accountJob, proxyJob, signatureJob, remoteSendersJob, reminderLeadJob).joinAll()
         val reloadSuperseded =
             accountGeneration != accountLoadGeneration ||
                 proxyGeneration != proxyLoadGeneration ||

@@ -1777,10 +1777,14 @@ data class CalendarEventParams(
      *  opened on, so the core moves the series by the change rather than
      *  restarting it there. 0 for none. */
     val occurrenceStart: Long = 0,
+    /** Minutes before start, at most two; null follows the app-wide default
+     *  and an empty list means none. */
+    val alerts: List<Int>? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "event_id" to eventId.takeIf { it.isNotEmpty() }?.jsonString(),
+            "alerts" to (alerts?.joinToString(separator = ",", prefix = "[", postfix = "]") ?: "null"),
             "occurrence_start" to occurrenceStart.takeIf { it > 0 }?.toString(),
             "title" to title.jsonString(),
             "notes" to notes.jsonString(),

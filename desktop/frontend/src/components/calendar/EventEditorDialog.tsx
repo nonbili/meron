@@ -1,8 +1,10 @@
 import { CalendarDays, Check, Copy, Mail, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
+import { useValue } from '@legendapp/state/react'
 import { dateValue, localInstant, parseDateValue, timeValue, utcDate, utcDateValue } from '../../lib/calendarGrid'
 import { formatEventRange } from '../../lib/date'
 import { Dialog } from '../dialog/Dialog'
+import { NO_ALERT, alertLabel, alertOptions } from '../../lib/eventAlerts'
 import { useTranslation } from '../../lib/i18n'
 import { copyText, openExternal } from '../../lib/native'
 import {
@@ -15,6 +17,7 @@ import {
   type EventEditor,
   type EventInput,
 } from '../../states/calendar'
+import { settings$ } from '../../states/settings'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
@@ -38,6 +41,23 @@ type Form = {
   endDate: string
   endTime: string
   repeat: CalendarRepeat
+  /** 'default' follows the app-wide alert; NO_ALERT turns alerts off. */
+  alert: 'default' | number
+  /** A second lead, only alongside a first one; NO_ALERT for none. */
+  secondAlert: number
+}
+
+/** The form's alert fields for an event's stored alerts. */
+function alertFields(alerts: number[] | null | undefined): Pick<Form, 'alert' | 'secondAlert'> {
+  if (alerts == null) return { alert: 'default', secondAlert: NO_ALERT }
+  return { alert: alerts[0] ?? NO_ALERT, secondAlert: alerts[1] ?? NO_ALERT }
+}
+
+/** What the core stores for the form's alerts. */
+function formAlerts(form: Form): number[] | null {
+  if (form.alert === 'default') return null
+  if (form.alert === NO_ALERT) return []
+  return form.secondAlert === NO_ALERT ? [form.alert] : [form.alert, form.secondAlert]
 }
 
 /** The editor's fields for what it was opened on. A new event starts at 09:00
@@ -56,6 +76,7 @@ function initialForm(editor: EventEditor): Form {
       endDate: day,
       endTime: '10:00',
       repeat: '',
+      ...alertFields(null),
     }
   }
   const { item } = editor
@@ -71,6 +92,7 @@ function initialForm(editor: EventEditor): Form {
     endDate: item.all_day ? utcDateValue(Math.max(item.start, item.end - 86_400)) : dateValue(end),
     endTime: timeValue(end),
     repeat: item.repeat,
+    ...alertFields(item.alerts),
   }
 }
 
@@ -85,6 +107,7 @@ function toInput(form: Form): EventInput {
       start,
       end: Math.max(start, utcDate(form.endDate)) + 86_400,
       repeat: form.repeat,
+      alerts: formAlerts(form),
     }
   }
   const start = localInstant(form.startDate, form.startTime)
@@ -96,7 +119,68 @@ function toInput(form: Form): EventInput {
     start,
     end: Math.max(start, localInstant(form.endDate, form.endTime)),
     repeat: form.repeat,
+    alerts: formAlerts(form),
   }
+}
+
+// Apple Calendar's "Alert" and "Second Alert": minutes before a timed event,
+// days before an all-day one (at 09:00).
+function AlertFields({
+  form,
+  allDay,
+  set,
+}: {
+  form: Form
+  /** The kind the alerts count in. */
+  allDay: boolean
+  set: <K extends keyof Form>(key: K, value: Form[K]) => void
+}) {
+  const { t } = useTranslation()
+  const defaultMinutes = useValue(settings$.reminderLeadMinutes)
+  const defaultDays = useValue(settings$.reminderAllDayDays)
+  const label = 'text-[0.6875rem] font-semibold text-secondary'
+  const defaultLabel = t('calendar.alert.default', {
+    value: alertLabel(allDay ? defaultDays : defaultMinutes, allDay),
+  })
+  const first = form.alert
+  const options = alertOptions(allDay)
+  return (
+    <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-2">
+      <span className={label}>{t('calendar.alert.label')}</span>
+      <SelectInput
+        aria-label={t('calendar.alert.label')}
+        value={String(first)}
+        onChange={(event) => {
+          const value = event.target.value
+          set('alert', value === 'default' ? 'default' : Number(value))
+        }}
+      >
+        <option value="default">{defaultLabel}</option>
+        <option value={NO_ALERT}>{alertLabel(NO_ALERT)}</option>
+        {options.map((lead) => (
+          <option key={lead} value={lead}>
+            {alertLabel(lead, allDay)}
+          </option>
+        ))}
+      </SelectInput>
+      {typeof first === 'number' && first !== NO_ALERT && (
+        <>
+          <span className={label}>{t('calendar.alert.second')}</span>
+          <SelectInput
+            aria-label={t('calendar.alert.second')}
+            value={String(form.secondAlert)}
+            onChange={(event) => set('secondAlert', Number(event.target.value))}
+          >
+            {[NO_ALERT, ...options.filter((lead) => lead !== first)].map((lead) => (
+              <option key={lead} value={lead}>
+                {alertLabel(lead, allDay)}
+              </option>
+            ))}
+          </SelectInput>
+        </>
+      )}
+    </div>
+  )
 }
 
 // An invitation's location is often its meeting link: open it, or copy it.
@@ -135,7 +219,7 @@ function InviteLocation({ location }: { location: string }) {
 }
 
 // Create or change an event made here. An accepted invitation opens read-only
-// but for its notes: its time and title are the organizer's to change. Mirrors
+// but for its notes and alerts: its time and title are the organizer's to change. Mirrors
 // mobile's EventEditorSheet.
 export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   const { t } = useTranslation()
@@ -222,7 +306,14 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               onChange={(event) => set('title', event.target.value)}
             />
             <label className="flex items-center gap-2 text-xs font-medium">
-              <Checkbox checked={form.allDay} onChange={(event) => set('allDay', event.target.checked)} />
+              <Checkbox
+                checked={form.allDay}
+                // Leads mean minutes for a timed event and days for an all-day
+                // one, so the switch starts the alerts over from the default.
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, allDay: event.target.checked, ...alertFields(null) }))
+                }
+              />
               {t('invite.allDay')}
             </label>
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-2">
@@ -283,6 +374,14 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
             />
           </>
         )}
+
+        <AlertFields
+          form={form}
+          // An invitation's alerts belong to its series, whose kind one
+          // occurrence can differ from.
+          allDay={invite ? (item.alerts_all_day ?? item.all_day) : form.allDay}
+          set={set}
+        />
 
         <textarea
           className={`${invite ? 'min-h-48' : 'min-h-20'} resize-y rounded-lg border border-border bg-chats px-2.5 py-1.5 text-xs text-primary placeholder-secondary outline-none transition-colors focus:border-accent select-text`}

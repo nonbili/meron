@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.RssFeed
@@ -52,6 +53,8 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -171,6 +174,9 @@ internal fun SettingsScreen(
     onToggleTasks: () -> Unit,
     calendarEnabled: Boolean,
     onToggleCalendar: () -> Unit,
+    reminderLeadMinutes: Int,
+    reminderAllDayDays: Int,
+    onAlertDefaultChange: (allDay: Boolean, lead: Int) -> Unit,
     sendShortcutMode: SendShortcutMode,
     onToggleSendShortcut: () -> Unit,
     quoteReplies: Boolean,
@@ -351,6 +357,9 @@ internal fun SettingsScreen(
                     onToggleTasks = onToggleTasks,
                     calendarEnabled = calendarEnabled,
                     onToggleCalendar = onToggleCalendar,
+                    reminderLeadMinutes = reminderLeadMinutes,
+                    reminderAllDayDays = reminderAllDayDays,
+                    onAlertDefaultChange = onAlertDefaultChange,
                     kanbanColumnWidth = kanbanColumnWidth,
                     onCycleKanbanColumnWidth = onCycleKanbanColumnWidth,
                     appProxy = appProxy,
@@ -806,6 +815,9 @@ internal fun SettingsGeneralPage(
     onToggleTasks: () -> Unit,
     calendarEnabled: Boolean,
     onToggleCalendar: () -> Unit,
+    reminderLeadMinutes: Int,
+    reminderAllDayDays: Int,
+    onAlertDefaultChange: (allDay: Boolean, lead: Int) -> Unit,
     kanbanColumnWidth: Int,
     onCycleKanbanColumnWidth: () -> Unit,
     appProxy: ProxySpec,
@@ -833,8 +845,10 @@ internal fun SettingsGeneralPage(
     modifier: Modifier = Modifier,
 ) {
     // The Network label: Appearance (label + 3 rows), Side navigation (label +
-    // 3 rows) and Kanban (2) come before it on every platform.
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) 10 else 0)
+    // 4 rows, plus the 2 alert defaults while the calendar is on) and Kanban
+    // (2) come before it on every platform.
+    val proxyIndex = if (calendarEnabled) 12 else 10
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) proxyIndex else 0)
     LazyColumn(modifier.appScrollbar(listState), state = listState) {
         item { SettingsSectionLabel(tr("settings.pages.appearance")) }
         item {
@@ -930,6 +944,26 @@ internal fun SettingsGeneralPage(
                 checked = calendarEnabled,
                 onToggle = onToggleCalendar,
             )
+        }
+        if (calendarEnabled) {
+            item {
+                AlertDefaultRow(
+                    title = tr("settings.calendar.reminderLead"),
+                    hint = tr("settings.calendar.reminderLeadHint"),
+                    allDay = false,
+                    lead = reminderLeadMinutes,
+                    onChange = { onAlertDefaultChange(false, it) },
+                )
+            }
+            item {
+                AlertDefaultRow(
+                    title = tr("settings.calendar.allDayAlert"),
+                    hint = tr("settings.calendar.allDayAlertHint"),
+                    allDay = true,
+                    lead = reminderAllDayDays,
+                    onChange = { onAlertDefaultChange(true, it) },
+                )
+            }
         }
 
         item { SettingsSectionLabel(tr("settings.sections.kanban")) }
@@ -1214,6 +1248,38 @@ internal fun SettingsComposerPage(
         }
 
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** A default event alert, picked from a menu. */
+@Composable
+private fun AlertDefaultRow(
+    title: String,
+    hint: String,
+    allDay: Boolean,
+    lead: Int,
+    onChange: (Int) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        SettingsRow(
+            icon = Icons.Filled.Notifications,
+            title = title,
+            hint = hint,
+            onClick = { menu = true },
+            trailing = { Text(alertLabel(lead, allDay), color = MaterialTheme.colorScheme.primary) },
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            (listOf(NO_ALERT) + alertOptions(allDay)).forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(alertLabel(option, allDay)) },
+                    onClick = {
+                        menu = false
+                        if (option != lead) onChange(option)
+                    },
+                )
+            }
+        }
     }
 }
 

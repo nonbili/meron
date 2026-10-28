@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.AlertDialog
@@ -81,15 +82,20 @@ private enum class Picking { StartDate, EndDate, StartTime, EndTime }
 
 private const val MINUTES_PER_DAY = 24 * 60L
 
+/** The editor's first alert: null follows the default, [NO_ALERT] is none. */
+private fun firstAlert(alerts: List<Int>?): Int? = if (alerts == null) null else alerts.firstOrNull() ?: NO_ALERT
+
 /**
  * Create or change an event made here. An accepted invitation opens read-only
- * but for its notes: its time and title are the organizer's to change.
+ * but for its notes and alerts: its time and title are the organizer's to change.
  * Mirrors desktop's EventEditorDialog.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CalendarEventEditor(
     target: CalendarEditorTarget,
+    defaultAlertMinutes: Int,
+    defaultAllDayAlertDays: Int,
     saving: Boolean,
     onDismiss: () -> Unit,
     onSave: (CalendarEventParams) -> Unit,
@@ -127,6 +133,15 @@ internal fun CalendarEventEditor(
     var endMinutes by remember { mutableStateOf(item?.takeUnless { it.allDay }?.let { minutesOf(maxOf(it.start, it.end)) } ?: (10 * 60)) }
     var picking by remember { mutableStateOf<Picking?>(null) }
     var repeatMenu by remember { mutableStateOf(false) }
+    var alert by remember { mutableStateOf(firstAlert(item?.alerts)) }
+    var secondAlert by remember { mutableStateOf(item?.alerts?.getOrNull(1) ?: NO_ALERT) }
+
+    fun alerts(): List<Int>? =
+        when (val first = alert) {
+            null -> null
+            NO_ALERT -> emptyList()
+            else -> listOfNotNull(first, secondAlert.takeIf { it != NO_ALERT })
+        }
 
     fun params(): CalendarEventParams {
         val (start, end) =
@@ -147,6 +162,7 @@ internal fun CalendarEventEditor(
             allDay = allDay,
             repeat = repeat,
             occurrenceStart = item?.takeIf { it.recurring }?.start ?: 0,
+            alerts = alerts(),
         )
     }
 
@@ -182,7 +198,16 @@ internal fun CalendarEventEditor(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(tr("invite.allDay"), modifier = Modifier.weight(1f))
-                        Switch(checked = allDay, onCheckedChange = { allDay = it })
+                        Switch(
+                            checked = allDay,
+                            onCheckedChange = {
+                                allDay = it
+                                // Leads mean minutes for a timed event and days
+                                // for an all-day one: start over from the default.
+                                alert = null
+                                secondAlert = NO_ALERT
+                            },
+                        )
                     }
                     DateTimeRow(
                         label = tr("calendar.fields.starts"),
@@ -222,6 +247,31 @@ internal fun CalendarEventEditor(
                         placeholder = { Text(tr("calendar.fields.location")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                // An invitation's alerts belong to its series, whose kind one
+                // occurrence can differ from.
+                val alertsAllDay = if (invite) item?.alertsAllDay ?: item?.allDay ?: false else allDay
+                val defaultLabel =
+                    tr(
+                        "calendar.alert.default",
+                        mapOf("value" to alertLabel(if (alertsAllDay) defaultAllDayAlertDays else defaultAlertMinutes, alertsAllDay)),
+                    )
+                val first = alert
+                AlertChip(
+                    label = tr("calendar.alert.label"),
+                    value = first?.let { alertLabel(it, alertsAllDay) } ?: defaultLabel,
+                    options = listOf<Int?>(null, NO_ALERT) + alertOptions(alertsAllDay),
+                    optionLabel = { it?.let { lead -> alertLabel(lead, alertsAllDay) } ?: defaultLabel },
+                    onPick = { alert = it },
+                )
+                if (first != null && first != NO_ALERT) {
+                    AlertChip(
+                        label = tr("calendar.alert.second"),
+                        value = alertLabel(secondAlert, alertsAllDay),
+                        options = listOf<Int?>(NO_ALERT) + alertOptions(alertsAllDay).filter { it != first },
+                        optionLabel = { alertLabel(it ?: NO_ALERT, alertsAllDay) },
+                        onPick = { secondAlert = it ?: NO_ALERT },
                     )
                 }
                 OutlinedTextField(
@@ -312,6 +362,39 @@ internal fun CalendarEventEditor(
         }
 
         null -> {}
+    }
+}
+
+/** One of the alert pickers: a chip naming its choice, opening a menu. */
+@Composable
+private fun AlertChip(
+    label: String,
+    value: String,
+    options: List<Int?>,
+    optionLabel: @Composable (Int?) -> String,
+    onPick: (Int?) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            AssistChip(
+                onClick = { menu = true },
+                label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                leadingIcon = { Icon(Icons.Filled.Notifications, contentDescription = null, Modifier.size(18.dp)) },
+            )
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option)) },
+                        onClick = {
+                            onPick(option)
+                            menu = false
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

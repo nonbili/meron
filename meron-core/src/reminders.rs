@@ -1,6 +1,7 @@
 //! One reminder plan shared by desktop and native mobile notification schedulers.
-//! Timed events alert ten minutes before starting; date-only items at 09:00
-//! local time. A selected task time is an instant, including explicit midnight.
+//! Events alert at their own alerts (at most two) or the app-wide default:
+//! timed events ten minutes before starting, all-day events at 09:00 local time
+//! on the day, unless changed. Date-only tasks alert at 09:00. A selected task time is an instant, including explicit midnight.
 use anyhow::Result;
 use chrono::{Datelike, TimeZone};
 use rusqlite::{Connection, params};
@@ -10,6 +11,15 @@ use serde_json::{Value, json};
 use crate::{calendar, store};
 const DAY: i64 = 86_400;
 const LEAD: i64 = 600;
+/// Settings row holding the default event alert, in minutes before start, or
+/// [`NO_ALERT`]. Shared by desktop and mobile, since the core plans reminders
+/// for both.
+pub const LEAD_SETTING_KEY: &str = "reminder_lead_minutes";
+/// Settings row holding the default all-day event alert, in days before the
+/// event (at 09:00), or [`NO_ALERT`].
+pub const ALL_DAY_SETTING_KEY: &str = "reminder_all_day_days";
+/// The default alert setting that turns event alerts off.
+pub const NO_ALERT: i64 = -1;
 const START_KEY: &str = "__reminders_started__";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -68,6 +78,66 @@ fn reset_start(conn: &Connection, now: i64) -> Result<()> {
     Ok(())
 }
 
+/// The default alerts for events without their own, as (timed minutes,
+/// all-day days): none, or one lead each. A missing or out-of-range setting
+/// falls back to [LEAD] and the day itself.
+fn default_alerts(conn: &Connection) -> Result<(Vec<i64>, Vec<i64>)> {
+    let stored = store::settings_get(
+        conn,
+        &[
+            LEAD_SETTING_KEY.to_string(),
+            ALL_DAY_SETTING_KEY.to_string(),
+        ],
+    )?;
+    let read = |key: &str, max: i64, fallback: i64| match stored[key].as_i64() {
+        Some(NO_ALERT) => vec![],
+        Some(lead) if (0..=max).contains(&lead) => vec![lead],
+        _ => vec![fallback],
+    };
+    Ok((
+        read(
+            LEAD_SETTING_KEY,
+            calendar::events::MAX_ALERT_MINUTES,
+            LEAD / 60,
+        ),
+        read(
+            ALL_DAY_SETTING_KEY,
+            calendar::events::MAX_ALL_DAY_ALERT_DAYS,
+            0,
+        ),
+    ))
+}
+
+/// When each alert of an all-day occurrence fires: 09:00 local time, the
+/// given number of days before its (UTC calendar) date.
+fn all_day_alert_times(start: i64, alerts: &[i64]) -> Vec<(usize, i64)> {
+    let mut seen = std::collections::HashSet::new();
+    alerts
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, days)| morning(start - days * DAY, true).map(|at| (slot, at)))
+        .filter(|(_, at)| seen.insert(*at))
+        .collect()
+}
+
+/// When each alert of a timed occurrence fires, keyed by its slot. An event
+/// created or rescheduled after every alert's time alerts once, at its start.
+fn alert_times(start: i64, changed: i64, alerts: &[i64]) -> Vec<(usize, i64)> {
+    let times: Vec<(usize, i64)> = alerts
+        .iter()
+        .enumerate()
+        .map(|(slot, minutes)| (slot, start - minutes * 60))
+        .collect();
+    if !times.is_empty() && changed < start && times.iter().all(|(_, at)| *at < changed) {
+        return vec![(0, start)];
+    }
+    let mut seen = std::collections::HashSet::new();
+    times
+        .into_iter()
+        .filter(|(_, at)| seen.insert(*at))
+        .collect()
+}
+
 fn plan(conn: &Connection, from: i64, to: i64, now: i64) -> Result<Vec<Reminder>> {
     let started = started_at(conn, now)?;
     Ok(list(conn, from, to)?
@@ -82,7 +152,9 @@ fn plan(conn: &Connection, from: i64, to: i64, now: i64) -> Result<Vec<Reminder>
 
 pub fn list(conn: &Connection, from: i64, to: i64) -> Result<Vec<Reminder>> {
     let mut reminders = Vec::new();
-    let payload = calendar::events::events_payload(conn, from - DAY, to + DAY + LEAD, false)?;
+    let (timed_defaults, all_day_defaults) = default_alerts(conn)?;
+    let reach = calendar::events::MAX_ALERT_MINUTES * 60;
+    let payload = calendar::events::events_payload(conn, from - DAY, to + DAY + reach, false)?;
     for event in payload["events"].as_array().into_iter().flatten() {
         if event["response"] == "declined" {
             continue;
@@ -91,32 +163,47 @@ pub fn list(conn: &Connection, from: i64, to: i64) -> Result<Vec<Reminder>> {
         let all_day = event["all_day"] == true;
         let created = event["created_at"].as_i64().unwrap_or(0);
         let changed = event["reminder_after"].as_i64().unwrap_or(created);
-        let at = if all_day {
-            morning(start, true)
-        } else if created.max(changed) > start - LEAD && created.max(changed) < start {
-            // An event created or rescheduled inside its lead time alerts at its start.
-            Some(start)
+        // An occurrence the organizer made all-day (or timed) on its own cannot
+        // use the series' alerts, which count in the other unit.
+        let own: Option<Vec<i64>> = serde_json::from_value(event["alerts"].clone())
+            .ok()
+            .filter(|_| event["alerts_all_day"] == event["all_day"]);
+        let times = if all_day {
+            all_day_alert_times(start, own.as_deref().unwrap_or(&all_day_defaults))
         } else {
-            Some(start - LEAD)
-        };
-        let Some(at) = at.filter(|at| *at >= from && *at < to) else {
-            continue;
+            alert_times(
+                start,
+                created.max(changed),
+                own.as_deref().unwrap_or(&timed_defaults),
+            )
         };
         let id = event["id"].as_str().unwrap_or_default();
-        reminders.push(Reminder {
-            key: format!("event:{id}:{start}:{at}"),
-            kind: "calendar".into(),
-            item_id: id.into(),
-            title: event["title"].as_str().unwrap_or_default().into(),
-            body: event["location"].as_str().unwrap_or_default().into(),
-            at,
-            eligible_after: created.max(changed),
-            expires_at: if all_day {
-                local_day_end(event["end"].as_i64().unwrap_or(start + DAY)).unwrap_or(start + DAY)
+        for (slot, at) in times {
+            if at < from || at >= to {
+                continue;
+            }
+            // Slot 0 keeps the key format receipts were first stored in.
+            let occurrence = if slot == 0 {
+                format!("event:{id}:{start}")
             } else {
-                event["end"].as_i64().unwrap_or(start).max(start + 1)
-            },
-        });
+                format!("event:{id}:{start}.{slot}")
+            };
+            reminders.push(Reminder {
+                key: format!("{occurrence}:{at}"),
+                kind: "calendar".into(),
+                item_id: id.into(),
+                title: event["title"].as_str().unwrap_or_default().into(),
+                body: event["location"].as_str().unwrap_or_default().into(),
+                at,
+                eligible_after: created.max(changed),
+                expires_at: if all_day {
+                    local_day_end(event["end"].as_i64().unwrap_or(start + DAY))
+                        .unwrap_or(start + DAY)
+                } else {
+                    event["end"].as_i64().unwrap_or(start).max(start + 1)
+                },
+            });
+        }
     }
     for task in store::tasks_due_between(conn, from - DAY, to + DAY)? {
         let at = if task.due_has_time {
@@ -152,9 +239,9 @@ pub fn list(conn: &Connection, from: i64, to: i64) -> Result<Vec<Reminder>> {
         {
             continue;
         }
-        // A lead-time fallback or timezone change can change an occurrence's
-        // trigger without making it a new occurrence. Match existing receipts
-        // by the event id + occurrence start, retaining the persisted key format.
+        // A lead-time change or timezone change can change an alert's trigger
+        // without making it a new one. Match existing receipts by the event id
+        // + occurrence start (+ alert slot), retaining the persisted key format.
         if reminder.kind == "calendar" {
             if let Some((occurrence, _)) = reminder.key.rsplit_once(':') {
                 if occurrence_check.query_row(

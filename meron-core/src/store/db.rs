@@ -683,6 +683,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 20 {
         migrate_v20(&tx)?;
     }
+    if version < 21 {
+        migrate_v21(&tx)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -1343,6 +1346,16 @@ fn migrate_v20(conn: &Connection) -> Result<()> {
             delivered_at INTEGER NOT NULL
          );
          PRAGMA user_version = 20;",
+    )?;
+    Ok(())
+}
+
+/// An event's own alerts (JSON minutes before start); NULL follows the
+/// app-wide default.
+fn migrate_v21(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "ALTER TABLE events ADD COLUMN alerts TEXT;
+         PRAGMA user_version = 21;",
     )?;
     Ok(())
 }

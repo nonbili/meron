@@ -109,6 +109,19 @@ internal const val APP_SIGNATURE_SETTING_KEY = "signature"
  */
 internal const val REMOTE_IMAGE_SENDERS_SETTING_KEY = "remote_image_senders"
 
+/**
+ * Core `settings` row holding the default event alert, in minutes before start
+ * or [NO_ALERT] (see EventAlerts.kt).
+ *
+ * Shared with desktop and read by the core itself (it plans reminders), so like
+ * the allowlist it is neither namespaced under `mobile.` nor a registry entry.
+ */
+internal const val REMINDER_LEAD_SETTING_KEY = "reminder_lead_minutes"
+
+/** Core `settings` row holding the default all-day event alert, in days before
+ *  the event or [NO_ALERT]; shared with desktop like [REMINDER_LEAD_SETTING_KEY]. */
+internal const val REMINDER_ALL_DAY_SETTING_KEY = "reminder_all_day_days"
+
 private val settingsByPrefKey = mobileSettings.associateBy { it.store to it.key }
 private val settingsBySettingKey = mobileSettings.associateBy { it.settingKey }
 

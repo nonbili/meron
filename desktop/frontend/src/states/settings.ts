@@ -37,6 +37,13 @@ import {
 import type { Account, ChatWallpaper } from '../types'
 import { normalizeI18nLanguage, resolveI18nLanguageFromWebLocale, type SupportedI18nLanguage } from '../lib/i18n'
 import { setTrayStyle } from '../lib/trayStyle'
+import {
+  ALERT_MINUTES,
+  ALL_DAY_ALERT_DAYS,
+  DEFAULT_ALERT_MINUTES,
+  DEFAULT_ALL_DAY_ALERT_DAYS,
+  NO_ALERT,
+} from '../lib/eventAlerts'
 
 // Core-persisted user settings map to the `settings` DB table; native tray
 // style is loaded separately through tray.getStyle. Each core-backed
@@ -174,6 +181,10 @@ export type Settings = {
   tasksEnabled: boolean
   /** Whether the optional calendar is available, like [tasksEnabled]. */
   calendarEnabled: boolean
+  /** Default alert for timed events, minutes before start or NO_ALERT. Read by the core. */
+  reminderLeadMinutes: number
+  /** Default alert for all-day events, days before at 09:00 or NO_ALERT. Read by the core. */
+  reminderAllDayDays: number
   /**
    * Whether the window's close button hides Meron to the tray instead of
    * quitting (Linux and Windows; macOS keeps its own close/quit split).
@@ -233,6 +244,8 @@ const DB_KEY = {
   showCalendarInSideNav: 'show_calendar_in_sidenav',
   tasksEnabled: 'tasks_enabled',
   calendarEnabled: 'calendar_enabled',
+  reminderLeadMinutes: 'reminder_lead_minutes',
+  reminderAllDayDays: 'reminder_all_day_days',
   closeToTray: 'close_to_tray',
   autoUpdateCheck: 'auto_update_check',
   dismissedUpdateVersion: 'dismissed_update_version',
@@ -447,6 +460,8 @@ export const settings$ = observable<Settings>({
   showCalendarInSideNav: true,
   tasksEnabled: true,
   calendarEnabled: true,
+  reminderLeadMinutes: DEFAULT_ALERT_MINUTES,
+  reminderAllDayDays: DEFAULT_ALL_DAY_ALERT_DAYS,
   closeToTray: true,
   // Boot gets the native saved choice/default before hydrating settings.
   monochromeTrayIcon: false,
@@ -1013,6 +1028,19 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.calendarEnabled] === 'boolean') {
       settings$.calendarEnabled.set(prefs[DB_KEY.calendarEnabled] as boolean)
+    }
+
+    const reminderLead = prefs[DB_KEY.reminderLeadMinutes]
+    if (typeof reminderLead === 'number' && (reminderLead === NO_ALERT || ALERT_MINUTES.includes(reminderLead))) {
+      settings$.reminderLeadMinutes.set(reminderLead)
+    }
+
+    const reminderAllDay = prefs[DB_KEY.reminderAllDayDays]
+    if (
+      typeof reminderAllDay === 'number' &&
+      (reminderAllDay === NO_ALERT || ALL_DAY_ALERT_DAYS.includes(reminderAllDay))
+    ) {
+      settings$.reminderAllDayDays.set(reminderAllDay)
     }
 
     if (typeof prefs[DB_KEY.closeToTray] === 'boolean') {

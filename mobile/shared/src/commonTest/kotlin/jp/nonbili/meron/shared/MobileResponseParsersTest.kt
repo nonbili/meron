@@ -769,4 +769,16 @@ class MobileResponseParsersTest {
         assertEquals("""{"id":"event-1"}""", parseCalendarRestorePayload("""{"ok":true,"restore":{"id":"event-1"}}"""))
         assertEquals(null, parseCalendarRestorePayload("""{"ok":true,"restore":null}"""))
     }
+
+    @Test
+    fun calendarAlertsDistinguishDefaultNoneAndOwn() {
+        val items =
+            parseCalendarEventsResponse(
+                """{"events":[{"id":"a","alerts":null},{"id":"b","alerts":[]},{"id":"c","alerts":[60, 5]}]}""",
+            )
+        assertEquals(listOf(null, emptyList(), listOf(60, 5)), items.map { it.alerts })
+        val params = CalendarEventParams(title = "", start = 1, end = 2)
+        assertTrue(params.toJson().contains(""""alerts":null"""))
+        assertTrue(params.copy(alerts = listOf(30)).toJson().contains(""""alerts":[30]"""))
+    }
 }

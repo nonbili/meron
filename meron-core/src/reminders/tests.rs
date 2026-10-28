@@ -373,3 +373,206 @@ fn a_repeat_rule_update_does_not_replay_an_already_delivered_occurrence() {
     let next = plan(&conn, start + 1, now + 3 * DAY, now).unwrap();
     assert!(!next.is_empty());
 }
+
+#[test]
+fn event_lead_time_follows_the_setting() {
+    let (_dir, conn) = db();
+    let start = store::now_unix() + DAY;
+    create_event(
+        &conn,
+        &EventInput {
+            title: "Review".into(),
+            start,
+            end: start + 1800,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let at = |conn: &Connection| list(conn, start - DAY, start + 1).unwrap()[0].at;
+    assert_eq!(at(&conn), start - LEAD);
+    store::setting_set(&conn, LEAD_SETTING_KEY, &json!(60)).unwrap();
+    assert_eq!(at(&conn), start - 3600);
+    store::setting_set(&conn, LEAD_SETTING_KEY, &json!(0)).unwrap();
+    assert_eq!(at(&conn), start);
+    store::setting_set(&conn, LEAD_SETTING_KEY, &json!(-5)).unwrap();
+    assert_eq!(at(&conn), start - LEAD);
+}
+
+#[test]
+fn default_alert_can_be_turned_off() {
+    let (_dir, conn) = db();
+    let start = store::now_unix() + DAY;
+    create_event(
+        &conn,
+        &EventInput {
+            title: "Quiet".into(),
+            start,
+            end: start + 1800,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    store::setting_set(&conn, LEAD_SETTING_KEY, &json!(NO_ALERT)).unwrap();
+    assert!(list(&conn, start - DAY, start + 1).unwrap().is_empty());
+}
+
+#[test]
+fn an_event_with_two_alerts_reminds_at_each_and_receipts_stay_per_alert() {
+    let (_dir, conn) = db();
+    let start = store::now_unix() + DAY;
+    let value = create_event(
+        &conn,
+        &EventInput {
+            title: "Flight".into(),
+            start,
+            end: start + 3600,
+            alerts: Some(Some(vec![60, 5, 60, -3])),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(value["event"]["alerts"], json!([60, 5]));
+    let plan = list(&conn, start - DAY, start + 1).unwrap();
+    let times: Vec<i64> = plan.iter().map(|r| r.at).collect();
+    assert_eq!(times, vec![start - 3600, start - 300]);
+    assert!(claim(&conn, &plan[0].key, start - 3600).unwrap().is_some());
+    let rest = list(&conn, start - DAY, start + 1).unwrap();
+    assert_eq!(rest.len(), 1);
+    assert_eq!(rest[0].at, start - 300);
+}
+
+#[test]
+fn event_alerts_override_the_default_and_survive_edits_that_omit_them() {
+    let (_dir, conn) = db();
+    let start = store::now_unix() + DAY;
+    let value = create_event(
+        &conn,
+        &EventInput {
+            title: "Muted".into(),
+            start,
+            end: start + 1800,
+            alerts: Some(Some(vec![])),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let id = value["event"]["id"].as_str().unwrap().to_string();
+    assert!(list(&conn, start - DAY, start + 1).unwrap().is_empty());
+    let rename = EventInput {
+        title: "Still muted".into(),
+        start,
+        end: start + 1800,
+        ..Default::default()
+    };
+    calendar::events::update_event(&conn, &id, &rename).unwrap();
+    assert!(list(&conn, start - DAY, start + 1).unwrap().is_empty());
+    let follow_default = EventInput {
+        alerts: Some(None),
+        ..rename
+    };
+    let value = calendar::events::update_event(&conn, &id, &follow_default).unwrap();
+    assert_eq!(value["event"]["alerts"], Value::Null);
+    assert_eq!(
+        list(&conn, start - DAY, start + 1).unwrap()[0].at,
+        start - LEAD
+    );
+}
+
+#[test]
+fn an_all_day_event_with_alerts_off_stays_quiet() {
+    let (_dir, conn) = db();
+    let day = (store::now_unix() / DAY + 2) * DAY;
+    create_event(
+        &conn,
+        &EventInput {
+            title: "Birthday".into(),
+            start: day,
+            end: day + DAY,
+            all_day: true,
+            alerts: Some(Some(vec![])),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(list(&conn, day - DAY, day + 2 * DAY).unwrap().is_empty());
+}
+
+#[test]
+fn alerts_round_trip_through_undo() {
+    let (_dir, conn) = db();
+    let start = store::now_unix() + DAY;
+    let value = create_event(
+        &conn,
+        &EventInput {
+            title: "Undo".into(),
+            start,
+            end: start + 1800,
+            alerts: Some(Some(vec![30])),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let id = value["event"]["id"].as_str().unwrap();
+    let deleted = calendar::events::delete_event(&conn, id).unwrap();
+    calendar::events::restore_event(&conn, &deleted["restore"]).unwrap();
+    assert_eq!(
+        store::event(&conn, id).unwrap().unwrap().alerts,
+        Some(vec![30])
+    );
+}
+
+#[test]
+fn all_day_alerts_fire_at_nine_on_the_day_or_days_before() {
+    let (_dir, conn) = db();
+    let day = (store::now_unix() / DAY + 10) * DAY;
+    let value = create_event(
+        &conn,
+        &EventInput {
+            title: "Trip".into(),
+            start: day,
+            end: day + DAY,
+            all_day: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let id = value["event"]["id"].as_str().unwrap().to_string();
+    let times = |conn: &Connection| {
+        list(conn, day - 9 * DAY, day + 2 * DAY)
+            .unwrap()
+            .iter()
+            .map(|r| r.at)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(times(&conn), vec![morning(day, true).unwrap()]);
+    store::setting_set(&conn, ALL_DAY_SETTING_KEY, &json!(1)).unwrap();
+    assert_eq!(times(&conn), vec![morning(day - DAY, true).unwrap()]);
+    store::setting_set(&conn, ALL_DAY_SETTING_KEY, &json!(NO_ALERT)).unwrap();
+    assert!(times(&conn).is_empty());
+    let own = EventInput {
+        title: "Trip".into(),
+        start: day,
+        end: day + DAY,
+        all_day: true,
+        alerts: Some(Some(vec![7, 0, 30])),
+        ..Default::default()
+    };
+    let value = calendar::events::update_event(&conn, &id, &own).unwrap();
+    assert_eq!(value["event"]["alerts"], json!([7, 0]));
+    assert_eq!(
+        times(&conn),
+        vec![
+            morning(day - 7 * DAY, true).unwrap(),
+            morning(day, true).unwrap()
+        ]
+    );
+    // Turning the event into a timed one drops day counts it cannot use.
+    let timed = EventInput {
+        title: "Trip".into(),
+        start: day + 3600,
+        end: day + 7200,
+        ..Default::default()
+    };
+    let value = calendar::events::update_event(&conn, &id, &timed).unwrap();
+    assert_eq!(value["event"]["alerts"], Value::Null);
+}

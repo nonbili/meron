@@ -181,6 +181,8 @@ internal fun CalendarRouteContent(
         editor?.let { target ->
             CalendarEventEditor(
                 target = target,
+                defaultAlertMinutes = reminderLeadMinutes,
+                defaultAllDayAlertDays = reminderAllDayDays,
                 saving = saving,
                 onDismiss = { if (!saving) editor = null },
                 onSave = { params ->

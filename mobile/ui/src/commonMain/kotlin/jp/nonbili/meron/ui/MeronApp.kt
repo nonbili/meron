@@ -861,6 +861,7 @@ private fun MeronMobileScreenContent(
             loadAppProxy()
             loadAppSignature()
             loadRemoteImageSenders()
+            loadAlertDefaults()
         }
 
         // Once accounts are known, surface whatever the local store already holds so
@@ -1397,6 +1398,9 @@ private fun MeronMobileScreenContent(
                         saveAppBoolean(prefs, CALENDAR_ENABLED_PREF, calendarEnabled)
                         if (!calendarEnabled && screen == Screen.Calendar) screen = Screen.Mail
                     },
+                    reminderLeadMinutes = reminderLeadMinutes,
+                    reminderAllDayDays = reminderAllDayDays,
+                    onAlertDefaultChange = ::saveAlertDefault,
                     sendShortcutMode = sendShortcutMode,
                     onToggleSendShortcut = {
                         val next = sendShortcutMode.next()

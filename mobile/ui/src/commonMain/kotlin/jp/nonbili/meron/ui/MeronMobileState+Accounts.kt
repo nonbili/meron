@@ -261,6 +261,68 @@ internal fun MeronMobileState.loadRemoteImageSenders(): Job? {
     }
 }
 
+/** Read the default event alerts (timed and all-day) from the core store. */
+internal fun MeronMobileState.loadAlertDefaults(): Job? {
+    if (!coreLoaded) return null
+    val generation = ++reminderLeadLoadGeneration
+    return scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val response =
+                    requireCoreOk(
+                        MobileMailCommandClient(core).getPrefs(
+                            AppPrefsGetParams(listOf(REMINDER_LEAD_SETTING_KEY, REMINDER_ALL_DAY_SETTING_KEY)),
+                        ),
+                    )
+                parseAppPrefsResponse(response)
+            }
+        }.onSuccess { stored ->
+            if (generation != reminderLeadLoadGeneration) return@onSuccess
+
+            fun lead(
+                key: String,
+                allDay: Boolean,
+            ): Int? = (stored[key] as? Number)?.toInt()?.takeIf { it == NO_ALERT || it in alertOptions(allDay) }
+            reminderLeadMinutes = lead(REMINDER_LEAD_SETTING_KEY, false) ?: DEFAULT_ALERT_MINUTES
+            reminderAllDayDays = lead(REMINDER_ALL_DAY_SETTING_KEY, true) ?: DEFAULT_ALL_DAY_ALERT_DAYS
+        }
+    }
+}
+
+/** Persist a default event alert; the core then has hosts reschedule. */
+internal fun MeronMobileState.saveAlertDefault(
+    allDay: Boolean,
+    lead: Int,
+) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+
+    fun current() = if (allDay) reminderAllDayDays else reminderLeadMinutes
+
+    fun show(value: Int) {
+        if (allDay) reminderAllDayDays = value else reminderLeadMinutes = value
+    }
+    val previous = current()
+    // Retire any read still in flight so it cannot take the edit back.
+    ++reminderLeadLoadGeneration
+    show(lead)
+    val key = if (allDay) REMINDER_ALL_DAY_SETTING_KEY else REMINDER_LEAD_SETTING_KEY
+    scope.launch {
+        alertDefaultWrites.withLock {
+            runCatching {
+                withContext(ioDispatcher) {
+                    requireCoreOk(MobileMailCommandClient(core).setPref(AppPrefsSetParams(key, encodeAppPrefValue(lead))))
+                }
+            }.onFailure {
+                if (current() == lead) show(previous)
+                status = trsError("mobile.status.reminderLeadUpdateFailed", it)
+            }
+        }
+    }
+}
+
 /** The allowlist as the core store holds it, normalized. Runs on [ioDispatcher]. */
 private suspend fun MeronMobileState.readRemoteImageSenders(): List<String> {
     val response =
@@ -329,6 +391,7 @@ internal fun MeronMobileState.invalidateBackupReloads() {
     ++proxyLoadGeneration
     ++appSignatureLoadGeneration
     ++remoteImageSendersLoadGeneration
+    ++reminderLeadLoadGeneration
     accountsLoading = false
     appSignatureLoaded = false
     appSignatureLoadCompletion.complete(Unit)

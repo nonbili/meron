@@ -24,6 +24,7 @@ import {
   SpellCheck,
   Quote,
   Pause,
+  Bell,
   BellOff,
   ScrollText,
   RefreshCw,
@@ -84,6 +85,7 @@ import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
+import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { setIntegratedTitlebar, windowChrome$ } from '../../lib/windowChrome'
 
@@ -410,6 +412,8 @@ function GeneralSection() {
   const showCalendarInSideNav = useValue(settings$.showCalendarInSideNav)
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const calendarEnabled = useValue(settings$.calendarEnabled)
+  const reminderLeadMinutes = useValue(settings$.reminderLeadMinutes)
+  const reminderAllDayDays = useValue(settings$.reminderAllDayDays)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
   const kanbanLockScroll = useValue(settings$.kanbanLockScroll)
   const language = useValue(settings$.language)
@@ -525,6 +529,32 @@ function GeneralSection() {
           checked={calendarEnabled}
           onChange={() => setCalendarEnabled(!calendarEnabled)}
         />
+        {calendarEnabled && (
+          <SelectRow
+            icon={<Bell size={15} />}
+            title={t('settings.calendar.reminderLead')}
+            hint={t('settings.calendar.reminderLeadHint')}
+            value={String(reminderLeadMinutes)}
+            options={[NO_ALERT, ...ALERT_MINUTES].map((minutes) => ({
+              value: String(minutes),
+              label: alertLabel(minutes),
+            }))}
+            onChange={(value) => settings$.reminderLeadMinutes.set(Number(value))}
+          />
+        )}
+        {calendarEnabled && (
+          <SelectRow
+            icon={<Bell size={15} />}
+            title={t('settings.calendar.allDayAlert')}
+            hint={t('settings.calendar.allDayAlertHint')}
+            value={String(reminderAllDayDays)}
+            options={[NO_ALERT, ...ALL_DAY_ALERT_DAYS].map((days) => ({
+              value: String(days),
+              label: alertLabel(days, true),
+            }))}
+            onChange={(value) => settings$.reminderAllDayDays.set(Number(value))}
+          />
+        )}
         <CloseToTrayRow />
         <IntegratedTitlebarRow />
         <AutoUpdateRow />

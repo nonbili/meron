@@ -45,6 +45,37 @@ pub struct EventInput {
     /// was opened on: `start`/`end` are then that occurrence's new times, and
     /// the series moves by the same amount. 0 for the series itself.
     pub occurrence_start: i64,
+    /// `None` keeps the event's alerts; `Some(None)` follows the app-wide
+    /// default; otherwise see [`CalendarEvent::alerts`].
+    pub alerts: Option<Option<Vec<i64>>>,
+}
+
+/// Alerts an event can carry on its own, like Apple Calendar's "Alert" and
+/// "Second Alert".
+pub const MAX_ALERTS: usize = 2;
+
+/// The longest timed alert lead the core accepts, in minutes: one week.
+pub const MAX_ALERT_MINUTES: i64 = 7 * 24 * 60;
+
+/// The longest all-day alert lead the core accepts, in days.
+pub const MAX_ALL_DAY_ALERT_DAYS: i64 = 7;
+
+/// Keep the alerts a client sent that the core can schedule: in range for the
+/// kind of event, no repeats, at most [`MAX_ALERTS`], in the order given.
+fn sanitize_alerts(alerts: &[i64], all_day: bool) -> Vec<i64> {
+    let max = if all_day {
+        MAX_ALL_DAY_ALERT_DAYS
+    } else {
+        MAX_ALERT_MINUTES
+    };
+    let mut out = Vec::new();
+    for &lead in alerts {
+        if (0..=max).contains(&lead) && !out.contains(&lead) {
+            out.push(lead);
+        }
+    }
+    out.truncate(MAX_ALERTS);
+    out
 }
 
 impl EventInput {
@@ -71,6 +102,11 @@ impl EventInput {
                 .get("occurrence_start")
                 .and_then(Value::as_i64)
                 .unwrap_or(0),
+            alerts: params.get("alerts").map(|alerts| {
+                alerts
+                    .as_array()
+                    .map(|alerts| alerts.iter().filter_map(Value::as_i64).collect())
+            }),
         }
     }
 }
@@ -98,7 +134,7 @@ fn apply_input(event: &mut CalendarEvent, input: &EventInput) -> Result<()> {
     event.location = input.location.trim().to_string();
     event.start_at = start;
     event.end_at = end;
-    event.all_day = input.all_day;
+    set_all_day(event, input.all_day);
     event.recurring = !repeat.is_empty();
     // A repeat keeps the zone it was made in: edited after travelling, it must
     // not take on the new zone's DST rules.
@@ -110,7 +146,25 @@ fn apply_input(event: &mut CalendarEvent, input: &EventInput) -> Result<()> {
         event.tzid.clone()
     };
     event.rrule = repeat;
+    apply_alerts(event, input);
     Ok(())
+}
+
+/// Alerts count minutes for a timed event and days for an all-day one, so a
+/// switch between the two follows the default until alerts are set again.
+fn set_all_day(event: &mut CalendarEvent, all_day: bool) {
+    if event.all_day != all_day {
+        event.alerts = None;
+    }
+    event.all_day = all_day;
+}
+
+fn apply_alerts(event: &mut CalendarEvent, input: &EventInput) {
+    if let Some(alerts) = &input.alerts {
+        event.alerts = alerts
+            .as_deref()
+            .map(|alerts| sanitize_alerts(alerts, event.all_day));
+    }
 }
 
 pub fn create_event(conn: &Connection, input: &EventInput) -> Result<Value> {
@@ -124,7 +178,7 @@ pub fn create_event(conn: &Connection, input: &EventInput) -> Result<Value> {
 }
 
 /// Change an event made here. An accepted invitation's time and title are the
-/// organizer's, so only its notes are the user's to edit.
+/// organizer's, so only its notes and alerts are the user's to edit.
 pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<Value> {
     let mut event = store::event(conn, id)?.ok_or_else(|| anyhow!("no such event: {id}"))?;
     if event.invite_uid.is_empty() {
@@ -132,6 +186,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         apply_input(&mut event, &input)?;
     } else {
         event.notes = input.notes.trim().to_string();
+        apply_alerts(&mut event, input);
     }
     let saved = store::save_event(conn, &event)?;
     Ok(json!({ "event": event_json(&saved) }))
@@ -554,7 +609,7 @@ fn file_invite(
     event.location = invite.location.clone();
     event.start_at = invite.start;
     event.end_at = invite.end;
-    event.all_day = invite.all_day;
+    set_all_day(&mut event, invite.all_day);
     event.recurring = invite.recurring;
     event.account = account.to_string();
     if !thread_id.is_empty() {
@@ -596,6 +651,10 @@ pub fn event_json(event: &CalendarEvent) -> Value {
         "response": event.response,
         "created_at": event.created_at,
         "reminder_after": event.reminder_after,
+        "alerts": event.alerts,
+        // The kind `alerts` counts in; an occurrence can differ (see
+        // `events_payload`).
+        "alerts_all_day": event.all_day,
         "source": if event.invite_uid.is_empty() { "event" } else { "invite" },
     })
 }

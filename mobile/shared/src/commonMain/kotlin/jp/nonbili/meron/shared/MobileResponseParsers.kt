@@ -828,6 +828,12 @@ data class CalendarItem(
     val response: String = "",
     /** A task's list. */
     val listId: String = "",
+    /** The event's own alerts, minutes before start; null follows the
+     *  default and an empty list means none. */
+    val alerts: List<Int>? = null,
+    /** Whether [alerts] count all-day days rather than minutes: the series'
+     *  kind, which one occurrence of an invitation can differ from. */
+    val alertsAllDay: Boolean? = null,
 )
 
 fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> =
@@ -862,6 +868,12 @@ fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> =
                 threadId = string("thread_id"),
                 response = string("response"),
                 listId = string("list_id"),
+                alerts =
+                    entries["alerts"]
+                        ?.takeIf { it.startsWith('[') }
+                        ?.jsonArrayElements()
+                        ?.mapNotNull { it.trim().toIntOrNull() },
+                alertsAllDay = entries["alerts_all_day"]?.let { it == "true" },
             )
         }.orEmpty()
 

@@ -39,6 +39,12 @@ export type CalendarItem = {
   response: string
   /** A task's list. */
   list_id?: string
+  /** The event's own alerts, minutes before start; null follows the default
+   * and an empty list means none. */
+  alerts?: number[] | null
+  /** Whether `alerts` count all-day days rather than minutes: the series'
+   * kind, which one occurrence of an invitation can differ from. */
+  alerts_all_day?: boolean
 }
 
 /** What the event editor sends, and what it was opened on. */
@@ -54,6 +60,8 @@ export type EventInput = {
    * opened on, so the core moves the series by the change rather than
    * restarting it there. */
   occurrence_start?: number
+  /** See [CalendarItem.alerts]. */
+  alerts: number[] | null
 }
 
 export type EventEditor = { mode: 'new'; day: number } | { mode: 'edit'; item: CalendarItem }
