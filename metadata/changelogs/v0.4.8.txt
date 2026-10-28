@@ -1,0 +1,7 @@
+- Add local folders to keep mail off the server
+- Create and rename folders on the server and in local folders
+- Add calendar and task reminders with optional task due times
+- Add a calendar side panel and a calendar item in the rail
+- Make meeting links in calendar events clickable and allow changing invite responses
+- Scroll messages by keyboard and step through threads with Alt+arrows
+- Group move and copy pickers by account with recent target shortcuts

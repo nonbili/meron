@@ -63,6 +63,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.4.8" date="2026-10-28">
+      <description>
+        <ul>
+          <li>Add local folders to keep mail off the server</li>
+          <li>Create and rename folders on the server and in local folders</li>
+          <li>Add calendar and task reminders with optional task due times</li>
+          <li>Add a calendar side panel and a calendar item in the rail</li>
+          <li>Make meeting links in calendar events clickable and allow changing invite responses</li>
+          <li>Scroll messages by keyboard and step through threads with Alt+arrows</li>
+          <li>Group move and copy pickers by account with recent target shortcuts</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.7" date="2026-10-22">
       <description>
         <ul>
