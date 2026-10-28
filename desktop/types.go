@@ -160,8 +160,8 @@ type AddGmailOAuthRequest struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-// AddOutlookOAuthRequest mirrors AddGmailOAuthRequest. AvatarURL is unused
-// (Microsoft's id_token carries no picture) but kept for shape parity.
+// AddOutlookOAuthRequest mirrors AddGmailOAuthRequest. When AvatarURL is empty
+// the profile photo is fetched from Microsoft Graph (the id_token carries none).
 type AddOutlookOAuthRequest struct {
 	ID           string `json:"id"`
 	Email        string `json:"email"`

@@ -821,6 +821,65 @@ fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
 }
 
 #[test]
+fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
+    use base64::Engine;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    let data_dir = unique_data_dir("oauth-code-photo");
+    let claims = serde_json::json!({ "preferred_username": "photo.user@example.com" });
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
+    let code_body = format!(
+        r#"{{"access_token":"imap","refresh_token":"refresh","expires_in":3600,"id_token":"h.{payload}.s"}}"#
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    // Code exchange, Graph token redemption, then the photo itself.
+    std::thread::spawn(move || {
+        for step in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 4096];
+            let read = stream.read(&mut buf).unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..read]).to_string();
+            let (content_type, body): (&str, Vec<u8>) = match step {
+                0 => ("application/json", code_body.clone().into_bytes()),
+                1 => ("application/json", br#"{"access_token":"graph"}"#.to_vec()),
+                _ => {
+                    assert!(request.starts_with("GET /photo "), "{request}");
+                    assert!(request.contains("Bearer graph"), "{request}");
+                    ("image/jpeg", b"\xff\xd8\xff\xe0photo".to_vec())
+                }
+            };
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        }
+    });
+    let request = format!(
+        r#"{{"id":69,"method":"account.exchangeOAuthCode","params":{{"email":"","provider":"outlook","code":"auth-code","client_id":"client","code_verifier":"verifier","token_url":"http://{addr}/token","photo_url":"http://{addr}/photo"}}}}"#
+    );
+
+    let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let avatar_url = exchanged["result"]["account"]["avatar_url"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        avatar_url.starts_with("/media/avatars/photo_user_example_com/")
+            && avatar_url.ends_with(".jpg"),
+        "{exchanged}"
+    );
+    let saved = std::fs::read(data_dir.join(avatar_url.trim_start_matches('/'))).unwrap();
+    assert_eq!(saved, b"\xff\xd8\xff\xe0photo");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_rejects_unsupported_oauth_provider() {
     let data_dir = unique_data_dir("oauth-provider");
     let value = invoke_mobile_protocol_json(

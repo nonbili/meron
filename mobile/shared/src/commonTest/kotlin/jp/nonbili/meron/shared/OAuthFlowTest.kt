@@ -53,6 +53,7 @@ class OAuthFlowTest {
         assertTrue(url.contains("profile"))
         assertTrue(url.contains("IMAP.AccessAsUser.All"))
         assertTrue(url.contains("SMTP.Send"))
+        assertTrue(url.contains("User.Read"))
     }
 
     @Test

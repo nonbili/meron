@@ -159,6 +159,13 @@ func (a *App) accountAddOutlookOAuth(payload map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if req.AvatarURL == "" && req.RefreshToken != "" {
+		if raw, err := fetchOutlookPhoto(req.RefreshToken); err != nil {
+			a.logf("account.addOutlookOAuth: profile photo unavailable: %v", err)
+		} else {
+			req.AvatarURL = a.saveAvatar(id, raw)
+		}
+	}
 	expiresAt := time.Now().Unix() + req.ExpiresIn
 	a.logf("account.addOutlookOAuth: connecting account=%s email=%s token_present=%t refresh_present=%t", id, req.Email, req.AccessToken != "", req.RefreshToken != "")
 	if _, err := a.sidecar.Call("account.connect", map[string]any{
@@ -180,6 +187,7 @@ func (a *App) accountAddOutlookOAuth(payload map[string]any) (any, error) {
 		"email":            req.Email,
 		"display_name":     req.DisplayName,
 		"sender_name":      req.SenderName,
+		"avatar_url":       req.AvatarURL,
 		"provider":         "outlook",
 	}); err != nil {
 		return nil, err
@@ -191,6 +199,7 @@ func (a *App) accountAddOutlookOAuth(payload map[string]any) (any, error) {
 		Email:             req.Email,
 		DisplayName:       req.DisplayName,
 		SenderName:        req.SenderName,
+		AvatarURL:         req.AvatarURL,
 		Provider:          "outlook",
 		AuthType:          "outlook_oauth",
 		IncludedInUnified: true,
@@ -267,7 +276,7 @@ func (a *App) beginOAuth(provider string) (any, error) {
 	switch provider {
 	case "outlook":
 		values.Set("client_id", outlookClientID())
-		values.Set("scope", outlookScopes)
+		values.Set("scope", outlookScopes+" "+outlookPhotoScope)
 		authBase = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 	default: // gmail
 		values.Set("client_id", googleClientID())
@@ -352,7 +361,7 @@ func (a *App) serveOAuthRedirect(listener net.Listener) {
 // account profile for the given provider. Gmail calls Google's userinfo
 // endpoint; Outlook reads the OIDC id_token returned alongside the tokens (no
 // extra request — Microsoft Graph is a separate resource the IMAP/SMTP token
-// can't address).
+// can't address; the photo is fetched when the account is saved).
 func exchangeOAuthCode(provider, code, verifier, redirectURI string) (*ExchangedProfile, error) {
 	switch provider {
 	case "outlook":
@@ -418,6 +427,42 @@ func exchangeOutlookOAuthCodeWithVerifier(code, verifier, redirectURI string) (*
 		return nil, errors.New("Outlook OAuth response did not include a refresh token")
 	}
 	return &out, nil
+}
+
+// fetchOutlookPhoto redeems the refresh token for a Microsoft Graph token and
+// downloads the account's profile photo. Fails when the account has no photo
+// (Graph answers 404) or the grant predates the photo scope.
+func fetchOutlookPhoto(refreshToken string) ([]byte, error) {
+	values := url.Values{}
+	values.Set("client_id", outlookClientID())
+	values.Set("refresh_token", refreshToken)
+	values.Set("grant_type", "refresh_token")
+	values.Set("scope", outlookPhotoScope)
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.PostForm(outlookTokenURL, values)
+	if err != nil {
+		return nil, err
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Graph token failed: %s", strings.TrimSpace(string(body)))
+	}
+	var tokens TokenExchangeResult
+	if err := json.Unmarshal(body, &tokens); err != nil {
+		return nil, err
+	}
+	req, _ := http.NewRequest(http.MethodGet, outlookGraphPhotoURL, nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	res, err = client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Graph photo returned status: %s", res.Status)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 5*1024*1024+1))
 }
 
 // parseIDTokenClaims decodes the (unverified) payload of an OIDC id_token to

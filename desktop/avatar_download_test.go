@@ -57,3 +57,40 @@ func TestDownloadAndSaveAvatarIgnoresNonRemote(t *testing.T) {
 		t.Errorf("expected empty url to be untouched, got %q", url2)
 	}
 }
+
+func TestFetchOutlookPhoto(t *testing.T) {
+	photo := []byte("\xff\xd8\xff\xe0photo")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			if r.FormValue("grant_type") != "refresh_token" || r.FormValue("refresh_token") != "refresh" || r.FormValue("scope") != outlookPhotoScope {
+				http.Error(w, "bad grant", http.StatusBadRequest)
+				return
+			}
+			w.Write([]byte(`{"access_token":"graph"}`))
+		case "/photo":
+			if r.Header.Get("Authorization") != "Bearer graph" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			w.Write(photo)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	defer func(token, photo string) { outlookTokenURL, outlookGraphPhotoURL = token, photo }(outlookTokenURL, outlookGraphPhotoURL)
+	outlookTokenURL = server.URL + "/token"
+
+	outlookGraphPhotoURL = server.URL + "/photo"
+	raw, err := fetchOutlookPhoto("refresh")
+	if err != nil || string(raw) != string(photo) {
+		t.Fatalf("fetchOutlookPhoto = %q, %v", raw, err)
+	}
+
+	// An account without a photo: Graph answers 404.
+	outlookGraphPhotoURL = server.URL + "/missing"
+	if _, err := fetchOutlookPhoto("refresh"); err == nil {
+		t.Fatal("fetchOutlookPhoto succeeded without a photo")
+	}
+}

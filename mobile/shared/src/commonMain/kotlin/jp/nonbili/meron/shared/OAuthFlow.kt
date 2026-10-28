@@ -65,7 +65,9 @@ fun buildOAuthAuthorizationUrl(request: OAuthAuthorizationRequest): String {
 
             "outlook" -> {
                 "https://login.microsoftonline.com/common/oauth2/v2.0/authorize" to
-                    "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send"
+                    // User.Read lets core fetch the profile photo from Microsoft Graph.
+                    "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send " +
+                    "https://graph.microsoft.com/User.Read"
             }
 
             else -> {

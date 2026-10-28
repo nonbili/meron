@@ -4,6 +4,10 @@ const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
 const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const OUTLOOK_SCOPES: &str = "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send";
+// Consented at authorize time alongside OUTLOOK_SCOPES, but a token covers one
+// resource, so the photo token is redeemed separately from the refresh token.
+const OUTLOOK_PHOTO_SCOPE: &str = "https://graph.microsoft.com/User.Read";
+const OUTLOOK_PHOTO_URL: &str = "https://graph.microsoft.com/v1.0/me/photo/$value";
 
 pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result<Value, String> {
     let email = req_str(params, "email")?;
@@ -303,6 +307,22 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     if opt_str(params, "avatar_url").is_empty() && !profile_picture.is_empty() {
         obj.insert("avatar_url".to_string(), Value::String(profile_picture));
     }
+    if provider == "outlook" && opt_str(params, "avatar_url").is_empty() {
+        let photo_url = params
+            .get("photo_url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(OUTLOOK_PHOTO_URL);
+        // No photo (Graph answers 404) or a failed request leaves the initials.
+        let photo = fetch_outlook_photo_blocking(&token_url, &client_id, &refresh_token, photo_url)
+            .and_then(|(ext, bytes)| {
+                store_mobile_account_media(data_dir, &account_id(&email), "avatars", ext, &bytes)
+            });
+        if let Ok(url) = photo {
+            obj.insert("avatar_url".to_string(), Value::String(url));
+        }
+    }
     obj.insert(
         "access_token".to_string(),
         Value::String(token.access_token),
@@ -338,6 +358,69 @@ fn fetch_google_userinfo_blocking(
         return Err(format!("Google userinfo failed ({status}): {body}"));
     }
     serde_json::from_str(&body).map_err(|err| format!("parse Google userinfo response: {err}"))
+}
+
+/// Redeem the refresh token for a Microsoft Graph token and download the
+/// account's profile photo, returning its file extension and bytes.
+fn fetch_outlook_photo_blocking(
+    token_url: &str,
+    client_id: &str,
+    refresh_token: &str,
+    photo_url: &str,
+) -> Result<(&'static str, Vec<u8>), String> {
+    let agent = crate::proxy::agent().map_err(|err| format!("Outlook photo proxy: {err:#}"))?;
+    let mut resp = agent
+        .post(token_url)
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(8)))
+        .build()
+        .send_form([
+            ("client_id", client_id),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+            ("scope", OUTLOOK_PHOTO_SCOPE),
+        ])
+        .map_err(|err| format!("Graph token request: {err:#}"))?;
+    let status = resp.status();
+    let body = resp
+        .body_mut()
+        .read_to_string()
+        .map_err(|err| format!("read Graph token response: {err:#}"))?;
+    if !status.is_success() {
+        return Err(format!("Graph token failed ({status}): {body}"));
+    }
+    let token: OAuthCodeTokenResponse =
+        serde_json::from_str(&body).map_err(|err| format!("parse Graph token response: {err}"))?;
+    let mut resp = agent
+        .get(photo_url)
+        .header("Authorization", &format!("Bearer {}", token.access_token))
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(8)))
+        .build()
+        .call()
+        .map_err(|err| format!("Graph photo request: {err:#}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Graph photo failed ({})", resp.status()));
+    }
+    let mime = resp
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let ext = media_extension("", mime.split(';').next().unwrap_or("").trim())?;
+    let bytes = resp
+        .body_mut()
+        .with_config()
+        .limit(5 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|err| format!("read Graph photo: {err:#}"))?;
+    if bytes.is_empty() {
+        return Err("Graph photo is empty".to_string());
+    }
+    Ok((ext, bytes))
 }
 
 fn parse_oauth_id_token_claims(id_token: &str) -> (String, String) {

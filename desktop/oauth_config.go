@@ -15,7 +15,15 @@ const (
 	// the account email and name from.
 	outlookScopes = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile"
 
-	outlookTokenURL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+	// Microsoft Graph scope for the account's profile photo. Consented at
+	// authorize time alongside outlookScopes, but a token covers one resource,
+	// so it is redeemed separately from the refresh token (see fetchOutlookPhoto).
+	outlookPhotoScope = "https://graph.microsoft.com/User.Read"
+)
+
+var (
+	outlookTokenURL      = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+	outlookGraphPhotoURL = "https://graph.microsoft.com/v1.0/me/photo/$value"
 )
 
 // Obfuscated Google OAuth credentials baked into release builds.

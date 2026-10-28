@@ -412,16 +412,6 @@ func (a *App) downloadAndSaveAvatar(accountID, avatarURL string) string {
 		return avatarURL
 	}
 
-	safeAccount := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			return r
-		}
-		return '-'
-	}, accountID)
-	if safeAccount == "" {
-		return avatarURL
-	}
-
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(avatarURL)
 	if err != nil {
@@ -440,10 +430,28 @@ func (a *App) downloadAndSaveAvatar(accountID, avatarURL string) string {
 		a.logf("read avatar body failed: %v", err)
 		return avatarURL
 	}
+	if saved := a.saveAvatar(accountID, raw); saved != "" {
+		return saved
+	}
+	return avatarURL
+}
+
+// saveAvatar writes image bytes under mediaDir/avatars/<safeAccount> and
+// returns the local media URL, or "" on error.
+func (a *App) saveAvatar(accountID string, raw []byte) string {
+	safeAccount := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, accountID)
+	if safeAccount == "" || len(raw) == 0 {
+		return ""
+	}
 
 	if len(raw) > 5*1024*1024 {
 		a.logf("avatar image too large: %d bytes", len(raw))
-		return avatarURL
+		return ""
 	}
 
 	extByMime := map[string]string{
@@ -461,14 +469,14 @@ func (a *App) downloadAndSaveAvatar(accountID, avatarURL string) string {
 	root := filepath.Join(mediaDir(), "avatars", safeAccount)
 	if err := os.MkdirAll(root, 0755); err != nil {
 		a.logf("create avatar dir failed: %v", err)
-		return avatarURL
+		return ""
 	}
 
 	key := uuid.New().String() + ext
 	dest := filepath.Join(root, key)
 	if err := os.WriteFile(dest, raw, 0644); err != nil {
 		a.logf("write avatar file failed: %v", err)
-		return avatarURL
+		return ""
 	}
 
 	return "/media/avatars/" + safeAccount + "/" + key

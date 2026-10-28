@@ -17,7 +17,19 @@ pub(crate) fn write_mobile_account_media_file(
         return Err("media file is empty".to_string());
     }
     let ext = media_extension(&filename, &mime)?;
-    let account_dir = safe_media_segment(&id);
+    let relative_url = store_mobile_account_media(data_dir, &id, media_kind, ext, &bytes)?;
+    Ok(json!({ "url": relative_url }))
+}
+
+/// Write media bytes under `media/<kind>/<account>/` and return its `/media/...` URL.
+pub(crate) fn store_mobile_account_media(
+    data_dir: &str,
+    id: &str,
+    media_kind: &str,
+    ext: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    let account_dir = safe_media_segment(id);
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -30,7 +42,7 @@ pub(crate) fn write_mobile_account_media_file(
         .join(&account_dir);
     std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
     std::fs::write(dir.join(stored_name), bytes).map_err(|err| err.to_string())?;
-    Ok(json!({ "url": relative_url }))
+    Ok(relative_url)
 }
 
 pub(crate) fn read_mobile_attachment_file(data_dir: &str, params: &Value) -> Result<Value, String> {
