@@ -26,6 +26,7 @@ pub(crate) use backup::*;
 pub(crate) use calendar::*;
 pub(crate) use feeds::*;
 pub(crate) use helpers::*;
+pub use mail::messages_still_unread;
 pub(crate) use mail::*;
 pub(crate) use media::*;
 pub(crate) use oauth::*;
@@ -221,6 +222,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "storage.usage" => mobile_storage_usage(data_dir),
         "storage.clearCache" => clear_mobile_storage_cache(data_dir),
         "mail.starredItems" => list_mobile_starred_items(data_dir, &req.params),
+        "mail.stillUnread" => mobile_messages_still_unread(data_dir, &req.params),
         "mail.allocateIdentity" => {
             let account_id = req
                 .params

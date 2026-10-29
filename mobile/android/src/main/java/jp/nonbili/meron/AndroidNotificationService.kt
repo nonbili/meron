@@ -13,8 +13,11 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import jp.nonbili.meron.shared.accountIdIsRss
 import jp.nonbili.meron.shared.backgroundRefreshSummaryKey
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** One new mail, as the shade shows it. Built from a `mail.newMessages` entry. */
 data class NewMailItem(
@@ -53,6 +56,21 @@ object AndroidNotificationService {
      *  — an undo offer, a failure report. [activeLines] skips these, or the
      *  summary would count them as arrivals and list them as messages. */
     private const val EXTRA_ANCILLARY = "jp.nonbili.meron.extra.ANCILLARY"
+
+    /** Private extras on the group summary: what to rebuild it with after
+     *  [reconcileNewMail] withdraws rows, which knows only the rows. */
+    private const val EXTRA_SUMMARY_ACCOUNT_NAME = "jp.nonbili.meron.extra.SUMMARY_ACCOUNT_NAME"
+    private const val EXTRA_SUMMARY_FOLDER = "jp.nonbili.meron.extra.SUMMARY_FOLDER"
+
+    /** Private extras: the core store row a child stands for, see
+     *  [newMailStoreKey]. Absent on rows posted before they existed. */
+    private const val EXTRA_STORE_FOLDER = "jp.nonbili.meron.extra.STORE_FOLDER"
+    private const val EXTRA_STORE_MESSAGE_ID = "jp.nonbili.meron.extra.STORE_MESSAGE_ID"
+
+    /** Reconciles run one at a time, off the caller's thread, and a request
+     *  made while one is queued joins it rather than adding another. */
+    private val reconcileExecutor = Executors.newSingleThreadExecutor()
+    private val reconcileQueued = AtomicBoolean(false)
     private const val NOTIFICATION_ID = 1001
     const val EXTRA_ACCOUNT_ID = "jp.nonbili.meron.extra.ACCOUNT_ID"
     const val EXTRA_FOLDER = "jp.nonbili.meron.extra.FOLDER"
@@ -261,6 +279,10 @@ object AndroidNotificationService {
                     // Which thread this row belongs to, so an action on any one
                     // row can find its siblings; see [cancelThreadRows].
                     putString(EXTRA_THREAD_KEY, item.threadKey)
+                    newMailStoreKey(batch, item)?.let { (folder, messageId) ->
+                        putString(EXTRA_STORE_FOLDER, folder)
+                        putString(EXTRA_STORE_MESSAGE_ID, messageId)
+                    }
                 },
             ).apply { if (item.date > 0) setWhen(item.date * 1000L) }
             .setAutoCancel(true)
@@ -272,6 +294,8 @@ object AndroidNotificationService {
         batch: NewMailBatch,
         groupKey: String,
         carriedOver: List<String>,
+        /** A recount, not an arrival: the shade updates without alerting. */
+        recount: Boolean = false,
     ): android.app.Notification {
         // Lines the user hasn't dismissed yet (read back from the shade) plus
         // this batch's, so the summary describes what is actually showing rather
@@ -297,7 +321,13 @@ object AndroidNotificationService {
             .setGroup(groupKey)
             .setGroupSummary(true)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-            .setAutoCancel(true)
+            .setOnlyAlertOnce(recount)
+            .addExtras(
+                android.os.Bundle().apply {
+                    putString(EXTRA_SUMMARY_ACCOUNT_NAME, batch.accountName)
+                    putString(EXTRA_SUMMARY_FOLDER, batch.folder)
+                },
+            ).setAutoCancel(true)
             .build()
     }
 
@@ -332,6 +362,123 @@ object AndroidNotificationService {
             }
         ids.forEach { manager.cancel(it) }
         return ids
+    }
+
+    /** Queues a [reconcileNewMail] after something that can change what is
+     *  unread: a sync, or a read, move or delete from the app. */
+    fun requestReconcile(context: Context) {
+        val appContext = context.applicationContext
+        if (!reconcileQueued.compareAndSet(false, true)) return
+        reconcileExecutor.execute {
+            reconcileQueued.set(false)
+            reconcileNewMail(appContext)
+        }
+    }
+
+    /** Withdraws every new-mail row whose message is no longer unread, the way
+     *  Gmail does: read, archived or deleted here, or — once a sync has brought
+     *  the change in — on another device. Blocking; asks core.
+     *
+     *  The shade is compared against core's store rather than tracking each
+     *  action, so every path that changes a message is covered alike. */
+    fun reconcileNewMail(base: Context) {
+        val context = localizedAppContext(base)
+        val rows =
+            try {
+                context
+                    .getSystemService(NotificationManager::class.java)
+                    .activeNotifications
+                    .mapNotNull { row ->
+                        val notification = row.notification
+                        val accountId = notification.group?.removePrefix(NEW_MAIL_GROUP_PREFIX)
+                        val extras = notification.extras
+                        if (accountId == null || accountId == notification.group) return@mapNotNull null
+                        if ((notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0) return@mapNotNull null
+                        val folder = extras?.getString(EXTRA_STORE_FOLDER) ?: return@mapNotNull null
+                        val messageId = extras.getString(EXTRA_STORE_MESSAGE_ID) ?: return@mapNotNull null
+                        StoreRow(row.id, accountId, folder, messageId)
+                    }
+            } catch (_: RuntimeException) {
+                return
+            }
+        if (rows.isEmpty()) return
+        val stillUnread = stillUnreadRows(rows) ?: return
+        val stale = rows.filterNot { it.key() in stillUnread }
+        if (stale.isEmpty()) return
+        val manager = NotificationManagerCompat.from(context)
+        stale.forEach { manager.cancel(it.notificationId) }
+        stale.groupBy { it.accountId }.forEach { (accountId, cancelled) ->
+            val extras = summaryExtras(context, accountId)
+            refreshNewMailSummary(
+                context,
+                accountId,
+                // A summary posted before these extras existed still names the
+                // account in its summary text.
+                accountName =
+                    extras?.getString(EXTRA_SUMMARY_ACCOUNT_NAME)
+                        ?: extras?.getCharSequence(NotificationCompat.EXTRA_SUMMARY_TEXT)?.toString().orEmpty(),
+                folder = extras?.getString(EXTRA_SUMMARY_FOLDER).orEmpty(),
+                justCancelled = cancelled.map { it.notificationId },
+            )
+        }
+    }
+
+    private data class StoreRow(
+        val notificationId: Int,
+        val accountId: String,
+        val folder: String,
+        val messageId: String,
+    ) {
+        fun key(): Triple<String, String, String> = Triple(accountId, folder, messageId)
+    }
+
+    /** The rows core still holds unread, or null when it could not say — in
+     *  which case nothing is withdrawn. */
+    private fun stillUnreadRows(rows: List<StoreRow>): Set<Triple<String, String, String>>? {
+        if (!MeronCoreNative.isLoaded()) return null
+        val messages = JSONArray()
+        rows.forEach {
+            messages.put(
+                JSONObject()
+                    .put("account_id", it.accountId)
+                    .put("folder_id", it.folder)
+                    .put("message_id", it.messageId),
+            )
+        }
+        val request =
+            JSONObject()
+                .put("id", 1)
+                .put("method", "mail.stillUnread")
+                .put("params", JSONObject().put("messages", messages))
+        val unread =
+            try {
+                JSONObject(MeronCoreNative.invokeJson(request.toString()))
+                    .optJSONObject("result")
+                    ?.optJSONArray("unread")
+            } catch (_: Exception) {
+                null
+            } ?: return null
+        return (0 until unread.length())
+            .mapNotNull { unread.optJSONObject(it) }
+            .map { Triple(it.optString("account_id"), it.optString("folder_id"), it.optString("message_id")) }
+            .toSet()
+    }
+
+    private fun summaryExtras(
+        context: Context,
+        accountId: String,
+    ): android.os.Bundle? {
+        val summaryId = newMailSummaryId(accountId)
+        return try {
+            context
+                .getSystemService(NotificationManager::class.java)
+                .activeNotifications
+                .firstOrNull { it.id == summaryId }
+                ?.notification
+                ?.extras
+        } catch (_: RuntimeException) {
+            null
+        }
     }
 
     /** Replaces the archived mail's row with an offer to put it back.
@@ -470,7 +617,7 @@ object AndroidNotificationService {
         try {
             manager.notify(
                 newMailSummaryId(accountId),
-                buildNewMailSummary(context, batch, groupKey, remaining),
+                buildNewMailSummary(context, batch, groupKey, remaining, recount = true),
             )
         } catch (_: SecurityException) {
             // Notification permission can change after canNotify() checks it.
@@ -587,7 +734,31 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
 
 /** Notifications for one account share a group, so the shade collapses that
  *  account's arrivals under a single summary instead of interleaving accounts. */
-fun newMailGroupKey(accountId: String): String = "jp.nonbili.meron.NEW_MAIL:$accountId"
+fun newMailGroupKey(accountId: String): String = "$NEW_MAIL_GROUP_PREFIX$accountId"
+
+private const val NEW_MAIL_GROUP_PREFIX = "jp.nonbili.meron.NEW_MAIL:"
+
+/** The core store row a notification stands for, as `mail.stillUnread` takes
+ *  it: mail by folder and UID, a feed entry by its subscription (the item's
+ *  thread key) and entry key. Null for a payload carrying neither, which
+ *  cannot be checked and so is left to the user. */
+fun newMailStoreKey(
+    batch: NewMailBatch,
+    item: NewMailItem,
+): Pair<String, String>? =
+    when {
+        accountIdIsRss(batch.accountId) -> {
+            (item.threadKey to item.itemKey).takeIf { item.threadKey.isNotBlank() && item.itemKey.isNotBlank() }
+        }
+
+        item.uid > 0 && batch.folder.isNotBlank() -> {
+            batch.folder to item.uid.toString()
+        }
+
+        else -> {
+            null
+        }
+    }
 
 /** Stable per-message id: re-posting the same mail (a retried sync, a push and
  *  a periodic refresh racing) updates its notification instead of stacking a

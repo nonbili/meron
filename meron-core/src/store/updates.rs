@@ -335,6 +335,26 @@ pub fn cached_message_ids(
     Ok(ids)
 }
 
+/// Whether each `(folder, msg_id)` is still in the cache and unread — mail by
+/// UID string, a feed item by its key under its subscription. A message read,
+/// moved or deleted since (here or, after a sync, on another device) is
+/// `false`. Backs withdrawing new-mail notifications that went stale.
+pub fn messages_still_unread(
+    conn: &Connection,
+    account: &str,
+    messages: &[(String, String)],
+) -> Result<Vec<bool>> {
+    let mut stmt = conn.prepare(
+        "SELECT 1 FROM messages
+         WHERE account = ?1 AND folder = ?2 AND msg_id = ?3 AND seen = 0",
+    )?;
+    let mut unread = Vec::with_capacity(messages.len());
+    for (folder, msg_id) in messages {
+        unread.push(stmt.exists(params![account, folder, msg_id])?);
+    }
+    Ok(unread)
+}
+
 pub fn delete_messages_by_uid(
     conn: &Connection,
     account: &str,

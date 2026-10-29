@@ -2241,6 +2241,56 @@ fn mobile_protocol_reads_uid_thread_message_from_store() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+// Notifications are withdrawn for mail no longer unread in the cache: read,
+// or gone from the folder (moved/deleted here, or pruned by a sync after
+// another device did it).
+#[test]
+fn mobile_protocol_reports_which_notified_messages_are_still_unread() {
+    let data_dir = unique_data_dir("still-unread");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let header = |uid: u32, seen: bool| MessageHeader {
+        uid,
+        subject: format!("Mail {uid}"),
+        from_addr: "aki@example.com".to_string(),
+        date: 100 + i64::from(uid),
+        seen,
+        ..Default::default()
+    };
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[header(1, false), header(2, true), header(3, false)],
+    )
+    .unwrap();
+    store::delete_messages_by_uid(&conn, "me@example.com", "INBOX", &[3]).unwrap();
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":5,"method":"mail.stillUnread","params":{"messages":[
+            {"account_id":"me@example.com","folder_id":"INBOX","message_id":"1"},
+            {"account_id":"me@example.com","folder_id":"inbox","message_id":"1"},
+            {"account_id":"me@example.com","folder_id":"INBOX","message_id":"2"},
+            {"account_id":"me@example.com","folder_id":"INBOX","message_id":"3"},
+            {"account_id":"other@example.com","folder_id":"INBOX","message_id":"1"},
+            {"account_id":"me@example.com","folder_id":"","message_id":"1"}
+        ]}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(
+        value["result"]["unread"],
+        // The inbox as a `mail.newMessages` detail names it ("inbox") finds the
+        // stored "INBOX" row, and comes back named as it was asked.
+        json!([
+            { "account_id": "me@example.com", "folder_id": "INBOX", "message_id": "1" },
+            { "account_id": "me@example.com", "folder_id": "inbox", "message_id": "1" }
+        ])
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 // A reply drafted on another client lands in the local store via the regular
 // Drafts folder sync; opening the thread must surface it from the store alone
 // (thread read spans folders), with no per-thread network check.

@@ -51,6 +51,27 @@ class AndroidNewMailNotificationTest {
         assertEquals("New mail", newMailChildTitle("", ""))
     }
 
+    private fun batch(
+        accountId: String,
+        folder: String,
+    ) = NewMailBatch(accountId = accountId, accountName = "", folder = folder, count = 1, items = emptyList())
+
+    @Test
+    fun storeKeyNamesTheCoreRowANotificationStandsFor() {
+        // Mail: its folder and UID, as `mail.stillUnread` looks them up.
+        assertEquals("INBOX" to "4821", newMailStoreKey(batch("me@example.com", "INBOX"), item(uid = 4821, threadKey = "t")))
+        // A feed entry lives under its subscription — the thread key — not the
+        // batch's nominal folder.
+        assertEquals(
+            "sub-1" to "key-monday",
+            newMailStoreKey(batch("rss-8f2a", "rss"), item(threadKey = "sub-1", itemKey = "key-monday")),
+        )
+        // Nothing to look up: the row stays until the user dismisses it.
+        assertEquals(null, newMailStoreKey(batch("me@example.com", "INBOX"), item(threadKey = "t")))
+        assertEquals(null, newMailStoreKey(batch("me@example.com", ""), item(uid = 7)))
+        assertEquals(null, newMailStoreKey(batch("rss-8f2a", "rss"), item(threadKey = "sub-1")))
+    }
+
     @Test
     fun feedEntriesSharingATitleKeepSeparateNotifications() {
         // A feed is one thread, so two entries of it share a thread key; keying

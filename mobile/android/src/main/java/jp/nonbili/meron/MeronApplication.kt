@@ -18,6 +18,11 @@ class MeronApplication : Application() {
             if (name in listOf("ready", "calendar.changed", "tasks.changed", "mail.synced")) {
                 AndroidReminders.refresh(this)
             }
+            // An IDLE watch syncs without going through a command, and may have
+            // brought in mail read or removed on another device.
+            if (name == "mail.synced" || name == "mail.newMessages") {
+                AndroidNotificationService.requestReconcile(this)
+            }
         }
         AndroidReminders.refresh(this)
         AndroidCrashLog.install(this)

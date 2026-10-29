@@ -139,6 +139,9 @@ class AndroidBackgroundSyncWorker(
             "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed hasTransient=$hasTransientNetworkError",
         )
         AndroidUnreadWidget.refreshAsync(applicationContext)
+        // These syncs ran as direct core calls, which no listener sees; mail
+        // read or removed elsewhere comes off the shade here.
+        AndroidNotificationService.reconcileNewMail(applicationContext)
         if (
             shouldNotifyRefreshComplete(
                 manualRun = inputData.getBoolean(KEY_MANUAL_RUN, false),

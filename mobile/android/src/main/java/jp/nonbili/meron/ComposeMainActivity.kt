@@ -323,7 +323,7 @@ class ComposeMainActivity : ComponentActivity() {
         val platformServices = AndroidPlatformServices(this)
         val mobileHost = AndroidMobileHost(this)
         setContent {
-            val appCore = remember { JniMeronCore() }
+            val appCore = remember { JniMeronCore { AndroidNotificationService.requestReconcile(applicationContext) } }
             jp.nonbili.meron.ui.MeronApp(
                 core = appCore,
                 coreLoaded = MeronCoreNative.isLoaded(),
