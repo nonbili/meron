@@ -116,6 +116,12 @@ pub(crate) async fn dispatch(
         // IMAP-backed starred filter keeps mail flags fresh; no round-trip
         // here). Core returns one final, searchable, paginated item model for
         // both mail and RSS so transport adapters do not mint ids or reshape it.
+        // Which notified messages are still unread, so the bridge can withdraw
+        // notifications for mail read, moved or deleted since.
+        "messages.stillUnread" => {
+            meron_core::protocol::messages_still_unread(&engine.db.lock().unwrap(), p)
+                .map_err(anyhow::Error::msg)
+        }
         "starred.items" => {
             let limit = req_u32(p, "limit").unwrap_or(200);
             // Before taking the store lock: opening the archive reads the store.

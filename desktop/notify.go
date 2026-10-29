@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -119,7 +120,37 @@ type notification struct {
 	body     string
 	account  string
 	threadID string
+	// The arrivals it announces, so it can be withdrawn once all are read;
+	// empty when they cannot all be named (see parseStoreMessages).
+	storeMessages []storeMessage
 }
+
+// storeMessage is a core store row: mail by folder and UID, a feed entry by
+// its subscription and entry key — what `messages.stillUnread` looks up.
+type storeMessage struct {
+	folder    string
+	messageID string
+}
+
+// trackedNotification is a delivered new-mail notification still on screen,
+// as far as we know, with the platform handle that withdraws it.
+type trackedNotification struct {
+	handle   string
+	account  string
+	messages []storeMessage
+}
+
+// maxTrackedNotifications bounds the list: entries for notifications the user
+// dismissed linger until their mail is read, and mail never read would
+// otherwise pile up for the life of the process.
+const maxTrackedNotifications = 32
+
+var (
+	trackedMu             sync.Mutex
+	trackedNotifications  []trackedNotification
+	notifyReconcileTimer  *time.Timer
+	notifyReconcileWindow = 500 * time.Millisecond
+)
 
 // notifyIcon writes the embedded app icon to a stable temp path the first time
 // it is needed and returns that path. Windows notifications take an icon file
@@ -154,6 +185,11 @@ func (a *App) handleSidecarEvent(name string, detail any) {
 		return
 	case "mail.newMessages":
 		a.notifyNewMail(detail)
+		a.requestNotificationReconcile()
+	case "mail.synced":
+		// A background or IDLE sync may have brought in mail read, moved or
+		// deleted on another device.
+		a.requestNotificationReconcile()
 	}
 }
 
@@ -241,6 +277,7 @@ func (a *App) notifyNewMail(detail any) {
 	labels := a.currentNativeLabels()
 	count := 1
 	var account, accountName, folder, folderName, from, subject, preview, threadKey string
+	var storeMessages []storeMessage
 	if m, ok := detail.(map[string]any); ok {
 		// Muted accounts still sync (the UI refreshes), they just don't raise an
 		// OS notification. The sidecar resolves the mute pref onto each event.
@@ -258,6 +295,7 @@ func (a *App) notifyNewMail(detail any) {
 		subject, _ = m["subject"].(string)
 		preview, _ = m["preview"].(string)
 		threadKey, _ = m["threadKey"].(string)
+		storeMessages = parseStoreMessages(m, count)
 	}
 
 	if accountName == "" {
@@ -298,15 +336,168 @@ func (a *App) notifyNewMail(detail any) {
 	}
 
 	n := notification{
-		title:    title,
-		body:     body,
-		account:  account,
-		threadID: notificationThreadID(account, folder, threadKey),
+		title:         title,
+		body:          body,
+		account:       account,
+		threadID:      notificationThreadID(account, folder, threadKey),
+		storeMessages: storeMessages,
 	}
 
 	// Off the sidecar read loop: the platform notify call can block briefly and
 	// must not stall event processing.
-	go a.deliverNotification(n)
+	go func() {
+		if handle := a.deliverNotification(n); handle != "" && len(n.storeMessages) > 0 {
+			trackNotification(trackedNotification{handle: handle, account: account, messages: n.storeMessages})
+			// The mail may have been read while delivery was under way, after
+			// the event's own reconcile found nothing yet to compare.
+			a.requestNotificationReconcile()
+		}
+	}()
+}
+
+// parseStoreMessages names the store rows a `mail.newMessages` detail's
+// arrivals are: mail by the batch folder and UID, a feed entry by its
+// subscription (the entry's thread key) and entry key. Empty unless every
+// arrival is listed and identifiable — a notification standing partly for
+// unlisted mail must not be withdrawn on the rest.
+func parseStoreMessages(detail map[string]any, count int) []storeMessage {
+	account, _ := detail["account"].(string)
+	folder, _ := detail["folder"].(string)
+	entries, _ := detail["messages"].([]any)
+	if len(entries) == 0 || len(entries) != count {
+		return nil
+	}
+	messages := make([]storeMessage, 0, len(entries))
+	for _, raw := range entries {
+		entry, _ := raw.(map[string]any)
+		if isRSSAccountID(account) {
+			subscription, _ := entry["threadKey"].(string)
+			itemKey, _ := entry["itemKey"].(string)
+			if subscription == "" || itemKey == "" {
+				return nil
+			}
+			messages = append(messages, storeMessage{folder: subscription, messageID: itemKey})
+			continue
+		}
+		uid, _ := entry["uid"].(float64)
+		if uid <= 0 || folder == "" {
+			return nil
+		}
+		messages = append(messages, storeMessage{folder: folder, messageID: fmt.Sprint(int64(uid))})
+	}
+	return messages
+}
+
+func trackNotification(t trackedNotification) {
+	trackedMu.Lock()
+	defer trackedMu.Unlock()
+	trackedNotifications = append(trackedNotifications, t)
+	if over := len(trackedNotifications) - maxTrackedNotifications; over > 0 {
+		trackedNotifications = trackedNotifications[over:]
+	}
+}
+
+// forgetNotification drops a notification that left the screen by other
+// means: dismissed, clicked, expired, or withdrawn here.
+func forgetNotification(handle string) {
+	trackedMu.Lock()
+	defer trackedMu.Unlock()
+	kept := trackedNotifications[:0]
+	for _, t := range trackedNotifications {
+		if t.handle != handle {
+			kept = append(kept, t)
+		}
+	}
+	trackedNotifications = kept
+}
+
+// notifyReconcileCommands may leave a message no longer unread, or no longer
+// there: a sync that brought in another device's changes, or the user's own
+// read, move and delete writes. Matches the mobile clients' lists.
+var notifyReconcileCommands = map[string]bool{
+	"mail.sync": true, "mail.markRead": true, "mail.markAllRead": true, "mail.archive": true,
+	"mail.delete": true, "mail.move": true, "mail.emptyFolder": true, "mail.folderDelete": true,
+	"account.remove": true, "rss.removeFeed": true,
+}
+
+// requestNotificationReconcile coalesces a burst of syncs and writes into one
+// reconcileNotifications pass.
+func (a *App) requestNotificationReconcile() {
+	trackedMu.Lock()
+	defer trackedMu.Unlock()
+	if len(trackedNotifications) == 0 {
+		return
+	}
+	if notifyReconcileTimer != nil {
+		notifyReconcileTimer.Stop()
+	}
+	notifyReconcileTimer = time.AfterFunc(notifyReconcileWindow, a.reconcileNotifications)
+}
+
+// reconcileNotifications withdraws new-mail notifications whose mail is no
+// longer unread, the way Gmail does: read, archived or deleted here, or — once
+// a sync has brought the change in — on another device. The notifications on
+// screen are compared against the store rather than tracking each action.
+func (a *App) reconcileNotifications() {
+	trackedMu.Lock()
+	tracked := append([]trackedNotification(nil), trackedNotifications...)
+	trackedMu.Unlock()
+	if len(tracked) == 0 || a.sidecar == nil || !a.sidecar.Started() {
+		return
+	}
+	var messages []map[string]any
+	for _, t := range tracked {
+		for _, m := range t.messages {
+			messages = append(messages, map[string]any{"account_id": t.account, "folder_id": m.folder, "message_id": m.messageID})
+		}
+	}
+	result, err := a.sidecar.Call("messages.stillUnread", map[string]any{"messages": messages})
+	if err != nil {
+		a.logf("notification reconcile failed: %v", err)
+		return
+	}
+	for _, handle := range staleNotifications(tracked, stillUnreadRows(result)) {
+		a.withdrawNotification(handle)
+		forgetNotification(handle)
+	}
+}
+
+type storeRow struct {
+	account string
+	message storeMessage
+}
+
+func stillUnreadRows(result any) map[storeRow]bool {
+	rows := map[storeRow]bool{}
+	m, _ := result.(map[string]any)
+	unread, _ := m["unread"].([]any)
+	for _, raw := range unread {
+		entry, _ := raw.(map[string]any)
+		account, _ := entry["account_id"].(string)
+		folder, _ := entry["folder_id"].(string)
+		messageID, _ := entry["message_id"].(string)
+		rows[storeRow{account: account, message: storeMessage{folder: folder, messageID: messageID}}] = true
+	}
+	return rows
+}
+
+// staleNotifications are those none of whose messages is still unread. One
+// notification covers a whole batch, so it stays while any arrival is unread.
+func staleNotifications(tracked []trackedNotification, stillUnread map[storeRow]bool) []string {
+	var stale []string
+	for _, t := range tracked {
+		live := false
+		for _, m := range t.messages {
+			if stillUnread[storeRow{account: t.account, message: m}] {
+				live = true
+				break
+			}
+		}
+		if !live {
+			stale = append(stale, t.handle)
+		}
+	}
+	return stale
 }
 
 func notificationThreadID(account, folder, threadKey string) string {

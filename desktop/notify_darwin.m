@@ -50,7 +50,7 @@ void setupNotificationDelegate() {
     });
 }
 
-void deliverUserNotification(char *title, char *body, char *account, char *threadID) {
+void deliverUserNotification(char *title, char *body, char *account, char *threadID, char *identifier) {
     // Owned (+1) copies, not autoreleased: this package is built without ARC, so
     // a dispatch_async block does not retain its captures. Holding the +1 until
     // the block releases them keeps the strings alive until delivery. The char*
@@ -59,8 +59,10 @@ void deliverUserNotification(char *title, char *body, char *account, char *threa
     NSString *b = [[NSString alloc] initWithUTF8String:body];
     NSString *acc = [[NSString alloc] initWithUTF8String:account];
     NSString *tid = [[NSString alloc] initWithUTF8String:threadID];
+    NSString *ident = [[NSString alloc] initWithUTF8String:identifier];
     dispatch_async(dispatch_get_main_queue(), ^{
         NSUserNotification *n = [[NSUserNotification alloc] init];
+        n.identifier = ident;
         n.title = t;
         n.informativeText = b;
         n.userInfo = @{@"account": acc, @"threadID": tid};
@@ -70,5 +72,22 @@ void deliverUserNotification(char *title, char *body, char *account, char *threa
         [b release];
         [acc release];
         [tid release];
+        [ident release];
+    });
+}
+
+// Withdraws a delivered notification by the identifier it was posted with.
+// Same ownership rule as above: the +1 copy lives until the block releases it.
+void removeUserNotification(char *identifier) {
+    NSString *ident = [[NSString alloc] initWithUTF8String:identifier];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSUserNotificationCenter *center = [NSUserNotificationCenter defaultUserNotificationCenter];
+        for (NSUserNotification *n in center.deliveredNotifications) {
+            if ([n.identifier isEqualToString:ident]) {
+                [center removeDeliveredNotification:n];
+                break;
+            }
+        }
+        [ident release];
     });
 }

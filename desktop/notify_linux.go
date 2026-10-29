@@ -4,7 +4,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gen2brain/beeep"
@@ -15,6 +18,7 @@ import (
 const (
 	portalNotificationInterface  = "org.freedesktop.portal.Notification"
 	portalNotificationAdd        = portalNotificationInterface + ".AddNotification"
+	portalNotificationRemove     = portalNotificationInterface + ".RemoveNotification"
 	portalNotificationAction     = portalNotificationInterface + ".ActionInvoked"
 	portalNotificationOpenAction = "open-thread"
 )
@@ -25,6 +29,7 @@ const (
 	fdoNotificationPath      = dbus.ObjectPath("/org/freedesktop/Notifications")
 	fdoNotificationInterface = "org.freedesktop.Notifications"
 	fdoNotificationNotify    = fdoNotificationInterface + ".Notify"
+	fdoNotificationClose     = fdoNotificationInterface + ".CloseNotification"
 	fdoNotificationAction    = fdoNotificationInterface + ".ActionInvoked"
 	fdoNotificationClosed    = fdoNotificationInterface + ".NotificationClosed"
 	// The action key a notification server invokes when the body itself is
@@ -37,9 +42,11 @@ var (
 	notificationSignals chan *dbus.Signal
 	notificationDone    chan struct{}
 	notificationMu      sync.Mutex
-	// Thread to open per live notification id, for the freedesktop service —
-	// unlike the portal, its ActionInvoked signal carries only the id, so the
-	// payload stays here until the notification is clicked or closed.
+	// Live notification ids this process posted to the freedesktop service,
+	// with the thread each opens — unlike the portal, its ActionInvoked signal
+	// carries only the id, so the payload stays here until the notification is
+	// clicked or closed. Also what makes withdrawing safe: the server reuses
+	// ids, so only one still listed here is ours to close.
 	fdoNotificationTargets = map[uint32]fdoNotificationTarget{}
 )
 
@@ -115,7 +122,7 @@ func (a *App) setupNotificationListener() {
 						a.openThreadFromNotification(target.Account, target.ThreadID)
 					}
 				case fdoNotificationAction:
-					if target, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok {
+					if target, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok && target.ThreadID != "" {
 						a.openThreadFromNotification(target.Account, target.ThreadID)
 					}
 				case fdoNotificationClosed:
@@ -162,14 +169,17 @@ func (a *App) closeNotificationListener() {
 // portal call still returns success, so that failure is invisible to us and no
 // fallback can key off it. Unsandboxed builds therefore talk to the
 // freedesktop notification service directly, as every other native app does.
-func (a *App) deliverNotification(n notification) {
+//
+// It returns the handle withdrawNotification takes, or "" when the
+// notification cannot be withdrawn (the beeep fallback).
+func (a *App) deliverNotification(n notification) string {
 	notificationMu.Lock()
 	conn := notificationConn
 	notificationMu.Unlock()
 
 	if os.Getenv("FLATPAK_ID") != "" {
 		if conn == nil {
-			return
+			return ""
 		}
 		id := "meron-" + uuid.NewString()
 		call := conn.Object(portalDesktopName, portalDesktopPath).Call(
@@ -180,23 +190,75 @@ func (a *App) deliverNotification(n notification) {
 		)
 		if call.Err != nil {
 			a.logf("notification portal failed: %v", call.Err)
+			return ""
 		}
-		return
+		return portalHandlePrefix + id
 	}
 
-	if conn != nil && a.notifyFreedesktop(conn, n) {
-		return
+	if conn != nil {
+		if ok, id := a.notifyFreedesktop(conn, n); ok {
+			if id == 0 {
+				return ""
+			}
+			return fdoHandle(id)
+		}
 	}
 
 	if err := beeep.Notify(n.title, n.body, notifyIcon()); err != nil {
 		a.logf("notify new mail failed: %v", err)
 	}
+	return ""
+}
+
+const (
+	portalHandlePrefix = "portal:"
+	fdoHandlePrefix    = "fdo:"
+)
+
+func fdoHandle(id uint32) string { return fmt.Sprintf("%s%d", fdoHandlePrefix, id) }
+
+// withdrawNotification takes a notification off screen by the handle
+// deliverNotification returned. An fdo notification is closed only while its
+// id is still ours: once dismissed, the server may have handed the id on.
+func (a *App) withdrawNotification(handle string) {
+	notificationMu.Lock()
+	conn := notificationConn
+	notificationMu.Unlock()
+	if conn == nil {
+		return
+	}
+	if id, ok := strings.CutPrefix(handle, portalHandlePrefix); ok {
+		if call := conn.Object(portalDesktopName, portalDesktopPath).Call(portalNotificationRemove, 0, id); call.Err != nil {
+			a.logf("notification portal remove failed: %v", call.Err)
+		}
+		return
+	}
+	raw, ok := strings.CutPrefix(handle, fdoHandlePrefix)
+	if !ok {
+		return
+	}
+	parsed, err := strconv.ParseUint(raw, 10, 32)
+	if err != nil {
+		return
+	}
+	id := uint32(parsed)
+	notificationMu.Lock()
+	_, live := fdoNotificationTargets[id]
+	delete(fdoNotificationTargets, id)
+	notificationMu.Unlock()
+	if !live {
+		return
+	}
+	if call := conn.Object(fdoNotificationName, fdoNotificationPath).Call(fdoNotificationClose, 0, id); call.Err != nil {
+		a.logf("notification close failed: %v", call.Err)
+	}
 }
 
 // notifyFreedesktop posts through org.freedesktop.Notifications, registering a
 // default action so clicking the notification body opens its thread (beeep, the
-// last-resort fallback, cannot carry one). Reports whether it was accepted.
-func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) bool {
+// last-resort fallback, cannot carry one). Reports whether it was accepted, and
+// the id the server gave it (0 when it could not be read).
+func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) (bool, uint32) {
 	// Only offer the click action when there is something to open; a server
 	// that renders actions as buttons would otherwise show a dead one.
 	var actions []string
@@ -223,25 +285,23 @@ func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) bool {
 	)
 	if call.Err != nil {
 		a.logf("notify new mail failed: %v", call.Err)
-		return false
-	}
-	if len(actions) == 0 {
-		return true
+		return false, 0
 	}
 
 	var id uint32
 	if err := call.Store(&id); err != nil {
 		// Delivered, but without an id there is nothing to match a later click
-		// against; the notification simply won't be clickable.
-		return true
+		// against; the notification simply won't be clickable or withdrawable.
+		return true, 0
 	}
+	// Registered even without a click action, so it can be withdrawn later.
 	notificationMu.Lock()
 	fdoNotificationTargets[id] = fdoNotificationTarget{
 		target:           notificationTarget{Account: n.account, ThreadID: n.threadID},
 		responseSequence: call.ResponseSequence,
 	}
 	notificationMu.Unlock()
-	return true
+	return true, id
 }
 
 // linuxDesktopEntry is the basename of this build's installed .desktop file.
@@ -279,6 +339,9 @@ func takeFdoNotificationTarget(body []any, sequence dbus.Sequence) (notification
 		known = false
 	}
 	notificationMu.Unlock()
+	if known {
+		forgetNotification(fdoHandle(id))
+	}
 	return entry.target, known
 }
 
@@ -291,10 +354,15 @@ func closeFdoNotificationTarget(body []any, sequence dbus.Sequence) {
 		return
 	}
 	notificationMu.Lock()
-	if entry, known := fdoNotificationTargets[id]; known && sequence > entry.responseSequence {
+	entry, known := fdoNotificationTargets[id]
+	closed := known && sequence > entry.responseSequence
+	if closed {
 		delete(fdoNotificationTargets, id)
 	}
 	notificationMu.Unlock()
+	if closed {
+		forgetNotification(fdoHandle(id))
+	}
 }
 
 type portalSerializedIcon struct {

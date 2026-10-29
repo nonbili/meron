@@ -128,6 +128,7 @@ pub(crate) async fn dispatch(
         "messages.unifiedRecent"
         | "messages.recent"
         | "starred.items"
+        | "messages.stillUnread"
         | "identity.allocate"
         | "contacts.suggest"
         | "messages.sync"

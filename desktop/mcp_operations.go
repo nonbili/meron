@@ -233,4 +233,6 @@ func (s *mcpService) notifyMailChanged(account string) {
 	if s.app.ctx != nil {
 		wailsRuntime.EventsEmit(s.app.ctx, "mail.synced", map[string]any{"account": account, "folders": true})
 	}
+	// Mail an MCP client read, moved or deleted may still be announced on screen.
+	s.app.requestNotificationReconcile()
 }

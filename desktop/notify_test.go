@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -165,5 +167,77 @@ func TestNotifyIconWritesEmbeddedIconOnce(t *testing.T) {
 	}
 	if got := notifyIcon(); got != path {
 		t.Fatalf("second notifyIcon() = %q, want %q", got, path)
+	}
+}
+
+func TestParseStoreMessagesNamesEveryArrival(t *testing.T) {
+	mail := parseStoreMessages(map[string]any{
+		"account":  "me@example.com",
+		"folder":   "inbox",
+		"messages": []any{map[string]any{"uid": float64(41)}, map[string]any{"uid": float64(42)}},
+	}, 2)
+	want := []storeMessage{{folder: "inbox", messageID: "41"}, {folder: "inbox", messageID: "42"}}
+	if !reflect.DeepEqual(mail, want) {
+		t.Fatalf("mail = %#v, want %#v", mail, want)
+	}
+
+	// A feed entry lives under its subscription, not the batch folder.
+	feed := parseStoreMessages(map[string]any{
+		"account":  "rss-8f2a",
+		"folder":   "rss",
+		"messages": []any{map[string]any{"uid": float64(0), "itemKey": "key-1", "threadKey": "sub-1"}},
+	}, 1)
+	if want := []storeMessage{{folder: "sub-1", messageID: "key-1"}}; !reflect.DeepEqual(feed, want) {
+		t.Fatalf("feed = %#v, want %#v", feed, want)
+	}
+
+	// More arrivals than listed: withdrawing on the listed ones would hide
+	// mail still unread, so the notification is left to the user.
+	partial := parseStoreMessages(map[string]any{
+		"account":  "me@example.com",
+		"folder":   "inbox",
+		"messages": []any{map[string]any{"uid": float64(41)}},
+	}, 30)
+	if partial != nil {
+		t.Fatalf("partial = %#v, want nil", partial)
+	}
+}
+
+func TestStaleNotificationsWaitForEveryArrivalToBeRead(t *testing.T) {
+	first := storeMessage{folder: "inbox", messageID: "41"}
+	second := storeMessage{folder: "inbox", messageID: "42"}
+	tracked := []trackedNotification{
+		{handle: "batch", account: "me", messages: []storeMessage{first, second}},
+		{handle: "single", account: "me", messages: []storeMessage{first}},
+		{handle: "elsewhere", account: "other", messages: []storeMessage{second}},
+	}
+	stillUnread := stillUnreadRows(map[string]any{"unread": []any{
+		map[string]any{"account_id": "me", "folder_id": "inbox", "message_id": "42"},
+	}})
+	// The same UID in another account is a different message.
+	if got := staleNotifications(tracked, stillUnread); !reflect.DeepEqual(got, []string{"single", "elsewhere"}) {
+		t.Fatalf("stale = %v", got)
+	}
+}
+
+func TestTrackedNotificationsStayBounded(t *testing.T) {
+	trackedMu.Lock()
+	saved := trackedNotifications
+	trackedNotifications = nil
+	trackedMu.Unlock()
+	defer func() {
+		trackedMu.Lock()
+		trackedNotifications = saved
+		trackedMu.Unlock()
+	}()
+
+	for i := 0; i < maxTrackedNotifications+5; i++ {
+		trackNotification(trackedNotification{handle: fmt.Sprint(i)})
+	}
+	forgetNotification(fmt.Sprint(maxTrackedNotifications + 4))
+	trackedMu.Lock()
+	defer trackedMu.Unlock()
+	if len(trackedNotifications) != maxTrackedNotifications-1 || trackedNotifications[0].handle != "5" {
+		t.Fatalf("tracked = %d entries starting at %q", len(trackedNotifications), trackedNotifications[0].handle)
 	}
 }

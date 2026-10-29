@@ -195,6 +195,9 @@ func (a *App) Invoke(command string, payload map[string]any) (result any, err er
 	start := time.Now()
 	defer a.recoverInvoke(command, &err)
 	result, err = a.invoke(command, payload)
+	if err == nil && notifyReconcileCommands[command] {
+		a.requestNotificationReconcile()
+	}
 	if err == nil && quietCommands[command] {
 		return result, nil
 	}

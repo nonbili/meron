@@ -43,8 +43,9 @@ func (a *App) setupNotificationListener() {
 func (a *App) closeNotificationListener() {}
 
 // deliverNotification shows a Windows toast whose activation arguments carry the
-// thread to open. Falls back to beeep (no click) if the toast fails.
-func (a *App) deliverNotification(n notification) {
+// thread to open. Falls back to beeep (no click) if the toast fails. Returns
+// no handle: go-toast posts untagged toasts, which cannot be removed later.
+func (a *App) deliverNotification(n notification) string {
 	t := toast.Notification{
 		AppID:               "Meron",
 		Title:               n.title,
@@ -59,7 +60,10 @@ func (a *App) deliverNotification(n notification) {
 			a.logf("notify new mail failed: %v", err)
 		}
 	}
+	return ""
 }
+
+func (a *App) withdrawNotification(string) {}
 
 func parseNotifyArgs(args string) (account, threadID string) {
 	account, threadID, _ = strings.Cut(args, notifyArgSeparator)
