@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -223,6 +225,9 @@ internal fun ThreadScreen(
     onViewedToBottom: () -> Unit,
     snackbarHost: SnackbarHostState,
     swipe: ThreadSwipeState,
+    /** Pulling the conversation down from its top closes it, as pulling the
+     *  message reader down does. Held above the pages, which it moves together. */
+    pull: PullToDismissState,
     /** The conversations beside this one in the list it was opened from, null
      *  where there is none (or swiping away is not safe right now). */
     onSwipeToPrevious: (() -> Unit)? = null,
@@ -988,6 +993,13 @@ internal fun ThreadScreen(
                             } else {
                                 Modifier
                             },
+                        )
+                        // Not while typing a reply, whose field scrolls too.
+                        .pullToDismiss(
+                            pull,
+                            enabled = active && swipeOpen && WindowInsets.ime.getBottom(LocalDensity.current) == 0,
+                            isAtTop = { !listState.canScrollBackward },
+                            onDismiss = onBack,
                         ),
                 ) {
                     if (messages.isEmpty()) {

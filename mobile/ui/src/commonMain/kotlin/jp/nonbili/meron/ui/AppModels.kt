@@ -13,19 +13,20 @@ internal object AppRoutes {
     const val Kanban = "kanban"
     const val Tasks = "tasks"
     const val Calendar = "calendar"
-    const val Thread = "thread"
     const val Compose = "compose"
     const val AddAccount = "add-account"
     const val Settings = "settings"
 }
 
+// Thread has no route of its own: a conversation is drawn over the route it
+// was opened from (see MeronMobileScreenContent).
 internal fun Screen.route(): String =
     when (this) {
         Screen.Mail -> AppRoutes.Mail
         Screen.Kanban -> AppRoutes.Kanban
         Screen.Tasks -> AppRoutes.Tasks
         Screen.Calendar -> AppRoutes.Calendar
-        Screen.Thread -> AppRoutes.Thread
+        Screen.Thread -> AppRoutes.Mail
         Screen.Compose -> AppRoutes.Compose
         Screen.AddAccount -> AppRoutes.AddAccount
         Screen.Settings -> AppRoutes.Settings
@@ -37,7 +38,6 @@ internal fun appRouteToScreen(route: String?): Screen? =
         AppRoutes.Kanban -> Screen.Kanban
         AppRoutes.Tasks -> Screen.Tasks
         AppRoutes.Calendar -> Screen.Calendar
-        AppRoutes.Thread -> Screen.Thread
         AppRoutes.Compose -> Screen.Compose
         AppRoutes.AddAccount -> Screen.AddAccount
         AppRoutes.Settings -> Screen.Settings

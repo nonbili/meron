@@ -1,12 +1,8 @@
 package jp.nonbili.meron.ui
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +41,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -53,21 +48,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -75,7 +64,6 @@ import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.visibleImageAttachments
-import kotlinx.coroutines.launch
 
 // Full-screen reader for a single message — the mobile equivalent of the desktop
 // "open in new tab" reader, showing the full header plus the message body.
@@ -109,98 +97,19 @@ internal fun MessageReaderScreen(
     var menuOpen by remember(message.id) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
-    val dismissThresholdPx = remember(density) { with(density) { 120.dp.toPx() } }
-    var screenHeightPx by remember { mutableStateOf(0f) }
-    var pullDistancePx by remember(message.id) { mutableStateOf(0f) }
-    var dismissedByPull by remember(message.id) { mutableStateOf(false) }
-    var isAnimating by remember(message.id) { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+    val pull = rememberPullToDismissState(message.id)
     // The message, captured for the frosted bands under the floating bars.
     val hazeState = rememberHazeState()
     var bottomCardHeightPx by remember { mutableIntStateOf(0) }
 
     BackHandler(onBack = onBack)
 
-    suspend fun handleDragRelease(velocityY: Float) {
-        isAnimating = true
-        if (pullDistancePx >= dismissThresholdPx || velocityY > 1000f) {
-            val target = if (screenHeightPx > 0f) screenHeightPx else with(density) { 800.dp.toPx() }
-            animate(
-                initialValue = pullDistancePx,
-                targetValue = target,
-                initialVelocity = velocityY,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-            ) { value, _ ->
-                pullDistancePx = value
-            }
-            dismissedByPull = true
-            onBack()
-        } else {
-            animate(
-                initialValue = pullDistancePx,
-                targetValue = 0f,
-                initialVelocity = velocityY,
-                animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            ) { value, _ ->
-                pullDistancePx = value
-            }
-        }
-        isAnimating = false
-    }
-
-    val pullToConversationConnection =
-        remember(message.id, dismissThresholdPx, scrollState, screenHeightPx) {
-            object : NestedScrollConnection {
-                override fun onPreScroll(
-                    available: Offset,
-                    source: NestedScrollSource,
-                ): Offset {
-                    if (dismissedByPull || isAnimating) return Offset.Zero
-
-                    val resistance =
-                        if (screenHeightPx > 0f) {
-                            (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
-                        } else {
-                            0.8f
-                        }
-
-                    // When pulling down (available.y > 0) and at the top of the scrollable content (scrollState.value == 0)
-                    if (available.y > 0f && scrollState.value == 0) {
-                        pullDistancePx += available.y * resistance
-                        return Offset(0f, available.y)
-                    }
-
-                    // When pushing back up (available.y < 0) and we have already pulled down (pullDistancePx > 0)
-                    if (available.y < 0f && pullDistancePx > 0f) {
-                        val consumedY = available.y.coerceAtLeast(-pullDistancePx / resistance)
-                        pullDistancePx = (pullDistancePx + consumedY * resistance).coerceAtLeast(0f)
-                        return Offset(0f, consumedY)
-                    }
-
-                    return Offset.Zero
-                }
-
-                override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (dismissedByPull || isAnimating || pullDistancePx == 0f) return Velocity.Zero
-                    handleDragRelease(available.y)
-                    return available
-                }
-            }
-        }
-
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .onSizeChanged { size ->
-                    screenHeightPx = size.height.toFloat()
-                }.graphicsLayer {
-                    translationY = pullDistancePx
-                    val progress = if (screenHeightPx > 0f) (pullDistancePx / screenHeightPx).coerceIn(0f, 1f) else 0f
-                    alpha = 1f - progress * 0.4f
-                    scaleX = 1f - progress * 0.05f
-                    scaleY = 1f - progress * 0.05f
-                }.nestedScroll(pullToConversationConnection)
+                .pullToDismissLayer(pull)
+                .pullToDismiss(pull, isAtTop = { !scrollState.canScrollBackward }, onDismiss = onBack)
                 .pointerInput(Unit) {
                     detectTapGestures { }
                 },
@@ -208,36 +117,7 @@ internal fun MessageReaderScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    modifier =
-                        Modifier.pointerInput(message.id, screenHeightPx) {
-                            detectVerticalDragGestures(
-                                onVerticalDrag = { _, dragAmount ->
-                                    if (!dismissedByPull && !isAnimating) {
-                                        val resistance =
-                                            if (screenHeightPx > 0f) {
-                                                (1f - (pullDistancePx / screenHeightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f)
-                                            } else {
-                                                0.8f
-                                            }
-                                        pullDistancePx = (pullDistancePx + dragAmount * resistance).coerceAtLeast(0f)
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
-                                        coroutineScope.launch {
-                                            handleDragRelease(0f)
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    if (!dismissedByPull && !isAnimating && pullDistancePx > 0f) {
-                                        coroutineScope.launch {
-                                            handleDragRelease(0f)
-                                        }
-                                    }
-                                },
-                            )
-                        },
+                    modifier = Modifier.pullToDismissHandle(pull, onDismiss = onBack),
                     // The subject lives in the content area below, so the bar
                     // stays empty and gives the body the full width.
                     title = {},
