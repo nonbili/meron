@@ -9,51 +9,15 @@ import kotlin.test.assertTrue
 
 class OAuthFlowTest {
     @Test
-    fun gmailAuthorizationUrlUsesPkceAndOfflineAccess() {
-        val url =
-            buildOAuthAuthorizationUrl(
-                OAuthAuthorizationRequest(
-                    provider = "gmail",
-                    clientId = "client id",
-                    redirectUri = defaultOAuthRedirectUri(),
-                    state = "state",
-                    codeChallenge = "challenge",
-                    loginHint = "me@example.com",
-                ),
-            )
-
-        assertTrue(url.startsWith("https://accounts.google.com/o/oauth2/v2/auth?"))
-        assertTrue(url.contains("client_id=client%20id"))
-        assertTrue(url.contains("redirect_uri=jp.nonbili.meron.oauth%3A%2F%2Foauth"))
-        assertTrue(url.contains("response_type=code"))
-        assertTrue(url.contains("scope=openid%20email%20profile%20https%3A%2F%2Fmail.google.com%2F"))
-        assertTrue(url.contains("state=state"))
-        assertTrue(url.contains("code_challenge=challenge"))
-        assertTrue(url.contains("code_challenge_method=S256"))
-        assertTrue(url.contains("access_type=offline"))
-        assertTrue(url.contains("prompt=consent"))
-        assertTrue(url.contains("login_hint=me%40example.com"))
-    }
-
-    @Test
-    fun outlookAuthorizationUrlUsesMicrosoftEndpointAndScopes() {
-        val url =
-            buildOAuthAuthorizationUrl(
-                OAuthAuthorizationRequest(
-                    provider = "outlook",
-                    clientId = "client",
-                    redirectUri = defaultOAuthRedirectUri(),
-                    state = "state",
-                    codeChallenge = "challenge",
-                ),
-            )
-
-        assertTrue(url.startsWith("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"))
-        assertTrue(url.contains("offline_access"))
-        assertTrue(url.contains("profile"))
-        assertTrue(url.contains("IMAP.AccessAsUser.All"))
-        assertTrue(url.contains("SMTP.Send"))
-        assertTrue(url.contains("User.Read"))
+    fun authorizeUrlResponseYieldsTheUrlOrFails() {
+        assertEquals(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=c",
+            parseOAuthAuthorizeUrlResponse("""{"url":"https://accounts.google.com/o/oauth2/v2/auth?client_id=c"}"""),
+        )
+        assertFailsWith<RuntimeException> {
+            parseOAuthAuthorizeUrlResponse("""{"error":{"message":"unsupported oauth provider"}}""")
+        }
+        assertFailsWith<IllegalStateException> { parseOAuthAuthorizeUrlResponse("""{"url":""}""") }
     }
 
     @Test

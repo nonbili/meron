@@ -8,6 +8,7 @@ object MobileCommand {
     const val AccountAutodiscover = "account.autodiscover"
     const val AccountAddOAuth = "account.addOAuth"
     const val AccountExchangeOAuthCode = "account.exchangeOAuthCode"
+    const val OAuthAuthorizeUrl = "oauth.authorizeUrl"
     const val AccountUpdateOAuthToken = "account.updateOAuthToken"
     const val AccountAddRss = "account.addRss"
     const val AccountRemove = "account.remove"
@@ -265,6 +266,25 @@ data class ExchangeOAuthCodeParams(
             "redirect_uri" to redirectUri.takeIf { it.isNotBlank() }?.jsonString(),
             "code_verifier" to codeVerifier.takeIf { it.isNotBlank() }?.jsonString(),
             "token_url" to tokenUrl.takeIf { it.isNotBlank() }?.jsonString(),
+        )
+}
+
+data class OAuthAuthorizeUrlParams(
+    val provider: String,
+    val clientId: String,
+    val redirectUri: String,
+    val state: String,
+    val codeChallenge: String,
+    val loginHint: String = "",
+) {
+    fun toJson(): String =
+        jsonObject(
+            "provider" to provider.jsonString(),
+            "client_id" to clientId.jsonString(),
+            "redirect_uri" to redirectUri.jsonString(),
+            "state" to state.jsonString(),
+            "code_challenge" to codeChallenge.jsonString(),
+            "login_hint" to loginHint.takeIf { it.isNotBlank() }?.jsonString(),
         )
 }
 
@@ -1154,6 +1174,8 @@ class MobileMailCommandClient(
     suspend fun autodiscoverAccount(params: AutodiscoverAccountParams): String = core.invoke(MobileCommand.AccountAutodiscover, params.toJson())
 
     suspend fun addOAuthAccount(params: AddOAuthAccountParams): String = core.invoke(MobileCommand.AccountAddOAuth, params.toJson())
+
+    suspend fun oauthAuthorizeUrl(params: OAuthAuthorizeUrlParams): String = parseOAuthAuthorizeUrlResponse(core.invoke(MobileCommand.OAuthAuthorizeUrl, params.toJson()))
 
     suspend fun exchangeOAuthCode(params: ExchangeOAuthCodeParams): String = core.invoke(MobileCommand.AccountExchangeOAuthCode, params.toJson())
 

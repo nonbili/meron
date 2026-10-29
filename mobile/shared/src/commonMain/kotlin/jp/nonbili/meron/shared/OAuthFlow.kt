@@ -10,15 +10,6 @@ fun isMeronOAuthCallbackScheme(scheme: String?): Boolean {
         normalized.startsWith("com.googleusercontent.apps.")
 }
 
-data class OAuthAuthorizationRequest(
-    val provider: String,
-    val clientId: String,
-    val redirectUri: String,
-    val state: String,
-    val codeChallenge: String,
-    val loginHint: String = "",
-)
-
 data class OAuthCallbackResult(
     val code: String,
     val state: String,
@@ -52,45 +43,6 @@ fun isPotentialOAuthCallbackUrl(rawUrl: String): Boolean {
             trimmed.contains("&error=")
     val hasState = trimmed.contains("?state=") || trimmed.contains("&state=")
     return hasCodeOrError && (hasState || isOAuthCallbackUrl(trimmed))
-}
-
-fun buildOAuthAuthorizationUrl(request: OAuthAuthorizationRequest): String {
-    val provider = request.provider.lowercase()
-    val (endpoint, scope) =
-        when (provider) {
-            "gmail" -> {
-                "https://accounts.google.com/o/oauth2/v2/auth" to
-                    "openid email profile https://mail.google.com/"
-            }
-
-            "outlook" -> {
-                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize" to
-                    // User.Read lets core fetch the profile photo from Microsoft Graph.
-                    "offline_access openid email profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send " +
-                    "https://graph.microsoft.com/User.Read"
-            }
-
-            else -> {
-                error("Unsupported OAuth provider: ${request.provider}")
-            }
-        }
-
-    return endpoint + "?" +
-        listOf(
-            "client_id" to request.clientId,
-            "redirect_uri" to request.redirectUri,
-            "response_type" to "code",
-            "scope" to scope,
-            "state" to request.state,
-            "code_challenge" to request.codeChallenge,
-            "code_challenge_method" to "S256",
-            "access_type" to "offline".takeIf { provider == "gmail" },
-            "prompt" to "consent".takeIf { provider == "gmail" },
-            "login_hint" to request.loginHint.takeIf { it.isNotBlank() },
-        ).filter { it.second != null }
-            .joinToString("&") { (key, value) ->
-                "${urlEncode(key)}=${urlEncode(value.orEmpty())}"
-            }
 }
 
 fun parseOAuthCallbackUrl(
@@ -190,21 +142,6 @@ private fun parseUrlQuery(query: String): Map<String, String> {
             val value = pair.substringAfter('=', missingDelimiterValue = "")
             oauthPercentDecode(key, plusAsSpace = true) to oauthPercentDecode(value, plusAsSpace = true)
         }
-}
-
-private fun urlEncode(value: String): String {
-    val out = StringBuilder()
-    value.encodeToByteArray().forEach { byte ->
-        val unsigned = byte.toInt() and 0xff
-        val ch = unsigned.toChar()
-        if (ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' || ch == '-' || ch == '_' || ch == '.' || ch == '~') {
-            out.append(ch)
-        } else {
-            out.append('%')
-            out.append(unsigned.toString(16).uppercase().padStart(2, '0'))
-        }
-    }
-    return out.toString()
 }
 
 private fun oauthPercentDecode(

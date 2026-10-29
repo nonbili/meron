@@ -8,6 +8,7 @@ mod compose;
 mod feeds;
 mod folders;
 pub(crate) mod messages;
+mod oauth;
 mod tasks;
 mod watch;
 
@@ -60,6 +61,10 @@ pub(crate) async fn dispatch(
         }
 
         "app.prefsGet" | "app.prefsSet" => prefs::dispatch(engine, req, out).await,
+
+        "oauth.authorizeUrl" | "oauth.exchangeCode" | "oauth.fetchPhoto" => {
+            oauth::dispatch(req).await
+        }
 
         "backup.export" | "backup.import" => backup::dispatch(engine, req, out).await,
 

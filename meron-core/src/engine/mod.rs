@@ -3,7 +3,6 @@
 //! mobile FFI host. Platform differences (where the SQLite DB lives, where
 //! per-account secrets are stored) are injected via the [`EngineHost`] trait.
 
-use anyhow::Context as _;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
@@ -31,11 +30,7 @@ pub use search::*;
 pub use sync::*;
 pub use transfers::*;
 
-pub const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-
-pub const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-
-pub const OUTLOOK_SCOPES: &str = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile";
+pub use crate::oauth::{GOOGLE_TOKEN_URL, OUTLOOK_SCOPES, OUTLOOK_TOKEN_URL};
 
 #[derive(Clone, Default)]
 pub struct OAuthDefaults {
@@ -59,6 +54,30 @@ fn oauth_defaults() -> OAuthDefaults {
         .read()
         .map(|defaults| defaults.clone())
         .unwrap_or_default()
+}
+
+/// The app's own OAuth client for a provider ("gmail" or "outlook"), for
+/// signing in: the configured defaults, else the `MERON_*` environment.
+pub fn default_oauth_client(provider: &str) -> crate::oauth::Client {
+    let defaults = oauth_defaults();
+    let or_env = |value: &str, name: &str| match value.trim() {
+        "" => std::env::var(name).unwrap_or_default().trim().to_string(),
+        value => value.to_string(),
+    };
+    match provider {
+        "outlook" => crate::oauth::Client {
+            provider: "outlook".to_string(),
+            client_id: or_env(&defaults.outlook_client_id, "MERON_OUTLOOK_CLIENT_ID"),
+            ..Default::default()
+        },
+        _ => crate::oauth::Client {
+            provider: "gmail".to_string(),
+            client_id: or_env(&defaults.google_client_id, "MERON_GOOGLE_CLIENT_ID"),
+            client_secret: or_env(&defaults.google_client_secret, "MERON_GOOGLE_CLIENT_SECRET"),
+            token_url: defaults.google_token_url.trim().to_string(),
+            ..Default::default()
+        },
+    }
 }
 
 /// Engine state: per-account credentials plus the on-disk store.
@@ -464,82 +483,41 @@ impl Engine {
                     }
                     anyhow::bail!("account needs reconnect: {account}");
                 }
-                // Provider-specific endpoint / credentials. Google needs a client
+                // The account's own client, else the app's. Google needs a client
                 // secret; Microsoft is a public client (PKCE) with no secret but
                 // must request the resource scopes on refresh.
-                let (
-                    default_token_url,
-                    default_client_id_env,
-                    default_client_secret_env,
-                    default_scope,
-                ): (&str, &str, Option<&str>, Option<&str>) = match creds.auth_type.as_str() {
-                    "outlook_oauth" => (
-                        OUTLOOK_TOKEN_URL,
-                        "MERON_OUTLOOK_CLIENT_ID",
-                        None,
-                        Some(OUTLOOK_SCOPES),
-                    ),
-                    _ => (
-                        GOOGLE_TOKEN_URL,
-                        "MERON_GOOGLE_CLIENT_ID",
-                        Some("MERON_GOOGLE_CLIENT_SECRET"),
-                        None,
-                    ),
-                };
-                let oauth_defaults = oauth_defaults();
-                let default_google_token_url = oauth_defaults.google_token_url.trim();
-                let token_url = if !creds.oauth_token_url.trim().is_empty() {
-                    creds.oauth_token_url.trim().to_string()
-                } else if creds.auth_type != "outlook_oauth" && !default_google_token_url.is_empty()
-                {
-                    default_google_token_url.to_string()
-                } else {
-                    default_token_url.to_string()
-                };
-                let client_id = if creds.oauth_client_id.trim().is_empty() {
-                    let configured = match creds.auth_type.as_str() {
-                        "outlook_oauth" => oauth_defaults.outlook_client_id.trim(),
-                        _ => oauth_defaults.google_client_id.trim(),
-                    };
-                    if configured.is_empty() {
-                        std::env::var(default_client_id_env).with_context(|| {
-                            match creds.auth_type.as_str() {
-                                "outlook_oauth" => {
-                                    "MERON_OUTLOOK_CLIENT_ID is required for Outlook OAuth refresh"
-                                }
-                                _ => "MERON_GOOGLE_CLIENT_ID is required for Gmail OAuth refresh",
-                            }
-                        })?
+                let outlook = creds.auth_type == "outlook_oauth";
+                let app = default_oauth_client(if outlook { "outlook" } else { "gmail" });
+                let own = |value: &str| Some(value.trim().to_string()).filter(|v| !v.is_empty());
+                let token_url =
+                    own(&creds.oauth_token_url).unwrap_or_else(|| app.token_url().to_string());
+                let Some(client_id) = own(&creds.oauth_client_id)
+                    .or_else(|| Some(app.client_id.clone()).filter(|id| !id.is_empty()))
+                else {
+                    anyhow::bail!(if outlook {
+                        "MERON_OUTLOOK_CLIENT_ID is required for Outlook OAuth refresh"
                     } else {
-                        configured.to_string()
-                    }
-                } else {
-                    creds.oauth_client_id.trim().to_string()
+                        "MERON_GOOGLE_CLIENT_ID is required for Gmail OAuth refresh"
+                    });
                 };
-                let client_secret = if creds.oauth_client_secret.trim().is_empty() {
-                    let configured = oauth_defaults.google_client_secret.trim();
-                    if !configured.is_empty() {
-                        configured.to_string()
+                // The app's secret goes only to the app's own endpoint. No secret
+                // anywhere is valid too: mobile's native Google clients are public
+                // (installed-app) clients that refresh with client_id only, and
+                // `refresh_oauth_token` omits the empty field.
+                let client_secret = own(&creds.oauth_client_secret).unwrap_or_else(|| {
+                    if token_url == app.token_url() {
+                        app.client_secret.clone()
                     } else {
-                        // No secret anywhere is a valid configuration: mobile's
-                        // native Google clients are public (installed-app)
-                        // clients that refresh with client_id only, and
-                        // `refresh_oauth_token` omits the empty field.
-                        match default_client_secret_env {
-                            Some(env_name) if token_url == GOOGLE_TOKEN_URL => {
-                                std::env::var(env_name).unwrap_or_default()
-                            }
-                            _ => String::new(),
-                        }
+                        String::new()
                     }
-                } else {
-                    creds.oauth_client_secret.trim().to_string()
-                };
+                });
                 let owned_scope = creds.oauth_scope.trim().to_string();
-                let scope = if owned_scope.is_empty() {
-                    default_scope
-                } else {
+                let scope = if !owned_scope.is_empty() {
                     Some(owned_scope.as_str())
+                } else if outlook {
+                    Some(OUTLOOK_SCOPES)
+                } else {
+                    None
                 };
                 let refreshed = imap::refresh_oauth_token(
                     &token_url,

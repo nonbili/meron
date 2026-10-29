@@ -136,7 +136,6 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
 import jp.nonbili.meron.shared.RemoteContentPolicy
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
@@ -154,7 +153,6 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts

@@ -148,27 +148,14 @@ type AddPasswordAccountRequest struct {
 	SMTPCertPin string `json:"smtp_cert_pin"`
 }
 
-type AddGmailOAuthRequest struct {
+// AddOAuthRequest saves a Gmail or Outlook account. When AvatarURL is empty
+// the provider's profile photo is fetched.
+type AddOAuthRequest struct {
 	ID           string `json:"id"`
 	Email        string `json:"email"`
 	DisplayName  string `json:"display_name"`
 	SenderName   string `json:"sender_name"`
 	AvatarURL    string `json:"avatar_url"`
-	AuthCode     string `json:"auth_code"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-}
-
-// AddOutlookOAuthRequest mirrors AddGmailOAuthRequest. When AvatarURL is empty
-// the profile photo is fetched from Microsoft Graph (the id_token carries none).
-type AddOutlookOAuthRequest struct {
-	ID           string `json:"id"`
-	Email        string `json:"email"`
-	DisplayName  string `json:"display_name"`
-	SenderName   string `json:"sender_name"`
-	AvatarURL    string `json:"avatar_url"`
-	AuthCode     string `json:"auth_code"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
@@ -249,22 +236,6 @@ type ExchangedProfile struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
-	AuthCode     string `json:"auth_code"`
-}
-
-type TokenExchangeResult struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	// IDToken is the OIDC id_token Microsoft returns; Google omits it. Used to
-	// read the account email/name without an extra userinfo call.
-	IDToken string `json:"id_token"`
-}
-
-type GoogleUserInfo struct {
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	Picture string `json:"picture"`
 }
 
 type ImapThreadIDs struct {

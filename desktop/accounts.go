@@ -30,7 +30,7 @@ func (a *App) accountAddPassword(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	id, err := a.accountSaveID(req.ID, req.Email)
+	id, _, err := a.accountSaveID(req.ID, req.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -101,35 +101,36 @@ func (a *App) accountAddPassword(payload map[string]any) (any, error) {
 
 // Reuse an existing ID only for the same mailbox. A different sign-in or an
 // edited email creates a separate account, without inheriting cached state.
-func (a *App) accountSaveID(existingID, email string) (string, error) {
+// A reconnect also returns the account it replaces (nil for a new one).
+func (a *App) accountSaveID(existingID, email string) (string, *Account, error) {
 	existingID = strings.TrimSpace(existingID)
 	result, err := a.accountList()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	accounts := result.(map[string]any)["accounts"].([]Account)
 	if existingID != "" {
 		found := false
-		for _, account := range accounts {
+		for i, account := range accounts {
 			if account.ID == existingID {
 				found = true
 				if accountID(account.Email) == accountID(email) {
-					return existingID, nil
+					return existingID, &accounts[i], nil
 				}
 				break
 			}
 		}
 		if !found {
-			return "", errors.New("account to reconnect not found")
+			return "", nil, errors.New("account to reconnect not found")
 		}
 	}
 	id := accountID(email)
 	for _, account := range accounts {
 		if accountID(account.Email) == id || account.ID == id {
-			return "", errors.New("email belongs to an existing account; edit or reconnect that account instead")
+			return "", nil, errors.New("email belongs to an existing account; edit or reconnect that account instead")
 		}
 	}
-	return id, nil
+	return id, nil, nil
 }
 
 // accountProbeCert fetches the certificate a mail server presents so the

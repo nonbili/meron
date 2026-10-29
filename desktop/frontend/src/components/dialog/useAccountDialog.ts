@@ -67,7 +67,6 @@ export function useAccountDialog() {
     username: '',
     username_touched: false,
     password: '',
-    auth_code: '',
     feed_url: '',
   })
   const [error, setError] = useState('')
@@ -87,6 +86,7 @@ export function useAccountDialog() {
   const formRef = useRef(form)
   formRef.current = form
   const [exchangedTokens, setExchangedTokens] = useState<null | {
+    avatar_url: string
     access_token: string
     refresh_token: string
     expires_in: number
@@ -142,7 +142,6 @@ export function useAccountDialog() {
       username: reconnectAccount.username || reconnectAccount.email,
       username_touched: true,
       password: '',
-      auth_code: '',
       feed_url: reconnectAccount.feed_url || '',
     })
     setError('')
@@ -191,7 +190,6 @@ export function useAccountDialog() {
           access_token: string
           refresh_token: string
           expires_in: number
-          auth_code: string
         }
       }>(`oauth.${provider}PollProfile`)
 
@@ -205,9 +203,9 @@ export function useAccountDialog() {
           ...f,
           email: res.profile!.email,
           display_name: res.profile!.display_name,
-          auth_code: res.profile!.auth_code,
         }))
         setExchangedTokens({
+          avatar_url: res.profile!.avatar_url,
           access_token: res.profile!.access_token,
           refresh_token: res.profile!.refresh_token,
           expires_in: res.profile!.expires_in,
@@ -219,7 +217,6 @@ export function useAccountDialog() {
           display_name: res.profile.display_name,
           sender_name: res.profile.display_name,
           avatar_url: res.profile.avatar_url,
-          auth_code: res.profile.auth_code,
           access_token: res.profile.access_token,
           refresh_token: res.profile.refresh_token,
           expires_in: res.profile.expires_in,
@@ -408,7 +405,7 @@ export function useAccountDialog() {
             email: form.email,
             display_name: form.display_name,
             sender_name: form.display_name,
-            auth_code: form.auth_code,
+            avatar_url: exchangedTokens?.avatar_url || null,
             access_token: exchangedTokens?.access_token || null,
             refresh_token: exchangedTokens?.refresh_token || null,
             expires_in: exchangedTokens?.expires_in || null,
@@ -488,7 +485,7 @@ export function useAccountDialog() {
   const saveDisabled =
     loading ||
     (mode === 'gmail' || mode === 'outlook'
-      ? !exchangedTokens && !form.auth_code
+      ? !exchangedTokens
       : mode === 'rss'
         ? !form.display_name
         : !form.email || (!form.password && !(editing && reconnectIdFor(form.email))))

@@ -718,9 +718,12 @@ fn mobile_protocol_appends_new_accounts() {
 fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
     let data_dir = unique_data_dir("oauth-code");
     let token_url = one_shot_oauth_token_server();
+    let picture_url = one_shot_server("/avatar", "image/png", "png");
     let userinfo_url = one_shot_json_server(
         "/userinfo",
-        r#"{"email":"google.user@gmail.com","name":"Google User","picture":"https://lh3.googleusercontent.com/avatar"}"#,
+        &format!(
+            r#"{{"email":"google.user@gmail.com","name":"Google User","picture":"{picture_url}"}}"#
+        ),
     );
     let unique = unique_test_suffix();
     let email = format!("me+{unique}@gmail.com");
@@ -751,9 +754,18 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         exchanged["result"]["account"]["sender_name"], "Google User",
         "{exchanged}"
     );
-    assert_eq!(
-        exchanged["result"]["account"]["avatar_url"], "https://lh3.googleusercontent.com/avatar",
+    // The picture is stored locally, like a chosen avatar.
+    let avatar_url = exchanged["result"]["account"]["avatar_url"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        avatar_url.starts_with("/media/avatars/") && avatar_url.ends_with(".png"),
         "{exchanged}"
+    );
+    assert_eq!(
+        std::fs::read(data_dir.join(avatar_url.trim_start_matches('/'))).unwrap(),
+        b"png"
     );
     assert_eq!(
         exchanged["result"]["account"]["needs_reconnect"], false,
@@ -880,6 +892,104 @@ fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
 }
 
 #[test]
+fn mobile_protocol_oauth_reconnect_keeps_the_stored_avatar() {
+    let data_dir = unique_data_dir("oauth-keeps-avatar");
+    let data_dir_str = data_dir.to_str().unwrap();
+    let email = format!("keep+{}@gmail.com", unique_test_suffix());
+    let add = |avatar: &str| {
+        invoke_mobile_protocol_json(
+            &format!(
+                r#"{{"id":1,"method":"account.addOAuth","params":{{"email":"{email}","provider":"gmail","avatar_url":"{avatar}","access_token":"access","refresh_token":"refresh"}}}}"#
+            ),
+            Some(data_dir_str),
+        )
+    };
+    let first = add("https://example.com/provider.png");
+    assert_eq!(
+        first["result"]["account"]["avatar_url"], "https://example.com/provider.png",
+        "{first}"
+    );
+    let set = invoke_mobile_protocol_json(
+        &format!(
+            r#"{{"id":2,"method":"account.setAvatar","params":{{"id":"{email}","avatar_url":"/media/avatars/custom.png"}}}}"#
+        ),
+        Some(data_dir_str),
+    );
+    assert!(set.get("error").is_none(), "{set}");
+
+    // A reconnect offers the provider's photo again; the chosen one stays.
+    let again = add("https://example.com/provider.png");
+    assert_eq!(
+        again["result"]["account"]["avatar_url"], "/media/avatars/custom.png",
+        "{again}"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn engine_refreshes_outlook_with_the_accounts_client_and_imap_scopes() {
+    use std::io::{Read, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let token_url = format!("http://{}/token", listener.local_addr().unwrap());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buf = [0_u8; 4096];
+        // Head and form body may arrive apart; read until the body is in.
+        while !String::from_utf8_lossy(&request).contains("grant_type") {
+            let read = stream.read(&mut buf).unwrap_or(0);
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buf[..read]);
+        }
+        tx.send(String::from_utf8_lossy(&request).to_string())
+            .unwrap();
+        let body = r#"{"access_token":"fresh","refresh_token":"refresh-2","expires_in":3600}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+
+    let data_dir = unique_data_dir("engine-outlook-refresh");
+    let data_dir_str = data_dir.to_str().unwrap();
+    let email = format!("refresh+{}@outlook.com", unique_test_suffix());
+    let added = invoke_mobile_protocol_json(
+        &format!(
+            r#"{{"id":1,"method":"account.addOAuth","params":{{"email":"{email}","provider":"outlook","client_id":"own-client","token_url":"{token_url}","access_token":"stale","refresh_token":"refresh","token_expires_at":1}}}}"#
+        ),
+        Some(data_dir_str),
+    );
+    assert!(added.get("error").is_none(), "{added}");
+
+    let engine = crate::engine::Engine::new(Box::new(MobileHost {
+        data_dir: data_dir_str.to_string(),
+    }))
+    .expect("engine builds");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let creds = rt
+        .block_on(engine.ensure_valid_creds(&email))
+        .expect("refreshes");
+    assert_eq!(creds.access_token.as_deref(), Some("fresh"));
+
+    let request = rx.recv().unwrap();
+    assert!(request.contains("client_id=own-client"), "{request}");
+    assert!(request.contains("IMAP.AccessAsUser.All"), "{request}");
+    assert!(!request.contains("client_secret"), "{request}");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_protocol_rejects_unsupported_oauth_provider() {
     let data_dir = unique_data_dir("oauth-provider");
     let value = invoke_mobile_protocol_json(
@@ -918,6 +1028,10 @@ fn one_shot_oauth_token_server_with_body(body: String) -> String {
 }
 
 fn one_shot_json_server(path: &str, body: &str) -> String {
+    one_shot_server(path, "application/json", body)
+}
+
+fn one_shot_server(path: &str, content_type: &str, body: &str) -> String {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::time::Duration;
@@ -925,6 +1039,7 @@ fn one_shot_json_server(path: &str, body: &str) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let body = body.to_string();
+    let content_type = content_type.to_string();
     let path = path.to_string();
     let server_path = path.clone();
     std::thread::spawn(move || {
@@ -974,7 +1089,8 @@ fn one_shot_json_server(path: &str, body: &str) -> String {
             }
             write!(
                     stream,
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    content_type,
                     body.len(),
                     body
                 )

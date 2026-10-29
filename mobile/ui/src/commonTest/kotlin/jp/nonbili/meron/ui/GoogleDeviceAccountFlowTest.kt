@@ -5,11 +5,13 @@ import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.MeronCore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class GoogleDeviceAccountFlowTest {
     @Test
@@ -32,23 +34,26 @@ class GoogleDeviceAccountFlowTest {
     }
 
     @Test
-    fun failedDeviceAuthOpensBrowserFallbackWhenRedirectIsConfigured() {
-        val services = FakePlatformServices()
-        val state =
-            testState(
-                services = services,
-                mobileHost =
-                    FakeMobileHost(
-                        result = GoogleDeviceAccountResult.Failed("Device auth failed."),
-                        googleRedirectUri = "com.googleusercontent.apps.test:/oauth2redirect",
-                    ),
-            )
+    fun failedDeviceAuthOpensBrowserFallbackWhenRedirectIsConfigured() =
+        runBlocking {
+            val services = FakePlatformServices()
+            val state =
+                testState(
+                    services = services,
+                    mobileHost =
+                        FakeMobileHost(
+                            result = GoogleDeviceAccountResult.Failed("Device auth failed."),
+                            googleRedirectUri = "com.googleusercontent.apps.test:/oauth2redirect",
+                        ),
+                    scope = this,
+                )
 
-        state.connectGoogleDeviceAccount()
+            state.connectGoogleDeviceAccount()
 
-        assertTrue(services.openedOAuth)
-        assertEquals("Opened Gmail sign-in", state.status)
-    }
+            // The authorization URL comes from the core first.
+            withTimeout(5_000) { while (!services.openedOAuth) delay(5) }
+            assertEquals("Opened Gmail sign-in", state.status)
+        }
 
     @Test
     fun failedDeviceAuthWithoutRedirectDoesNotOpenBrowserFallback() {
@@ -75,8 +80,9 @@ class GoogleDeviceAccountFlowTest {
     private fun testState(
         services: PlatformServices,
         mobileHost: MobileHost,
+        scope: CoroutineScope = CoroutineScope(EmptyCoroutineContext),
     ) = MeronMobileState(
-        scope = CoroutineScope(EmptyCoroutineContext),
+        scope = scope,
         core = FakeCore(),
         coreLoaded = true,
         prefs = FakePreferences(),
@@ -223,7 +229,7 @@ class GoogleDeviceAccountFlowTest {
         override suspend fun invoke(
             command: String,
             payloadJson: String,
-        ): String = "{}"
+        ): String = if (command == "oauth.authorizeUrl") """{"url":"https://accounts.google.com/o/oauth2/v2/auth"}""" else "{}"
 
         override fun events(): CoreEventStream =
             object : CoreEventStream {

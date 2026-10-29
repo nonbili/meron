@@ -702,6 +702,11 @@ fun encodeAppPrefValue(value: Any): String =
 
 fun parseMediaFileUrlResponse(responseJson: String): String = responseJson.findJsonStringProperty("url").orEmpty()
 
+/** The authorization URL from `oauth.authorizeUrl`; throws on a core error or none. */
+fun parseOAuthAuthorizeUrlResponse(responseJson: String): String =
+    requireCoreOk(responseJson).findJsonStringProperty("url")?.takeIf { it.isNotBlank() }
+        ?: error("OAuth authorization URL missing")
+
 fun parseAttachmentDataResponse(responseJson: String): String = responseJson.findJsonStringProperty("data").orEmpty()
 
 fun parseSearchFieldsResponse(responseJson: String): SearchFields =

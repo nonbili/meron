@@ -4,9 +4,8 @@ import androidx.compose.material.icons.filled.Add
 import jp.nonbili.meron.shared.AddOAuthAccountParams
 import jp.nonbili.meron.shared.ExchangeOAuthCodeParams
 import jp.nonbili.meron.shared.MobileMailCommandClient
-import jp.nonbili.meron.shared.OAuthAuthorizationRequest
+import jp.nonbili.meron.shared.OAuthAuthorizeUrlParams
 import jp.nonbili.meron.shared.UpdateOAuthTokenParams
-import jp.nonbili.meron.shared.buildOAuthAuthorizationUrl
 import jp.nonbili.meron.shared.coreErrorMessage
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.isOAuthLoginFailure
@@ -295,6 +294,10 @@ internal fun MeronMobileState.exchangeOAuthCode() {
 
 @OptIn(ExperimentalUuidApi::class)
 internal fun MeronMobileState.launchOAuthFlow() {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
     val clientId = bakedOAuthClientId()
     if (clientId.isBlank()) {
         status = trs("mobile.status.oauthClientIdRequired")
@@ -314,24 +317,31 @@ internal fun MeronMobileState.launchOAuthFlow() {
             email = oauthEmail.trim(),
         ),
     )
-    val url =
-        buildOAuthAuthorizationUrl(
-            OAuthAuthorizationRequest(
-                provider = oauthProvider,
-                clientId = clientId,
-                redirectUri = redirectUri,
-                state = oauthState,
-                codeChallenge = pkceChallenge(oauthVerifier),
-                loginHint = oauthEmail.trim(),
-            ),
+    val request =
+        OAuthAuthorizeUrlParams(
+            provider = oauthProvider,
+            clientId = clientId,
+            redirectUri = redirectUri,
+            state = oauthState,
+            codeChallenge = pkceChallenge(oauthVerifier),
+            loginHint = oauthEmail.trim(),
         )
-    status = trs("mobile.status.openedProviderSignIn", mapOf("provider" to oauthProvider.replaceFirstChar { it.uppercase() }))
-    services.openOAuthUrl(
-        url = url,
-        callbackScheme = redirectUri.substringBefore(':', missingDelimiterValue = ""),
-        onCallback = ::handleOAuthCallback,
-        onFailure = { message -> status = withReason(trs("mobile.android.oauthBrowserLaunchFailed"), message) { key, args -> trs(key, args) } },
-    )
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) { MobileMailCommandClient(core).oauthAuthorizeUrl(request) }
+        }.onSuccess { url ->
+            status = trs("mobile.status.openedProviderSignIn", mapOf("provider" to oauthProvider.replaceFirstChar { it.uppercase() }))
+            services.openOAuthUrl(
+                url = url,
+                callbackScheme = redirectUri.substringBefore(':', missingDelimiterValue = ""),
+                onCallback = ::handleOAuthCallback,
+                onFailure = { message -> status = withReason(trs("mobile.android.oauthBrowserLaunchFailed"), message) { key, args -> trs(key, args) } },
+            )
+        }.onFailure {
+            if (it is CancellationException) throw it
+            status = trsError("mobile.android.oauthBrowserLaunchFailed", it)
+        }
+    }
 }
 
 internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {

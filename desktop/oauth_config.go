@@ -2,29 +2,15 @@ package main
 
 import "meron/internal/obf"
 
-const (
-	// Loopback host for the OAuth redirect. Per RFC 8252 (OAuth for Native Apps)
-	// we bind an ephemeral port (host:0) at flow start and build the redirect URI
-	// from the OS-assigned port — both Google and Microsoft match loopback
-	// redirects on host only, so the portless URI is what's registered. This
-	// avoids hardcoding a port that may already be in use.
-	oauthLoopbackHost = "127.0.0.1"
-
-	// Delegated scopes for Outlook/Microsoft 365 IMAP+SMTP access. offline_access
-	// yields a refresh token; openid/email/profile populate the id_token we read
-	// the account email and name from.
-	outlookScopes = "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email profile"
-
-	// Microsoft Graph scope for the account's profile photo. Consented at
-	// authorize time alongside outlookScopes, but a token covers one resource,
-	// so it is redeemed separately from the refresh token (see fetchOutlookPhoto).
-	outlookPhotoScope = "https://graph.microsoft.com/User.Read"
-)
-
-var (
-	outlookTokenURL      = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-	outlookGraphPhotoURL = "https://graph.microsoft.com/v1.0/me/photo/$value"
-)
+// Loopback host for the OAuth redirect. Per RFC 8252 (OAuth for Native Apps)
+// we bind an ephemeral port (host:0) at flow start and build the redirect URI
+// from the OS-assigned port — both Google and Microsoft match loopback
+// redirects on host only, so the portless URI is what's registered. This
+// avoids hardcoding a port that may already be in use.
+//
+// The scopes and the authorization URL itself come from the core
+// (meron_core::oauth), shared with mobile.
+const oauthLoopbackHost = "127.0.0.1"
 
 // Obfuscated Google OAuth credentials baked into release builds.
 //
