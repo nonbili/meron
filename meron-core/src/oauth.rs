@@ -331,11 +331,11 @@ fn download_photo(url: &str, bearer: Option<&str>) -> Result<Photo, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::Write;
     use std::net::TcpListener;
 
     /// Answer each request in turn with `(content type, body)`, handing the
-    /// request heads back for inspection.
+    /// complete requests back for inspection.
     fn serve(
         responses: Vec<(&'static str, Vec<u8>)>,
     ) -> (String, std::sync::mpsc::Receiver<String>) {
@@ -345,9 +345,8 @@ mod tests {
         std::thread::spawn(move || {
             for (content_type, body) in responses {
                 let (mut stream, _) = listener.accept().unwrap();
-                let mut buf = [0_u8; 4096];
-                let read = stream.read(&mut buf).unwrap_or(0);
-                let _ = tx.send(String::from_utf8_lossy(&buf[..read]).to_string());
+                let request = crate::test_support::read_http_request(&mut stream);
+                let _ = tx.send(request);
                 let status = if body.is_empty() {
                     "404 Not Found"
                 } else {

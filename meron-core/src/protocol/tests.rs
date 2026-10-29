@@ -835,7 +835,7 @@ fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
 #[test]
 fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
     use base64::Engine;
-    use std::io::{Read, Write};
+    use std::io::Write;
     use std::net::TcpListener;
 
     let data_dir = unique_data_dir("oauth-code-photo");
@@ -850,9 +850,7 @@ fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
     std::thread::spawn(move || {
         for step in 0..3 {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut buf = [0_u8; 4096];
-            let read = stream.read(&mut buf).unwrap_or(0);
-            let request = String::from_utf8_lossy(&buf[..read]).to_string();
+            let request = crate::test_support::read_http_request(&mut stream);
             let (content_type, body): (&str, Vec<u8>) = match step {
                 0 => ("application/json", code_body.clone().into_bytes()),
                 1 => ("application/json", br#"{"access_token":"graph"}"#.to_vec()),
@@ -929,28 +927,15 @@ fn mobile_protocol_oauth_reconnect_keeps_the_stored_avatar() {
 
 #[test]
 fn engine_refreshes_outlook_with_the_accounts_client_and_imap_scopes() {
-    use std::io::{Read, Write};
+    use std::io::Write;
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let token_url = format!("http://{}/token", listener.local_addr().unwrap());
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
-            .unwrap();
-        let mut request = Vec::new();
-        let mut buf = [0_u8; 4096];
-        // Head and form body may arrive apart; read until the body is in.
-        while !String::from_utf8_lossy(&request).contains("grant_type") {
-            let read = stream.read(&mut buf).unwrap_or(0);
-            if read == 0 {
-                break;
-            }
-            request.extend_from_slice(&buf[..read]);
-        }
-        tx.send(String::from_utf8_lossy(&request).to_string())
-            .unwrap();
+        let request = crate::test_support::read_http_request(&mut stream);
+        tx.send(request).unwrap();
         let body = r#"{"access_token":"fresh","refresh_token":"refresh-2","expires_in":3600}"#;
         write!(
             stream,
