@@ -24,6 +24,10 @@ private final class IosCoreEventStream: CoreEventStream {
             if ["ready", "mail.synced", "mail.newMessages"].contains(event.name) {
                 IosUnreadWidgets.refresh()
             }
+            // A foreground IDLE watch syncs without going through a command.
+            if ["mail.synced", "mail.newMessages"].contains(event.name) {
+                IosNewMailReconciler.request()
+            }
         }
         _ = meron_core_emit_ready_event()
         return IosCloseableHandle {
@@ -44,6 +48,9 @@ final class IosMeronCore: MeronCore {
         completionHandler(RustCoreBridge.invokeJson(request.toJson()), nil)
         if IosUnreadWidgets.commandChangesSnapshot(command) {
             IosUnreadWidgets.refresh()
+        }
+        if iosCommandMayStaleNotifications(command) {
+            IosNewMailReconciler.request()
         }
     }
 

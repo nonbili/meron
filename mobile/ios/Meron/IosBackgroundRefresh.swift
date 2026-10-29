@@ -20,6 +20,9 @@ enum IosNotificationPayloadKey {
     static let folder = "folder"
     static let threadKey = "threadKey"
     static let subject = "subject"
+    /// The core store rows the notification announced, as `[folder, message
+    /// id]` pairs; see [IosNewMailReconciler].
+    static let storeMessages = "storeMessages"
 }
 
 func iosNotificationThreadTarget(userInfo: [AnyHashable: Any]) -> IosNotificationThreadTarget? {
@@ -154,7 +157,8 @@ enum IosNotificationService {
         count: Int,
         accountId: String = "",
         folder: String = "",
-        threadKey: String = ""
+        threadKey: String = "",
+        storeMessages: [IosStoreMessage] = []
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = accountName.isEmpty ? String(localized: "mobile.ios.newMailTitle") : accountName
@@ -168,13 +172,18 @@ enum IosNotificationService {
             content.body = messageSubject.isEmpty ? String(localized: "mobile.ios.newMailBodyFallback") : messageSubject
         }
         content.sound = .default
+        var userInfo: [String: Any] = [:]
         if !accountId.isEmpty, !folder.isEmpty, !threadKey.isEmpty {
-            content.userInfo = [
-                IosNotificationPayloadKey.accountId: accountId,
-                IosNotificationPayloadKey.folder: folder,
-                IosNotificationPayloadKey.threadKey: threadKey,
-                IosNotificationPayloadKey.subject: subject,
-            ]
+            userInfo[IosNotificationPayloadKey.folder] = folder
+            userInfo[IosNotificationPayloadKey.threadKey] = threadKey
+            userInfo[IosNotificationPayloadKey.subject] = subject
+        }
+        if !accountId.isEmpty, !storeMessages.isEmpty {
+            userInfo[IosNotificationPayloadKey.storeMessages] = storeMessages.map { [$0.folder, $0.messageId] }
+        }
+        if !userInfo.isEmpty {
+            userInfo[IosNotificationPayloadKey.accountId] = accountId
+            content.userInfo = userInfo
         }
         return content
     }
@@ -186,7 +195,8 @@ enum IosNotificationService {
         count: Int,
         accountId: String = "",
         folder: String = "",
-        threadKey: String = ""
+        threadKey: String = "",
+        storeMessages: [IosStoreMessage] = []
     ) {
         let content = notifyNewMailContentForTesting(
             accountName: accountName,
@@ -195,14 +205,142 @@ enum IosNotificationService {
             count: count,
             accountId: accountId,
             folder: folder,
-            threadKey: threadKey
+            threadKey: threadKey,
+            storeMessages: storeMessages
         )
         let request = UNNotificationRequest(
-            identifier: "meron-new-mail-\(UUID().uuidString)",
+            identifier: "\(iosNewMailNotificationPrefix)\(UUID().uuidString)",
             content: content,
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+    }
+}
+
+let iosNewMailNotificationPrefix = "meron-new-mail-"
+
+/// A core store row: mail by folder and UID, a feed entry by its subscription
+/// and entry key — what `mail.stillUnread` looks up.
+struct IosStoreMessage: Hashable {
+    let folder: String
+    let messageId: String
+}
+
+struct IosStoreRow: Hashable {
+    let accountId: String
+    let message: IosStoreMessage
+}
+
+/// A delivered new-mail notification and the messages it announced.
+struct IosTrackedNotification: Equatable {
+    let identifier: String
+    let accountId: String
+    let messages: [IosStoreMessage]
+}
+
+/// Read a delivered notification back, or nil for one that is not new mail or
+/// predates `storeMessages` — those are left to the user.
+func iosTrackedNotification(identifier: String, userInfo: [AnyHashable: Any]) -> IosTrackedNotification? {
+    guard identifier.hasPrefix(iosNewMailNotificationPrefix),
+          let accountId = userInfo[IosNotificationPayloadKey.accountId] as? String, !accountId.isEmpty,
+          let pairs = userInfo[IosNotificationPayloadKey.storeMessages] as? [[String]]
+    else { return nil }
+    let messages = pairs.compactMap { pair in
+        pair.count == 2 ? IosStoreMessage(folder: pair[0], messageId: pair[1]) : nil
+    }
+    guard !messages.isEmpty else { return nil }
+    return IosTrackedNotification(identifier: identifier, accountId: accountId, messages: messages)
+}
+
+/// The notifications none of whose messages is still unread. One notification
+/// covers a whole batch, so it stays while any arrival in it is unread.
+func iosStaleNotificationIds(_ tracked: [IosTrackedNotification], stillUnread: Set<IosStoreRow>) -> [String] {
+    tracked
+        .filter { notification in
+            !notification.messages.contains { stillUnread.contains(IosStoreRow(accountId: notification.accountId, message: $0)) }
+        }
+        .map(\.identifier)
+}
+
+/// Commands after which a message may no longer be unread, or no longer there:
+/// a sync that brought in another device's changes, or the app's own read,
+/// move and delete writes. Matches the Android client's list.
+func iosCommandMayStaleNotifications(_ command: String) -> Bool {
+    [
+        "mail.sync", "mail.markRead", "mail.markAllRead", "mail.archive", "mail.delete",
+        "mail.move", "mail.emptyFolder", "mail.folderDelete", "account.remove", "rss.sync", "rss.markRead",
+        "feed.remove",
+    ].contains(command)
+}
+
+/// Withdraws new-mail notifications whose mail is no longer unread, the way
+/// Gmail does: read, archived or deleted here, or — once a sync has brought the
+/// change in — on another device. The delivered notifications are compared
+/// against core's store rather than tracking each action.
+enum IosNewMailReconciler {
+    private static let queue = DispatchQueue(label: "jp.nonbili.meron.new-mail-reconcile", qos: .utility)
+    private static var pending: DispatchWorkItem?
+
+    /// Coalesces a burst of syncs and writes into one pass.
+    static func request() {
+        queue.async {
+            pending?.cancel()
+            let work = DispatchWorkItem { reconcile() }
+            pending = work
+            queue.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
+    }
+
+    /// Background tasks reconcile before reporting completion to iOS.
+    static func reconcileNow() {
+        queue.sync {
+            pending?.cancel()
+            pending = nil
+            reconcile()
+        }
+    }
+
+    private static func reconcile() {
+        let center = UNUserNotificationCenter.current()
+        let delivered = DispatchSemaphore(value: 0)
+        var tracked: [IosTrackedNotification] = []
+        center.getDeliveredNotifications { notifications in
+            tracked = notifications.compactMap {
+                iosTrackedNotification(identifier: $0.request.identifier, userInfo: $0.request.content.userInfo)
+            }
+            delivered.signal()
+        }
+        guard delivered.wait(timeout: .now() + 5) == .success, !tracked.isEmpty,
+              let stillUnread = fetchStillUnread(tracked)
+        else { return }
+        let stale = iosStaleNotificationIds(tracked, stillUnread: stillUnread)
+        if !stale.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: stale)
+        }
+    }
+
+    /// The rows core still holds unread, or nil when it could not say — in
+    /// which case nothing is withdrawn.
+    private static func fetchStillUnread(_ tracked: [IosTrackedNotification]) -> Set<IosStoreRow>? {
+        let messages = tracked.flatMap { notification in
+            notification.messages.map {
+                ["account_id": notification.accountId, "folder_id": $0.folder, "message_id": $0.messageId]
+            }
+        }
+        let request: [String: Any] = ["id": 94, "method": "mail.stillUnread", "params": ["messages": messages]]
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let json = String(data: data, encoding: .utf8),
+              let responseData = RustCoreBridge.invokeJson(json).data(using: .utf8),
+              let response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let result = response["result"] as? [String: Any],
+              let unread = result["unread"] as? [[String: Any]]
+        else { return nil }
+        return Set(unread.map {
+            IosStoreRow(
+                accountId: $0["account_id"] as? String ?? "",
+                message: IosStoreMessage(folder: $0["folder_id"] as? String ?? "", messageId: $0["message_id"] as? String ?? "")
+            )
+        })
     }
 }
 
@@ -325,6 +463,7 @@ enum IosBackgroundRefresh {
         DispatchQueue.global(qos: .background).async {
             let result = refreshNow()
             IosUnreadWidgets.refreshBeforeCompletion()
+            IosNewMailReconciler.reconcileNow()
             if result.refreshed > 0 {
                 IosNotificationService.notifyRefreshComplete(result.summary)
             }
@@ -346,6 +485,8 @@ enum IosBackgroundRefresh {
         let operation = BlockOperation {
             let result = refreshNow()
             IosUnreadWidgets.refreshBeforeCompletion()
+            // Mail read or removed on another device came in with this sync.
+            IosNewMailReconciler.reconcileNow()
             if result.refreshed > 0 {
                 IosNotificationService.notifyRefreshComplete(result.summary)
             }
@@ -431,7 +572,8 @@ enum IosBackgroundRefresh {
             count: batch.count,
             accountId: batch.accountId,
             folder: batch.folder,
-            threadKey: batch.threadKey
+            threadKey: batch.threadKey,
+            storeMessages: batch.storeMessages
         )
     }
 
@@ -516,6 +658,9 @@ struct IosNewMailBatch: Equatable {
     let subject: String
     let count: Int
     let threadKey: String
+    /// Every arrival the notification announces, so it can be withdrawn once
+    /// they are all read; empty when the detail does not list them all.
+    var storeMessages: [IosStoreMessage] = []
 }
 
 /// Read a `new_messages` detail into a batch worth notifying about, or nil when
@@ -534,8 +679,29 @@ func iosNewMailBatch(_ detail: [String: Any]) -> IosNewMailBatch? {
         from: detail["from"] as? String ?? "",
         subject: detail["subject"] as? String ?? "",
         count: count,
-        threadKey: detail["threadKey"] as? String ?? ""
+        threadKey: detail["threadKey"] as? String ?? "",
+        storeMessages: iosStoreMessages(detail, count: count)
     )
+}
+
+/// The store rows a detail's `messages` name: mail by the batch folder and
+/// UID, a feed entry by its subscription (the entry's thread key) and entry
+/// key. Empty unless every arrival is listed and identifiable — a notification
+/// standing partly for unlisted mail must not be withdrawn on the rest.
+func iosStoreMessages(_ detail: [String: Any], count: Int) -> [IosStoreMessage] {
+    let accountId = detail["account"] as? String ?? ""
+    let folder = detail["folder"] as? String ?? ""
+    let entries = detail["messages"] as? [[String: Any]] ?? []
+    let messages: [IosStoreMessage] = entries.compactMap { entry in
+        if accountId.hasPrefix("rss-") {
+            let subscription = entry["threadKey"] as? String ?? ""
+            let itemKey = entry["itemKey"] as? String ?? ""
+            return subscription.isEmpty || itemKey.isEmpty ? nil : IosStoreMessage(folder: subscription, messageId: itemKey)
+        }
+        let uid = (entry["uid"] as? NSNumber)?.int64Value ?? 0
+        return uid > 0 && !folder.isEmpty ? IosStoreMessage(folder: folder, messageId: String(uid)) : nil
+    }
+    return messages.count == count && messages.count == entries.count ? messages : []
 }
 
 struct IosRefreshSyncRequest {

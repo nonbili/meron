@@ -154,4 +154,39 @@ final class IosNotificationContractTests: XCTestCase {
         XCTAssertEqual(selection.wanted, ["meron-reminder:event:new"])
     }
 
+    func testNewMailNotificationRemembersTheMessagesItAnnounced() throws {
+        let content = IosNotificationService.notifyNewMailContentForTesting(
+            accountName: "Work",
+            from: "Ann",
+            subject: "Lunch?",
+            count: 2,
+            accountId: "acct",
+            folder: "INBOX",
+            threadKey: "<abc@example.com>",
+            storeMessages: [IosStoreMessage(folder: "INBOX", messageId: "41"), IosStoreMessage(folder: "INBOX", messageId: "42")]
+        )
+
+        let tracked = try XCTUnwrap(iosTrackedNotification(identifier: "meron-new-mail-1", userInfo: content.userInfo))
+        XCTAssertEqual(tracked.accountId, "acct")
+        XCTAssertEqual(tracked.messages.map(\.messageId), ["41", "42"])
+        // Reminders and refresh summaries are never withdrawn as read mail.
+        XCTAssertNil(iosTrackedNotification(identifier: "meron-reminder:event:1", userInfo: content.userInfo))
+    }
+
+    func testBatchNotificationIsWithdrawnOnlyOnceAllItsMailIsRead() {
+        let first = IosStoreMessage(folder: "INBOX", messageId: "41")
+        let second = IosStoreMessage(folder: "INBOX", messageId: "42")
+        let batch = IosTrackedNotification(identifier: "meron-new-mail-1", accountId: "acct", messages: [first, second])
+        let single = IosTrackedNotification(identifier: "meron-new-mail-2", accountId: "acct", messages: [first])
+
+        XCTAssertEqual(
+            iosStaleNotificationIds([batch, single], stillUnread: [IosStoreRow(accountId: "acct", message: second)]),
+            ["meron-new-mail-2"]
+        )
+        // The same UID in another account is a different message.
+        XCTAssertEqual(
+            iosStaleNotificationIds([single], stillUnread: [IosStoreRow(accountId: "other", message: first)]),
+            ["meron-new-mail-2"]
+        )
+    }
 }

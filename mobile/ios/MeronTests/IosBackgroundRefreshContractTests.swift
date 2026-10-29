@@ -109,6 +109,43 @@ final class IosBackgroundRefreshContractTests: XCTestCase {
         )
     }
 
+    func testBatchRemembersEveryArrivalItAnnounces() throws {
+        let mail = try XCTUnwrap(
+            iosNewMailBatch([
+                "account": "acct",
+                "folder": "INBOX",
+                "count": 2,
+                "threadKey": "t",
+                "messages": [["uid": 41, "threadKey": "t"], ["uid": 42, "threadKey": "u"]],
+            ])
+        )
+        XCTAssertEqual(mail.storeMessages, [IosStoreMessage(folder: "INBOX", messageId: "41"), IosStoreMessage(folder: "INBOX", messageId: "42")])
+
+        // A feed entry lives under its subscription, not the batch folder.
+        let feed = try XCTUnwrap(
+            iosNewMailBatch([
+                "account": "rss-8f2a",
+                "folder": "rss",
+                "count": 1,
+                "threadKey": "sub-1",
+                "messages": [["uid": 0, "itemKey": "key-1", "threadKey": "sub-1"]],
+            ])
+        )
+        XCTAssertEqual(feed.storeMessages, [IosStoreMessage(folder: "sub-1", messageId: "key-1")])
+
+        // More arrivals than listed: withdrawing on the listed ones would hide
+        // mail still unread, so the notification is left to the user.
+        let partial = try XCTUnwrap(
+            iosNewMailBatch([
+                "account": "acct",
+                "folder": "INBOX",
+                "count": 30,
+                "messages": [["uid": 41]],
+            ])
+        )
+        XCTAssertEqual(partial.storeMessages, [])
+    }
+
     func testMutedAccountsSyncButStaySilent() {
         XCTAssertNil(
             iosNewMailBatch([
