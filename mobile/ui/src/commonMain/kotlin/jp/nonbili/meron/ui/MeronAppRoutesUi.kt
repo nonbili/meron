@@ -479,7 +479,9 @@ internal fun KanbanRouteContent(
                     attachmentsOnly = kanbanAttachmentsOnly,
                     search = kanbanSearch,
                     searchScope = kanbanSearchScope,
-                    onOpen = { thread, column -> readCoreThread(thread, sourceFolder = column.folderId) },
+                    onOpen = { thread, column ->
+                        readCoreThread(thread, sourceFolder = column.folderId, browseSource = ThreadBrowseSource.KanbanColumn(column))
+                    },
                     selectedThreadIds = selectedMailThreadIds,
                     selectionActive = mailSelectionActive,
                     onToggleSelected = { thread ->
@@ -1480,7 +1482,7 @@ internal fun MailRouteContent(
                                     scrollToTopRequest = mailListScrollToTopRequest,
                                     canLoadMore = pageableCoreAccounts().isNotEmpty(),
                                     loadingMore = loadingMoreThreads,
-                                    onOpen = ::readCoreThread,
+                                    onOpen = { readCoreThread(it, browseSource = ThreadBrowseSource.MailList) },
                                     onToggleStar = ::toggleStar,
                                     onArchive = ::archiveOrRemove,
                                     onDelete = ::deleteThread,

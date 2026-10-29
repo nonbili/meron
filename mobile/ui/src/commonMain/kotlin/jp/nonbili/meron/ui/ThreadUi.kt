@@ -222,6 +222,16 @@ internal fun ThreadScreen(
     onMessagesRead: (List<String>) -> Unit,
     onViewedToBottom: () -> Unit,
     snackbarHost: SnackbarHostState,
+    swipe: ThreadSwipeState,
+    /** The conversations beside this one in the list it was opened from, null
+     *  where there is none (or swiping away is not safe right now). */
+    onSwipeToPrevious: (() -> Unit)? = null,
+    onSwipeToNext: (() -> Unit)? = null,
+    /** False for a conversation laid out beside the open one, to be swiped over
+     *  to: it shows as it would open, but takes no input, handles no back, and
+     *  neither marks anything read nor loads older mail. */
+    active: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
     val deleteLabel = tr(thread?.let { threadDeleteActionKey(it.folder, it.folderRole) } ?: "threads.actions.moveToTrash")
@@ -523,7 +533,7 @@ internal fun ThreadScreen(
         }
     }
     BackHandler(
-        enabled = searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null,
+        enabled = active && searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null,
         onBack = closeSearch,
     )
     // One-shot positioning when the thread's messages first arrive, mirroring
@@ -547,8 +557,10 @@ internal fun ThreadScreen(
         autoLoadOlderArmed = true
     }
     val currentOnLoadOlder by rememberUpdatedState(onLoadOlder)
-    LaunchedEffect(thread?.id, autoLoadOlderArmed, canLoadOlder, loadingOlder) {
-        if (thread == null || !autoLoadOlderArmed || !canLoadOlder || loadingOlder) return@LaunchedEffect
+    // Keyed on [active] too: a page positioned while beside the open one starts
+    // watching once it is swiped over to.
+    LaunchedEffect(thread?.id, active, autoLoadOlderArmed, canLoadOlder, loadingOlder) {
+        if (thread == null || !active || !autoLoadOlderArmed || !canLoadOlder || loadingOlder) return@LaunchedEffect
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .first { firstVisibleIndex -> firstVisibleIndex <= THREAD_LOAD_OLDER_ITEM_INDEX }
@@ -560,7 +572,7 @@ internal fun ThreadScreen(
     // ids are remembered per open so each is sent at most once.
     val currentOnMessagesRead by rememberUpdatedState(onMessagesRead)
     val currentOnViewedToBottom by rememberUpdatedState(onViewedToBottom)
-    if (thread != null) {
+    if (thread != null && active) {
         val density = LocalDensity.current
         val markedReadIds = remember(thread.id) { mutableSetOf<String>() }
         var viewedToBottomSent by remember(thread.id) { mutableStateOf(false) }
@@ -719,7 +731,12 @@ internal fun ThreadScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .then(if (active) Modifier else Modifier.blockPointerInput()),
+    ) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -954,7 +971,25 @@ internal fun ThreadScreen(
                         onClose = closeSearch,
                     )
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                // Only the conversation itself pages: not while searching it,
+                // and not under the reader, gallery or details over it.
+                val swipeOpen = !searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .then(
+                            if (active) {
+                                Modifier.threadSwipe(
+                                    state = swipe,
+                                    onPrevious = onSwipeToPrevious?.takeIf { swipeOpen },
+                                    onNext = onSwipeToNext?.takeIf { swipeOpen },
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
                     if (messages.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()

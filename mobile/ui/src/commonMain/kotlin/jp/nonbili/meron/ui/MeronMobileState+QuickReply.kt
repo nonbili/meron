@@ -15,6 +15,7 @@ import jp.nonbili.meron.shared.SendIdentity
 import jp.nonbili.meron.shared.SendStatus
 import jp.nonbili.meron.shared.SignatureMark
 import jp.nonbili.meron.shared.SignaturePlacement
+import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSendIdentities
 import jp.nonbili.meron.shared.bodyWithSignature
 import jp.nonbili.meron.shared.bodyWithSwappedSignature
@@ -39,8 +40,11 @@ import kotlinx.coroutines.withContext
 // bounce doesn't take it (the core decides which, see `accepts_replies`). Keeps
 // mail we sent out of recipient/threading derivation — see [sentByUs] for what
 // counts as ours.
-internal fun MeronMobileState.quickReplyParent(): MessageBody? {
-    val accountId = selectedCoreThread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
+internal fun MeronMobileState.quickReplyParent(
+    thread: ThreadSummary? = selectedCoreThread,
+    messages: List<MessageBody> = this.messages,
+): MessageBody? {
+    val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val ownAddresses =
         account
@@ -72,7 +76,10 @@ private fun MessageBody.sentByUs(ownAddresses: Set<String>): Boolean {
 
 // Continue a thread with the configured identity used by its most recent
 // outgoing message. Null means there is no such message; blank means primary.
-private fun MeronMobileState.detectRecentThreadFrom(account: AccountSummary): String? {
+private fun detectRecentThreadFrom(
+    account: AccountSummary,
+    messages: List<MessageBody>,
+): String? {
     val identities = accountSendIdentities(account)
     val byEmail = identities.associateBy { it.email.trim().lowercase() }
     val ownAddresses = identities.map { it.email.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
@@ -92,20 +99,22 @@ private fun MeronMobileState.detectRecentThreadFrom(account: AccountSummary): St
 internal fun MeronMobileState.resolveQuickReplyFrom(
     parent: MessageBody,
     account: AccountSummary?,
+    pickedFrom: String = quickReplyFrom,
+    messages: List<MessageBody> = this.messages,
 ): String {
     if (account == null) return ""
-    if (quickReplyFrom.isNotBlank()) {
-        return if (quickReplyFrom.equals(account.email, ignoreCase = true)) "" else quickReplyFrom
+    if (pickedFrom.isNotBlank()) {
+        return if (pickedFrom.equals(account.email, ignoreCase = true)) "" else pickedFrom
     }
-    detectRecentThreadFrom(account)?.let { return it }
+    detectRecentThreadFrom(account, messages)?.let { return it }
     return detectReplyFromIdentity(parent, account)
 }
 
 // Identities the open thread's quick reply can send as. Empty when there is
 // nothing to choose between (no thread, unknown account, or a single address) —
 // the reply bar hides its From row rather than stating the obvious.
-internal fun MeronMobileState.quickReplyIdentities(): List<SendIdentity> {
-    val thread = selectedCoreThread ?: return emptyList()
+internal fun MeronMobileState.quickReplyIdentities(thread: ThreadSummary? = selectedCoreThread): List<SendIdentity> {
+    if (thread == null) return emptyList()
     val accountId = thread.accountId.ifBlank { defaultSendAccountId() }
     val account = coreAccounts.firstOrNull { it.id == accountId } ?: return emptyList()
     val identities = accountSendIdentities(account)
@@ -115,22 +124,30 @@ internal fun MeronMobileState.quickReplyIdentities(): List<SendIdentity> {
 /** Backs the reply bar's recipient row: the To/Cc the bar would send to as it
  * stands. Both blank when the open thread cannot be replied to, which hides the
  * row. */
-internal fun MeronMobileState.quickReplyRecipients(): ReplyRecipients {
+internal fun MeronMobileState.quickReplyRecipients(
+    thread: ThreadSummary? = selectedCoreThread,
+    messages: List<MessageBody> = this.messages,
+): ReplyRecipients {
     val none = ReplyRecipients("", "")
-    val thread = selectedCoreThread ?: return none
-    if (threadIdIsRss(thread.id)) return none
-    val parent = quickReplyParent() ?: return none
+    if (thread == null || threadIdIsRss(thread.id)) return none
+    val parent = quickReplyParent(thread, messages) ?: return none
     return buildReplyRecipients(parent)
 }
 
 // The identity the reply bar's From row shows as current — the resolved send-as
 // address matched back to the pickable list.
-internal fun MeronMobileState.selectedQuickReplyIdentity(): SendIdentity? {
-    val identities = quickReplyIdentities()
+// A conversation shown beside the open one has no pick of its own yet, so it
+// shows the identity its reply would start from.
+internal fun MeronMobileState.selectedQuickReplyIdentity(
+    thread: ThreadSummary? = selectedCoreThread,
+    messages: List<MessageBody> = this.messages,
+): SendIdentity? {
+    val identities = quickReplyIdentities(thread)
     if (identities.isEmpty()) return null
     val account = coreAccounts.firstOrNull { it.id == identities.first().accountId } ?: return null
-    val parent = quickReplyParent()
-    val email = (parent?.let { resolveQuickReplyFrom(it, account) } ?: quickReplyFrom).ifBlank { account.email }
+    val pickedFrom = if (thread?.id == selectedCoreThread?.id) quickReplyFrom else ""
+    val parent = quickReplyParent(thread, messages)
+    val email = (parent?.let { resolveQuickReplyFrom(it, account, pickedFrom, messages) } ?: pickedFrom).ifBlank { account.email }
     return identities.firstOrNull { it.email.equals(email, ignoreCase = true) } ?: identities.first()
 }
 
@@ -138,11 +155,15 @@ internal fun MeronMobileState.selectedQuickReplyIdentity(): SendIdentity? {
  * The account the open thread's quick reply sends from. Blank when there is no
  * thread, or none of the accounts can send.
  */
-private fun MeronMobileState.quickReplyAccountId(): String {
-    val thread = selectedCoreThread ?: return ""
+private fun MeronMobileState.quickReplyAccountId(thread: ThreadSummary? = selectedCoreThread): String {
+    if (thread == null) return ""
     if (threadIdIsRss(thread.id)) return ""
     return thread.accountId.ifBlank { defaultSendAccountId() }
 }
+
+/** What [thread]'s reply bar would be seeded with on opening it: the
+ *  replying account's signature, as [seedQuickReplySignature] puts there. */
+internal fun MeronMobileState.seededQuickReplyBody(thread: ThreadSummary): String = bodyWithSignature("", quickReplyAccountId(thread).takeIf { it.isNotBlank() }?.let { signatureTextFor(it) }.orEmpty())
 
 /**
  * Seed the reply bar with the replying account's signature, as the box the user
@@ -154,6 +175,7 @@ private fun MeronMobileState.quickReplyAccountId(): String {
  * signature is read back from the core asynchronously, so a box seeded before
  * it lands is seeded again once it does — unless the user has since typed.
  */
+
 internal fun MeronMobileState.seedQuickReplySignature() {
     val threadId = quickReplyThreadId
     val signature = quickReplyAccountId().takeIf { it.isNotBlank() }?.let { signatureTextFor(it) }.orEmpty()

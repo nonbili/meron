@@ -209,6 +209,26 @@ internal fun FilterMode.emptyNoun(): String =
         FilterMode.Starred -> "starred cards"
     }
 
+/** The cards a Kanban column shows: its loaded threads, narrowed by the board's
+ *  filter and by its search where that reaches this column. */
+internal fun kanbanColumnVisibleThreads(
+    column: KanbanColumnSpec,
+    threads: List<ThreadSummary>,
+    filter: FilterMode,
+    search: String,
+    searchScope: String,
+    attachmentsOnly: Boolean,
+): List<ThreadSummary> {
+    val boardSearch = if (searchScope.ifBlank { "all" } == "all" || searchScope == kanbanColumnKey(column)) search else ""
+    val columnSearch = narrowKanbanQuery(column.query, boardSearch)
+    return threads.filteredKanbanThreads(
+        filter = filter,
+        search = columnSearch,
+        searchAlreadyApplied = columnSearch.isNotBlank(),
+        attachmentsOnly = attachmentsOnly,
+    )
+}
+
 internal fun List<ThreadSummary>.filteredKanbanThreads(
     filter: FilterMode,
     search: String,

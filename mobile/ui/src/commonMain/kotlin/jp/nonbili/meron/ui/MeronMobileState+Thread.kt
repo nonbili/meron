@@ -143,6 +143,94 @@ internal fun MeronMobileState.openDraftCompose(
     }
 }
 
+/** The conversations either side of the open one in the list it was opened
+ *  from, as that list shows them: the newer one above it, then the older one
+ *  below. */
+internal fun MeronMobileState.threadBrowseNeighbors(): Pair<ThreadSummary?, ThreadSummary?> {
+    val current = selectedCoreThread ?: return null to null
+    val threads =
+        when (val source = threadBrowseSource) {
+            null -> {
+                return null to null
+            }
+
+            ThreadBrowseSource.MailList -> {
+                coreThreads
+            }
+
+            is ThreadBrowseSource.KanbanColumn -> {
+                kanbanColumnVisibleThreads(
+                    column = source.column,
+                    threads = kanbanColumns[kanbanColumnKey(source.column)]?.threads.orEmpty(),
+                    filter = kanbanFilter,
+                    search = kanbanSearch,
+                    searchScope = kanbanSearchScope,
+                    attachmentsOnly = kanbanAttachmentsOnly,
+                )
+            }
+        }
+    val index = threads.indexOfFirst { it.id == current.id }
+    if (index < 0) return null to null
+    return threads.getOrNull(index - 1) to threads.getOrNull(index + 1)
+}
+
+/** Opens [thread], a neighbour of the open conversation in the same list,
+ *  with what its preview already shows. The conversation left behind becomes a
+ *  preview in turn, as it stood, for swiping back to. */
+internal fun MeronMobileState.browseToThread(thread: ThreadSummary) {
+    val source = threadBrowseSource
+    selectedCoreThread?.let { current ->
+        threadPreviews = threadPreviews + (current.id to ThreadPreview(ThreadReadPage(visibleThreadMessages(), messageCursor), current.dateEpochSeconds))
+    }
+    flushQuickReplyAutosave()
+    readCoreThread(
+        thread,
+        sourceFolder = (source as? ThreadBrowseSource.KanbanColumn)?.column?.folderId ?: thread.folder,
+        browseSource = source,
+        initialPage = threadPreviews[thread.id]?.page,
+    )
+}
+
+/** Reads [neighbors] ahead, the conversations beside the open one, so swiping
+ *  shows them as they are rather than a spinner. Reading a thread marks nothing
+ *  read. Previews of anything else are dropped. */
+internal fun MeronMobileState.prefetchThreadPreviews(neighbors: List<ThreadSummary>) {
+    if (!coreLoaded) return
+    val wanted = neighbors.associateBy { it.id }
+    threadPreviews = threadPreviews.filterKeys { it in wanted }
+    for (thread in neighbors) {
+        if (threadPreviews[thread.id]?.stamp == thread.dateEpochSeconds) continue
+        if (!threadPreviewReads.add(thread.id)) continue
+        scope.launch {
+            runCatching { readFirstThreadPage(thread) }
+                .onSuccess { page ->
+                    // Still beside the open one, and not opened meanwhile.
+                    val neighbors = threadBrowseNeighbors()
+                    if (thread.id == neighbors.first?.id || thread.id == neighbors.second?.id) {
+                        threadPreviews = threadPreviews + (thread.id to ThreadPreview(page, thread.dateEpochSeconds))
+                    }
+                }.onFailure { Log.w("Mail", "thread preview read failed", it) }
+            threadPreviewReads.remove(thread.id)
+        }
+    }
+}
+
+private suspend fun MeronMobileState.readFirstThreadPage(thread: ThreadSummary): ThreadReadPage {
+    val backendThreadId = thread.backendThreadId()
+    val response =
+        withContext(ioDispatcher) {
+            val client = MobileMailCommandClient(core)
+            if (threadIdIsRss(backendThreadId)) {
+                client.readRssThread(RssThreadParams(threadId = backendThreadId))
+            } else {
+                withManagedGoogleAuth(client, thread.accountId) {
+                    client.readThread(ThreadReadParams(threadId = backendThreadId))
+                }
+            }
+        }
+    return parseThreadReadPage(response)
+}
+
 internal fun draftThreadShouldOpenConversation(messages: List<MessageBody>): Boolean =
     messages.any { it.folderId.isNotBlank() && !folderIsDrafts(it.folderId) } ||
         messages.any { folderIsDrafts(it.folderId) && (it.references.isNotBlank() || it.inReplyTo.isNotBlank()) }
@@ -150,6 +238,9 @@ internal fun draftThreadShouldOpenConversation(messages: List<MessageBody>): Boo
 internal fun MeronMobileState.readCoreThread(
     thread: ThreadSummary,
     sourceFolder: String = thread.folder,
+    browseSource: ThreadBrowseSource? = null,
+    // What is already on screen for it, when swiped over from beside it.
+    initialPage: ThreadReadPage? = null,
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -158,14 +249,24 @@ internal fun MeronMobileState.readCoreThread(
     val backendThreadId = thread.backendThreadId()
     val readToken = activeThreadReadToken + 1
     activeThreadReadToken = readToken
-    val returnScreen = if (screen == Screen.Kanban) screen else Screen.Mail
+    val returnScreen =
+        when (screen) {
+            Screen.Kanban -> screen
+
+            // Swiped over from the conversation beside it: back still leads
+            // to the list it was opened from.
+            Screen.Thread -> previousTopScreen
+
+            else -> Screen.Mail
+        }
     val readsDraftThread =
         !threadIdIsRss(backendThreadId) &&
             (thread.folderRole == "drafts" || (thread.folderRole == "folder" && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))))
     val selectedThread = if (sourceFolder.isNotBlank() && sourceFolder != thread.folder) thread.copy(folder = sourceFolder) else thread
     selectedCoreThread = selectedThread
-    messages = emptyList()
-    messageCursor = ""
+    threadBrowseSource = browseSource
+    messages = initialPage?.messages.orEmpty()
+    messageCursor = initialPage?.nextCursor.orEmpty()
     loadingMoreMessages = false
     previousTopScreen = returnScreen
     if (quickReplyThreadId != backendThreadId) {
@@ -190,40 +291,49 @@ internal fun MeronMobileState.readCoreThread(
     // Nothing is marked read on open: messages are marked incrementally as the
     // user scrolls past them (see the scroll-driven marking in ThreadUi),
     // mirroring desktop.
+
+    // A draft standing on its own opens in the editor; one that answers a
+    // conversation opens with it. True when it went to the editor.
+    fun routeDraftThread(loaded: List<MessageBody>): Boolean {
+        if (!readsDraftThread) return false
+        if (draftThreadShouldOpenConversation(loaded)) {
+            screen = Screen.Thread
+            return false
+        }
+        val draftMessage = loaded.lastOrNull { message -> folderIsDrafts(message.folderId) } ?: loaded.lastOrNull()
+        draftMessage?.let { message -> openDraftCompose(message, selectedThread, returnScreen = returnScreen) }
+        return draftMessage != null
+    }
+    if (initialPage != null) {
+        if (routeDraftThread(initialPage.messages)) return
+        // Swiped over to: what its preview shows is on screen already, older
+        // pages it had loaded included. Refresh it in place as a reload does,
+        // which keeps those pages and their cursor, rather than replacing it
+        // with the newest page alone.
+        scope.launch {
+            runCatching { reloadCurrentThreadMessages() }
+                .onSuccess {
+                    if (activeThreadReadToken == readToken) hydrateQuickReplyFromTailDraft(backendThreadId, messages)
+                }.onFailure {
+                    if (activeThreadReadToken != readToken) return@onFailure
+                    status = trsError("mobile.status.openMessageFailed", it)
+                }
+        }
+        return
+    }
     scope.launch {
         runCatching {
-            withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                if (threadIdIsRss(backendThreadId)) {
-                    client.readRssThread(RssThreadParams(threadId = backendThreadId))
-                } else {
-                    withManagedGoogleAuth(client, selectedThread.accountId) {
-                        client.readThread(ThreadReadParams(threadId = backendThreadId))
-                    }
-                }
-            }
-        }.onSuccess {
+            readFirstThreadPage(selectedThread)
+        }.onSuccess { page ->
             // Drop any superseded read, including an older request for this
             // same conversation after the user backed out and reopened it.
             if (activeThreadReadToken != readToken || selectedCoreThread?.backendThreadId() != backendThreadId) {
                 return@onSuccess
             }
-            val page = parseThreadReadPage(it)
             messages = mergeLocalSendMessages(messages, page.messages)
             messageCursor = page.nextCursor
             hydrateQuickReplyFromTailDraft(backendThreadId, messages)
-            if (readsDraftThread) {
-                val draftMessage =
-                    page.messages.lastOrNull { message -> folderIsDrafts(message.folderId) }
-                        ?: page.messages.lastOrNull()
-                if (draftThreadShouldOpenConversation(page.messages)) {
-                    screen = Screen.Thread
-                } else {
-                    draftMessage?.let { message ->
-                        openDraftCompose(message, selectedThread, returnScreen = returnScreen)
-                    }
-                }
-            }
+            routeDraftThread(page.messages)
         }.onFailure {
             if (activeThreadReadToken != readToken) return@onFailure
             status = trsError("mobile.status.openMessageFailed", it)

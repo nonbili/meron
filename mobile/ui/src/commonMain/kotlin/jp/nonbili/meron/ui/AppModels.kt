@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import androidx.compose.ui.graphics.ImageBitmap
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.FolderSummary
+import jp.nonbili.meron.shared.ThreadReadPage
 import jp.nonbili.meron.shared.ThreadSummary
 
 internal enum class Screen { Mail, Kanban, Tasks, Calendar, Thread, Compose, AddAccount, Settings }
@@ -290,6 +291,23 @@ internal data class RenameFolderTarget(
     val folderName: String,
     val parent: String,
 )
+
+/** A conversation beside the open one, read ahead for swiping over to it.
+ *  [stamp] is the summary's date when it was read: a newer one means new mail
+ *  arrived since, and the preview is read again. */
+internal data class ThreadPreview(
+    val page: ThreadReadPage,
+    val stamp: Long,
+)
+
+/** The list a conversation was opened from, which swiping it sideways pages through. */
+internal sealed interface ThreadBrowseSource {
+    data object MailList : ThreadBrowseSource
+
+    data class KanbanColumn(
+        val column: KanbanColumnSpec,
+    ) : ThreadBrowseSource
+}
 
 internal data class KanbanBoardSpec(
     val id: String,

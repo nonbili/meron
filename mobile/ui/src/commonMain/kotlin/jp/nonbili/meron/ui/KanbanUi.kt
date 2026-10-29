@@ -683,16 +683,7 @@ internal fun KanbanColumn(
     showSenderImages: Boolean,
     kanbanColumnWidth: Dp,
 ) {
-    val columnKey = kanbanColumnKey(column)
-    val boardSearch = if (searchScope.ifBlank { "all" } == "all" || searchScope == columnKey) search else ""
-    val columnSearch = narrowKanbanQuery(column.query, boardSearch)
-    val visibleThreads =
-        state.threads.filteredKanbanThreads(
-            filter = filter,
-            search = columnSearch,
-            searchAlreadyApplied = columnSearch.isNotBlank(),
-            attachmentsOnly = attachmentsOnly,
-        )
+    val visibleThreads = kanbanColumnVisibleThreads(column, state.threads, filter, search, searchScope, attachmentsOnly)
     val canLoadMore = state.nextCursor.isNotBlank() || state.accountCursors.isNotEmpty()
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     val showAccountBadge = column.accountId == UNIFIED_ACCOUNT_ID

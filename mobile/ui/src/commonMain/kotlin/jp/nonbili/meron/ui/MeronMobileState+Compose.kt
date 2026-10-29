@@ -628,10 +628,12 @@ private suspend fun MeronMobileState.discardObsoleteComposeDraft(
 
 /** Whether the open conversation's reply target has other recipients, so
  * reply-all would reach someone the reply bar does not. */
-internal fun MeronMobileState.canReplyAllToThread(): Boolean {
-    val thread = selectedCoreThread ?: return false
-    if (threadIdIsRss(thread.id)) return false
-    val parent = quickReplyParent() ?: return false
+internal fun MeronMobileState.canReplyAllToThread(
+    thread: ThreadSummary? = selectedCoreThread,
+    messages: List<MessageBody> = this.messages,
+): Boolean {
+    if (thread == null || threadIdIsRss(thread.id)) return false
+    val parent = quickReplyParent(thread, messages) ?: return false
     return replyAllAddsRecipients(parent)
 }
 

@@ -194,6 +194,15 @@ internal class MeronMobileState(
     var mailListScrollToTopRequest by mutableStateOf(0L)
     var loadingMoreThreads by mutableStateOf(false)
     var selectedCoreThread by mutableStateOf<ThreadSummary?>(null)
+
+    // Null when the conversation was opened from outside a list (a task, a
+    // card's action sheet), which leaves nothing to swipe through.
+    var threadBrowseSource by mutableStateOf<ThreadBrowseSource?>(null)
+
+    // The conversations either side of the open one, by thread id, and the
+    // reads for them still out.
+    var threadPreviews by mutableStateOf(emptyMap<String, ThreadPreview>())
+    val threadPreviewReads = mutableSetOf<String>()
     var activeThreadReadToken by mutableStateOf(0L)
 
     // Refreshes of the open conversation, numbered as they start, and the
