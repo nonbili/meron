@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -115,6 +116,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -510,31 +513,35 @@ internal fun MailList(
     }
 }
 
+/**
+ * The search box an app bar opens into, shared by the mail list and the board:
+ * a filled pill with the query, search options and a clear button. The bar's
+ * back arrow stands beside it, so it carries no search icon of its own and the
+ * text gets the width. [leading] goes before the text, such as the column a
+ * board search is narrowed to, and [onBackspaceEmpty] is a hardware Backspace
+ * in the empty box.
+ */
 @Composable
-internal fun MailHeaderSearchField(
+internal fun HeaderSearchField(
     search: String,
-    placeholder: String? = null,
+    placeholder: String,
     onSearchChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onOpenOptions: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
+    onBackspaceEmpty: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
 ) {
-    val effectivePlaceholder = placeholder ?: tr("mobile.mail.searchMail")
     Surface(
-        modifier = Modifier.fillMaxWidth().height(44.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+            Modifier.fillMaxWidth().padding(start = if (leading != null) 8.dp else 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Filled.Search,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            leading?.invoke()
             BasicTextField(
                 value = search,
                 onValueChange = onSearchChange,
@@ -549,10 +556,19 @@ internal fun MailHeaderSearchField(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .padding(start = 10.dp)
+                        .padding(start = if (leading != null) 8.dp else 0.dp)
+                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
                                 onSearchSubmit()
+                                true
+                            } else if (
+                                onBackspaceEmpty != null &&
+                                event.type == KeyEventType.KeyDown &&
+                                event.key == Key.Backspace &&
+                                search.isEmpty()
+                            ) {
+                                onBackspaceEmpty()
                                 true
                             } else {
                                 false
@@ -562,7 +578,7 @@ internal fun MailHeaderSearchField(
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (search.isBlank()) {
                             Text(
-                                effectivePlaceholder,
+                                placeholder,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -574,7 +590,7 @@ internal fun MailHeaderSearchField(
                 },
             )
             if (onOpenOptions != null) {
-                IconButton(onClick = onOpenOptions, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onOpenOptions, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.Tune, contentDescription = tr("search.options"), modifier = Modifier.size(18.dp))
                 }
             }
@@ -584,7 +600,7 @@ internal fun MailHeaderSearchField(
                         onSearchChange("")
                         onSearchSubmit()
                     },
-                    modifier = Modifier.size(34.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = tr("common.clearSearch"), modifier = Modifier.size(18.dp))
                 }
@@ -834,6 +850,8 @@ internal fun ThreadAvatarWithAccountBadge(
             Box(
                 Modifier
                     .align(Alignment.BottomStart)
+                    // Hangs off the corner like desktop's, clear of the sender's initials.
+                    .offset(x = (-4).dp, y = 4.dp)
                     .size(18.dp)
                     .clip(CircleShape)
                     .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),

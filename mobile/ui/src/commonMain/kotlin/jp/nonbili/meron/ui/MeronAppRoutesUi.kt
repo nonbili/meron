@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -62,7 +64,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -111,7 +116,7 @@ internal fun MailSelectionTitle(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun KanbanRouteContent(
     state: MeronMobileState,
@@ -123,6 +128,38 @@ internal fun KanbanRouteContent(
 ) {
     with(state) {
         var searchOptionsOpen by remember { mutableStateOf(false) }
+        // Search folds to an icon in the app bar, as on desktop, and opens across
+        // it when wanted. A running search or scope keeps it open.
+        val kanbanSearchActive = kanbanSearch.isNotBlank() || kanbanSearchScope.ifBlank { "all" } != "all"
+        // Latched open by any search, restored ones included, so emptying the box
+        // by hand can't fold it over results only closing it clears.
+        var kanbanSearchOpen by remember { mutableStateOf(kanbanSearchActive) }
+        LaunchedEffect(kanbanSearchActive) { if (kanbanSearchActive) kanbanSearchOpen = true }
+        val showKanbanSearch = kanbanSearchOpen || kanbanSearchActive
+        val kanbanSearchFocus = remember { FocusRequester() }
+        var kanbanSearchFocusRequests by remember { mutableStateOf(0) }
+        LaunchedEffect(kanbanSearchFocusRequests) {
+            if (kanbanSearchFocusRequests > 0) runCatching { kanbanSearchFocus.requestFocus() }
+        }
+        val openKanbanSearch: () -> Unit = {
+            kanbanSearchOpen = true
+            kanbanSearchFocusRequests++
+        }
+        val closeKanbanSearch = {
+            kanbanSearchOpen = false
+            persistKanbanSearch("")
+            persistKanbanSearchScope("all")
+            // A search emptied by hand but never resubmitted still has its results
+            // on screen, or on their way, so compare what each column was read
+            // with, not the box; a load still out is replaced, so its results
+            // can't land after the search has closed.
+            val showingOtherView =
+                activeKanbanBoard?.columns.orEmpty().any { column ->
+                    kanbanColumns[kanbanColumnKey(column)]?.let { it.loading || it.cursorView != currentKanbanColumnView(column) } == true
+                }
+            if (showingOtherView) loadKanbanBoard(refresh = true)
+        }
+        BackHandler(enabled = showKanbanSearch && !mailSelectionActive && drawerState.isClosed, onBack = closeKanbanSearch)
         if (searchOptionsOpen) {
             SearchOptionsSheet(
                 state = state,
@@ -132,24 +169,18 @@ internal fun KanbanRouteContent(
                     persistKanbanSearch(query)
                     loadKanbanBoard(refresh = true)
                 },
-                // A search scoped to one column saves into it; a board-wide one picks.
-                // A saved search narrowed by it isn't saved again (see saveKanbanSearchColumn).
-                saveColumns =
-                    activeKanbanBoard?.columns.orEmpty().filter {
-                        it.query.isBlank() && (kanbanSearchScope.ifBlank { "all" } == "all" || kanbanColumnKey(it) == kanbanSearchScope)
-                    },
+                // The sheet narrows these to the column picked under "Search in", or
+                // offers them all for a board-wide search. A saved search narrowed by
+                // it isn't saved again (see saveKanbanSearchColumn).
+                saveColumns = activeKanbanBoard?.columns.orEmpty().filter { it.query.isBlank() },
                 columnLabel = { column ->
                     val account = coreAccounts.firstOrNull { it.id == column.accountId }
                     searchScopeTitle(column, coreAccounts, foldersByAccount) to account?.let { it.displayName.ifBlank { it.email } }.orEmpty()
                 },
                 onSave = { query, column -> saveKanbanSearchColumn(column, query, clearsScopedSearch = false) },
-                contactsAccountId =
-                    activeKanbanBoard
-                        ?.columns
-                        ?.firstOrNull { kanbanColumnKey(it) == kanbanSearchScope }
-                        ?.accountId
-                        ?.takeUnless { it == UNIFIED_ACCOUNT_ID }
-                        .orEmpty(),
+                scopeColumns = activeKanbanBoard?.columns.orEmpty(),
+                scope = kanbanSearchScope,
+                onScopeChange = ::persistKanbanSearchScope,
             )
         }
         // A saved search column's query, edited in the same form.
@@ -244,6 +275,14 @@ internal fun KanbanRouteContent(
                         title = {
                             if (mailSelectionActive) {
                                 MailSelectionTitle(selectedMailThreads.size, height = 52.dp)
+                            } else if (!showKanbanSearch) {
+                                Text(
+                                    activeKanbanBoard?.name.orEmpty(),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             } else {
                                 KanbanHeaderSearchField(
                                     search = kanbanSearch,
@@ -255,6 +294,7 @@ internal fun KanbanRouteContent(
                                     onSearchScopeChange = ::persistKanbanSearchScope,
                                     onSearchSubmit = { loadKanbanBoard(refresh = true) },
                                     onOpenOptions = { searchOptionsOpen = true },
+                                    focusRequester = kanbanSearchFocus,
                                 )
                             }
                         },
@@ -265,6 +305,10 @@ internal fun KanbanRouteContent(
                                     mailSelectionMenuOpen = false
                                 }) {
                                     Icon(Icons.Filled.Close, contentDescription = tr("mobile.actions.clearSelection"))
+                                }
+                            } else if (showKanbanSearch) {
+                                IconButton(onClick = closeKanbanSearch) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
                                 }
                             } else {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -373,7 +417,11 @@ internal fun KanbanRouteContent(
                                         }
                                     }
                                 }
-                            } else {
+                            } else if (!showKanbanSearch) {
+                                // An open search takes the whole bar, the board's menu included.
+                                IconButton(onClick = openKanbanSearch) {
+                                    Icon(Icons.Filled.Search, contentDescription = tr("kanban.searchBoardAction"))
+                                }
                                 Box {
                                     IconButton(onClick = { kanbanMenuOpen = true }) {
                                         Icon(Icons.Filled.MoreVert, contentDescription = tr("kanban.actions.boardOptions"))
@@ -540,6 +588,7 @@ internal fun KanbanRouteContent(
                     onRemoveColumn = ::removeKanbanColumn,
                     onMoveColumn = ::moveKanbanColumn,
                     onSearchColumn = { column ->
+                        openKanbanSearch()
                         persistKanbanSearchScope(kanbanColumnKey(column))
                         if (kanbanSearch.isNotBlank()) loadKanbanBoard(refresh = true)
                     },
@@ -556,7 +605,7 @@ internal fun KanbanRouteContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun MailRouteContent(
     state: MeronMobileState,
@@ -571,6 +620,32 @@ internal fun MailRouteContent(
 ) {
     with(state) {
         var searchOptionsOpen by remember { mutableStateOf(false) }
+        // Search folds to an icon beside the folder title and opens across the
+        // app bar when wanted. A running search keeps it open.
+        // Latched open by any search, as on the board.
+        var mailSearchOpen by remember { mutableStateOf(mailSearch.isNotBlank()) }
+        LaunchedEffect(mailSearch.isNotBlank()) { if (mailSearch.isNotBlank()) mailSearchOpen = true }
+        val showMailSearch = mailSearchOpen || mailSearch.isNotBlank()
+        val mailSearchFocus = remember { FocusRequester() }
+        var mailSearchFocusRequests by remember { mutableStateOf(0) }
+        LaunchedEffect(mailSearchFocusRequests) {
+            if (mailSearchFocusRequests > 0) runCatching { mailSearchFocus.requestFocus() }
+        }
+        val closeMailSearch = {
+            mailSearchOpen = false
+            // A search emptied by hand but never resubmitted still has its results
+            // on screen, or on their way, so check what the list was read with
+            // and what is being read, not just the box.
+            if (
+                mailSearch.isNotBlank() ||
+                visibleMailboxKey?.query?.isNotBlank() == true ||
+                activeMailboxLoadKey?.query?.isNotBlank() == true
+            ) {
+                mailSearch = ""
+                syncCoreThreads(syncFirst = false)
+            }
+        }
+        BackHandler(enabled = showMailSearch && !mailSelectionActive && drawerState.isClosed, onBack = closeMailSearch)
         if (searchOptionsOpen) {
             SearchOptionsSheet(
                 state = state,
@@ -687,11 +762,18 @@ internal fun MailRouteContent(
                         title = {
                             if (mailSelectionActive) {
                                 MailSelectionTitle(selectedMailThreads.size, height = 44.dp)
+                            } else if (showMailSearch) {
+                                HeaderSearchField(
+                                    search = mailSearch,
+                                    placeholder = if (selectedAccountIsRss) tr("threads.searchFeeds") else tr("mobile.mail.searchMail"),
+                                    onSearchChange = { mailSearch = it },
+                                    onSearchSubmit = { syncCoreThreads(syncFirst = false) },
+                                    // Feed search is plain text; the operators are mail's.
+                                    onOpenOptions = if (selectedAccountIsRss) null else ({ searchOptionsOpen = true }),
+                                    focusRequester = mailSearchFocus,
+                                )
                             } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     // An RSS account has no folders to choose between.
                                     // The unified view picks by role instead of by
                                     // mailbox name — each entry means "every account's
@@ -724,10 +806,7 @@ internal fun MailRouteContent(
                                                     syncFirst = false,
                                                 )
                                             },
-                                            // Capped so a deep folder name can't crowd
-                                            // out the search field next to it.
-                                            modifier = Modifier.widthIn(max = 120.dp),
-                                            fontSize = 14.sp,
+                                            fontSize = 18.sp,
                                             onSetFolderNotify =
                                                 if (unifiedMailbox) {
                                                     null
@@ -743,19 +822,13 @@ internal fun MailRouteContent(
                                                 },
                                         )
                                     }
-                                    Box(Modifier.weight(1f)) {
-                                        MailHeaderSearchField(
-                                            search = mailSearch,
-                                            placeholder =
-                                                if (selectedAccountIsRss) {
-                                                    tr("threads.searchFeeds")
-                                                } else {
-                                                    null
-                                                },
-                                            onSearchChange = { mailSearch = it },
-                                            onSearchSubmit = { syncCoreThreads(syncFirst = false) },
-                                            // Feed search is plain text; the operators are mail's.
-                                            onOpenOptions = if (selectedAccountIsRss) null else ({ searchOptionsOpen = true }),
+                                    if (selectedAccountIsRss) {
+                                        Text(
+                                            selectedAccount?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                         )
                                     }
                                 }
@@ -768,6 +841,10 @@ internal fun MailRouteContent(
                                     mailSelectionMenuOpen = false
                                 }) {
                                     Icon(Icons.Filled.Close, contentDescription = tr("mobile.actions.clearSelection"))
+                                }
+                            } else if (showMailSearch) {
+                                IconButton(onClick = closeMailSearch) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
                                 }
                             } else {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -873,7 +950,8 @@ internal fun MailRouteContent(
                                         }
                                     }
                                 }
-                            } else {
+                            } else if (!showMailSearch) {
+                                // An open search takes the whole bar, the folder's menu included.
                                 val loadedUnread = coreThreads.any { it.unread }
                                 val folderUnreadTotal =
                                     if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
@@ -927,6 +1005,15 @@ internal fun MailRouteContent(
                                 // Renaming follows the delete rule, and moves the
                                 // subfolders along too.
                                 val showFolderActions = newFolderAccount != null || deletableMailboxFolder != null
+                                IconButton(onClick = {
+                                    mailSearchOpen = true
+                                    mailSearchFocusRequests++
+                                }) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = if (selectedAccountIsRss) tr("threads.searchFeeds") else tr("mobile.mail.searchMail"),
+                                    )
+                                }
                                 Box {
                                     IconButton(onClick = { mailboxMenuOpen = true }) {
                                         Icon(

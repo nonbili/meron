@@ -122,6 +122,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -137,6 +138,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -306,141 +308,65 @@ internal fun KanbanHeaderSearchField(
     onSearchScopeChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onOpenOptions: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
-    var scopeMenuOpen by remember { mutableStateOf(false) }
     val normalizedScope = searchScope.ifBlank { "all" }
     val scopedColumn = columns.firstOrNull { kanbanColumnKey(it) == normalizedScope }
-    val scopeLabel = scopedColumn?.let { searchScopeTitle(it, accounts, foldersByAccount) } ?: tr("kanban.searchScope.allColumns")
-    Box(Modifier.fillMaxWidth()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                BasicTextField(
-                    value = search,
-                    onValueChange = onSearchChange,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions =
-                        KeyboardActions(
-                            onSearch = { onSearchSubmit() },
-                            onDone = { onSearchSubmit() },
-                        ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .padding(start = 10.dp)
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
-                                    onSearchSubmit()
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                    decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (search.isBlank()) {
-                                Text(
-                                    tr("kanban.searchBoard"),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                )
-                if (onOpenOptions != null) {
-                    IconButton(onClick = onOpenOptions, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Filled.Tune, contentDescription = tr("search.options"), modifier = Modifier.size(18.dp))
-                    }
-                }
-                if (search.isNotBlank()) {
-                    IconButton(
-                        onClick = {
-                            onSearchChange("")
-                            onSearchSubmit()
-                        },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(Icons.Filled.Close, contentDescription = tr("common.clearSearch"), modifier = Modifier.size(18.dp))
-                    }
-                }
-                Box(
-                    Modifier
-                        .padding(horizontal = 2.dp)
-                        .width(1.dp)
-                        .height(30.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant),
-                )
-                Row(
-                    Modifier
-                        .height(44.dp)
-                        .widthIn(min = 66.dp, max = 132.dp)
-                        .clickable { scopeMenuOpen = true }
-                        .padding(horizontal = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Whose folder it is, since a board can hold the same folder of several accounts.
-                    scopedColumn?.let { Avatar(columnAvatarLabel(it, accounts), 18.dp, columnAvatarFallbackIcon(it, accounts)) }
-                    Text(
-                        scopeLabel,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .height(52.dp)
-                .widthIn(min = 66.dp, max = 132.dp),
-        ) {
-            DropdownMenu(expanded = scopeMenuOpen, onDismissRequest = { scopeMenuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(tr("kanban.searchScope.allColumns")) },
-                    leadingIcon = { Icon(Icons.Filled.ViewKanban, contentDescription = null) },
-                    onClick = {
-                        scopeMenuOpen = false
-                        onSearchScopeChange("all")
-                        onSearchSubmit()
-                    },
-                )
-                columns.forEach { column ->
-                    DropdownMenuItem(
-                        text = { Text(searchScopeTitle(column, accounts, foldersByAccount), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        leadingIcon = { Avatar(columnAvatarLabel(column, accounts), 22.dp, columnAvatarFallbackIcon(column, accounts)) },
-                        onClick = {
-                            scopeMenuOpen = false
-                            onSearchScopeChange(kanbanColumnKey(column))
-                            onSearchSubmit()
-                        },
-                    )
-                }
-            }
+    val clearScope = {
+        onSearchScopeChange("all")
+        onSearchSubmit()
+    }
+    HeaderSearchField(
+        search = search,
+        placeholder = tr("kanban.searchBoard"),
+        onSearchChange = onSearchChange,
+        onSearchSubmit = onSearchSubmit,
+        onOpenOptions = onOpenOptions,
+        focusRequester = focusRequester,
+        // Backspace in an empty box takes the scope off, as with any token before a caret.
+        onBackspaceEmpty = if (scopedColumn != null) clearScope else null,
+        // A search narrowed to one column says which, as on desktop; clearing it searches them all.
+        // It gives up its name for the query's room once typing starts.
+        leading =
+            scopedColumn?.let {
+                { KanbanSearchScopeChip(it, accounts, foldersByAccount, showName = search.isEmpty(), onClear = clearScope) }
+            },
+    )
+}
+
+@Composable
+private fun KanbanSearchScopeChip(
+    column: KanbanColumnSpec,
+    accounts: List<AccountSummary>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
+    showName: Boolean,
+    onClear: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    // The whole chip is its own remove button, so it needs no × beside the text's.
+    Row(
+        Modifier
+            .height(32.dp)
+            .widthIn(max = 160.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(accent.copy(alpha = 0.1f))
+            .clickable(onClickLabel = tr("kanban.searchScope.allColumns"), role = Role.Button, onClick = onClear)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // Whose folder it is, since a board can hold the same folder of several accounts.
+        Avatar(columnAvatarLabel(column, accounts), 16.dp, columnAvatarFallbackIcon(column, accounts))
+        if (showName) {
+            Text(
+                searchScopeTitle(column, accounts, foldersByAccount),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
+                modifier = Modifier.weight(1f, fill = false),
+            )
         }
     }
 }

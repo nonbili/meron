@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -257,161 +258,165 @@ internal fun MailDrawer(
     onReconnectGoogle: (AccountSummary) -> Unit = {},
 ) {
     val chat = LocalChatColors.current
-    ModalDrawerSheet(
-        drawerContainerColor = chat.sidebar,
-        drawerContentColor = chat.onSidebar,
-    ) {
-        val listState = rememberLazyListState()
-        LazyColumn(
-            Modifier.appScrollbar(listState, color = chat.onSidebar.copy(alpha = 0.4f)),
-            state = listState,
-            contentPadding = PaddingValues(vertical = 16.dp),
+    // M3's fixed 360dp sheet nearly covers a narrow phone; keep 56dp of the screen behind visible.
+    BoxWithConstraints {
+        ModalDrawerSheet(
+            modifier = Modifier.width(minOf(360.dp, maxWidth - 56.dp)),
+            drawerContainerColor = chat.sidebar,
+            drawerContentColor = chat.onSidebar,
         ) {
-            item {
-                Text(
-                    "Meron",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = chat.onSidebar,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                )
-            }
-            if (accounts.isNotEmpty()) {
-                item { DrawerLabel(tr("drawer.inboxes"), chat) }
-                if (showUnifiedInboxNav) {
-                    item {
-                        val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
-                        val unread =
-                            folders
-                                .filter { it.accountId in includedAccountIds }
-                                .groupBy { it.accountId }
-                                .values
-                                .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
+            val listState = rememberLazyListState()
+            LazyColumn(
+                Modifier.appScrollbar(listState, color = chat.onSidebar.copy(alpha = 0.4f)),
+                state = listState,
+                contentPadding = PaddingValues(vertical = 16.dp),
+            ) {
+                item {
+                    Text(
+                        "Meron",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = chat.onSidebar,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    )
+                }
+                if (accounts.isNotEmpty()) {
+                    item { DrawerLabel(tr("drawer.inboxes"), chat) }
+                    if (showUnifiedInboxNav) {
+                        item {
+                            val includedAccountIds = accounts.filter { it.includedInUnified }.map { it.id }.toSet()
+                            val unread =
+                                folders
+                                    .filter { it.accountId in includedAccountIds }
+                                    .groupBy { it.accountId }
+                                    .values
+                                    .sumOf { accountFolders -> folderUnread(accountFolders, INBOX_FOLDER) }
+                            SidebarRow(
+                                selected = currentScreen == Screen.Mail && selectedAccountId == UNIFIED_ACCOUNT_ID,
+                                chat = chat,
+                                onClick = onSelectUnified,
+                                leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                title = tr("kanban.columns.unifiedInbox"),
+                                trailing = if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
+                            )
+                        }
+                    }
+                    items(accounts, key = { it.id }) { account ->
+                        val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
+                        val unread = folderUnread(folders.filter { it.accountId == account.id }, INBOX_FOLDER)
+                        val needsGoogleReauth = account.id == googleReauthAccountId
                         SidebarRow(
-                            selected = currentScreen == Screen.Mail && selectedAccountId == UNIFIED_ACCOUNT_ID,
+                            selected = currentScreen == Screen.Mail && account.id == selectedAccountId,
                             chat = chat,
-                            onClick = onSelectUnified,
-                            leading = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            title = tr("kanban.columns.unifiedInbox"),
-                            trailing = if (showUnreadBadges) unread.takeIf { it > 0 }?.toString() else null,
+                            onClick = {
+                                if (needsGoogleReauth) onReconnectGoogle(account) else onSelectAccount(account)
+                            },
+                            leading = {
+                                AccountBadgeAvatar(
+                                    label = label,
+                                    avatarUrl = account.avatarUrl,
+                                    size = 24.dp,
+                                    fallbackIcon = accountAvatarFallbackIcon(account),
+                                )
+                            },
+                            title = label,
+                            trailing =
+                                if (account.needsReconnect || needsGoogleReauth) {
+                                    "!"
+                                } else if (showUnreadBadges) {
+                                    unread.takeIf { it > 0 }?.toString()
+                                } else {
+                                    null
+                                },
                         )
                     }
                 }
-                items(accounts, key = { it.id }) { account ->
-                    val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
-                    val unread = folderUnread(folders.filter { it.accountId == account.id }, INBOX_FOLDER)
-                    val needsGoogleReauth = account.id == googleReauthAccountId
-                    SidebarRow(
-                        selected = currentScreen == Screen.Mail && account.id == selectedAccountId,
-                        chat = chat,
-                        onClick = {
-                            if (needsGoogleReauth) onReconnectGoogle(account) else onSelectAccount(account)
-                        },
-                        leading = {
-                            AccountBadgeAvatar(
-                                label = label,
-                                avatarUrl = account.avatarUrl,
-                                size = 24.dp,
-                                fallbackIcon = accountAvatarFallbackIcon(account),
-                            )
-                        },
-                        title = label,
-                        trailing =
-                            if (account.needsReconnect || needsGoogleReauth) {
-                                "!"
-                            } else if (showUnreadBadges) {
-                                unread.takeIf { it > 0 }?.toString()
-                            } else {
-                                null
+                if (accounts.isNotEmpty() && (kanbanBoards.isNotEmpty() || tasksEnabled || calendarEnabled)) {
+                    item { DrawerLabel(tr("drawer.views"), chat) }
+                }
+                if (accounts.isNotEmpty() && kanbanBoards.isNotEmpty()) {
+                    items(kanbanBoards, key = { it.id }) { board ->
+                        SidebarRow(
+                            selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
+                            chat = chat,
+                            onClick = { onSelectKanbanBoard(board) },
+                            leading = {
+                                if (board.avatarUrl.isNotBlank()) {
+                                    AccountBadgeAvatar(
+                                        label = board.name,
+                                        avatarUrl = board.avatarUrl,
+                                        size = 24.dp,
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp))
+                                }
                             },
+                            title = board.name,
+                            trailing = null,
+                        )
+                    }
+                }
+                // Calendar and Tasks follow the boards, so toggling them never shifts the boards.
+                if (calendarEnabled) {
+                    item {
+                        SidebarRow(
+                            selected = currentScreen == Screen.Calendar,
+                            chat = chat,
+                            onClick = onSelectCalendar,
+                            leading = { Icon(Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            title = tr("calendar.title"),
+                            trailing = null,
+                        )
+                    }
+                }
+                if (tasksEnabled) {
+                    item {
+                        SidebarRow(
+                            selected = currentScreen == Screen.Tasks,
+                            chat = chat,
+                            onClick = onSelectTasks,
+                            leading = { Icon(Icons.Filled.Checklist, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            title = tr("tasks.title"),
+                            trailing = null,
+                        )
+                    }
+                }
+                item {
+                    HorizontalDivider(
+                        Modifier.padding(vertical = 10.dp, horizontal = 20.dp),
+                        color = chat.onSidebarMuted.copy(alpha = 0.25f),
                     )
                 }
-            }
-            if (accounts.isNotEmpty() && (kanbanBoards.isNotEmpty() || tasksEnabled || calendarEnabled)) {
-                item { DrawerLabel(tr("drawer.views"), chat) }
-            }
-            // Calendar and Tasks are a row each, shown once switched on.
-            if (calendarEnabled) {
                 item {
                     SidebarRow(
-                        selected = currentScreen == Screen.Calendar,
+                        selected = false,
                         chat = chat,
-                        onClick = onSelectCalendar,
-                        leading = { Icon(Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        title = tr("calendar.title"),
+                        onClick = onAddAccount,
+                        leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = tr("accounts.actions.addAccount"),
                         trailing = null,
                     )
                 }
-            }
-            if (tasksEnabled) {
                 item {
                     SidebarRow(
-                        selected = currentScreen == Screen.Tasks,
+                        selected = false,
                         chat = chat,
-                        onClick = onSelectTasks,
-                        leading = { Icon(Icons.Filled.Checklist, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        title = tr("tasks.title"),
+                        onClick = onOpenSettings,
+                        leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = tr("settings.label"),
                         trailing = null,
                     )
                 }
-            }
-            if (accounts.isNotEmpty() && kanbanBoards.isNotEmpty()) {
-                items(kanbanBoards, key = { it.id }) { board ->
+                item {
                     SidebarRow(
-                        selected = currentScreen == Screen.Kanban && board.id == activeKanbanBoardId,
+                        selected = false,
                         chat = chat,
-                        onClick = { onSelectKanbanBoard(board) },
-                        leading = {
-                            if (board.avatarUrl.isNotBlank()) {
-                                AccountBadgeAvatar(
-                                    label = board.name,
-                                    avatarUrl = board.avatarUrl,
-                                    size = 24.dp,
-                                )
-                            } else {
-                                Icon(Icons.Filled.ViewKanban, contentDescription = null, modifier = Modifier.size(20.dp))
-                            }
-                        },
-                        title = board.name,
+                        onClick = onShowAbout,
+                        leading = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        title = tr("about.title"),
                         trailing = null,
                     )
                 }
-            }
-            item {
-                HorizontalDivider(
-                    Modifier.padding(vertical = 10.dp, horizontal = 20.dp),
-                    color = chat.onSidebarMuted.copy(alpha = 0.25f),
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onAddAccount,
-                    leading = { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = tr("accounts.actions.addAccount"),
-                    trailing = null,
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onOpenSettings,
-                    leading = { Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = tr("settings.label"),
-                    trailing = null,
-                )
-            }
-            item {
-                SidebarRow(
-                    selected = false,
-                    chat = chat,
-                    onClick = onShowAbout,
-                    leading = { Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    title = tr("about.title"),
-                    trailing = null,
-                )
             }
         }
     }
@@ -522,7 +527,8 @@ internal fun SidebarRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        // A fixed slot, so titles line up whether they follow a 20dp icon or a 24dp avatar.
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.material3.LocalContentColor provides tint,
             ) { leading() }

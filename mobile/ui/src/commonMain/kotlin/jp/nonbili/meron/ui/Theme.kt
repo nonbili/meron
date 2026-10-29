@@ -564,7 +564,14 @@ private fun resolveThemeSpec(theme: AppTheme): ResolvedTheme {
     // themes set the canvas apart from the cards, so do the same here: a tinted
     // canvas under lighter cards, or a deeper one under them in dark.
     val canvas = if (fallback.dark) platform.surfaceContainerLowest else platform.surfaceContainer
-    val scheme = platform.copy(background = canvas)
+    // Material's outlines (tone 50 and 80) draw much heavier lines than Meron's
+    // own borders; soften them to the same weight against the cards.
+    val scheme =
+        platform.copy(
+            background = canvas,
+            outline = platform.onSurfaceVariant.copy(alpha = 0.55f),
+            outlineVariant = lerp(platform.outlineVariant, platform.surface, 0.5f),
+        )
     return ResolvedTheme(dynamicThemeSpec(scheme, fallback.dark), scheme)
 }
 

@@ -17,12 +17,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,6 +75,11 @@ import kotlinx.coroutines.withContext
  * column of its own: one is saved into directly, several offer a pick.
  * From and To suggest [contactsAccountId]'s correspondents, or every
  * account's when it's blank.
+ *
+ * With [scopeColumns], a "Search in" picker narrows the search to one of them,
+ * as on desktop: it starts at [scope] and hands the pick to [onScopeChange] on
+ * search. The pick then also decides which [saveColumns] are offered and
+ * whose correspondents are suggested.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,9 +95,18 @@ internal fun SearchOptionsSheet(
     contactsAccountId: String = "",
     /** The submit button's text; "Search" by default. */
     submitLabel: String? = null,
+    scopeColumns: List<KanbanColumnSpec> = emptyList(),
+    scope: String = "all",
+    onScopeChange: (String) -> Unit = {},
 ) {
     var fields by remember { mutableStateOf<SearchFields?>(null) }
     var pickingColumn by remember { mutableStateOf(false) }
+    var pickedScope by remember(scope) { mutableStateOf(scope.ifBlank { "all" }) }
+    val scopedColumn = scopeColumns.firstOrNull { kanbanColumnKey(it) == pickedScope }
+    val offeredSaveColumns =
+        if (scopeColumns.isEmpty() || scopedColumn == null) saveColumns else saveColumns.filter { it == scopedColumn }
+    val contactsAccount =
+        if (scopeColumns.isEmpty()) contactsAccountId else scopedColumn?.accountId?.takeUnless { it == UNIFIED_ACCOUNT_ID }.orEmpty()
     var pickingDate by remember { mutableStateOf<DateField?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(query) {
@@ -107,6 +126,7 @@ internal fun SearchOptionsSheet(
         fields?.let { current ->
             scope.launch {
                 val built = state.buildSearchQuery(current) ?: return@launch
+                if (scopeColumns.isNotEmpty()) onScopeChange(pickedScope)
                 onSearch(built)
                 onDismiss()
             }
@@ -127,10 +147,16 @@ internal fun SearchOptionsSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(tr("search.options"), style = MaterialTheme.typography.titleMedium)
-            SearchOptionsAddressField(state, contactsAccountId, tr("composer.fields.from"), current.from, submit) {
+            if (scopeColumns.isNotEmpty()) {
+                SearchOptionsScopeField(state, scopeColumns, scopedColumn, columnLabel) { column ->
+                    pickedScope = column?.let(::kanbanColumnKey) ?: "all"
+                    pickingColumn = false
+                }
+            }
+            SearchOptionsAddressField(state, contactsAccount, tr("composer.fields.from"), current.from, submit) {
                 fields = current.copy(from = it)
             }
-            SearchOptionsAddressField(state, contactsAccountId, tr("composer.fields.to"), current.to, submit) {
+            SearchOptionsAddressField(state, contactsAccount, tr("composer.fields.to"), current.to, submit) {
                 fields = current.copy(to = it)
             }
             SearchOptionsTextField(tr("composer.fields.subject"), current.subject, submit) { fields = current.copy(subject = it) }
@@ -156,10 +182,10 @@ internal fun SearchOptionsSheet(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (saveColumns.isNotEmpty()) {
+                if (offeredSaveColumns.isNotEmpty()) {
                     TextButton(
                         onClick = {
-                            if (saveColumns.size == 1) save(saveColumns.first()) else pickingColumn = !pickingColumn
+                            if (offeredSaveColumns.size == 1) save(offeredSaveColumns.first()) else pickingColumn = !pickingColumn
                         },
                         enabled = current != SearchFields(),
                     ) {
@@ -173,7 +199,7 @@ internal fun SearchOptionsSheet(
             }
             if (pickingColumn) {
                 HorizontalDivider()
-                saveColumns.forEach { column ->
+                offeredSaveColumns.forEach { column ->
                     val (folder, account) = columnLabel(column)
                     ListItem(
                         // Whose folder it is, since a board can hold the same folder of several accounts.
@@ -213,6 +239,72 @@ internal fun SearchOptionsSheet(
 }
 
 private enum class DateField { After, Before }
+
+/** "Search in": all of a board's columns, or one of them, picked from a menu. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchOptionsScopeField(
+    state: MeronMobileState,
+    columns: List<KanbanColumnSpec>,
+    selected: KanbanColumnSpec?,
+    columnLabel: @Composable (KanbanColumnSpec) -> Pair<String, String>,
+    onPick: (KanbanColumnSpec?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val accounts = state.coreAccounts
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected?.let { columnLabel(it).first } ?: tr("kanban.searchScope.allColumns"),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(tr("search.searchIn")) },
+            leadingIcon = {
+                if (selected == null) {
+                    Icon(Icons.Filled.ViewKanban, contentDescription = null)
+                } else {
+                    Avatar(columnAvatarLabel(selected, accounts), 24.dp, columnAvatarFallbackIcon(selected, accounts))
+                }
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(tr("kanban.searchScope.allColumns")) },
+                leadingIcon = { Icon(Icons.Filled.ViewKanban, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onPick(null)
+                },
+            )
+            columns.forEach { column ->
+                val (folder, account) = columnLabel(column)
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(folder, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (account.isNotBlank()) {
+                                Text(
+                                    account,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    leadingIcon = { Avatar(columnAvatarLabel(column, accounts), 24.dp, columnAvatarFallbackIcon(column, accounts)) },
+                    onClick = {
+                        expanded = false
+                        onPick(column)
+                    },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun SearchOptionsTextField(
