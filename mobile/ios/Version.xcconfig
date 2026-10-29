@@ -1,4 +1,4 @@
 // Single source of truth for the iOS app version.
 // Bump these two lines per release; all build configurations inherit them.
-MARKETING_VERSION = 0.4.6
-CURRENT_PROJECT_VERSION = 42
+MARKETING_VERSION = 0.4.7
+CURRENT_PROJECT_VERSION = 43

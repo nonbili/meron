@@ -1,0 +1,5 @@
+- Swipe between threads with neighbors shown live, and pull down from the top to close a conversation
+- Add calendar and task reminders with configurable event alerts and optional task due times
+- Create and rename folders from the mailbox and column menus
+- Clear notifications when mail is read or removed on any device
+- Show Microsoft account profile photos and account avatars in move and copy pickers
