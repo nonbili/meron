@@ -121,6 +121,31 @@ describe('Composer', () => {
     expect(body?.className).toContain('var(--me-message-scale)')
   })
 
+  it('scrolls a plain-text body with one scrollbar at the pane edge', () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    // The textarea fills the body and scrolls itself. As an inline box it sat on
+    // a text baseline, and the gap below overflowed the body by a few pixels,
+    // which drew a second scrollbar. The side padding sits inside the textarea,
+    // so its own scrollbar lands at the pane edge, clear of the text.
+    const body = view.container.querySelector('textarea')!
+    const classes = body.className.split(' ')
+    expect(classes).toContain('block')
+    expect(classes).toContain('px-4')
+    expect(body.parentElement!.className.split(' ')).not.toContain('px-4')
+  })
+
+  it('keeps the side padding on the scrolling body above a folded quote', () => {
+    const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> Lunch?' }
+    const tabId = openComposeTab({ to: 'them@example.com', rich: false, text: 'Sounds good', quote })!
+    const view = render(<Composer tabId={tabId} />)
+
+    const body = view.container.querySelector('textarea')!
+    expect(body.className.split(' ')).not.toContain('px-4')
+    expect(body.parentElement!.className.split(' ')).toContain('px-4')
+  })
+
   it('scales the rich-text body with the message text size', () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', rich: true })!
     render(<Composer tabId={tabId} />)

@@ -124,11 +124,15 @@ export function Composer({ tabId }: { tabId: string }) {
 
       {/* Body */}
       <div ref={bodyRef} className="relative flex min-h-0 flex-1 flex-col">
-        {/* With a folded quote the body only grows with what is typed, so the
+        {/* Without a quote the plain-text textarea fills this box and scrolls
+            itself: it is a block (an inline one leaves a baseline gap that made
+            this box scroll too) and holds the side padding, so its scrollbar
+            sits at the pane edge.
+            With a folded quote the body only grows with what is typed, so the
             quote's dots sit right under the text rather than below an empty
             box; clicking the space left below still writes into the body. */}
         <div
-          className={`flex-1 overflow-y-auto px-4 py-3${draft.quote ? ' [&_.tiptap-body]:min-h-[4.5em]' : ''}`}
+          className={`flex-1 overflow-y-auto py-3${draft.quote || draft.rich ? ' px-4' : ''}${draft.quote ? ' [&_.tiptap-body]:min-h-[4.5em]' : ''}`}
           onKeyDown={handleKeyDown}
           onMouseDown={(event) => {
             if (!draft.quote || event.target !== event.currentTarget) return
@@ -154,7 +158,7 @@ export function Composer({ tabId }: { tabId: string }) {
               placeholder={t('composer.placeholders.message')}
               spellCheck={spellCheck}
               rows={draft.quote ? Math.max(3, draft.text.split('\n').length + 1) : undefined}
-              className={`${draft.quote ? 'min-h-[4.5em]' : 'h-full min-h-[240px]'} w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
+              className={`${draft.quote ? 'min-h-[4.5em]' : 'block h-full min-h-[240px] px-4'} w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
             />
           )}
           {draft.quote && <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />}
