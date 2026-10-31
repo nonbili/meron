@@ -548,6 +548,31 @@ fn search_messages_has_attachment_reads_the_files_column() {
 }
 
 #[test]
+fn cached_search_headers_returns_the_rows_it_holds() {
+    let conn = test_conn();
+    insert_message(&conn, 1, "Plain", "Aki", "aki@example.com", Some("read"));
+    insert_message(&conn, 2, "Files", "Aki", "aki@example.com", None);
+    conn.execute(
+        "UPDATE messages SET files = '[{\"filename\":\"a.pdf\",\"mime\":\"application/pdf\"}]',
+                             json = '{\"gmail_msg_id\":7,\"message_id\":\"m2\",\"attachment_metadata\":true}'
+         WHERE uid = 2",
+        [],
+    )
+    .unwrap();
+
+    // Header-only, attachments never read: the fetch has to fill this one in.
+    insert_message(&conn, 3, "Unknown", "Aki", "aki@example.com", None);
+
+    let headers = cached_search_headers(&conn, "acct", "INBOX", &[1, 2, 3, 4]).unwrap();
+    assert_eq!(headers.len(), 2);
+    assert_eq!(headers[0].folder, "INBOX");
+    assert_eq!(headers[0].files.as_deref().map(<[_]>::len), Some(0));
+    assert_eq!(headers[1].files.as_deref().map(<[_]>::len), Some(1));
+    assert_eq!(headers[1].gmail_msg_id, Some(7));
+    assert_eq!(headers[1].message_id, "m2");
+}
+
+#[test]
 fn search_messages_matches_substrings_including_cjk() {
     let conn = test_conn();
     insert_message(

@@ -336,14 +336,36 @@ async fn append_search_batch(
             None => requests.push((hit.folder.clone(), vec![hit.uid])),
         }
     }
-    let fetched = if requests.is_empty() {
+    // Only what the cache lacks goes to the server, so repeating a search costs
+    // no headers. A cached hit keeps its flags as of the last sync. A folder
+    // counts as fetched once all its hits are in hand.
+    let mut cached: Vec<(String, Vec<imap::MessageHeader>)> = Vec::new();
+    let mut missing: Vec<(String, Vec<u32>)> = Vec::new();
+    for (folder, uids) in &requests {
+        let headers =
+            store::cached_search_headers(&engine.db.lock().unwrap(), account, folder, uids)?;
+        let held = headers
+            .iter()
+            .map(|header| header.uid)
+            .collect::<std::collections::HashSet<_>>();
+        let lacking = uids
+            .iter()
+            .copied()
+            .filter(|uid| !held.contains(uid))
+            .collect::<Vec<_>>();
+        if !lacking.is_empty() {
+            missing.push((folder.clone(), lacking));
+        }
+        cached.push((folder.clone(), headers));
+    }
+    let live = if missing.is_empty() {
         Vec::new()
     } else {
-        let Some(fetched) = per_folder_live(
+        let live = per_folder_live(
             engine,
             account,
             query,
-            requests.clone(),
+            missing.clone(),
             |session, folder, uids, _| {
                 Box::pin(async move {
                     let mut headers = imap::fetch_headers_by_uid(session, folder, uids).await?;
@@ -355,26 +377,31 @@ async fn append_search_batch(
             },
         )
         .await
-        else {
-            *incomplete = true;
-            return Ok(false);
-        };
-        if fetched.is_empty() {
-            *incomplete = true;
-            return Ok(false);
-        }
-        if fetched.len() < requests.len() {
+        .unwrap_or_default();
+        if live.len() < missing.len() {
             *incomplete = true;
         }
-        fetched
+        live
     };
 
     // Each step takes the store lock on its own, so sync, thread reads and flag
     // writes can interleave with a large search instead of queueing behind it.
-    for (folder, headers) in &fetched {
+    for (folder, headers) in &live {
         store::upsert_messages(&engine.db.lock().unwrap(), account, folder, headers)?;
     }
 
+    let fetched = cached
+        .into_iter()
+        .filter(|(folder, _)| {
+            live.iter().any(|(done, _)| done == folder)
+                || !missing.iter().any(|(lacking, _)| lacking == folder)
+        })
+        .chain(live.clone())
+        .collect::<Vec<_>>();
+    if !requests.is_empty() && fetched.is_empty() {
+        *incomplete = true;
+        return Ok(false);
+    }
     let fetched_folders = fetched
         .iter()
         .map(|(folder, _)| folder.as_str())

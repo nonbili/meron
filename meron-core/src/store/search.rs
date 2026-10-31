@@ -353,6 +353,48 @@ pub fn cached_message_dates(
     Ok(dates)
 }
 
+/// The cached headers of whichever of `uids` the cache holds in `folder`, so a
+/// search batch only fetches the hits it lacks. `files` is always set: rows
+/// whose attachments were never read are left out, for the fetch to fill in.
+pub fn cached_search_headers(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> Result<Vec<MessageHeader>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
+                m.thread_key, json_extract(m.json, '$.to'),
+                COALESCE(json_extract(m.json, '$.message_id'), ''),
+                CAST(json_extract(m.json, '$.gmail_msg_id') AS TEXT),
+                m.files
+         FROM messages m
+         WHERE m.account = ?1 AND m.folder = ?2 AND m.uid = ?3
+           AND (m.body IS NOT NULL
+                OR COALESCE(json_extract(m.json, '$.attachment_metadata'), 0) <> 0)",
+    )?;
+    let mut headers = Vec::new();
+    for &uid in uids {
+        let header = stmt
+            .query_row(params![account, folder, uid], |row| {
+                let mut header = search_header_from_row(row)?;
+                header.gmail_msg_id = row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|id| id.parse().ok());
+                header.files = Some(
+                    row.get::<_, Option<String>>(11)?
+                        .and_then(|files| serde_json::from_str(&files).ok())
+                        .unwrap_or_default(),
+                );
+                header.folder = folder.to_string();
+                Ok(header)
+            })
+            .optional()?;
+        headers.extend(header);
+    }
+    Ok(headers)
+}
+
 /// The snapshot's `count` newest unfetched server hits by date, across all its
 /// folders, plus the newest one after them: nothing older than that one can be
 /// placed until it is fetched. Nothing is consumed until
