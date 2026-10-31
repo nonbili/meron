@@ -41,6 +41,8 @@ pub struct SearchQuery {
     pub unread: bool,
     /// `is:starred`.
     pub starred: bool,
+    /// `has:attachment`.
+    pub has_attachment: bool,
     /// `after:` — sent on or after this day.
     pub after: Option<NaiveDate>,
     /// `before:` — sent before this day.
@@ -68,6 +70,7 @@ impl SearchQuery {
             || self.read
             || self.unread
             || self.starred
+            || self.has_attachment
             || self.after.is_some()
             || self.before.is_some()
     }
@@ -91,6 +94,7 @@ impl SearchQuery {
                 Some(Operator::Subject(value)) => self.subject.push(value),
                 Some(Operator::Seen(value)) => seen = Some(value),
                 Some(Operator::Starred) => self.starred = true,
+                Some(Operator::HasAttachment) => self.has_attachment = true,
                 Some(Operator::After(date)) => self.after = self.after.max(Some(date)),
                 Some(Operator::Before(date)) => {
                     self.before = Some(self.before.map_or(date, |before| before.min(date)))
@@ -140,6 +144,7 @@ enum Operator {
     Subject(AnyOf),
     Seen(bool),
     Starred,
+    HasAttachment,
     After(NaiveDate),
     Before(NaiveDate),
 }
@@ -162,6 +167,7 @@ impl Operator {
                 "starred" => Operator::Starred,
                 _ => return None,
             },
+            "has" if value.eq_ignore_ascii_case("attachment") => Operator::HasAttachment,
             "after" => Operator::After(parse_date(value)?),
             "before" => Operator::Before(parse_date(value)?),
             _ => return None,
@@ -359,6 +365,7 @@ pub struct SearchFields {
     pub before: String,
     pub unread: bool,
     pub starred: bool,
+    pub has_attachment: bool,
 }
 
 impl SearchFields {
@@ -395,6 +402,10 @@ impl SearchFields {
                 Some(Operator::Seen(true)) => seen != Some(true),
                 Some(Operator::Starred) => {
                     fields.starred = true;
+                    true
+                }
+                Some(Operator::HasAttachment) => {
+                    fields.has_attachment = true;
                     true
                 }
                 None => false,
@@ -445,6 +456,9 @@ impl SearchFields {
         }
         if self.starred {
             terms.push("is:starred".to_string());
+        }
+        if self.has_attachment {
+            terms.push("has:attachment".to_string());
         }
         for (key, value) in [("after", &self.after), ("before", &self.before)] {
             if let Some(date) = parse_date(value.trim()) {
@@ -772,6 +786,19 @@ mod tests {
     }
 
     #[test]
+    fn has_attachment_is_an_operator() {
+        let q = SearchQuery::parse("HAS:Attachment budget");
+        assert!(q.has_attachment);
+        assert_eq!(q.text, ["budget"]);
+        assert!(SearchQuery::parse("has:attachment").has_operators());
+        assert!(SearchQuery::parse("x AND has:attachment").has_attachment);
+        // Gmail's other `has:` values stay text, as any unknown operator.
+        let q = SearchQuery::parse("has:drive");
+        assert!(!q.has_operators());
+        assert_eq!(q.text, ["has:drive"]);
+    }
+
+    #[test]
     fn and_joins_queries_that_must_all_match() {
         let q = SearchQuery::parse("invoice  due AND paid");
         assert_eq!(q.text, ["invoice  due", "paid"]);
@@ -865,7 +892,7 @@ mod tests {
     #[test]
     fn fields_round_trip_through_query_text() {
         let fields = SearchFields::parse(
-            r#"budget from:"Ann Lee" to:d@e.f is:unread is:starred after:2026/01/02 before:2026-02-03"#,
+            r#"budget from:"Ann Lee" to:d@e.f is:unread is:starred has:attachment after:2026/01/02 before:2026-02-03"#,
         );
         assert_eq!(
             fields,
@@ -878,11 +905,12 @@ mod tests {
                 before: "2026-02-03".into(),
                 unread: true,
                 starred: true,
+                has_attachment: true,
             }
         );
         assert_eq!(
             fields.to_query(),
-            r#"from:"Ann Lee" to:d@e.f is:starred after:2026/01/02 before:2026/02/03 budget is:unread"#
+            r#"from:"Ann Lee" to:d@e.f is:starred has:attachment after:2026/01/02 before:2026/02/03 budget is:unread"#
         );
         assert_eq!(SearchFields::parse(&fields.to_query()), fields);
     }

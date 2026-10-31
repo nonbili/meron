@@ -408,6 +408,7 @@
   "feeds.urlHint": "フィードURL、またはサイトのアドレスを貼り付けてフィードを自動検出します。",
   "filters.all": "すべて",
   "filters.allFeeds": "すべてのフィード",
+  "filters.hasAttachment": "添付あり",
   "filters.label": "フィルター",
   "filters.starred": "スター付き",
   "filters.unread": "未読",

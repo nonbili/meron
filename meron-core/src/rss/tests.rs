@@ -617,6 +617,13 @@ fn recent_reads_search_operators_against_feed_items() {
     assert_eq!(titles("after:2020/01/01"), ["Second Feed"]);
     assert_eq!(titles("before:2020/01/01 caption"), ["Example Feed"]);
     assert!(titles("to:me@example.com").is_empty());
+    conn.execute(
+        "UPDATE messages SET json = json_set(json, '$.images', json('[{\"url\":\"https://x.y/a.png\"}]'))
+         WHERE folder = 'feed-2'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(titles("has:attachment"), ["Second Feed"]);
 }
 
 // ---- read_thread_page pagination ----------------------------------------

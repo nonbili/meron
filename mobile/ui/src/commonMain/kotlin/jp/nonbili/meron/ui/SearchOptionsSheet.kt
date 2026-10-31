@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -169,7 +170,7 @@ internal fun SearchOptionsSheet(
                     fields = current.copy(before = "")
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = current.unread,
                     onClick = { fields = current.copy(unread = !current.unread) },
@@ -179,6 +180,11 @@ internal fun SearchOptionsSheet(
                     selected = current.starred,
                     onClick = { fields = current.copy(starred = !current.starred) },
                     label = { Text(tr("filters.starred")) },
+                )
+                FilterChip(
+                    selected = current.hasAttachment,
+                    onClick = { fields = current.copy(hasAttachment = !current.hasAttachment) },
+                    label = { Text(tr("filters.hasAttachment")) },
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

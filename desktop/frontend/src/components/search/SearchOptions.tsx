@@ -24,6 +24,7 @@ export type SearchFields = {
   before: string
   unread: boolean
   starred: boolean
+  has_attachment: boolean
 }
 
 const EMPTY_FIELDS: SearchFields = {
@@ -35,6 +36,7 @@ const EMPTY_FIELDS: SearchFields = {
   before: '',
   unread: false,
   starred: false,
+  has_attachment: false,
 }
 
 /** A board's part of the form: which column to search, and saving the search as a column. */
@@ -145,6 +147,7 @@ export function SearchOptions({
     !fields ||
     (!fields.unread &&
       !fields.starred &&
+      !fields.has_attachment &&
       [fields.from, fields.to, fields.subject, fields.words, fields.after, fields.before].every((v) => !v.trim()))
 
   const set = <K extends keyof SearchFields>(key: K, value: SearchFields[K]) =>
@@ -236,6 +239,13 @@ export function SearchOptions({
               <label className="flex cursor-pointer items-center gap-2 select-none">
                 <Checkbox checked={fields.starred} onChange={(event) => set('starred', event.target.checked)} />
                 {t('filters.starred')}
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 select-none">
+                <Checkbox
+                  checked={fields.has_attachment}
+                  onChange={(event) => set('has_attachment', event.target.checked)}
+                />
+                {t('filters.hasAttachment')}
               </label>
             </div>
             <div className="flex items-center justify-between gap-2 pt-1">

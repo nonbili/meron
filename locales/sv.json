@@ -408,6 +408,7 @@
   "feeds.urlHint": "Klistra in en flödes-URL, eller en webbplatsadress för att automatiskt hitta dess flöde.",
   "filters.all": "Alla",
   "filters.allFeeds": "Alla flöden",
+  "filters.hasAttachment": "Med bilaga",
   "filters.label": "Filtrera",
   "filters.starred": "Stjärnmärkta",
   "filters.unread": "Olästa",

@@ -408,6 +408,7 @@
   "feeds.urlHint": "Incolla l'URL di un feed o l'indirizzo di un sito per trovarne automaticamente il feed.",
   "filters.all": "Tutti",
   "filters.allFeeds": "Tutti i feed",
+  "filters.hasAttachment": "Con allegato",
   "filters.label": "Filtro",
   "filters.starred": "Speciali",
   "filters.unread": "Non letti",

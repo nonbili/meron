@@ -124,6 +124,9 @@ pub fn search_messages(
     if query.starred {
         filters.push_str(" AND m.starred <> 0");
     }
+    if query.has_attachment {
+        filters.push_str(" AND m.files IS NOT NULL");
+    }
     if let Some(after) = query.after {
         filters.push_str(" AND m.date >= ?");
         args.push(local_midnight(after).into());

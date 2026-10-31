@@ -408,6 +408,7 @@
   "feeds.urlHint": "Επικολλήστε ένα URL ροής ή μια διεύθυνση ιστότοπου για αυτόματο εντοπισμό της ροής του.",
   "filters.all": "Όλα",
   "filters.allFeeds": "Όλες οι ροές",
+  "filters.hasAttachment": "Με συνημμένο",
   "filters.label": "Φίλτρο",
   "filters.starred": "Με αστέρι",
   "filters.unread": "Μη αναγνωσμένα",

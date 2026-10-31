@@ -408,6 +408,7 @@
   "feeds.urlHint": "Kleebi voo URL või saidi aadress, et selle voog automaatselt tuvastada.",
   "filters.all": "Kõik",
   "filters.allFeeds": "Kõik vood",
+  "filters.hasAttachment": "Manusega",
   "filters.label": "Filter",
   "filters.starred": "Tärniga",
   "filters.unread": "Lugemata",

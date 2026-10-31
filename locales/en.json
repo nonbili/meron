@@ -408,6 +408,7 @@
   "feeds.urlHint": "Paste a feed URL, or a site address to auto-discover its feed.",
   "filters.all": "All",
   "filters.allFeeds": "All feeds",
+  "filters.hasAttachment": "Has attachment",
   "filters.label": "Filter",
   "filters.starred": "Starred",
   "filters.unread": "Unread",

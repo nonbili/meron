@@ -1115,6 +1115,15 @@ pub async fn search_uids(session: &mut Session, folder: &str, query: &str) -> Re
     Ok(uids)
 }
 
+/// SEARCH has no attachment key and HEADER sees only the top level, so
+/// `has:attachment` rules out just what can't hold one: single-part plain text
+/// or HTML that no header gives a file name. Everything else is a candidate for
+/// the live search to check against its BODYSTRUCTURE.
+const ATTACHMENT_CANDIDATES: &str = "OR OR HEADER Content-Disposition \"\" \
+     HEADER Content-Type \"name\" \
+     (NOT HEADER Content-Type \"text/plain\" \
+     NOT HEADER Content-Type \"text/html\")";
+
 /// Build the SEARCH criteria for a text `query`.
 ///
 /// On Gmail, defer to its own search engine via X-GM-RAW: it understands the
@@ -1168,6 +1177,9 @@ fn search_criteria(gmail: bool, query: &str, charset: bool, literal: bool) -> St
         }
         if query.starred {
             keys.push("FLAGGED".to_string());
+        }
+        if query.has_attachment {
+            keys.push(ATTACHMENT_CANDIDATES.to_string());
         }
         // The SENT* keys compare the Date header, which is what the cache
         // dates messages by, rather than the internal (arrival) date.
@@ -3209,6 +3221,10 @@ mod tests {
                 false
             ),
             "SUBJECT \"Q3 plan\" UNSEEN FLAGGED SENTSINCE 02-Jan-2026 SENTBEFORE 03-Feb-2026"
+        );
+        assert_eq!(
+            search_criteria(false, "from:a@b.c has:attachment", false, false),
+            format!("FROM \"a@b.c\" {}", super::ATTACHMENT_CANDIDATES)
         );
         // Gmail gets the query untouched, operators and all.
         assert_eq!(

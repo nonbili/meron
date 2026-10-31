@@ -719,6 +719,7 @@ fun parseSearchFieldsResponse(responseJson: String): SearchFields =
         before = responseJson.findJsonStringProperty("before").orEmpty(),
         unread = responseJson.findJsonBooleanProperty("unread") == true,
         starred = responseJson.findJsonBooleanProperty("starred") == true,
+        hasAttachment = responseJson.findJsonBooleanProperty("has_attachment") == true,
     )
 
 fun parseSearchBuildResponse(responseJson: String): String = responseJson.findJsonStringProperty("query").orEmpty()

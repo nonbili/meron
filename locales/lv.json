@@ -408,6 +408,7 @@
   "feeds.urlHint": "Ielīmējiet plūsmas URL vai vietnes adresi, lai automātiski atklātu tās plūsmu.",
   "filters.all": "Visi",
   "filters.allFeeds": "Visas plūsmas",
+  "filters.hasAttachment": "Ar pielikumu",
   "filters.label": "Filtrs",
   "filters.starred": "Ar zvaigznīti",
   "filters.unread": "Nelasītie",

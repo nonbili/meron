@@ -12,14 +12,21 @@ class MobileResponseParsersTest {
     fun parsesSearchFieldsAndBuiltQuery() {
         val fields =
             parseSearchFieldsResponse(
-                """{"id":1,"result":{"from":"Ann Lee","to":"","subject":"plan","words":"budget","after":"2026-01-02","before":"","unread":true,"starred":false}}""",
+                """{"id":1,"result":{"from":"Ann Lee","to":"","subject":"plan","words":"budget","after":"2026-01-02","before":"","unread":true,"starred":false,"has_attachment":true}}""",
             )
         assertEquals(
-            SearchFields(from = "Ann Lee", subject = "plan", words = "budget", after = "2026-01-02", unread = true),
+            SearchFields(
+                from = "Ann Lee",
+                subject = "plan",
+                words = "budget",
+                after = "2026-01-02",
+                unread = true,
+                hasAttachment = true,
+            ),
             fields,
         )
         assertEquals(
-            """{"from":"Ann Lee","to":"","subject":"plan","words":"budget","after":"2026-01-02","before":"","unread":true,"starred":false}""",
+            """{"from":"Ann Lee","to":"","subject":"plan","words":"budget","after":"2026-01-02","before":"","unread":true,"starred":false,"has_attachment":true}""",
             fields.toJson(),
         )
         assertEquals("from:a@b.c", parseSearchBuildResponse("""{"id":2,"result":{"query":"from:a@b.c"}}"""))

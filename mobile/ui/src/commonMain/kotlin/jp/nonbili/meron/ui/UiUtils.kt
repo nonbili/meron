@@ -606,7 +606,7 @@ internal fun AttachmentsOnlyMenuItem(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     DropdownMenuItem(
-        text = { Text(tr("chat.attachments")) },
+        text = { Text(tr("filters.hasAttachment")) },
         leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
         trailingIcon = {
             if (checked) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)

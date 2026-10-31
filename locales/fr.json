@@ -408,6 +408,7 @@
   "feeds.urlHint": "Collez l'URL d'un flux ou l'adresse d'un site pour découvrir automatiquement son flux.",
   "filters.all": "Tout",
   "filters.allFeeds": "Tous les flux",
+  "filters.hasAttachment": "Avec pièce jointe",
   "filters.label": "Filtrer",
   "filters.starred": "Suivis",
   "filters.unread": "Non lus",

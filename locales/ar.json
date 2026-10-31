@@ -408,6 +408,7 @@
   "feeds.urlHint": "الصق رابط خلاصة، أو عنوان موقع لاكتشاف خلاصته تلقائيًا.",
   "filters.all": "الكل",
   "filters.allFeeds": "كل الخلاصات",
+  "filters.hasAttachment": "يحتوي على مرفق",
   "filters.label": "تصفية",
   "filters.starred": "المميزة بنجمة",
   "filters.unread": "غير مقروء",

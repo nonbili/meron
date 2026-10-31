@@ -408,6 +408,7 @@
   "feeds.urlHint": "Bir besleme URL'si veya beslemesini otomatik keşfetmek için bir site adresi yapıştırın.",
   "filters.all": "Tümü",
   "filters.allFeeds": "Tüm beslemeler",
+  "filters.hasAttachment": "Eki var",
   "filters.label": "Filtre",
   "filters.starred": "Yıldızlı",
   "filters.unread": "Okunmamış",

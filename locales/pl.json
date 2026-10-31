@@ -408,6 +408,7 @@
   "feeds.urlHint": "Wklej URL kanału lub adres witryny, aby automatycznie wykryć jej kanał.",
   "filters.all": "Wszystkie",
   "filters.allFeeds": "Wszystkie kanały",
+  "filters.hasAttachment": "Z załącznikiem",
   "filters.label": "Filtr",
   "filters.starred": "Oznaczone gwiazdką",
   "filters.unread": "Nieprzeczytane",

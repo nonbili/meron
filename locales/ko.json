@@ -408,6 +408,7 @@
   "feeds.urlHint": "피드 URL 또는 사이트 주소를 붙여넣어 피드를 자동 감지합니다.",
   "filters.all": "전체",
   "filters.allFeeds": "모든 피드",
+  "filters.hasAttachment": "첨부파일 있음",
   "filters.label": "필터",
   "filters.starred": "별표 표시됨",
   "filters.unread": "읽지 않음",

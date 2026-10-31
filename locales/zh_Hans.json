@@ -408,6 +408,7 @@
   "feeds.urlHint": "粘贴订阅源 URL，或输入网站地址以自动发现其订阅源。",
   "filters.all": "全部",
   "filters.allFeeds": "所有订阅源",
+  "filters.hasAttachment": "有附件",
   "filters.label": "筛选",
   "filters.starred": "星标",
   "filters.unread": "未读",

@@ -118,6 +118,7 @@ data class SearchFields(
     val before: String = "",
     val unread: Boolean = false,
     val starred: Boolean = false,
+    val hasAttachment: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -129,6 +130,7 @@ data class SearchFields(
             "before" to before.jsonString(),
             "unread" to unread.toString(),
             "starred" to starred.toString(),
+            "has_attachment" to hasAttachment.toString(),
         )
 }
 

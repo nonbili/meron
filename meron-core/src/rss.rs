@@ -577,6 +577,13 @@ pub fn recent(
     if query.starred {
         sql.push_str(" AND m.starred <> 0");
     }
+    // What an item's `has_attachments` counts: its inline images and videos.
+    if query.has_attachment {
+        sql.push_str(
+            " AND (json_array_length(m.json,'$.images') > 0
+                   OR json_array_length(m.json,'$.videos') > 0)",
+        );
+    }
     if let Some(after) = query.after {
         sql.push_str(" AND m.date >= ?");
         args.push(Box::new(local_midnight(after)));

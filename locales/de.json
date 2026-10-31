@@ -408,6 +408,7 @@
   "feeds.urlHint": "Fügen Sie eine Feed-URL oder eine Website-Adresse ein, um deren Feed automatisch zu erkennen.",
   "filters.all": "Alle",
   "filters.allFeeds": "Alle Feeds",
+  "filters.hasAttachment": "Mit Anhang",
   "filters.label": "Filter",
   "filters.starred": "Markiert",
   "filters.unread": "Ungelesen",

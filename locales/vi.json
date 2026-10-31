@@ -408,6 +408,7 @@
   "feeds.urlHint": "Dán một URL nguồn tin hoặc một địa chỉ trang web để tự động phát hiện nguồn tin.",
   "filters.all": "Tất cả",
   "filters.allFeeds": "Tất cả nguồn tin",
+  "filters.hasAttachment": "Có tệp đính kèm",
   "filters.label": "Bộ lọc",
   "filters.starred": "Đã gắn sao",
   "filters.unread": "Chưa đọc",

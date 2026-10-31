@@ -174,7 +174,7 @@ export function BoardMenu({
             }}
           >
             <Paperclip size={13} className="text-secondary shrink-0" />
-            <span className="whitespace-nowrap shrink-0">{t('chat.attachments')}</span>
+            <span className="whitespace-nowrap shrink-0">{t('filters.hasAttachment')}</span>
             <Check size={13} className={`ml-auto shrink-0 ${attachmentsOnly ? '' : 'invisible'}`} />
           </button>
           <div className="my-1 border-t border-border" />

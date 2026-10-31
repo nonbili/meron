@@ -525,6 +525,29 @@ fn cached_search_reads_carry_the_message_id() {
 }
 
 #[test]
+fn search_messages_has_attachment_reads_the_files_column() {
+    let conn = test_conn();
+    insert_message(&conn, 1, "Plan", "Aki", "aki@example.com", None);
+    insert_message(&conn, 2, "Plan", "Aki", "aki@example.com", None);
+    conn.execute(
+        "UPDATE messages SET files = '[{\"filename\":\"a.pdf\",\"mime\":\"application/pdf\"}]'
+         WHERE uid = 2",
+        [],
+    )
+    .unwrap();
+
+    let uids = |query: &str| {
+        search_messages(&conn, "acct", "INBOX", query, 10, None)
+            .unwrap()
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(uids("has:attachment"), [2]);
+    assert_eq!(uids("plan has:attachment"), [2]);
+}
+
+#[test]
 fn search_messages_matches_substrings_including_cjk() {
     let conn = test_conn();
     insert_message(

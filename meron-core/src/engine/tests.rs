@@ -1154,3 +1154,43 @@ fn only_a_reconnect_failure_becomes_a_reconnect_event() {
     let offline = anyhow::anyhow!("connection refused");
     assert!(super::needs_reconnect_event("a@example.com", &offline).is_none());
 }
+
+#[test]
+fn live_hits_need_files_only_for_has_attachment() {
+    use crate::search_query::SearchQuery;
+    let header = |files| imap::MessageHeader {
+        files,
+        ..Default::default()
+    };
+    let file = crate::store::CardFile {
+        filename: "a.pdf".into(),
+        mime: "application/pdf".into(),
+    };
+    let wanted = SearchQuery::parse("has:attachment");
+    assert!(crate::engine::search::live_hit_matches(
+        &wanted,
+        &header(Some(vec![file]))
+    ));
+    assert!(!crate::engine::search::live_hit_matches(
+        &wanted,
+        &header(Some(vec![]))
+    ));
+    // Gmail answered the query itself.
+    assert!(crate::engine::search::live_hit_matches(
+        &wanted,
+        &imap::MessageHeader {
+            gmail_msg_id: Some(1),
+            files: Some(vec![]),
+            ..Default::default()
+        }
+    ));
+    // Not fetched: nothing says the hit is wrong.
+    assert!(crate::engine::search::live_hit_matches(
+        &wanted,
+        &header(None)
+    ));
+    assert!(crate::engine::search::live_hit_matches(
+        &SearchQuery::parse("plan"),
+        &header(Some(vec![]))
+    ));
+}

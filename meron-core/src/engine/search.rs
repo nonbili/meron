@@ -4,6 +4,7 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::search_query::SearchQuery;
 use crate::{imap, store};
 
 use super::*;
@@ -385,9 +386,10 @@ async fn append_search_batch(
         .collect::<std::collections::HashSet<_>>();
     let mut listed = store::search_snapshot_members(&engine.db.lock().unwrap(), token)?;
     let mut messages = Vec::new();
+    let parsed = SearchQuery::parse(query);
     for header in fetched.iter().flat_map(|(_, headers)| headers) {
         let key = (header.folder.clone(), header.uid);
-        if done_keys.contains(&key) && listed.insert(key) {
+        if done_keys.contains(&key) && live_hit_matches(&parsed, header) && listed.insert(key) {
             messages.push(header.clone());
         }
     }
@@ -450,6 +452,21 @@ async fn append_search_batch(
         cache_resume.as_deref(),
     )?;
     Ok(true)
+}
+
+/// Whether a server hit really matches: outside Gmail, `has:attachment` is only
+/// approximated by SEARCH, and a hit's files are known once it is fetched.
+/// `None` means they weren't, so the hit stands. Gmail's own answer is left
+/// alone: it reads the whole query, as in `has:attachment OR from:ann`, which
+/// [`SearchQuery`] does not.
+///
+/// A CID image counts as inline until its body is read, as for the attachments
+/// filter and the list card's paperclip. BODYSTRUCTURE can't tell one the HTML
+/// shows, and keeping them all would list every newsletter with a logo.
+pub(super) fn live_hit_matches(query: &SearchQuery, header: &imap::MessageHeader) -> bool {
+    !query.has_attachment
+        || header.gmail_msg_id.is_some()
+        || header.files.as_ref().is_none_or(|files| !files.is_empty())
 }
 
 /// Which of a fetched `batch` can be placed, and the frontier below which
