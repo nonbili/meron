@@ -1668,6 +1668,10 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 async move { imap::append_copied_messages(session, &target, &raw_messages).await },
             )
         }))?;
+        let copies = std::collections::BTreeMap::from([(parsed.folder.clone(), uids.clone())]);
+        store::carried_tags(&conn, &parsed.account, &copies)
+            .and_then(|tags| store::apply_carried_tags(&conn, &target_account, tags, true))
+            .map_err(|err| err.to_string())?;
         // Read-only refresh, on its own session; see the move handlers above.
         let copied_result = json!({
             "ok": true,
@@ -2043,6 +2047,46 @@ pub(crate) fn mark_mobile_thread_starred(data_dir: &str, params: &Value) -> Resu
             false,
         )
         .map_err(|err| err.to_string())
+    })
+}
+
+/// Save a tag change locally, then let the server catch up on its own: a tag
+/// needs no connection, and a failed push is retried by the next sync.
+pub(crate) fn set_mobile_thread_tags(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let thread_id = req_str(params, "thread_id")?;
+    let parsed = parse_thread_id_with_request_folder(&thread_id, params)
+        .ok_or_else(|| "invalid thread_id".to_string())?;
+    let add = crate::tags::parse_tag_list(params.get("add"))?;
+    let remove = crate::tags::parse_tag_list(params.get("remove"))?;
+    let key = parsed
+        .subject_filter
+        .as_deref()
+        .map(|subject| store::branch_compound_key(&parsed.thread_key, subject))
+        .unwrap_or_else(|| parsed.thread_key.clone());
+    let result = with_mobile_db(data_dir, |conn| {
+        let uids = if has_requested_mobile_message_ids(params) || parsed.uid.is_some() {
+            requested_mobile_uids(&conn, &parsed, params)?
+        } else {
+            Vec::new()
+        };
+        let targets = store::tag_targets(&conn, &parsed.account, &parsed.folder, &key, &uids)
+            .map_err(|err| err.to_string())?;
+        let tags = store::retag(&conn, &parsed.account, &targets, &add, &remove, true)
+            .map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true, "tags": tags }))
+    })?;
+    crate::ffi::spawn_tag_push(data_dir, &parsed.account);
+    Ok(result)
+}
+
+pub(crate) fn list_mobile_tags(data_dir: &str) -> Result<Value, String> {
+    with_mobile_db(data_dir, |conn| {
+        let tags: Vec<Value> = store::tag_counts(&conn, None)
+            .map_err(|err| err.to_string())?
+            .into_iter()
+            .map(|(tag, count)| json!({ "tag": tag, "count": count }))
+            .collect();
+        Ok(json!({ "tags": tags }))
     })
 }
 

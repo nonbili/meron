@@ -1319,6 +1319,7 @@ internal fun KanbanThreadActionDialog(
     onToggleRead: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    onTags: () -> Unit,
     onCopyFeedUrl: () -> Unit,
     onMove: (KanbanColumnSpec) -> Unit,
 ) {
@@ -1336,6 +1337,9 @@ internal fun KanbanThreadActionDialog(
                 item { DialogAction(tr("kanban.actions.openThread"), onOpen) }
                 item { DialogAction(if (thread.starred) tr("chat.unstar") else tr("chat.star"), onToggleStar) }
                 item { DialogAction(if (thread.unread) tr("threads.actions.markAsRead") else tr("threads.actions.markAsUnread"), onToggleRead) }
+                if (!threadIdIsRss(thread.id)) {
+                    item { DialogAction(tr("tags.title"), onTags) }
+                }
                 if (threadIdIsRss(thread.id) && thread.feedUrl.isNotBlank()) {
                     item { DialogAction(tr("feeds.copyUrl"), onCopyFeedUrl) }
                 }

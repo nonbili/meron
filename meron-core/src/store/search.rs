@@ -127,6 +127,16 @@ pub fn search_messages(
     if query.has_attachment {
         filters.push_str(" AND m.files IS NOT NULL");
     }
+    for tag in &query.tags {
+        filters.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM message_tags t
+                          WHERE t.account = m.account AND t.tag = ?
+                            AND t.state IN {} AND t.tag_key = {})",
+            super::tags::LIVE_STATES,
+            super::tags::qualified_tag_key("m")
+        ));
+        args.push(tag.clone().into());
+    }
     if let Some(after) = query.after {
         filters.push_str(" AND m.date >= ?");
         args.push(local_midnight(after).into());

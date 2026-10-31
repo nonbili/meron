@@ -166,12 +166,23 @@ pub struct BackupTask {
     pub message_id: String,
 }
 
+/// One tag on one message, keyed the way `store::tags` keys it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BackupTag {
+    pub account: String,
+    pub key: String,
+    pub tag: String,
+}
+
 /// The decrypted body of a backup. Not `Debug`, for the same reason as
 /// [`BackupAccount`].
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct BackupData {
     #[serde(default)]
     pub accounts: Vec<BackupAccount>,
+    /// Tags on mail. Older backups have none.
+    #[serde(default)]
+    pub tags: Vec<BackupTag>,
     /// The `settings` table, key -> parsed JSON value.
     #[serde(default)]
     pub settings: Map<String, Value>,
@@ -267,9 +278,23 @@ pub fn collect(
         redact_settings(&mut settings);
     }
 
+    let mut tags = Vec::new();
+    for account in &accounts {
+        tags.extend(
+            store::account_tags(conn, &account.id)?
+                .into_iter()
+                .map(|(key, tag)| BackupTag {
+                    account: account.id.clone(),
+                    key,
+                    tag,
+                }),
+        );
+    }
+
     Ok(BackupData {
         accounts,
         settings,
+        tags,
         task_lists: collect_task_lists(conn)?,
         events: store::all_events(conn)?,
     })
@@ -647,6 +672,18 @@ pub fn apply(
     for event in &data.events {
         if !event.id.is_empty() && store::insert_event_if_absent(&tx, event)? {
             summary.events += 1;
+        }
+    }
+
+    // Keyed by Message-ID, so they rejoin their mail as it syncs back in.
+    for entry in &data.tags {
+        let known: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id = ?1)",
+            params![entry.account],
+            |row| row.get(0),
+        )?;
+        if known {
+            store::restore_tag(&tx, &entry.account, &entry.key, &entry.tag)?;
         }
     }
 

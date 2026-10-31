@@ -231,7 +231,14 @@ fn thread_cards_json_keyed(
     let mut senders: HashMap<(String, String), Vec<store::CardSender>> = HashMap::new();
     // And which files it carries, which the page's headers cannot say.
     let mut files: HashMap<(String, String), Vec<store::CardFile>> = HashMap::new();
+    // Same for its tags, which any message of the thread may carry.
+    let mut tags: HashMap<(String, String), Vec<String>> = HashMap::new();
     for (folder, keys) in keys_by_folder {
+        tags.extend(
+            store::card_tags(conn, account_id, folder, &keys)?
+                .into_iter()
+                .map(|(key, list)| ((folder.to_string(), key), list)),
+        );
         files.extend(
             store::card_attachments(conn, account_id, folder, &keys)?
                 .into_iter()
@@ -306,6 +313,10 @@ fn thread_cards_json_keyed(
                 .get(&(folder.to_string(), card.thread_key.clone()))
                 .map(Vec::as_slice)
                 .unwrap_or_default();
+            let tags = tags
+                .get(&(folder.to_string(), card.thread_key.clone()))
+                .map(Vec::as_slice)
+                .unwrap_or_default();
             let folder_role = store::folder_role(conn, account_id, folder)?;
             let thread_id = format_thread_id(account_id, folder, &card.thread_key);
             let original_thread_id = card
@@ -332,6 +343,7 @@ fn thread_cards_json_keyed(
                 "unread_count": card.unread_count,
                 "message_count": message_count,
                 "starred": card.header.starred,
+                "tags": tags,
                 "has_draft": card.has_draft,
                 "has_attachments": !files.is_empty(),
                 "files": files,

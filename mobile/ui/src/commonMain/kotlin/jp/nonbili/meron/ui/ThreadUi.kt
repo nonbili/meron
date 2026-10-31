@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UnfoldLess
@@ -160,6 +161,7 @@ internal fun ThreadScreen(
     onToggleStar: () -> Unit,
     /** Null when Tasks is switched off, which hides the action entirely. */
     onAddToTasks: (() -> Unit)? = null,
+    onTags: (() -> Unit)? = null,
     moveFolders: List<FolderSummary>,
     copyFolders: List<FolderSummary>,
     transferAccounts: List<jp.nonbili.meron.shared.AccountSummary> = emptyList(),
@@ -760,6 +762,11 @@ internal fun ThreadScreen(
                             if (printing) CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp))
                             // On the bar, like the desktop header's, and not the
                             // Tasks screen's checklist icon: this files the thread.
+                            if (onTags != null) {
+                                IconButton(onClick = onTags) {
+                                    Icon(Icons.Filled.Sell, contentDescription = tr("tags.title"))
+                                }
+                            }
                             if (onAddToTasks != null) {
                                 IconButton(onClick = onAddToTasks) {
                                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = tr("tasks.addFromMessage"))

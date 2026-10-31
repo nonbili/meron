@@ -1536,6 +1536,10 @@ private fun MeronMobileScreenContent(
                                             selectedCoreThread = t.copy(starred = !t.starred)
                                         }
                                     },
+                                    onTags =
+                                        selectedCoreThread
+                                            ?.takeIf { !threadIdIsRss(it.id) }
+                                            ?.let { thread -> { selectedTagThread = thread } },
                                     onAddToTasks =
                                         selectedCoreThread
                                             ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
@@ -1705,6 +1709,10 @@ private fun MeronMobileScreenContent(
                     }
                 },
             )
+        }
+
+        selectedTagThread?.let { thread ->
+            TagDialog(thread = thread, onDismiss = { selectedTagThread = null })
         }
 
         selectedMailMoveThread?.let { thread ->
@@ -1903,6 +1911,10 @@ private fun MeronMobileScreenContent(
                 onDelete = {
                     kanbanActionThread = null
                     deleteThread(thread)
+                },
+                onTags = {
+                    kanbanActionThread = null
+                    selectedTagThread = thread
                 },
                 onCopyFeedUrl = {
                     kanbanActionThread = null

@@ -627,6 +627,39 @@ func (a *App) markStarred(payload map[string]any) (any, error) {
 	return map[string]any{"ok": true}, nil
 }
 
+// setTags adds and removes tags on a thread and answers with the tags it now
+// carries. Tags are saved locally, so this never waits for the server.
+func (a *App) setTags(payload map[string]any) (any, error) {
+	threadID, _ := payload["thread_id"].(string)
+	ids, ok := parseImapThreadID(threadID)
+	if !ok {
+		return nil, fmt.Errorf("not a mail thread: %s", threadID)
+	}
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, fmt.Errorf("mail core is not running")
+	}
+	params := map[string]any{
+		"account":    ids.Account,
+		"folder":     deleteFolder(payload, ids.Folder),
+		"thread_key": ids.ThreadKey,
+		"add":        payload["add"],
+		"remove":     payload["remove"],
+	}
+	if ids.ThreadKey == "" && ids.UID > 0 {
+		delete(params, "thread_key")
+		params["uid"] = ids.UID
+	}
+	return a.sidecar.Call("messages.setTags", params)
+}
+
+// tagList lists every tag in use, for pickers.
+func (a *App) tagList() (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return map[string]any{"tags": []any{}}, nil
+	}
+	return a.sidecar.Call("tags.list", map[string]any{})
+}
+
 // markAllRead marks every message in one mail folder as read. An RSS account has
 // one synthetic Inbox, so its account-level operation marks every feed item read.
 func (a *App) markAllRead(payload map[string]any) (any, error) {

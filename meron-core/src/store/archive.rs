@@ -790,6 +790,24 @@ fn restore_attached(conn: &Connection, media_root: &Path) -> Result<usize> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?
     };
+    // A backup from before tags has no such table. Rows keyed by location stay
+    // behind: the restore hands out new UIDs.
+    let has_tags: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM restore.sqlite_master WHERE name = 'message_tags')",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_tags {
+        conn.execute(
+            &format!(
+                "INSERT OR IGNORE INTO main.message_tags(account, tag_key, tag, state, updated_at)
+                 SELECT account, tag_key, tag, 0, 0 FROM restore.message_tags
+                  WHERE state IN {} AND tag_key NOT LIKE 'uid:%'",
+                super::tags::LIVE_STATES,
+            ),
+            [],
+        )?;
+    }
     for (id, folder) in &rows {
         let uid = allocate_uids(conn, folder, 1)?;
         conn.execute(
@@ -1129,6 +1147,16 @@ mod tests {
         let stats = local_storage_stats(&conn).unwrap();
         assert_eq!(stats["messages"], 1);
         assert!(stats["file_bytes"].as_i64().unwrap() > 0);
+        let tag_key = ["kept@example.com".to_string()];
+        crate::store::change_tags(
+            &conn,
+            LOCAL_ACCOUNT_ID,
+            &tag_key,
+            &["todo".into()],
+            &[],
+            false,
+        )
+        .unwrap();
         let dest = dir.join("copy.db");
         crate::store::backup_archive_to(&conn, &dest, "correct horse").unwrap();
 
@@ -1141,6 +1169,10 @@ mod tests {
             1
         );
         assert_eq!(raw_message(&other, "Old/2024", 1).unwrap().unwrap(), RAW);
+        assert_eq!(
+            crate::store::tags_by_key(&other, LOCAL_ACCOUNT_ID, &tag_key).unwrap()[&tag_key[0]],
+            ["todo"]
+        );
         assert!(super::super::folder_exists(&other, LOCAL_ACCOUNT_ID, "Old").unwrap());
         // Restoring again adds nothing twice.
         assert_eq!(

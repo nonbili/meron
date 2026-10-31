@@ -362,6 +362,8 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
                 sendersTruncated =
                     item.jsonObjectEntries().firstOrNull { it.first == "senders_truncated" }?.second == "true",
                 starred = item.findJsonBooleanProperty("starred") ?: false,
+                // Top-level key, like senders: subjects are sender-written text.
+                tags = item.topLevelStringArray("tags"),
                 hasStarredItems = item.findJsonBooleanProperty("has_starred_items") ?: false,
                 hasDraft = item.findJsonBooleanProperty("has_draft") ?: false,
                 hasAttachments = item.jsonObjectEntries().firstOrNull { it.first == "has_attachments" }?.second == "true",
@@ -751,6 +753,30 @@ fun parseStorageUsageResponse(responseJson: String): StorageUsage =
         cacheBytes = responseJson.findJsonLongProperty("cacheBytes") ?: 0,
         dbBytes = responseJson.findJsonLongProperty("dbBytes") ?: 0,
     )
+
+/** The tags a `mail.setTags` answer says the thread now carries. */
+fun parseSetTagsResponse(responseJson: String): List<String> = responseJson.topLevelStringArray("tags")
+
+/** Every tag in use, as `mail.tagList` answers, most used first. */
+fun parseTagListResponse(responseJson: String): List<String> =
+    responseJson
+        .jsonObjectEntries()
+        .firstOrNull { it.first == "tags" }
+        ?.second
+        ?.takeIf { it.startsWith("[") }
+        ?.jsonArrayElements()
+        ?.sortedByDescending { it.findJsonLongProperty("count") ?: 0 }
+        ?.mapNotNull { it.findJsonStringProperty("tag") }
+        .orEmpty()
+
+private fun String.topLevelStringArray(name: String): List<String> =
+    jsonObjectEntries()
+        .firstOrNull { it.first == name }
+        ?.second
+        ?.takeIf { it.startsWith("[") }
+        ?.jsonArrayElements()
+        ?.mapNotNull { element -> "{\"value\":$element}".findJsonStringProperty("value") }
+        .orEmpty()
 
 private fun String.findJsonArrayProperty(name: String): String? {
     val key = name.jsonString()

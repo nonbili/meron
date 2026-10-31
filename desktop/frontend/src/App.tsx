@@ -38,6 +38,7 @@ import { AccountDialog } from './components/dialog/AccountDialog'
 import { SettingsDialog } from './components/dialog/SettingsDialog'
 import { AddFeedDialog } from './components/dialog/AddFeedDialog'
 import { FeedEditDialog } from './components/dialog/FeedEditDialog'
+import { TagDialog } from './components/dialog/TagDialog'
 
 export default function App() {
   const { t } = useTranslation()
@@ -66,6 +67,7 @@ export default function App() {
   const settingsOpen = useValue(ui$.settingsOpen)
   const addFeedAccount = useValue(ui$.addFeedAccount)
   const editFeed = useValue(ui$.editFeed)
+  const tagThreadId = useValue(ui$.tagThreadId)
 
   useAppEffects()
   // The side navigation (and Meron's title bar, when there is one) form a
@@ -161,6 +163,7 @@ export default function App() {
         {setupOpen && <AccountDialog />}
         {addFeedAccount && <AddFeedDialog />}
         {editFeed && <FeedEditDialog />}
+        {tagThreadId && <TagDialog threadId={tagThreadId} />}
 
         <AppToast />
         <EmlExportProgress />

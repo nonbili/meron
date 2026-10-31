@@ -7,6 +7,8 @@
 //! and empty values stay free text, so `re:foo` or a URL still searches as
 //! typed.
 //!
+//! `tag:name` matches a tag, and is answered by the local store alone.
+//!
 //! `from:`, `to:` and `subject:` take alternatives the Gmail way — any of them
 //! matches: `from:{a b}`, `from:(a OR b)`, `from:a,b`, or `from:a OR from:b`.
 //! `OR` between other terms, negation and general grouping are not supported.
@@ -43,6 +45,8 @@ pub struct SearchQuery {
     pub starred: bool,
     /// `has:attachment`.
     pub has_attachment: bool,
+    /// `tag:` terms, each normalized; a message must carry them all.
+    pub tags: Vec<String>,
     /// `after:` — sent on or after this day.
     pub after: Option<NaiveDate>,
     /// `before:` — sent before this day.
@@ -71,6 +75,7 @@ impl SearchQuery {
             || self.unread
             || self.starred
             || self.has_attachment
+            || !self.tags.is_empty()
             || self.after.is_some()
             || self.before.is_some()
     }
@@ -95,6 +100,7 @@ impl SearchQuery {
                 Some(Operator::Seen(value)) => seen = Some(value),
                 Some(Operator::Starred) => self.starred = true,
                 Some(Operator::HasAttachment) => self.has_attachment = true,
+                Some(Operator::Tag(tag)) => self.tags.push(tag),
                 Some(Operator::After(date)) => self.after = self.after.max(Some(date)),
                 Some(Operator::Before(date)) => {
                     self.before = Some(self.before.map_or(date, |before| before.min(date)))
@@ -145,6 +151,7 @@ enum Operator {
     Seen(bool),
     Starred,
     HasAttachment,
+    Tag(String),
     After(NaiveDate),
     Before(NaiveDate),
 }
@@ -168,6 +175,7 @@ impl Operator {
                 _ => return None,
             },
             "has" if value.eq_ignore_ascii_case("attachment") => Operator::HasAttachment,
+            "tag" => Operator::Tag(crate::tags::normalize_tag(value)?),
             "after" => Operator::After(parse_date(value)?),
             "before" => Operator::Before(parse_date(value)?),
             _ => return None,
@@ -408,7 +416,7 @@ impl SearchFields {
                     fields.has_attachment = true;
                     true
                 }
-                None => false,
+                Some(Operator::Tag(_)) | None => false,
             };
             if slot {
                 taken = true;
@@ -776,6 +784,10 @@ mod tests {
 
     #[test]
     fn flags_and_dates() {
+        let q = SearchQuery::parse("tag:Work tag:\"to do\" tag:a:b");
+        assert_eq!(q.tags, ["work", "to-do"]);
+        assert_eq!(q.text, ["tag:a:b"]);
+
         let q = SearchQuery::parse("is:starred is:read after:2026/01/02 before:2026-02-03");
         assert!(q.starred);
         assert!(q.read && !q.unread);

@@ -94,6 +94,9 @@ pub fn upsert_messages(
                 m.files.as_ref().filter(|files| !files.is_empty()).map(|files| json!(files).to_string()),
                 m.files.is_some() as i64
         ])?;
+        if let Some(server_tags) = &m.server_tags {
+            observe_server_tags(&tx, account, folder, m.uid, server_tags)?;
+        }
     }
     reconcile_thread_keys_from(&tx, account, upserted_ids)?;
     tx.commit()?;
@@ -902,6 +905,7 @@ pub fn clear_folder_messages(conn: &Connection, account: &str, folder: &str) -> 
         "DELETE FROM messages WHERE account = ?1 AND folder = ?2",
         params![account, folder],
     )?;
+    clear_location_tags(conn, account, folder)?;
     conn.execute(
         "DELETE FROM uncached_unseen WHERE account = ?1 AND folder = ?2",
         params![account, folder],

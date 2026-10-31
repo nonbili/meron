@@ -216,6 +216,7 @@ export type Message = {
   /** Total messages in the thread, read or not; absent when not grouped. */
   message_count?: number
   starred: boolean
+  tags?: string[]
   /** RSS thread only: at least one item in the feed is starred. This does not
    * mean the feed card itself is starred. */
   has_starred_items?: boolean

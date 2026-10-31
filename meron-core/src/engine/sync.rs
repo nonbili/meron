@@ -64,6 +64,98 @@ pub async fn mark_starred_copies(
     Ok(())
 }
 
+/// Bring the server up to date with pending tag changes. Each write commits on
+/// its own, so a failure leaves only that write pending for the next try.
+pub async fn push_pending_tags(engine: &Engine, account: &str) -> anyhow::Result<()> {
+    let turn = engine
+        .tag_pushes
+        .lock()
+        .unwrap()
+        .entry(account.to_string())
+        .or_default()
+        .clone();
+    let _turn = turn.lock().await;
+
+    let refused_key = |folder: &str, tag: &str| format!("{account}\n{folder}\n{tag}");
+    let pushes = {
+        let db = engine.db.lock().unwrap();
+        if store::account_paused(&db, account)? {
+            return Ok(());
+        }
+        store::pending_tag_pushes(&db, account)?
+    };
+    let mut refused = std::collections::HashSet::new();
+    for push in &pushes {
+        let key = refused_key(&push.folder, &push.tag);
+        if push.add && engine.refused_tags.lock().unwrap().contains(&key) {
+            refused.insert((push.folder.clone(), push.tag.clone()));
+            continue;
+        }
+        let writable = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stored = engine
+            .with_flag_write_session(
+                account,
+                |session| {
+                    let writable = writable.clone();
+                    let push = push.clone();
+                    Box::pin(async move {
+                        let can =
+                            imap::prepare_tag_update(session, &push.folder, &push.tag).await?;
+                        writable.store(can, std::sync::atomic::Ordering::Relaxed);
+                        anyhow::Ok(())
+                    })
+                },
+                |session| {
+                    let writable = writable.load(std::sync::atomic::Ordering::Relaxed);
+                    let push = push.clone();
+                    Box::pin(async move {
+                        // Only a new keyword can be refused. Taking one away is
+                        // always asked for: it may be there either way.
+                        if push.add && !writable {
+                            return anyhow::Ok(false);
+                        }
+                        imap::store_tag(session, &push.uids, &push.tag, push.add).await?;
+                        anyhow::Ok(true)
+                    })
+                },
+            )
+            .await;
+        match stored {
+            Ok(true) => store::record_tag_push(&engine.db.lock().unwrap(), account, push)?,
+            Ok(false) => {
+                engine.refused_tags.lock().unwrap().insert(key);
+                refused.insert((push.folder.clone(), push.tag.clone()));
+            }
+            Err(err) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.tags",
+                    "account={account} folder={}: tag push deferred: {err:#}",
+                    push.folder
+                );
+            }
+        }
+    }
+    store::settle_pending_tags(&engine.db.lock().unwrap(), account, &refused)
+}
+
+/// [`push_pending_tags`] without waiting for it: a tag is already saved locally,
+/// and a slow or absent server must not hold up the action or the sync that
+/// asked. Whatever fails stays pending for the next sync to retry.
+pub fn spawn_tag_push(engine: &Arc<Engine>, account: &str) {
+    let engine = engine.clone();
+    let account = account.to_string();
+    tokio::spawn(async move {
+        if let Err(err) = push_pending_tags(&engine, &account).await {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.tags",
+                "account={account}: tag push failed: {err:#}"
+            );
+        }
+    });
+}
+
 /// Where [`delete_to_trash`] moved messages, and the Trash folder's UIDNEXT
 /// from just before the move (see [`refresh_moved_copies`]).
 pub struct Trashed {
@@ -635,32 +727,45 @@ async fn sync_messages_with_policy(
     let prepare_engine = engine.clone();
     let prepare_account = account.to_string();
     let prepare_folder = folder.to_string();
-    let (prior_modseq, prior_validity, removed_epoch, removal_guard, missing_files) =
-        tokio::task::spawn_blocking(move || {
-            let engine = prepare_engine;
-            let account = prepare_account.as_str();
-            let folder = prepare_folder.as_str();
-            let db = crate::log::timed_db_lock(&engine.db, "sync_messages.prepare/backfill");
-            if background && store::account_paused(&db, account)? {
-                return Err(anyhow::Error::new(BackgroundSyncCancelled));
-            }
-            let modseq = store::get_folder_modseq(&db, account, folder)?;
-            let validity = store::get_folder_state(&db, account, folder)?
-                .map(|(v, _)| v)
-                .unwrap_or(0);
-            // Removals after this point (an archive that lands while the fetch is
-            // still on the wire) get a higher epoch. This snapshot must not write
-            // those UIDs back.
-            let missing_files =
-                store::missing_attachment_metadata_uids(&db, account, folder, limit)?;
-            let (id, removed_epoch) = store::begin_message_sync(&db)?;
-            let guard = MessageSyncGuard {
-                engine: engine.clone(),
-                id,
-            };
-            anyhow::Ok((modseq, validity, removed_epoch, guard, missing_files))
-        })
-        .await??;
+    let (
+        prior_modseq,
+        prior_validity,
+        removed_epoch,
+        removal_guard,
+        missing_files,
+        needs_tag_baseline,
+    ) = tokio::task::spawn_blocking(move || {
+        let engine = prepare_engine;
+        let account = prepare_account.as_str();
+        let folder = prepare_folder.as_str();
+        let db = crate::log::timed_db_lock(&engine.db, "sync_messages.prepare/backfill");
+        if background && store::account_paused(&db, account)? {
+            return Err(anyhow::Error::new(BackgroundSyncCancelled));
+        }
+        let modseq = store::get_folder_modseq(&db, account, folder)?;
+        let validity = store::get_folder_state(&db, account, folder)?
+            .map(|(v, _)| v)
+            .unwrap_or(0);
+        // Removals after this point (an archive that lands while the fetch is
+        // still on the wire) get a higher epoch. This snapshot must not write
+        // those UIDs back.
+        let missing_files = store::missing_attachment_metadata_uids(&db, account, folder, limit)?;
+        let (id, removed_epoch) = store::begin_message_sync(&db)?;
+        let guard = MessageSyncGuard {
+            engine: engine.clone(),
+            id,
+        };
+        let tag_baseline = store::needs_tag_baseline(&db, account, folder)?;
+        anyhow::Ok((
+            modseq,
+            validity,
+            removed_epoch,
+            guard,
+            missing_files,
+            tag_baseline,
+        ))
+    })
+    .await??;
 
     let fetch = || async {
         let attempt = engine
@@ -674,10 +779,16 @@ async fn sync_messages_with_policy(
                     // or the server lacks CONDSTORE.
                     let validity_matches =
                         prior_validity != 0 && prior_validity == batch.uidvalidity;
-                    let flag_sync =
+                    let mut flag_sync =
                         imap::sync_flags(session, &folder, prior_modseq, validity_matches)
                             .await
                             .ok();
+                    if needs_tag_baseline
+                        && validity_matches
+                        && let Some(flag_sync) = flag_sync.as_mut()
+                    {
+                        flag_sync.tag_baseline = imap::fetch_all_tags(session).await.ok();
+                    }
                     // Server-side UID set so we can drop locally cached messages another
                     // client moved or deleted. Best-effort: a failure here skips the prune.
                     let server_uids = imap::list_all_uids(session, &folder).await.ok();
@@ -733,6 +844,8 @@ async fn sync_messages_with_policy(
         .into_iter()
         .filter(|uid| batch.messages.iter().any(|header| header.uid == *uid))
         .collect();
+    let tag_engine = engine.clone();
+    let tag_account = account.to_string();
     let catchup_engine = engine.clone();
     let catchup_account = account.to_string();
     let catchup_folder = folder.to_string();
@@ -803,9 +916,16 @@ async fn sync_messages_with_policy(
     let flag_count = flag_sync.as_ref().map_or(0, |fs| fs.changes.len());
     let phase_started = std::time::Instant::now();
     if let Some(fs) = flag_sync {
-        for &(uid, seen, starred) in &fs.changes {
-            store::update_message_seen(&db, account, folder, uid, seen)?;
-            store::update_message_starred(&db, account, folder, uid, starred)?;
+        for (uid, seen, starred, tags) in &fs.changes {
+            store::update_message_seen(&db, account, folder, *uid, *seen)?;
+            store::update_message_starred(&db, account, folder, *uid, *starred)?;
+            store::observe_server_tags(&db, account, folder, *uid, tags)?;
+        }
+        if let Some(baseline) = &fs.tag_baseline {
+            for (uid, tags) in baseline {
+                store::observe_server_tags(&db, account, folder, *uid, tags)?;
+            }
+            store::mark_tag_baseline(&db, account, folder)?;
         }
         if fs.highest_modseq > 0 {
             store::set_folder_modseq(&db, account, folder, fs.highest_modseq)?;
@@ -895,6 +1015,10 @@ async fn sync_messages_with_policy(
                 "attachment metadata catch-up skipped: {err:#}"
             ),
         }
+    }
+    let tags_pending = store::has_pending_tags(&tag_engine.db.lock().unwrap(), &tag_account)?;
+    if tags_pending {
+        spawn_tag_push(&tag_engine, &tag_account);
     }
     Ok(result)
 }

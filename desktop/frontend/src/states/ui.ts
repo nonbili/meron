@@ -73,6 +73,7 @@ export const ui$ = observable({
   accountSettingsId: '',
   addFeedAccount: '',
   editFeed: null as EditFeed | null,
+  tagThreadId: '',
   // The optional Tasks panel: whether the right-hand panel is showing, and
   // which list it is showing. Unlike a board it does not own the main pane —
   // it sits beside mail or kanban, so both stay visible while you work through
@@ -129,6 +130,7 @@ export function modalOpen(): boolean {
     ui$.setupOpen.peek() ||
     !!ui$.addFeedAccount.peek() ||
     !!ui$.editFeed.peek() ||
+    !!ui$.tagThreadId.peek() ||
     !!ui$.confirm.peek()
   )
 }

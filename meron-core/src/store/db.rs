@@ -686,6 +686,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 21 {
         migrate_v21(&tx)?;
     }
+    if version < 22 {
+        migrate_v22(&tx)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -1357,5 +1360,27 @@ fn migrate_v21(conn: &Connection) -> Result<()> {
         "ALTER TABLE events ADD COLUMN alerts TEXT;
          PRAGMA user_version = 21;",
     )?;
+    Ok(())
+}
+
+/// Tags (see `store::tags`). `server_tags` is what a mailbox copy last showed,
+/// NULL until it has been looked at. The key lives in an expression index
+/// rather than a column so every path that writes a message row is covered.
+fn migrate_v22(conn: &Connection) -> Result<()> {
+    conn.execute_batch(&format!(
+        "ALTER TABLE messages ADD COLUMN server_tags TEXT;
+         CREATE INDEX messages_tag_key_idx ON messages(account, {key}) WHERE uid <> 0;
+         CREATE TABLE message_tags (
+            account    TEXT NOT NULL,
+            tag_key    TEXT NOT NULL,
+            tag        TEXT NOT NULL,
+            state      INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account, tag_key, tag)
+         ) WITHOUT ROWID;
+         CREATE INDEX message_tags_tag_idx ON message_tags(account, tag);
+         PRAGMA user_version = 22;",
+        key = super::tags::TAG_KEY_SQL,
+    ))?;
     Ok(())
 }

@@ -122,6 +122,15 @@ pub struct Engine {
     /// reader for the rest of this run: each failed to download, then failed
     /// again straight after other mail had come down on the same connection.
     pub prefetch_skipped: std::sync::Mutex<HashSet<String>>,
+    /// Tags a mailbox turned down this run, as `account\nfolder\ntag`, so they
+    /// stay local without a pointless SELECT on every sync. Per tag: a mailbox
+    /// may keep a fixed set of keywords and still refuse new ones. Cleared on
+    /// restart, which lets a server that gained support be asked again.
+    pub refused_tags: std::sync::Mutex<HashSet<String>>,
+    /// One tag push at a time per account. A push works from a snapshot, so an
+    /// overlapping one could settle a newer edit while an older write is still
+    /// on its way to the server.
+    pub tag_pushes: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -409,6 +418,8 @@ impl Engine {
             body_fetch_done: Notify::new(),
             media_recovery_hold: std::sync::Mutex::new(HashMap::new()),
             prefetch_skipped: std::sync::Mutex::new(HashSet::new()),
+            refused_tags: std::sync::Mutex::new(HashSet::new()),
+            tag_pushes: std::sync::Mutex::new(HashMap::new()),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),

@@ -577,6 +577,10 @@ pub fn recent(
     if query.starred {
         sql.push_str(" AND m.starred <> 0");
     }
+    // Tags are for mail: no feed item carries one.
+    if !query.tags.is_empty() {
+        sql.push_str(" AND 0");
+    }
     // What an item's `has_attachments` counts: its inline images and videos.
     if query.has_attachment {
         sql.push_str(

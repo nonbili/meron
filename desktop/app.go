@@ -396,6 +396,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.markRead(payload)
 	case "mail.markStarred":
 		return a.markStarred(payload)
+	case "mail.setTags":
+		return a.setTags(payload)
+	case "mail.tagList":
+		return a.tagList()
 	case "mail.markAllRead":
 		return a.markAllRead(payload)
 	case "mail.emptyFolder":

@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Pencil,
   Star,
+  Tag,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -19,6 +20,7 @@ import { settings$ } from '../../states/settings'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 import { AddMailToTasksMenu } from '../tasks/AddMailToTasksMenu'
+import { openTagDialog } from '../../states/mailTags'
 import { markThreadRead, markThreadUnread, starThread } from '../../states/mailFlags'
 import { deletesForever, isDraftFolder } from '../../states/mailFolders'
 import { archiveThread, deleteThread } from '../../states/mailMoves'
@@ -339,6 +341,15 @@ export function ThreadContextMenu({
           const threadId = menu.threadId
           close()
           void starThread(threadId, starred).then(() => after(action, threadId))
+        }}
+      />
+      <MenuItem
+        icon={<Tag size={13} className="text-secondary" />}
+        label={t('tags.title')}
+        onClick={() => {
+          const threadId = menu.threadId
+          close()
+          openTagDialog(threadId)
         }}
       />
       <MenuItem

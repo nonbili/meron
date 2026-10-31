@@ -789,6 +789,7 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
     tx.execute("DELETE FROM accounts WHERE id = ?1", params![id])?;
     tx.execute("DELETE FROM folders WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM messages WHERE account = ?1", params![id])?;
+    tx.execute("DELETE FROM message_tags WHERE account = ?1", params![id])?;
     tx.execute(
         "DELETE FROM mail_search_hits WHERE account = ?1",
         params![id],

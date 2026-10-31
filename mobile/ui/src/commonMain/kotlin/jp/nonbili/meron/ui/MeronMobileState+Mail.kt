@@ -24,6 +24,7 @@ import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
+import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
 import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadSummary
@@ -34,6 +35,8 @@ import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseFolderRenameResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
+import jp.nonbili.meron.shared.parseSetTagsResponse
+import jp.nonbili.meron.shared.parseTagListResponse
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
@@ -285,6 +288,42 @@ internal fun MeronMobileState.toggleStar(thread: ThreadSummary) {
         },
     )
 }
+
+/**
+ * Save a tag change and show the tags the core answers with. Tags are stored
+ * locally, so this waits on the database, never the server; a failure means the
+ * core refused the tag.
+ */
+internal fun MeronMobileState.changeThreadTags(
+    thread: ThreadSummary,
+    add: List<String> = emptyList(),
+    remove: List<String> = emptyList(),
+    onDone: (List<String>?) -> Unit,
+) {
+    val backendThreadId = thread.backendThreadId()
+    val itemIds = listOf(thread.id).takeIf { backendThreadId != thread.id }.orEmpty()
+    scope.launch {
+        val tags =
+            runCatching {
+                parseSetTagsResponse(
+                    requireCoreOk(
+                        withContext(ioDispatcher) {
+                            MobileMailCommandClient(core).setTags(
+                                SetTagsParams(threadId = backendThreadId, add = add, remove = remove, messageIds = itemIds),
+                            )
+                        },
+                    ),
+                )
+            }.getOrNull()
+        if (tags != null) updateThreadEverywhere(thread) { it.copy(tags = tags) }
+        onDone(tags)
+    }
+}
+
+internal suspend fun MeronMobileState.loadKnownTags(): List<String> =
+    runCatching {
+        parseTagListResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).tagList() }))
+    }.getOrDefault(emptyList())
 
 internal fun MeronMobileState.toggleRead(thread: ThreadSummary) {
     val backendThreadId = thread.backendThreadId()

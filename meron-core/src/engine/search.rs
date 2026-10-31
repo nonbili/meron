@@ -595,6 +595,14 @@ pub async fn search_mail_messages(
     limit: u32,
     before_cursor: Option<&crate::thread_list::SearchCursor>,
 ) -> anyhow::Result<SearchMailPage> {
+    // Tags live in the store, and on some servers only there.
+    if !crate::search_query::SearchQuery::parse(query)
+        .tags
+        .is_empty()
+    {
+        let db = engine.db.lock().unwrap();
+        return cached_search_mail_page(&db, account, folders, query, limit, before_cursor);
+    }
     let mut incomplete = false;
     let cursor = match before_cursor {
         Some(cursor) => cursor.clone(),

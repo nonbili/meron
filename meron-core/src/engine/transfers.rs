@@ -49,6 +49,10 @@ pub async fn move_between_accounts(
         })
         .await?;
     require_complete_fetch(uids, &messages)?;
+    let tags = {
+        let copies = std::collections::BTreeMap::from([(folder.to_string(), uids.to_vec())]);
+        store::carried_tags(&engine.db.lock().unwrap(), account, &copies)?
+    };
     engine
         .with_write_session(target_account, |session| {
             let target = target_folder.to_owned();
@@ -56,6 +60,8 @@ pub async fn move_between_accounts(
             Box::pin(async move { imap::append_copied_messages(session, &target, &messages).await })
         })
         .await?;
+    // Before the source goes: a failure here must not lose the tags.
+    store::apply_carried_tags(&engine.db.lock().unwrap(), target_account, tags, true)?;
 
     let removed = delete_to_trash(engine, account, folder, uids)
         .await

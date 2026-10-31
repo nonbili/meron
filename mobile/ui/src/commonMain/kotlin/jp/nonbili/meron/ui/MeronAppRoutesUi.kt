@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -388,6 +389,16 @@ internal fun KanbanRouteContent(
                                                 ?.takeUnless { threadIdIsRss(it.id) }
                                         if (singleSelectedMailThread != null) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                            if (!threadIdIsRss(singleSelectedMailThread.id)) {
+                                                DropdownMenuItem(
+                                                    text = { Text(tr("tags.title")) },
+                                                    leadingIcon = { Icon(Icons.Filled.Sell, contentDescription = null) },
+                                                    onClick = {
+                                                        mailSelectionMenuOpen = false
+                                                        selectedTagThread = singleSelectedMailThread
+                                                    },
+                                                )
+                                            }
                                             DropdownMenuItem(
                                                 text = { Text(tr("threads.actions.moveTo")) },
                                                 leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
@@ -921,6 +932,16 @@ internal fun MailRouteContent(
                                                 ?.takeUnless { threadIdIsRss(it.id) }
                                         if (singleSelectedMailThread != null) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                            if (!threadIdIsRss(singleSelectedMailThread.id)) {
+                                                DropdownMenuItem(
+                                                    text = { Text(tr("tags.title")) },
+                                                    leadingIcon = { Icon(Icons.Filled.Sell, contentDescription = null) },
+                                                    onClick = {
+                                                        mailSelectionMenuOpen = false
+                                                        selectedTagThread = singleSelectedMailThread
+                                                    },
+                                                )
+                                            }
                                             DropdownMenuItem(
                                                 text = { Text(tr("threads.actions.moveTo")) },
                                                 leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },

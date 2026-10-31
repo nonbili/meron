@@ -83,6 +83,8 @@ object MobileCommand {
     const val MarkAllRead = "mail.markAllRead"
     const val EmptyFolder = "mail.emptyFolder"
     const val MarkStarred = "mail.markStarred"
+    const val SetTags = "mail.setTags"
+    const val TagList = "mail.tagList"
     const val RssSync = "rss.sync"
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
@@ -1136,6 +1138,21 @@ data class MarkStarredParams(
         )
 }
 
+data class SetTagsParams(
+    val threadId: String,
+    val add: List<String> = emptyList(),
+    val remove: List<String> = emptyList(),
+    val messageIds: List<String> = emptyList(),
+) {
+    fun toJson(): String =
+        jsonObject(
+            "thread_id" to threadId.jsonString(),
+            "add" to add.jsonStringArray(),
+            "remove" to remove.jsonStringArray(),
+            "message_ids" to messageIds.takeUnless { it.isEmpty() }?.jsonStringArray(),
+        )
+}
+
 data class RssMarkReadParams(
     val threadId: String,
     val seen: Boolean = true,
@@ -1360,6 +1377,10 @@ class MobileMailCommandClient(
     suspend fun emptyFolder(params: EmptyFolderParams): String = core.invoke(MobileCommand.EmptyFolder, params.toJson())
 
     suspend fun markStarred(params: MarkStarredParams): String = core.invoke(MobileCommand.MarkStarred, params.toJson())
+
+    suspend fun setTags(params: SetTagsParams): String = core.invoke(MobileCommand.SetTags, params.toJson())
+
+    suspend fun tagList(): String = core.invoke(MobileCommand.TagList, "{}")
 }
 
 fun accountListRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.AccountList)

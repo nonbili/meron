@@ -54,6 +54,18 @@ func looksLikeArchiveFolder(name string) bool {
 // threadsJSON maps the core's ready thread cards (grouping, subject branching,
 // root titles, and unread counts all live in the sidecar, shared with mobile)
 // into bridge Messages; only thread-id minting happens here.
+// jsonStrings reads a JSON array of strings, skipping anything else.
+func jsonStrings(value any) []string {
+	items, _ := value.([]any)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if text, ok := item.(string); ok {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
 func threadsJSON(accountID, folder string, raw any) any {
 	object, _ := raw.(map[string]any)
 	if final, ok := object["threads"].([]any); ok {
@@ -101,6 +113,7 @@ func threadsJSON(accountID, folder string, raw any) any {
 			UnreadCount:       uint32(jsonNumber(card["unread_count"])),
 			MessageCount:      uint32(jsonNumber(card["message_count"])),
 			Starred:           jsonBool(card["starred"]),
+			Tags:              jsonStrings(card["tags"]),
 			HasDraft:          jsonBool(card["has_draft"]),
 			OriginalThreadID:  originalThreadID,
 			RecipientOverflow: uint32(jsonNumber(card["recipient_overflow"])),

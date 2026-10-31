@@ -455,6 +455,12 @@ pub async fn read_thread_page(
             &mine,
             &ours,
         );
+        message["tags"] = json!(store::message_tags(
+            &engine.db.lock().unwrap(),
+            account,
+            &slot.folder,
+            header.uid,
+        )?);
         // A paged read answers before pruned attachment files are back. The
         // body and its `/media` URLs are the same before and after, so this is
         // what tells a client its pictures are worth asking for again. A count,

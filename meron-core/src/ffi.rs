@@ -123,6 +123,23 @@ where
     engine_block_on_anyhow(future).map_err(|err| format!("{err:#}"))
 }
 
+/// Push pending tag changes in the background, on the engine runtime.
+pub(crate) fn spawn_tag_push(data_dir: &str, account: &str) {
+    let (Ok(engine), Some(runtime)) = (engine_for(data_dir), engine_runtime()) else {
+        return;
+    };
+    let account = account.to_string();
+    runtime.spawn(async move {
+        if let Err(err) = crate::engine::push_pending_tags(&engine, &account).await {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.tags",
+                "account={account}: tag push failed: {err:#}"
+            );
+        }
+    });
+}
+
 /// Variant that preserves the concrete error for callers which must reconcile
 /// details from a partially applied server mutation.
 pub(crate) fn engine_block_on_anyhow<F, T>(future: F) -> anyhow::Result<T>

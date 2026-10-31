@@ -112,3 +112,19 @@ pub(crate) fn resolve_send_from(
     let db = engine.db.lock().unwrap();
     store::resolve_send_from(&db, account, &creds.user, requested_from)
 }
+
+/// The explicit UIDs of a tag change, or nothing when it names a whole thread.
+pub(crate) fn tag_uids(params: &Value) -> Vec<u32> {
+    match params.get("uids").and_then(Value::as_array) {
+        Some(uids) => uids
+            .iter()
+            .filter_map(Value::as_u64)
+            .map(|uid| uid as u32)
+            .collect(),
+        None => params
+            .get("uid")
+            .and_then(Value::as_u64)
+            .map(|uid| vec![uid as u32])
+            .unwrap_or_default(),
+    }
+}

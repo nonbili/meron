@@ -126,6 +126,8 @@ data class ThreadSummary(
     /** Senders between the first entry and the rest were left out of a long list. */
     val sendersTruncated: Boolean = false,
     val starred: Boolean = false,
+    /** Tags on the thread's messages, sorted. */
+    val tags: List<String> = emptyList(),
     val hasStarredItems: Boolean = false,
     val hasDraft: Boolean = false,
     val hasAttachments: Boolean = false,

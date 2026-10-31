@@ -292,6 +292,10 @@ pub struct MessageHeader {
     pub seen: bool,
     pub starred: bool,
     pub thread_key: String,
+    /// Tags among the message's keywords, when this header came from a FETCH
+    /// that read its FLAGS. `None` says nothing about them.
+    #[serde(skip)]
+    pub server_tags: Option<Vec<String>>,
     /// Normalized RFC Message-ID from the envelope, when available.
     #[serde(default)]
     pub message_id: String,
@@ -1065,6 +1069,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
             date: message_date(ef.date, &fetch),
             seen,
             starred,
+            server_tags: Some(fetch_tags(&fetch)),
             thread_key,
             message_id: ef.message_id,
             gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1363,6 +1368,7 @@ pub async fn fetch_by_message_ids(
                     date,
                     seen,
                     starred,
+                    server_tags: Some(fetch_tags(&fetch)),
                     thread_key,
                     message_id: ef.message_id,
                     gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1436,6 +1442,7 @@ pub async fn fetch_headers_by_uid(
                 date: message_date(ef.date, &fetch),
                 seen,
                 starred,
+                server_tags: Some(fetch_tags(&fetch)),
                 thread_key,
                 message_id: ef.message_id,
                 gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1525,7 +1532,9 @@ pub async fn fetch_dates_by_uid(
 /// fetch.
 pub struct FlagSync {
     pub highest_modseq: u64,
-    pub changes: Vec<(u32, bool, bool)>, // (uid, seen, starred)
+    pub changes: Vec<(u32, bool, bool, Vec<String>)>, // (uid, seen, starred, tags)
+    /// Every message's tags, when the folder still needed that first full read.
+    pub tag_baseline: Option<Vec<(u32, Vec<String>)>>,
 }
 
 /// Reconcile \Seen and \Flagged across an entire folder using CONDSTORE so updates made
@@ -1553,6 +1562,7 @@ pub async fn sync_flags(
         return Ok(FlagSync {
             highest_modseq: 0,
             changes: Vec::new(),
+            tag_baseline: None,
         });
     }
     let mailbox = session
@@ -1569,6 +1579,7 @@ pub async fn sync_flags(
         return Ok(FlagSync {
             highest_modseq,
             changes: Vec::new(),
+            tag_baseline: None,
         });
     }
 
@@ -1590,13 +1601,32 @@ pub async fn sync_flags(
         let starred = fetch
             .flags()
             .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
-        changes.push((uid, seen, starred));
+        let tags = fetch_tags(&fetch);
+        changes.push((uid, seen, starred, tags));
     }
     drop(stream);
     Ok(FlagSync {
         highest_modseq,
         changes,
+        tag_baseline: None,
     })
+}
+
+/// Every message's tags in the selected mailbox. CONDSTORE only reports changes,
+/// so mail cached before tags existed has to be read once in full.
+pub async fn fetch_all_tags(session: &mut Session) -> Result<Vec<(u32, Vec<String>)>> {
+    let mut stream = session
+        .uid_fetch("1:*", "(FLAGS)")
+        .await
+        .context("UID FETCH tag baseline")?;
+    let mut tags = Vec::new();
+    while let Some(item) = stream.next().await {
+        let fetch = item.context("tag baseline item")?;
+        if let Some(uid) = fetch.uid {
+            tags.push((uid, fetch_tags(&fetch)));
+        }
+    }
+    Ok(tags)
 }
 
 /// SELECT `folder` as the preflight of a flag update. Pooled sessions die
@@ -1606,6 +1636,32 @@ pub async fn sync_flags(
 pub async fn prepare_flag_update(session: &mut Session, folder: &str) -> Result<()> {
     session.select(folder).await.context("SELECT")?;
     Ok(())
+}
+
+/// Select `folder` for a write of `tag`'s keyword, and say whether it can hold
+/// it: it must allow new keywords, or already list this one as permanent.
+pub async fn prepare_tag_update(session: &mut Session, folder: &str, tag: &str) -> Result<bool> {
+    let mailbox = session.select(folder).await.context("SELECT")?;
+    let keyword = crate::tags::tag_to_keyword(tag);
+    Ok(mailbox.permanent_flags.iter().any(|flag| match flag {
+        async_imap::types::Flag::MayCreate => true,
+        async_imap::types::Flag::Custom(known) => known.eq_ignore_ascii_case(&keyword),
+        _ => false,
+    }))
+}
+
+/// The tags among a FETCH response's keywords, sorted.
+fn fetch_tags(fetch: &async_imap::types::Fetch) -> Vec<String> {
+    let mut tags: Vec<String> = fetch
+        .flags()
+        .filter_map(|flag| match flag {
+            async_imap::types::Flag::Custom(keyword) => crate::tags::keyword_to_tag(&keyword),
+            _ => None,
+        })
+        .collect();
+    tags.sort();
+    tags.dedup();
+    tags
 }
 
 /// Longest UID set sent in one command. RFC 7162 asks clients to keep command
@@ -1660,6 +1716,17 @@ async fn store_flag(session: &mut Session, uids: &[u32], op: &str) -> Result<()>
         }
     }
     Ok(())
+}
+
+/// Add or remove a tag's keyword on a set of UIDs already in the selected
+/// mailbox. The caller must first run [`prepare_tag_update`] on the session.
+pub async fn store_tag(session: &mut Session, uids: &[u32], tag: &str, add: bool) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let sign = if add { '+' } else { '-' };
+    let keyword = crate::tags::tag_to_keyword(tag);
+    store_flag(session, uids, &format!("{sign}FLAGS.SILENT ({keyword})")).await
 }
 
 /// Add or remove the `\Seen` flag on a set of UIDs already in the selected

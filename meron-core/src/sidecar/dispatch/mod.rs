@@ -146,11 +146,14 @@ pub(crate) async fn dispatch(
 
         "messages.markRead"
         | "messages.markStarred"
+        | "messages.setTags"
         | "messages.delete"
         | "messages.move"
         | "messages.copy"
         | "messages.markAllRead"
         | "messages.markAllReadUnified" => actions::dispatch(engine, req, out).await,
+
+        "tags.list" => messages::dispatch(engine, req, out).await,
 
         "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
 

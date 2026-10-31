@@ -8,6 +8,7 @@ import { clsx } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
 import { isDraftFolder } from '../../states/mailFolders'
 import { AttachmentChips } from './AttachmentChips'
+import { TagChips } from './TagChips'
 
 export function ThreadListItem({
   thread,
@@ -165,6 +166,7 @@ export function ThreadListItem({
                 </span>
               )}
             </p>
+            <TagChips tags={thread.tags} />
             {unread && bulkSelectable ? (
               <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
             ) : unread ? (

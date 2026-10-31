@@ -779,6 +779,7 @@ internal fun MailRow(
                     }
                 }
             }
+            MailRowTagChips(thread.tags, Modifier.padding(top = 4.dp))
             if (thread.files.isNotEmpty()) {
                 MailRowAttachmentChips(thread.files, Modifier.padding(top = 4.dp))
             }

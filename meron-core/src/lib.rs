@@ -29,6 +29,7 @@ pub mod secrets;
 mod secrets_portal;
 pub mod smtp;
 pub mod store;
+pub mod tags;
 pub mod tasks;
 #[cfg(test)]
 mod test_support;

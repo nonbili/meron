@@ -7,6 +7,8 @@ use std::collections::HashSet;
 
 use crate::imap::MessageHeader;
 
+use super::tags::{TAG_KEY_SQL, has_tags, tags_of_cards};
+
 #[derive(Clone)]
 pub struct ThreadCard {
     pub thread_key: String,
@@ -450,6 +452,37 @@ pub(super) fn count_card_rows(
     })
 }
 
+/// The tags behind each of `card_keys`, sorted, keyed by card key. Scoped and
+/// deduplicated like [`card_message_counts`], so a card's tags are those of the
+/// messages it counts.
+pub fn card_tags(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    card_keys: &[String],
+) -> Result<std::collections::HashMap<String, Vec<String>>> {
+    use std::collections::HashMap;
+
+    if !has_tags(conn, account)? {
+        return Ok(HashMap::new());
+    }
+    let mut roots: Vec<String> = card_keys
+        .iter()
+        .map(|key| split_thread_key(key).0)
+        .collect();
+    roots.sort();
+    roots.dedup();
+    let (uid_roots, threaded_roots): (Vec<String>, Vec<String>) =
+        roots.into_iter().partition(|root| root.starts_with("uid:"));
+
+    let mut keys_by_card: HashMap<String, Vec<String>> = HashMap::new();
+    let mut collect =
+        |card: String, row: CardRow| keys_by_card.entry(card).or_default().push(row.tag_key);
+    for_each_card_row(conn, account, Some(folder), &uid_roots, &mut collect)?;
+    for_each_card_row(conn, account, None, &threaded_roots, &mut collect)?;
+    tags_of_cards(conn, account, keys_by_card)
+}
+
 /// One sender of a thread card, as the list row names them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CardSender {
@@ -597,6 +630,7 @@ pub(super) struct CardRow {
     date: i64,
     files: Vec<CardFile>,
     files_authoritative: bool,
+    tag_key: String,
 }
 
 /// Visit every cached message behind `roots` once, with the card key it belongs
@@ -637,7 +671,8 @@ fn for_each_card_row(
         let mut stmt = conn.prepare(&format!(
             "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), subject,
                     COALESCE(json_extract(json, '$.message_id'), ''),
-                    folder, COALESCE(from_name, ''), COALESCE(from_addr, ''), date, files, body IS NOT NULL
+                    folder, COALESCE(from_name, ''), COALESCE(from_addr, ''), date, files, body IS NOT NULL,
+                    {TAG_KEY_SQL}
              FROM messages
              WHERE account = ?1 AND {folder_clause}uid <> 0
                AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) IN ({placeholders})"
@@ -656,6 +691,7 @@ fn for_each_card_row(
                     from_addr: row.get(5)?,
                     date: row.get(6)?,
                     files_authoritative: row.get(8)?,
+                    tag_key: row.get(9)?,
                     files: row
                         .get::<_, Option<String>>(7)?
                         .and_then(|files| serde_json::from_str(&files).ok())

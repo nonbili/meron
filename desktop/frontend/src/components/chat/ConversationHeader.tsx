@@ -20,6 +20,7 @@ import {
   Star,
   Trash2,
   X,
+  Tag,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { printThread } from '../../lib/printMail'
@@ -28,6 +29,7 @@ import { copyText } from '../../lib/native'
 import { showToast, ui$ } from '../../states/ui'
 import { settings$ } from '../../states/settings'
 import { starThread } from '../../states/mailFlags'
+import { openTagDialog } from '../../states/mailTags'
 import { deletesForever, isDraftFolder } from '../../states/mailFolders'
 import { archiveThread, deleteThread } from '../../states/mailMoves'
 import { goToSearchMatch, setAllMessagesExpanded, thread$ } from '../../states/thread'
@@ -195,6 +197,15 @@ export function ConversationHeader({
       </button>
       {!isRSS && (
         <>
+          <button
+            onClick={() => {
+              openTagDialog(activeThread.thread_id)
+              closeActionMenus()
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
+          >
+            <Tag size={15} className="shrink-0" /> {t('tags.title')}
+          </button>
           {!isLocalAccountId(activeThread.account_id) && (
             <button
               onClick={() => {
