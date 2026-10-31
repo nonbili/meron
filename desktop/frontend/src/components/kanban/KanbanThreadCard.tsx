@@ -14,6 +14,7 @@ import { isRssAccount } from '../../lib/threadActions'
 import type { Message } from '../../types'
 import { ThreadListItem } from '../threads/ThreadListItem'
 import type { ThreadContextMenuController } from '../threads/ThreadContextMenu'
+import { PANE_ANIMATION_MS } from './KanbanConversationPane'
 
 export function KanbanThreadCard({
   boardId,
@@ -65,8 +66,18 @@ export function KanbanThreadCard({
   const activeTab = useValue(compose$.activeTab)
   const active = starredFeed ? activeTab === thread.id : thread.thread_id === paneThreadId
 
+  // Follow the card for as long as the pane slides open: the pane narrows the
+  // board after the card is selected, so a card that fits now can end up under it.
   useEffect(() => {
-    if (active) selectedItemRef.current?.scrollIntoView({ block: 'nearest' })
+    if (!active) return
+    const keepInView = () => selectedItemRef.current?.scrollIntoView({ block: 'nearest' })
+    keepInView()
+    const until = performance.now() + PANE_ANIMATION_MS
+    let frame = requestAnimationFrame(function follow(now) {
+      keepInView()
+      if (now < until) frame = requestAnimationFrame(follow)
+    })
+    return () => cancelAnimationFrame(frame)
   }, [active])
 
   // Ctrl/Cmd+click and double-click. Starred feed items are single articles and
@@ -98,7 +109,9 @@ export function KanbanThreadCard({
         active={starredColumn ? active : thread.thread_id === paneThreadId}
         rootRef={active ? selectedItemRef : undefined}
         badgeAccount={column.accountId === 'unified' ? account : undefined}
-        className="rounded-lg border border-border bg-chats shadow-sm overflow-hidden"
+        // The margin reaches past the column's own padding and border to the
+        // board's gutter, so scrolling to a card shows its whole column.
+        className="scroll-mx-[13px] rounded-lg border border-border bg-chats shadow-sm overflow-hidden"
         bulkSelectable={bulkSelectable}
         bulkSelected={bulkSelected}
         onSelect={(event) => {
