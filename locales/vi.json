@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Phím tắt bàn phím",
   "sidenav.actions.hideFromSideNav": "Ẩn khỏi thanh bên",
   "sidenav.actions.viewAndTheme": "Xem & Giao diện",
+  "tags.added": "Đã gắn thẻ {tag}",
   "tags.invalid": "Dùng chữ, số, dấu chấm, dấu gạch ngang và gạch dưới, và giữ thẻ ngắn gọn.",
   "tags.placeholder": "Thêm thẻ",
   "tags.remove": "Xóa {tag}",

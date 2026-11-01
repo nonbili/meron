@@ -73,6 +73,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -1846,10 +1847,12 @@ private fun MeronMobileScreenContent(
         }
 
         if (showKanbanColumnDialog && screen == Screen.Kanban) {
+            val knownTags by produceState(emptyList<String>()) { value = loadKnownTags() }
             KanbanColumnDialog(
                 accounts = coreAccounts,
                 board = activeKanbanBoard,
                 foldersByAccount = foldersByAccount,
+                knownTags = knownTags,
                 onApply = {
                     applyKanbanColumns(it)
                     showKanbanColumnDialog = false
@@ -1915,6 +1918,12 @@ private fun MeronMobileScreenContent(
                 onTags = {
                     kanbanActionThread = null
                     selectedTagThread = thread
+                },
+                onAddTag = { tag ->
+                    kanbanActionThread = null
+                    changeThreadTags(thread, add = listOf(tag)) { tags ->
+                        status = trs(if (tags == null) "tags.invalid" else "tags.added", mapOf("tag" to tag))
+                    }
                 },
                 onCopyFeedUrl = {
                     kanbanActionThread = null

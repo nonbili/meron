@@ -1,5 +1,6 @@
 import { invoke } from '../lib/bridge'
-import { kanban$ } from './kanban'
+import { columnReadsTags, loadKanbanColumn } from '../lib/kanbanData'
+import { getKanbanColumns, kanban$, kanbanColumnKey } from './kanban'
 import { mail$, updateKanbanThread } from './mail'
 import { ui$ } from './ui'
 
@@ -30,6 +31,13 @@ export async function setThreadTags(threadId: string, add: string[], remove: str
     mail$.messages.get().map((message) => (message.thread_id === threadId ? { ...message, tags } : message)),
   )
   updateKanbanThread(threadId, (thread) => ({ ...thread, tags }))
+  // A tag column may gain or lose this thread, which no folder sync announces.
+  const query = kanban$.searchQuery.peek().trim()
+  const scope = kanban$.searchScope.peek()
+  for (const column of getKanbanColumns(kanban$.activeBoardId.peek())) {
+    if (!columnReadsTags(column)) continue
+    void loadKanbanColumn(column, false, scope === 'all' || scope === kanbanColumnKey(column) ? query : '')
+  }
   return tags
 }
 

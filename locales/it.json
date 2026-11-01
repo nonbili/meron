@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Scorciatoie da tastiera",
   "sidenav.actions.hideFromSideNav": "Nascondi dalla barra laterale",
   "sidenav.actions.viewAndTheme": "Visualizzazione e tema",
+  "tags.added": "Tag {tag} aggiunto",
   "tags.invalid": "Usa lettere, numeri, punti, trattini e trattini bassi, e mantienilo breve.",
   "tags.placeholder": "Aggiungi un tag",
   "tags.remove": "Rimuovi {tag}",

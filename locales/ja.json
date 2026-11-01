@@ -1176,6 +1176,7 @@
   "shortcuts.title": "キーボードショートカット",
   "sidenav.actions.hideFromSideNav": "サイドバーから非表示",
   "sidenav.actions.viewAndTheme": "表示とテーマ",
+  "tags.added": "{tag} をタグ付けしました",
   "tags.invalid": "文字、数字、ドット、ハイフン、アンダースコアを使い、短くしてください。",
   "tags.placeholder": "タグを追加",
   "tags.remove": "{tag} を削除",

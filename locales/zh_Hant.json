@@ -1176,6 +1176,7 @@
   "shortcuts.title": "鍵盤快速鍵",
   "sidenav.actions.hideFromSideNav": "在側邊欄隱藏",
   "sidenav.actions.viewAndTheme": "檢視與主題",
+  "tags.added": "已新增標籤 {tag}",
   "tags.invalid": "請使用字母、數字、點、連字號和底線，並保持簡短。",
   "tags.placeholder": "新增標籤",
   "tags.remove": "移除 {tag}",

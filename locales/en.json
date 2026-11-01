@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Keyboard shortcuts",
   "sidenav.actions.hideFromSideNav": "Hide from side navigation",
   "sidenav.actions.viewAndTheme": "View & theme",
+  "tags.added": "Tagged {tag}",
   "tags.invalid": "Use letters, numbers, dots, dashes and underscores, and keep it short.",
   "tags.placeholder": "Add a tag",
   "tags.remove": "Remove {tag}",

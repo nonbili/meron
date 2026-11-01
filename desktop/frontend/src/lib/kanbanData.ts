@@ -234,6 +234,8 @@ export function kanbanColumnMatchesMailEvent(
   folderId: string | undefined,
   foldersByAccount: Record<string, Folder[]>,
 ): boolean {
+  // A tag search reads the whole account, whatever folder anchors it.
+  if (columnReadsTags(column)) return kanbanColumnCoversAccount(column, accountId)
   if (column.accountId !== 'unified') {
     return column.accountId === accountId && folderMatches(column.folderId, folderId)
   }
@@ -362,6 +364,18 @@ export const KANBAN_MOVE_MESSAGES = {
   copiedNotRemovedReason: 'kanban.move.copiedNotRemovedReason',
 } as const
 
+/** The tag a column lists, when its saved search is exactly one `tag:` term. */
+export function columnTag(column: KanbanColumn): string | undefined {
+  // The unified Starred view filters its own list: a tag alone can't join it.
+  if (isUnifiedStarredColumn(column)) return undefined
+  return column.query?.match(/^tag:([^\s"]+)$/)?.[1]?.toLowerCase()
+}
+
+/** Whether a column's saved search uses tags at all, alone or among other terms. */
+export function columnReadsTags(column: KanbanColumn): boolean {
+  return /(^|\s)tag:\S/i.test(column.query ?? '')
+}
+
 /**
  * What dropping `thread` from `source` onto `target` would do: the move and the
  * mailbox it leaves from, nothing, or a refusal to explain. A unified column
@@ -370,21 +384,54 @@ export const KANBAN_MOVE_MESSAGES = {
  * origin. Pure, so the drop handler and the drag-time column styling agree.
  */
 export type KanbanMoveResolution =
-  | { kind: 'move'; origin: KanbanColumn }
+  | { kind: 'move'; origin: KanbanColumn; removeTag?: string }
+  | { kind: 'tag'; add?: string; remove?: string }
   | { kind: 'noop' }
   | { kind: 'blocked'; reasonKey: string }
 
 export function resolveKanbanMove(
   source: KanbanColumn,
   target: KanbanColumn,
-  thread: Pick<Message, 'account_id' | 'folder_id'> | undefined,
-  accounts: { id: string; provider: string; auth_type: string }[],
+  thread: (Pick<Message, 'account_id' | 'folder_id'> & Partial<Pick<Message, 'folder_role'>>) | undefined,
+  accounts: { id: string; provider: string; auth_type: string; included_in_unified?: boolean }[],
 ): KanbanMoveResolution {
   const sameColumn = (a: KanbanColumn, b: KanbanColumn) =>
     a.accountId === b.accountId && folderMatches(a.folderId, b.folderId)
+  const sourceTag = columnTag(source)
+  const targetTag = columnTag(target)
+  // A tag column is a state rather than a place: dropping on it tags the thread
+  // and leaves the mail where it is, taking the tag of the column it came from.
+  if (targetTag) {
+    if (targetTag === sourceTag) return { kind: 'noop' }
+    if (!thread) return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.unknownOrigin }
+    if (isRSSAccount(thread.account_id, accounts)) {
+      return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.feedToMail }
+    }
+    // A column that would never list it: another account's, a unified one this
+    // account stays out of, or any of them for mail thrown away, which tag
+    // searches skip.
+    const discarded = thread.folder_role === 'trash' || thread.folder_role === 'junk'
+    const listed =
+      target.accountId === 'unified'
+        ? accounts.find((account) => account.id === thread.account_id)?.included_in_unified !== false
+        : target.accountId === thread.account_id
+    if (!listed || discarded) return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.savedSearchTarget }
+    return { kind: 'tag', add: targetTag, remove: sourceTag }
+  }
   if (target.accountId === 'unified') return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.unifiedTarget }
   // A saved search only lists matches; a card dropped on it might not be one.
   if (target.query) return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.savedSearchTarget }
+  // A tag column spans folders, so like a unified one it leaves the origin to
+  // the card. Dropped on its own folder, leaving the column is all that's left.
+  if (sourceTag) {
+    if (!thread) return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.unknownOrigin }
+    const origin = { accountId: thread.account_id, folderId: thread.folder_id }
+    if (sameColumn(origin, target)) return { kind: 'tag', remove: sourceTag }
+    if (isRSSAccount(target.accountId, accounts)) {
+      return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.mailToFeed }
+    }
+    return { kind: 'move', origin, removeTag: sourceTag }
+  }
   if (sameColumn(source, target)) return { kind: 'noop' }
   if (source.accountId === 'unified' && !thread) {
     return { kind: 'blocked', reasonKey: KANBAN_DROP_REASONS.unknownOrigin }
@@ -609,8 +656,13 @@ function keepReadThreads(column: KanbanColumn, key: string, fetched: Message[]):
   const readThreads = mail$.readThreads.peek()
   if (Object.keys(readThreads).length === 0) return fetched
   const fetchedIds = new Set(fetched.map((thread) => thread.thread_id))
+  const tag = columnTag(column)
   const kept = (kanban$.threads[key].peek() ?? []).filter(
-    (thread) => readThreads[thread.thread_id] && !fetchedIds.has(thread.thread_id),
+    (thread) =>
+      readThreads[thread.thread_id] &&
+      !fetchedIds.has(thread.thread_id) &&
+      // Staying put for having been read is no reason to outlive the tag.
+      (!tag || thread.tags?.includes(tag)),
   )
   if (kept.length === 0) return fetched
   return [...fetched, ...kept].sort((a, b) => b.date - a.date)

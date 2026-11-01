@@ -315,7 +315,15 @@ internal fun MeronMobileState.changeThreadTags(
                     ),
                 )
             }.getOrNull()
-        if (tags != null) updateThreadEverywhere(thread) { it.copy(tags = tags) }
+        if (tags != null) {
+            updateThreadEverywhere(thread) { it.copy(tags = tags) }
+            // A tag column may gain or lose this thread, which no sync announces.
+            kanbanBoards
+                .firstOrNull { it.id == activeKanbanBoardId }
+                ?.columns
+                ?.filter(::kanbanColumnReadsTags)
+                ?.forEach { loadKanbanColumn(it) }
+        }
         onDone(tags)
     }
 }

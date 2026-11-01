@@ -384,7 +384,12 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
             // Chat-view search spans the selected folder plus Sent, so a
             // lookup surfaces both received and self-sent mail (and old
             // messages filed under Sent), not just the current mailbox.
-            let folders = search_folders(&engine.db.lock().unwrap(), &account, &folder);
+            let folders = query_folders(
+                &engine.db.lock().unwrap(),
+                &account,
+                &folder,
+                &request.query,
+            );
             if refresh || request.search_before_cursor.as_ref().is_some() {
                 let page = search_mail_messages(
                     engine,

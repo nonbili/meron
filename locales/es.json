@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Atajos de teclado",
   "sidenav.actions.hideFromSideNav": "Ocultar de la barra lateral",
   "sidenav.actions.viewAndTheme": "Vista y tema",
+  "tags.added": "Etiquetado: {tag}",
   "tags.invalid": "Usa letras, números, puntos, guiones y guiones bajos, y que sea corta.",
   "tags.placeholder": "Añadir una etiqueta",
   "tags.remove": "Quitar {tag}",

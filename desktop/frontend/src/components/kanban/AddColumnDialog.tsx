@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Inbox, Star, X } from 'lucide-react'
+import { Inbox, Star, Tag, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from '../dialog/Dialog'
 import type { Folder } from '../../types'
@@ -25,7 +25,7 @@ export function AddColumnDialog({
   /** Optional toggle for the board's pinned inbox column, shown above the folders. */
   inboxOption?: { key: string; label: string }
   /** Optional non-folder columns shown above account folders. */
-  specialOptions?: { key: string; label: string; icon?: 'inbox' | 'star' }[]
+  specialOptions?: { key: string; label: string; icon?: 'inbox' | 'star' | 'tag' }[]
   onClose: () => void
   onApply: (selectedKeys: string[]) => void
   onCreateFolder?: (accountId: string, name: string) => Promise<Folder>
@@ -63,7 +63,7 @@ export function AddColumnDialog({
       <p className="shrink-0 px-4 pt-3 text-[0.6875rem] font-medium text-secondary">{t('kanban.addColumnsHint')}</p>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {topOptions.map((option) => {
-          const Icon = option.icon === 'star' ? Star : Inbox
+          const Icon = option.icon === 'star' ? Star : option.icon === 'tag' ? Tag : Inbox
           return (
             <label
               key={option.key}

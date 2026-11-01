@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Skróty klawiszowe",
   "sidenav.actions.hideFromSideNav": "Ukryj z paska bocznego",
   "sidenav.actions.viewAndTheme": "Widok i motyw",
+  "tags.added": "Dodano tag {tag}",
   "tags.invalid": "Użyj liter, cyfr, kropek, myślników i podkreśleń, i zachowaj krótką formę.",
   "tags.placeholder": "Dodaj tag",
   "tags.remove": "Usuń {tag}",

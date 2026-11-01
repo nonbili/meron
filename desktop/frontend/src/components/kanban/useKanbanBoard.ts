@@ -5,6 +5,7 @@ import { invoke } from '../../lib/bridge'
 import { t } from '../../lib/i18n'
 import { mailTransferError } from '../../lib/mailTransferErrors'
 import { moveFeed } from '../../states/feeds'
+import { setThreadTags } from '../../states/mailTags'
 import { showToast } from '../../states/ui'
 import { rememberThreadTransfer } from '../../states/recentThreadTransfers'
 import { kanbanColumnKey, kanban$, reorderKanbanColumn, type KanbanColumn } from '../../states/kanban'
@@ -156,6 +157,19 @@ export function useKanbanDnd(boardId: string, accounts: Account[]) {
       showToast(t(resolution.reasonKey), 'error')
       return
     }
+    if (resolution.kind === 'tag') {
+      const { add, remove } = resolution
+      kanban$.movingThread.set(threadId)
+      try {
+        await setThreadTags(threadId, add ? [add] : [], remove ? [remove] : [])
+      } catch (error) {
+        showToast(mailTransferError(error, t(KANBAN_MOVE_MESSAGES.failed)), 'error')
+      } finally {
+        kanban$.movingThread.set('')
+      }
+      await Promise.all([source, target].map((column) => loadKanbanColumn(column, false, queryForColumn(column))))
+      return
+    }
     const origin = resolution.origin
     // The account's own column may also be on the board; it shows the same
     // mailbox the thread just left, so it needs the reload too.
@@ -189,6 +203,8 @@ export function useKanbanDnd(boardId: string, accounts: Account[]) {
 
     kanban$.movingThread.set(threadId)
     try {
+      // First, while the thread id still names it: the move gives it a new one.
+      if (resolution.removeTag) await setThreadTags(threadId, [], [resolution.removeTag])
       if (movedThread) {
         kanban$.threads[sourceKey].set(sourceBefore.filter((thread) => thread.thread_id !== threadId))
         kanban$.threads[targetKey].set([
@@ -213,6 +229,8 @@ export function useKanbanDnd(boardId: string, accounts: Account[]) {
       showToast(t(KANBAN_MOVE_MESSAGES.moved))
       await reloadAll()
     } catch (error) {
+      // A drop that failed changes nothing, tag included.
+      if (resolution.removeTag) await setThreadTags(threadId, [resolution.removeTag], []).catch(() => undefined)
       kanban$.threads[sourceKey].set(sourceBefore)
       kanban$.threads[targetKey].set(targetBefore)
       showToast(mailTransferError(error, t(KANBAN_MOVE_MESSAGES.failed)), 'error')

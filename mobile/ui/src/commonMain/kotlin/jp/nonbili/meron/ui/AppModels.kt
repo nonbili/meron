@@ -234,6 +234,20 @@ internal data class KanbanColumnSpec(
     val query: String = "",
 )
 
+/** The tag a column lists, when its saved search is exactly one `tag:` term. */
+internal fun kanbanColumnTag(column: KanbanColumnSpec): String? {
+    // The unified Starred view filters its own list: a tag alone can't join it.
+    if (isUnifiedStarredColumn(column)) return null
+    return Regex("""^tag:([^\s"]+)$""")
+        .find(column.query)
+        ?.groupValues
+        ?.get(1)
+        ?.lowercase()
+}
+
+/** Whether a column's saved search uses tags at all, alone or among other terms. */
+internal fun kanbanColumnReadsTags(column: KanbanColumnSpec): Boolean = Regex("""(^|\s)tag:\S""", RegexOption.IGNORE_CASE).containsMatchIn(column.query)
+
 /** A Trash or Junk folder awaiting "empty folder" confirmation. [column] is set
  *  when the action came from a Kanban column, so that column is refreshed after. */
 internal data class EmptyFolderTarget(

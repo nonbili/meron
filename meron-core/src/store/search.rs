@@ -127,14 +127,18 @@ pub fn search_messages(
     if query.has_attachment {
         filters.push_str(" AND m.files IS NOT NULL");
     }
+    // From the tag to its messages, once per statement, rather than from each
+    // row of the mailbox to its tags: a tag is on few of them.
     for tag in &query.tags {
         filters.push_str(&format!(
-            " AND EXISTS (SELECT 1 FROM message_tags t
-                          WHERE t.account = m.account AND t.tag = ?
-                            AND t.state IN {} AND t.tag_key = {})",
+            " AND m.id IN (SELECT tagged.id FROM message_tags t
+                           JOIN messages tagged ON tagged.account = t.account AND tagged.uid <> 0
+                                AND {} = t.tag_key
+                           WHERE t.account = ? AND t.tag = ? AND t.state IN {})",
+            super::tags::qualified_tag_key("tagged"),
             super::tags::LIVE_STATES,
-            super::tags::qualified_tag_key("m")
         ));
+        args.push(account.to_string().into());
         args.push(tag.clone().into());
     }
     if let Some(after) = query.after {

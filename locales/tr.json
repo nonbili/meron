@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Klavye kısayolları",
   "sidenav.actions.hideFromSideNav": "Kenar çubuğundan gizle",
   "sidenav.actions.viewAndTheme": "Görünüm ve tema",
+  "tags.added": "{tag} etiketi eklendi",
   "tags.invalid": "Harf, rakam, nokta, tire ve alt çizgi kullanın ve kısa tutun.",
   "tags.placeholder": "Etiket ekle",
   "tags.remove": "{tag} etiketini kaldır",

@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Raccourcis clavier",
   "sidenav.actions.hideFromSideNav": "Masquer de la barre latérale",
   "sidenav.actions.viewAndTheme": "Affichage & thème",
+  "tags.added": "Étiquette {tag} ajoutée",
   "tags.invalid": "Utilisez des lettres, chiffres, points, tirets et tirets bas, et restez bref.",
   "tags.placeholder": "Ajouter une étiquette",
   "tags.remove": "Retirer {tag}",

@@ -874,7 +874,7 @@ fn list_mobile_account_threads(
             // One folder list for both halves: the live search and the offline
             // fallback must cover the same mailboxes, or losing the network
             // would silently drop the Sent hits from the results.
-            let folders = mobile_search_folders(data_dir, &account_id, &folder_id)?;
+            let folders = mobile_search_folders(data_dir, &account_id, &folder_id, &request.query)?;
             // Mobile renders indexed local hits first, then repeats the first
             // page with refresh=true off the UI thread. Later pages are local
             // reads (the live snapshot, else cached keyset order), served
@@ -1103,9 +1103,12 @@ fn mobile_search_folders(
     data_dir: &str,
     account_id: &str,
     folder_id: &str,
+    query: &str,
 ) -> Result<Vec<String>, String> {
     let conn = open_mobile_db(data_dir)?;
-    Ok(crate::engine::search_folders(&conn, account_id, folder_id))
+    Ok(crate::engine::query_folders(
+        &conn, account_id, folder_id, query,
+    ))
 }
 
 fn search_cached_mobile_mail_messages(

@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Tastaturkürzel",
   "sidenav.actions.hideFromSideNav": "Aus Seitenleiste ausblenden",
   "sidenav.actions.viewAndTheme": "Ansicht & Design",
+  "tags.added": "Mit {tag} getaggt",
   "tags.invalid": "Verwende Buchstaben, Ziffern, Punkte, Binde- und Unterstriche und halte den Tag kurz.",
   "tags.placeholder": "Tag hinzufügen",
   "tags.remove": "{tag} entfernen",

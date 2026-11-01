@@ -382,7 +382,11 @@ internal fun MeronMobileState.refreshKanbanColumnsForMailEvent(
                 column.accountId == UNIFIED_ACCOUNT_ID &&
                     accountIncludedInUnified &&
                     unifiedColumnMatchesFolder(column.folderId, foldersByAccount[accountId].orEmpty(), folderId)
-            directFolderMatch || unifiedFolderMatch
+            // A tag search reads the whole account, whatever folder anchors it.
+            val tagMatch =
+                kanbanColumnReadsTags(column) &&
+                    (column.accountId == accountId || (column.accountId == UNIFIED_ACCOUNT_ID && accountIncludedInUnified))
+            directFolderMatch || unifiedFolderMatch || tagMatch
         }.distinctBy(::kanbanColumnKey)
         .forEach { column ->
             // The IDLE/event path has already synced the core DB, so callers can

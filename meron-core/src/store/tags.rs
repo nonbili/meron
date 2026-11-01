@@ -112,7 +112,8 @@ pub fn change_tags(
                 params![account, key, tag, state, now, PENDING_REMOVE, REMOVED],
             )?;
         }
-        for tag in remove {
+        // Asked to do both, the tag stays.
+        for tag in remove.iter().filter(|tag| !add.contains(tag)) {
             if mirrored {
                 tx.execute(
                     "UPDATE message_tags SET state = ?4, updated_at = ?5
@@ -819,6 +820,25 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM message_tags", [], |row| row.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn tag_search_finds_any_copy_and_skips_removed_tags() {
+        let conn = db();
+        let mut archived = message(9, "m@x", Some(&["todo"]));
+        archived.date = 5;
+        upsert(&conn, "Archive", &[archived]);
+        upsert(&conn, "INBOX", &[message(1, "other@x", Some(&[]))]);
+        let folders = ["INBOX".to_string(), "Archive".to_string()];
+        let found = |query: &str| {
+            crate::store::search_messages_in_folders(&conn, "a", &folders, query, 10, None)
+                .unwrap()
+                .len()
+        };
+        assert_eq!(found("tag:todo"), 1);
+        assert_eq!(found("tag:other"), 0);
+        change_tags(&conn, "a", &["m@x".into()], &[], &["todo".into()], true).unwrap();
+        assert_eq!(found("tag:todo"), 0);
     }
 
     #[test]

@@ -1176,6 +1176,7 @@
   "shortcuts.title": "اختصارات لوحة المفاتيح",
   "sidenav.actions.hideFromSideNav": "إخفاء من الشريط الجانبي",
   "sidenav.actions.viewAndTheme": "العرض والسمة",
+  "tags.added": "تم وضع الوسم {tag}",
   "tags.invalid": "استخدم الأحرف والأرقام والنقاط والشرطات والشرطات السفلية، واجعله قصيرًا.",
   "tags.placeholder": "أضف وسمًا",
   "tags.remove": "إزالة {tag}",

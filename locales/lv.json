@@ -1176,6 +1176,7 @@
   "shortcuts.title": "Tastatūras saīsnes",
   "sidenav.actions.hideFromSideNav": "Paslēpt no sānjoslas",
   "sidenav.actions.viewAndTheme": "Skats un motīvs",
+  "tags.added": "Pievienota birka {tag}",
   "tags.invalid": "Izmantojiet burtus, ciparus, punktus, domuzīmes un pasvītras, un saglabājiet to īsu.",
   "tags.placeholder": "Pievienot birku",
   "tags.remove": "Noņemt {tag}",

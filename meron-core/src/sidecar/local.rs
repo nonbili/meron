@@ -424,10 +424,11 @@ async fn local_mail(
                     filter,
                 )?,
                 thread_list::MailSource::Search => {
+                    let folders = engine::query_folders(&db, account, &folder, &request.query);
                     let messages = store::search_messages_in_folders(
                         &db,
                         account,
-                        std::slice::from_ref(&folder),
+                        &folders,
                         &request.query,
                         request.limit,
                         request.search_before_cursor.as_ref(),

@@ -63,6 +63,31 @@ pub fn search_folders(conn: &Connection, account: &str, folder: &str) -> Vec<Str
     folders
 }
 
+/// The mailboxes `query` reads from `folder`. A tag belongs to the message
+/// wherever it is filed, so a tag search spans the account, short of the mail
+/// its owner threw away; the mailbox asked for stays first, and always included.
+pub fn query_folders(conn: &Connection, account: &str, folder: &str, query: &str) -> Vec<String> {
+    if crate::search_query::SearchQuery::parse(query)
+        .tags
+        .is_empty()
+    {
+        return search_folders(conn, account, folder);
+    }
+    let mut folders = vec![folder.to_string()];
+    let names = store::get_folders(conn, account).unwrap_or_default();
+    folders.extend(
+        names
+            .into_iter()
+            .map(|known| known.name)
+            .filter(|name| !name.eq_ignore_ascii_case(folder))
+            .filter(|name| {
+                let role = store::folder_role(conn, account, name).unwrap_or_default();
+                role != "trash" && role != "junk"
+            }),
+    );
+    folders
+}
+
 /// The cached Drafts mailbox name for `account`, if any — used so the regular
 /// mailbox sync also pulls drafts and replies saved from another client thread
 /// into the conversation view straight from the local store. `current` is
@@ -92,4 +117,22 @@ pub fn cached_archive_folder_from_folders(
 /// Canonicalize folder names so "inbox"/"INBOX" map to one store key + mailbox.
 pub fn canon_folder(folder: &str) -> String {
     crate::mail_model::canon_folder(folder)
+}
+
+#[cfg(test)]
+mod query_folder_tests {
+    use super::*;
+
+    #[test]
+    fn a_tag_search_spans_the_account_short_of_trash_and_junk() {
+        let path = std::env::temp_dir().join(format!("meron-qf-{}.db", uuid::Uuid::new_v4()));
+        let conn = store::open_at(&path).unwrap();
+        for folder in ["INBOX", "Projects", "Trash", "Junk"] {
+            store::ensure_folder(&conn, "a", folder).unwrap();
+        }
+        let mut folders = query_folders(&conn, "a", "INBOX", "tag:todo");
+        assert_eq!(folders.remove(0), "INBOX");
+        assert_eq!(folders, ["Projects"]);
+        assert_eq!(query_folders(&conn, "a", "INBOX", "plain"), ["INBOX"]);
+    }
 }

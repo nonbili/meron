@@ -69,6 +69,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewKanban
@@ -1140,6 +1141,7 @@ internal fun KanbanColumnDialog(
     accounts: List<AccountSummary>,
     board: KanbanBoardSpec?,
     foldersByAccount: Map<String, List<FolderSummary>>,
+    knownTags: List<String>,
     onApply: (List<KanbanColumnSpec>) -> Unit,
     onCreateFolder: (AccountSummary) -> Unit,
     onDismiss: () -> Unit,
@@ -1185,6 +1187,16 @@ internal fun KanbanColumnDialog(
                         subtitle = null,
                         onClick = { toggle(unified) },
                         leadingIcon = Icons.Filled.Inbox,
+                    )
+                }
+                items(knownTags, key = { "tag:$it" }) { tag ->
+                    val column = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER, "tag:$tag")
+                    SidebarLikeDialogRow(
+                        selected = selected.contains(kanbanColumnKey(column)),
+                        title = tag,
+                        subtitle = null,
+                        onClick = { toggle(column) },
+                        leadingIcon = Icons.Filled.Sell,
                     )
                 }
                 accounts.forEach { account ->
@@ -1320,6 +1332,7 @@ internal fun KanbanThreadActionDialog(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onTags: () -> Unit,
+    onAddTag: (String) -> Unit,
     onCopyFeedUrl: () -> Unit,
     onMove: (KanbanColumnSpec) -> Unit,
 ) {
@@ -1357,6 +1370,23 @@ internal fun KanbanThreadActionDialog(
                             val targetAccount = accounts.firstOrNull { it.id == target.accountId }
                             targetAccount != null && (threadIdIsRss(thread.id) == accountSummaryIsRss(targetAccount))
                         }.filterNot { it.accountId == thread.accountId && it.folderId.equals(thread.folder, ignoreCase = true) }
+                // A tag column is a state: joining it tags the thread where it lies.
+                val tagTargets =
+                    // Tag searches skip the trash, so that mail could not join one.
+                    if (threadIdIsRss(thread.id) || thread.folderRole == "trash" || thread.folderRole == "junk") {
+                        emptyList()
+                    } else {
+                        board
+                            ?.columns
+                            .orEmpty()
+                            .filter { column ->
+                                column.accountId == thread.accountId ||
+                                    (column.accountId == UNIFIED_ACCOUNT_ID && accounts.firstOrNull { it.id == thread.accountId }?.includedInUnified == true)
+                            }.mapNotNull(::kanbanColumnTag)
+                            .distinct()
+                            .filterNot { it in thread.tags }
+                    }
+                items(tagTargets, key = { "tag:$it" }) { tag -> DialogAction(tag) { onAddTag(tag) } }
                 if (moveTargets.isNotEmpty()) {
                     item {
                         Text(
