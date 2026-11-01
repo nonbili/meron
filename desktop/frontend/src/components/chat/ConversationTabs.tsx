@@ -158,8 +158,11 @@ export function ConversationTabs() {
               compose$.activeTab.set(tab.id)
               if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
             }}
-            className={`group relative flex max-w-[200px] cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
-              activeTab === tab.id ? ACTIVE_TAB : INACTIVE_TAB
+            // The active tab always shows its ×, so it keeps room for it (pr-7);
+            // other tabs only reveal it on hover, over the label. The width cap is
+            // in rem so a larger text size doesn't squeeze the label.
+            className={`group relative flex max-w-[12.5rem] cursor-pointer items-center gap-1.5 pl-3 text-xs border-b-2 transition-colors ${
+              activeTab === tab.id ? `pr-7 ${ACTIVE_TAB}` : `pr-3 ${INACTIVE_TAB}`
             }`}
             onContextMenu={(event) => {
               event.preventDefault()
