@@ -138,9 +138,9 @@ internal fun Modifier.pullToDismissLayer(state: PullToDismissState): Modifier =
 
 /**
  * Pulls from the scrolling content inside: a drag down that started with it at
- * its top ([isAtTop], read as the finger goes down) moves the view instead of
- * the content. Flings never pull, so momentum carrying the content to its top
- * stops there.
+ * its top ([isAtTop], read as the finger goes down), and that nothing nested in
+ * it scrolls, moves the view instead of the content. Flings never pull, so
+ * momentum carrying the content to its top stops there.
  */
 @Composable
 internal fun Modifier.pullToDismiss(
@@ -155,16 +155,31 @@ internal fun Modifier.pullToDismiss(
     val connection =
         remember(state) {
             object : NestedScrollConnection {
+                // Once pulling, the view takes the whole drag, either way.
                 override fun onPreScroll(
                     available: Offset,
                     source: NestedScrollSource,
                 ): Offset {
                     if (source != NestedScrollSource.UserInput || !state.canPull) return Offset.Zero
-                    val pulling = state.distancePx > 0f
-                    if (available.y > 0f && (pulling || (state.armed && atTop()))) {
-                        return Offset(0f, state.dragBy(available.y))
+                    if (state.distancePx > 0f && available.y != 0f) return Offset(0f, state.dragBy(available.y))
+                    return Offset.Zero
+                }
+
+                // Before that, a drag down pulls only with what everything
+                // inside left over, so a capped message bubble scrolls back up
+                // through its own body first. Anything inside scrolling during
+                // the touch disarms it, so reaching a top mid-drag stops there.
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    if (source != NestedScrollSource.UserInput || !state.canPull) return Offset.Zero
+                    if (consumed.y != 0f) {
+                        state.armed = false
+                        return Offset.Zero
                     }
-                    if (available.y < 0f && pulling) return Offset(0f, state.dragBy(available.y))
+                    if (available.y > 0f && state.armed && atTop()) return Offset(0f, state.dragBy(available.y))
                     return Offset.Zero
                 }
 
