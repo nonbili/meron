@@ -229,6 +229,13 @@ CREATE INDEX IF NOT EXISTS tasks_thread_idx ON tasks(thread_id);
 const BODY_CACHE_VERSION: &str = "1";
 
 pub fn open() -> Result<Connection> {
+    open_notifying(|| {})
+}
+
+/// [`open`], calling `on_upgrade` first if this open has to rewrite an existing
+/// store, which can take a while on a large cache. A brand-new store and an
+/// up-to-date one stay silent.
+pub fn open_notifying(on_upgrade: impl FnOnce()) -> Result<Connection> {
     let path = db_path();
     // The key comes from the OS keychain, historically the slowest and most
     // failure-prone step of startup (a Flatpak Secret portal with no backend
@@ -250,10 +257,19 @@ pub fn open() -> Result<Connection> {
     let key = key?;
     let _ = STORE_KEY.set(key.clone());
     match key {
-        Some(key) => open_at_keyed(path, &key),
+        Some(key) => open_inner(path.as_ref(), Some(&key), on_upgrade),
         // Keyring disabled (tests/headless): keep the store plaintext as before.
-        None => open_at(path),
+        None => open_inner(path.as_ref(), None, on_upgrade),
     }
+}
+
+/// [`open_notifying`] for a store at a host-chosen path and key.
+pub fn open_at_notifying(
+    path: impl AsRef<Path>,
+    key: Option<&str>,
+    on_upgrade: impl FnOnce(),
+) -> Result<Connection> {
+    open_inner(path.as_ref(), key, on_upgrade)
 }
 
 /// The key [`open`] resolved, so the local-folder archive opens with the same
@@ -283,7 +299,7 @@ pub fn open_archive_at(path: impl AsRef<Path>, key: Option<&str>) -> Result<Conn
         let _ = std::fs::create_dir_all(parent);
     }
     let fresh = !path.exists();
-    let conn = open_keyed_connection(path, key)?;
+    let conn = open_keyed_connection(path, key, || {})?;
     // Deleting archived mail should give the disk space back. auto_vacuum only
     // takes effect when set before the first table exists.
     if fresh {
@@ -376,22 +392,31 @@ fn archive_path() -> PathBuf {
 /// is set, so this stays byte-compatible with pre-encryption databases and is
 /// what tests and the headless/`MERON_KEYRING=off` path use.
 pub fn open_at(path: impl AsRef<Path>) -> Result<Connection> {
-    open_inner(path.as_ref(), None)
+    open_inner(path.as_ref(), None, || {})
 }
 
 /// Open an encrypted store, keying the connection with `key` (64 hex chars = a
 /// raw 32-byte SQLCipher key). A legacy plaintext database at `path` is migrated
 /// in place to an encrypted one on first keyed open.
 pub fn open_at_keyed(path: impl AsRef<Path>, key: &str) -> Result<Connection> {
-    open_inner(path.as_ref(), Some(key))
+    open_inner(path.as_ref(), Some(key), || {})
 }
 
-fn open_inner(path: &Path, key: Option<&str>) -> Result<Connection> {
+fn open_inner(path: &Path, key: Option<&str>, on_upgrade: impl FnOnce()) -> Result<Connection> {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let conn = open_keyed_connection(path, key)?;
+    let mut on_upgrade = Some(on_upgrade);
+    let mut announce_upgrade = || {
+        if let Some(on_upgrade) = on_upgrade.take() {
+            on_upgrade();
+        }
+    };
+    let conn = open_keyed_connection(path, key, &mut announce_upgrade)?;
     configure_connection(&conn)?;
+    if upgrade_pending(&conn) {
+        announce_upgrade();
+    }
     with_anyhow_busy_retry(|| run_migrations(&conn)).context("run migrations")?;
     with_anyhow_busy_retry(|| invalidate_body_cache_if_needed(&conn))
         .context("invalidate body cache if needed")?;
@@ -420,8 +445,13 @@ fn configure_connection(conn: &Connection) -> Result<()> {
 
 /// Opens `path` and applies the SQLCipher `key` (if any). When the key is set
 /// but the file turns out to be an unencrypted legacy database, it is migrated
-/// in place to an encrypted database before returning.
-fn open_keyed_connection(path: &Path, key: Option<&str>) -> Result<Connection> {
+/// in place to an encrypted database before returning, calling `on_encrypt`
+/// first because that exports the whole file.
+fn open_keyed_connection(
+    path: &Path,
+    key: Option<&str>,
+    on_encrypt: impl FnOnce(),
+) -> Result<Connection> {
     let conn = Connection::open(path).with_context(|| format!("open db {}", path.display()))?;
     let Some(key) = key else {
         return Ok(conn);
@@ -443,6 +473,7 @@ fn open_keyed_connection(path: &Path, key: Option<&str>) -> Result<Connection> {
         );
     }
     drop(conn);
+    on_encrypt();
     encrypt_plaintext_db(path, key)
         .with_context(|| format!("encrypt legacy plaintext db {}", path.display()))?;
     let conn = Connection::open(path).with_context(|| format!("reopen db {}", path.display()))?;
@@ -604,6 +635,24 @@ fn config_dir() -> PathBuf {
 }
 
 // ---- Migrations -------------------------------------------------------------
+
+/// The `user_version` [`run_migrations`] leaves behind.
+pub(super) const SCHEMA_VERSION: i64 = 22;
+
+/// Whether opening this store will rewrite existing data: a schema behind
+/// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
+/// whether to tell the user, so a failed read just answers "no".
+fn upgrade_pending(conn: &Connection) -> bool {
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap_or(0);
+    if version == 0 {
+        return false;
+    }
+    version < SCHEMA_VERSION
+        || meta_get(conn, "body_cache_version")
+            .is_ok_and(|current| current.as_deref() != Some(BODY_CACHE_VERSION))
+}
 
 /// Apply schema migrations in order, tracked by SQLite's `PRAGMA user_version`.
 ///

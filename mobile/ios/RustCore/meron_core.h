@@ -6,6 +6,7 @@
 uint32_t meron_core_protocol_version(void);
 char *meron_core_ready_json(void);
 char *meron_core_ping_json(void);
+char *meron_core_configure_json_keyed(const char *data_dir, const char *db_key);
 char *meron_core_init_json(const char *data_dir);
 char *meron_core_init_json_keyed(const char *data_dir, const char *db_key);
 char *meron_core_invoke_json(const char *request);

@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "E-posta sunucusuna erişilemedi. Bir sonraki eşitlemede tekrar denenecek...",
   "connectivity.syncFailedAccount": "{account} için e-posta sunucusuna erişilemedi. Bir sonraki eşitlemede tekrar denenecek...",
   "connectivity.syncedAccount": "{account} eşitlendi",
+  "connectivity.upgradingStore": "E-posta veritabanınız güncelleniyor. Bu işlem birkaç dakika sürebilir…",
   "crash.body": "Bu cihaza bir rapor kaydedildi. Göndermek, günlüğü paylaşım sayfasında açar; böylece önce okuyabilirsiniz. E-posta adresleri gizlenir.",
   "crash.notNow": "Şimdi değil",
   "crash.send": "Raporu gönder",

@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Neizdevās sasniegt pasta serveri. Tiks mēģināts vēlreiz nākamajā sinhronizācijā...",
   "connectivity.syncFailedAccount": "Neizdevās sasniegt {account} pasta serveri. Tiks mēģināts vēlreiz nākamajā sinhronizācijā...",
   "connectivity.syncedAccount": "{account} sinhronizēts",
+  "connectivity.upgradingStore": "Notiek jūsu pasta datubāzes atjaunināšana. Tas var aizņemt dažas minūtes…",
   "crash.body": "Atskaite ir saglabāta šajā ierīcē. Nosūtot tiek atvērta kopīgošanas izvēlne ar žurnālu, lai tu to vispirms varētu izlasīt. E-pasta adreses ir maskētas.",
   "crash.notNow": "Ne tagad",
   "crash.send": "Nosūtīt atskaiti",

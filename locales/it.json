@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Impossibile raggiungere il server di posta. Nuovo tentativo al prossimo rilevamento...",
   "connectivity.syncFailedAccount": "Impossibile raggiungere il server di posta per {account}. Nuovo tentativo alla prossima sincronizzazione...",
   "connectivity.syncedAccount": "{account} sincronizzato",
+  "connectivity.upgradingStore": "Aggiornamento del database della posta. Potrebbe richiedere alcuni minuti…",
   "crash.body": "È stato salvato un rapporto su questo dispositivo. L'invio apre il pannello di condivisione con il registro, così puoi leggerlo prima. Gli indirizzi email sono mascherati.",
   "crash.notNow": "Non ora",
   "crash.send": "Invia rapporto",

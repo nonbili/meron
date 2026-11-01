@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Der Mailserver konnte nicht erreicht werden. Versuch wird bei der nächsten Synchronisierung wiederholt...",
   "connectivity.syncFailedAccount": "Der Mailserver für {account} konnte nicht erreicht werden. Versuch wird bei der nächsten Synchronisierung wiederholt...",
   "connectivity.syncedAccount": "{account} synchronisiert",
+  "connectivity.upgradingStore": "Deine Mail-Datenbank wird aktualisiert. Das kann einige Minuten dauern…",
   "crash.body": "Ein Bericht wurde auf diesem Gerät gespeichert. Beim Senden öffnet sich das Teilen-Menü mit dem Protokoll, sodass du es zuerst lesen kannst. E-Mail-Adressen sind maskiert.",
   "crash.notNow": "Jetzt nicht",
   "crash.send": "Bericht senden",

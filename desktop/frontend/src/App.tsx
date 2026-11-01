@@ -32,6 +32,7 @@ import { AppConfirm } from './components/dialog/AppConfirm'
 import { CertificateTrustDialog } from './components/dialog/CertificateTrustDialog'
 import { TitleBar, useTitleBar } from './components/titlebar/TitleBar'
 import { ConnectivityBanner } from './components/banner/ConnectivityBanner'
+import { MigrationBanner } from './components/banner/MigrationBanner'
 import { UpdateBanner } from './components/banner/UpdateBanner'
 import { SetupScreen } from './components/setup/SetupScreen'
 import { AccountDialog } from './components/dialog/AccountDialog'
@@ -93,6 +94,7 @@ export default function App() {
   return (
     <div className="flex h-full w-full flex-col bg-app text-primary">
       <TitleBar />
+      <MigrationBanner />
       <ConnectivityBanner />
       <UpdateBanner />
       <main className="flex min-h-0 w-full flex-1 bg-sidenav">

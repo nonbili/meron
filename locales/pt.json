@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Não foi possível contactar o servidor de correio. A tentar novamente na próxima sincronização...",
   "connectivity.syncFailedAccount": "Não foi possível contactar o servidor de correio de {account}. A tentar novamente na próxima sincronização...",
   "connectivity.syncedAccount": "{account} sincronizado",
+  "connectivity.upgradingStore": "A atualizar a sua base de dados de correio. Isto pode demorar alguns minutos…",
   "crash.body": "Foi guardado um relatório neste dispositivo. Ao enviar, abre-se a folha de partilha com o registo, para que o possa ler primeiro. Os endereços de email são ocultados.",
   "crash.notNow": "Agora não",
   "crash.send": "Enviar relatório",

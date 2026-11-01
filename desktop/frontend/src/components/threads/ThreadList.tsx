@@ -16,6 +16,7 @@ import {
   ui$,
   type BulkSelectionItem,
 } from '../../states/ui'
+import { connectivity$ } from '../../states/connectivity'
 import { thread$ } from '../../states/thread'
 import {
   mail$,
@@ -82,9 +83,11 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   // true from the first paint of a navigation, which is a frame or more before
   // the effect that starts the load.
   const threadsLoadedKey = useValue(mail$.threadsLoadedKey)
+  const coreMigrating = useValue(connectivity$.migrating)
   const threadsLoading =
+    coreMigrating ||
     threadsLoadedKey !==
-    threadListViewKey(selectedAccount, selectedFolder, query, listFilterKey(filterMode, attachmentsOnly))
+      threadListViewKey(selectedAccount, selectedFolder, query, listFilterKey(filterMode, attachmentsOnly))
   const threadMenu = useThreadContextMenu(accounts)
   // Starred is a folder of the unified view whose rows span every account. It
   // lists ordinary threads, so it shares this list's selection, context menu and
@@ -457,7 +460,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
           }
         }}
       >
-        {accounts.length === 0 ? (
+        {accounts.length === 0 && !coreMigrating ? (
           <EmptyState title={t('empty.welcomeTitle')} text={t('empty.mailSetupText')} />
         ) : filteredThreads.length === 0 ? (
           // An empty list mid-load is "not here yet", not "nothing here": telling

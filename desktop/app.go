@@ -230,6 +230,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.readDroppedFilesCommand(payload)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
+	case "core.status":
+		return map[string]any{"migrating": a.sidecar != nil && a.sidecar.Migrating()}, nil
 	case "app.prefsGet":
 		return a.appPrefsGet(payload)
 	case "app.prefsSet":

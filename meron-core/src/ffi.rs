@@ -613,6 +613,27 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJson(
 }
 
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreConfigureJsonKeyed(
+    mut env: JNIEnv,
+    _class: JClass,
+    data_dir: JString,
+    db_key: JString,
+) -> jstring {
+    let strings = env
+        .get_string(&data_dir)
+        .map(|value| value.to_string_lossy().into_owned())
+        .and_then(|data_dir| {
+            env.get_string(&db_key)
+                .map(|value| (data_dir, value.to_string_lossy().into_owned()))
+        });
+    let response = match strings {
+        Ok((data_dir, db_key)) => configure_mobile_core(&data_dir, Some(&db_key)),
+        Err(err) => serde_json::json!({ "error": { "message": format!("bad JNI string: {err}") } }),
+    };
+    java_string(&env, response.to_string())
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJsonKeyed(
     mut env: JNIEnv,
     _class: JClass,
@@ -694,6 +715,22 @@ pub unsafe extern "C" fn meron_core_invoke_json(request: *const c_char) -> *mut 
     json_to_c_string(invoke_mobile_request_json(&request))
 }
 
+/// Set up the core without opening the store; see [`configure_mobile_core`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn meron_core_configure_json_keyed(
+    data_dir: *const c_char,
+    db_key: *const c_char,
+) -> *mut c_char {
+    if data_dir.is_null() || db_key.is_null() {
+        return json_to_c_string(serde_json::json!({
+            "error": { "message": "data_dir and db_key are required" }
+        }));
+    }
+    let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
+    let db_key = unsafe { CStr::from_ptr(db_key) }.to_string_lossy();
+    json_to_c_string(configure_mobile_core(&data_dir, Some(&db_key)))
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn meron_core_init_json(data_dir: *const c_char) -> *mut c_char {
     if data_dir.is_null() {
@@ -771,14 +808,24 @@ fn json_to_c_string(value: serde_json::Value) -> *mut c_char {
     }
 }
 
-fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
+/// Which data dir's store is ready for commands. Held across the upgrade, so
+/// everything that needs the store waits here instead of racing the migration on
+/// a second connection.
+static STORE_PREPARED: Mutex<Option<String>> = Mutex::new(None);
+/// Whether [`prepare_mobile_store`] is upgrading the store right now, for
+/// `core.status`, which must answer without waiting on it.
+static STORE_UPGRADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Everything a host needs to set up without touching the store: safe on a main
+/// thread, where a migration would stall the launch until the OS kills it and
+/// rolls the migration back. The first command prepares the store.
+fn configure_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
     let data_dir = data_dir.trim();
     if data_dir.is_empty() {
         return serde_json::json!({ "error": { "message": "data_dir is required" } });
     }
     let db_key = db_key.map(str::trim).unwrap_or_default();
-    let mut config = MOBILE_CONFIG.lock().unwrap();
-    *config = Some(MobileConfig {
+    *MOBILE_CONFIG.lock().unwrap() = Some(MobileConfig {
         data_dir: data_dir.to_string(),
         db_key: db_key.to_string(),
     });
@@ -788,14 +835,6 @@ fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
         None
     } else {
         Some(db_key.to_string())
-    });
-    // Publish the app-wide proxy before any command can open a socket. Mobile
-    // has stateless command paths that connect without ever building an Engine
-    // (background syncs, one-off sends), and `init` is the one point they all
-    // pass through.
-    let _ = crate::protocol::with_mobile_db(data_dir, |conn| {
-        crate::proxy::load_global(&conn).map_err(|err| err.to_string())?;
-        Ok(json!({ "ok": true }))
     });
     // Route core logs to the platform over the event channel; the host forwards
     // `log` events to os_log / Logcat. Without this the core's logs (which use
@@ -810,13 +849,61 @@ fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
     // so the host never sees a Kotlin/Swift exception. The hook runs first and
     // gets the panic into the diagnostic log before the abort.
     crate::log::install_panic_hook();
-    // After the log sink, so a failure reaches the platform log. List cards
-    // name attachments from a column older caches lack. Fill it on
+    serde_json::json!({
+        "ok": true,
+        "protocol": PROTOCOL_VERSION,
+        "data_dir": data_dir,
+    })
+}
+
+/// [`configure_mobile_core`] plus the store, for hosts already off the main
+/// thread that want it ready before their first command.
+fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
+    let configured = configure_mobile_core(data_dir, db_key);
+    if configured.get("error").is_none() {
+        prepare_mobile_store(data_dir.trim());
+    }
+    configured
+}
+
+/// Upgrade the store and load what commands assume is loaded. Once per process
+/// and data dir; every command comes through here, so none can run ahead of it,
+/// and a failure is retried by the next one, which then reports its own error.
+fn prepare_mobile_store(data_dir: &str) {
+    let mut prepared = STORE_PREPARED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if prepared.as_deref() == Some(data_dir) {
+        return;
+    }
+    let db_path = Path::new(data_dir).join("meron.db");
+    let key = crate::protocol::mobile_db_key();
+    let opened = crate::store::open_at_notifying(&db_path, key.as_deref(), || {
+        STORE_UPGRADING.store(true, Ordering::SeqCst);
+    });
+    STORE_UPGRADING.store(false, Ordering::SeqCst);
+    let conn = match opened {
+        Ok(conn) => conn,
+        Err(err) => {
+            crate::mlog!(crate::log::Level::Warn, "store", "prepare: {err:#}");
+            return;
+        }
+    };
+    // Publish the app-wide proxy before any command can open a socket. Mobile
+    // has stateless command paths that connect without ever building an Engine
+    // (background syncs, one-off sends).
+    if let Err(err) = crate::proxy::load_global(&conn) {
+        crate::mlog!(crate::log::Level::Warn, "store", "proxy: {err:#}");
+    }
+    drop(conn);
+    *prepared = Some(data_dir.to_string());
+    drop(prepared);
+    // List cards name attachments from a column older caches lack. Fill it on
     // its own connection, a batch at a time, so commands opening the store in
     // the meantime only ever wait on one short transaction. Once per process.
     static FILES_BACKFILL_STARTED: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);
-    if !FILES_BACKFILL_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+    if !FILES_BACKFILL_STARTED.swap(true, Ordering::SeqCst) {
         let data_dir = data_dir.to_string();
         std::thread::spawn(move || {
             let result = crate::protocol::with_mobile_db(&data_dir, |conn| {
@@ -839,11 +926,6 @@ fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
             }
         });
     }
-    serde_json::json!({
-        "ok": true,
-        "protocol": PROTOCOL_VERSION,
-        "data_dir": data_dir,
-    })
 }
 
 fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
@@ -852,8 +934,20 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         .unwrap()
         .as_ref()
         .map(|config| config.data_dir.clone());
+    // Neither needs the store, and they are what a host can ask while it waits.
+    let req = serde_json::from_str::<Request>(request).ok();
+    let method = req.as_ref().map(|req| req.method.as_str());
+    if method == Some("core.status") {
+        let migrating = STORE_UPGRADING.load(Ordering::SeqCst);
+        return json!({ "id": req.map(|req| req.id), "result": { "migrating": migrating } });
+    }
+    if method != Some("ping")
+        && let Some(data_dir) = data_dir.as_deref()
+    {
+        prepare_mobile_store(data_dir);
+    }
     if let Some(data_dir) = data_dir.as_deref()
-        && let Ok(req) = serde_json::from_str::<Request>(request)
+        && let Some(req) = req
         && matches!(
             req.method.as_str(),
             "watch.start" | "watch.stop" | "engine.foreground" | "engine.background"
@@ -1195,6 +1289,8 @@ mod tests {
 
     static CAPTURED_EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static EVENT_CALLBACK_TEST_LOCK: Mutex<()> = Mutex::new(());
+    /// Held by tests that set or depend on the process-wide mobile config.
+    static MOBILE_CONFIG_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     unsafe extern "C" fn capture_event(event_json: *const c_char, _user_data: *mut c_void) {
         assert!(!event_json.is_null());
@@ -1235,6 +1331,9 @@ mod tests {
 
     #[test]
     fn ffi_invoke_json_wraps_ping() {
+        let _guard = MOBILE_CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let request = CString::new(r#"{"id":5,"method":"ping"}"#).unwrap();
         let raw = unsafe { take_owned_string(meron_core_invoke_json(request.as_ptr())) };
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
@@ -1252,6 +1351,9 @@ mod tests {
 
     #[test]
     fn ffi_init_json_records_mobile_data_dir() {
+        let _guard = MOBILE_CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let data_dir = CString::new("/tmp/meron-mobile-test").unwrap();
         let raw = unsafe { take_owned_string(meron_core_init_json(data_dir.as_ptr())) };
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
@@ -1265,6 +1367,29 @@ mod tests {
                 db_key: String::new(),
             })
         );
+    }
+
+    #[test]
+    fn configuring_leaves_the_store_for_the_first_command() {
+        let _guard = MOBILE_CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = std::env::temp_dir().join(format!("meron-configure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let data_dir = dir.to_str().unwrap();
+        let configured = configure_mobile_core(data_dir, None);
+        assert_eq!(configured["ok"], true);
+        assert!(!dir.join("meron.db").exists());
+
+        let ping = invoke_mobile_request_json(r#"{"id":1,"method":"ping","params":{}}"#);
+        assert_eq!(ping["result"]["pong"], true);
+        let status = invoke_mobile_request_json(r#"{"id":2,"method":"core.status","params":{}}"#);
+        assert_eq!(status["result"]["migrating"], false);
+        assert!(!dir.join("meron.db").exists());
+
+        invoke_mobile_request_json(r#"{"id":3,"method":"account.list","params":{}}"#);
+        assert!(dir.join("meron.db").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

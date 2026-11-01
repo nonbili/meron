@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "No se pudo conectar al servidor de correo. Reintentando en la próxima sincronización...",
   "connectivity.syncFailedAccount": "No se pudo conectar al servidor de correo de {account}. Reintentando en la próxima sincronización...",
   "connectivity.syncedAccount": "{account} sincronizado",
+  "connectivity.upgradingStore": "Actualizando tu base de datos de correo. Esto puede tardar unos minutos…",
   "crash.body": "Se guardó un informe en este dispositivo. Al enviarlo se abre la hoja para compartir con el registro, para que puedas leerlo antes. Las direcciones de correo están ocultas.",
   "crash.notNow": "Ahora no",
   "crash.send": "Enviar informe",

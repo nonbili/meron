@@ -40,7 +40,7 @@ struct DesktopHost;
 
 impl EngineHost for DesktopHost {
     fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
-        store::open()
+        store::open_notifying(announce_store_upgrade)
     }
 
     fn apply_secret(&self, conn: &rusqlite::Connection, account: &str, creds: &mut imap::Creds) {
@@ -74,6 +74,18 @@ impl EngineHost for DesktopHost {
     ) -> anyhow::Result<()> {
         secrets::store(account, secrets)
     }
+}
+
+/// Tell the bridge the store is being upgraded, so it holds request timeouts and
+/// the UI can say why nothing is loading. This runs inside the synchronous
+/// `Engine::new`, before anything else has written to stdout, so it goes straight
+/// to the std handle rather than through [`Writer`].
+fn announce_store_upgrade() {
+    use std::io::Write;
+    let line = json!({ "event": "core.migrating", "detail": {} });
+    let mut stdout = std::io::stdout().lock();
+    let _ = writeln!(stdout, "{line}");
+    let _ = stdout.flush();
 }
 
 #[tokio::main]

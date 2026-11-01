@@ -5443,3 +5443,41 @@ fn matching_uids_reads_headers_and_never_a_cached_body() {
     let search = search_messages(&conn, "acct", "INBOX", "secretword", 10, None).unwrap();
     assert_eq!(search.len(), 2);
 }
+
+/// `open_notifying` leans on this constant to spot a store it must upgrade.
+#[test]
+fn schema_version_matches_the_last_migration() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    db::run_migrations(&conn).unwrap();
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, db::SCHEMA_VERSION);
+}
+
+/// Encrypting a legacy store exports all of it, so it has to be announced even
+/// when the schema is already current, and only by the open that does it.
+#[test]
+fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
+    let dir = std::env::temp_dir().join(format!("meron-encrypt-notify-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("meron.db");
+    let _ = std::fs::remove_file(&path);
+    drop(db::open_at(&path).unwrap());
+    let key = "ab".repeat(32);
+
+    let mut announced = 0;
+    let conn = db::open_at_notifying(&path, Some(&key), || {
+        // The file is still the plaintext original at this point.
+        let header = std::fs::read(&path).unwrap();
+        assert!(header.starts_with(b"SQLite format 3\0"));
+        announced += 1;
+    })
+    .unwrap();
+    drop(conn);
+    assert_eq!(announced, 1);
+
+    let conn = db::open_at_notifying(&path, Some(&key), || panic!("nothing to upgrade")).unwrap();
+    drop(conn);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

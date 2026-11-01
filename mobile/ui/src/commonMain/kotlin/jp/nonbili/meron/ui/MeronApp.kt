@@ -154,6 +154,7 @@ import jp.nonbili.meron.shared.MarkStarredParams
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MobileCommand
 import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveRssFeedParams
 import jp.nonbili.meron.shared.MoveThreadParams
@@ -223,6 +224,7 @@ internal const val MAILBOX_BLOCKING_TIMEOUT_MS = 15_000L
 // timeout the loader shows "still syncing" copy, past this one we give up and
 // surface the timeout error.
 internal const val MAILBOX_BLOCKING_HARD_TIMEOUT_MS = 60_000L
+private const val CORE_STATUS_POLL_MS = 500L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -324,6 +326,18 @@ fun MeronApp(
 
     // Reconcile once the core is up: the table wins, which is what lets a
     // restored backup reach these settings without a separate channel.
+    // The first commands wait while the core upgrades its store, with nothing to
+    // say why. Ask, until they get through; a poll because the upgrade may have
+    // begun before this composition could subscribe to any event.
+    LaunchedEffect(coreLoaded) {
+        if (!coreLoaded) return@LaunchedEffect
+        while (!state.initialAccountsLoaded) {
+            delay(CORE_STATUS_POLL_MS)
+            val status = runCatching { withContext(ioDispatcher) { core.invoke(MobileCommand.CoreStatus) } }
+            state.coreMigrating = status.getOrNull().orEmpty().contains("\"migrating\":true")
+        }
+        state.coreMigrating = false
+    }
     LaunchedEffect(coreLoaded) {
         if (!coreLoaded) return@LaunchedEffect
         val changed = hydrateSettingsFromCore(prefs, kanbanPrefs, mirror)

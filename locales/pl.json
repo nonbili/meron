@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Nie udało się połączyć z serwerem poczty. Ponowna próba przy następnej synchronizacji...",
   "connectivity.syncFailedAccount": "Nie udało się połączyć z serwerem poczty dla {account}. Ponowna próba przy następnej synchronizacji...",
   "connectivity.syncedAccount": "{account} zsynchronizowano",
+  "connectivity.upgradingStore": "Aktualizowanie bazy danych poczty. Może to potrwać kilka minut…",
   "crash.body": "Raport został zapisany na tym urządzeniu. Wysłanie otwiera panel udostępniania z dziennikiem, więc możesz go najpierw przeczytać. Adresy e-mail są zamaskowane.",
   "crash.notNow": "Nie teraz",
   "crash.send": "Wyślij raport",

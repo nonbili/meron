@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "메일 서버에 연결할 수 없습니다. 다음 동기화 시 다시 시도합니다…",
   "connectivity.syncFailedAccount": "{account}의 메일 서버에 연결할 수 없습니다. 다음 동기화 시 다시 시도합니다…",
   "connectivity.syncedAccount": "{account} 동기화됨",
+  "connectivity.upgradingStore": "메일 데이터베이스를 업데이트하는 중입니다. 몇 분 정도 걸릴 수 있습니다…",
   "crash.body": "보고서가 이 기기에 저장되었습니다. 보내기를 누르면 로그와 함께 공유 시트가 열리므로 먼저 내용을 확인할 수 있습니다. 이메일 주소는 가려집니다.",
   "crash.notNow": "나중에",
   "crash.send": "보고서 보내기",

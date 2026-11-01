@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Não foi possível conectar ao servidor de e-mail. Tentando novamente na próxima sincronização...",
   "connectivity.syncFailedAccount": "Não foi possível conectar ao servidor de e-mail de {account}. Tentando novamente na próxima sincronização...",
   "connectivity.syncedAccount": "{account} sincronizado",
+  "connectivity.upgradingStore": "Atualizando seu banco de dados de e-mail. Isso pode levar alguns minutos…",
   "crash.body": "Um relatório foi salvo neste dispositivo. Ao enviar, a folha de compartilhamento abre com o log, para que você possa lê-lo antes. Os endereços de e-mail são mascarados.",
   "crash.notNow": "Agora não",
   "crash.send": "Enviar relatório",

@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "无法连接到邮件服务器。将在下次同步时重试…",
   "connectivity.syncFailedAccount": "无法连接到 {account} 的邮件服务器。将在下次同步时重试…",
   "connectivity.syncedAccount": "{account} 已同步",
+  "connectivity.upgradingStore": "正在更新邮件数据库，可能需要几分钟…",
   "crash.body": "报告已保存在此设备上。发送时会打开分享面板并附上日志，你可以先查看内容。邮箱地址已做遮蔽处理。",
   "crash.notNow": "暂不",
   "crash.send": "发送报告",

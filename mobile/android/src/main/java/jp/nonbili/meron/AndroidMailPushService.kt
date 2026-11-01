@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -66,7 +67,7 @@ class AndroidMailPushService :
             stopSelf()
             return
         }
-        MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
+        MeronCoreNative.configureJson(filesDir.absolutePath, MeronDbKey.get(this))
         MeronCoreNative.addCoreEventListener(this)
     }
 
@@ -142,7 +143,12 @@ class AndroidMailPushService :
     }
 
     private suspend fun refreshWatches() {
-        val response = MeronCoreNative.invokeJson("""{"id":1,"method":"account.list"}""")
+        // Off this main-thread scope: the first command waits out any store
+        // upgrade. Later ones find the store ready.
+        val response =
+            withContext(Dispatchers.IO) {
+                MeronCoreNative.invokeJson("""{"id":1,"method":"account.list"}""")
+            }
         val accounts = parseAccountListResponse(response)
         val active = accounts.filterNot { accountSummaryIsRss(it) || it.paused || it.needsReconnect }
         // INBOX, plus the opted-in folders that hold an IDLE slot: IDLE watches

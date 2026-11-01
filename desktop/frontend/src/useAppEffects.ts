@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { boot } from './boot'
 import { invoke } from './lib/bridge'
+import { watchCoreMigration } from './states/connectivity'
 import { installWindowChrome, syncWindowFrame } from './lib/windowChrome'
 import { ui$, showToast } from './states/ui'
 import { mail$, loadThreads, loadThread, findLocalThread } from './states/mail'
@@ -108,6 +109,9 @@ export function useAppEffects() {
   }, [])
 
   useEffect(() => installWindowChrome(), [])
+
+  // Before boot: its first requests are the ones a store upgrade holds up.
+  useEffect(() => watchCoreMigration(), [])
 
   useEffect(() => {
     void boot().catch((error) => {

@@ -307,7 +307,7 @@ class ComposeMainActivity : ComponentActivity() {
         jp.nonbili.meron.ui.androidImageContext = this
         val coreInitJson =
             if (MeronCoreNative.isLoaded()) {
-                MeronCoreNative.initJson(filesDir.absolutePath, MeronDbKey.get(this))
+                MeronCoreNative.configureJson(filesDir.absolutePath, MeronDbKey.get(this))
             } else {
                 ""
             }

@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Unable to connect to the mail server. Retrying on the next sync…",
   "connectivity.syncFailedAccount": "Unable to connect to the mail server for {account}. Retrying on the next sync…",
   "connectivity.syncedAccount": "{account} synced",
+  "connectivity.upgradingStore": "Updating your mail database. This can take a few minutes…",
   "crash.body": "A report was saved on this device. Sending it opens the share sheet with the log, so you can read it first. Email addresses are masked.",
   "crash.notNow": "Not now",
   "crash.send": "Send report",

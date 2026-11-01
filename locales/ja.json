@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "メールサーバーに接続できませんでした。次の同期時に再試行します…",
   "connectivity.syncFailedAccount": "{account} のメールサーバーに接続できませんでした。次の同期時に再試行します…",
   "connectivity.syncedAccount": "{account} を同期しました",
+  "connectivity.upgradingStore": "メールデータベースを更新しています。数分かかる場合があります…",
   "crash.body": "レポートはこの端末に保存されています。送信すると共有シートがログとともに開くので、先に内容を確認できます。メールアドレスは伏せ字になります。",
   "crash.notNow": "今はしない",
   "crash.send": "レポートを送信",

@@ -10,13 +10,15 @@ struct Meron: App {
     private let incomingThreadEvents = IncomingThreadEvents()
 
     private let core = IosMeronCore()
+    private static let engineLifecycleQueue = DispatchQueue(label: "jp.nonbili.meron.engine-lifecycle")
+
     private let coreLoaded = true
     private let coreInitJson: String
     private let coreProtocolVersion: Int32
 
     init() {
         let dataDirectory = IosAppPaths.mobileDataDirectory()
-        coreInitJson = RustCoreBridge.initJson(dataDirectory: dataDirectory, dbKey: IosDbKey.get())
+        coreInitJson = RustCoreBridge.configureJson(dataDirectory: dataDirectory, dbKey: IosDbKey.get())
         coreProtocolVersion = Int32(RustCoreBridge.protocolVersion())
         IosBackgroundRefresh.register()
         IosBackgroundRefresh.schedule()
@@ -29,9 +31,23 @@ struct Meron: App {
 
     /// Drive the core's foreground Engine lifecycle (warm pool + IDLE) from the
     /// app's foreground/background transitions.
+    /// Serial and off the main thread: the first call waits out any store
+    /// upgrade, and iOS kills an app that blocks its launch for long.
     private static func engineLifecycle(_ method: String) {
         let request = #"{"id":92,"method":"\#(method)","params":{}}"#
-        _ = RustCoreBridge.invokeJson(request)
+        var task = UIBackgroundTaskIdentifier.invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "Engine lifecycle") {
+            UIApplication.shared.endBackgroundTask(task)
+            task = .invalid
+        }
+        engineLifecycleQueue.async {
+            _ = RustCoreBridge.invokeJson(request)
+            DispatchQueue.main.async {
+                guard task != .invalid else { return }
+                UIApplication.shared.endBackgroundTask(task)
+                task = .invalid
+            }
+        }
     }
 
     var body: some Scene {

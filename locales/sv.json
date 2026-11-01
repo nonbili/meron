@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Kunde inte nå e-postservern. Försöker igen vid nästa synkronisering...",
   "connectivity.syncFailedAccount": "Kunde inte nå e-postservern för {account}. Försöker igen vid nästa synkronisering...",
   "connectivity.syncedAccount": "{account} synkroniserat",
+  "connectivity.upgradingStore": "Din e-postdatabas uppdateras. Det kan ta några minuter…",
   "crash.body": "En rapport sparades på den här enheten. Att skicka öppnar delningsvyn med loggen, så att du kan läsa den först. E-postadresser är maskerade.",
   "crash.notNow": "Inte nu",
   "crash.send": "Skicka rapport",

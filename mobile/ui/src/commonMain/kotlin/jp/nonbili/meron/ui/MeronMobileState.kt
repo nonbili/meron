@@ -183,6 +183,9 @@ internal class MeronMobileState(
     // show a loading indicator instead of an empty state on cold start.
     var initialThreadsLoaded by mutableStateOf(false)
     var initialAccountsLoaded by mutableStateOf(false)
+
+    /** The core is upgrading its store, which holds up every other command. */
+    var coreMigrating by mutableStateOf(false)
     var mailboxCursor by mutableStateOf("")
     var mailboxAccountCursors by mutableStateOf(emptyMap<String, String>())
 

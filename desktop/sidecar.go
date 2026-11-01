@@ -30,6 +30,13 @@ type Sidecar struct {
 	cancel  context.CancelFunc
 	stderr  io.Writer
 	onEvent func(name string, detail any)
+
+	// coreUp closes once the core can answer requests (see awaitCore), and
+	// releaseCore is what closes it. Both are nil for a sidecar never Started.
+	coreUp      chan struct{}
+	releaseCore func()
+	// migrating is true while the core reports upgrading its store.
+	migrating bool
 }
 
 type sidecarResponse struct {
@@ -79,6 +86,9 @@ func (s *Sidecar) Start(ctx context.Context) error {
 	s.stdin = stdin
 	s.cancel = cancel
 	s.started = true
+	coreUp := make(chan struct{})
+	s.coreUp = coreUp
+	s.releaseCore = sync.OnceFunc(func() { close(coreUp) })
 	go s.readLoop(ctx, stdout)
 	go func() {
 		_ = cmd.Wait()
@@ -89,8 +99,69 @@ func (s *Sidecar) Start(ctx context.Context) error {
 			ch <- sidecarResponse{Error: "sidecar exited"}
 		}
 		s.mu.Unlock()
+		s.finishStarting(ctx)
 	}()
 	return nil
+}
+
+// Migrating reports whether the core is upgrading its store right now.
+func (s *Sidecar) Migrating() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.migrating
+}
+
+// finishStarting lets waiting calls through: the core is ready, has reported it
+// cannot start (and now answers every call with the reason), or has exited.
+func (s *Sidecar) finishStarting(ctx context.Context) {
+	s.mu.Lock()
+	release := s.releaseCore
+	s.mu.Unlock()
+	if release != nil {
+		release()
+	}
+	// After the release, so awaitCore can trust a cleared flag to mean coreUp is
+	// closed.
+	s.mu.Lock()
+	wasMigrating := s.migrating
+	s.migrating = false
+	s.mu.Unlock()
+	if wasMigrating && ctx != nil {
+		wailsRuntime.EventsEmit(ctx, "core.migrationDone")
+	}
+}
+
+// awaitCore holds a call until the core reads its stdin, so that a request's
+// timeout measures the request and not the startup in front of it. A store
+// upgrade is waited out however long it takes, because the UI says what is
+// happening. Any other stall (a keychain that never answers) still fails after
+// the call's own timeout, with the same error a late response would give.
+func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
+	s.mu.Lock()
+	coreUp := s.coreUp
+	s.mu.Unlock()
+	if coreUp == nil {
+		return nil
+	}
+	start := time.Now()
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-coreUp:
+			return nil
+		case <-ticker.C:
+			if s.Migrating() {
+				continue
+			}
+			select {
+			case <-coreUp:
+				return nil
+			default:
+			}
+			return fmt.Errorf("sidecar %s timeout after %s", method, time.Since(start).Round(time.Millisecond))
+		}
+	}
 }
 
 func sidecarEnv() []string {
@@ -130,6 +201,9 @@ func (s *Sidecar) Close() {
 
 func (s *Sidecar) Call(method string, params any) (any, error) {
 	timeout := sidecarCallTimeout(method)
+	if err := s.awaitCore(method, timeout); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	if !s.started {
 		s.mu.Unlock()
@@ -176,6 +250,14 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 			continue
 		}
 		if eventName, ok := object["event"].(string); ok {
+			switch eventName {
+			case "core.migrating":
+				s.mu.Lock()
+				s.migrating = true
+				s.mu.Unlock()
+			case "ready", "core.fatal":
+				s.finishStarting(ctx)
+			}
 			if ctx != nil {
 				wailsRuntime.EventsEmit(ctx, eventName, object["detail"])
 			}

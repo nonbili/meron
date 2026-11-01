@@ -1511,7 +1511,9 @@ internal fun MailRouteContent(
                     ) {
                         when {
                             !initialAccountsLoaded || accountsLoading -> {
-                                LoadingState(tr("mobile.status.loadingInbox"))
+                                LoadingState(
+                                    tr(if (coreMigrating) "connectivity.upgradingStore" else "mobile.status.loadingInbox"),
+                                )
                             }
 
                             coreAccounts.isEmpty() -> {

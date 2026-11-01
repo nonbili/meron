@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Không thể kết nối với máy chủ thư. Đang thử lại trong lần đồng bộ tiếp theo...",
   "connectivity.syncFailedAccount": "Không thể kết nối với máy chủ thư của {account}. Đang thử lại trong lần đồng bộ tiếp theo...",
   "connectivity.syncedAccount": "{account} đã đồng bộ",
+  "connectivity.upgradingStore": "Đang cập nhật cơ sở dữ liệu thư của bạn. Quá trình này có thể mất vài phút…",
   "crash.body": "Một báo cáo đã được lưu trên thiết bị này. Khi gửi, bảng chia sẻ sẽ mở kèm nhật ký để bạn đọc trước. Địa chỉ email được che bớt.",
   "crash.notNow": "Để sau",
   "crash.send": "Gửi báo cáo",

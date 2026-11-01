@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "無法連接至郵件伺服器。將於下次同步時重試…",
   "connectivity.syncFailedAccount": "無法連接至 {account} 的郵件伺服器。將於下次同步時重試…",
   "connectivity.syncedAccount": "{account} 已同步",
+  "connectivity.upgradingStore": "正在更新郵件資料庫，可能需要幾分鐘…",
   "crash.body": "報告已儲存在此裝置上。傳送時會開啟分享面板並附上記錄，你可以先查看內容。電子郵件地址已遮蔽。",
   "crash.notNow": "暫不",
   "crash.send": "傳送報告",

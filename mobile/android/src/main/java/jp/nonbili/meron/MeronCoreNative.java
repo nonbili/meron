@@ -57,6 +57,14 @@ final class MeronCoreNative {
         return meronCoreInvokeJson(requestJson);
     }
 
+    /** Sets up the core without opening the store, so unlike {@link #initJson}
+     *  it is safe on the main thread. The first command prepares the store. */
+    static String configureJson(String dataDir, String dbKey) {
+        if (!LOADED) return "";
+        configureOAuthDefaults();
+        return meronCoreConfigureJsonKeyed(dataDir, dbKey);
+    }
+
     static String initJson(String dataDir) {
         if (!LOADED) return "";
         configureOAuthDefaults();
@@ -130,6 +138,7 @@ final class MeronCoreNative {
 
     private static native int meronCoreProtocolVersion();
     private static native void meronCoreInitializeAndroidContext(Context context);
+    private static native String meronCoreConfigureJsonKeyed(String dataDir, String dbKey);
     private static native String meronCoreInitJson(String dataDir);
     private static native String meronCoreInitJsonKeyed(String dataDir, String dbKey);
     private static native String meronCoreInvokeJson(String requestJson);

@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "E-posti serveriga ei saadud ühendust. Uus katse järgmisel sünkroonimisel...",
   "connectivity.syncFailedAccount": "{account} e-posti serveriga ei saadud ühendust. Uus katse järgmisel sünkroonimisel...",
   "connectivity.syncedAccount": "{account} sünkroonitud",
+  "connectivity.upgradingStore": "Sinu e-posti andmebaasi uuendatakse. See võib võtta mõne minuti…",
   "crash.body": "Aruanne salvestati sellesse seadmesse. Saatmine avab jagamisvaate koos logiga, et saaksid selle enne läbi lugeda. E-posti aadressid on varjatud.",
   "crash.notNow": "Mitte praegu",
   "crash.send": "Saada aruanne",

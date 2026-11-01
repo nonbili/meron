@@ -354,6 +354,7 @@
   "connectivity.syncFailed": "Impossible de contacter le serveur de messagerie. Nouvel essai lors de la prochaine synchronisation...",
   "connectivity.syncFailedAccount": "Impossible de contacter le serveur de messagerie pour {account}. Nouvel essai lors de la prochaine synchronisation...",
   "connectivity.syncedAccount": "{account} synchronisé",
+  "connectivity.upgradingStore": "Mise à jour de votre base de données de courrier. Cela peut prendre quelques minutes…",
   "crash.body": "Un rapport a été enregistré sur cet appareil. L'envoi ouvre la feuille de partage avec le journal, afin que vous puissiez le lire d'abord. Les adresses e-mail sont masquées.",
   "crash.notNow": "Pas maintenant",
   "crash.send": "Envoyer le rapport",
