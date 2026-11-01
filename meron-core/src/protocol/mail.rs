@@ -2124,6 +2124,38 @@ pub(crate) fn set_mobile_rules(data_dir: &str, params: &Value) -> Result<Value, 
     })
 }
 
+pub(crate) fn mobile_rule_matches(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_str(params, "id")?;
+    with_mobile_db(data_dir, |conn| {
+        let count =
+            store::count_existing_rule_matches(&conn, &id).map_err(|err| err.to_string())?;
+        Ok(json!({ "count": count }))
+    })
+}
+
+pub(crate) fn mobile_rule_status(data_dir: &str) -> Result<Value, String> {
+    with_mobile_db(data_dir, |conn| {
+        let log = store::rule_log(&conn).map_err(|err| err.to_string())?;
+        let running = store::running_rules(&conn).map_err(|err| err.to_string())?;
+        Ok(json!({ "log": log, "running": running }))
+    })
+}
+
+pub(crate) fn stop_mobile_rule(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_str(params, "id")?;
+    with_mobile_db(data_dir, |conn| {
+        store::stop_rule(&conn, &id).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
+pub(crate) fn run_mobile_rule(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_str(params, "id")?;
+    let engine = crate::ffi::engine_for(data_dir)?;
+    let count = crate::ffi::engine_block_on(crate::engine::run_rule_on_existing(&engine, &id))?;
+    Ok(json!({ "count": count }))
+}
+
 pub(crate) fn cached_thread_uids(
     conn: &rusqlite::Connection,
     parsed: &ParsedThreadId,

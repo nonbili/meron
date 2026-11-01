@@ -4,7 +4,7 @@ import { InfoTip } from '../tooltip/InfoTip'
 import { SelectInput, TextInput } from '../field/Field'
 
 // iOS/chat-style switch, matching the look used across the settings UI.
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label?: string }) {
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label?: string }) {
   return (
     <button
       type="button"
@@ -29,11 +29,24 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: () =
 
 // A settings section: compact heading + one card whose rows are separated by
 // thin dividers. Rows inside should be SettingRow-based.
-export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+export function SettingsGroup({
+  title,
+  overflowVisible = false,
+  children,
+}: {
+  title: string
+  /** For a group holding a popup that must reach past the card's edge. */
+  overflowVisible?: boolean
+  children: ReactNode
+}) {
   return (
     <section>
       <h3 className="mb-2 px-1 text-[0.75rem] font-semibold text-secondary">{title}</h3>
-      <div className="rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 overflow-hidden shadow-sm shadow-black/[0.03] dark:shadow-black/10">
+      <div
+        className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/10 ${
+          overflowVisible ? '' : 'overflow-hidden'
+        }`}
+      >
         {children}
       </div>
     </section>

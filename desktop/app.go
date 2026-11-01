@@ -406,6 +406,14 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.rules()
 	case "mail.setRules":
 		return a.setRules(payload)
+	case "mail.ruleMatches":
+		return a.ruleMatches(payload)
+	case "mail.runRule":
+		return a.runRule(payload)
+	case "mail.ruleStatus":
+		return a.ruleStatus()
+	case "mail.stopRule":
+		return a.stopRule(payload)
 	case "mail.markAllRead":
 		return a.markAllRead(payload)
 	case "mail.emptyFolder":

@@ -763,6 +763,31 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parsesRulesWithTheirScopeAndTargets() {
+        val rule =
+            parseRulesResponse(
+                """{"rules":[{"id":"r","query":"","tags":[],"mark_read":false,"star":true,"move_to":"folder","folder":"Saved","folder_account":"b","accounts":["a","b"],"copy_folder":"Kept","copy_account":"c","disabled":true}]}""",
+            ).single()
+        assertEquals("b", rule.folderAccount)
+        assertEquals(listOf("a", "b"), rule.accounts)
+        assertEquals("Kept", rule.copyFolder)
+        assertEquals("c", rule.copyAccount)
+        assertEquals(true, rule.disabled)
+        assertEquals(rule, parseRulesResponse("""{"rules":[${rule.toJson()}]}""").single())
+    }
+
+    @Test
+    fun parsesRuleStatus() {
+        val status =
+            parseRuleStatusResponse(
+                """{"log":[{"at":5,"rule_id":"r","account":"a","subject":"Invoice","count":1,"failed":true,"detail":"gone"}],"running":{"r":40}}""",
+            )
+        assertEquals(RuleLogEntry(at = 5, ruleId = "r", subject = "Invoice", failed = true, detail = "gone"), status.log.single())
+        assertEquals(mapOf("r" to 40), status.running)
+        assertEquals(RuleStatus(), parseRuleStatusResponse("""{"log":[],"running":{}}"""))
+    }
+
+    @Test
     fun parsesCalendarItemsAndTheirRestorePayload() {
         val items =
             parseCalendarEventsResponse(

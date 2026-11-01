@@ -221,6 +221,12 @@ fn engine_foreground() -> Result<Value, String> {
                 data_dir: data_dir.clone(),
             });
             let engine = Engine::new(host).map_err(|err| format!("{err:#}"))?;
+            let _ = engine.rule_progress.set(Arc::new(|account, folder| {
+                emit_event(
+                    "mail.synced",
+                    json!({ "account": account, "folder": folder, "synced": 0 }),
+                );
+            }));
             *slot = Some(Arc::new(engine));
         }
     }

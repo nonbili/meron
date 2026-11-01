@@ -1901,6 +1901,60 @@ async fn message_sizes(
     Ok(sizes)
 }
 
+/// Whether `folder` holds this very message, byte for byte: a caller may give up
+/// the source on a yes. SEARCH only finds candidates, and a resent message can
+/// keep its Message-ID and even its size. In doubt this says no, and the price is
+/// a duplicate. On a yes the copy gets the source's read and starred state, added
+/// to whatever it has, as an APPEND would have given it.
+pub async fn folder_holds_message(
+    session: &mut Session,
+    folder: &str,
+    id: &str,
+    message: &RawMessageCopy,
+) -> Result<bool> {
+    session.select(folder).await.context("SELECT")?;
+    let hits = session
+        .uid_search(format!("UNDELETED HEADER MESSAGE-ID {}", imap_quote(id)))
+        .await
+        .context("UID SEARCH")?;
+    if hits.is_empty() {
+        return Ok(false);
+    }
+    let uid_set = hits
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut found = None;
+    {
+        let mut stream = session
+            .uid_fetch(uid_set, "(UID BODY.PEEK[])")
+            .await
+            .context("UID FETCH candidate copy")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH candidate copy item")?;
+            if fetch.body() == Some(message.raw.as_slice()) {
+                found = fetch.uid.or(found);
+            }
+        }
+    }
+    let Some(uid) = found else {
+        return Ok(false);
+    };
+    for (wanted, flag) in [(message.seen, "\\Seen"), (message.starred, "\\Flagged")] {
+        if wanted {
+            let mut stream = session
+                .uid_store(uid.to_string(), format!("+FLAGS.SILENT ({flag})"))
+                .await
+                .context("UID STORE copy flags")?;
+            while let Some(item) = stream.next().await {
+                item.context("UID STORE item")?;
+            }
+        }
+    }
+    Ok(true)
+}
+
 /// Whether the selected mailbox holds a copy of a message: the same whole
 /// Message-ID at the same size. SEARCH can't say, as it matches substrings, and
 /// a resent message can keep its ID, so its hits are read back. In doubt this

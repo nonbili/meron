@@ -1442,12 +1442,14 @@ internal fun SettingsToggleRow(
     subtitle: String? = null,
     hint: String? = null,
     checked: Boolean,
+    /** Shown in place of [icon], such as an account's avatar. */
+    leading: (@Composable () -> Unit)? = null,
     onToggle: () -> Unit,
 ) {
     ListItem(
         headlineContent = { SettingsHeadline(title = title, hint = hint) },
         supportingContent = subtitle?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        leadingContent = leading ?: { Icon(icon, contentDescription = null) },
         trailingContent = {
             Switch(
                 checked = checked,

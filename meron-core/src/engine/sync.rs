@@ -1089,11 +1089,8 @@ async fn sync_messages_with_policy(
             "mail.rules",
             "account={tag_account}: rule actions skipped: {err:#}"
         ),
-        Err(_) => crate::mlog!(
-            crate::log::Level::Warn,
-            "mail.rules",
-            "account={tag_account}: rule actions ran out of time"
-        ),
+        // A large message can take longer to copy than any sync may wait.
+        Err(_) => spawn_rule_worker(&tag_engine, &tag_account, &rule_folder),
     }
     result
         .arrivals

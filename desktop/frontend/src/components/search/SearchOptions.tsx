@@ -11,37 +11,8 @@ import { Button } from '../button/Button'
 import { RecipientInput } from '../composer/RecipientInput'
 import { Checkbox } from '../field/Checkbox'
 import { ColumnAvatar, useColumnLabel } from '../kanban/ColumnLabel'
+import { EMPTY_FIELDS, fieldsEmpty, type SearchFields } from './searchFields'
 import { TagInput } from './TagInput'
-
-/** The search options form, as the core's `search.parse` reads a query. */
-export type SearchFields = {
-  from: string
-  to: string
-  subject: string
-  /** Separated by spaces or commas; a thread must carry them all. */
-  tags: string
-  words: string
-  /** `yyyy-mm-dd`, or empty. */
-  after: string
-  /** `yyyy-mm-dd`, or empty. */
-  before: string
-  unread: boolean
-  starred: boolean
-  has_attachment: boolean
-}
-
-const EMPTY_FIELDS: SearchFields = {
-  from: '',
-  to: '',
-  subject: '',
-  tags: '',
-  words: '',
-  after: '',
-  before: '',
-  unread: false,
-  starred: false,
-  has_attachment: false,
-}
 
 /** A board's part of the form: which column to search, and saving the search as a column. */
 export type BoardSearchOptions = {
@@ -147,14 +118,7 @@ export function SearchOptions({
   }
 
   // Nothing to save until some field is filled in.
-  const empty =
-    !fields ||
-    (!fields.unread &&
-      !fields.starred &&
-      !fields.has_attachment &&
-      [fields.from, fields.to, fields.subject, fields.tags, fields.words, fields.after, fields.before].every(
-        (v) => !v.trim(),
-      ))
+  const empty = !fields || fieldsEmpty(fields)
 
   const set = <K extends keyof SearchFields>(key: K, value: SearchFields[K]) =>
     setFields((current) => (current ? { ...current, [key]: value } : current))
@@ -299,7 +263,7 @@ export function SearchOptions({
   )
 }
 
-const inputClass =
+export const inputClass =
   'min-w-0 flex-1 rounded-lg bg-app px-2 py-1.5 text-xs text-primary outline-none ring-1 ring-border focus:ring-accent'
 
 /**
@@ -307,7 +271,7 @@ const inputClass =
  * `<label>` would forward a click on one of them to the first, reopening a
  * menu the click just closed.
  */
-function Row({ label, menu = false, children }: { label: string; menu?: boolean; children: ReactNode }) {
+export function Row({ label, menu = false, children }: { label: string; menu?: boolean; children: ReactNode }) {
   const Wrapper = menu ? 'div' : 'label'
   return (
     <Wrapper className="flex items-center gap-3">

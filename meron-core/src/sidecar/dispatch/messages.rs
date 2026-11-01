@@ -144,6 +144,24 @@ pub(crate) async fn dispatch(
             let rules = store::set_rules(&engine.db.lock().unwrap(), rules)?;
             Ok(json!({ "rules": rules }))
         }
+        "rules.status" => {
+            let db = engine.db.lock().unwrap();
+            Ok(json!({ "log": store::rule_log(&db)?, "running": store::running_rules(&db)? }))
+        }
+        "rules.stop" => {
+            store::stop_rule(&engine.db.lock().unwrap(), &req_str(p, "id")?)?;
+            Ok(json!({ "ok": true }))
+        }
+        "rules.matches" => {
+            let id = req_str(p, "id")?;
+            let count = store::count_existing_rule_matches(&engine.db.lock().unwrap(), &id)?;
+            Ok(json!({ "count": count }))
+        }
+        "rules.run" => {
+            let id = req_str(p, "id")?;
+            let count = run_rule_on_existing(engine, &id).await?;
+            Ok(json!({ "count": count }))
+        }
 
         "starred.items" => {
             let limit = req_u32(p, "limit").unwrap_or(200);

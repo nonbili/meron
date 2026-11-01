@@ -58,7 +58,7 @@ pub fn search_messages(
     search_messages_among(conn, account, folder, query, limit, before_cursor, None)
 }
 
-/// Which of `uids` in `folder` match `query`.
+/// Which of `uids` in `folder` match `query`, read against their headers only.
 pub fn matching_uids(
     conn: &Connection,
     account: &str,
@@ -106,7 +106,7 @@ fn search_messages_among(
     // phrases; `columns` the same columns for a short needle. A condition
     // with any short needle is scanned whole, as the index can't find it.
     let mut text_condition =
-        |needles: &[String], index: &str, scope: &str, columns: &'static [usize]| {
+        |needles: &[String], index: &str, scopes: &[&str], columns: &'static [usize]| {
             if needles.iter().any(|needle| needle.chars().count() < 3) {
                 scans.push((
                     needles.iter().map(|needle| needle.to_lowercase()).collect(),
@@ -121,31 +121,42 @@ fn search_messages_among(
                     .map(|needle| format!("\"{}\"", needle.replace('"', "\"\"")))
                     .collect::<Vec<_>>()
                     .join(" OR ");
-                let expression = format!("{scope}({phrases})");
-                let count = index.matches('?').count();
-                args.extend(std::iter::repeat_n(Value::from(expression), count));
+                debug_assert_eq!(scopes.len(), index.matches('?').count());
+                args.extend(
+                    scopes
+                        .iter()
+                        .map(|scope| Value::from(format!("{scope}({phrases})"))),
+                );
             }
         };
     const MESSAGES_FTS: &str = "SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?";
     const RECIPIENTS_FTS: &str =
         "SELECT rowid FROM messages_recipients_fts WHERE messages_recipients_fts MATCH ?";
+    // A rule reads only what every message has: a body may or may not be cached
+    // yet, and a rule must not depend on which.
+    let headers_only = only_uids.is_some();
     for text in &query.text {
         // Body last: it is by far the largest column to fold.
+        let (scopes, columns): (&[&str], &'static [usize]) = if headers_only {
+            (&["{subject from_name from_addr} : ", ""], &[1, 2, 3, 10])
+        } else {
+            (&["", ""], &[1, 2, 3, 10, 11])
+        };
         text_condition(
             std::slice::from_ref(text),
             &format!("{MESSAGES_FTS} UNION {RECIPIENTS_FTS}"),
-            "",
-            &[1, 2, 3, 10, 11],
+            scopes,
+            columns,
         );
     }
     for from in &query.from {
-        text_condition(from, MESSAGES_FTS, "{from_name from_addr} : ", &[2, 3]);
+        text_condition(from, MESSAGES_FTS, &["{from_name from_addr} : "], &[2, 3]);
     }
     for subject in &query.subject {
-        text_condition(subject, MESSAGES_FTS, "subject : ", &[1]);
+        text_condition(subject, MESSAGES_FTS, &["subject : "], &[1]);
     }
     for to in &query.to {
-        text_condition(to, RECIPIENTS_FTS, "", &[10]);
+        text_condition(to, RECIPIENTS_FTS, &[""], &[10]);
     }
     if let Some(uids) = only_uids {
         let list = uids

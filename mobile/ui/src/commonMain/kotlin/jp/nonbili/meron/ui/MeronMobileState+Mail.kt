@@ -25,6 +25,7 @@ import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.Rule
+import jp.nonbili.meron.shared.RuleStatus
 import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
 import jp.nonbili.meron.shared.TagCount
@@ -39,6 +40,8 @@ import jp.nonbili.meron.shared.parseFolderRenameResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseReplaceTagResponse
 import jp.nonbili.meron.shared.parseReplacedQueries
+import jp.nonbili.meron.shared.parseRuleCountResponse
+import jp.nonbili.meron.shared.parseRuleStatusResponse
 import jp.nonbili.meron.shared.parseRulesResponse
 import jp.nonbili.meron.shared.parseSetTagsResponse
 import jp.nonbili.meron.shared.parseTagCountsResponse
@@ -419,6 +422,23 @@ internal suspend fun MeronMobileState.saveRules(rules: List<Rule>): List<Rule>? 
     runCatching {
         parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setRules(rules) }))
     }.getOrNull()
+
+internal suspend fun MeronMobileState.ruleMatches(id: String): Int? =
+    runCatching {
+        parseRuleCountResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).ruleMatches(id) }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.runRule(id: String): Int? =
+    runCatching {
+        parseRuleCountResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).runRule(id) }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.loadRuleStatus(): RuleStatus? =
+    runCatching {
+        parseRuleStatusResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).ruleStatus() }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.stopRule(id: String): Boolean = runCatching { requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).stopRule(id) }) }.isSuccess
 
 internal suspend fun MeronMobileState.loadKnownTags(): List<String> =
     runCatching {

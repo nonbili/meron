@@ -194,5 +194,174 @@ func TestIntegrationTags(t *testing.T) {
 		deliver(filed)
 		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == filed })
 		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return str(message, "subject") == filed })
+
+		callMap(t, sidecar, "rules.set", map[string]any{
+			"rules": []map[string]any{
+				{"query": "subject:copyme", "copy_account": "acct", "copy_folder": "Receipts"},
+				{"query": "subject:notmine", "star": true, "accounts": []string{"someone-else"}},
+			},
+		})
+		copied := "Copyme over"
+		foreign := "Notmine at all"
+		deliver(copied)
+		deliver(foreign)
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == copied })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == copied })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
+			return str(message, "subject") == foreign && message["starred"] != true
+		})
+
+		callMap(t, sidecar, "rules.set", map[string]any{
+			"rules": []map[string]any{{"move_to": "folder", "folder": "Receipts"}},
+		})
+		anything := "Anything at all"
+		deliver(anything)
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == anything })
+
+		// Delivered with no rule to take it, so only running one by hand can.
+		callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{}})
+		late := "Bystander already here"
+		deliver(late)
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == late })
+		saved := callMap(t, sidecar, "rules.set", map[string]any{
+			"rules": []map[string]any{{"query": "subject:bystander", "star": true}},
+		})
+		id := str(saved["rules"].([]any)[0].(map[string]any), "id")
+		if matches := callMap(t, sidecar, "rules.matches", map[string]any{"id": id}); matches["count"] != float64(1) {
+			t.Fatalf("matches: %v", matches)
+		}
+		if run := callMap(t, sidecar, "rules.run", map[string]any{"id": id}); run["count"] != float64(1) {
+			t.Fatalf("run: %v", run)
+		}
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
+			return str(message, "subject") == late && message["starred"] == true
+		})
 	})
+}
+
+// A rule across two real accounts: a copy reaches the other account and the mail
+// stays, a move reaches it and the original goes to Trash, and repeating a run by
+// hand doesn't copy again.
+func TestIntegrationRulesAcrossAccounts(t *testing.T) {
+	server := startMailServer(t)
+	sidecar, _ := startSidecar(t)
+	const alice, bob = "alice@mail.test", "bob@mail.test"
+	connectAccount(t, sidecar, server, "a", alice)
+	connectAccount(t, sidecar, server, "b", bob)
+	deliver := func(subject string) {
+		imapAppend(t, server.imapPort, alice, testPassword, "INBOX", rawMessage([]string{
+			"From: sender@mail.test", "To: " + alice, "Subject: " + subject,
+			"Message-ID: <" + strings.ReplaceAll(subject, " ", ".") + "@mail.test>",
+		}, "body\r\n"))
+	}
+	subjectIs := func(subject string) func(map[string]any) bool {
+		return func(message map[string]any) bool { return str(message, "subject") == subject }
+	}
+	// Mail only counts as new once the folder has been synced with something in it.
+	deliver("seed")
+	pollInbox(t, sidecar, "a", subjectIs("seed"))
+	callMap(t, sidecar, "folders.create", map[string]any{"account": "b", "name": "Saved"})
+	callMap(t, sidecar, "folders.list", map[string]any{"account": "b", "refresh": true})
+	callMap(t, sidecar, "folders.list", map[string]any{"account": "a", "refresh": true})
+
+	callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{
+			{"query": "subject:copyacross", "accounts": []string{"a"}, "copy_account": "b", "copy_folder": "Saved"},
+			{"query": "subject:moveacross", "accounts": []string{"a"}, "move_to": "folder", "folder": "Saved", "folder_account": "b"},
+		},
+	})
+	copied, moved := "copyacross one", "moveacross two"
+	deliver(copied)
+	deliver(moved)
+	pollFolder(t, sidecar, "b", "Saved", subjectIs(copied))
+	pollFolder(t, sidecar, "b", "Saved", subjectIs(moved))
+	pollInbox(t, sidecar, "a", subjectIs(copied))
+	pollFolder(t, sidecar, "a", "Trash", subjectIs(moved))
+	assertNoMessageInFolder(t, sidecar, "a", "INBOX", subjectIs(moved))
+
+	// Nothing here to catch it as new, so only a run by hand copies it, once.
+	callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{}})
+	existing := "existing three"
+	deliver(existing)
+	pollInbox(t, sidecar, "a", subjectIs(existing))
+	saved := callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{{"query": "subject:existing", "copy_account": "b", "copy_folder": "Saved"}},
+	})
+	id := str(saved["rules"].([]any)[0].(map[string]any), "id")
+	for range 2 {
+		if run := callMap(t, sidecar, "rules.run", map[string]any{"id": id}); run["count"] != float64(1) {
+			// The second run sees the first still queued, or done.
+			t.Logf("run: %v", run)
+		}
+		time.Sleep(time.Second)
+	}
+	pollFolder(t, sidecar, "b", "Saved", subjectIs(existing))
+	time.Sleep(2 * time.Second)
+	found := runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "search", "-u", bob, "mailbox", "Saved", "header", "subject", existing)
+	if lines := strings.Count(strings.TrimSpace(found), "\n") + 1; lines != 1 {
+		t.Fatalf("copies in Saved: %d\n%s", lines, found)
+	}
+
+	// A different message under the same Message-ID isn't a copy of this one.
+	imapAppend(t, server.imapPort, alice, testPassword, "INBOX", rawMessage([]string{
+		"From: sender@mail.test", "To: " + alice, "Subject: resent four", "Message-ID: <resent@mail.test>",
+	}, "the first, shorter\r\n"))
+	imapAppend(t, server.imapPort, bob, testPassword, "Saved", rawMessage([]string{
+		"From: sender@mail.test", "To: " + alice, "Subject: resent four", "Message-ID: <resent@mail.test>",
+	}, "x\r\n"))
+	pollInbox(t, sidecar, "a", subjectIs("resent four"))
+	saved = callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{{"query": "subject:resent", "copy_account": "b", "copy_folder": "Saved"}},
+	})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		found = runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "search", "-u", bob, "mailbox", "Saved", "header", "subject", "resent four")
+		if strings.Count(strings.TrimSpace(found), "\n") == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a resent message wasn't copied beside the earlier one:\n%s", found)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	// An identical copy already there still gets what a rule did to the original.
+	flagged := "flagged five"
+	deliver(flagged)
+	pollInbox(t, sidecar, "a", subjectIs(flagged))
+	saved = callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{{"query": "subject:flagged", "copy_account": "b", "copy_folder": "Saved"}},
+	})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	pollFolder(t, sidecar, "b", "Saved", subjectIs(flagged))
+	saved = callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{{"query": "subject:flagged", "star": true, "copy_account": "b", "copy_folder": "Saved"}},
+	})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	deadline = time.Now().Add(15 * time.Second)
+	for !strings.Contains(runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "fetch", "-u", bob, "flags", "mailbox", "Saved", "header", "subject", flagged), "\\Flagged") {
+		if time.Now().After(deadline) {
+			t.Fatal("the star never reached the copy already in Saved")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	// A cross-account move still lands if an earlier copy has since been deleted.
+	runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "expunge", "-u", bob, "mailbox", "Saved", "header", "subject", existing)
+	saved = callMap(t, sidecar, "rules.set", map[string]any{
+		"rules": []map[string]any{{"query": "subject:existing", "move_to": "folder", "folder": "Saved", "folder_account": "b"}},
+	})
+	id = str(saved["rules"].([]any)[0].(map[string]any), "id")
+	callMap(t, sidecar, "rules.run", map[string]any{"id": id})
+	pollFolder(t, sidecar, "a", "Trash", subjectIs(existing))
+	found = runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "search", "-u", bob, "mailbox", "Saved", "header", "subject", existing)
+	if strings.TrimSpace(found) == "" {
+		t.Fatal("the original went to Trash but no copy reached Saved")
+	}
+
+	status := callMap(t, sidecar, "rules.status", map[string]any{})
+	if log, _ := status["log"].([]any); len(log) == 0 {
+		t.Fatal("no log of what rules did")
+	}
 }

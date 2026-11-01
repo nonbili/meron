@@ -802,8 +802,44 @@ fun parseRulesResponse(responseJson: String): List<Rule> =
                 star = rule.findJsonBooleanProperty("star") ?: false,
                 moveTo = rule.findJsonStringProperty("move_to").orEmpty(),
                 folder = rule.findJsonStringProperty("folder").orEmpty(),
+                folderAccount = rule.findJsonStringProperty("folder_account").orEmpty(),
+                accounts = rule.topLevelStringArray("accounts"),
+                copyFolder = rule.findJsonStringProperty("copy_folder").orEmpty(),
+                copyAccount = rule.findJsonStringProperty("copy_account").orEmpty(),
+                disabled = rule.findJsonBooleanProperty("disabled") ?: false,
             )
         }.orEmpty()
+
+fun parseRuleStatusResponse(responseJson: String): RuleStatus {
+    val entries = responseJson.jsonObjectEntries()
+
+    fun property(name: String) = entries.firstOrNull { it.first == name }?.second
+    return RuleStatus(
+        log =
+            property("log")
+                ?.takeIf { it.startsWith("[") }
+                ?.jsonArrayElements()
+                ?.map { entry ->
+                    RuleLogEntry(
+                        at = entry.findJsonLongProperty("at") ?: 0,
+                        ruleId = entry.findJsonStringProperty("rule_id").orEmpty(),
+                        subject = entry.findJsonStringProperty("subject").orEmpty(),
+                        count = entry.findJsonLongProperty("count")?.toInt() ?: 1,
+                        failed = entry.findJsonBooleanProperty("failed") ?: false,
+                        detail = entry.findJsonStringProperty("detail").orEmpty(),
+                    )
+                }.orEmpty(),
+        running =
+            property("running")
+                ?.takeIf { it.startsWith("{") }
+                ?.jsonObjectEntries()
+                ?.associate { (id, left) -> id to (left.toIntOrNull() ?: 0) }
+                .orEmpty(),
+    )
+}
+
+/** The `count` answering `mail.ruleMatches` and `mail.runRule`. */
+fun parseRuleCountResponse(responseJson: String): Int = responseJson.findJsonLongProperty("count")?.toInt() ?: 0
 
 private fun String.topLevelStringArray(name: String): List<String> =
     jsonObjectEntries()

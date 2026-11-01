@@ -314,7 +314,7 @@ private fun SearchOptionsScopeField(
 }
 
 @Composable
-private fun SearchOptionsTextField(
+internal fun SearchOptionsTextField(
     label: String,
     value: String,
     onSubmit: () -> Unit,
@@ -407,7 +407,7 @@ private fun lastListComma(value: String): Int {
  * address.
  */
 @Composable
-private fun SearchOptionsAddressField(
+internal fun SearchOptionsAddressField(
     state: MeronMobileState,
     accountId: String,
     label: String,
@@ -490,7 +490,7 @@ private fun SearchOptionsDateChip(
     )
 }
 
-private suspend fun MeronMobileState.parseSearchQuery(query: String): SearchFields? =
+internal suspend fun MeronMobileState.parseSearchQuery(query: String): SearchFields? =
     runCatching {
         withContext(ioDispatcher) {
             parseSearchFieldsResponse(requireCoreOk(MobileMailCommandClient(core).parseSearch(query)))
@@ -509,7 +509,7 @@ private suspend fun MeronMobileState.suggestSearchContacts(
         }
     }.getOrDefault(emptyList())
 
-private suspend fun MeronMobileState.buildSearchQuery(fields: SearchFields): String? =
+internal suspend fun MeronMobileState.buildSearchQuery(fields: SearchFields): String? =
     runCatching {
         withContext(ioDispatcher) {
             parseSearchBuildResponse(requireCoreOk(MobileMailCommandClient(core).buildSearch(fields)))

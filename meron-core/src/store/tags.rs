@@ -751,8 +751,9 @@ mod tests {
     use super::*;
     use crate::imap::MessageHeader;
     use crate::store::{
-        Rule, apply_rules, finish_rule_actions, pending_rule_actions, replace_rule_tag,
-        retry_rule_actions, rules, set_rules,
+        Rule, RuleCopy, apply_rules, count_existing_rule_matches, finish_rule_actions,
+        pending_rule_actions, queue_existing_rule, replace_rule_tag, retry_rule_actions, rules,
+        set_rules,
     };
 
     fn db() -> Connection {
@@ -998,11 +999,12 @@ mod tests {
         apply_rules(&conn, "a", "Sent", 1, &[1]).unwrap();
         assert!(tags(&conn, "m@x").is_empty());
 
+        // No search is all new mail; no action is nothing at all.
         let no_search = Rule {
             query: " ".into(),
             ..rule.clone()
         };
-        assert!(set_rules(&conn, vec![no_search]).is_err());
+        assert_eq!(set_rules(&conn, vec![no_search]).unwrap()[0].query, "");
         let no_tag = Rule {
             tags: vec![],
             ..rule
@@ -1181,6 +1183,457 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_without_a_search_takes_all_new_mail() {
+        let conn = db();
+        set_rules(
+            &conn,
+            vec![Rule {
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(
+            &conn,
+            "INBOX",
+            &[message(1, "m@x", Some(&[])), message(2, "n@x", Some(&[]))],
+        );
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1, 2]).unwrap();
+        assert_eq!(pending_rule_actions(&conn, "a", "INBOX").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn running_a_rule_by_hand_takes_inbox_mail_and_is_safe_to_repeat() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO accounts(id, engine, provider, email, display_name, avatar_url, config, created_at, updated_at)
+             VALUES('a', 'imap', 'imap', 'a@x.test', '', '', '{}', 0, 0)",
+            [],
+        )
+        .unwrap();
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        let rules = set_rules(
+            &conn,
+            vec![Rule {
+                id: "r".into(),
+                query: "subject:s".into(),
+                star: true,
+                copy_account: "a".into(),
+                copy_folder: "Saved".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let id = &rules[0].id;
+        upsert(
+            &conn,
+            "INBOX",
+            &[message(1, "m@x", Some(&[])), message(2, "n@x", Some(&[]))],
+        );
+        upsert(&conn, "Saved", &[message(9, "n@x", Some(&[]))]);
+        upsert(&conn, "Other", &[message(5, "o@x", Some(&[]))]);
+
+        assert_eq!(count_existing_rule_matches(&conn, id).unwrap(), 2);
+        assert_eq!(
+            queue_existing_rule(&conn, id).unwrap(),
+            [("a".to_string(), 2)]
+        );
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued.len(), 2);
+        assert_eq!(queued[0].uidvalidity, 7);
+        assert_eq!(queued[0].copies.len(), 1);
+        assert!(
+            pending_rule_actions(&conn, "a", "Other")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(queue_existing_rule(&conn, id).unwrap().is_empty());
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued[0].copies.len(), 1);
+    }
+
+    fn account(conn: &Connection, id: &str) {
+        conn.execute(
+            "INSERT INTO accounts(id, engine, provider, email, display_name, avatar_url, config, created_at, updated_at)
+             VALUES(?1, 'imap', 'imap', ?1, '', '', '{}', 0, 0)",
+            [id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_rule_turned_off_does_nothing() {
+        let conn = db();
+        account(&conn, "a");
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        let rules = set_rules(
+            &conn,
+            vec![Rule {
+                star: true,
+                disabled: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(queue_existing_rule(&conn, &rules[0].id).is_err());
+    }
+
+    #[test]
+    fn mail_without_a_message_id_is_not_copied_or_moved_across_accounts() {
+        let conn = db();
+        set_rules(
+            &conn,
+            vec![Rule {
+                star: true,
+                move_to: "folder".into(),
+                folder: "Saved".into(),
+                folder_account: "b".into(),
+                copy_account: "b".into(),
+                copy_folder: "Other".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert!(queued[0].star);
+        assert!(queued[0].copies.is_empty() && !queued[0].trash);
+        let log = crate::store::rule_log(&conn).unwrap();
+        assert!(log.iter().any(|entry| entry.failed));
+    }
+
+    #[test]
+    fn removing_an_account_narrows_a_rule_or_turns_it_off() {
+        let conn = db();
+        let rule = |accounts: &[&str], copy: &str| Rule {
+            star: true,
+            accounts: accounts.iter().map(|id| id.to_string()).collect(),
+            copy_account: copy.into(),
+            copy_folder: if copy.is_empty() { "" } else { "Saved" }.into(),
+            ..Default::default()
+        };
+        set_rules(
+            &conn,
+            vec![
+                rule(&["gone", "kept"], ""),
+                rule(&["gone"], ""),
+                rule(&[], "gone"),
+            ],
+        )
+        .unwrap();
+
+        crate::store::forget_rule_account(&conn, "gone").unwrap();
+        let rules = crate::store::rules(&conn).unwrap();
+        assert_eq!(rules[0].accounts, ["kept"]);
+        assert!(!rules[0].disabled);
+        assert_eq!(rules[1].accounts, ["gone"]);
+        assert!(rules[1].disabled && rules[2].disabled);
+    }
+
+    #[test]
+    fn what_rules_did_is_logged_and_a_given_up_action_counts_against_its_rule() {
+        let conn = db();
+        let rules = set_rules(
+            &conn,
+            vec![Rule {
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+
+        for _ in 0..5 {
+            retry_rule_actions(&conn, "a", "INBOX", &[1], 0, "no such folder").unwrap();
+        }
+        let log = crate::store::rule_log(&conn).unwrap();
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[0].rule_id, rules[0].id);
+        assert!(log[0].failed);
+        assert_eq!(log[0].detail, "no such folder");
+        assert_eq!(log[0].subject, "s");
+        assert_eq!(log[1].subject, "s");
+        assert!(!log[1].failed);
+    }
+
+    #[test]
+    fn a_run_by_hand_reports_what_is_left_and_can_be_stopped() {
+        let conn = db();
+        account(&conn, "a");
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        let rules = set_rules(
+            &conn,
+            vec![Rule {
+                query: "subject:s".into(),
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let id = rules[0].id.clone();
+        upsert(
+            &conn,
+            "INBOX",
+            &[message(1, "m@x", Some(&[])), message(2, "n@x", Some(&[]))],
+        );
+
+        queue_existing_rule(&conn, &id).unwrap();
+        assert_eq!(crate::store::running_rules(&conn).unwrap()[&id], 2);
+        crate::store::stop_rule(&conn, &id).unwrap();
+        assert!(crate::store::running_rules(&conn).unwrap().is_empty());
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_run_by_hand_doesnt_skip_mail_another_rule_has_work_queued_for() {
+        let conn = db();
+        account(&conn, "a");
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        let rule = |star: bool| Rule {
+            query: "subject:s".into(),
+            star,
+            mark_read: !star,
+            ..Default::default()
+        };
+        let rules = set_rules(&conn, vec![rule(true), rule(false)]).unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        queue_existing_rule(&conn, &rules[0].id).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert_eq!(
+            queue_existing_rule(&conn, &rules[1].id).unwrap(),
+            [("a".to_string(), 1)]
+        );
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued.len(), 2);
+        assert!(queued.iter().any(|action| action.star));
+        assert!(queued.iter().any(|action| action.mark_read));
+
+        // The same rule again adds nothing.
+        assert!(queue_existing_rule(&conn, &rules[1].id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn what_a_stopped_run_had_in_flight_leaves_a_later_run_alone() {
+        let conn = db();
+        account(&conn, "a");
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        let rules = set_rules(
+            &conn,
+            vec![Rule {
+                query: "subject:s".into(),
+                copy_account: "a".into(),
+                copy_folder: "Saved".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let id = rules[0].id.clone();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        queue_existing_rule(&conn, &id).unwrap();
+        let old = pending_rule_actions(&conn, "a", "INBOX").unwrap().remove(0);
+        crate::store::stop_rule(&conn, &id).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        queue_existing_rule(&conn, &id).unwrap();
+        for _ in 0..5 {
+            retry_rule_actions(&conn, "a", "INBOX", &[1], old.run, "x").unwrap();
+        }
+        finish_rule_actions(&conn, "a", "INBOX", &[1], old.run).unwrap();
+
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued.len(), 1);
+        assert_ne!(queued[0].run, old.run);
+        assert_eq!(queued[0].copies, old.copies);
+    }
+
+    #[test]
+    fn a_rule_runs_only_on_its_accounts() {
+        let conn = db();
+        let rule = |accounts: &[&str]| Rule {
+            query: "subject:s".into(),
+            star: true,
+            accounts: accounts.iter().map(|id| id.to_string()).collect(),
+            ..Default::default()
+        };
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        set_rules(&conn, vec![rule(&["other"])]).unwrap();
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
+
+        set_rules(&conn, vec![rule(&["a", "other"])]).unwrap();
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        assert_eq!(pending_rule_actions(&conn, "a", "INBOX").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_copy_is_queued_unless_the_mail_is_already_there() {
+        let conn = db();
+        set_rules(
+            &conn,
+            vec![
+                Rule {
+                    query: "subject:s".into(),
+                    copy_account: "b".into(),
+                    copy_folder: "Saved".into(),
+                    ..Default::default()
+                },
+                Rule {
+                    query: "subject:s".into(),
+                    copy_account: "a".into(),
+                    copy_folder: "INBOX".into(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        // Not to where the message already is.
+        let copy = RuleCopy {
+            account: "b".into(),
+            folder: "Saved".into(),
+        };
+        assert_eq!(queued[0].copies, [copy.clone()]);
+        assert!(!queued[0].trash && queued[0].target.is_empty());
+    }
+
+    #[test]
+    fn a_copy_to_where_the_mail_is_moving_is_left_to_the_move() {
+        let conn = db();
+        crate::store::ensure_folder(&conn, "a", "Saved").unwrap();
+        set_rules(
+            &conn,
+            vec![
+                Rule {
+                    query: "subject:s".into(),
+                    copy_account: "a".into(),
+                    copy_folder: "Saved".into(),
+                    ..Default::default()
+                },
+                Rule {
+                    query: "subject:s".into(),
+                    move_to: "folder".into(),
+                    folder: "Saved".into(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued[0].target, "Saved");
+        assert!(queued[0].copies.is_empty());
+    }
+
+    #[test]
+    fn a_copy_to_trash_is_left_to_the_move_there() {
+        let conn = db();
+        crate::store::upsert_folders(
+            &conn,
+            "a",
+            &[crate::imap::Folder {
+                name: "Bin".into(),
+                role: "trash".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        set_rules(
+            &conn,
+            vec![Rule {
+                query: "subject:s".into(),
+                move_to: "trash".into(),
+                copy_account: "a".into(),
+                copy_folder: "Bin".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert!(queued[0].trash && queued[0].copies.is_empty());
+    }
+
+    #[test]
+    fn a_move_that_lost_to_another_rule_counts_as_a_failure() {
+        let conn = db();
+        let lost = crate::store::RuleAction {
+            rule_ids: vec!["r".into()],
+            ..Default::default()
+        };
+        crate::store::log_rule_lost_moves(&conn, "a", &[lost]).unwrap();
+        let log = crate::store::rule_log(&conn).unwrap();
+        assert_eq!(log[0].rule_id, "r");
+        assert!(log[0].failed);
+    }
+
+    #[test]
+    fn a_move_to_another_account_is_a_copy_and_then_trash() {
+        let conn = db();
+        set_rules(
+            &conn,
+            vec![Rule {
+                query: "subject:s".into(),
+                move_to: "folder".into(),
+                folder: "Saved".into(),
+                folder_account: "b".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert!(queued[0].trash);
+        assert_eq!(queued[0].target, "");
+        assert_eq!(queued[0].copies.len(), 1);
+        assert_eq!(queued[0].copies[0].account, "b");
+    }
+
+    #[test]
+    fn a_copy_needs_both_its_account_and_folder() {
+        let conn = db();
+        let refused = set_rules(
+            &conn,
+            vec![Rule {
+                query: "subject:s".into(),
+                copy_folder: "Saved".into(),
+                ..Default::default()
+            }],
+        );
+        assert!(refused.is_err());
+    }
+
+    #[test]
     fn a_star_is_queued_and_a_tag_is_not() {
         let conn = db();
         let starred = Rule {
@@ -1263,12 +1716,18 @@ mod tests {
         );
         apply_rules(&conn, "a", "INBOX", 1, &[1, 2]).unwrap();
 
-        finish_rule_actions(&conn, "a", "INBOX", &[2]).unwrap();
+        finish_rule_actions(&conn, "a", "INBOX", &[2], 0).unwrap();
         for _ in 0..4 {
-            assert_eq!(retry_rule_actions(&conn, "a", "INBOX", &[1]).unwrap(), 0);
+            assert_eq!(
+                retry_rule_actions(&conn, "a", "INBOX", &[1], 0, "x").unwrap(),
+                0
+            );
         }
         assert_eq!(pending_rule_actions(&conn, "a", "INBOX").unwrap().len(), 1);
-        assert_eq!(retry_rule_actions(&conn, "a", "INBOX", &[1]).unwrap(), 1);
+        assert_eq!(
+            retry_rule_actions(&conn, "a", "INBOX", &[1], 0, "x").unwrap(),
+            1
+        );
         assert!(
             pending_rule_actions(&conn, "a", "INBOX")
                 .unwrap()

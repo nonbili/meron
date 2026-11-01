@@ -285,11 +285,11 @@ export function ThreadMoveCopyItems({
   )
 }
 
-function accountLabel(account: Account) {
+export function accountLabel(account: Account) {
   return account.display_name || account.email || account.id
 }
 
-function FolderListStatus({ loading }: { loading: boolean }) {
+export function FolderListStatus({ loading }: { loading: boolean }) {
   const { t } = useTranslation()
   return (
     <div className="px-3 py-2 text-xs font-semibold text-secondary">
@@ -300,7 +300,7 @@ function FolderListStatus({ loading }: { loading: boolean }) {
 
 /** A row in the folder flyout for one account, opening that account's
  *  folders one level further out. */
-function AccountFolderItem({
+export function AccountFolderItem({
   account,
   folders,
   excludedFolderIds,

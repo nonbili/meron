@@ -83,7 +83,15 @@ async fn main() {
     meron_core::log::install_panic_hook();
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
     let engine = match Engine::new(Box::new(DesktopHost)) {
-        Ok(engine) => Arc::new(engine),
+        Ok(engine) => {
+            let writer = out.clone();
+            let _ = engine.rule_progress.set(Arc::new(move |account, folder| {
+                let writer = writer.clone();
+                let detail = json!({ "account": account, "folder": folder });
+                tokio::spawn(async move { emit(&writer, "mail.synced", detail).await });
+            }));
+            Arc::new(engine)
+        }
         Err(e) => {
             // Storage is unusable (an unreachable keychain, a store encrypted
             // with a key we no longer hold). Keep serving stdin anyway: exiting

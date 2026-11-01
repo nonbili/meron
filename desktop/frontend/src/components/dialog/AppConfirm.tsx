@@ -36,7 +36,7 @@ export function AppConfirm() {
             {confirm.title}
           </h2>
           {confirm.message && (
-            <p id="app-confirm-message" className="mt-1 text-sm leading-relaxed text-secondary">
+            <p id="app-confirm-message" className="mt-1 whitespace-pre-line text-sm leading-relaxed text-secondary">
               {confirm.message}
             </p>
           )}

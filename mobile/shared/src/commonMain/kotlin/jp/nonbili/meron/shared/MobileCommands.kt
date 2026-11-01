@@ -88,6 +88,10 @@ object MobileCommand {
     const val ReplaceTag = "mail.replaceTag"
     const val Rules = "mail.rules"
     const val SetRules = "mail.setRules"
+    const val RuleMatches = "mail.ruleMatches"
+    const val RunRule = "mail.runRule"
+    const val RuleStatus = "mail.ruleStatus"
+    const val StopRule = "mail.stopRule"
     const val RssSync = "rss.sync"
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
@@ -1166,6 +1170,14 @@ data class Rule(
     val star: Boolean = false,
     val moveTo: String = "",
     val folder: String = "",
+    /** The account of [folder]; empty for the mail's own account. */
+    val folderAccount: String = "",
+    /** The accounts the rule runs on; empty for all of them. */
+    val accounts: List<String> = emptyList(),
+    val copyFolder: String = "",
+    val copyAccount: String = "",
+    /** Kept, but not run. */
+    val disabled: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -1176,8 +1188,29 @@ data class Rule(
             "star" to star.toString(),
             "move_to" to moveTo.jsonString(),
             "folder" to folder.jsonString(),
+            "folder_account" to folderAccount.jsonString(),
+            "accounts" to accounts.jsonStringArray(),
+            "copy_folder" to copyFolder.jsonString(),
+            "copy_account" to copyAccount.jsonString(),
+            "disabled" to disabled.toString(),
         )
 }
+
+/** One line of what rules did. [subject] is empty for a run by hand, which logs one line. */
+data class RuleLogEntry(
+    val at: Long = 0,
+    val ruleId: String = "",
+    val subject: String = "",
+    val count: Int = 1,
+    val failed: Boolean = false,
+    val detail: String = "",
+)
+
+/** What rules did lately, and how many messages each rule run by hand has left. */
+data class RuleStatus(
+    val log: List<RuleLogEntry> = emptyList(),
+    val running: Map<String, Int> = emptyMap(),
+)
 
 data class RssMarkReadParams(
     val threadId: String,
@@ -1426,6 +1459,14 @@ class MobileMailCommandClient(
             MobileCommand.SetRules,
             rules.joinToString(separator = ",", prefix = "{\"rules\":[", postfix = "]}") { it.toJson() },
         )
+
+    suspend fun ruleMatches(id: String): String = core.invoke(MobileCommand.RuleMatches, jsonObject("id" to id.jsonString()))
+
+    suspend fun runRule(id: String): String = core.invoke(MobileCommand.RunRule, jsonObject("id" to id.jsonString()))
+
+    suspend fun ruleStatus(): String = core.invoke(MobileCommand.RuleStatus, "{}")
+
+    suspend fun stopRule(id: String): String = core.invoke(MobileCommand.StopRule, jsonObject("id" to id.jsonString()))
 }
 
 fun accountListRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.AccountList)

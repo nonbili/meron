@@ -2813,7 +2813,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 22);
 
     for table in [
         "accounts",
@@ -2851,7 +2851,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 22);
 }
 
 #[test]
@@ -2879,7 +2879,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 22);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -4607,7 +4607,7 @@ fn tasks_tables_arrive_on_an_existing_install() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 22);
 
     // Cached mail is untouched, and the new tables are writable.
     let messages: i64 = conn
@@ -5419,4 +5419,27 @@ fn rename_folder_keeps_the_rows_and_drops_the_cache() {
         None
     );
     assert_eq!(get_folder_unread(&conn, "acct", "Work/Reports").unwrap(), 0);
+}
+
+#[test]
+fn matching_uids_reads_headers_and_never_a_cached_body() {
+    let conn = test_conn();
+    insert_message(
+        &conn,
+        1,
+        "Plan",
+        "Aki",
+        "aki@example.com",
+        Some("the secretword"),
+    );
+    insert_message(&conn, 2, "secretword", "Aki", "aki@example.com", None);
+    insert_message(&conn, 3, "Plan", "Aki", "aki@example.com", Some("ab here"));
+    insert_message(&conn, 4, "ab", "Aki", "aki@example.com", None);
+
+    let hits = |query: &str| matching_uids(&conn, "acct", "INBOX", query, &[1, 2, 3, 4]).unwrap();
+    assert_eq!(hits("secretword"), [2]);
+    // Short enough to be scanned, not looked up in the index.
+    assert_eq!(hits("ab"), [4]);
+    let search = search_messages(&conn, "acct", "INBOX", "secretword", 10, None).unwrap();
+    assert_eq!(search.len(), 2);
 }

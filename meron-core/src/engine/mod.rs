@@ -133,6 +133,11 @@ pub struct Engine {
     /// overlapping one could settle a newer edit while an older write is still
     /// on its way to the server.
     pub tag_pushes: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Accounts with a worker going through queued rule actions.
+    pub rule_workers: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// Hears the account and folder when rules changed mail with no sync around
+    /// to say so. Set once by the host, which knows how to tell its clients.
+    pub rule_progress: std::sync::OnceLock<Arc<dyn Fn(&str, &str) + Send + Sync>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -422,6 +427,8 @@ impl Engine {
             prefetch_skipped: std::sync::Mutex::new(HashSet::new()),
             refused_tags: std::sync::Mutex::new(HashSet::new()),
             tag_pushes: std::sync::Mutex::new(HashMap::new()),
+            rule_workers: std::sync::Mutex::new(Default::default()),
+            rule_progress: std::sync::OnceLock::new(),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
