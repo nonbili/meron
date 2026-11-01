@@ -11,7 +11,7 @@
 //! nothing, and only a keyword that was there and went away removes a tag.
 
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::{now_unix, split_thread_key, thread_uids_by_folder};
@@ -99,6 +99,20 @@ pub fn change_tags(
     mirrored: bool,
 ) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
+    write_tag_changes(&tx, account, keys, add, remove, mirrored)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// [`change_tags`], inside the caller's transaction.
+fn write_tag_changes(
+    tx: &Connection,
+    account: &str,
+    keys: &[String],
+    add: &[String],
+    remove: &[String],
+    mirrored: bool,
+) -> Result<()> {
     let now = now_unix();
     for key in keys {
         for tag in add {
@@ -128,7 +142,6 @@ pub fn change_tags(
             }
         }
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -653,24 +666,111 @@ pub fn apply_tag_rules(conn: &Connection, account: &str, folder: &str, uids: &[u
     if uids.is_empty() {
         return Ok(());
     }
-    let rules = tag_rules(conn)?;
+    // Reading the rules and applying them are one step: see [`replace_tag_and_rules`].
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let rules = tag_rules(&tx)?;
     if rules.is_empty() {
         return Ok(());
     }
-    let role = super::folder_role(conn, account, folder)?;
+    let role = super::folder_role(&tx, account, folder)?;
     if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
         return Ok(());
     }
     for rule in rules {
-        let matched = super::matching_uids(conn, account, folder, &rule.query, uids)?;
+        let matched = super::matching_uids(&tx, account, folder, &rule.query, uids)?;
         if matched.is_empty() {
             continue;
         }
         let copies = BTreeMap::from([(folder.to_string(), matched)]);
-        let keys = message_tag_keys(conn, account, &copies)?;
-        change_tags(conn, account, &keys, &rule.tags, &[], true)?;
+        let keys = message_tag_keys(&tx, account, &copies)?;
+        write_tag_changes(&tx, account, &keys, &rule.tags, &[], true)?;
     }
+    tx.commit()?;
     Ok(())
+}
+
+/// Rename `tag` on every message of this store, or take it off with no `to`, and
+/// answer with the accounts that changed. A message already carrying `to` just
+/// loses `tag`. Only mail cached here can change: a keyword on mail not yet
+/// downloaded reads as the old tag when it arrives.
+pub fn replace_tag(
+    conn: &Connection,
+    tag: &str,
+    to: Option<&str>,
+    mirrored: bool,
+) -> Result<Vec<String>> {
+    let tx = conn.unchecked_transaction()?;
+    let accounts = replace_message_tag(&tx, tag, to, mirrored)?;
+    tx.commit()?;
+    Ok(accounts)
+}
+
+/// [`replace_tag`] and [`replace_rule_tag`] as one step, for a store whose rules
+/// sync applies. A write transaction from the start, as [`apply_tag_rules`] holds
+/// one: rules it read can't then land after this sweep and bring the tag back.
+pub fn replace_tag_and_rules(
+    conn: &Connection,
+    tag: &str,
+    to: Option<&str>,
+) -> Result<(Vec<String>, Vec<TagRule>)> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let rules = replace_rule_tag(&tx, tag, to)?;
+    let accounts = replace_message_tag(&tx, tag, to, true)?;
+    tx.commit()?;
+    Ok((accounts, rules))
+}
+
+fn replace_message_tag(
+    conn: &Connection,
+    tag: &str,
+    to: Option<&str>,
+    mirrored: bool,
+) -> Result<Vec<String>> {
+    if to == Some(tag) {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT account, tag_key FROM message_tags
+         WHERE tag = ?1 AND state IN {LIVE_STATES}"
+    ))?;
+    let mut keys: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in stmt.query_map(params![tag], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (account, key) = row?;
+        keys.entry(account).or_default().push(key);
+    }
+    let add: Vec<String> = to.iter().map(|to| to.to_string()).collect();
+    let remove = [tag.to_string()];
+    for (account, keys) in &keys {
+        write_tag_changes(conn, account, keys, &add, &remove, mirrored)?;
+    }
+    Ok(keys.into_keys().collect())
+}
+
+/// [`replace_tag`] for the rules: they apply the new name, or lose the tag, and
+/// a rule left with no tag is gone. Answers with the rules as they now stand.
+pub fn replace_rule_tag(conn: &Connection, tag: &str, to: Option<&str>) -> Result<Vec<TagRule>> {
+    let rules = tag_rules(conn)?;
+    if to == Some(tag) {
+        return Ok(rules);
+    }
+    let mut next = Vec::with_capacity(rules.len());
+    for mut rule in rules {
+        if let Some(to) = to {
+            rule.query = crate::search_query::rename_tag_terms(&rule.query, tag, to);
+        }
+        if rule.tags.iter().any(|item| item == tag) {
+            rule.tags.retain(|item| item != tag);
+            rule.tags.extend(to.map(str::to_string));
+            rule.tags.sort();
+            rule.tags.dedup();
+        }
+        if !rule.tags.is_empty() {
+            next.push(rule);
+        }
+    }
+    set_tag_rules(conn, next)
 }
 
 /// The tags of one mailbox copy's message.
@@ -1006,6 +1106,125 @@ mod tests {
             ..rule
         };
         assert!(set_tag_rules(&conn, vec![no_tag]).is_err());
+    }
+
+    #[test]
+    fn renaming_a_tag_moves_it_on_the_server_and_merges_into_an_existing_one() {
+        let conn = db();
+        upsert(
+            &conn,
+            "INBOX",
+            &[
+                message(1, "one@x", Some(&["old"])),
+                message(2, "both@x", Some(&["new", "old"])),
+                message(3, "other@x", Some(&["keep"])),
+            ],
+        );
+        assert_eq!(replace_tag(&conn, "old", Some("new"), true).unwrap(), ["a"]);
+        assert_eq!(tags(&conn, "one@x"), ["new"]);
+        assert_eq!(tags(&conn, "both@x"), ["new"]);
+        assert_eq!(tags(&conn, "other@x"), ["keep"]);
+        assert_eq!(tag_counts(&conn, None).unwrap().get("old"), None);
+
+        let pushes = pending_tag_pushes(&conn, "a").unwrap();
+        assert_eq!(pushes.len(), 2);
+        assert!(
+            pushes
+                .iter()
+                .any(|push| push.tag == "new" && push.add && push.uids == [1])
+        );
+        assert!(
+            pushes
+                .iter()
+                .any(|push| push.tag == "old" && !push.add && push.uids == [1, 2])
+        );
+    }
+
+    #[test]
+    fn a_deleted_tag_leaves_every_account_and_stays_gone_through_a_stale_sync() {
+        let conn = db();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&["old", "keep"]))]);
+        crate::store::upsert_messages(&conn, "b", "INBOX", &[message(1, "m@x", Some(&["old"]))])
+            .unwrap();
+        assert_eq!(replace_tag(&conn, "old", None, true).unwrap(), ["a", "b"]);
+        assert_eq!(tags(&conn, "m@x"), ["keep"]);
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&["old", "keep"]))]);
+        assert_eq!(tags(&conn, "m@x"), ["keep"], "echo from before the push");
+    }
+
+    #[test]
+    fn replacing_a_tag_with_itself_or_an_unknown_one_changes_nothing() {
+        let conn = db();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&["todo"]))]);
+        assert!(
+            replace_tag(&conn, "todo", Some("todo"), true)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(replace_tag(&conn, "absent", None, true).unwrap().is_empty());
+        assert_eq!(tags(&conn, "m@x"), ["todo"]);
+        assert!(pending_tag_pushes(&conn, "a").unwrap().is_empty());
+    }
+
+    #[test]
+    fn local_mail_renames_without_waiting_for_a_server() {
+        let conn = db();
+        upsert(&conn, "Notes", &[message(1, "m@x", None)]);
+        change_tags(&conn, "a", &["m@x".into()], &["old".into()], &[], false).unwrap();
+        replace_tag(&conn, "old", Some("new"), false).unwrap();
+        assert_eq!(tags(&conn, "m@x"), ["new"]);
+        assert!(!has_pending_tags(&conn, "a").unwrap());
+    }
+
+    #[test]
+    fn rules_follow_a_rename_and_lose_a_deleted_tag() {
+        let conn = db();
+        let rule = |query: &str, tags: &[&str]| TagRule {
+            query: query.into(),
+            tags: tags.iter().map(|tag| tag.to_string()).collect(),
+            ..Default::default()
+        };
+        set_tag_rules(
+            &conn,
+            vec![
+                rule("from:a", &["old", "keep"]),
+                rule("from:b tag:OLD tag:older", &["keep"]),
+                rule("from:c", &["old"]),
+            ],
+        )
+        .unwrap();
+
+        let renamed = replace_rule_tag(&conn, "old", Some("new")).unwrap();
+        assert_eq!(renamed[0].tags, ["keep", "new"]);
+        assert_eq!(renamed[1].query, "from:b tag:new tag:older");
+        assert_eq!(renamed[2].tags, ["new"]);
+
+        let deleted = replace_rule_tag(&conn, "new", None).unwrap();
+        assert_eq!(deleted.len(), 2, "a rule with no tag left can never apply");
+        assert_eq!(deleted[0].tags, ["keep"]);
+        assert_eq!(tag_rules(&conn).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_rename_with_its_rules_changes_both_and_leaves_no_old_tag_for_new_mail() {
+        let conn = db();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&["old"]))]);
+        let rule = TagRule {
+            query: "subject:s".into(),
+            tags: vec!["old".into()],
+            ..Default::default()
+        };
+        set_tag_rules(&conn, vec![rule]).unwrap();
+
+        let (accounts, rules) = replace_tag_and_rules(&conn, "old", Some("new")).unwrap();
+        assert_eq!(accounts, ["a"]);
+        assert_eq!(rules[0].tags, ["new"]);
+        assert_eq!(tags(&conn, "m@x"), ["new"]);
+
+        upsert(&conn, "INBOX", &[message(2, "n@x", Some(&[]))]);
+        apply_tag_rules(&conn, "a", "INBOX", &[2]).unwrap();
+        assert_eq!(tags(&conn, "n@x"), ["new"]);
+        assert_eq!(tag_counts(&conn, None).unwrap().get("old"), None);
     }
 
     #[test]

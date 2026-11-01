@@ -1148,6 +1148,7 @@ private fun MeronMobileScreenContent(
                     LaunchedEffect(Unit) { loadStorageUsage() }
                     SettingsScreen(
                         onOpenTagRules = { showTagRulesDialog = true },
+                        onOpenTags = { showTagsDialog = true },
                         onBack = popAppBack,
                         initialGeneral = settingsGeneralTarget,
                         onConsumeInitialGeneral = { settingsGeneralTarget = false },
@@ -1718,6 +1719,10 @@ private fun MeronMobileScreenContent(
 
         if (showTagRulesDialog) {
             TagRulesDialog(onDismiss = { showTagRulesDialog = false })
+        }
+
+        if (showTagsDialog) {
+            TagsDialog(onDismiss = { showTagsDialog = false })
         }
 
         selectedMailMoveThread?.let { thread ->

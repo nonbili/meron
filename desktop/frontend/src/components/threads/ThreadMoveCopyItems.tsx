@@ -21,11 +21,11 @@ const RECENT_LIMIT = 3
 // The flyouts are portalled out of the menu that opens them, so that menu's
 // "click outside" check has to count them as inside: they carry this marker.
 // Above every menu that hosts them, the conversation's overlay included.
-const flyoutClass = 'fixed z-[62] max-h-[calc(100vh-1rem)] overflow-y-auto shadow-xl'
+export const flyoutClass = 'fixed z-[62] max-h-[calc(100vh-1rem)] overflow-y-auto shadow-xl'
 
 /** Where a flyout of `width` opens beside its menu row: to the right, or to the
  *  left when the window has no room there. Null while closed. */
-function useFlyoutPosition(open: boolean, anchorRef: RefObject<HTMLDivElement | null>, width: number) {
+export function useFlyoutPosition(open: boolean, anchorRef: RefObject<HTMLDivElement | null>, width: number) {
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   useLayoutEffect(() => {
     if (!open) {

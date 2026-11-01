@@ -2090,6 +2090,24 @@ pub(crate) fn list_mobile_tags(data_dir: &str) -> Result<Value, String> {
     })
 }
 
+/// Rename a tag everywhere, or delete it, then let the server catch up on its
+/// own, as a tag change on one thread does.
+pub(crate) fn replace_mobile_tag(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let (tag, to) = crate::tags::parse_tag_replacement(params)?;
+    let mut accounts = Vec::new();
+    let result = with_mobile_db(data_dir, |conn| {
+        let (changed, rules) = store::replace_tag_and_rules(&conn, &tag, to.as_deref())
+            .map_err(|err| err.to_string())?;
+        accounts = changed;
+        let queries = crate::tags::renamed_queries(params, &tag, to.as_deref());
+        Ok(json!({ "ok": true, "tag": to, "rules": rules, "queries": queries }))
+    })?;
+    for account in &accounts {
+        crate::ffi::spawn_tag_push(data_dir, account);
+    }
+    Ok(result)
+}
+
 pub(crate) fn mobile_tag_rules(data_dir: &str) -> Result<Value, String> {
     with_mobile_db(data_dir, |conn| {
         let rules = store::tag_rules(&conn).map_err(|err| err.to_string())?;

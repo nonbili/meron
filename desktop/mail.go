@@ -660,6 +660,14 @@ func (a *App) tagList() (any, error) {
 	return a.sidecar.Call("tags.list", map[string]any{})
 }
 
+// replaceTag renames a tag everywhere, or deletes it when "to" is left out.
+func (a *App) replaceTag(payload map[string]any) (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, fmt.Errorf("mail core is not running")
+	}
+	return a.sidecar.Call("tags.replace", map[string]any{"tag": payload["tag"], "to": payload["to"], "queries": payload["queries"]})
+}
+
 // tagRules lists the rules that tag new mail.
 func (a *App) tagRules() (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {

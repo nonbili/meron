@@ -85,6 +85,7 @@ object MobileCommand {
     const val MarkStarred = "mail.markStarred"
     const val SetTags = "mail.setTags"
     const val TagList = "mail.tagList"
+    const val ReplaceTag = "mail.replaceTag"
     const val TagRules = "mail.tagRules"
     const val SetTagRules = "mail.setTagRules"
     const val RssSync = "rss.sync"
@@ -1398,6 +1399,17 @@ class MobileMailCommandClient(
     suspend fun setTags(params: SetTagsParams): String = core.invoke(MobileCommand.SetTags, params.toJson())
 
     suspend fun tagList(): String = core.invoke(MobileCommand.TagList, "{}")
+
+    /** Renames [tag] everywhere, or deletes it when [to] is null. The answer rewrites [queries], in order. */
+    suspend fun replaceTag(
+        tag: String,
+        to: String?,
+        queries: List<String>,
+    ): String =
+        core.invoke(
+            MobileCommand.ReplaceTag,
+            jsonObject("tag" to tag.jsonString(), "to" to to?.jsonString(), "queries" to queries.jsonStringArray()),
+        )
 
     suspend fun tagRules(): String = core.invoke(MobileCommand.TagRules, "{}")
 

@@ -240,6 +240,25 @@ fn clauses(query: &str) -> Vec<Clause<'_>> {
     clauses
 }
 
+/// `query` with each `tag:` term for `tag` naming `to` instead. Read as a search
+/// reads it: a quoted term's text and anything else that only looks like one are
+/// left alone, and every spelling of the term counts. The rest stays as written.
+pub fn rename_tag_terms(query: &str, tag: &str, to: &str) -> String {
+    let mut renamed = String::with_capacity(query.len());
+    let mut copied = 0;
+    for term in terms(query) {
+        if matches!(Operator::parse(term), Some(Operator::Tag(name)) if name == tag) {
+            let start = term.as_ptr() as usize - query.as_ptr() as usize;
+            renamed.push_str(&query[copied..start]);
+            renamed.push_str("tag:");
+            renamed.push_str(to);
+            copied = start + term.len();
+        }
+    }
+    renamed.push_str(&query[copied..]);
+    renamed
+}
+
 /// The slice of `query` from the start of `first` to the end of `last`, both
 /// slices of it.
 fn span<'a>(query: &'a str, first: &str, last: &str) -> &'a str {
@@ -682,6 +701,27 @@ fn parse_date(value: &str) -> Option<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renaming_a_tag_changes_only_terms_that_search_it() {
+        let rename = |query| rename_tag_terms(query, "old", "new");
+        assert_eq!(rename("tag:old"), "tag:new");
+        assert_eq!(
+            rename("from:a  TAG:Old tag:\"old\" tag:#old"),
+            "from:a  tag:new tag:new tag:new"
+        );
+        assert_eq!(rename("tag:old AND is:unread"), "tag:new AND is:unread");
+        for untouched in [
+            "tag:older",
+            "-tag:old",
+            "subject:\"Discuss tag:old tomorrow\"",
+            "from:(tag:old OR b)",
+            "\"tag:old\"",
+            "tag:",
+        ] {
+            assert_eq!(rename(untouched), untouched);
+        }
+    }
 
     #[test]
     fn plain_query_is_unchanged_free_text() {

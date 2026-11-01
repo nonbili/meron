@@ -106,6 +106,40 @@ func TestIntegrationTags(t *testing.T) {
 		pollCards(t, sidecar, hasTags(subject))
 	})
 
+	t.Run("renaming and deleting a tag reach the server", func(t *testing.T) {
+		subject := "Tag renamed everywhere"
+		uid := deliver(subject)
+		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == subject })
+		callMap(t, sidecar, "messages.setTags", map[string]any{
+			"account": "acct", "folder": "INBOX", "uids": []uint32{uid}, "add": []string{"draftname"},
+		})
+		keywordsSettle := func(want func(string) bool) {
+			t.Helper()
+			deadline := time.Now().Add(20 * time.Second)
+			for {
+				flags := serverKeywords(t, server, user, subject)
+				if want(flags) {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("keywords never settled: %s", flags)
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+		keywordsSettle(func(flags string) bool { return strings.Contains(flags, "draftname") })
+
+		callMap(t, sidecar, "tags.replace", map[string]any{"tag": "draftname", "to": "Final Name"})
+		pollCards(t, sidecar, hasTags(subject, "final-name"))
+		keywordsSettle(func(flags string) bool {
+			return strings.Contains(flags, "final-name") && !strings.Contains(flags, "draftname")
+		})
+
+		callMap(t, sidecar, "tags.replace", map[string]any{"tag": "final-name"})
+		pollCards(t, sidecar, hasTags(subject))
+		keywordsSettle(func(flags string) bool { return !strings.Contains(flags, "final-name") })
+	})
+
 	t.Run("a rule tags new mail and leaves mail already here", func(t *testing.T) {
 		old := "Invoice from before"
 		deliver(old)

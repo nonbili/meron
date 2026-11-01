@@ -58,7 +58,7 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
       // Three columns, the outer two equal while there is room, so the search
       // is centred on the window rather than between the ends' unequal contents.
       // Each end keeps at least its own width; the search gives way first.
-      className={`grid h-10 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,28rem)_minmax(max-content,1fr)] items-center bg-sidenav text-sidenav-ink ${layout}`}
+      className={`grid h-10 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,36rem)_minmax(max-content,1fr)] items-center bg-sidenav text-sidenav-ink ${layout}`}
       onContextMenu={(event) => {
         // The search box keeps the webview's own menu for its text.
         if (!tools || event.defaultPrevented || event.target instanceof HTMLInputElement) return

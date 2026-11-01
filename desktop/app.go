@@ -400,6 +400,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.setTags(payload)
 	case "mail.tagList":
 		return a.tagList()
+	case "mail.replaceTag":
+		return a.replaceTag(payload)
 	case "mail.tagRules":
 		return a.tagRules()
 	case "mail.setTagRules":

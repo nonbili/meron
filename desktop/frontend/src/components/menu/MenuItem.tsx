@@ -15,6 +15,7 @@ export function MenuItem({
   danger,
   disabled,
   submenuOpen,
+  pressed,
   trailing,
   className,
 }: {
@@ -25,6 +26,8 @@ export function MenuItem({
   disabled?: boolean
   /** Pass the open state for rows that open a submenu. */
   submenuOpen?: boolean
+  /** Pass the on/off state for rows that toggle in place. */
+  pressed?: boolean
   /** Right-aligned slot (e.g. a chevron or shortcut hint). */
   trailing?: ReactNode
   /** Extra classes appended to the shared item class. */
@@ -38,6 +41,7 @@ export function MenuItem({
       disabled={disabled}
       aria-haspopup={submenuOpen !== undefined ? 'menu' : undefined}
       aria-expanded={submenuOpen}
+      aria-pressed={pressed}
       className={`${base}${className ? ` ${className}` : ''}`}
     >
       {icon}

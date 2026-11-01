@@ -759,16 +759,31 @@ fun parseStorageUsageResponse(responseJson: String): StorageUsage =
 fun parseSetTagsResponse(responseJson: String): List<String> = responseJson.topLevelStringArray("tags")
 
 /** Every tag in use, as `mail.tagList` answers, most used first. */
-fun parseTagListResponse(responseJson: String): List<String> =
+fun parseTagListResponse(responseJson: String): List<String> = parseTagCountsResponse(responseJson).map { it.tag }
+
+data class TagCount(
+    val tag: String,
+    val count: Long,
+)
+
+/** Every tag in use and how many messages carry it, as `mail.tagList` answers, most used first. */
+fun parseTagCountsResponse(responseJson: String): List<TagCount> =
     responseJson
         .jsonObjectEntries()
         .firstOrNull { it.first == "tags" }
         ?.second
         ?.takeIf { it.startsWith("[") }
         ?.jsonArrayElements()
-        ?.sortedByDescending { it.findJsonLongProperty("count") ?: 0 }
-        ?.mapNotNull { it.findJsonStringProperty("tag") }
+        ?.mapNotNull { entry ->
+            entry.findJsonStringProperty("tag")?.let { TagCount(it, entry.findJsonLongProperty("count") ?: 0) }
+        }?.sortedByDescending { it.count }
         .orEmpty()
+
+/** The name a `mail.replaceTag` answer kept: null after a delete. */
+fun parseReplaceTagResponse(responseJson: String): String? = responseJson.findJsonStringProperty("tag")
+
+/** The saved searches sent with a `mail.replaceTag`, in order, as they now read. */
+fun parseReplacedQueries(responseJson: String): List<String> = responseJson.topLevelStringArray("queries")
 
 /** The rules a `mail.tagRules` or `mail.setTagRules` answer lists. */
 fun parseTagRulesResponse(responseJson: String): List<TagRule> =

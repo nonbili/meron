@@ -26,6 +26,7 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
+import jp.nonbili.meron.shared.TagCount
 import jp.nonbili.meron.shared.TagRule
 import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadSummary
@@ -36,7 +37,10 @@ import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseFolderRenameResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
+import jp.nonbili.meron.shared.parseReplaceTagResponse
+import jp.nonbili.meron.shared.parseReplacedQueries
 import jp.nonbili.meron.shared.parseSetTagsResponse
+import jp.nonbili.meron.shared.parseTagCountsResponse
 import jp.nonbili.meron.shared.parseTagListResponse
 import jp.nonbili.meron.shared.parseTagRulesResponse
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
@@ -319,16 +323,90 @@ internal fun MeronMobileState.changeThreadTags(
             }.getOrNull()
         if (tags != null) {
             updateThreadEverywhere(thread) { it.copy(tags = tags) }
-            // A tag column may gain or lose this thread, which no sync announces.
-            kanbanBoards
-                .firstOrNull { it.id == activeKanbanBoardId }
-                ?.columns
-                ?.filter(::kanbanColumnReadsTags)
-                ?.forEach { loadKanbanColumn(it) }
+            reloadTagColumns()
         }
         onDone(tags)
     }
 }
+
+/** A tag column may gain or lose threads, which no sync announces. */
+private fun MeronMobileState.reloadTagColumns() {
+    kanbanBoards
+        .firstOrNull { it.id == activeKanbanBoardId }
+        ?.columns
+        ?.filter { kanbanColumnReadsTags(it.copy(query = "${it.query} $kanbanSearch")) }
+        ?.forEach { loadKanbanColumn(it) }
+}
+
+/**
+ * Rename [tag] everywhere, or delete it with no [to], and report to [onDone] whether
+ * the core took it. It handles mail and rules; boards live here, so their saved
+ * searches go through it to be rewritten. Two columns that come to mean the same
+ * search become one, and a search scoped to a column stays on it. On the app's
+ * scope, not a dialog's: closing one mid-way must not leave the boards behind.
+ */
+internal fun MeronMobileState.replaceTag(
+    tag: String,
+    to: String?,
+    onDone: (Boolean) -> Unit,
+) {
+    val queries = kanbanBoards.flatMap { board -> board.columns.map { it.query } }.filter { it.isNotBlank() }.distinct()
+    scope.launch {
+        val answer =
+            runCatching {
+                requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).replaceTag(tag, to, queries) })
+            }.getOrNull()
+        if (answer != null) applyTagReplacement(tag, parseReplaceTagResponse(answer), queries.zip(parseReplacedQueries(answer)).toMap())
+        onDone(answer != null)
+    }
+}
+
+private fun MeronMobileState.applyTagReplacement(
+    tag: String,
+    next: String?,
+    renamed: Map<String, String>,
+) {
+    fun swap(thread: ThreadSummary): ThreadSummary =
+        if (tag !in thread.tags) {
+            thread
+        } else {
+            thread.copy(tags = (thread.tags - tag + listOfNotNull(next)).distinct().sorted())
+        }
+    coreThreads = coreThreads.map(::swap)
+    selectedCoreThread = selectedCoreThread?.let(::swap)
+    kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = state.threads.map(::swap)) }
+    // A cached search may no longer list the same mail; a cached mailbox does.
+    mailboxCache =
+        mailboxCache
+            .filterKeys { it.query.isBlank() }
+            .mapValues { (_, cached) -> cached.copy(threads = cached.threads.map(::swap)) }
+
+    fun rewrite(column: KanbanColumnSpec) = column.copy(query = renamed[column.query] ?: column.query)
+    kanbanBoards
+        .flatMap { it.columns }
+        .firstOrNull { kanbanColumnKey(it) == kanbanSearchScope }
+        ?.let { persistKanbanSearchScope(kanbanColumnKey(rewrite(it))) }
+    persistKanbanBoards(
+        kanbanBoards.map { board ->
+            board.copy(columns = board.columns.map(::rewrite).distinctBy(::kanbanColumnKey))
+        },
+    )
+    val shown = kanbanBoards.flatMap { it.columns }.map(::kanbanColumnKey).toSet()
+    kanbanColumns = kanbanColumns.filterKeys { it in shown }
+    loadKanbanBoard()
+    // Read the list again: a search may gain or lose results, and a read from
+    // before this change must not be the last word.
+    syncCoreThreads(
+        accountOverride = selectedCoreAccountId,
+        folderOverride = selectedCoreFolder,
+        syncFirst = false,
+    )
+}
+
+internal suspend fun MeronMobileState.loadTagCounts(): List<TagCount> =
+    runCatching {
+        parseTagCountsResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).tagList() }))
+    }.getOrDefault(emptyList())
 
 /** The saved rules, or null if they could not be read. */
 internal suspend fun MeronMobileState.loadTagRules(): List<TagRule>? =

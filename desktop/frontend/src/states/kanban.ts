@@ -389,6 +389,32 @@ function updateBoard(boardId: string, update: (board: KanbanBoard) => KanbanBoar
   )
 }
 
+/** Every saved search on every board, for the core to read. */
+export function kanbanColumnQueries(): string[] {
+  return [
+    ...new Set(settings$.kanbanBoards.get().flatMap((board) => board.columns.flatMap((column) => column.query ?? []))),
+  ]
+}
+
+/** Saved searches take the given new spellings, on every board, each column
+ *  keeping its slot and state. One that comes to mean the search of another
+ *  column on its board joins it: whatever pointed at it moves there. */
+export function renameKanbanColumnQueries(renamed: Map<string, string>) {
+  for (const board of settings$.kanbanBoards.get()) {
+    for (const column of board.columns) {
+      const query = column.query && renamed.get(column.query)
+      if (!query || query === column.query) continue
+      const target = { ...column, query }
+      if (replaceKanbanColumn(board.id, column, target)) continue
+      if (kanban$.searchScope.peek() === kanbanColumnKey(column)) kanban$.searchScope.set(kanbanColumnKey(target))
+      if (kanban$.paneColumnKey.peek() === kanbanBoardColumnKey(board.id, column)) {
+        kanban$.paneColumnKey.set(kanbanBoardColumnKey(board.id, target))
+      }
+      removeKanbanColumn(board.id, column)
+    }
+  }
+}
+
 export function getKanbanColumns(boardId: string): KanbanColumn[] {
   return settings$.kanbanBoards.get().find((board) => board.id === boardId)?.columns ?? []
 }

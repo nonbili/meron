@@ -4,7 +4,7 @@ use std::sync::Arc;
 use meron_core::engine::Engine;
 use meron_core::engine::*;
 use meron_core::protocol::Request;
-use meron_core::tags::parse_tag_list;
+use meron_core::tags::{parse_tag_list, parse_tag_replacement, renamed_queries};
 use meron_core::{imap, mail_model, store};
 
 use crate::Writer;
@@ -206,6 +206,20 @@ pub(crate) async fn dispatch(
             };
             spawn_tag_push(&engine, &account);
             Ok(json!({ "ok": true, "tags": tags }))
+        }
+
+        // Rename a tag everywhere, or delete it. The archive goes first, as
+        // opening it reads the store.
+        "tags.replace" => {
+            let (tag, to) = parse_tag_replacement(p).map_err(anyhow::Error::msg)?;
+            crate::sidecar::local::replace_tag(engine, &tag, to.as_deref())?;
+            let (accounts, rules) =
+                store::replace_tag_and_rules(&engine.db.lock().unwrap(), &tag, to.as_deref())?;
+            for account in &accounts {
+                spawn_tag_push(&engine, account);
+            }
+            let queries = renamed_queries(p, &tag, to.as_deref());
+            Ok(json!({ "ok": true, "tag": to, "rules": rules, "queries": queries }))
         }
 
         "messages.delete" => {

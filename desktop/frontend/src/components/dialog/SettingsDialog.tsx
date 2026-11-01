@@ -72,7 +72,7 @@ import { ThemeSettingsSection } from './ThemeSettingsSection'
 import { FontSettingsSection } from './FontSettingsSection'
 import { AccountProxyCard, ProxySettingsSection } from './ProxySettingsCard'
 import { AccountSignatureCard, SignatureSettingsSection } from './SignatureSettingsCard'
-import { TagRulesSection } from './TagRulesSection'
+import { TagsSection } from './TagsSection'
 import { AccountProfileGroup } from './AccountProfileGroup'
 import { useAccountAvatar } from './useAccountAvatar'
 import { RemoveImageBadge } from './RemoveImageBadge'
@@ -629,6 +629,8 @@ function MessagesSection() {
         <FontSettingsSection part="message" />
       </SettingsGroup>
 
+      <TagsSection />
+
       <SettingsGroup title={t('settings.sections.privacy')}>
         <SettingRow
           title={t('settings.privacy.remoteSenders')}
@@ -688,7 +690,6 @@ function ComposerSection() {
       </SettingsGroup>
 
       <SignatureSettingsSection />
-      <TagRulesSection />
     </div>
   )
 }

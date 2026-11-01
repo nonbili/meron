@@ -789,6 +789,17 @@ pub(crate) fn tag_counts(main: &Arc<Engine>) -> std::collections::BTreeMap<Strin
     counts.unwrap_or_default()
 }
 
+/// Rename or delete a tag in local folders. See [`store::replace_tag`]. Nothing
+/// to do without local folders, and the archive is not created for it.
+pub(crate) fn replace_tag(main: &Arc<Engine>, tag: &str, to: Option<&str>) -> anyhow::Result<()> {
+    if !store::has_local_account(&main.db.lock().unwrap())? {
+        return Ok(());
+    }
+    let archive = archive(main)?;
+    store::replace_tag(&archive.db.lock().unwrap(), tag, to, false)?;
+    Ok(())
+}
+
 /// Starred threads kept in local folders, for the cross-account Starred view.
 /// Empty when there are no local folders; the archive is not created for it.
 pub(crate) fn starred_cards(main: &Arc<Engine>, max_threads: u32) -> Vec<Value> {

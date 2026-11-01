@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import jp.nonbili.meron.shared.TagCount
 import jp.nonbili.meron.shared.TagRule
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlinx.coroutines.launch
@@ -150,6 +151,121 @@ internal fun MeronMobileState.TagDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.close")) } },
     )
+}
+
+/** Every tag in use, each to rename or delete across all mail on this device. */
+@Composable
+internal fun MeronMobileState.TagsDialog(onDismiss: () -> Unit) {
+    var tags by remember { mutableStateOf(emptyList<TagCount>()) }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var name by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<TagCount?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("") }
+    val coroutines = rememberCoroutineScope()
+    LaunchedEffect(Unit) { tags = loadTagCounts() }
+
+    fun replace(
+        tag: String,
+        to: String?,
+    ) {
+        if (busy) return
+        busy = true
+        replaceTag(tag, to) { done ->
+            coroutines.launch {
+                if (done) {
+                    tags = loadTagCounts()
+                    editing = null
+                }
+                failed = !done
+                busy = false
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("tags.title")) },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(tr("tags.manage.hint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (tags.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = filter,
+                        onValueChange = { filter = it },
+                        singleLine = true,
+                        placeholder = { Text(tr("tags.manage.filter")) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                val query = filter.trim().lowercase()
+                tags.filter { query in it.tag }.forEach { entry ->
+                    if (editing == entry.tag) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = {
+                                name = it
+                                failed = false
+                            },
+                            singleLine = true,
+                            isError = failed,
+                            supportingText = if (failed) ({ Text(tr("tags.invalid")) }) else null,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) replace(entry.tag, name) }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row {
+                            TextButton(enabled = !busy && name.isNotBlank(), onClick = { replace(entry.tag, name) }) {
+                                Text(tr("buttons.save"))
+                            }
+                            TextButton(onClick = { editing = null }) { Text(tr("buttons.cancel")) }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${entry.tag} (${entry.count})",
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                enabled = !busy,
+                                onClick = {
+                                    name = entry.tag
+                                    failed = false
+                                    editing = entry.tag
+                                },
+                            ) { Text(tr("buttons.edit")) }
+                            TextButton(enabled = !busy, onClick = { deleting = entry }) { Text(tr("buttons.delete")) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.close")) } },
+    )
+
+    deleting?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(tr("tags.manage.delete")) },
+            text = { Text(tr("tags.manage.deleteConfirm", mapOf("tag" to entry.tag, "count" to entry.count))) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleting = null
+                        replace(entry.tag, null)
+                    },
+                ) { Text(tr("buttons.delete")) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(tr("buttons.cancel")) } },
+        )
+    }
 }
 
 /** Tag new mail that matches a search, in the search box's own syntax. */

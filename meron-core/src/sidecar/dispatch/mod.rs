@@ -147,6 +147,7 @@ pub(crate) async fn dispatch(
         "messages.markRead"
         | "messages.markStarred"
         | "messages.setTags"
+        | "tags.replace"
         | "messages.delete"
         | "messages.move"
         | "messages.copy"

@@ -105,6 +105,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SettingsScreen(
     onOpenTagRules: () -> Unit,
+    onOpenTags: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
     onConsumeInitialGeneral: () -> Unit,
@@ -407,6 +408,7 @@ internal fun SettingsScreen(
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
                     onOpenTagRules = onOpenTagRules,
+                    onOpenTags = onOpenTags,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1120,6 +1122,7 @@ internal fun SettingsMessagesPage(
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
     onOpenTagRules: () -> Unit,
+    onOpenTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -1189,6 +1192,14 @@ internal fun SettingsMessagesPage(
         }
 
         item { SettingsSectionLabel(tr("tags.title")) }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Sell,
+                title = tr("tags.title"),
+                hint = tr("tags.manage.hint"),
+                onClick = onOpenTags,
+            )
+        }
         item {
             SettingsRow(
                 icon = Icons.Filled.Sell,

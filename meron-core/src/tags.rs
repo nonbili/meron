@@ -95,9 +95,80 @@ pub fn parse_tag_list(value: Option<&serde_json::Value>) -> Result<Vec<String>, 
     Ok(tags)
 }
 
+/// A request to rename a tag everywhere, or to delete it when `to` is left out or
+/// null: the tag, and what it becomes. Any other `to` that spells no tag is an
+/// error, never a delete, so clearing a rename field can't take a tag off every
+/// message.
+pub fn parse_tag_replacement(
+    params: &serde_json::Value,
+) -> Result<(String, Option<String>), String> {
+    let spell = |input: &str| normalize_tag(input).ok_or_else(|| format!("invalid tag: {input}"));
+    let tag = spell(
+        params
+            .get("tag")
+            .and_then(|tag| tag.as_str())
+            .unwrap_or_default(),
+    )?;
+    let to = match params.get("to") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(to)) => Some(spell(to)?),
+        Some(other) => return Err(format!("invalid tag: {other}")),
+    };
+    Ok((tag, to))
+}
+
+/// The answer's `queries`: each saved search the request sent, in order, as it
+/// reads after the replacement. Boards are kept by the app, so this is how their
+/// columns follow a rename without a second reader of the search syntax.
+pub fn renamed_queries(params: &serde_json::Value, tag: &str, to: Option<&str>) -> Vec<String> {
+    params
+        .get("queries")
+        .and_then(|queries| queries.as_array())
+        .into_iter()
+        .flatten()
+        .map(|query| {
+            let query = query.as_str().unwrap_or_default();
+            match to {
+                Some(to) => crate::search_query::rename_tag_terms(query, tag, to),
+                None => query.to_string(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_missing_name_deletes_a_tag() {
+        let parse = |params| parse_tag_replacement(&params);
+        assert_eq!(
+            parse(serde_json::json!({ "tag": "#Old", "to": "New Name" })),
+            Ok(("old".to_string(), Some("new-name".to_string())))
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "tag": "old" })),
+            Ok(("old".to_string(), None))
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "tag": "old", "to": null })),
+            Ok(("old".to_string(), None))
+        );
+        assert!(parse(serde_json::json!({ "tag": "old", "to": "" })).is_err());
+        assert!(parse(serde_json::json!({ "tag": "old", "to": "  " })).is_err());
+        assert!(parse(serde_json::json!({ "tag": "old", "to": 123 })).is_err());
+    }
+
+    #[test]
+    fn saved_searches_come_back_in_order_and_follow_only_a_rename() {
+        let params = serde_json::json!({ "queries": ["tag:old", "from:a"] });
+        assert_eq!(
+            renamed_queries(&params, "old", Some("new")),
+            ["tag:new", "from:a"]
+        );
+        assert_eq!(renamed_queries(&params, "old", None), ["tag:old", "from:a"]);
+    }
 
     #[test]
     fn input_normalizes_to_one_spelling() {

@@ -3,7 +3,6 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { loadTagRules, saveTagRules, type TagRule } from '../../states/mailTags'
 import { IconButton } from '../button/IconButton'
-import { SettingsGroup } from './AccountSettingsRows'
 
 const fieldClass =
   'min-w-0 flex-1 rounded-lg bg-hover px-2.5 py-1.5 text-xs text-primary placeholder-secondary border border-transparent focus:ring-1 focus:ring-accent'
@@ -49,7 +48,7 @@ export function TagRulesSection() {
   }
 
   return (
-    <SettingsGroup title={t('tags.rules.title')}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl border border-border divide-y divide-border/40">
       {rules?.map((rule) => (
         <div key={rule.id} className="flex items-center gap-2 px-3.5 py-2 text-xs">
           <span className="min-w-0 flex-1 truncate font-medium text-primary">{rule.query}</span>
@@ -92,7 +91,6 @@ export function TagRulesSection() {
         />
       </div>
       {invalid && <p className="px-3.5 py-2 text-[0.6875rem] font-medium text-rose-500">{t('tags.rules.invalid')}</p>}
-      <p className="px-3.5 py-2 text-[0.6875rem] text-secondary">{t('tags.rules.hint')}</p>
-    </SettingsGroup>
+    </div>
   )
 }

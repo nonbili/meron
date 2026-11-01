@@ -234,16 +234,15 @@ export function SearchOptions({
             {address('from', t('composer.fields.from'), true)}
             {address('to', t('composer.fields.to'))}
             {text('subject', t('composer.fields.subject'))}
-            <Row label={t('tags.title')}>
-              <TagInput
-                value={fields.tags}
-                onChange={(value) => set('tags', value)}
-                className={clsx(inputClass, 'w-full')}
-              />
+            <Row label={t('tags.title')} menu>
+              <TagInput value={fields.tags} onChange={(value) => set('tags', value)} />
             </Row>
             {text('words', t('search.hasWords'))}
-            {date('after', t('search.after'))}
-            {date('before', t('search.before'))}
+            {/* Side by side where they fit, to keep the form wider than it is tall. */}
+            <div className="flex flex-wrap gap-x-3 gap-y-2">
+              <div className="min-w-56 flex-1">{date('after', t('search.after'))}</div>
+              <div className="min-w-56 flex-1">{date('before', t('search.before'))}</div>
+            </div>
             <div className="flex items-center gap-5 pt-1 text-xs text-primary">
               <label className="flex cursor-pointer items-center gap-2 select-none">
                 <Checkbox checked={fields.unread} onChange={(event) => set('unread', event.target.checked)} />
