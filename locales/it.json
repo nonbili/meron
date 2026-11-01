@@ -921,6 +921,7 @@
   "rules.moveTo": "Sposta in",
   "rules.moveUp": "Sposta su",
   "rules.queryHint": "Lascia vuoto per includere tutta la nuova posta. Il corpo dei messaggi non viene controllato.",
+  "rules.reorder": "Trascina per riordinare",
   "rules.run": "Esegui sulla posta esistente",
   "rules.runAction": "Esegui",
   "rules.runConfirm": "Applicare questa regola alla posta in arrivo? Messaggi corrispondenti: {count}. È inclusa solo la posta salvata su questo dispositivo.",

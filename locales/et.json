@@ -921,6 +921,7 @@
   "rules.moveTo": "Teisalda",
   "rules.moveUp": "Liiguta üles",
   "rules.queryHint": "Jäta tühjaks, et hõlmata kõik uued kirjad. Kirjade sisu ei kontrollita.",
+  "rules.reorder": "Lohista järjestuse muutmiseks",
   "rules.run": "Käivita olemasolevatel kirjadel",
   "rules.runAction": "Käivita",
   "rules.runConfirm": "Kas rakendada seda reeglit postkastis olevatele kirjadele? Sobivaid kirju: {count}. Kaasatakse ainult selles seadmes salvestatud kirjad.",

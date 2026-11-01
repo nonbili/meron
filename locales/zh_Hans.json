@@ -921,6 +921,7 @@
   "rules.moveTo": "移动到",
   "rules.moveUp": "上移",
   "rules.queryHint": "留空则匹配所有新邮件。不检查邮件正文。",
+  "rules.reorder": "拖动以重新排序",
   "rules.run": "对现有邮件运行",
   "rules.runAction": "运行",
   "rules.runConfirm": "要将此规则应用于收件箱中的邮件吗？匹配的邮件：{count} 封。仅包括存储在此设备上的邮件。",

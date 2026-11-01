@@ -921,6 +921,7 @@
   "rules.moveTo": "Pārvietot uz",
   "rules.moveUp": "Pārvietot augšup",
   "rules.queryHint": "Atstājiet tukšu, lai iekļautu visus jaunos e-pastus. Ziņojumu saturs netiek pārbaudīts.",
+  "rules.reorder": "Velciet, lai pārkārtotu",
   "rules.run": "Izpildīt esošajiem e-pastiem",
   "rules.runAction": "Izpildīt",
   "rules.runConfirm": "Vai lietot šo kārtulu iesūtnes e-pastiem? Atbilstošie ziņojumi: {count}. Iekļauti tikai šajā ierīcē saglabātie e-pasti.",

@@ -921,6 +921,7 @@
   "rules.moveTo": "Verschieben nach",
   "rules.moveUp": "Nach oben",
   "rules.queryHint": "Leer lassen, um alle neuen E-Mails zu erfassen. Nachrichtentexte werden nicht geprüft.",
+  "rules.reorder": "Zum Sortieren ziehen",
   "rules.run": "Auf vorhandene E-Mails anwenden",
   "rules.runAction": "Ausführen",
   "rules.runConfirm": "Diese Regel auf E-Mails im Eingang anwenden? Passende Nachrichten: {count}. Nur auf diesem Gerät gespeicherte E-Mails sind enthalten.",

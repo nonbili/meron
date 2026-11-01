@@ -921,6 +921,7 @@
   "rules.moveTo": "Mover para",
   "rules.moveUp": "Mover para cima",
   "rules.queryHint": "Deixe vazio para incluir todos os novos e-mails. O corpo das mensagens não é verificado.",
+  "rules.reorder": "Arraste para reordenar",
   "rules.run": "Executar nos e-mails existentes",
   "rules.runAction": "Executar",
   "rules.runConfirm": "Aplicar esta regra aos e-mails da caixa de entrada? Mensagens correspondentes: {count}. Somente e-mails armazenados neste dispositivo são incluídos.",

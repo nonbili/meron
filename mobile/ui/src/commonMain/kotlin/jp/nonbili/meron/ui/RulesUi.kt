@@ -8,25 +8,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +52,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import sh.calvin.reorderable.ReorderableColumn
 
 private val NEW_RULE = Rule(query = "")
 
@@ -208,6 +215,7 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf(RuleStatus()) }
     var invalid by remember { mutableStateOf(false) }
     val coroutines = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     LaunchedEffect(Unit) {
         rules = loadRules()
         loadRuleStatus()?.let { status = it }
@@ -238,6 +246,7 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
 
     fun save(
         next: suspend () -> List<Rule>?,
+        onFailed: () -> Unit = {},
         onSaved: () -> Unit,
     ) {
         if (saving) return
@@ -249,6 +258,8 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
             if (saved != null) {
                 rules = saved
                 onSaved()
+            } else {
+                onFailed()
             }
         }
     }
@@ -258,14 +269,17 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
         invalid = false
     }
 
-    // Order matters: the first rule to move a message decides where it goes.
-    fun shift(
-        at: Int,
-        by: Int,
+    // Order matters: the first rule to move a message decides where it goes. The
+    // new order shows at once, or a dropped row would jump back until the save.
+    fun move(
+        from: Int,
+        to: Int,
     ) {
-        val next = rules.orEmpty().toMutableList()
-        next.add(at + by, next.removeAt(at))
-        save({ next }) {}
+        val before = rules.orEmpty()
+        if (saving || from == to || to !in before.indices) return
+        val next = before.toMutableList().apply { add(to, removeAt(from)) }
+        rules = next
+        save({ next }, onFailed = { rules = before }) {}
     }
 
     fun change(next: Rule) {
@@ -335,119 +349,158 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
             Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
         }
         val known = { id: String -> coreAccounts.any { it.id == id } }
-        rules.orEmpty().forEachIndexed { at, rule ->
-            val left = status.running[rule.id]
-            val failure = status.log.firstOrNull { it.ruleId == rule.id }?.takeIf { it.failed }
-            // A rule keeps a removed account until edited, so that it says what
-            // is wrong instead of quietly becoming a different rule.
-            val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            rule.accounts.forEach { id ->
-                                val account = coreAccounts.firstOrNull { it.id == id }
-                                AccountBadgeAvatar(
-                                    label = account?.let(::accountLabel) ?: id,
-                                    avatarUrl = account?.avatarUrl.orEmpty(),
-                                    size = 16.dp,
-                                )
-                            }
-                            Text(
-                                conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Text(
-                            ruleSummary(mailAccounts, rule),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (left != null) {
-                            Text(tr("rules.runLeft", mapOf("count" to left.toString())), fontSize = 12.sp)
-                        }
-                        if (lost) {
-                            Text(tr("rules.accountGone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                        }
-                        if (failure != null) {
-                            Text(
-                                "${tr("rules.lastFailed")}: ${failure.detail}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = !rule.disabled,
-                        enabled = !saving && !(rule.disabled && lost),
-                        onCheckedChange = { on ->
-                            save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
-                        },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(enabled = !saving && at > 0, onClick = { shift(at, -1) }) {
-                        Icon(Icons.Filled.ArrowUpward, contentDescription = tr("rules.moveUp"))
-                    }
-                    IconButton(enabled = !saving && at < rules.orEmpty().lastIndex, onClick = { shift(at, 1) }) {
-                        Icon(Icons.Filled.ArrowDownward, contentDescription = tr("rules.moveDown"))
-                    }
-                    if (left != null) {
-                        TextButton(
-                            onClick = {
-                                coroutines.launch {
-                                    if (!stopRule(rule.id)) runNotice = failed
-                                    loadRuleStatus()?.let { status = it }
-                                }
-                            },
-                        ) { Text(tr("rules.stop")) }
-                    } else {
-                        TextButton(
-                            enabled = !saving && draft.id != rule.id && !rule.disabled,
-                            onClick = {
-                                coroutines.launch {
-                                    val count = ruleMatches(rule.id)
-                                    runStarted = null
-                                    when (count) {
-                                        null -> runNotice = failed
-                                        0 -> runNotice = nothing
-                                        else -> confirmRun = rule to count
+        // The labels are read here: accessibility actions run outside composition.
+        val moveUp = tr("rules.moveUp")
+        val moveDown = tr("rules.moveDown")
+        val reorder = tr("rules.reorder")
+        ReorderableColumn(
+            list = rules.orEmpty(),
+            onSettle = ::move,
+            onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) { at, rule, dragging ->
+            key(rule.id) {
+                val left = status.running[rule.id]
+                val failure = status.log.firstOrNull { it.ruleId == rule.id }?.takeIf { it.failed }
+                // A rule keeps a removed account until edited, so that it says what
+                // is wrong instead of quietly becoming a different rule.
+                val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
+                ReorderableItem {
+                    Surface(
+                        color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                        shadowElevation = if (dragging) 6.dp else 0.dp,
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        rule.accounts.forEach { id ->
+                                            val account = coreAccounts.firstOrNull { it.id == id }
+                                            AccountBadgeAvatar(
+                                                label = account?.let(::accountLabel) ?: id,
+                                                avatarUrl = account?.avatarUrl.orEmpty(),
+                                                size = 16.dp,
+                                            )
+                                        }
+                                        Text(
+                                            conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Text(
+                                        ruleSummary(mailAccounts, rule),
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (left != null) {
+                                        Text(tr("rules.runLeft", mapOf("count" to left.toString())), fontSize = 12.sp)
+                                    }
+                                    if (lost) {
+                                        Text(tr("rules.accountGone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                    }
+                                    if (failure != null) {
+                                        Text(
+                                            "${tr("rules.lastFailed")}: ${failure.detail}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.error,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
                                     }
                                 }
-                            },
-                        ) { Text(tr("rules.runAction")) }
-                    }
-                    TextButton(
-                        enabled = !saving,
-                        onClick = {
-                            opening?.cancel()
-                            opening =
-                                coroutines.launch {
-                                    val parsed = parseSearchQuery(rule.query)
-                                    // Its failure handling also swallows being cancelled.
-                                    ensureActive()
-                                    fields = parsed ?: SearchFields(words = rule.query)
-                                    draft = rule
-                                    tags = rule.tags.joinToString(", ")
-                                    scoped = rule.accounts.isNotEmpty()
-                                    adding = false
-                                    invalid = false
+                                Switch(
+                                    checked = !rule.disabled,
+                                    enabled = !saving && !(rule.disabled && lost),
+                                    onCheckedChange = { on ->
+                                        save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
+                                    },
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.DragHandle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier =
+                                        Modifier
+                                            .draggableHandle(
+                                                enabled = !saving,
+                                                onDragStarted = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                },
+                                            ).semantics {
+                                                contentDescription = reorder
+                                                // A drag can't be performed from a screen reader.
+                                                customActions =
+                                                    listOfNotNull(
+                                                        CustomAccessibilityAction(moveUp) {
+                                                            move(at, at - 1)
+                                                            true
+                                                        }.takeIf { at > 0 },
+                                                        CustomAccessibilityAction(moveDown) {
+                                                            move(at, at + 1)
+                                                            true
+                                                        }.takeIf { at < rules.orEmpty().lastIndex },
+                                                    )
+                                            }.padding(12.dp),
+                                )
+                                if (left != null) {
+                                    TextButton(
+                                        onClick = {
+                                            coroutines.launch {
+                                                if (!stopRule(rule.id)) runNotice = failed
+                                                loadRuleStatus()?.let { status = it }
+                                            }
+                                        },
+                                    ) { Text(tr("rules.stop")) }
+                                } else {
+                                    TextButton(
+                                        enabled = !saving && draft.id != rule.id && !rule.disabled,
+                                        onClick = {
+                                            coroutines.launch {
+                                                val count = ruleMatches(rule.id)
+                                                runStarted = null
+                                                when (count) {
+                                                    null -> runNotice = failed
+                                                    0 -> runNotice = nothing
+                                                    else -> confirmRun = rule to count
+                                                }
+                                            }
+                                        },
+                                    ) { Text(tr("rules.runAction")) }
                                 }
-                        },
-                    ) { Text(tr("buttons.edit")) }
-                    TextButton(
-                        enabled = !saving,
-                        onClick = { confirmDelete = rule },
-                    ) { Text(tr("buttons.delete")) }
+                                TextButton(
+                                    enabled = !saving,
+                                    onClick = {
+                                        opening?.cancel()
+                                        opening =
+                                            coroutines.launch {
+                                                val parsed = parseSearchQuery(rule.query)
+                                                // Its failure handling also swallows being cancelled.
+                                                ensureActive()
+                                                fields = parsed ?: SearchFields(words = rule.query)
+                                                draft = rule
+                                                tags = rule.tags.joinToString(", ")
+                                                scoped = rule.accounts.isNotEmpty()
+                                                adding = false
+                                                invalid = false
+                                            }
+                                    },
+                                ) { Text(tr("buttons.edit")) }
+                                TextButton(
+                                    enabled = !saving,
+                                    onClick = { confirmDelete = rule },
+                                ) { Text(tr("buttons.delete")) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -573,7 +626,7 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
                                 val edited = rule.copy(disabled = live?.disabled ?: rule.disabled)
                                 if (editing) current.map { if (it.id == rule.id) edited else it } else current + rule
                             }
-                        }, ::reset)
+                        }, onSaved = ::reset)
                     },
                 ) { Text(if (editing) tr("buttons.save") else tr("rules.add")) }
             }

@@ -921,6 +921,7 @@
   "rules.moveTo": "Mover a",
   "rules.moveUp": "Subir",
   "rules.queryHint": "Déjalos vacíos para abarcar todo el correo nuevo. No se revisa el cuerpo de los mensajes.",
+  "rules.reorder": "Arrastra para reordenar",
   "rules.run": "Ejecutar en el correo existente",
   "rules.runAction": "Ejecutar",
   "rules.runConfirm": "¿Aplicar esta regla al correo de la bandeja de entrada? Mensajes coincidentes: {count}. Solo se incluye el correo guardado en este dispositivo.",

@@ -921,6 +921,7 @@
   "rules.moveTo": "Przenieś do",
   "rules.moveUp": "Przenieś w górę",
   "rules.queryHint": "Pozostaw puste, aby objąć całą nową pocztę. Treść wiadomości nie jest sprawdzana.",
+  "rules.reorder": "Przeciągnij, aby zmienić kolejność",
   "rules.run": "Uruchom na istniejącej poczcie",
   "rules.runAction": "Uruchom",
   "rules.runConfirm": "Zastosować tę regułę do poczty w skrzynce odbiorczej? Pasujące wiadomości: {count}. Uwzględniana jest tylko poczta zapisana na tym urządzeniu.",

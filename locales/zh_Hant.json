@@ -921,6 +921,7 @@
   "rules.moveTo": "移動到",
   "rules.moveUp": "上移",
   "rules.queryHint": "留空則符合所有新郵件。不會檢查郵件內文。",
+  "rules.reorder": "拖曳以重新排序",
   "rules.run": "對現有郵件執行",
   "rules.runAction": "執行",
   "rules.runConfirm": "要將此規則套用到收件匣中的郵件嗎？符合的郵件：{count} 封。僅包含儲存在此裝置上的郵件。",

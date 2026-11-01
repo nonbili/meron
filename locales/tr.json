@@ -921,6 +921,7 @@
   "rules.moveTo": "Şuraya taşı",
   "rules.moveUp": "Yukarı taşı",
   "rules.queryHint": "Tüm yeni postaları kapsamak için boş bırakın. İleti gövdeleri denetlenmez.",
+  "rules.reorder": "Yeniden sıralamak için sürükleyin",
   "rules.run": "Mevcut postalarda çalıştır",
   "rules.runAction": "Çalıştır",
   "rules.runConfirm": "Bu kural gelen kutusundaki postalara uygulansın mı? Eşleşen ileti: {count}. Yalnızca bu cihazda depolanan postalar dahildir.",

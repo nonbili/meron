@@ -921,6 +921,7 @@
   "rules.moveTo": "이동 위치",
   "rules.moveUp": "위로 이동",
   "rules.queryHint": "비워 두면 모든 새 메일에 적용됩니다. 메시지 본문은 확인하지 않습니다.",
+  "rules.reorder": "드래그하여 순서 변경",
   "rules.run": "기존 메일에 실행",
   "rules.runAction": "실행",
   "rules.runConfirm": "받은편지함의 메일에 이 규칙을 적용할까요? 일치하는 메시지: {count}개. 이 기기에 저장된 메일만 포함됩니다.",

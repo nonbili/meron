@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
-import { ArrowDown, ArrowUp, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
@@ -25,6 +29,7 @@ import { Checkbox } from '../field/Checkbox'
 import { EMPTY_FIELDS, fieldsEmpty, type SearchFields } from '../search/searchFields'
 import { inputClass, Row } from '../search/SearchOptions'
 import { TagInput } from '../search/TagInput'
+import { useTaskDragSensors } from '../tasks/taskDrag'
 import { accountLabel } from '../threads/ThreadMoveCopyItems'
 import { SegmentedRow, SettingRow, SettingsGroup, Switch, ToggleRow } from './AccountSettingsRows'
 import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
@@ -60,6 +65,68 @@ const EMPTY_DRAFT: Draft = {
   disabled: false,
 }
 
+type RuleRowProps = {
+  id: string
+  at: number
+  locked: boolean
+  editing: boolean
+  onMove: (to: number) => void
+  children: ReactNode
+}
+
+// Dragged by its handle, since the rest of the row is controls. The arrow keys
+// move it instead of dnd-kit's keyboard sensor, which would lose Escape to the
+// dialog around it.
+function RuleRow({ id, at, locked, editing, onMove, children }: RuleRowProps) {
+  const { t } = useTranslation()
+  const { listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: locked,
+  })
+  const handle = useRef<HTMLButtonElement | null>(null)
+  const keepFocus = useRef(false)
+
+  // Moving a row in the DOM can drop the focus it holds.
+  useLayoutEffect(() => {
+    if (keepFocus.current) handle.current?.focus()
+    keepFocus.current = false
+  }, [at])
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-rule={id}
+      style={{ transform: CSS.Translate.toString(transform), transition: isDragging ? 'none' : transition }}
+      className={`flex items-center gap-2 px-3.5 py-2 text-xs ${
+        isDragging ? 'relative z-10 bg-raised' : editing ? 'bg-active/60' : ''
+      }`}
+    >
+      <button
+        ref={(node) => {
+          handle.current = node
+          setActivatorNodeRef(node)
+        }}
+        type="button"
+        title={t('rules.reorder')}
+        aria-label={t('rules.reorder')}
+        aria-keyshortcuts="ArrowUp ArrowDown"
+        aria-disabled={locked}
+        className="-ml-1.5 flex h-6 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-secondary hover:text-primary active:cursor-grabbing"
+        {...listeners}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+          event.preventDefault()
+          keepFocus.current = true
+          onMove(at + (event.key === 'ArrowUp' ? -1 : 1))
+        }}
+      >
+        <GripVertical size={13} />
+      </button>
+      {children}
+    </div>
+  )
+}
+
 // What to do with new mail that matches some conditions, filled in as fields. A
 // rule stores them as search text, which the form never shows; conditions it has
 // no field for stay in that text across an edit.
@@ -84,6 +151,7 @@ export function RulesPanel() {
   const [starting, setStarting] = useState<string | null>(null)
   const [status, setStatus] = useState<RuleStatus>({ log: [], running: {} })
   const [conditions, setConditions] = useState<Record<string, SearchFields>>({})
+  const sensors = useTaskDragSensors()
 
   useEffect(() => {
     void loadRules().then(setRules, () => setRules(null))
@@ -167,13 +235,13 @@ export function RulesPanel() {
   const setDisabled = (rule: Rule, disabled: boolean) =>
     rules && save(() => rules.map((item) => (item.id === rule.id ? { ...item, disabled } : item)))
 
-  // Order matters: the first rule to move a message decides where it goes.
-  const shift = (at: number, by: number) => {
-    if (!rules) return
-    const next = [...rules]
-    const [rule] = next.splice(at, 1)
-    next.splice(at + by, 0, rule)
-    void save(() => next)
+  // Order matters: the first rule to move a message decides where it goes. The
+  // new order shows at once, or a dropped row would jump back until the save.
+  const move = async (from: number, to: number) => {
+    if (!rules || saving || to < 0 || to >= rules.length || from === to) return
+    const next = arrayMove(rules, from, to)
+    setRules(next)
+    if (!(await save(() => next))) setRules(rules)
   }
 
   const chosenAccounts = draft.accounts.filter(known)
@@ -299,101 +367,102 @@ export function RulesPanel() {
 
       {rules?.length === 0 && !formOpen && <p className="text-xs text-secondary">{t('rules.empty')}</p>}
       {rules && rules.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-border divide-y divide-border/40">
-          {rules.map((rule, at) => {
-            const left = status.running[rule.id]
-            const failure = lastFailure(rule)
-            const lost = lostAccount(rule)
-            return (
-              <div
-                key={rule.id}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs ${editing === rule.id ? 'bg-active/60' : ''}`}
-              >
-                <Switch
-                  checked={!rule.disabled}
-                  label={t('rules.enabled')}
-                  onChange={() => {
-                    if (!(rule.disabled && lost)) void setDisabled(rule, !rule.disabled)
-                  }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className={`flex min-w-0 items-center gap-1.5 ${rule.disabled ? 'opacity-50' : ''}`}>
-                    {rule.accounts.map((id) => {
-                      const account = allAccounts.find((item) => item.id === id)
-                      const name = account ? accountLabel(account) : id
-                      return (
-                        <span key={id} title={name} className="shrink-0">
-                          <AccountAvatar accountId={id} name={name} src={account?.avatar_url} size={16} />
-                        </span>
-                      )
-                    })}
-                    <p className="min-w-0 truncate font-medium text-primary">{condition(rule)}</p>
-                  </div>
-                  <p className={`truncate text-accent ${rule.disabled ? 'opacity-50' : ''}`}>{summary(rule)}</p>
-                  {left !== undefined && (
-                    <p className="truncate text-secondary">{t('rules.runLeft', { count: left })}</p>
-                  )}
-                  {lost && <p className="text-rose-500">{t('rules.accountGone')}</p>}
-                  {failure && (
-                    <p className="truncate text-rose-500" title={failure.detail}>
-                      {t('rules.lastFailed')}
-                    </p>
-                  )}
-                </div>
-                <IconButton
-                  icon={ArrowUp}
-                  iconSize={13}
-                  label={t('rules.moveUp')}
-                  size="sm"
-                  disabled={saving || at === 0}
-                  onClick={() => shift(at, -1)}
-                />
-                <IconButton
-                  icon={ArrowDown}
-                  iconSize={13}
-                  label={t('rules.moveDown')}
-                  size="sm"
-                  disabled={saving || at === rules.length - 1}
-                  onClick={() => shift(at, 1)}
-                />
-                {left !== undefined ? (
-                  <IconButton
-                    icon={Square}
-                    iconSize={13}
-                    label={t('rules.stop')}
-                    size="sm"
-                    onClick={() => void stop(rule)}
-                  />
-                ) : (
-                  <IconButton
-                    icon={Play}
-                    iconSize={13}
-                    label={t('rules.run')}
-                    size="sm"
-                    disabled={saving || starting !== null || editing === rule.id || rule.disabled}
-                    onClick={() => void run(rule)}
-                  />
-                )}
-                <IconButton
-                  icon={Pencil}
-                  iconSize={13}
-                  label={t('rules.edit')}
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => void edit(rule)}
-                />
-                <IconButton
-                  icon={Trash2}
-                  iconSize={13}
-                  label={t('rules.delete')}
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => void remove(rule)}
-                />
-              </div>
-            )
-          })}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={({ active, over }) => {
+            if (!over) return
+            const at = (id: unknown) => rules.findIndex((rule) => rule.id === id)
+            void move(at(active.id), at(over.id))
+          }}
+        >
+          <SortableContext items={rules.map((rule) => rule.id)} strategy={verticalListSortingStrategy}>
+            <div className="overflow-hidden rounded-xl border border-border divide-y divide-border/40">
+              {rules.map((rule, at) => {
+                const left = status.running[rule.id]
+                const failure = lastFailure(rule)
+                const lost = lostAccount(rule)
+                return (
+                  <RuleRow
+                    key={rule.id}
+                    id={rule.id}
+                    at={at}
+                    locked={saving}
+                    editing={editing === rule.id}
+                    onMove={(to) => void move(at, to)}
+                  >
+                    <Switch
+                      checked={!rule.disabled}
+                      label={t('rules.enabled')}
+                      onChange={() => {
+                        if (!(rule.disabled && lost)) void setDisabled(rule, !rule.disabled)
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className={`flex min-w-0 items-center gap-1.5 ${rule.disabled ? 'opacity-50' : ''}`}>
+                        {rule.accounts.map((id) => {
+                          const account = allAccounts.find((item) => item.id === id)
+                          const name = account ? accountLabel(account) : id
+                          return (
+                            <span key={id} title={name} className="shrink-0">
+                              <AccountAvatar accountId={id} name={name} src={account?.avatar_url} size={16} />
+                            </span>
+                          )
+                        })}
+                        <p className="min-w-0 truncate font-medium text-primary">{condition(rule)}</p>
+                      </div>
+                      <p className={`truncate text-accent ${rule.disabled ? 'opacity-50' : ''}`}>{summary(rule)}</p>
+                      {left !== undefined && (
+                        <p className="truncate text-secondary">{t('rules.runLeft', { count: left })}</p>
+                      )}
+                      {lost && <p className="text-rose-500">{t('rules.accountGone')}</p>}
+                      {failure && (
+                        <p className="truncate text-rose-500" title={failure.detail}>
+                          {t('rules.lastFailed')}
+                        </p>
+                      )}
+                    </div>
+                    {left !== undefined ? (
+                      <IconButton
+                        icon={Square}
+                        iconSize={13}
+                        label={t('rules.stop')}
+                        size="sm"
+                        onClick={() => void stop(rule)}
+                      />
+                    ) : (
+                      <IconButton
+                        icon={Play}
+                        iconSize={13}
+                        label={t('rules.run')}
+                        size="sm"
+                        disabled={saving || starting !== null || editing === rule.id || rule.disabled}
+                        onClick={() => void run(rule)}
+                      />
+                    )}
+                    <IconButton
+                      icon={Pencil}
+                      iconSize={13}
+                      label={t('rules.edit')}
+                      size="sm"
+                      disabled={saving}
+                      onClick={() => void edit(rule)}
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      iconSize={13}
+                      label={t('rules.delete')}
+                      size="sm"
+                      disabled={saving}
+                      onClick={() => void remove(rule)}
+                    />
+                  </RuleRow>
+                )
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {!formOpen && (

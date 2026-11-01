@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'bun:test'
+import { afterEach, expect, it, spyOn } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import type { Rule, RuleStatus } from '../../states/mailRules'
@@ -281,12 +281,53 @@ it('keeps a change of the switch made while the rule is open for editing', async
 it('reorders rules, since the first to move a message wins', async () => {
   const saved = stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }])
   const view = render(<RulesPanel />)
-  await waitFor(() => expect(view.getAllByLabelText('Move down').length).toBe(2))
-  expect((view.getAllByLabelText('Move up')[0] as HTMLButtonElement).disabled).toBe(true)
+  await waitFor(() => expect(view.getAllByLabelText('Drag to reorder').length).toBe(2))
+  const handle = view.getAllByLabelText('Drag to reorder')[0]
+  handle.focus()
 
-  fireEvent.click(view.getAllByLabelText('Move down')[0])
+  fireEvent.keyDown(handle, { key: 'ArrowUp' })
+  expect(saved.length).toBe(0)
+
+  fireEvent.keyDown(handle, { key: 'ArrowDown' })
   await waitFor(() => expect(saved.length).toBe(1))
   expect(saved[0].map((rule) => rule.id)).toEqual(['r2', 'r1'])
+  expect(document.activeElement).toBe(view.getAllByLabelText('Drag to reorder')[1])
+})
+
+async function dragFirstRuleDown(refuse: boolean) {
+  const saved = stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }], refuse)
+  const rect = spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const row = this.closest('[data-rule]')
+    const top = row ? [...row.parentElement!.children].indexOf(row) * 40 : 0
+    return new DOMRect(0, top, 200, 40)
+  })
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getAllByLabelText('Drag to reorder').length).toBe(2))
+  const handle = view.getAllByLabelText('Drag to reorder')[0]
+
+  fireEvent.mouseDown(handle, { clientX: 10, clientY: 10, button: 0 })
+  fireEvent.mouseMove(document, { clientX: 10, clientY: 30 })
+  fireEvent.mouseMove(document, { clientX: 10, clientY: 55 })
+  await waitFor(() => expect(handle.closest('[data-rule]')!.className).toContain('bg-raised'))
+  fireEvent.mouseUp(document)
+  rect.mockRestore()
+  // dnd-kit retains its document click listener for 50ms after dragging.
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  return saved
+}
+
+const shownOrder = () => [...document.querySelectorAll('[data-rule]')].map((row) => row.getAttribute('data-rule'))
+
+it('saves the order a rule is dragged to', async () => {
+  const saved = await dragFirstRuleDown(false)
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0].map((rule) => rule.id)).toEqual(['r2', 'r1'])
+  await waitFor(() => expect(shownOrder()).toEqual(['r2', 'r1']))
+})
+
+it('puts a dragged rule back when the save fails', async () => {
+  await dragFirstRuleDown(true)
+  await waitFor(() => expect(shownOrder()).toEqual(['r1', 'r2']))
 })
 
 it('shows what a run has left and stops it', async () => {

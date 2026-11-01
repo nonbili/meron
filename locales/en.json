@@ -921,6 +921,7 @@
   "rules.moveTo": "Move to",
   "rules.moveUp": "Move up",
   "rules.queryHint": "Leave these empty to match all new mail. Message bodies aren't checked.",
+  "rules.reorder": "Drag to reorder",
   "rules.run": "Run on existing mail",
   "rules.runAction": "Run",
   "rules.runConfirm": "Apply this rule to mail already in the Inbox? Matching messages: {count}. Only mail stored on this device is included.",

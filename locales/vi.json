@@ -921,6 +921,7 @@
   "rules.moveTo": "Chuyển đến",
   "rules.moveUp": "Chuyển lên",
   "rules.queryHint": "Để trống để áp dụng cho mọi thư mới. Nội dung thư không được kiểm tra.",
+  "rules.reorder": "Kéo để sắp xếp lại",
   "rules.run": "Chạy trên thư hiện có",
   "rules.runAction": "Chạy",
   "rules.runConfirm": "Áp dụng quy tắc này cho thư trong Hộp thư đến? Số thư khớp: {count}. Chỉ bao gồm thư được lưu trên thiết bị này.",

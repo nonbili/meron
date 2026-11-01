@@ -921,6 +921,7 @@
   "rules.moveTo": "移動先",
   "rules.moveUp": "上へ移動",
   "rules.queryHint": "空欄のままにすると、すべての新着メールが対象になります。本文は対象外です。",
+  "rules.reorder": "ドラッグして並べ替え",
   "rules.run": "既存のメールに実行",
   "rules.runAction": "実行",
   "rules.runConfirm": "受信トレイのメールにこのルールを適用しますか？ 一致するメッセージ: {count} 件。このデバイスに保存されたメールのみが対象です。",

@@ -921,6 +921,7 @@
   "rules.moveTo": "Flytta till",
   "rules.moveUp": "Flytta upp",
   "rules.queryHint": "Lämna tomt för att ta med all ny e-post. Meddelandetext kontrolleras inte.",
+  "rules.reorder": "Dra för att ändra ordning",
   "rules.run": "Kör på befintlig e-post",
   "rules.runAction": "Kör",
   "rules.runConfirm": "Tillämpa den här regeln på e-post i inkorgen? Matchande meddelanden: {count}. Endast e-post som lagras på den här enheten ingår.",

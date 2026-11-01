@@ -921,6 +921,7 @@
   "rules.moveTo": "Déplacer vers",
   "rules.moveUp": "Monter",
   "rules.queryHint": "Laissez vide pour inclure tout le nouveau courrier. Le corps des messages n’est pas vérifié.",
+  "rules.reorder": "Glisser pour réorganiser",
   "rules.run": "Exécuter sur le courrier existant",
   "rules.runAction": "Exécuter",
   "rules.runConfirm": "Appliquer cette règle au courrier de la boîte de réception ? Messages correspondants : {count}. Seul le courrier stocké sur cet appareil est inclus.",
