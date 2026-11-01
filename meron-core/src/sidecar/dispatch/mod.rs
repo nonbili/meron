@@ -154,7 +154,7 @@ pub(crate) async fn dispatch(
         | "messages.markAllRead"
         | "messages.markAllReadUnified" => actions::dispatch(engine, req, out).await,
 
-        "tags.list" | "tags.rules" | "tags.setRules" => messages::dispatch(engine, req, out).await,
+        "tags.list" | "rules.list" | "rules.set" => messages::dispatch(engine, req, out).await,
 
         "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
 

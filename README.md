@@ -66,7 +66,8 @@ updater works as well and always fetches the full image.
 ## Features
 
 - Unified Inbox, kanban and chat views
-- Tags that sync as IMAP keywords, with tag columns and rules for new mail
+- Tags that sync as IMAP keywords, with tag columns
+- Rules that tag, mark read, star, archive, move or trash new mail matching a search
 - IMAP/SMTP email and RSS/Atom feeds ([Exchange via DavMail](docs/exchange-davmail.md))
 - Threaded conversations with rich-text composing and media galleries
 - Easy setup with OAuth or automatic mailbox discovery

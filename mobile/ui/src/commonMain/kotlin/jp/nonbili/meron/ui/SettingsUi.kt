@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.FormatSize
@@ -104,7 +105,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun SettingsScreen(
-    onOpenTagRules: () -> Unit,
+    rulesPage: @Composable (Modifier) -> Unit,
     onOpenTags: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
@@ -236,6 +237,7 @@ internal fun SettingsScreen(
             SettingsRoutes.General -> SettingsPage.General
             SettingsRoutes.Messages -> SettingsPage.Messages
             SettingsRoutes.Composer -> SettingsPage.Composer
+            SettingsRoutes.Rules -> SettingsPage.Rules
             SettingsRoutes.Account -> selectedSettingsAccountId?.let { SettingsPage.AccountDetail(it) } ?: SettingsPage.Root
             SettingsRoutes.AccountWallpaper -> selectedSettingsAccountId?.let { SettingsPage.AccountWallpaper(it) } ?: SettingsPage.Root
             SettingsRoutes.KanbanBoard -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardDetail(it) } ?: SettingsPage.Root
@@ -308,6 +310,7 @@ internal fun SettingsScreen(
                             SettingsPage.General -> tr("settings.sections.general")
                             SettingsPage.Messages -> tr("settings.sections.messages")
                             SettingsPage.Composer -> tr("settings.sections.composer")
+                            SettingsPage.Rules -> tr("rules.title")
                             is SettingsPage.AccountDetail -> tr("settings.account.account")
                             is SettingsPage.AccountWallpaper -> tr("settings.account.chatBackground")
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
@@ -407,10 +410,13 @@ internal fun SettingsScreen(
                     onToggleReaderBottomActions = onToggleReaderBottomActions,
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
-                    onOpenTagRules = onOpenTagRules,
                     onOpenTags = onOpenTags,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+
+            composable(SettingsRoutes.Rules) {
+                rulesPage(Modifier.fillMaxSize())
             }
 
             composable(SettingsRoutes.Composer) {
@@ -627,6 +633,14 @@ internal fun SettingsScreen(
                             onClick = { settingsNavController.navigate(SettingsRoutes.Composer) },
                         )
                     }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.FilterList,
+                            title = tr("rules.title"),
+                            subtitle = null,
+                            onClick = { settingsNavController.navigate(SettingsRoutes.Rules) },
+                        )
+                    }
                     item { SettingsSectionLabel(tr("settings.sections.kanbanBoards")) }
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
@@ -764,6 +778,8 @@ private sealed class SettingsPage {
 
     data object Composer : SettingsPage()
 
+    data object Rules : SettingsPage()
+
     data object RemoteSenders : SettingsPage()
 
     data object Theme : SettingsPage()
@@ -792,6 +808,7 @@ private object SettingsRoutes {
     const val General = "settings/general"
     const val Messages = "settings/messages"
     const val Composer = "settings/composer"
+    const val Rules = "settings/rules"
     const val Account = "settings/account"
     const val AccountWallpaper = "settings/account-wallpaper"
     const val KanbanBoard = "settings/kanban-board"
@@ -1121,7 +1138,6 @@ internal fun SettingsMessagesPage(
     onToggleReaderBottomActions: () -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
-    onOpenTagRules: () -> Unit,
     onOpenTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1198,14 +1214,6 @@ internal fun SettingsMessagesPage(
                 title = tr("tags.title"),
                 hint = tr("tags.manage.hint"),
                 onClick = onOpenTags,
-            )
-        }
-        item {
-            SettingsRow(
-                icon = Icons.Filled.Sell,
-                title = tr("tags.rules.title"),
-                hint = tr("tags.rules.hint"),
-                onClick = onOpenTagRules,
             )
         }
 

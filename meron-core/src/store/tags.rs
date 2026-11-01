@@ -105,7 +105,7 @@ pub fn change_tags(
 }
 
 /// [`change_tags`], inside the caller's transaction.
-fn write_tag_changes(
+pub(super) fn write_tag_changes(
     tx: &Connection,
     account: &str,
     keys: &[String],
@@ -615,80 +615,6 @@ pub fn tag_counts_json(counts: BTreeMap<String, u32>) -> serde_json::Value {
     serde_json::json!({ "tags": tags })
 }
 
-const TAG_RULES_KEY: &str = "tag_rules";
-
-/// Tag new mail that matches a search. Rules live in `settings`, so backups
-/// carry them, and are kept per device.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct TagRule {
-    #[serde(default)]
-    pub id: String,
-    /// In the search box's syntax, read against what a new message's envelope
-    /// says: its body is not here yet.
-    pub query: String,
-    pub tags: Vec<String>,
-}
-
-pub fn tag_rules(conn: &Connection) -> Result<Vec<TagRule>> {
-    let stored = super::settings_get(conn, &[TAG_RULES_KEY.to_string()])?;
-    Ok(stored
-        .get(TAG_RULES_KEY)
-        .and_then(|rules| serde_json::from_value(rules.clone()).ok())
-        .unwrap_or_default())
-}
-
-/// Replace the rules, refusing any that could never apply.
-pub fn set_tag_rules(conn: &Connection, rules: Vec<TagRule>) -> Result<Vec<TagRule>> {
-    let mut clean = Vec::with_capacity(rules.len());
-    for mut rule in rules {
-        rule.query = rule.query.trim().to_string();
-        anyhow::ensure!(
-            !crate::search_query::SearchQuery::parse(&rule.query).is_empty(),
-            "a rule needs a search"
-        );
-        let tags = serde_json::json!(rule.tags);
-        rule.tags = crate::tags::parse_tag_list(Some(&tags)).map_err(anyhow::Error::msg)?;
-        anyhow::ensure!(!rule.tags.is_empty(), "a rule needs a tag");
-        if rule.id.is_empty() {
-            rule.id = uuid::Uuid::new_v4().to_string();
-        }
-        clean.push(rule);
-    }
-    super::setting_set(conn, TAG_RULES_KEY, &serde_json::json!(clean))?;
-    Ok(clean)
-}
-
-/// Run the rules over mail that has just arrived in `folder`: never seen on
-/// this account, in any folder. Only then, so taking a tag off a message by hand
-/// sticks. Mail the user wrote or threw away
-/// has not arrived in that sense.
-pub fn apply_tag_rules(conn: &Connection, account: &str, folder: &str, uids: &[u32]) -> Result<()> {
-    if uids.is_empty() {
-        return Ok(());
-    }
-    // Reading the rules and applying them are one step: see [`replace_tag_and_rules`].
-    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
-    let rules = tag_rules(&tx)?;
-    if rules.is_empty() {
-        return Ok(());
-    }
-    let role = super::folder_role(&tx, account, folder)?;
-    if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
-        return Ok(());
-    }
-    for rule in rules {
-        let matched = super::matching_uids(&tx, account, folder, &rule.query, uids)?;
-        if matched.is_empty() {
-            continue;
-        }
-        let copies = BTreeMap::from([(folder.to_string(), matched)]);
-        let keys = message_tag_keys(&tx, account, &copies)?;
-        write_tag_changes(&tx, account, &keys, &rule.tags, &[], true)?;
-    }
-    tx.commit()?;
-    Ok(())
-}
-
 /// Rename `tag` on every message of this store, or take it off with no `to`, and
 /// answer with the accounts that changed. A message already carrying `to` just
 /// loses `tag`. Only mail cached here can change: a keyword on mail not yet
@@ -705,16 +631,16 @@ pub fn replace_tag(
     Ok(accounts)
 }
 
-/// [`replace_tag`] and [`replace_rule_tag`] as one step, for a store whose rules
-/// sync applies. A write transaction from the start, as [`apply_tag_rules`] holds
-/// one: rules it read can't then land after this sweep and bring the tag back.
+/// [`replace_tag`] and [`super::replace_rule_tag`] as one step, for a store whose
+/// rules sync applies. A write transaction from the start, as
+/// [`super::apply_rules`] holds one: rules it read can't then land after this sweep and bring the tag back.
 pub fn replace_tag_and_rules(
     conn: &Connection,
     tag: &str,
     to: Option<&str>,
-) -> Result<(Vec<String>, Vec<TagRule>)> {
+) -> Result<(Vec<String>, Vec<super::Rule>)> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
-    let rules = replace_rule_tag(&tx, tag, to)?;
+    let rules = super::replace_rule_tag(&tx, tag, to)?;
     let accounts = replace_message_tag(&tx, tag, to, true)?;
     tx.commit()?;
     Ok((accounts, rules))
@@ -746,31 +672,6 @@ fn replace_message_tag(
         write_tag_changes(conn, account, keys, &add, &remove, mirrored)?;
     }
     Ok(keys.into_keys().collect())
-}
-
-/// [`replace_tag`] for the rules: they apply the new name, or lose the tag, and
-/// a rule left with no tag is gone. Answers with the rules as they now stand.
-pub fn replace_rule_tag(conn: &Connection, tag: &str, to: Option<&str>) -> Result<Vec<TagRule>> {
-    let rules = tag_rules(conn)?;
-    if to == Some(tag) {
-        return Ok(rules);
-    }
-    let mut next = Vec::with_capacity(rules.len());
-    for mut rule in rules {
-        if let Some(to) = to {
-            rule.query = crate::search_query::rename_tag_terms(&rule.query, tag, to);
-        }
-        if rule.tags.iter().any(|item| item == tag) {
-            rule.tags.retain(|item| item != tag);
-            rule.tags.extend(to.map(str::to_string));
-            rule.tags.sort();
-            rule.tags.dedup();
-        }
-        if !rule.tags.is_empty() {
-            next.push(rule);
-        }
-    }
-    set_tag_rules(conn, next)
 }
 
 /// The tags of one mailbox copy's message.
@@ -849,6 +750,10 @@ pub fn account_tags(conn: &Connection, account: &str) -> Result<Vec<(String, Str
 mod tests {
     use super::*;
     use crate::imap::MessageHeader;
+    use crate::store::{
+        Rule, apply_rules, finish_rule_actions, pending_rule_actions, replace_rule_tag,
+        retry_rule_actions, rules, set_rules,
+    };
 
     fn db() -> Connection {
         let path = std::env::temp_dir().join(format!(
@@ -1046,15 +951,12 @@ mod tests {
     #[test]
     fn rules_tag_only_the_new_mail_that_matches() {
         let conn = db();
-        let rule = TagRule {
+        let rule = Rule {
             query: "from:billing".into(),
             tags: vec!["Finance".into()],
             ..Default::default()
         };
-        assert_eq!(
-            set_tag_rules(&conn, vec![rule]).unwrap()[0].tags,
-            ["finance"]
-        );
+        assert_eq!(set_rules(&conn, vec![rule]).unwrap()[0].tags, ["finance"]);
 
         let mut new_bill = message(2, "new@x", Some(&[]));
         new_bill.from_addr = "billing@shop.test".into();
@@ -1063,7 +965,7 @@ mod tests {
         let other = message(3, "other@x", Some(&[]));
         upsert(&conn, "INBOX", &[old_bill, new_bill, other]);
 
-        apply_tag_rules(&conn, "a", "INBOX", &[2, 3]).unwrap();
+        apply_rules(&conn, "a", "INBOX", 1, &[2, 3]).unwrap();
         assert_eq!(tags(&conn, "new@x"), ["finance"]);
         assert!(tags(&conn, "old@x").is_empty(), "already here before");
         assert!(tags(&conn, "other@x").is_empty());
@@ -1086,26 +988,26 @@ mod tests {
     #[test]
     fn rules_leave_sent_mail_alone_and_refuse_to_be_empty() {
         let conn = db();
-        let rule = TagRule {
+        let rule = Rule {
             query: "subject:s".into(),
             tags: vec!["todo".into()],
             ..Default::default()
         };
-        set_tag_rules(&conn, vec![rule.clone()]).unwrap();
+        set_rules(&conn, vec![rule.clone()]).unwrap();
         upsert(&conn, "Sent", &[message(1, "m@x", Some(&[]))]);
-        apply_tag_rules(&conn, "a", "Sent", &[1]).unwrap();
+        apply_rules(&conn, "a", "Sent", 1, &[1]).unwrap();
         assert!(tags(&conn, "m@x").is_empty());
 
-        let no_search = TagRule {
+        let no_search = Rule {
             query: " ".into(),
             ..rule.clone()
         };
-        assert!(set_tag_rules(&conn, vec![no_search]).is_err());
-        let no_tag = TagRule {
+        assert!(set_rules(&conn, vec![no_search]).is_err());
+        let no_tag = Rule {
             tags: vec![],
             ..rule
         };
-        assert!(set_tag_rules(&conn, vec![no_tag]).is_err());
+        assert!(set_rules(&conn, vec![no_tag]).is_err());
     }
 
     #[test]
@@ -1179,12 +1081,12 @@ mod tests {
     #[test]
     fn rules_follow_a_rename_and_lose_a_deleted_tag() {
         let conn = db();
-        let rule = |query: &str, tags: &[&str]| TagRule {
+        let rule = |query: &str, tags: &[&str]| Rule {
             query: query.into(),
             tags: tags.iter().map(|tag| tag.to_string()).collect(),
             ..Default::default()
         };
-        set_tag_rules(
+        set_rules(
             &conn,
             vec![
                 rule("from:a", &["old", "keep"]),
@@ -1200,21 +1102,190 @@ mod tests {
         assert_eq!(renamed[2].tags, ["new"]);
 
         let deleted = replace_rule_tag(&conn, "new", None).unwrap();
-        assert_eq!(deleted.len(), 2, "a rule with no tag left can never apply");
+        assert_eq!(deleted.len(), 2, "a rule with nothing left to do is gone");
         assert_eq!(deleted[0].tags, ["keep"]);
-        assert_eq!(tag_rules(&conn).unwrap().len(), 2);
+        assert_eq!(rules(&conn).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_deleted_tag_leaves_a_rule_its_other_actions() {
+        let conn = db();
+        let rule = Rule {
+            query: "from:a".into(),
+            tags: vec!["old".into()],
+            star: true,
+            ..Default::default()
+        };
+        set_rules(&conn, vec![rule]).unwrap();
+        let kept = replace_rule_tag(&conn, "old", None).unwrap();
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].tags.is_empty() && kept[0].star);
+    }
+
+    #[test]
+    fn rules_may_do_anything_but_nothing() {
+        let conn = db();
+        let rule = |move_to: &str, folder: &str| Rule {
+            query: "from:a".into(),
+            move_to: move_to.into(),
+            folder: folder.into(),
+            ..Default::default()
+        };
+        assert!(set_rules(&conn, vec![rule("", "")]).is_err());
+        assert!(set_rules(&conn, vec![rule("folder", " ")]).is_err());
+        assert!(set_rules(&conn, vec![rule("somewhere", "")]).is_err());
+        let kept = set_rules(
+            &conn,
+            vec![rule("trash", "stray"), rule("folder", " Work ")],
+        )
+        .unwrap();
+        assert_eq!(kept[0].folder, "");
+        assert_eq!(kept[1].folder, "Work");
+    }
+
+    #[test]
+    fn matching_rules_add_up_and_the_first_move_wins() {
+        let conn = db();
+        let rule = |query: &str| Rule {
+            query: query.into(),
+            ..Default::default()
+        };
+        set_rules(
+            &conn,
+            vec![
+                Rule {
+                    mark_read: true,
+                    ..rule("subject:s")
+                },
+                Rule {
+                    move_to: "trash".into(),
+                    ..rule("subject:s")
+                },
+                Rule {
+                    star: true,
+                    move_to: "archive".into(),
+                    ..rule("subject:s")
+                },
+            ],
+        )
+        .unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 9, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued.len(), 1);
+        let action = &queued[0];
+        assert_eq!((action.uid, action.uidvalidity), (1, 9));
+        assert!(action.mark_read && action.star && action.trash);
+        assert_eq!(action.target, "");
+    }
+
+    #[test]
+    fn a_star_is_queued_and_a_tag_is_not() {
+        let conn = db();
+        let starred = Rule {
+            query: "from:x".into(),
+            star: true,
+            ..Default::default()
+        };
+        let tagged = Rule {
+            query: "subject:s".into(),
+            tags: vec!["todo".into()],
+            ..Default::default()
+        };
+        set_rules(&conn, vec![starred, tagged]).unwrap();
+        let mut from_x = message(1, "m@x", Some(&[]));
+        from_x.from_addr = "x@x.test".into();
+        upsert(&conn, "INBOX", &[from_x, message(2, "n@x", Some(&[]))]);
+
+        apply_rules(&conn, "a", "INBOX", 1, &[1, 2]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(queued.iter().map(|a| a.uid).collect::<Vec<_>>(), [1]);
+        assert_eq!(tags(&conn, "n@x"), ["todo"]);
+    }
+
+    #[test]
+    fn a_move_to_a_folder_the_account_lacks_is_skipped() {
+        let conn = db();
+        let rule = Rule {
+            query: "subject:s".into(),
+            mark_read: true,
+            move_to: "folder".into(),
+            folder: "Nowhere".into(),
+            ..Default::default()
+        };
+        set_rules(&conn, vec![rule]).unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        let queued = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert!(queued[0].mark_read);
+        assert_eq!(queued[0].target, "");
+        assert!(!queued[0].trash);
+    }
+
+    #[test]
+    fn a_rule_finds_a_folder_by_the_name_people_see() {
+        let conn = db();
+        let wire = crate::utf7::encode("日本語");
+        conn.execute(
+            "INSERT INTO folders(account, name) VALUES ('a', ?1)",
+            [&wire],
+        )
+        .unwrap();
+        let rule = Rule {
+            query: "subject:s".into(),
+            move_to: "folder".into(),
+            folder: "日本語".into(),
+            ..Default::default()
+        };
+        set_rules(&conn, vec![rule]).unwrap();
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        assert_eq!(
+            pending_rule_actions(&conn, "a", "INBOX").unwrap()[0].target,
+            wire
+        );
+    }
+
+    #[test]
+    fn queued_actions_retry_a_few_times_then_give_up() {
+        let conn = db();
+        let rule = Rule {
+            query: "subject:s".into(),
+            move_to: "trash".into(),
+            ..Default::default()
+        };
+        set_rules(&conn, vec![rule]).unwrap();
+        upsert(
+            &conn,
+            "INBOX",
+            &[message(1, "m@x", Some(&[])), message(2, "n@x", Some(&[]))],
+        );
+        apply_rules(&conn, "a", "INBOX", 1, &[1, 2]).unwrap();
+
+        finish_rule_actions(&conn, "a", "INBOX", &[2]).unwrap();
+        for _ in 0..4 {
+            assert_eq!(retry_rule_actions(&conn, "a", "INBOX", &[1]).unwrap(), 0);
+        }
+        assert_eq!(pending_rule_actions(&conn, "a", "INBOX").unwrap().len(), 1);
+        assert_eq!(retry_rule_actions(&conn, "a", "INBOX", &[1]).unwrap(), 1);
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
     fn a_rename_with_its_rules_changes_both_and_leaves_no_old_tag_for_new_mail() {
         let conn = db();
         upsert(&conn, "INBOX", &[message(1, "m@x", Some(&["old"]))]);
-        let rule = TagRule {
+        let rule = Rule {
             query: "subject:s".into(),
             tags: vec!["old".into()],
             ..Default::default()
         };
-        set_tag_rules(&conn, vec![rule]).unwrap();
+        set_rules(&conn, vec![rule]).unwrap();
 
         let (accounts, rules) = replace_tag_and_rules(&conn, "old", Some("new")).unwrap();
         assert_eq!(accounts, ["a"]);
@@ -1222,7 +1293,7 @@ mod tests {
         assert_eq!(tags(&conn, "m@x"), ["new"]);
 
         upsert(&conn, "INBOX", &[message(2, "n@x", Some(&[]))]);
-        apply_tag_rules(&conn, "a", "INBOX", &[2]).unwrap();
+        apply_rules(&conn, "a", "INBOX", 1, &[2]).unwrap();
         assert_eq!(tags(&conn, "n@x"), ["new"]);
         assert_eq!(tag_counts(&conn, None).unwrap().get("old"), None);
     }

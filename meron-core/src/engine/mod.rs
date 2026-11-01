@@ -17,6 +17,7 @@ mod prefetch;
 #[cfg(test)]
 pub(crate) use prefetch::transfer_clock_tests::slow_fetch_engine;
 mod read;
+mod rules;
 mod search;
 mod sync;
 mod transfers;
@@ -26,6 +27,7 @@ pub use background_sync::{BackgroundSyncCancelled, BackgroundSyncTimedOut, retry
 pub use folders::*;
 pub use prefetch::*;
 pub use read::*;
+pub use rules::*;
 pub use search::*;
 pub use sync::*;
 pub use transfers::*;

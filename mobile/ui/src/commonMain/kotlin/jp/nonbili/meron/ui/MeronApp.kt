@@ -1147,7 +1147,7 @@ private fun MeronMobileScreenContent(
                 composable(AppRoutes.Settings) {
                     LaunchedEffect(Unit) { loadStorageUsage() }
                     SettingsScreen(
-                        onOpenTagRules = { showTagRulesDialog = true },
+                        rulesPage = { modifier -> RulesPage(modifier) },
                         onOpenTags = { showTagsDialog = true },
                         onBack = popAppBack,
                         initialGeneral = settingsGeneralTarget,
@@ -1715,10 +1715,6 @@ private fun MeronMobileScreenContent(
 
         selectedTagThread?.let { thread ->
             TagDialog(thread = thread, onDismiss = { selectedTagThread = null })
-        }
-
-        if (showTagRulesDialog) {
-            TagRulesDialog(onDismiss = { showTagRulesDialog = false })
         }
 
         if (showTagsDialog) {

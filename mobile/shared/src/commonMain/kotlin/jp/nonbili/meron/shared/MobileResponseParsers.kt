@@ -785,8 +785,8 @@ fun parseReplaceTagResponse(responseJson: String): String? = responseJson.findJs
 /** The saved searches sent with a `mail.replaceTag`, in order, as they now read. */
 fun parseReplacedQueries(responseJson: String): List<String> = responseJson.topLevelStringArray("queries")
 
-/** The rules a `mail.tagRules` or `mail.setTagRules` answer lists. */
-fun parseTagRulesResponse(responseJson: String): List<TagRule> =
+/** The rules a `mail.rules` or `mail.setRules` answer lists. */
+fun parseRulesResponse(responseJson: String): List<Rule> =
     responseJson
         .jsonObjectEntries()
         .firstOrNull { it.first == "rules" }
@@ -794,10 +794,14 @@ fun parseTagRulesResponse(responseJson: String): List<TagRule> =
         ?.takeIf { it.startsWith("[") }
         ?.jsonArrayElements()
         ?.map { rule ->
-            TagRule(
+            Rule(
                 id = rule.findJsonStringProperty("id").orEmpty(),
                 query = rule.findJsonStringProperty("query").orEmpty(),
                 tags = rule.topLevelStringArray("tags"),
+                markRead = rule.findJsonBooleanProperty("mark_read") ?: false,
+                star = rule.findJsonBooleanProperty("star") ?: false,
+                moveTo = rule.findJsonStringProperty("move_to").orEmpty(),
+                folder = rule.findJsonStringProperty("folder").orEmpty(),
             )
         }.orEmpty()
 

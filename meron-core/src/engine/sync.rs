@@ -225,6 +225,40 @@ impl MovedCopies {
     }
 }
 
+/// Move `uids` to `target` on the server and cache where they went.
+pub async fn move_within_account(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    target: &str,
+    uids: &[u32],
+) -> anyhow::Result<MovedCopies> {
+    let cached_ids = store::cached_message_ids(&engine.db.lock().unwrap(), account, folder, uids)?;
+    let moved_ids = moved_message_ids(engine, account, folder, uids, cached_ids).await;
+    let uid_next_before = engine
+        .with_write_session(account, |session| {
+            let folder = folder.to_string();
+            let target = target.to_string();
+            let uids = uids.to_vec();
+            Box::pin(async move { imap::move_to_folder(session, &folder, &target, &uids).await })
+        })
+        .await?;
+    let copies = refresh_moved_copies(
+        engine,
+        account,
+        target,
+        uids.len(),
+        uid_next_before,
+        moved_ids.as_deref(),
+    )
+    .await;
+    let db = engine.db.lock().unwrap();
+    copies.store(&db, account, target)?;
+    store::delete_messages_by_uid(&db, account, folder, uids)?;
+    drop(db);
+    Ok(copies)
+}
+
 /// The lowercased Message-ID of each message about to be moved, `""` for one
 /// without, so [`refresh_moved_copies`] can tell its copies from other mail in
 /// the target. `cached` comes from `store::cached_message_ids`; what the cache
@@ -846,6 +880,7 @@ async fn sync_messages_with_policy(
         .collect();
     let tag_engine = engine.clone();
     let tag_account = account.to_string();
+    let rule_folder = folder.to_string();
     let catchup_engine = engine.clone();
     let catchup_account = account.to_string();
     let catchup_folder = folder.to_string();
@@ -865,7 +900,7 @@ async fn sync_messages_with_policy(
     let account = account.to_string();
     let folder = folder.to_string();
     // Outside the network timeout: always observe the committed result.
-    let (result, removal_guard) = tokio::task::spawn_blocking(move || {
+    let (mut result, removal_guard) = tokio::task::spawn_blocking(move || {
     let account = account.as_str();
     let folder = folder.as_str();
     let db = crate::log::timed_db_lock(&engine.db, "sync_messages.persist");
@@ -946,11 +981,11 @@ async fn sync_messages_with_policy(
     if let Some(unseen) = server_unseen.as_ref() {
         store::set_uncached_unseen(&db, account, folder, unseen)?;
     }
-    if let Err(err) = store::apply_tag_rules(&db, account, folder, &first_seen) {
+    if let Err(err) = store::apply_rules(&db, account, folder, batch.uidvalidity, &first_seen) {
         crate::mlog!(
             crate::log::Level::Warn,
-            "mail.tags",
-            "account={account} folder={folder}: tag rules skipped: {err:#}"
+            "mail.rules",
+            "account={account} folder={folder}: rules skipped: {err:#}"
         );
     }
     let phase_started = std::time::Instant::now();
@@ -1038,8 +1073,36 @@ async fn sync_messages_with_policy(
     if tags_pending {
         spawn_tag_push(&tag_engine, &tag_account);
     }
+    // Awaited, unlike the tags, so what the caller announces next is where the
+    // rules left it: mail they read or moved doesn't notify, and mail they failed
+    // to still does. Whatever doesn't finish stays queued for the next sync.
+    let mut silenced = std::collections::BTreeSet::new();
+    let rules_ran = tokio::time::timeout(
+        RULE_ACTIONS_BUDGET,
+        run_rule_actions(&tag_engine, &tag_account, &rule_folder, &mut silenced),
+    )
+    .await;
+    match rules_ran {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={tag_account}: rule actions skipped: {err:#}"
+        ),
+        Err(_) => crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={tag_account}: rule actions ran out of time"
+        ),
+    }
+    result
+        .arrivals
+        .retain(|message| !silenced.contains(&message.uid));
     Ok(result)
 }
+
+/// How long a sync waits on the server work its rules queued.
+const RULE_ACTIONS_BUDGET: Duration = Duration::from_secs(60);
 
 pub(super) const DEFAULT_BACKGROUND_SYNC_TIMEOUT_SECS: u64 = 30;
 pub(super) const MAX_BACKGROUND_SYNC_TIMEOUT_SECS: u64 = 24 * 60 * 60;

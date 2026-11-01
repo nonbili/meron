@@ -689,6 +689,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     if version < 22 {
         migrate_v22(&tx)?;
     }
+    if version < 23 {
+        migrate_v23(&tx)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -1382,5 +1385,25 @@ fn migrate_v22(conn: &Connection) -> Result<()> {
          PRAGMA user_version = 22;",
         key = super::tags::TAG_KEY_SQL,
     ))?;
+    Ok(())
+}
+
+/// v23: what rules still have to do on the server, so a failed sync keeps it.
+fn migrate_v23(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE rule_actions (
+            account     TEXT NOT NULL,
+            folder      TEXT NOT NULL,
+            uid         INTEGER NOT NULL,
+            uidvalidity INTEGER NOT NULL,
+            mark_read   INTEGER NOT NULL DEFAULT 0,
+            star        INTEGER NOT NULL DEFAULT 0,
+            trash       INTEGER NOT NULL DEFAULT 0,
+            target      TEXT NOT NULL DEFAULT '',
+            attempts    INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account, folder, uid)
+         ) WITHOUT ROWID;
+         PRAGMA user_version = 23;",
+    )?;
     Ok(())
 }

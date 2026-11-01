@@ -86,8 +86,8 @@ object MobileCommand {
     const val SetTags = "mail.setTags"
     const val TagList = "mail.tagList"
     const val ReplaceTag = "mail.replaceTag"
-    const val TagRules = "mail.tagRules"
-    const val SetTagRules = "mail.setTagRules"
+    const val Rules = "mail.rules"
+    const val SetRules = "mail.setRules"
     const val RssSync = "rss.sync"
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
@@ -1158,16 +1158,24 @@ data class SetTagsParams(
         )
 }
 
-data class TagRule(
+data class Rule(
     val id: String = "",
     val query: String,
-    val tags: List<String>,
+    val tags: List<String> = emptyList(),
+    val markRead: Boolean = false,
+    val star: Boolean = false,
+    val moveTo: String = "",
+    val folder: String = "",
 ) {
     fun toJson(): String =
         jsonObject(
             "id" to id.jsonString(),
             "query" to query.jsonString(),
             "tags" to tags.jsonStringArray(),
+            "mark_read" to markRead.toString(),
+            "star" to star.toString(),
+            "move_to" to moveTo.jsonString(),
+            "folder" to folder.jsonString(),
         )
 }
 
@@ -1411,11 +1419,11 @@ class MobileMailCommandClient(
             jsonObject("tag" to tag.jsonString(), "to" to to?.jsonString(), "queries" to queries.jsonStringArray()),
         )
 
-    suspend fun tagRules(): String = core.invoke(MobileCommand.TagRules, "{}")
+    suspend fun rules(): String = core.invoke(MobileCommand.Rules, "{}")
 
-    suspend fun setTagRules(rules: List<TagRule>): String =
+    suspend fun setRules(rules: List<Rule>): String =
         core.invoke(
-            MobileCommand.SetTagRules,
+            MobileCommand.SetRules,
             rules.joinToString(separator = ",", prefix = "{\"rules\":[", postfix = "]}") { it.toJson() },
         )
 }

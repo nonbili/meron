@@ -24,10 +24,10 @@ import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.RemoveRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
+import jp.nonbili.meron.shared.Rule
 import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
 import jp.nonbili.meron.shared.TagCount
-import jp.nonbili.meron.shared.TagRule
 import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSummaryIsRss
@@ -39,10 +39,10 @@ import jp.nonbili.meron.shared.parseFolderRenameResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseReplaceTagResponse
 import jp.nonbili.meron.shared.parseReplacedQueries
+import jp.nonbili.meron.shared.parseRulesResponse
 import jp.nonbili.meron.shared.parseSetTagsResponse
 import jp.nonbili.meron.shared.parseTagCountsResponse
 import jp.nonbili.meron.shared.parseTagListResponse
-import jp.nonbili.meron.shared.parseTagRulesResponse
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
@@ -409,15 +409,15 @@ internal suspend fun MeronMobileState.loadTagCounts(): List<TagCount> =
     }.getOrDefault(emptyList())
 
 /** The saved rules, or null if they could not be read. */
-internal suspend fun MeronMobileState.loadTagRules(): List<TagRule>? =
+internal suspend fun MeronMobileState.loadRules(): List<Rule>? =
     runCatching {
-        parseTagRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).tagRules() }))
+        parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).rules() }))
     }.getOrNull()
 
 /** The rules as the core kept them, or null if it refused one. */
-internal suspend fun MeronMobileState.saveTagRules(rules: List<TagRule>): List<TagRule>? =
+internal suspend fun MeronMobileState.saveRules(rules: List<Rule>): List<Rule>? =
     runCatching {
-        parseTagRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setTagRules(rules) }))
+        parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setRules(rules) }))
     }.getOrNull()
 
 internal suspend fun MeronMobileState.loadKnownTags(): List<String> =

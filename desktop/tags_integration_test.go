@@ -144,12 +144,55 @@ func TestIntegrationTags(t *testing.T) {
 		old := "Invoice from before"
 		deliver(old)
 		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == old })
-		callMap(t, sidecar, "tags.setRules", map[string]any{
+		callMap(t, sidecar, "rules.set", map[string]any{
 			"rules": []map[string]any{{"query": "subject:invoice", "tags": []string{"finance"}}},
 		})
 		fresh := "Invoice just in"
 		deliver(fresh)
 		pollCards(t, sidecar, hasTags(fresh, "finance"))
 		pollCards(t, sidecar, hasTags(old))
+	})
+
+	t.Run("rules read, star and move new mail on the server", func(t *testing.T) {
+		callMap(t, sidecar, "rules.set", map[string]any{
+			"rules": []map[string]any{
+				{"query": "subject:keepme", "mark_read": true, "star": true},
+				{"query": "subject:binme", "move_to": "trash"},
+			},
+		})
+
+		kept := "Keepme please"
+		deliver(kept)
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
+			return str(message, "subject") == kept && message["seen"] == true && message["starred"] == true
+		})
+		settled := func(flags string) bool {
+			return strings.Contains(flags, "\\Seen") && strings.Contains(flags, "\\Flagged")
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for !settled(serverKeywords(t, server, user, kept)) {
+			if time.Now().After(deadline) {
+				t.Fatalf("server flags: %s", serverKeywords(t, server, user, kept))
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		binned := "Binme now"
+		bystander := "Stays right here"
+		deliver(binned)
+		deliver(bystander)
+		pollFolder(t, sidecar, "acct", "Trash", func(message map[string]any) bool { return str(message, "subject") == binned })
+		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return str(message, "subject") == binned })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == bystander })
+
+		callMap(t, sidecar, "folders.create", map[string]any{"account": "acct", "name": "Receipts"})
+		callMap(t, sidecar, "folders.list", map[string]any{"account": "acct", "refresh": true})
+		callMap(t, sidecar, "rules.set", map[string]any{
+			"rules": []map[string]any{{"query": "subject:fileme", "move_to": "folder", "folder": "Receipts"}},
+		})
+		filed := "Fileme away"
+		deliver(filed)
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == filed })
+		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return str(message, "subject") == filed })
 	})
 }

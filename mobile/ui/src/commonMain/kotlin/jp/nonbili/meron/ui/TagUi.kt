@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.TagCount
-import jp.nonbili.meron.shared.TagRule
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlinx.coroutines.launch
 
@@ -266,88 +265,4 @@ internal fun MeronMobileState.TagsDialog(onDismiss: () -> Unit) {
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(tr("buttons.cancel")) } },
         )
     }
-}
-
-/** Tag new mail that matches a search, in the search box's own syntax. */
-@Composable
-internal fun MeronMobileState.TagRulesDialog(onDismiss: () -> Unit) {
-    // Each save replaces the whole list, so nothing may start from a stale one:
-    // not before the list has loaded, and not while another save is on its way.
-    var rules by remember { mutableStateOf<List<TagRule>?>(null) }
-    var saving by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    var names by remember { mutableStateOf("") }
-    var invalid by remember { mutableStateOf(false) }
-    val coroutines = rememberCoroutineScope()
-    LaunchedEffect(Unit) { rules = loadTagRules() }
-
-    fun save(next: List<TagRule>) {
-        if (saving) return
-        saving = true
-        coroutines.launch {
-            val saved = saveTagRules(next)
-            saving = false
-            invalid = saved == null
-            if (saved != null) {
-                rules = saved
-                query = ""
-                names = ""
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(tr("tags.rules.title")) },
-        text = {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(tr("tags.rules.hint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                rules.orEmpty().forEach { rule ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${rule.query} \u2192 ${rule.tags.joinToString(", ")}",
-                            fontSize = 13.sp,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(enabled = !saving, onClick = { save(rules.orEmpty().filter { it.id != rule.id }) }) {
-                            Text(tr("tags.rules.delete"))
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = {
-                        query = it
-                        invalid = false
-                    },
-                    singleLine = true,
-                    label = { Text(tr("tags.rules.query")) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = names,
-                    onValueChange = {
-                        names = it
-                        invalid = false
-                    },
-                    singleLine = true,
-                    isError = invalid,
-                    label = { Text(tr("tags.rules.tags")) },
-                    supportingText = if (invalid) ({ Text(tr("tags.rules.invalid")) }) else null,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    enabled = !saving && rules != null,
-                    onClick = {
-                        val tags = names.split(",").map(String::trim).filter(String::isNotEmpty)
-                        save(rules.orEmpty() + TagRule(query = query, tags = tags))
-                    },
-                ) { Text(tr("tags.rules.add")) }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.close")) } },
-    )
 }

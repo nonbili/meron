@@ -10,7 +10,7 @@
 use anyhow::{Context, Result, anyhow};
 use futures::StreamExt;
 use mailparse::MailHeaderMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::task::{Context as TaskContext, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -1805,6 +1805,134 @@ pub async fn move_to_folder(
     Ok(target_uid_next)
 }
 
+/// How far a [`move_to_folder_once`] got.
+#[derive(Debug, Default)]
+pub struct MoveOutcome {
+    /// What has left the source, including what was already gone.
+    pub moved: Vec<u32>,
+    /// Why the rest of the UIDs are still there.
+    pub failed: Option<anyhow::Error>,
+}
+
+/// [`move_to_folder`] that may be repeated after being cut off at any point. A
+/// server with MOVE does that by itself. Without it a move is a copy and a
+/// delete, so what `dest` already holds is not copied again, only removed from
+/// the source. `message_ids` lines up with `uids`; a message with `""` can't be
+/// told from its copy, so it stays where it is and the outcome says so.
+pub async fn move_to_folder_once(
+    session: &mut Session,
+    source_folder: &str,
+    dest_folder: &str,
+    uids: &[u32],
+    message_ids: &[String],
+) -> Result<MoveOutcome> {
+    let supports_move = match session.capabilities().await {
+        Ok(caps) => caps.has_str("MOVE"),
+        Err(_) => false,
+    };
+    if supports_move {
+        move_to_folder(session, source_folder, dest_folder, uids).await?;
+        return Ok(MoveOutcome {
+            moved: uids.to_vec(),
+            failed: None,
+        });
+    }
+    let sizes = message_sizes(session, source_folder, uids).await?;
+    session.select(dest_folder).await.context("SELECT")?;
+    let (mut copied, mut pending, mut gone, mut unidentified) =
+        (Vec::new(), Vec::new(), Vec::new(), 0);
+    for (uid, id) in uids.iter().zip(message_ids) {
+        // Gone from the source: another client got there, nothing to move.
+        let Some(size) = sizes.get(uid) else {
+            gone.push(*uid);
+            continue;
+        };
+        if id.is_empty() {
+            unidentified += 1;
+        } else if holds_copy(session, id, *size).await? {
+            copied.push(*uid);
+        } else {
+            pending.push(*uid);
+        }
+    }
+    move_to_folder(session, source_folder, dest_folder, &pending).await?;
+    let mut moved = pending;
+    moved.append(&mut gone);
+    if let Err(err) = expunge_uids(session, source_folder, &copied).await {
+        return Ok(MoveOutcome {
+            moved,
+            failed: Some(err),
+        });
+    }
+    moved.append(&mut copied);
+    let failed = (unidentified > 0).then(|| {
+        anyhow::anyhow!(
+            "{unidentified} messages have no Message-ID to tell a retry by, so they were not moved"
+        )
+    });
+    Ok(MoveOutcome { moved, failed })
+}
+
+/// The UIDVALIDITY `folder` has on the server right now.
+pub async fn folder_uidvalidity(session: &mut Session, folder: &str) -> Result<u32> {
+    let mailbox = session.select(folder).await.context("SELECT")?;
+    Ok(mailbox.uid_validity.unwrap_or(0))
+}
+
+async fn message_sizes(
+    session: &mut Session,
+    folder: &str,
+    uids: &[u32],
+) -> Result<HashMap<u32, u32>> {
+    session.select(folder).await.context("SELECT")?;
+    let mut sizes = HashMap::new();
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, "(UID RFC822.SIZE)")
+            .await
+            .context("UID FETCH size")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH size item")?;
+            if let (Some(uid), Some(size)) = (fetch.uid, fetch.size) {
+                sizes.insert(uid, size);
+            }
+        }
+    }
+    Ok(sizes)
+}
+
+/// Whether the selected mailbox holds a copy of a message: the same whole
+/// Message-ID at the same size. SEARCH can't say, as it matches substrings, and
+/// a resent message can keep its ID, so its hits are read back. In doubt this
+/// says no: the price is a duplicate, where a wrong yes would lose the original.
+async fn holds_copy(session: &mut Session, id: &str, size: u32) -> Result<bool> {
+    let hits = session
+        .uid_search(format!("HEADER MESSAGE-ID {}", imap_quote(id)))
+        .await
+        .context("UID SEARCH")?;
+    if hits.is_empty() {
+        return Ok(false);
+    }
+    let uid_set = hits
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let wanted = id.trim().to_lowercase();
+    let mut found = false;
+    let mut stream = session
+        .uid_fetch(uid_set, "(UID RFC822.SIZE BODY.PEEK[HEADER])")
+        .await
+        .context("UID FETCH Message-ID")?;
+    while let Some(item) = stream.next().await {
+        let fetch = item.context("UID FETCH Message-ID item")?;
+        let header = fetch.header().unwrap_or_default();
+        found |= fetch.size == Some(size)
+            && crate::parse::message_id_of(header).trim().to_lowercase() == wanted;
+    }
+    Ok(found)
+}
+
 #[derive(Clone)]
 pub struct RawMessageCopy {
     /// The source UID, or 0 when the server left it out of the FETCH reply.
@@ -3449,6 +3577,114 @@ pub async fn move_to_folder_checked(
 mod append_tests {
     use super::*;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn a_repeated_move_without_imap_move_copies_only_what_is_missing() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let (reader, mut writer) = socket.into_split();
+            let mut reader = tokio::io::BufReader::new(reader);
+            writer.write_all(b"* OK ready\r\n").await.unwrap();
+            let mut commands = Vec::new();
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).await.unwrap() == 0 {
+                    return commands;
+                }
+                let (tag, command) = line.trim_end().split_once(' ').unwrap();
+                let upper = command.to_uppercase();
+                let untagged = if upper.starts_with("CAPABILITY") {
+                    "* CAPABILITY IMAP4rev1 UIDPLUS\r\n".to_string()
+                } else if upper.starts_with("SELECT") {
+                    "* 2 EXISTS\r\n".to_string()
+                } else if upper.starts_with("UID SEARCH") {
+                    let hit = if command.contains("copied@x") {
+                        " 9"
+                    } else if command.contains("near@x") {
+                        " 8"
+                    } else if command.contains("resent@x") {
+                        " 7"
+                    } else {
+                        ""
+                    };
+                    format!("* SEARCH{hit}\r\n")
+                } else {
+                    String::new()
+                };
+                let untagged = if upper.starts_with("UID FETCH") {
+                    if upper.contains("BODY.PEEK") {
+                        let (uid, id, size) = if command.contains(" 9 ") {
+                            (9, "copied@x", 100)
+                        } else if command.contains(" 7 ") {
+                            (7, "resent@x", 999)
+                        } else {
+                            (8, "prefix-near@x", 100)
+                        };
+                        let header = format!("Message-ID: <{id}>\r\n\r\n");
+                        format!(
+                            "* 1 FETCH (UID {uid} RFC822.SIZE {size} BODY[HEADER] {{{}}}\r\n{header})\r\n",
+                            header.len()
+                        )
+                    } else {
+                        // Every message the test names, except 6: it is gone.
+                        (1..=5)
+                            .map(|uid| format!("* {uid} FETCH (UID {uid} RFC822.SIZE 100)\r\n"))
+                            .collect()
+                    }
+                } else {
+                    untagged
+                };
+                let reply = format!("{untagged}{tag} OK done\r\n");
+                writer.write_all(reply.as_bytes()).await.unwrap();
+                commands.push(upper);
+            }
+        });
+        let tcp = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let mut client = async_imap::Client::new(Stream::plain(tcp));
+        client.read_response().await.unwrap().unwrap();
+        let mut session = client
+            .login("test", "test")
+            .await
+            .map_err(|(err, _)| err)
+            .unwrap();
+
+        // 2 is not there yet, 3 only resembles what is, and 4 was resent under
+        // the same ID at another size: all three must really be copied.
+        let ids = ["copied@x", "fresh@x", "near@x", "resent@x"].map(String::from);
+        let all = move_to_folder_once(&mut session, "INBOX", "Work", &[1, 2, 3, 4], &ids)
+            .await
+            .unwrap();
+        assert!(all.failed.is_none());
+        assert_eq!(all.moved, [2, 3, 4, 1]);
+        let unidentified = ["copied@x".to_string(), String::new()];
+        let partial = move_to_folder_once(&mut session, "INBOX", "Work", &[1, 5], &unidentified)
+            .await
+            .unwrap();
+        assert!(
+            partial.failed.is_some(),
+            "the one that can't be told apart stays behind, and the caller hears of it"
+        );
+        assert_eq!(partial.moved, [1]);
+        let gone = ["gone@x".to_string()];
+        let gone = move_to_folder_once(&mut session, "INBOX", "Work", &[6], &gone)
+            .await
+            .unwrap();
+        assert_eq!(gone.moved, [6]);
+        drop(session);
+
+        let commands = server.await.unwrap();
+        let sent = |verb: &str| -> Vec<&String> {
+            commands.iter().filter(|c| c.starts_with(verb)).collect()
+        };
+        assert_eq!(sent("UID COPY").len(), 1);
+        assert!(sent("UID COPY")[0].starts_with("UID COPY 2:4 "));
+        let stored: Vec<_> = sent("UID STORE");
+        assert!(stored.iter().any(|c| c.starts_with("UID STORE 1 ")));
+        assert!(!stored.iter().any(|c| c.starts_with("UID STORE 5 ")));
+        assert!(!stored.iter().any(|c| c.starts_with("UID STORE 6 ")));
+    }
 
     #[tokio::test]
     async fn copy_failure_reports_only_confirmed_appends_and_keeps_server_reason() {

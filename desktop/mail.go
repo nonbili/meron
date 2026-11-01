@@ -668,20 +668,20 @@ func (a *App) replaceTag(payload map[string]any) (any, error) {
 	return a.sidecar.Call("tags.replace", map[string]any{"tag": payload["tag"], "to": payload["to"], "queries": payload["queries"]})
 }
 
-// tagRules lists the rules that tag new mail.
-func (a *App) tagRules() (any, error) {
+// rules lists what to do with new mail.
+func (a *App) rules() (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return map[string]any{"rules": []any{}}, nil
 	}
-	return a.sidecar.Call("tags.rules", map[string]any{})
+	return a.sidecar.Call("rules.list", map[string]any{})
 }
 
-// setTagRules replaces those rules, answering with what the core kept.
-func (a *App) setTagRules(payload map[string]any) (any, error) {
+// setRules replaces those rules, answering with what the core kept.
+func (a *App) setRules(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, fmt.Errorf("mail core is not running")
 	}
-	return a.sidecar.Call("tags.setRules", map[string]any{"rules": payload["rules"]})
+	return a.sidecar.Call("rules.set", map[string]any{"rules": payload["rules"]})
 }
 
 // markAllRead marks every message in one mail folder as read. An RSS account has

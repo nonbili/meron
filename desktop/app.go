@@ -402,10 +402,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.tagList()
 	case "mail.replaceTag":
 		return a.replaceTag(payload)
-	case "mail.tagRules":
-		return a.tagRules()
-	case "mail.setTagRules":
-		return a.setTagRules(payload)
+	case "mail.rules":
+		return a.rules()
+	case "mail.setRules":
+		return a.setRules(payload)
 	case "mail.markAllRead":
 		return a.markAllRead(payload)
 	case "mail.emptyFolder":

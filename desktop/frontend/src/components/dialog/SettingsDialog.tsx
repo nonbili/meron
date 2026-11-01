@@ -30,6 +30,7 @@ import {
   RefreshCw,
   MessagesSquare,
   Keyboard,
+  ListFilter,
   Archive,
   Server,
   PanelTop,
@@ -88,18 +89,20 @@ import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
+import { RulesPanel } from './RulesPanel'
 import { setIntegratedTitlebar, windowChrome$ } from '../../lib/windowChrome'
 
-// General uses the empty selection; Messages, Composer and MCP have ids of
+// General uses the empty selection; Messages, Composer, Rules and MCP have ids of
 // their own. Account and board IDs share the selection state with these
 // settings sections.
-type SectionId = 'general' | 'messages' | 'composer'
+type SectionId = 'general' | 'messages' | 'composer' | 'rules'
 const SECTIONS: { id: SectionId; labelKey: string; icon: LucideIcon }[] = [
   { id: 'general', labelKey: 'settings.sections.general', icon: SlidersHorizontal },
   { id: 'messages', labelKey: 'settings.sections.messages', icon: MessagesSquare },
   { id: 'composer', labelKey: 'settings.sections.composer', icon: SquarePen },
+  { id: 'rules', labelKey: 'rules.title', icon: ListFilter },
 ]
-const PAGE_IDS = new Set<string>(['messages', 'composer', 'mcp'])
+const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp'])
 
 const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
   { value: 'enter', label: sendShortcutLabel('enter') },
@@ -253,6 +256,8 @@ export function SettingsDialog() {
             <MessagesSection />
           ) : selected === 'composer' ? (
             <ComposerSection />
+          ) : selected === 'rules' ? (
+            <RulesPanel />
           ) : (
             <GeneralSection />
           )}

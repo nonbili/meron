@@ -138,10 +138,10 @@ pub(crate) async fn dispatch(
             Ok(store::tag_counts_json(counts))
         }
 
-        "tags.rules" => Ok(json!({ "rules": store::tag_rules(&engine.db.lock().unwrap())? })),
-        "tags.setRules" => {
+        "rules.list" => Ok(json!({ "rules": store::rules(&engine.db.lock().unwrap())? })),
+        "rules.set" => {
             let rules = serde_json::from_value(p.get("rules").cloned().unwrap_or_default())?;
-            let rules = store::set_tag_rules(&engine.db.lock().unwrap(), rules)?;
+            let rules = store::set_rules(&engine.db.lock().unwrap(), rules)?;
             Ok(json!({ "rules": rules }))
         }
 

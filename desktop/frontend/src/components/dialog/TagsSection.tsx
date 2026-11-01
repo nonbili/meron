@@ -9,41 +9,33 @@ import { IconButton } from '../button/IconButton'
 import { TextInput } from '../field/Field'
 import { SettingRow, SettingsGroup } from './AccountSettingsRows'
 import { Dialog } from './Dialog'
-import { TagRulesSection } from './TagRulesSection'
 
 const nameClass =
   'min-w-0 flex-1 rounded-lg bg-hover px-2 py-1 text-xs text-primary outline-none ring-1 ring-border focus:ring-accent'
 
-// Two rows that open dialogs, so a long list of tags or rules never pushes the
-// settings below them out of sight.
+// A row that opens a dialog, so a long list of tags never pushes the settings
+// below it out of sight.
 export function TagsSection() {
   const { t } = useTranslation()
-  const [open, setOpen] = useState<'tags' | 'rules' | null>(null)
-  const openButton = (dialog: 'tags' | 'rules', label: string) => (
-    <button
-      onClick={() => setOpen(dialog)}
-      aria-label={label}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[0.625rem] cursor-pointer transition-colors"
-    >
-      {t('buttons.edit')}
-    </button>
-  )
+  const [open, setOpen] = useState(false)
   return (
     <SettingsGroup title={t('tags.title')}>
-      <SettingRow title={t('tags.title')} hint={t('tags.manage.hint')} control={openButton('tags', t('tags.title'))} />
       <SettingRow
-        title={t('tags.rules.title')}
-        hint={t('tags.rules.hint')}
-        control={openButton('rules', t('tags.rules.title'))}
+        title={t('tags.title')}
+        hint={t('tags.manage.hint')}
+        control={
+          <button
+            onClick={() => setOpen(true)}
+            aria-label={t('tags.title')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[0.625rem] cursor-pointer transition-colors"
+          >
+            {t('buttons.edit')}
+          </button>
+        }
       />
-      {open === 'tags' && (
-        <TagSettingsDialog title={t('tags.title')} hint={t('tags.manage.hint')} onClose={() => setOpen(null)}>
+      {open && (
+        <TagSettingsDialog title={t('tags.title')} hint={t('tags.manage.hint')} onClose={() => setOpen(false)}>
           <TagList />
-        </TagSettingsDialog>
-      )}
-      {open === 'rules' && (
-        <TagSettingsDialog title={t('tags.rules.title')} hint={t('tags.rules.hint')} onClose={() => setOpen(null)}>
-          <TagRulesSection />
         </TagSettingsDialog>
       )}
     </SettingsGroup>

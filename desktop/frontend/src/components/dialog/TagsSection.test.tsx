@@ -23,7 +23,7 @@ function stubCore() {
         Invoke: async (command: string, payload: Call['payload']) => {
           calls.push({ command, payload })
           if (command === 'mail.tagList') return { tags: counts }
-          if (command === 'mail.tagRules') return { rules: [] }
+          if (command === 'mail.rules') return { rules: [] }
           if (command !== 'mail.replaceTag') return {}
           counts = counts.filter(({ tag }) => tag !== payload.tag)
           return {
@@ -111,7 +111,7 @@ it('reads the list again after a replacement', async () => {
   await waitFor(() => expect(reads().length).toBeGreaterThan(0))
 })
 
-it('keeps long lists behind a row each, so the page stays short', async () => {
+it('keeps the long list behind a row, so the page stays short', async () => {
   stubCore()
   const view = render(<TagsSection />)
   expect(view.queryByText('work')).toBeNull()
@@ -119,8 +119,6 @@ it('keeps long lists behind a row each, so the page stays short', async () => {
   await waitFor(() => expect(view.getByText('work')).toBeTruthy())
   fireEvent.click(view.getByLabelText('Close'))
   await waitFor(() => expect(view.queryByText('work')).toBeNull())
-  fireEvent.click(view.getByRole('button', { name: 'Tag rules' }))
-  await waitFor(() => expect(view.getByLabelText('Add rule')).toBeTruthy())
 })
 
 it('renames a tag from its row, most used first', async () => {

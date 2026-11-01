@@ -1,3 +1,4 @@
+import type { Rule } from './mailRules'
 import { invoke } from '../lib/bridge'
 import { columnReadsTags, loadKanbanColumn } from '../lib/kanbanData'
 import { getKanbanColumns, kanban$, kanbanColumnKey, kanbanColumnQueries, renameKanbanColumnQueries } from './kanban'
@@ -79,9 +80,9 @@ function reloadTagColumns(every = false) {
 // rules, answering with the name it kept and the rules as they now stand; boards
 // live here, so their saved searches go through it to be rewritten. Whatever is
 // on screen follows, as no sync announces this either.
-export async function replaceTag(tag: string, to?: string): Promise<TagRule[]> {
+export async function replaceTag(tag: string, to?: string): Promise<Rule[]> {
   const queries = kanbanColumnQueries()
-  const result = await invoke<{ tag?: string | null; rules?: TagRule[]; queries?: string[] }>('mail.replaceTag', {
+  const result = await invoke<{ tag?: string | null; rules?: Rule[]; queries?: string[] }>('mail.replaceTag', {
     tag,
     to,
     queries,
@@ -109,17 +110,4 @@ export async function replaceTag(tag: string, to?: string): Promise<TagRule[]> {
 export async function loadTagCounts(): Promise<TagCount[]> {
   const { tags } = await invoke<{ tags: TagCount[] }>('mail.tagList', {})
   return tags ?? []
-}
-
-export type TagRule = { id: string; query: string; tags: string[] }
-
-export async function loadTagRules(): Promise<TagRule[]> {
-  const { rules } = await invoke<{ rules: TagRule[] }>('mail.tagRules', {})
-  return rules ?? []
-}
-
-// The core normalizes what it keeps and refuses a rule that could never apply.
-export async function saveTagRules(rules: TagRule[]): Promise<TagRule[]> {
-  const saved = await invoke<{ rules: TagRule[] }>('mail.setTagRules', { rules })
-  return saved.rules ?? []
 }

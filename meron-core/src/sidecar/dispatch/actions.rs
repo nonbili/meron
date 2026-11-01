@@ -422,34 +422,8 @@ pub(crate) async fn dispatch(
                 .await;
             }
 
-            let cached_ids =
-                store::cached_message_ids(&engine.db.lock().unwrap(), &account, &folder, &uids)?;
-            let moved_ids = moved_message_ids(engine, &account, &folder, &uids, cached_ids).await;
-            let uid_next_before = engine
-                .with_write_session(&account, |session| {
-                    let folder = folder.clone();
-                    let target_folder = target_folder.clone();
-                    let uids = uids.clone();
-                    Box::pin(async move {
-                        imap::move_to_folder(session, &folder, &target_folder, &uids).await
-                    })
-                })
-                .await?;
-            let copies = refresh_moved_copies(
-                engine,
-                &account,
-                &target_folder,
-                uids.len(),
-                uid_next_before,
-                moved_ids.as_deref(),
-            )
-            .await;
-
-            {
-                let db = engine.db.lock().unwrap();
-                copies.store(&db, &account, &target_folder)?;
-                store::delete_messages_by_uid(&db, &account, &folder, &uids)?;
-            }
+            let copies =
+                move_within_account(engine, &account, &folder, &target_folder, &uids).await?;
             // The IMAP MOVE above completed for every resolved UID. A concurrent
             // source-folder refresh may already have pruned those rows locally,
             // so the cache DELETE count is not the number moved on the server.
