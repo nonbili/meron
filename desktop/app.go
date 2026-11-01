@@ -400,6 +400,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.setTags(payload)
 	case "mail.tagList":
 		return a.tagList()
+	case "mail.tagRules":
+		return a.tagRules()
+	case "mail.setTagRules":
+		return a.setTagRules(payload)
 	case "mail.markAllRead":
 		return a.markAllRead(payload)
 	case "mail.emptyFolder":

@@ -769,6 +769,22 @@ fun parseTagListResponse(responseJson: String): List<String> =
         ?.mapNotNull { it.findJsonStringProperty("tag") }
         .orEmpty()
 
+/** The rules a `mail.tagRules` or `mail.setTagRules` answer lists. */
+fun parseTagRulesResponse(responseJson: String): List<TagRule> =
+    responseJson
+        .jsonObjectEntries()
+        .firstOrNull { it.first == "rules" }
+        ?.second
+        ?.takeIf { it.startsWith("[") }
+        ?.jsonArrayElements()
+        ?.map { rule ->
+            TagRule(
+                id = rule.findJsonStringProperty("id").orEmpty(),
+                query = rule.findJsonStringProperty("query").orEmpty(),
+                tags = rule.topLevelStringArray("tags"),
+            )
+        }.orEmpty()
+
 private fun String.topLevelStringArray(name: String): List<String> =
     jsonObjectEntries()
         .firstOrNull { it.first == name }

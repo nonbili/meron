@@ -45,3 +45,16 @@ export async function loadTagCounts(): Promise<TagCount[]> {
   const { tags } = await invoke<{ tags: TagCount[] }>('mail.tagList', {})
   return tags ?? []
 }
+
+export type TagRule = { id: string; query: string; tags: string[] }
+
+export async function loadTagRules(): Promise<TagRule[]> {
+  const { rules } = await invoke<{ rules: TagRule[] }>('mail.tagRules', {})
+  return rules ?? []
+}
+
+// The core normalizes what it keeps and refuses a rule that could never apply.
+export async function saveTagRules(rules: TagRule[]): Promise<TagRule[]> {
+  const saved = await invoke<{ rules: TagRule[] }>('mail.setTagRules', { rules })
+  return saved.rules ?? []
+}

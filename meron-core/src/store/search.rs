@@ -55,6 +55,38 @@ pub fn search_messages(
     limit: u32,
     before_cursor: Option<&crate::thread_list::SearchCursor>,
 ) -> Result<Vec<MessageHeader>> {
+    search_messages_among(conn, account, folder, query, limit, before_cursor, None)
+}
+
+/// Which of `uids` in `folder` match `query`.
+pub fn matching_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    query: &str,
+    uids: &[u32],
+) -> Result<Vec<u32>> {
+    let hits = search_messages_among(
+        conn,
+        account,
+        folder,
+        query,
+        uids.len() as u32,
+        None,
+        Some(uids),
+    )?;
+    Ok(hits.into_iter().map(|header| header.uid).collect())
+}
+
+fn search_messages_among(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    query: &str,
+    limit: u32,
+    before_cursor: Option<&crate::thread_list::SearchCursor>,
+    only_uids: Option<&[u32]>,
+) -> Result<Vec<MessageHeader>> {
     let query = SearchQuery::parse(query);
     if query.is_empty() {
         return Ok(Vec::new());
@@ -114,6 +146,14 @@ pub fn search_messages(
     }
     for to in &query.to {
         text_condition(to, RECIPIENTS_FTS, "", &[10]);
+    }
+    if let Some(uids) = only_uids {
+        let list = uids
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        filters.push_str(&format!(" AND m.uid IN ({list})"));
     }
     if query.read {
         filters.push_str(" AND m.seen <> 0");

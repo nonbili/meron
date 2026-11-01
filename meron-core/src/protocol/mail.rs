@@ -2090,6 +2090,22 @@ pub(crate) fn list_mobile_tags(data_dir: &str) -> Result<Value, String> {
     })
 }
 
+pub(crate) fn mobile_tag_rules(data_dir: &str) -> Result<Value, String> {
+    with_mobile_db(data_dir, |conn| {
+        let rules = store::tag_rules(&conn).map_err(|err| err.to_string())?;
+        Ok(json!({ "rules": rules }))
+    })
+}
+
+pub(crate) fn set_mobile_tag_rules(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let rules = serde_json::from_value(params.get("rules").cloned().unwrap_or_default())
+        .map_err(|err| err.to_string())?;
+    with_mobile_db(data_dir, |conn| {
+        let rules = store::set_tag_rules(&conn, rules).map_err(|err| err.to_string())?;
+        Ok(json!({ "rules": rules }))
+    })
+}
+
 pub(crate) fn cached_thread_uids(
     conn: &rusqlite::Connection,
     parsed: &ParsedThreadId,

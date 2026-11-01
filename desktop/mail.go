@@ -660,6 +660,22 @@ func (a *App) tagList() (any, error) {
 	return a.sidecar.Call("tags.list", map[string]any{})
 }
 
+// tagRules lists the rules that tag new mail.
+func (a *App) tagRules() (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return map[string]any{"rules": []any{}}, nil
+	}
+	return a.sidecar.Call("tags.rules", map[string]any{})
+}
+
+// setTagRules replaces those rules, answering with what the core kept.
+func (a *App) setTagRules(payload map[string]any) (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, fmt.Errorf("mail core is not running")
+	}
+	return a.sidecar.Call("tags.setRules", map[string]any{"rules": payload["rules"]})
+}
+
 // markAllRead marks every message in one mail folder as read. An RSS account has
 // one synthetic Inbox, so its account-level operation marks every feed item read.
 func (a *App) markAllRead(payload map[string]any) (any, error) {

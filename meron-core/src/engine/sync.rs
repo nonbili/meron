@@ -873,6 +873,17 @@ async fn sync_messages_with_policy(
     let arrivals = if current.is_some_and(|(validity, _)| validity == batch.uidvalidity) && store::folder_notifies(&db, account, folder)? {
         store::classify_arrivals(&db, account, folder, current.unwrap().1, batch.uid_next, &batch.messages)?
     } else { Vec::new() };
+    // Before the upsert records them as observed. Nothing on a first sync, when
+    // everything is new to the store and none of it to the mailbox.
+    let first_seen: Vec<u32> = match current {
+        Some((validity, uid_next)) if validity == batch.uidvalidity => {
+            store::first_seen_messages(&db, account, folder, uid_next, batch.uid_next, &batch.messages)?
+                .into_iter()
+                .map(|message| message.uid)
+                .collect()
+        }
+        _ => Vec::new(),
+    };
     let persist_started = std::time::Instant::now();
     let phase_started = std::time::Instant::now();
     if prior_validity != 0 && prior_validity != batch.uidvalidity {
@@ -934,6 +945,13 @@ async fn sync_messages_with_policy(
     let flags_time = phase_started.elapsed();
     if let Some(unseen) = server_unseen.as_ref() {
         store::set_uncached_unseen(&db, account, folder, unseen)?;
+    }
+    if let Err(err) = store::apply_tag_rules(&db, account, folder, &first_seen) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.tags",
+            "account={account} folder={folder}: tag rules skipped: {err:#}"
+        );
     }
     let phase_started = std::time::Instant::now();
     store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)?;

@@ -85,6 +85,8 @@ object MobileCommand {
     const val MarkStarred = "mail.markStarred"
     const val SetTags = "mail.setTags"
     const val TagList = "mail.tagList"
+    const val TagRules = "mail.tagRules"
+    const val SetTagRules = "mail.setTagRules"
     const val RssSync = "rss.sync"
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
@@ -1153,6 +1155,19 @@ data class SetTagsParams(
         )
 }
 
+data class TagRule(
+    val id: String = "",
+    val query: String,
+    val tags: List<String>,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "id" to id.jsonString(),
+            "query" to query.jsonString(),
+            "tags" to tags.jsonStringArray(),
+        )
+}
+
 data class RssMarkReadParams(
     val threadId: String,
     val seen: Boolean = true,
@@ -1381,6 +1396,14 @@ class MobileMailCommandClient(
     suspend fun setTags(params: SetTagsParams): String = core.invoke(MobileCommand.SetTags, params.toJson())
 
     suspend fun tagList(): String = core.invoke(MobileCommand.TagList, "{}")
+
+    suspend fun tagRules(): String = core.invoke(MobileCommand.TagRules, "{}")
+
+    suspend fun setTagRules(rules: List<TagRule>): String =
+        core.invoke(
+            MobileCommand.SetTagRules,
+            rules.joinToString(separator = ",", prefix = "{\"rules\":[", postfix = "]}") { it.toJson() },
+        )
 }
 
 fun accountListRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.AccountList)

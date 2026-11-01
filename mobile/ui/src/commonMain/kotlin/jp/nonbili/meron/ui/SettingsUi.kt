@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.UnfoldMore
@@ -103,6 +104,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun SettingsScreen(
+    onOpenTagRules: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
     onConsumeInitialGeneral: () -> Unit,
@@ -404,6 +406,7 @@ internal fun SettingsScreen(
                     onToggleReaderBottomActions = onToggleReaderBottomActions,
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
+                    onOpenTagRules = onOpenTagRules,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1116,6 +1119,7 @@ internal fun SettingsMessagesPage(
     onToggleReaderBottomActions: () -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
+    onOpenTagRules: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -1181,6 +1185,16 @@ internal fun SettingsMessagesPage(
                 hint = tr("settings.appearance.readerBottomActionsHint"),
                 checked = readerBottomActions,
                 onToggle = onToggleReaderBottomActions,
+            )
+        }
+
+        item { SettingsSectionLabel(tr("tags.title")) }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.Sell,
+                title = tr("tags.rules.title"),
+                hint = tr("tags.rules.hint"),
+                onClick = onOpenTagRules,
             )
         }
 

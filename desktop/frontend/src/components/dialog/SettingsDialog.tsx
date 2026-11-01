@@ -72,6 +72,7 @@ import { ThemeSettingsSection } from './ThemeSettingsSection'
 import { FontSettingsSection } from './FontSettingsSection'
 import { AccountProxyCard, ProxySettingsSection } from './ProxySettingsCard'
 import { AccountSignatureCard, SignatureSettingsSection } from './SignatureSettingsCard'
+import { TagRulesSection } from './TagRulesSection'
 import { AccountProfileGroup } from './AccountProfileGroup'
 import { useAccountAvatar } from './useAccountAvatar'
 import { RemoveImageBadge } from './RemoveImageBadge'
@@ -687,6 +688,7 @@ function ComposerSection() {
       </SettingsGroup>
 
       <SignatureSettingsSection />
+      <TagRulesSection />
     </div>
   )
 }

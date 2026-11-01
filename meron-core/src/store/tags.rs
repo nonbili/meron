@@ -602,6 +602,77 @@ pub fn tag_counts_json(counts: BTreeMap<String, u32>) -> serde_json::Value {
     serde_json::json!({ "tags": tags })
 }
 
+const TAG_RULES_KEY: &str = "tag_rules";
+
+/// Tag new mail that matches a search. Rules live in `settings`, so backups
+/// carry them, and are kept per device.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct TagRule {
+    #[serde(default)]
+    pub id: String,
+    /// In the search box's syntax, read against what a new message's envelope
+    /// says: its body is not here yet.
+    pub query: String,
+    pub tags: Vec<String>,
+}
+
+pub fn tag_rules(conn: &Connection) -> Result<Vec<TagRule>> {
+    let stored = super::settings_get(conn, &[TAG_RULES_KEY.to_string()])?;
+    Ok(stored
+        .get(TAG_RULES_KEY)
+        .and_then(|rules| serde_json::from_value(rules.clone()).ok())
+        .unwrap_or_default())
+}
+
+/// Replace the rules, refusing any that could never apply.
+pub fn set_tag_rules(conn: &Connection, rules: Vec<TagRule>) -> Result<Vec<TagRule>> {
+    let mut clean = Vec::with_capacity(rules.len());
+    for mut rule in rules {
+        rule.query = rule.query.trim().to_string();
+        anyhow::ensure!(
+            !crate::search_query::SearchQuery::parse(&rule.query).is_empty(),
+            "a rule needs a search"
+        );
+        let tags = serde_json::json!(rule.tags);
+        rule.tags = crate::tags::parse_tag_list(Some(&tags)).map_err(anyhow::Error::msg)?;
+        anyhow::ensure!(!rule.tags.is_empty(), "a rule needs a tag");
+        if rule.id.is_empty() {
+            rule.id = uuid::Uuid::new_v4().to_string();
+        }
+        clean.push(rule);
+    }
+    super::setting_set(conn, TAG_RULES_KEY, &serde_json::json!(clean))?;
+    Ok(clean)
+}
+
+/// Run the rules over mail that has just arrived in `folder`: never seen on
+/// this account, in any folder. Only then, so taking a tag off a message by hand
+/// sticks. Mail the user wrote or threw away
+/// has not arrived in that sense.
+pub fn apply_tag_rules(conn: &Connection, account: &str, folder: &str, uids: &[u32]) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let rules = tag_rules(conn)?;
+    if rules.is_empty() {
+        return Ok(());
+    }
+    let role = super::folder_role(conn, account, folder)?;
+    if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
+        return Ok(());
+    }
+    for rule in rules {
+        let matched = super::matching_uids(conn, account, folder, &rule.query, uids)?;
+        if matched.is_empty() {
+            continue;
+        }
+        let copies = BTreeMap::from([(folder.to_string(), matched)]);
+        let keys = message_tag_keys(conn, account, &copies)?;
+        change_tags(conn, account, &keys, &rule.tags, &[], true)?;
+    }
+    Ok(())
+}
+
 /// The tags of one mailbox copy's message.
 pub fn message_tags(
     conn: &Connection,
@@ -848,6 +919,71 @@ mod tests {
         assert_eq!(found("tag:other"), 0);
         change_tags(&conn, "a", &["m@x".into()], &[], &["todo".into()], true).unwrap();
         assert_eq!(found("tag:todo"), 0);
+    }
+
+    #[test]
+    fn rules_tag_only_the_new_mail_that_matches() {
+        let conn = db();
+        let rule = TagRule {
+            query: "from:billing".into(),
+            tags: vec!["Finance".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            set_tag_rules(&conn, vec![rule]).unwrap()[0].tags,
+            ["finance"]
+        );
+
+        let mut new_bill = message(2, "new@x", Some(&[]));
+        new_bill.from_addr = "billing@shop.test".into();
+        let mut old_bill = message(1, "old@x", Some(&[]));
+        old_bill.from_addr = "billing@shop.test".into();
+        let other = message(3, "other@x", Some(&[]));
+        upsert(&conn, "INBOX", &[old_bill, new_bill, other]);
+
+        apply_tag_rules(&conn, "a", "INBOX", &[2, 3]).unwrap();
+        assert_eq!(tags(&conn, "new@x"), ["finance"]);
+        assert!(tags(&conn, "old@x").is_empty(), "already here before");
+        assert!(tags(&conn, "other@x").is_empty());
+    }
+
+    #[test]
+    fn mail_filed_from_another_folder_has_not_arrived() {
+        let conn = db();
+        let known = message(1, "m@x", Some(&[]));
+        upsert(&conn, "INBOX", std::slice::from_ref(&known));
+        let filed = message(7, "m@x", Some(&[]));
+        let fresh = message(8, "new@x", Some(&[]));
+        let first_seen =
+            crate::store::first_seen_messages(&conn, "a", "Archive", 7, 9, &[filed, fresh])
+                .unwrap();
+        let uids: Vec<u32> = first_seen.iter().map(|message| message.uid).collect();
+        assert_eq!(uids, [8]);
+    }
+
+    #[test]
+    fn rules_leave_sent_mail_alone_and_refuse_to_be_empty() {
+        let conn = db();
+        let rule = TagRule {
+            query: "subject:s".into(),
+            tags: vec!["todo".into()],
+            ..Default::default()
+        };
+        set_tag_rules(&conn, vec![rule.clone()]).unwrap();
+        upsert(&conn, "Sent", &[message(1, "m@x", Some(&[]))]);
+        apply_tag_rules(&conn, "a", "Sent", &[1]).unwrap();
+        assert!(tags(&conn, "m@x").is_empty());
+
+        let no_search = TagRule {
+            query: " ".into(),
+            ..rule.clone()
+        };
+        assert!(set_tag_rules(&conn, vec![no_search]).is_err());
+        let no_tag = TagRule {
+            tags: vec![],
+            ..rule
+        };
+        assert!(set_tag_rules(&conn, vec![no_tag]).is_err());
     }
 
     #[test]

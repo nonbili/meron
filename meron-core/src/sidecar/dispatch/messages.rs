@@ -138,6 +138,13 @@ pub(crate) async fn dispatch(
             Ok(store::tag_counts_json(counts))
         }
 
+        "tags.rules" => Ok(json!({ "rules": store::tag_rules(&engine.db.lock().unwrap())? })),
+        "tags.setRules" => {
+            let rules = serde_json::from_value(p.get("rules").cloned().unwrap_or_default())?;
+            let rules = store::set_tag_rules(&engine.db.lock().unwrap(), rules)?;
+            Ok(json!({ "rules": rules }))
+        }
+
         "starred.items" => {
             let limit = req_u32(p, "limit").unwrap_or(200);
             // Before taking the store lock: opening the archive reads the store.

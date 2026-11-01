@@ -412,6 +412,25 @@ pub fn classify_arrivals(
     after: u32,
     messages: &[MessageHeader],
 ) -> Result<Vec<MessageHeader>> {
+    let unread = messages
+        .iter()
+        .filter(|message| !message.seen)
+        .cloned()
+        .collect::<Vec<_>>();
+    first_seen_messages(conn, account, folder, before, after, &unread)
+}
+
+/// Messages in the UID range of the last sync that the account has not observed
+/// anywhere before, newest first, read or not. Mail filed here from another
+/// folder got a new UID, but it has not arrived.
+pub fn first_seen_messages(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    before: u32,
+    after: u32,
+    messages: &[MessageHeader],
+) -> Result<Vec<MessageHeader>> {
     let mut arrivals = Vec::new();
     if before == 0 || after <= before {
         return Ok(arrivals);
@@ -420,7 +439,7 @@ pub fn classify_arrivals(
         .prepare("SELECT 1 FROM observed_mail_identities WHERE account = ?1 AND identity = ?2")?;
     let mut identities = HashSet::new();
     for message in messages {
-        if message.seen || message.uid < before || message.uid >= after {
+        if message.uid < before || message.uid >= after {
             continue;
         }
         let identity = message_identity(message, folder);

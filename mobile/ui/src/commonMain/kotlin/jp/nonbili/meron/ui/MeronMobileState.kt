@@ -171,6 +171,7 @@ internal class MeronMobileState(
     var selectedMailThreadIds by mutableStateOf(emptySet<String>())
     var selectedMailMoveThread by mutableStateOf<ThreadSummary?>(null)
     var selectedTagThread by mutableStateOf<ThreadSummary?>(null)
+    var showTagRulesDialog by mutableStateOf(false)
 
     // Set while the "empty trash/junk" confirmation is on screen; the delete only
     // runs if the user confirms.

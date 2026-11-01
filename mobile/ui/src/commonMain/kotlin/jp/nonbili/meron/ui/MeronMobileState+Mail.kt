@@ -26,6 +26,7 @@ import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
+import jp.nonbili.meron.shared.TagRule
 import jp.nonbili.meron.shared.ThreadActionParams
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSummaryIsRss
@@ -37,6 +38,7 @@ import jp.nonbili.meron.shared.parseFolderRenameResponse
 import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseSetTagsResponse
 import jp.nonbili.meron.shared.parseTagListResponse
+import jp.nonbili.meron.shared.parseTagRulesResponse
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
@@ -327,6 +329,18 @@ internal fun MeronMobileState.changeThreadTags(
         onDone(tags)
     }
 }
+
+/** The saved rules, or null if they could not be read. */
+internal suspend fun MeronMobileState.loadTagRules(): List<TagRule>? =
+    runCatching {
+        parseTagRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).tagRules() }))
+    }.getOrNull()
+
+/** The rules as the core kept them, or null if it refused one. */
+internal suspend fun MeronMobileState.saveTagRules(rules: List<TagRule>): List<TagRule>? =
+    runCatching {
+        parseTagRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setTagRules(rules) }))
+    }.getOrNull()
 
 internal suspend fun MeronMobileState.loadKnownTags(): List<String> =
     runCatching {
