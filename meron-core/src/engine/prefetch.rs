@@ -639,7 +639,7 @@ pub(crate) mod transfer_clock_tests {
             &engine,
             "acc",
             &wanted,
-            &std::env::temp_dir(),
+            &parse::test_media_root(),
             TransferLimits {
                 idle: Duration::from_millis(100),
                 total: Duration::from_secs(3),
@@ -660,7 +660,7 @@ pub(crate) mod transfer_clock_tests {
             &engine,
             "acc",
             &wanted,
-            &std::env::temp_dir(),
+            &parse::test_media_root(),
             TransferLimits {
                 idle: Duration::from_millis(50),
                 total: Duration::from_secs(3),
@@ -755,7 +755,9 @@ pub(crate) mod transfer_clock_tests {
         engine.accounts.lock().await.insert("acc".into(), creds);
         let worker = tokio::spawn({
             let engine = engine.clone();
-            async move { prefetch_batch(&engine, "acc", "INBOX", &[1, 2], &std::env::temp_dir()).await }
+            async move {
+                prefetch_batch(&engine, "acc", "INBOX", &[1, 2], &parse::test_media_root()).await
+            }
         });
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {

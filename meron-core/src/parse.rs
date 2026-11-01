@@ -1250,6 +1250,13 @@ fn media_cache_cap() -> u64 {
         .unwrap_or(MEDIA_CAP_BYTES)
 }
 
+/// A media root for tests that fetch bodies: the fetch prunes it, which walks all
+/// of it and deletes from it, so it must never be the shared temp dir itself.
+#[cfg(test)]
+pub(crate) fn test_media_root() -> PathBuf {
+    std::env::temp_dir().join("meron-test-media")
+}
+
 pub fn prune_media_cache(root: &Path) {
     let cap = media_cache_cap();
     let mut files = Vec::new();
