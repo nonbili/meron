@@ -716,6 +716,7 @@ fun parseSearchFieldsResponse(responseJson: String): SearchFields =
         from = responseJson.findJsonStringProperty("from").orEmpty(),
         to = responseJson.findJsonStringProperty("to").orEmpty(),
         subject = responseJson.findJsonStringProperty("subject").orEmpty(),
+        tags = responseJson.findJsonStringProperty("tags").orEmpty(),
         words = responseJson.findJsonStringProperty("words").orEmpty(),
         after = responseJson.findJsonStringProperty("after").orEmpty(),
         before = responseJson.findJsonStringProperty("before").orEmpty(),

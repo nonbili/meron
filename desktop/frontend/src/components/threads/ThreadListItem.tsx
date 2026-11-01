@@ -166,7 +166,6 @@ export function ThreadListItem({
                 </span>
               )}
             </p>
-            <TagChips tags={thread.tags} />
             {unread && bulkSelectable ? (
               <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
             ) : unread ? (
@@ -175,6 +174,7 @@ export function ThreadListItem({
               </span>
             ) : null}
           </div>
+          <TagChips tags={thread.tags} />
           {!!thread.files?.length && <AttachmentChips files={thread.files} />}
         </div>
       </button>

@@ -365,6 +365,8 @@ pub struct SearchFields {
     pub from: String,
     pub to: String,
     pub subject: String,
+    /// Tags a thread must all carry, separated by spaces or commas.
+    pub tags: String,
     /// Free text, plus any terms the other fields can't hold.
     pub words: String,
     /// `yyyy-mm-dd`, or empty.
@@ -416,7 +418,14 @@ impl SearchFields {
                     fields.has_attachment = true;
                     true
                 }
-                Some(Operator::Tag(_)) | None => false,
+                Some(Operator::Tag(tag)) => {
+                    if !fields.tags.is_empty() {
+                        fields.tags.push(' ');
+                    }
+                    fields.tags.push_str(&tag);
+                    true
+                }
+                None => false,
             };
             if slot {
                 taken = true;
@@ -462,6 +471,12 @@ impl SearchFields {
                 any => terms.push(format!("{key}:{{{}}}", any.join(" "))),
             }
         }
+        terms.extend(
+            self.tags
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .filter(|tag| !tag.is_empty())
+                .map(|tag| format!("tag:{tag}")),
+        );
         if self.starred {
             terms.push("is:starred".to_string());
         }
@@ -904,7 +919,7 @@ mod tests {
     #[test]
     fn fields_round_trip_through_query_text() {
         let fields = SearchFields::parse(
-            r#"budget from:"Ann Lee" to:d@e.f is:unread is:starred has:attachment after:2026/01/02 before:2026-02-03"#,
+            r#"budget tag:work from:"Ann Lee" tag:to-do to:d@e.f is:unread is:starred has:attachment after:2026/01/02 before:2026-02-03"#,
         );
         assert_eq!(
             fields,
@@ -912,6 +927,7 @@ mod tests {
                 from: "Ann Lee".into(),
                 to: "d@e.f".into(),
                 subject: String::new(),
+                tags: "work to-do".into(),
                 words: "budget".into(),
                 after: "2026-01-02".into(),
                 before: "2026-02-03".into(),
@@ -922,9 +938,19 @@ mod tests {
         );
         assert_eq!(
             fields.to_query(),
-            r#"from:"Ann Lee" to:d@e.f is:starred has:attachment after:2026/01/02 before:2026/02/03 budget is:unread"#
+            r#"from:"Ann Lee" to:d@e.f tag:work tag:to-do is:starred has:attachment after:2026/01/02 before:2026/02/03 budget is:unread"#
         );
         assert_eq!(SearchFields::parse(&fields.to_query()), fields);
+    }
+
+    #[test]
+    fn the_tag_field_takes_commas_and_builds_a_query_saved_as_a_tag_column() {
+        let fields = SearchFields {
+            tags: "work, to-do".into(),
+            ..Default::default()
+        };
+        assert_eq!(fields.to_query(), "tag:work tag:to-do");
+        assert_eq!(SearchFields::parse("tag:work").to_query(), "tag:work");
     }
 
     #[test]

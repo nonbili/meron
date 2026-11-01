@@ -11,12 +11,15 @@ import { Button } from '../button/Button'
 import { RecipientInput } from '../composer/RecipientInput'
 import { Checkbox } from '../field/Checkbox'
 import { ColumnAvatar, useColumnLabel } from '../kanban/ColumnLabel'
+import { TagInput } from './TagInput'
 
 /** The search options form, as the core's `search.parse` reads a query. */
 export type SearchFields = {
   from: string
   to: string
   subject: string
+  /** Separated by spaces or commas; a thread must carry them all. */
+  tags: string
   words: string
   /** `yyyy-mm-dd`, or empty. */
   after: string
@@ -31,6 +34,7 @@ const EMPTY_FIELDS: SearchFields = {
   from: '',
   to: '',
   subject: '',
+  tags: '',
   words: '',
   after: '',
   before: '',
@@ -148,7 +152,9 @@ export function SearchOptions({
     (!fields.unread &&
       !fields.starred &&
       !fields.has_attachment &&
-      [fields.from, fields.to, fields.subject, fields.words, fields.after, fields.before].every((v) => !v.trim()))
+      [fields.from, fields.to, fields.subject, fields.tags, fields.words, fields.after, fields.before].every(
+        (v) => !v.trim(),
+      ))
 
   const set = <K extends keyof SearchFields>(key: K, value: SearchFields[K]) =>
     setFields((current) => (current ? { ...current, [key]: value } : current))
@@ -228,6 +234,13 @@ export function SearchOptions({
             {address('from', t('composer.fields.from'), true)}
             {address('to', t('composer.fields.to'))}
             {text('subject', t('composer.fields.subject'))}
+            <Row label={t('tags.title')}>
+              <TagInput
+                value={fields.tags}
+                onChange={(value) => set('tags', value)}
+                className={clsx(inputClass, 'w-full')}
+              />
+            </Row>
             {text('words', t('search.hasWords'))}
             {date('after', t('search.after'))}
             {date('before', t('search.before'))}

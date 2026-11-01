@@ -161,6 +161,7 @@ internal fun SearchOptionsSheet(
                 fields = current.copy(to = it)
             }
             SearchOptionsTextField(tr("composer.fields.subject"), current.subject, submit) { fields = current.copy(subject = it) }
+            SearchOptionsTagField(state, tr("tags.title"), current.tags, submit) { fields = current.copy(tags = it) }
             SearchOptionsTextField(tr("search.hasWords"), current.words, submit) { fields = current.copy(words = it) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SearchOptionsDateChip(tr("search.after"), current.after, { pickingDate = DateField.After }) {
@@ -328,6 +329,61 @@ private fun SearchOptionsTextField(
         keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** Where the tag being typed starts: the field lists tags by spaces or commas. */
+private fun tagTailStart(value: String): Int = value.indexOfLast { it.isWhitespace() || it == ',' } + 1
+
+/** Known tags completing the one being typed, leaving out those already listed. */
+internal fun tagSuggestions(
+    known: List<String>,
+    value: String,
+): List<String> {
+    val start = tagTailStart(value)
+    val tail = value.substring(start).lowercase()
+    val listed = value.substring(0, start).lowercase().split(' ', ',')
+    return known.filter { tail in it && it !in listed }.take(MAX_TAG_SUGGESTIONS)
+}
+
+/** The field with the tag being typed replaced by [tag], ready for the next one. */
+internal fun completeTag(
+    value: String,
+    tag: String,
+): String = "${value.substring(0, tagTailStart(value))}$tag "
+
+private const val MAX_TAG_SUGGESTIONS = 6
+
+/** The Tags field, suggesting known tags while it has focus. */
+@Composable
+private fun SearchOptionsTagField(
+    state: MeronMobileState,
+    label: String,
+    value: String,
+    onSubmit: () -> Unit,
+    onValueChange: (String) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    var known by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(Unit) { known = state.loadKnownTags() }
+    Column {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+        )
+        if (focused) {
+            tagSuggestions(known, value).forEach { tag ->
+                ListItem(
+                    headlineContent = { Text(tag, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    modifier = Modifier.clickable { onValueChange(completeTag(value, tag)) },
+                )
+            }
+        }
+    }
 }
 
 /** The comma ending the list's last complete entry, or -1; one inside quotes (`"Lee, Ann"`) is part of a name. */

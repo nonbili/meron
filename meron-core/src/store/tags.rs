@@ -922,6 +922,28 @@ mod tests {
     }
 
     #[test]
+    fn a_search_for_several_tags_wants_them_all() {
+        let conn = db();
+        upsert(
+            &conn,
+            "INBOX",
+            &[
+                message(1, "both@x", Some(&["todo", "work"])),
+                message(2, "one@x", Some(&["todo"])),
+            ],
+        );
+        let folders = ["INBOX".to_string()];
+        let found = |query: &str| {
+            crate::store::search_messages_in_folders(&conn, "a", &folders, query, 10, None)
+                .unwrap()
+                .len()
+        };
+        assert_eq!(found("tag:todo"), 2);
+        assert_eq!(found("tag:todo tag:work"), 1);
+        assert_eq!(found("tag:todo tag:absent"), 0);
+    }
+
+    #[test]
     fn rules_tag_only_the_new_mail_that_matches() {
         let conn = db();
         let rule = TagRule {

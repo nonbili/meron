@@ -69,7 +69,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewKanban
@@ -1141,7 +1140,6 @@ internal fun KanbanColumnDialog(
     accounts: List<AccountSummary>,
     board: KanbanBoardSpec?,
     foldersByAccount: Map<String, List<FolderSummary>>,
-    knownTags: List<String>,
     onApply: (List<KanbanColumnSpec>) -> Unit,
     onCreateFolder: (AccountSummary) -> Unit,
     onDismiss: () -> Unit,
@@ -1187,16 +1185,6 @@ internal fun KanbanColumnDialog(
                         subtitle = null,
                         onClick = { toggle(unified) },
                         leadingIcon = Icons.Filled.Inbox,
-                    )
-                }
-                items(knownTags, key = { "tag:$it" }) { tag ->
-                    val column = KanbanColumnSpec(UNIFIED_ACCOUNT_ID, INBOX_FOLDER, "tag:$tag")
-                    SidebarLikeDialogRow(
-                        selected = selected.contains(kanbanColumnKey(column)),
-                        title = tag,
-                        subtitle = null,
-                        onClick = { toggle(column) },
-                        leadingIcon = Icons.Filled.Sell,
                     )
                 }
                 accounts.forEach { account ->

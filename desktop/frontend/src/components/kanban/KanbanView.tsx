@@ -34,7 +34,6 @@ import { settings$ } from '../../states/settings'
 import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
 import { AddColumnDialog, type AccountGroup } from './AddColumnDialog'
-import { loadTagCounts, type TagCount } from '../../states/mailTags'
 import { SortableColumn } from './KanbanBoardColumn'
 import { KanbanDragPreview } from './KanbanThreadCard'
 import { useThreadContextMenu } from '../threads/ThreadContextMenu'
@@ -44,7 +43,6 @@ import { BoardMenu, FilterSwitch } from './KanbanBoardMenu'
 import {
   isRSSAccount,
   loadKanbanColumn,
-  columnTag,
   resolveKanbanMove,
   restrictColumnDragToHorizontal,
   useFoldersByAccount,
@@ -80,13 +78,10 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  // The dialog picks folders and unified tag columns; other saved searches are
-  // not among its options, so they stay out of what it can add or remove.
+  // The dialog picks folders; saved searches are not among its options, so they
+  // stay out of what it can add or remove.
   const selectedKeys = useMemo(
-    () =>
-      visibleColumns
-        .filter((column) => !column.query || (column.accountId === 'unified' && columnTag(column)))
-        .map((column) => kanbanColumnKey(column)),
+    () => visibleColumns.filter((column) => !column.query).map((column) => kanbanColumnKey(column)),
     [visibleColumns],
   )
   // Derived from the folder cache rather than snapshotted when the dialog opens,
@@ -103,7 +98,6 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
     [accounts, foldersByAccount],
   )
 
-  const [knownTags, setKnownTags] = useState<TagCount[]>([])
   useKanbanBoardSync(boardId, visibleColumns, accounts)
   const { dragPreview, setDragPreview, moveThread, handleDragStart, handleDragEnd } = useKanbanDnd(boardId, accounts)
   // One controller for the whole board so a right-click in one column closes any
@@ -130,7 +124,6 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
   }, [globalFilter, attachmentsOnly, searchQuery, searchScope])
 
   function openDialog() {
-    void loadTagCounts().then(setKnownTags, () => setKnownTags([]))
     // Kick a real folder LIST per account and open immediately on the cache. The
     // sync is async and deduped in core; its mail.synced({folders:true}) refreshes
     // foldersByAccount, and because the groups below are derived from that cache
@@ -268,11 +261,6 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
               label: t('kanban.columns.unifiedInbox'),
               icon: 'inbox',
             },
-            ...knownTags.map(({ tag }) => ({
-              key: kanbanColumnKey({ accountId: 'unified', folderId: 'inbox', query: `tag:${tag}` }),
-              label: tag,
-              icon: 'tag' as const,
-            })),
           ]}
           onClose={() => setDialogOpen(false)}
           onApply={applyColumns}
