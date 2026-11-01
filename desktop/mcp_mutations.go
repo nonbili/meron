@@ -17,6 +17,13 @@ type mcpOrganizeArgs struct {
 	Action         string   `json:"action" jsonschema:"One of mark_read, mark_unread, star, unstar, archive, trash, move"`
 	TargetFolderID string   `json:"target_folder_id,omitempty" jsonschema:"Required for move; within the same account"`
 }
+type mcpTagArgs struct {
+	AccountID string   `json:"account_id"`
+	FolderID  string   `json:"folder_id" jsonschema:"Exact folder_id of the selected messages"`
+	UIDs      []uint32 `json:"uids" jsonschema:"1–1000 message UIDs in this account and folder. The UID is the final numeric component of each message id from read_thread."`
+	Add       []string `json:"add,omitempty" jsonschema:"Tags to add: short text of letters, numbers, dots, dashes and underscores. Case is ignored."`
+	Remove    []string `json:"remove,omitempty" jsonschema:"Tags to remove"`
+}
 type mcpSendArgs struct {
 	mcpDraftArgs
 	RequestID string `json:"request_id" jsonschema:"Unique ID for this operation. Reuse it unchanged for retries; retained for one hour while Meron stays running."`
@@ -89,6 +96,28 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 				return nil, errors.New("A target folder is required")
 			}
 			result, err := s.coreCall("mcp.organize", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "action": a.Action, "target_folder": a.TargetFolderID})
+			s.notifyMailChanged(a.AccountID)
+			return result, err
+		})
+	}
+	if c.Organize {
+		mcpRegister(s, server, c, "tag_messages", "Add or remove tags on selected mail messages, in every folder holding a copy. Tagging never moves mail and is safe to undo, so prefer it to moving when sorting. Saved locally at once and synced to the server as IMAP keywords where it supports them. Returns the tags the messages now carry. Find tagged mail with the tag:name query of search_messages.", mcpOrganize, func(a mcpTagArgs) string { return a.AccountID }, func(a mcpTagArgs, _ mcpClient) (any, error) {
+			if err := validateMCPSelection(a.AccountID, a.FolderID, a.UIDs, false); err != nil {
+				return nil, err
+			}
+			if len(a.Add)+len(a.Remove) == 0 {
+				return nil, errors.New("Name a tag to add or remove")
+			}
+			if len(a.Add)+len(a.Remove) > 50 {
+				return nil, errors.New("Change at most 50 tags at once")
+			}
+			if a.Add == nil {
+				a.Add = []string{}
+			}
+			if a.Remove == nil {
+				a.Remove = []string{}
+			}
+			result, err := s.coreCall("messages.setTags", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "add": a.Add, "remove": a.Remove})
 			s.notifyMailChanged(a.AccountID)
 			return result, err
 		})

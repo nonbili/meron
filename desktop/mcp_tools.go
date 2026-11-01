@@ -372,6 +372,12 @@ func (s *mcpService) tools(c mcpClient) *mcp.Server {
 		}
 		return s.app.folderList(map[string]any{"account_id": a.AccountID})
 	})
+	mcpRegister(s, server, c, "list_tags", "List the tags in use in one approved account, with how many messages carry each. Search for one with the tag:name query of search_messages.", mcpRead, func(a mcpAccountArgs) string { return a.AccountID }, func(a mcpAccountArgs, _ mcpClient) (any, error) {
+		if a.AccountID == "" {
+			return nil, errors.New("account_id is required")
+		}
+		return s.coreCall("tags.list", map[string]any{"account": a.AccountID})
+	})
 	mcpRegister(s, server, c, "search_messages", "Search or list conversations. With an account_id it reads one approved account and pages with a cursor; without one it merges the inboxes of every approved account, newest first, and reports each account's own cursor for paging. Returns up to 50 conversations; an account marked truncated_by_merge has more that did not fit and must be searched on its own rather than by cursor.", mcpRead, func(a mcpSearchArgs) string { return a.AccountID }, func(a mcpSearchArgs, grant mcpClient) (any, error) {
 		if a.ServerSearch && strings.TrimSpace(a.Query) == "" {
 			return nil, errors.New("server_search requires a query")

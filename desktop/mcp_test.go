@@ -111,7 +111,7 @@ func TestMCPAccountBoundaryAndReadOnlyTools(t *testing.T) {
 			t.Fatalf("unexpected tool %s", tool.Name)
 		}
 	}
-	if len(list.Tools) != 6 {
+	if len(list.Tools) != 7 {
 		t.Fatalf("tools=%v", list.Tools)
 	}
 	for _, tc := range []struct {

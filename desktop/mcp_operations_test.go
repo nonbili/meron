@@ -195,6 +195,26 @@ func TestMCPOrganizeUsesOnlyConstrainedCorePath(t *testing.T) {
 	}
 }
 
+func TestMCPTagMessagesNeedsOrganizeAndAGrant(t *testing.T) {
+	app, writer := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{"ok": true}})
+	s := testMCPService(t, app, false)
+	s.config.Clients[0].Organize = true
+	session := connectTestMCP(t, s)
+	args := map[string]any{"account_id": "allowed", "folder_id": "INBOX", "uids": []uint32{7}, "add": []string{"todo"}}
+	result := callMCP(t, session, "tag_messages", args)
+	if result.IsError || len(writer.calls) != 1 || writer.calls[0].Method != "messages.setTags" {
+		t.Fatal(writer.calls)
+	}
+	for _, bad := range []map[string]any{
+		{"account_id": "excluded", "folder_id": "INBOX", "uids": []uint32{7}, "add": []string{"todo"}},
+		{"account_id": "allowed", "folder_id": "INBOX", "uids": []uint32{7}},
+	} {
+		if !callMCP(t, session, "tag_messages", bad).IsError {
+			t.Fatal("unsafe tag change accepted")
+		}
+	}
+}
+
 func TestMCPOperationStatusIsClientScoped(t *testing.T) {
 	app, _ := newMailHandlerTestApp(t)
 	s := testMCPService(t, app, false)

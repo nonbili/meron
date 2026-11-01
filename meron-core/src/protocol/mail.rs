@@ -2084,12 +2084,9 @@ pub(crate) fn set_mobile_thread_tags(data_dir: &str, params: &Value) -> Result<V
 
 pub(crate) fn list_mobile_tags(data_dir: &str) -> Result<Value, String> {
     with_mobile_db(data_dir, |conn| {
-        let tags: Vec<Value> = store::tag_counts(&conn, None)
-            .map_err(|err| err.to_string())?
-            .into_iter()
-            .map(|(tag, count)| json!({ "tag": tag, "count": count }))
-            .collect();
-        Ok(json!({ "tags": tags }))
+        store::tag_counts(&conn, None)
+            .map(store::tag_counts_json)
+            .map_err(|err| err.to_string())
     })
 }
 

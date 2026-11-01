@@ -133,12 +133,14 @@ results are kept for one hour while Meron runs.
 | --- | --- |
 | `list_accounts` | Approved account IDs, names, email addresses and provider only; no credentials or server settings. |
 | `list_folders` | Folders for one approved account. |
-| `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Text search includes the selected folder and Sent. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
+| `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Text search includes the selected folder and Sent; `tag:name` finds tagged mail anywhere in the account outside Trash and Junk, and is answered from the local cache. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
+| `list_tags` | The tags in use in one approved account, with how many messages carry each. |
 | `read_thread` | Up to 50 messages using an exact thread ID from search; accepts a pagination cursor. Each message carries a `reply` object with the recipients a reply to it should use. Missing bodies may be filled in the background, so a subsequent read may be needed. |
 | `read_attachment` | Returns one cached attachment from an approved account as base64, up to 5 MiB. The key comes from `read_thread`; bytes exist only after that call cached the message. |
 | `create_draft` | Optional: creates a new plain text draft with recipients, subject and body, plus `in_reply_to` and `references` to keep a reply in its thread. Review and send it in Meron. |
 | `update_draft` | Optional: replaces an existing draft, addressed by its Message-ID — one `create_draft` returned, or one started in Meron and reported as `message_id` by `read_thread`. The whole draft is overwritten. |
 | `organize_messages` | Optional: marks selected messages read/unread, stars, archives, trashes or moves them within one account. Trash always moves; it never deletes permanently, including from Drafts. Moving needs IMAP MOVE or UIDPLUS. |
+| `tag_messages` | Optional, under the organizing permission: adds or removes tags on selected messages, in every folder holding a copy. Tags never move mail. They are saved locally at once and synced as IMAP keywords where the server supports them. |
 | `send_message` | Optional: sends a plain text message, reply or forward. Usually returns `pending_approval`. |
 | `delete_permanently` | Optional: permanently deletes the exact selected UIDs, skipping Trash. Requires IMAP UIDPLUS. Usually returns `pending_approval`. |
 | `empty_trash` | Optional: snapshots the Trash folder (at most 1000 messages) and permanently deletes that snapshot; later arrivals are excluded. Usually returns `pending_approval`. |

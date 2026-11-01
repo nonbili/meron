@@ -41,6 +41,7 @@ const LOCAL_MAIL_METHODS: &[&str] = &[
     "messages.markRead",
     "messages.markStarred",
     "messages.setTags",
+    "tags.list",
     "messages.markAllRead",
     "messages.delete",
     "messages.move",
@@ -562,6 +563,11 @@ async fn local_mail(
             )?;
             mail_model::add_folder_unreads(&mut result, &db, account, by_folder.keys())?;
             Ok(result)
+        }
+
+        "tags.list" => {
+            let counts = store::tag_counts(&archive.db.lock().unwrap(), Some(account))?;
+            Ok(store::tag_counts_json(counts))
         }
 
         "messages.setTags" => {

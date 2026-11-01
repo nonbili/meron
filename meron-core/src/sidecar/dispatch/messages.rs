@@ -122,18 +122,20 @@ pub(crate) async fn dispatch(
             meron_core::protocol::messages_still_unread(&engine.db.lock().unwrap(), p)
                 .map_err(anyhow::Error::msg)
         }
-        // Every tag in use, for pickers. The archive is read before taking the
-        // store lock, as opening it reads the store.
+        // Every tag in use, for pickers, or one account's. The archive is read
+        // before taking the store lock, as opening it reads the store.
         "tags.list" => {
-            let mut counts = crate::sidecar::local::tag_counts(engine);
-            for (tag, count) in store::tag_counts(&engine.db.lock().unwrap(), None)? {
+            let account = req_str(p, "account").ok();
+            let mut counts = if account.is_none() {
+                crate::sidecar::local::tag_counts(engine)
+            } else {
+                Default::default()
+            };
+            let db = engine.db.lock().unwrap();
+            for (tag, count) in store::tag_counts(&db, account.as_deref())? {
                 *counts.entry(tag).or_insert(0) += count;
             }
-            let tags: Vec<Value> = counts
-                .into_iter()
-                .map(|(tag, count)| json!({ "tag": tag, "count": count }))
-                .collect();
-            Ok(json!({ "tags": tags }))
+            Ok(store::tag_counts_json(counts))
         }
 
         "starred.items" => {

@@ -593,6 +593,15 @@ pub fn tag_counts(conn: &Connection, account: Option<&str>) -> Result<BTreeMap<S
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// [`tag_counts`] as the `tags.list` answer.
+pub fn tag_counts_json(counts: BTreeMap<String, u32>) -> serde_json::Value {
+    let tags: Vec<_> = counts
+        .into_iter()
+        .map(|(tag, count)| serde_json::json!({ "tag": tag, "count": count }))
+        .collect();
+    serde_json::json!({ "tags": tags })
+}
+
 /// The tags of one mailbox copy's message.
 pub fn message_tags(
     conn: &Connection,
