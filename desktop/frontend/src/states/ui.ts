@@ -112,6 +112,8 @@ export const ui$ = observable({
   // Optional one-shot undo paired with the current toast. Set by reversible
   // actions (archive/star/unread) so an accidental keystroke is recoverable.
   toastUndo: null as null | (() => void),
+  // The action button's label when it isn't Undo.
+  toastActionLabel: '',
   toastPlacement: 'app' as ToastPlacement,
   confirm: null as ConfirmState | null,
 })
@@ -182,11 +184,15 @@ export function showToast(
 
 // Like showToast but pairs the message with an Undo affordance. Given a longer
 // (5s) window since the whole point is to catch an accidental action.
-export function showUndoToast(msg: string, undo: () => void, placement: ToastPlacement = 'app') {
+export function showUndoToast(msg: string, undo: () => void, placement: ToastPlacement = 'app', actionLabel = '') {
   clearTimeout(toastTimer)
+  ui$.toastActionLabel.set(actionLabel)
   ui$.toastTone.set('success')
   ui$.toastPlacement.set(placement)
   ui$.toast.set(msg)
+  // Cleared first: over a function already there, the observable would store
+  // the updater itself, leaving a button that does nothing.
+  ui$.toastUndo.set(null)
   ui$.toastUndo.set(() => undo)
   toastTimer = setTimeout(() => {
     if (ui$.toast.get() === msg) {

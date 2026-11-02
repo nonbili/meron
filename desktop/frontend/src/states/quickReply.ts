@@ -20,6 +20,8 @@ import {
 } from './compose'
 import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
 import { compose$, newDraftMessageId } from './composeState'
+import { draftSaveRunning } from './composeSessions'
+import { parseAddressList } from '../components/chat/messageHelpers'
 
 // Quick-reply draft lifecycle: signature seeding, autosave, hydration from a
 // thread's tail draft, and ownership hand-offs with compose tabs and sends.
@@ -471,6 +473,30 @@ ui$.selectedThread.onChange(({ value }) => {
   compose$.quickReplySignature.set(null)
 })
 
+const addressesOf = (raw: string | undefined) =>
+  parseAddressList(raw)
+    .map((item) => item.email.toLowerCase())
+    .sort()
+    .join(' ')
+
+// The quick reply saves plain text under recipients and a subject worked out
+// from the thread, so a draft it can't reproduce must stay out of the box: its
+// next autosave would flatten the body and redirect the reply. That is a draft
+// the full composer kept with Esc, or another client wrote. It stays a bubble,
+// which opens in the full composer.
+function quickReplyCanHoldDraft(draft: Message): boolean {
+  if (draft.body_html?.trim() || draft.bcc?.trim() || draft.reply_to?.trim()) return false
+  const activeT = getActiveThread()
+  if (!activeT) return true
+  const { to, cc } = buildReplyRecipients(pickReplyTarget(activeT))
+  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  return (
+    addressesOf(draft.to) === addressesOf(to) &&
+    addressesOf(draft.cc) === addressesOf(cc) &&
+    (draft.subject ?? '').trim() === subject.trim()
+  )
+}
+
 // Pre-fills the quick reply with an already-saved draft sitting at the tail of
 // the active thread, so the user can continue and send it inline instead of
 // being forced into the full editor. No-op when the tail message isn't a
@@ -507,6 +533,7 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   // editors on one server draft, and hand this box a draft it may then discard.
   if (draftOpenInComposeTab(tailDraftId)) return
   if (normalizeMessageId(compose$.quickReplyDraftId.peek()) === normalizedTailDraftId) return
+  if (!quickReplyCanHoldDraft(tail)) return
   // Only into a box that is free. Hydration fills an empty quick reply from a
   // saved draft; it is not entitled to replace a reply in progress — one the
   // user began while this very draft was still a header-less row, say — nor to
@@ -629,6 +656,9 @@ export function draftOpenInComposeTab(draftId: string): boolean {
   if (!draftId) return false
   const id = normalizeMessageId(draftId)
   if (openingComposeTabDraftIds.has(id)) return true
+  // Its tab has closed, but the Esc save is still writing what this copy is
+  // about to become.
+  if (draftSaveRunning((draft) => normalizeMessageId(draft.draftMessageId) === id)) return true
   return compose$.tabs
     .peek()
     .some((tab) => !!tab.compose?.draftMessageId && normalizeMessageId(tab.compose.draftMessageId) === id)
