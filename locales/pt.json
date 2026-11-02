@@ -505,7 +505,7 @@
   "kanban.board.namePlaceholder": "Mostrado no cabeçalho do quadro",
   "kanban.board.removeImage": "Remover imagem do quadro",
   "kanban.board.settings": "Definições do quadro...",
-  "kanban.board.showUnreadBadgeHint": "Mostrar a contagem de mensagens não lidas das colunas deste quadro na barra lateral.",
+  "kanban.board.showUnreadBadgeHint": "Mostrar na barra lateral o total de não lidas das colunas de pasta deste quadro. As colunas de pesquisa guardada e Com estrela não são contadas.",
   "kanban.board.subtitle": "{count, plural, one {Quadro kanban · {count} coluna} other {Quadro kanban · {count} colunas}}",
   "kanban.board.uploadImageFailed": "Falha ao carregar imagem do quadro",
   "kanban.columns.unifiedArchive": "Arquivo unificado",

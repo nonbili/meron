@@ -505,7 +505,7 @@
   "kanban.board.namePlaceholder": "显示在看板标题中",
   "kanban.board.removeImage": "移除看板图片",
   "kanban.board.settings": "看板设置...",
-  "kanban.board.showUnreadBadgeHint": "在侧边栏中显示此看板各列的未读消息数。",
+  "kanban.board.showUnreadBadgeHint": "在侧边栏中显示此看板各文件夹列的未读数总和。已保存的搜索列和星标列不计入。",
   "kanban.board.subtitle": "{count, plural, one {看板 · {count} 列} other {看板 · {count} 列}}",
   "kanban.board.uploadImageFailed": "上传看板图片失败",
   "kanban.columns.unifiedArchive": "统一归档",

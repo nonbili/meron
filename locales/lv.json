@@ -505,7 +505,7 @@
   "kanban.board.namePlaceholder": "Tiek rādīts tāfeles galvenē",
   "kanban.board.removeImage": "Noņemt tāfeles attēlu",
   "kanban.board.settings": "Tāfeles iestatījumi...",
-  "kanban.board.showUnreadBadgeHint": "Rādīt šīs tāfeles kolonnu nelasīto ziņojumu skaitu sānu joslā.",
+  "kanban.board.showUnreadBadgeHint": "Rādīt šīs tāfeles mapju kolonnu nelasīto ziņojumu kopsummu sānu joslā. Saglabātās meklēšanas un ar zvaigznīti atzīmētās kolonnas netiek skaitītas.",
   "kanban.board.subtitle": "{count, plural, one {Kanban tāfele · {count} kolonna} other {Kanban tāfele · {count} kolonnas}}",
   "kanban.board.uploadImageFailed": "Neizdevās augšupielādēt tāfeles attēlu",
   "kanban.columns.unifiedArchive": "Apvienotais arhīvs",

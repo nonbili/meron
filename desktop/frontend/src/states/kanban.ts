@@ -271,13 +271,7 @@ export function setKanbanBoardWallpaper(boardId: string, wallpaper: ChatWallpape
 
 /** Turn the unread count on a board's rail tile on or off. */
 export function setKanbanBoardUnreadBadge(boardId: string, show: boolean) {
-  settings$.kanbanBoards.set(
-    settings$.kanbanBoards.get().map((board) => {
-      if (board.id !== boardId) return board
-      const { showUnreadBadge: _, ...rest } = board
-      return show ? { ...rest, showUnreadBadge: true } : rest
-    }),
-  )
+  updateBoard(boardId, ({ showUnreadBadge: _, ...rest }) => (show ? { ...rest, showUnreadBadge: true } : rest))
 }
 
 export function removeKanbanBoard(boardId: string) {

@@ -792,6 +792,23 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
   }
 }
 
+// Sync one folder and resolve once it has landed, not once it is queued, so a
+// caller going through several holds one mailbox session at a time. Failures are
+// the caller's to ignore: this is for background refreshes.
+export async function syncFolderAndWait(accountId: string, folder: string) {
+  const completion = waitForKanbanSync([accountId], folder)
+  try {
+    await Promise.all([
+      invoke<{ online?: boolean }>('mail.sync', { account_id: accountId, folder }).then((result) => {
+        if (result?.online === false) throw new Error('Mail engine unavailable')
+      }),
+      completion.promise,
+    ])
+  } finally {
+    completion.cancel()
+  }
+}
+
 // Manually pull a single column's folder from the server, then reload it. Unlike
 // the chat-view sync (which always targets the selected account's inbox), this is
 // column-scoped: it syncs the exact account + folder the column shows. Unified

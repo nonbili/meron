@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { mail$ } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { SideNav } from './SideNav'
@@ -45,6 +45,19 @@ describe('board unread badge', () => {
     const view = render(<SideNav />)
     const tile = view.getByTitle('Work', { exact: false })
     expect(tile.textContent).toBe('7')
+  })
+
+  it('updates the count when the folder counts or the switch change', () => {
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns }])
+    const view = render(<SideNav />)
+    act(() => settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns, showUnreadBadge: true }]))
+    expect(view.getByTitle('Work', { exact: false }).textContent).toBe('7')
+    act(() =>
+      mail$.foldersByAccount['acc-1'].set([
+        { id: 'INBOX', account_id: 'acc-1', name: 'INBOX', role: 'inbox', unread: 1 },
+      ]),
+    )
+    expect(view.getByTitle('Work', { exact: false }).textContent).toBe('1')
   })
 
   it('shows no count on a board whose switch is off', () => {

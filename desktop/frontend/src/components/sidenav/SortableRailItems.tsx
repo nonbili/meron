@@ -5,7 +5,7 @@ import { useValue } from '@legendapp/state/react'
 import type { DragEvent } from 'react'
 import type { Account } from '../../types'
 import { useTranslation } from '../../lib/i18n'
-import { accounts$, isLocalAccountId } from '../../states/accounts'
+import { isLocalAccountId, unifiedAccounts } from '../../states/accounts'
 import { settings$, type KanbanBoard } from '../../states/settings'
 import { mail$ } from '../../states/mail'
 import { inboxUnread } from '../../states/mailFolders'
@@ -54,14 +54,20 @@ interface SortableBoardProps {
 }
 
 // The board's unread count when its badge is switched on, else 0. Counts come
-// from the folder caches, which useAppEffects keeps filled while any board's
-// badge is on, so a board that isn't open has a number too.
+// from the folder caches, which useAppEffects keeps filled and synced while the
+// badge is on, so a board that isn't open has a current number too. A tile with
+// its badge off subscribes to nothing, and one with it on re-renders only when
+// the number changes.
 function useBoardUnread(board: SortableBoardProps['board']): number {
-  const foldersByAccount = useValue(mail$.foldersByAccount)
-  const accounts = useValue(accounts$)
-  if (board.showUnreadBadge !== true) return 0
-  const unifiedIds = accounts.filter((account) => account.included_in_unified !== false).map((account) => account.id)
-  return boardUnreadCount(board.columns, foldersByAccount, unifiedIds)
+  return useValue(() =>
+    board.showUnreadBadge === true
+      ? boardUnreadCount(
+          board.columns,
+          mail$.foldersByAccount.get(),
+          unifiedAccounts().map((account) => account.id),
+        )
+      : 0,
+  )
 }
 
 export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut }: SortableBoardProps) {

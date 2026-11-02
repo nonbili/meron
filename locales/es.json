@@ -505,7 +505,7 @@
   "kanban.board.namePlaceholder": "Se muestra en el encabezado del tablero",
   "kanban.board.removeImage": "Eliminar imagen de tablero",
   "kanban.board.settings": "Ajustes de tablero...",
-  "kanban.board.showUnreadBadgeHint": "Mostrar el recuento de mensajes no leídos de las columnas de este tablero en la barra lateral.",
+  "kanban.board.showUnreadBadgeHint": "Mostrar en la barra lateral el total de no leídos de las columnas de carpeta de este tablero. Las columnas de búsqueda guardada y Destacados no se cuentan.",
   "kanban.board.subtitle": "{count, plural, one {Tablero Kanban · {count} columna} other {Tablero Kanban · {count} columnas}}",
   "kanban.board.uploadImageFailed": "Error al subir la imagen del tablero",
   "kanban.columns.unifiedArchive": "Archivo unificado",
