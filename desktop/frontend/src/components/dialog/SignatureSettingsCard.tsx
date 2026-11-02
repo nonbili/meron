@@ -180,8 +180,10 @@ function SignatureEditor({
     </ToolbarButton>
   )
 
+  // The group no longer clips (the Markdown help reaches past it), so a toolbar
+  // at the top of the card rounds its own corners.
   return (
-    <div>
+    <div className="first:[&>:first-child]:rounded-t-2xl">
       {source === null ? (
         <ComposerToolbar editor={editor} onSetLink={setLink} trailing={sourceToggle} />
       ) : (
@@ -232,7 +234,7 @@ export function SignatureSettingsSection() {
   const signature = useValue(settings$.signature)
 
   return (
-    <SettingsGroup title={t('settings.sections.signature')}>
+    <SettingsGroup title={t('settings.sections.signature')} overflowVisible>
       <SignatureEditor owner="app" value={signature} onChange={(html) => settings$.signature.set(html)} />
       <p className="px-3.5 py-2 text-[0.6875rem] text-secondary">{t('settings.signature.hint')}</p>
     </SettingsGroup>
@@ -291,7 +293,7 @@ export function AccountSignatureCard({ account }: { account: Account }) {
   }
 
   return (
-    <SettingsGroup title={t('settings.sections.signature')}>
+    <SettingsGroup title={t('settings.sections.signature')} overflowVisible>
       <SelectRow
         icon={<PenLine size={15} />}
         title={t('settings.signature.label')}
