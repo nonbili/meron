@@ -19,6 +19,22 @@ const WHEEL_LINE_PX = 40
 // active tab doesn't compete with the subject heading below it.
 const ACTIVE_TAB = 'border-accent font-semibold text-primary'
 const INACTIVE_TAB = 'border-transparent font-medium text-secondary hover:text-primary'
+// Like browser tabs: all the same width, sharing the strip as more open (the
+// strip scrolls past min-w-24), so a tab keeps its width when it becomes active.
+// In rem so a larger text size gets the same room.
+const TAB_WIDTH = 'w-[12.5rem] min-w-24'
+// A long label fades out at the tab's end instead of an ellipsis. The label
+// fills the tab, so a short one never reaches the fade.
+const LABEL_FADE = '[mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)]'
+// Where the × shows, the fade ends 1rem early, clear of the × and its shadow.
+const LABEL_FADE_BEFORE_X = '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_calc(100%-1rem))]'
+const LABEL_FADE_ON_REVEAL =
+  'group-hover:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_calc(100%-1rem))] group-focus-within:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_calc(100%-1rem))]'
+
+function labelClass(active: boolean) {
+  const fade = active ? LABEL_FADE_BEFORE_X : `${LABEL_FADE} ${LABEL_FADE_ON_REVEAL}`
+  return `min-w-0 flex-1 overflow-hidden whitespace-nowrap text-left ${fade}`
+}
 
 // Scrolls the strip, and only the strip, just enough to show the tab.
 function revealTab(strip: HTMLElement, tabId: string) {
@@ -122,14 +138,14 @@ export function ConversationTabs() {
               event.preventDefault()
               setMenu({ x: event.clientX, y: event.clientY, tabId: '' })
             }}
-            className={`group relative flex shrink-0 items-center gap-1.5 px-3 text-xs border-b-2 transition-colors cursor-pointer ${
+            className={`group relative flex ${TAB_WIDTH} items-center gap-1.5 px-3 text-xs border-b-2 transition-colors cursor-pointer ${
               activeTab === '' ? ACTIVE_TAB : INACTIVE_TAB
             }`}
             title={t('chat.currentConversation')}
           >
-            <button className="flex items-center gap-1.5 self-stretch cursor-pointer">
-              <MessageSquare size={13} />
-              {t('chat.current')}
+            <button className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch cursor-pointer">
+              <MessageSquare size={13} className="shrink-0" />
+              <span className={labelClass(activeTab === '')}>{t('chat.current')}</span>
             </button>
             <button
               onClick={(event) => {
@@ -158,10 +174,7 @@ export function ConversationTabs() {
               compose$.activeTab.set(tab.id)
               if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
             }}
-            // Like browser tabs: all the same width, sharing the strip as more open
-            // (the strip scrolls past min-w-24), so a tab keeps its width when it
-            // becomes active. In rem so a larger text size gets the same room.
-            className={`group relative flex w-[12.5rem] min-w-24 cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
+            className={`group relative flex ${TAB_WIDTH} cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
               activeTab === tab.id ? ACTIVE_TAB : INACTIVE_TAB
             }`}
             onContextMenu={(event) => {
@@ -180,7 +193,7 @@ export function ConversationTabs() {
                 size={18}
               />
             )}
-            <span className="truncate">{tab.subject}</span>
+            <span className={labelClass(activeTab === tab.id)}>{tab.subject}</span>
             <button
               onClick={(event) => {
                 event.stopPropagation()
