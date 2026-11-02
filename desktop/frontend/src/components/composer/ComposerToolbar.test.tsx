@@ -49,4 +49,14 @@ describe('ComposerToolbar Markdown help', () => {
     fireEvent.pointerDown(document.body)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('leaves focus in the editor when the icon or the popover is pressed', () => {
+    renderToolbar()
+    const button = screen.getByTitle('Markdown')
+
+    // fireEvent.mouseDown returns false once the default, moving focus, is prevented.
+    expect(fireEvent.mouseDown(button)).toBe(false)
+    fireEvent.click(button)
+    expect(fireEvent.mouseDown(screen.getByRole('dialog'))).toBe(false)
+  })
 })

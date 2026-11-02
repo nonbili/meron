@@ -54,7 +54,10 @@ function MarkdownHelp() {
   )
 
   return (
-    <div ref={rootRef} className="relative">
+    // preventDefault keeps focus in the editor. Unlike the formatting buttons,
+    // this one never hands it back, and with it gone the next keys typed would
+    // run the app's single-key shortcuts, archiving or deleting the thread.
+    <div ref={rootRef} className="relative" onMouseDown={(event) => event.preventDefault()}>
       <ToolbarButton active={open} onClick={() => setOpen((v) => !v)} title={t('composer.toolbar.markdown')}>
         <MarkdownIcon size={17} />
       </ToolbarButton>
