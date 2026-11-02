@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Affiché dans l'en-tête du tableau",
   "kanban.board.removeImage": "Supprimer l'image du tableau",
   "kanban.board.settings": "Paramètres du tableau...",
+  "kanban.board.showUnreadBadgeHint": "Afficher dans la barre latérale le total des non-lus des colonnes de dossier de ce tableau. Les colonnes de recherche enregistrée et Suivis ne sont pas comptées.",
   "kanban.board.subtitle": "{count, plural, one {Tableau Kanban · {count} colonne} other {Tableau Kanban · {count} colonnes}}",
   "kanban.board.uploadImageFailed": "Échec du chargement de l'image de tableau",
   "kanban.columns.unifiedArchive": "Archives unifiées",

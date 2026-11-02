@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Mostrato nell'intestazione della bacheca",
   "kanban.board.removeImage": "Rimuovi immagine della bacheca",
   "kanban.board.settings": "Impostazioni bacheca...",
+  "kanban.board.showUnreadBadgeHint": "Mostra nella barra laterale il totale dei non letti delle colonne cartella di questa bacheca. Le colonne di ricerca salvata e Speciali non vengono conteggiate.",
   "kanban.board.subtitle": "{count, plural, one {Bacheca kanban · {count} colonna} other {Bacheca kanban · {count} colonne}}",
   "kanban.board.uploadImageFailed": "Caricamento dell'immagine della bacheca non riuscito",
   "kanban.columns.unifiedArchive": "Archivio unificato",

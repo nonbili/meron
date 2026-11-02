@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Εμφανίζεται στην κεφαλίδα του πίνακα",
   "kanban.board.removeImage": "Αφαίρεση εικόνας πίνακα",
   "kanban.board.settings": "Ρυθμίσεις πίνακα...",
+  "kanban.board.showUnreadBadgeHint": "Εμφάνιση του συνόλου των μη αναγνωσμένων στις στήλες φακέλων αυτού του πίνακα στην πλαϊνή γραμμή. Οι στήλες αποθηκευμένης αναζήτησης και με αστέρι δεν υπολογίζονται.",
   "kanban.board.subtitle": "{count, plural, one {Πίνακας Kanban · {count} στήλη} other {Πίνακας Kanban · {count} στήλες}}",
   "kanban.board.uploadImageFailed": "Αποτυχία μεταφόρτωσης εικόνας πίνακα",
   "kanban.columns.unifiedArchive": "Ενοποιημένο αρχείο",

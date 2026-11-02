@@ -5,10 +5,11 @@ import { useValue } from '@legendapp/state/react'
 import type { DragEvent } from 'react'
 import type { Account } from '../../types'
 import { useTranslation } from '../../lib/i18n'
-import { isLocalAccountId } from '../../states/accounts'
-import { settings$ } from '../../states/settings'
+import { isLocalAccountId, unifiedAccounts } from '../../states/accounts'
+import { settings$, type KanbanBoard } from '../../states/settings'
 import { mail$ } from '../../states/mail'
 import { inboxUnread } from '../../states/mailFolders'
+import { boardUnreadCount } from '../../lib/boardUnread'
 import { Avatar } from '../avatar/Avatar'
 import { AccountAvatar } from '../avatar/AccountAvatar'
 import { UnreadCountBadge } from './UnreadCountBadge'
@@ -46,14 +47,32 @@ export const railTileShape = (active: boolean) =>
 
 interface SortableBoardProps {
   shortcut?: string
-  board: { id: string; name: string; avatarUrl?: string }
+  board: Pick<KanbanBoard, 'id' | 'name' | 'avatarUrl' | 'columns' | 'showUnreadBadge'>
   active: boolean
   onSelect: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }
 
+// The board's unread count when its badge is switched on, else 0. Counts come
+// from the folder caches, which useAppEffects keeps filled and synced while the
+// badge is on, so a board that isn't open has a current number too. A tile with
+// its badge off subscribes to nothing, and one with it on re-renders only when
+// the number changes.
+function useBoardUnread(board: SortableBoardProps['board']): number {
+  return useValue(() =>
+    board.showUnreadBadge === true
+      ? boardUnreadCount(
+          board.columns,
+          mail$.foldersByAccount.get(),
+          unifiedAccounts().map((account) => account.id),
+        )
+      : 0,
+  )
+}
+
 export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut }: SortableBoardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: board.id })
+  const unreadCount = useBoardUnread(board)
 
   return (
     <div
@@ -67,25 +86,30 @@ export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut
       title={board.name + (shortcut ? ` (${shortcut})` : '')}
     >
       {railIndicator(active)}
-      {board.avatarUrl ? (
-        <div
-          className={`flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
-            active ? '' : 'opacity-75 group-hover:opacity-100'
-          }`}
-        >
-          <Avatar name={board.name} src={board.avatarUrl} size={40} className="!rounded-none pointer-events-none" />
-        </div>
-      ) : (
-        <div
-          className={`flex h-10 w-10 items-center justify-center ${railTileShape(active)} ${
-            active
-              ? 'bg-accent text-accent-label'
-              : 'bg-sidenav-ink/10 text-sidenav-ink/60 group-hover:bg-sidenav-ink/20 group-hover:text-sidenav-ink'
-          }`}
-        >
-          <Columns3 size={19} />
-        </div>
-      )}
+      {/* The badge sits on this wrapper, as on account tiles, so it stays
+          full-opacity while an inactive board's image is dimmed. */}
+      <div className="relative">
+        {board.avatarUrl ? (
+          <div
+            className={`flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
+              active ? '' : 'opacity-75 group-hover:opacity-100'
+            }`}
+          >
+            <Avatar name={board.name} src={board.avatarUrl} size={40} className="!rounded-none pointer-events-none" />
+          </div>
+        ) : (
+          <div
+            className={`flex h-10 w-10 items-center justify-center ${railTileShape(active)} ${
+              active
+                ? 'bg-accent text-accent-label'
+                : 'bg-sidenav-ink/10 text-sidenav-ink/60 group-hover:bg-sidenav-ink/20 group-hover:text-sidenav-ink'
+            }`}
+          >
+            <Columns3 size={19} />
+          </div>
+        )}
+        <UnreadCountBadge count={unreadCount} />
+      </div>
     </div>
   )
 }

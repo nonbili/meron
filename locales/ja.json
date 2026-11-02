@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "ボードのヘッダーに表示されます",
   "kanban.board.removeImage": "ボードの画像を削除",
   "kanban.board.settings": "ボードの設定...",
+  "kanban.board.showUnreadBadgeHint": "このボードのフォルダー列の未読数の合計をサイドバーに表示します。保存した検索の列とスター付きの列は数えません。",
   "kanban.board.subtitle": "{count, plural, one {カンバンボード · {count}列} other {カンバンボード · {count}列}}",
   "kanban.board.uploadImageFailed": "ボード画像のアップロードに失敗しました",
   "kanban.columns.unifiedArchive": "統合アーカイブ",

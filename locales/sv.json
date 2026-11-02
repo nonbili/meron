@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Visas i tavelhuvudet",
   "kanban.board.removeImage": "Ta bort tavelbild",
   "kanban.board.settings": "Tavelinställningar...",
+  "kanban.board.showUnreadBadgeHint": "Visa summan av olästa i den här tavlans mappkolumner i sidofältet. Kolumner för sparade sökningar och Stjärnmärkta räknas inte.",
   "kanban.board.subtitle": "{count, plural, one {Kanban-tavla · {count} kolumn} other {Kanban-tavla · {count} kolumner}}",
   "kanban.board.uploadImageFailed": "Kunde inte ladda upp tavelbild",
   "kanban.columns.unifiedArchive": "Samlat arkiv",

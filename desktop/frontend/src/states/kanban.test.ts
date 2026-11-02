@@ -18,6 +18,7 @@ import {
   removeKanbanColumnsForFolder,
   reorderKanbanColumn,
   selectKanbanBoard,
+  setKanbanBoardUnreadBadge,
   setKanbanBoardWallpaper,
   switchKanbanColumnFolder,
 } from './kanban'
@@ -739,6 +740,22 @@ describe('setKanbanBoardWallpaper', () => {
     setKanbanBoardWallpaper('b1', { kind: 'preset', presetId: 'plain' })
 
     expect(settings$.kanbanBoards.get()[0]).not.toHaveProperty('wallpaper')
+  })
+})
+
+describe('setKanbanBoardUnreadBadge', () => {
+  it('turns the badge on for one board and clears the field when turned off', () => {
+    settings$.kanbanBoards.set([
+      { id: 'b1', name: 'Board', columns: [] },
+      { id: 'b2', name: 'Other', columns: [] },
+    ])
+
+    setKanbanBoardUnreadBadge('b1', true)
+    expect(settings$.kanbanBoards.get()[0].showUnreadBadge).toBe(true)
+    expect(settings$.kanbanBoards.get()[1]).not.toHaveProperty('showUnreadBadge')
+
+    setKanbanBoardUnreadBadge('b1', false)
+    expect(settings$.kanbanBoards.get()[0]).not.toHaveProperty('showUnreadBadge')
   })
 })
 

@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Wyświetlana w nagłówku tablicy",
   "kanban.board.removeImage": "Usuń obraz tablicy",
   "kanban.board.settings": "Ustawienia tablicy...",
+  "kanban.board.showUnreadBadgeHint": "Pokaż na pasku bocznym sumę nieprzeczytanych w kolumnach folderów tej tablicy. Kolumny zapisanych wyszukiwań i oznaczonych gwiazdką nie są liczone.",
   "kanban.board.subtitle": "{count, plural, one {Tablica Kanban · {count} kolumna} other {Tablica Kanban · {count} kolumny}}",
   "kanban.board.uploadImageFailed": "Nie udało się przesłać obrazu tablicy",
   "kanban.columns.unifiedArchive": "Wspólne archiwum",

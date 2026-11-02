@@ -42,6 +42,7 @@ import {
   searchScopeColumn,
   searchTargets,
   subscribeKanbanMailReloads,
+  syncFolderAndWait,
   syncKanbanColumn,
 } from './kanbanData'
 
@@ -335,6 +336,32 @@ describe('kanban column loading filters', () => {
 
     expect(calls).toEqual(['mail.sync', 'mail.threadList'])
     expect(finished).toBe(true)
+    expect(handlers.size).toBe(0)
+  })
+
+  it('holds a background folder sync until that folder has landed', async () => {
+    const handlers = new Map<string, (detail: unknown) => void>()
+    ;(window as any).runtime = {
+      EventsOn: (name: string, handler: (detail: unknown) => void) => {
+        handlers.set(name, handler)
+        return () => handlers.delete(name)
+      },
+    }
+    ;(window as any).go = { main: { App: { Invoke: async () => ({ online: true, queued: true }) } } }
+
+    let finished = false
+    const sync = syncFolderAndWait('acc1', 'Later').then(() => {
+      finished = true
+    })
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(finished).toBe(false)
+
+    handlers.get('mail.synced')?.({ account: 'acc1', folder: 'Other' })
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(finished).toBe(false)
+
+    handlers.get('mail.synced')?.({ account: 'acc1', folder: 'Later' })
+    await sync
     expect(handlers.size).toBe(0)
   })
 

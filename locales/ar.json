@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "يظهر في ترويسة اللوحة",
   "kanban.board.removeImage": "إزالة صورة اللوحة",
   "kanban.board.settings": "إعدادات اللوحة...",
+  "kanban.board.showUnreadBadgeHint": "عرض مجموع أعداد الرسائل غير المقروءة في أعمدة المجلدات بهذه اللوحة في الشريط الجانبي. لا تُحتسب أعمدة البحث المحفوظ والمميزة بنجمة.",
   "kanban.board.subtitle": "{count, plural, one {لوحة كانبان · {count} عمود} other {لوحة كانبان · {count} أعمدة}}",
   "kanban.board.uploadImageFailed": "فشل رفع صورة اللوحة",
   "kanban.columns.unifiedArchive": "الأرشيف الموحد",

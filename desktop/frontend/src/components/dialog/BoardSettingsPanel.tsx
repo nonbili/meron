@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Camera, Columns3, Image as ImageIcon, Trash2 } from 'lucide-react'
+import { Camera, Columns3, Image as ImageIcon, Inbox, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import type { KanbanBoard } from '../../states/settings'
 import {
   removeKanbanBoard,
   renameKanbanBoard,
   setKanbanBoardAvatar,
+  setKanbanBoardUnreadBadge,
   setKanbanBoardWallpaper,
 } from '../../states/kanban'
 import { confirmAction, showToast, ui$ } from '../../states/ui'
@@ -16,7 +17,7 @@ import { writeBoardAvatarFile, writeBoardWallpaperFile } from '../../lib/boardMe
 import { AvatarCropDialog } from './AvatarCropDialog'
 import { RemoveImageBadge } from './RemoveImageBadge'
 import { WallpaperDialog } from './WallpaperDialog'
-import { SettingRow, SettingsGroup, TextRow } from './AccountSettingsRows'
+import { SettingRow, SettingsGroup, TextRow, ToggleRow } from './AccountSettingsRows'
 
 function BoardTile({ board, size, className = '' }: { board: KanbanBoard; size: number; className?: string }) {
   if (board.avatarUrl) {
@@ -144,7 +145,7 @@ function BoardWallpaperCard({ board }: { board: KanbanBoard }) {
   )
 }
 
-// Settings panel for one kanban board: image, name, and background, mirroring
+// Settings panel for one kanban board: image, name, background and unread badge, mirroring
 // the account panel layout.
 export function BoardPanel({ board }: { board: KanbanBoard }) {
   const { t } = useTranslation()
@@ -208,6 +209,13 @@ export function BoardPanel({ board }: { board: KanbanBoard }) {
       <SettingsGroup title={t('kanban.board.label')}>
         <BoardNameRow board={board} />
         <BoardWallpaperCard board={board} />
+        <ToggleRow
+          icon={<Inbox size={15} />}
+          title={t('settings.appearance.showUnreadAccountBadge')}
+          hint={t('kanban.board.showUnreadBadgeHint')}
+          checked={board.showUnreadBadge === true}
+          onChange={() => setKanbanBoardUnreadBadge(board.id, !board.showUnreadBadge)}
+        />
       </SettingsGroup>
 
       <button

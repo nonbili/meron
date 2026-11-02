@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "보드 헤더에 표시됨",
   "kanban.board.removeImage": "보드 이미지 삭제",
   "kanban.board.settings": "보드 설정...",
+  "kanban.board.showUnreadBadgeHint": "사이드바에 이 보드 폴더 열의 읽지 않은 메시지 수 합계를 표시합니다. 저장된 검색 열과 별표 표시됨 열은 포함되지 않습니다.",
   "kanban.board.subtitle": "{count, plural, one {칸반 보드 · 열 {count}개} other {칸반 보드 · 열 {count}개}}",
   "kanban.board.uploadImageFailed": "보드 이미지를 업로드하지 못했습니다",
   "kanban.columns.unifiedArchive": "통합 보관함",

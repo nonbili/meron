@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Kuvatakse stendi päises",
   "kanban.board.removeImage": "Eemalda stendi pilt",
   "kanban.board.settings": "Stendi seaded...",
+  "kanban.board.showUnreadBadgeHint": "Kuva külgribal selle stendi kaustaveergude lugemata sõnumite summa. Salvestatud otsingu ja tärniga veerge ei arvestata.",
   "kanban.board.subtitle": "{count, plural, one {Kanban-stend · {count} veerg} other {Kanban-stend · {count} veergu}}",
   "kanban.board.uploadImageFailed": "Stendi pildi üleslaadimine ebaõnnestus",
   "kanban.columns.unifiedArchive": "Ühendatud arhiiv",

@@ -507,6 +507,7 @@
   "kanban.board.namePlaceholder": "Wird im Board-Header angezeigt",
   "kanban.board.removeImage": "Board-Bild entfernen",
   "kanban.board.settings": "Board-Einstellungen...",
+  "kanban.board.showUnreadBadgeHint": "Zeigt die Summe der ungelesenen Nachrichten in den Ordnerspalten dieses Boards in der Seitenleiste an. Spalten für gespeicherte Suchen und Markiert werden nicht mitgezählt.",
   "kanban.board.subtitle": "{count, plural, one {Kanban-Board · {count} Spalte} other {Kanban-Board · {count} Spalten}}",
   "kanban.board.uploadImageFailed": "Board-Bild konnte nicht hochgeladen werden",
   "kanban.columns.unifiedArchive": "Gemeinsames Archiv",

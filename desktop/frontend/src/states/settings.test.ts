@@ -45,6 +45,13 @@ describe('sanitizeKanbanBoards', () => {
     ])
   })
 
+  it('keeps the unread badge switch only when it is on', () => {
+    expect(sanitizeKanbanBoards([{ ...baseBoard, showUnreadBadge: true }])?.[0].showUnreadBadge).toBe(true)
+    for (const showUnreadBadge of [false, 'yes', 1, null]) {
+      expect(sanitizeKanbanBoards([{ ...baseBoard, showUnreadBadge }])?.[0]).not.toHaveProperty('showUnreadBadge')
+    }
+  })
+
   it('accepts an app-managed avatar url', () => {
     const boards = sanitizeKanbanBoards([{ ...baseBoard, avatarUrl: '/media/avatars/kb-1/a.png' }])
     expect(boards?.[0].avatarUrl).toBe('/media/avatars/kb-1/a.png')

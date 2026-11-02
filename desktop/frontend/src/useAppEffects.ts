@@ -8,7 +8,7 @@ import { ui$, showToast } from './states/ui'
 import { mail$, loadThreads, loadThread, findLocalThread } from './states/mail'
 import { loadFolders, refreshAccountFoldersCache, inboxUnread } from './states/mailFolders'
 import { openMailtoCompose, openThreadTabById } from './states/compose'
-import { accounts$ } from './states/accounts'
+import { accounts$, unifiedAccounts } from './states/accounts'
 import type { Account } from './types'
 import { kanban$ } from './states/kanban'
 import { setSyncError, clearSyncErrorFor } from './states/connectivity'
@@ -16,7 +16,8 @@ import { settings$, applyDocumentLanguage, watchSystemAppearance } from './state
 import { configurationRefresh } from './lib/configurationRefresh'
 import { applyUpdateStatus, loadUpdateStatus, runUpdateCheck } from './states/update'
 import type { UpdateStatus } from './lib/update'
-import { useFoldersByAccount } from './lib/kanbanData'
+import { syncFolderAndWait, useFoldersByAccount } from './lib/kanbanData'
+import { boardBadgeAccountIds, boardBadgeSyncTargets } from './lib/boardUnread'
 import { setTrayUnread } from './lib/trayUnread'
 import i18n, { resolveI18nLanguageFromWebLocale, t, translationTemplate } from './lib/i18n'
 import { isConnectivitySyncError } from './components/banner/connectivityBannerHelpers'
@@ -29,6 +30,14 @@ const MAX_RSS_SYNC_INTERVAL_MINUTES = 1440
 // the boot sync has the network to itself.
 const UPDATE_FIRST_CHECK_DELAY_MS = 30_000
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
+// Matches the core's NOTIFY_POLL_INTERVAL for opted-in folders without IDLE.
+const BOARD_BADGE_SYNC_INTERVAL_MS = 120_000
+
+function badgeAccounts(accounts: Account[], showAccountBadges: boolean, boardBadgeAccounts: string) {
+  if (showAccountBadges) return accounts
+  const ids = new Set(boardBadgeAccounts.split('\n'))
+  return accounts.filter((account) => ids.has(account.id))
+}
 
 // All of App's side effects: startup boot/sync, per-selection read-state resets,
 // RSS periodic sync, native event wiring (mailto, notifications, new mail/sync),
@@ -58,8 +67,19 @@ export function useAppEffects() {
   const attachmentsOnly = useValue(ui$.attachmentsOnly)
   const activeBoardId = useValue(kanban$.activeBoardId)
   const startupSyncDone = useRef(false)
+  const boardBadgeSyncRunning = useRef(false)
   const language = useValue(settings$.language)
-  const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
+  const showAccountBadges = useValue(settings$.showUnreadAccountBadge)
+  const showBoardBadges = useValue(() => settings$.kanbanBoards.get().some((board) => board.showUnreadBadge))
+  // Account badges read every account's cached folder counts, board badges only
+  // those of the accounts their columns show. Joined so the effects below re-run
+  // when the set changes, not on every board edit.
+  const boardBadgeAccounts = useValue(() =>
+    boardBadgeAccountIds(
+      settings$.kanbanBoards.get(),
+      unifiedAccounts().map((account) => account.id),
+    ).join('\n'),
+  )
   const autoUpdateCheck = useValue(settings$.autoUpdateCheck)
 
   useEffect(() => {
@@ -139,15 +159,13 @@ export function useAppEffects() {
   }, [])
 
   useEffect(() => {
-    // When the avatar unread-badge setting is on, seed every account's folder
-    // cache so badges show for all accounts — not just the selected one (which
-    // loadFolders covers). Cache-only (refresh:false), so no IMAP round-trip;
+    // Seed the folder cache of every account a badge reads, so badges show for
+    // all of them — not just the selected one (which loadFolders covers). Cache-only (refresh:false), so no IMAP round-trip;
     // mail.synced keeps these fresh afterwards. Covers paused accounts too.
-    if (!showUnreadBadge) return
-    for (const account of accounts) {
+    for (const account of badgeAccounts(accounts, showAccountBadges, boardBadgeAccounts)) {
       void refreshAccountFoldersCache(account.id, false)
     }
-  }, [showUnreadBadge, accounts])
+  }, [showAccountBadges, boardBadgeAccounts, accounts])
 
   useEffect(() => {
     // Safety net: event-driven refreshes (refreshFoldersAfterFlagChange,
@@ -155,14 +173,33 @@ export function useAppEffects() {
     // account if their one-shot refreshAccountFoldersCache call fails silently.
     // Periodically re-seed every account's folder cache so a missed refresh
     // self-heals within one interval instead of leaving a badge stuck stale.
-    if (!showUnreadBadge) return
+    const seeded = badgeAccounts(accounts, showAccountBadges, boardBadgeAccounts)
+    if (seeded.length === 0) return
     const timer = window.setInterval(() => {
-      for (const account of accounts) {
+      for (const account of seeded) {
         void refreshAccountFoldersCache(account.id, false)
       }
     }, 60_000)
     return () => window.clearInterval(timer)
-  }, [showUnreadBadge, accounts])
+  }, [showAccountBadges, boardBadgeAccounts, accounts])
+
+  useEffect(() => {
+    // The re-seed above only recounts the local store. A board's folders get no
+    // watch while it is closed, so sync them here to keep its badge current; each
+    // mail.synced then refreshes the count. One at a time, like the core's poll,
+    // and never over a run still going.
+    if (!showBoardBadges) return
+    const timer = window.setInterval(async () => {
+      if (boardBadgeSyncRunning.current) return
+      boardBadgeSyncRunning.current = true
+      const targets = boardBadgeSyncTargets(settings$.kanbanBoards.peek(), mail$.foldersByAccount.peek(), accounts)
+      for (const target of targets) {
+        await syncFolderAndWait(target.account_id, target.folder).catch(() => {})
+      }
+      boardBadgeSyncRunning.current = false
+    }, BOARD_BADGE_SYNC_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [showBoardBadges, accounts])
 
   useEffect(() => {
     // Folders created outside Meron (webmail, another client) only reach the store
