@@ -1,4 +1,5 @@
 import type { Message } from '../types'
+import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { showToast, ui$ } from './ui'
 import { accounts$, isLocalAccountId, isSendableAccount } from './accounts'
@@ -597,31 +598,46 @@ const sentDraftDiscards = new Map<string, SentDraft>()
 // Gaps between further attempts at a discard that failed. A draft still there
 // after the last one is left for the user, who is told about it.
 const SENT_DRAFT_DISCARD_RETRY_DELAYS_MS = [5_000, 30_000, 120_000, 600_000]
+// A closed tab gets one quick retry, for a connection that was only slow: the
+// user just asked for this, so a failure has to reach them while they still
+// remember doing it.
+const CLOSED_DRAFT_DISCARD_RETRY_DELAYS_MS = [5_000]
 
 /**
  * Discard the draft behind a message that was just sent. Resolves with whether
  * the first attempt removed it; a failed one keeps the draft suppressed and is
  * retried in the background, so callers can settle their own state either way.
  */
-export async function discardSentDraft(draft: SentDraft): Promise<boolean> {
+export async function discardSentDraft(
+  draft: SentDraft,
+  retryDelays: number[] = SENT_DRAFT_DISCARD_RETRY_DELAYS_MS,
+): Promise<boolean> {
   const id = normalizeMessageId(draft.draftMessageId)
   // A row known only by its local id can be neither suppressed nor retried by
   // Message-ID: one plain attempt, failing out loud.
   if (!id) return discardSavedDraftCopy(draft)
   sentDraftDiscards.set(id, draft)
   publishSendingDraftIds()
-  if (await attemptSentDraftDiscard(id, draft)) return true
-  void retrySentDraftDiscard(id, draft)
+  const failure = await attemptSentDraftDiscard(id, draft)
+  if (!failure) return true
+  void retrySentDraftDiscard(id, draft, retryDelays, failure.error)
   return false
 }
 
-async function attemptSentDraftDiscard(id: string, draft: SentDraft): Promise<boolean> {
+/** Discard the draft of a compose tab the user closed, as a send does but with
+ * a failure reported within about a minute. */
+export function discardClosedDraft(draft: SentDraft): Promise<boolean> {
+  return discardSentDraft(draft, CLOSED_DRAFT_DISCARD_RETRY_DELAYS_MS)
+}
+
+/** Null when the draft is gone. */
+async function attemptSentDraftDiscard(id: string, draft: SentDraft): Promise<{ error: unknown } | null> {
   discardingDraftIds.add(id)
   try {
     await discardSavedDraftCopy(draft, { throwOnError: true })
   } catch (error) {
-    console.error('Discarding a sent message’s draft failed:', error)
-    return false
+    console.error('Discarding a draft failed:', error)
+    return { error }
   } finally {
     discardingDraftIds.delete(id)
   }
@@ -629,11 +645,12 @@ async function attemptSentDraftDiscard(id: string, draft: SentDraft): Promise<bo
     sentDraftDiscards.delete(id)
     publishSendingDraftIds()
   }
-  return true
+  return null
 }
 
-async function retrySentDraftDiscard(id: string, draft: SentDraft) {
-  for (const delay of SENT_DRAFT_DISCARD_RETRY_DELAYS_MS) {
+async function retrySentDraftDiscard(id: string, draft: SentDraft, delays: number[], firstError: unknown) {
+  let lastError = firstError
+  for (const delay of delays) {
     await new Promise((resolve) => setTimeout(resolve, delay))
     if (sentDraftDiscards.get(id) !== draft) return
     // Reopened in the full editor meanwhile: it is the user's draft again.
@@ -642,11 +659,13 @@ async function retrySentDraftDiscard(id: string, draft: SentDraft) {
       publishSendingDraftIds()
       return
     }
-    if (await attemptSentDraftDiscard(id, draft)) return
+    const failure = await attemptSentDraftDiscard(id, draft)
+    if (!failure) return
+    lastError = failure.error
   }
   // Still suppressed, so it cannot come back into the quick reply this session;
   // the Drafts folder is where the user can remove it.
-  showToast(t('composer.status.couldNotDiscardDraft'), 'error')
+  showToast(contextualErrorMessage(lastError, t('composer.status.couldNotDiscardDraft')), 'error')
 }
 
 /** Whether a full-editor tab is editing this server-side draft, or about to be:

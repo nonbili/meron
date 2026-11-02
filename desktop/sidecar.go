@@ -448,9 +448,9 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A token exchange plus the profile, or the profile photo.
 	case "oauth.exchangeCode", "oauth.fetchPhoto":
 		return 30 * time.Second
-	case "messages.read", "messages.thread", "messages.markRead", "messages.markStarred", "messages.markAllRead", "messages.markAllReadUnified", "send", "save_draft", "folders.delete", "folders.rename":
+	case "messages.read", "messages.thread", "messages.markRead", "messages.markStarred", "messages.markAllRead", "messages.markAllReadUnified", "send", "save_draft", "discard_draft", "folders.delete", "folders.rename":
 		return 30 * time.Second
-	case "folders.list", "folders.create", "folders.archive", "messages.recent", "messages.sync", "rss.markRead", "rss.markAllRead", "watch.start", "watch.stop", "discard_draft", "account.addRss", "account.addLocal", "feed.add", "rss.importOpml":
+	case "folders.list", "folders.create", "folders.archive", "messages.recent", "messages.sync", "rss.markRead", "rss.markAllRead", "watch.start", "watch.stop", "account.addRss", "account.addLocal", "feed.add", "rss.importOpml":
 		return 15 * time.Second
 	default:
 		return 5 * time.Second

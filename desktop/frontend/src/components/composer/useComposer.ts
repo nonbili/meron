@@ -31,7 +31,7 @@ import {
 } from '../../lib/attachFiles'
 import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
-import { discardSentDraft } from '../../states/quickReply'
+import { discardClosedDraft, discardSentDraft } from '../../states/quickReply'
 import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
 import { getComposeSession, registerComposeSession, trackDraftSave } from '../../states/composeSessions'
 import { accounts$, isSendableAccount } from '../../states/accounts'
@@ -143,7 +143,7 @@ export function useComposer(tabId: string) {
   }
   const discardRemoteDraft = async (target: ComposeDraft) => {
     const remote = remoteDraftOf(target)
-    if (remote) await discardSavedDraftCopy(remote, { throwOnError: true })
+    if (remote) await discardClosedDraft(remote)
   }
 
   /**

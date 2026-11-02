@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Folder, Message } from '../types'
 import { accounts$ } from './accounts'
 import { compose$ } from './composeState'
-import { kanban$ } from './kanban'
+import { kanban$, kanbanColumnKey } from './kanban'
 import {
   loadMoreThreads,
   loadThread,
@@ -1030,6 +1030,140 @@ describe('deleteThread', () => {
     expect(mail$.threads.get()).toHaveLength(0)
     expect(mail$.messages.get()).toHaveLength(0)
     expect(ui$.toast.get()).toBe('')
+  })
+
+  it('leaves a conversation that loaded during a failed discard on screen', async () => {
+    // A restored compose tab has no conversation loaded; closing it opens one.
+    mail$.messages.set([])
+    let refuse = (_reason: string) => {}
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = (command: string, payload: unknown) =>
+      command === 'mail.discardDraft'
+        ? new Promise((_resolve, reject) => {
+            refuse = reject
+          })
+        : invoke(command, payload)
+
+    const discard = discardSavedDraftCopy({
+      threadId: '',
+      messageId: '',
+      folderId: '',
+      accountId: 'acc',
+      draftMessageId: 'draft-id@example.com',
+    })
+    const loaded = thread()
+    ui$.selectedThread.set(loaded.thread_id)
+    mail$.messages.set([loaded])
+    refuse('sidecar discard_draft timeout after 15s')
+
+    expect(await discard).toBe(false)
+    expect(mail$.messages.get()).toEqual([loaded])
+    // Wails rejects with a plain string, which is still the reason.
+    expect(ui$.toast.get()).toBe('Could not discard draft: sidecar discard_draft timeout after 15s')
+  })
+
+  it('puts a draft back when its discard fails', async () => {
+    const reply = thread({ id: 'reply', has_draft: true })
+    const saved = thread({ id: 'saved', folder_id: 'Drafts', message_id: 'draft-id@example.com' })
+    mail$.threads.set([reply])
+    mail$.messages.set([reply, saved])
+    ui$.selectedThread.set(reply.thread_id)
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = (command: string, payload: unknown) =>
+      command === 'mail.discardDraft' ? Promise.reject('refused') : invoke(command, payload)
+
+    await discardSavedDraftCopy({
+      threadId: '',
+      messageId: '',
+      folderId: '',
+      accountId: 'acc',
+      draftMessageId: 'draft-id@example.com',
+      replyThreadId: reply.thread_id,
+    })
+
+    expect(mail$.messages.get().map((message) => message.id)).toEqual(['reply', 'saved'])
+    expect(mail$.threads.get()[0].has_draft).toBe(true)
+  })
+
+  it('keeps one copy of a draft that a refresh reloaded during its failed discard', async () => {
+    const reply = thread({ id: 'reply' })
+    const saved = thread({ id: 'saved', folder_id: 'Drafts', message_id: 'draft-id@example.com' })
+    mail$.messages.set([reply, saved])
+    ui$.selectedThread.set(reply.thread_id)
+    let refuse = (_reason: string) => {}
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = (command: string, payload: unknown) =>
+      command === 'mail.discardDraft'
+        ? new Promise((_resolve, reject) => {
+            refuse = reject
+          })
+        : invoke(command, payload)
+
+    const discard = discardSavedDraftCopy({
+      threadId: '',
+      messageId: '',
+      folderId: '',
+      accountId: 'acc',
+      draftMessageId: 'draft-id@example.com',
+    })
+    mail$.messages.set([{ ...reply }, { ...saved }])
+    refuse('refused')
+    await discard
+
+    expect(mail$.messages.get().map((message) => message.id)).toEqual(['reply', 'saved'])
+  })
+
+  it('puts a draft back in date order when its discard fails', async () => {
+    const first = thread({ id: 'first', date: 100 })
+    const saved = thread({ id: 'saved', folder_id: 'Drafts', message_id: 'draft-id@example.com', date: 200 })
+    const last = thread({ id: 'last', date: 300 })
+    mail$.messages.set([first, saved, last])
+    ui$.selectedThread.set(first.thread_id)
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = (command: string, payload: unknown) =>
+      command === 'mail.discardDraft' ? Promise.reject('refused') : invoke(command, payload)
+
+    await discardSavedDraftCopy({
+      threadId: '',
+      messageId: '',
+      folderId: '',
+      accountId: 'acc',
+      draftMessageId: 'draft-id@example.com',
+    })
+
+    expect(mail$.messages.get().map((message) => message.id)).toEqual(['first', 'saved', 'last'])
+  })
+
+  it('does not report a discard as failed when only the card reload fails', async () => {
+    const reply = thread({ id: 'reply' })
+    const column = { accountId: 'acc', folderId: 'inbox' }
+    const boards = settings$.kanbanBoards.get()
+    settings$.kanbanBoards.set([{ ...boards[0], id: 'board', columns: [column] }])
+    kanban$.activeBoardId.set('board')
+    kanban$.threads[kanbanColumnKey(column)].set([reply])
+    mail$.messages.set([reply])
+    ui$.selectedThread.set(reply.thread_id)
+    responses['mail.discardDraft'] = { ok: true, deleted: 1 }
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = (command: string, payload: unknown) =>
+      command === 'mail.threadList' ? Promise.reject('list timeout') : invoke(command, payload)
+
+    try {
+      const discarded = await discardSavedDraftCopy({
+        threadId: '',
+        messageId: '',
+        folderId: '',
+        accountId: 'acc',
+        draftMessageId: 'draft-id@example.com',
+        replyThreadId: reply.thread_id,
+      })
+      expect(discarded).toBe(true)
+      expect(ui$.toast.get()).toBe('')
+    } finally {
+      settings$.kanbanBoards.set(boards)
+      kanban$.activeBoardId.set('')
+      kanban$.threads.set({})
+    }
   })
 
   it('discards an autosaved compose draft by stable draft message id', async () => {

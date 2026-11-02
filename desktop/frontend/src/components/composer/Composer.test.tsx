@@ -838,23 +838,53 @@ describe('Composer', () => {
     })
   }
 
-  it('closes an explicitly discarded composer after reporting a discard failure', async () => {
-    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!
-    const view = render(<Composer tabId={tabId} />)
+  describe('when a discard fails', () => {
+    const realSetTimeout = globalThis.setTimeout
+    const wait = (ms: number) =>
+      act(async () => {
+        await new Promise((resolve) => realSetTimeout(resolve, ms))
+      })
+    const discardWithFailure = async () => {
+      const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!
+      const view = render(<Composer tabId={tabId} />)
+      await act(async () => {
+        updateComposeDraft(tabId, { fromEmail: 'a@example.com' })
+      })
+      await wait(20)
+      discardFailure = true
+      await act(async () => {
+        ;[...view.container.querySelectorAll('button')].find((button) => button.textContent === 'Discard')!.click()
+      })
+      await wait(10)
+      return tabId
+    }
 
-    await act(async () => {
-      updateComposeDraft(tabId, { fromEmail: 'a@example.com' })
-      await new Promise((resolve) => setTimeout(resolve, 20))
+    beforeEach(() => {
+      // The retry's delay, cut short.
+      globalThis.setTimeout = ((handler: () => void, ms?: number) =>
+        realSetTimeout(handler, ms === 5_000 ? 40 : ms)) as typeof setTimeout
     })
-    discardFailure = true
-    await act(async () => {
-      const discard = [...view.container.querySelectorAll('button')].find((button) => button.textContent === 'Discard')!
-      discard.click()
-      await new Promise((resolve) => setTimeout(resolve, 20))
+    afterEach(() => {
+      globalThis.setTimeout = realSetTimeout
     })
 
-    expect(draftOf(tabId)).toBeUndefined()
-    expect(ui$.toast.peek()).toBe('Could not discard draft: server refused discard')
+    it('closes the composer and reports it once the retry fails too', async () => {
+      const tabId = await discardWithFailure()
+      expect(draftOf(tabId)).toBeUndefined()
+      // The first failure may only be a slow connection.
+      expect(ui$.toast.peek()).toBe('')
+
+      await wait(80)
+      expect(ui$.toast.peek()).toBe('Could not discard draft: server refused discard')
+    })
+
+    it('says nothing when the retry succeeds', async () => {
+      await discardWithFailure()
+      discardFailure = false
+
+      await wait(80)
+      expect(ui$.toast.peek()).toBe('')
+    })
   })
 
   it('cleans up the old account’s draft when the draft moves accounts', async () => {

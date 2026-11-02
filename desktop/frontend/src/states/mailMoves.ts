@@ -2,6 +2,7 @@ import type { Message } from '../types'
 import { rememberThreadTransfer } from './recentThreadTransfers'
 import { isLocalAccountId } from './accounts'
 import { invoke } from '../lib/bridge'
+import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
@@ -12,6 +13,7 @@ import {
   findLocalThread,
   getFilteredThreads,
   kanbanKeysWithThread,
+  listFilterKey,
   loadThreads,
   mail$,
   normalizeMessageId,
@@ -21,6 +23,7 @@ import {
   releaseRemovedThread,
   suppressRemovedThread,
   requestThreadReselect,
+  threadListViewKey,
   uniqueThreadItems,
   updateKanbanThread,
 } from './mail'
@@ -620,6 +623,9 @@ export async function discardSavedDraftCopy(
 
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
+  const viewKey = () =>
+    threadListViewKey(ui$.selectedAccount.peek(), ui$.selectedFolder.peek(), ui$.query.peek(), listFilterKey())
+  const previousView = viewKey()
   const discardedDraftMessageId = normalizeMessageId(draft.draftMessageId)
   const withoutDiscardedDraft = (messages: Message[]) =>
     messages.filter((message) => {
@@ -680,27 +686,65 @@ export async function discardSavedDraftCopy(
       if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(res)
       applyMutationFolderUnreads(res as MutationResult)
     }
-    await reloadThreadCards(kanbanKeys)
-    // A mail.synced thread refresh can land while the server discard is on the
-    // wire and reinsert the stale draft row after the optimistic removal above.
-    // The discard has now succeeded, so remove that copy again before deriving
-    // the conversation and thread-card draft state.
-    const reconciledMessages = withoutDiscardedDraft(mail$.messages.get())
-    if (reconciledMessages.length !== mail$.messages.get().length) mail$.messages.set(reconciledMessages)
-    if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, reconciledMessages)
-    reconcileReplyThreadDraft(reconciledMessages)
-    const selectedAcc = ui$.selectedAccount.get()
-    if (selectedAcc) void loadFolders(selectedAcc, false)
-    if (draft.accountId && draft.accountId !== selectedAcc) void loadFolders(draft.accountId, false)
-    return true
   } catch (error) {
-    mail$.threads.set(previousThreads)
-    mail$.messages.set(previousMessages)
+    // Put back what this discard took and nothing else. The tab closes before
+    // the discard runs, so the conversation may have changed since: a restored
+    // compose tab has none loaded at all, and restoring the lists as they were
+    // would blank the one that has loaded behind it.
+    const openThread = ui$.selectedThread.get()
+    const current = mail$.messages.get()
+    const present = new Set([...nextMessages, ...current].map((message) => message.id))
+    const missing = previousMessages.filter((message) => message.thread_id === openThread && !present.has(message.id))
+    if (missing.length > 0) {
+      const restored = [...current]
+      for (const message of missing) {
+        const later = restored.findIndex((item) => item.date > message.date)
+        restored.splice(later === -1 ? restored.length : later, 0, message)
+      }
+      mail$.messages.set(restored)
+    }
+    if (viewKey() === previousView) {
+      const cards = new Set([draft.threadId, draft.replyThreadId].filter(Boolean))
+      const badges = new Map(
+        previousThreads
+          .filter((thread) => cards.has(thread.thread_id))
+          .map((thread) => [thread.thread_id, thread.has_draft]),
+      )
+      const threads = removeThread
+        ? restoreRemovedThread(mail$.threads.get(), previousThreads, draft.threadId)
+        : mail$.threads.get()
+      mail$.threads.set(
+        threads.map((thread) =>
+          badges.has(thread.thread_id) ? { ...thread, has_draft: badges.get(thread.thread_id) } : thread,
+        ),
+      )
+    }
     if (options.throwOnError) throw error
-    const message = options.failureMessage ?? t('composer.status.couldNotDiscardDraft')
-    showToast(error instanceof Error ? `${message}: ${error.message}` : message, 'error')
+    showToast(
+      contextualErrorMessage(error, options.failureMessage ?? t('composer.status.couldNotDiscardDraft')),
+      'error',
+    )
     return false
   }
+  // The draft is gone from here on, so a card reload that fails is not a failed
+  // discard: the next refresh corrects the cards.
+  try {
+    await reloadThreadCards(kanbanKeys)
+  } catch (error) {
+    console.error('Reloading thread cards after a discard failed:', error)
+  }
+  // A mail.synced thread refresh can land while the server discard is on the
+  // wire and reinsert the stale draft row after the optimistic removal above.
+  // The discard has now succeeded, so remove that copy again before deriving
+  // the conversation and thread-card draft state.
+  const reconciledMessages = withoutDiscardedDraft(mail$.messages.get())
+  if (reconciledMessages.length !== mail$.messages.get().length) mail$.messages.set(reconciledMessages)
+  if (!removeThread) reconcileThreadDraftFromLoadedMessages(draft.threadId, reconciledMessages)
+  reconcileReplyThreadDraft(reconciledMessages)
+  const selectedAcc = ui$.selectedAccount.get()
+  if (selectedAcc) void loadFolders(selectedAcc, false)
+  if (draft.accountId && draft.accountId !== selectedAcc) void loadFolders(draft.accountId, false)
+  return true
 }
 
 // Delete a single message (e.g. one draft) out of a thread, leaving the rest of

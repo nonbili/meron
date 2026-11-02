@@ -10,7 +10,6 @@ import { getActiveThread, normalizeMessageId } from './mail'
 // inside an import cycle through mail.ts.
 import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
-import { discardSavedDraftCopy } from './mailMoves'
 import { LOCAL_SEND_PREFIX } from './pendingSends'
 import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
@@ -55,6 +54,7 @@ import {
 import {
   cancelQuickReplyDraftSave,
   clearQuickReplyDraftOwnership,
+  discardClosedDraft,
   discardingDraftIds,
   quickReplyAbandonedSaves,
   nextQuickReplyOwnershipTick,
@@ -1139,31 +1139,18 @@ export async function closeMessageTab(id: string) {
   return closeComposeSession(id, async () => {
     const remoteId = draft.draftMessageId?.startsWith('local-draft-') ? undefined : draft.draftMessageId
     finishClosingMessageTab(id)
-    try {
-      if (remoteId || draft.sourceDraft) {
-        await discardSavedDraftCopy(
-          {
-            threadId: draft.sourceDraft?.threadId ?? '',
-            messageId: draft.sourceDraft?.messageId ?? '',
-            folderId: draft.sourceDraft?.folderId ?? '',
-            accountId: draft.accountId,
-            draftMessageId: remoteId,
-            // A reply escalated out of a conversation has no draft row of its
-            // own to take the card away with it; the conversation's card stays
-            // and only its Draft badge goes.
-            replyThreadId: draft.sourceDraft ? '' : tabs[index].threadId,
-          },
-          { throwOnError: true },
-        )
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      showToast(
-        message
-          ? `${t('composer.status.couldNotDiscardDraft')}: ${message}`
-          : t('composer.status.couldNotDiscardDraft'),
-        'error',
-      )
+    if (remoteId || draft.sourceDraft) {
+      await discardClosedDraft({
+        threadId: draft.sourceDraft?.threadId ?? '',
+        messageId: draft.sourceDraft?.messageId ?? '',
+        folderId: draft.sourceDraft?.folderId ?? '',
+        accountId: draft.accountId,
+        draftMessageId: remoteId,
+        // A reply escalated out of a conversation has no draft row of its
+        // own to take the card away with it; the conversation's card stays
+        // and only its Draft badge goes.
+        replyThreadId: draft.sourceDraft ? '' : tabs[index].threadId,
+      })
     }
   })
 }
