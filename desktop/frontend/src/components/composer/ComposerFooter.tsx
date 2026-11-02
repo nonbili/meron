@@ -64,6 +64,12 @@ export function ComposerFooter({
 }) {
   const { t } = useTranslation()
   const draftAutosaveFailed = t('composer.status.draftAutosaveFailed')
+  const saved = saveStatus === 'saved'
+  const saveStatusLabel = saved
+    ? t('composer.status.savedToServer')
+    : saveStatus === 'saving'
+      ? t('composer.status.savingDraft')
+      : ''
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/60 bg-chat px-4 py-2.5 select-none">
@@ -98,24 +104,17 @@ export function ComposerFooter({
       <div className="flex items-center gap-3">
         {/* Saving and saved are icons, not words: spelled out, the status
             wrapped onto three lines whenever the composer sat in a narrow pane. */}
-        {saveStatus === 'saving' && (
+        {/* Always mounted, with only its text changing: screen readers announce
+            changes inside a live region, not a region that appears already filled. */}
+        <span role="status" className="sr-only">
+          {saveStatusLabel}
+        </span>
+        {saveStatusLabel && (
           <span
-            role="status"
-            aria-label={t('composer.status.savingDraft')}
-            title={t('composer.status.savingDraft')}
-            className="flex items-center text-secondary"
+            title={saveStatusLabel}
+            className={`flex items-center ${saved ? 'text-emerald-500' : 'text-secondary'}`}
           >
-            <CloudStatusIcon saved={false} size={16} />
-          </span>
-        )}
-        {saveStatus === 'saved' && (
-          <span
-            role="status"
-            aria-label={t('composer.status.savedToServer')}
-            title={t('composer.status.savedToServer')}
-            className="flex items-center text-emerald-500"
-          >
-            <CloudStatusIcon saved size={16} />
+            <CloudStatusIcon saved={saved} size={16} />
           </span>
         )}
         {saveStatus === 'error' && (
