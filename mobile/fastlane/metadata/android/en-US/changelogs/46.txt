@@ -1,0 +1,5 @@
+- Add tags to mail, synced as IMAP keywords, with search, kanban columns and tag management
+- Add rules to automatically tag, mark read, star, move, copy or trash matching mail, with manual runs and an activity log
+- Add has:attachment search operator and a Has attachment search option
+- Run store migrations in the background without blocking startup
+- Let capped message bubbles scroll back up before pulling down closes the conversation
