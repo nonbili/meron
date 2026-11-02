@@ -5,6 +5,38 @@ import { IconButton } from '../button/IconButton'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+// One cloud for both save states, so only the mark inside it changes when a
+// save finishes: lucide's cloud-upload, with its arrow swapped for a check
+// mark of the same footprint (lucide's own cloud-check sits 2px lower).
+// Nudged down 1px: centred by its box, the cloud read high next to the
+// lowercase of "Discard" (measured on Linux, 2x).
+function CloudStatusIcon({ saved, size }: { saved: boolean; size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="translate-y-px"
+    >
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+      {saved ? (
+        <path d="m8.5 17 2.5 2.5 5-5.5" />
+      ) : (
+        <g className="animate-pulse">
+          <path d="M12 13v8" />
+          <path d="m8 17 4-4 4 4" />
+        </g>
+      )}
+    </svg>
+  )
+}
+
 // The composer's bottom action bar: attach/inline-image buttons, the rich/plain
 // toggle, autosave status and the Discard/Send buttons.
 export function ComposerFooter({
@@ -32,6 +64,12 @@ export function ComposerFooter({
 }) {
   const { t } = useTranslation()
   const draftAutosaveFailed = t('composer.status.draftAutosaveFailed')
+  const saved = saveStatus === 'saved'
+  const saveStatusLabel = saved
+    ? t('composer.status.savedToServer')
+    : saveStatus === 'saving'
+      ? t('composer.status.savingDraft')
+      : ''
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/60 bg-chat px-4 py-2.5 select-none">
@@ -64,16 +102,19 @@ export function ComposerFooter({
         </button>
       </div>
       <div className="flex items-center gap-3">
-        {saveStatus === 'saving' && (
-          <span className="flex items-center gap-1.5 text-[0.6875rem] text-secondary">
-            <RefreshCw size={11} className="animate-spin" />
-            <span>{t('composer.status.savingDraft')}</span>
-          </span>
-        )}
-        {saveStatus === 'saved' && (
-          <span className="flex items-center gap-1.5 text-[0.6875rem] text-emerald-500 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{t('composer.status.savedToServer')}</span>
+        {/* Saving and saved are icons, not words: spelled out, the status
+            wrapped onto three lines whenever the composer sat in a narrow pane. */}
+        {/* Always mounted, with only its text changing: screen readers announce
+            changes inside a live region, not a region that appears already filled. */}
+        <span role="status" className="sr-only">
+          {saveStatusLabel}
+        </span>
+        {saveStatusLabel && (
+          <span
+            title={saveStatusLabel}
+            className={`flex items-center ${saved ? 'text-emerald-500' : 'text-secondary'}`}
+          >
+            <CloudStatusIcon saved={saved} size={16} />
           </span>
         )}
         {saveStatus === 'error' && (
