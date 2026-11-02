@@ -61,6 +61,17 @@ type ThreadListProps = {
   onResizeStart?: PointerEventHandler<HTMLDivElement>
 }
 
+/**
+ * Width rule for the folder picker in the list header. With the search box in
+ * the header the name is capped so a deep folder name can't crowd it out. With
+ * the search in the title bar only a spacer shares the row, so the name takes
+ * the room it needs and is cut off only when the row runs out; a fixed share
+ * cut off short names ("Unified inbox") with a larger Text size.
+ */
+export function threadListFolderLabelClass(searchInTitleBar: boolean): string {
+  return `-ml-2 text-xs font-bold ${searchInTitleBar ? 'min-w-0' : 'max-w-[40%] shrink-0'}`
+}
+
 export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const { t } = useTranslation()
   const query = useValue(ui$.query)
@@ -309,14 +320,13 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         <div className="flex h-12 shrink-0 flex-row items-center gap-3 pl-4 pr-2 border-b border-border/60">
           <div className="flex items-center gap-2 w-full">
             {/* Current folder, doubling as a picker: switching here retargets the
-              list the same way it retargets a kanban column. Capped so a deep
-              folder name can't crowd out the search box. */}
+              list the same way it retargets a kanban column. */}
             {showFolderSwitcher && !searchExpanded && (
               <FolderSwitcher
                 accountId={selectedAccount}
                 folderId={selectedFolder}
                 label={folderLabel({ accountId: selectedAccount, folderId: selectedFolder }, folders, accounts, t)}
-                labelClassName="-ml-2 max-w-[40%] shrink-0 text-xs font-bold"
+                labelClassName={threadListFolderLabelClass(titleBar)}
                 onSelect={(nextFolderId) => ui$.selectedFolder.set(nextFolderId)}
               />
             )}
