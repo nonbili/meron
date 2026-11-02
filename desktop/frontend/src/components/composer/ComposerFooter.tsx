@@ -1,4 +1,4 @@
-import { Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
+import { CloudUpload, Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
@@ -85,15 +85,19 @@ export function ComposerFooter({
         </button>
       </div>
       <div className="flex items-center gap-3">
+        {/* Saving and saved are icons, not words: spelled out, the status
+            wrapped onto three lines whenever the composer sat in a narrow pane. */}
         {saveStatus === 'saving' && (
-          <span className="flex items-center gap-1.5 text-[0.6875rem] text-secondary">
-            <RefreshCw size={11} className="animate-spin" />
-            <span>{t('composer.status.savingDraft')}</span>
+          <span
+            role="status"
+            aria-label={t('composer.status.savingDraft')}
+            title={t('composer.status.savingDraft')}
+            className="flex items-center text-secondary"
+          >
+            <CloudUpload size={16} className="animate-pulse" />
           </span>
         )}
         {saveStatus === 'saved' && (
-          // An icon, not the words: spelled out, the status wrapped onto three
-          // lines whenever the composer sat in a narrow pane.
           <span
             role="status"
             aria-label={t('composer.status.savedToServer')}
