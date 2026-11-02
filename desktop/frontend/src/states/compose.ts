@@ -1,3 +1,4 @@
+import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
@@ -1180,6 +1181,16 @@ export function closeMessageTabs(ids: string[]) {
   const active = compose$.activeTab.get()
   for (const id of closing) if (id !== active) finishClosingMessageTab(id)
   if (closing.includes(active)) finishClosingMessageTab(active)
+}
+
+// Put a tab where another one sits, for reordering the strip. Either may have
+// closed during the drag, in which case the order stands.
+export function moveMessageTab(id: string, overId: string) {
+  const tabs = compose$.tabs.get()
+  const from = tabs.findIndex((tab) => tab.id === id)
+  const to = tabs.findIndex((tab) => tab.id === overId)
+  if (from === -1 || to === -1 || from === to) return
+  compose$.tabs.set(arrayMove(tabs, from, to))
 }
 
 // Reveal a message's remote content in the conversation and on any reader tab

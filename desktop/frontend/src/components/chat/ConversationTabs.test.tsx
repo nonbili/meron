@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { ConversationTabs } from './ConversationTabs'
 import { openThreadTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
@@ -114,5 +114,46 @@ describe('ConversationTabs', () => {
     expect(compose$.tabs.get()).toHaveLength(0)
     expect(compose$.activeTab.get()).toBe('')
     expect(ui$.selectedThread.get()).toBe('t-current')
+  })
+
+  it('reorders tabs by dragging, leaving the active tab and Current alone', async () => {
+    ui$.selectedThread.set('t-current')
+    openThreadTab(message({ thread_id: 't-a', subject: 'First' }))
+    openThreadTab(message({ thread_id: 't-b', subject: 'Second' }))
+    const rect = spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const tab = this.closest('[data-tab-id]')
+      const left = tab ? [...tab.parentElement!.children].indexOf(tab) * 100 : 0
+      return new DOMRect(left, 0, 100, 36)
+    })
+    const view = render(<ConversationTabs />)
+    const first = view.getByTitle('First')
+
+    fireEvent.mouseDown(first, { clientX: 150, clientY: 10, button: 0 })
+    fireEvent.mouseMove(document, { clientX: 170, clientY: 10 })
+    fireEvent.mouseMove(document, { clientX: 260, clientY: 10 })
+    await waitFor(() => expect(first.className).toContain('z-20'))
+    fireEvent.mouseUp(document)
+    rect.mockRestore()
+    // dnd-kit retains its document click listener for 50ms after dragging.
+    await new Promise((resolve) => setTimeout(resolve, 60))
+
+    expect(compose$.tabs.get().map((tab) => tab.threadId)).toEqual(['t-b', 't-a'])
+    expect(compose$.activeTab.get()).toBe('thread-t-b')
+    const strip = [...document.querySelectorAll('[data-tab-id]')].map((tab) => tab.getAttribute('data-tab-id'))
+    expect(strip).toEqual(['', 'thread-t-b', 'thread-t-a'])
+  })
+
+  it('does not start a drag from the close button', async () => {
+    openThreadTab(message({ thread_id: 't-a', subject: 'First' }))
+    openThreadTab(message({ thread_id: 't-b', subject: 'Second' }))
+    const view = render(<ConversationTabs />)
+    const first = view.getByTitle('First')
+
+    fireEvent.mouseDown(first.querySelector('button')!, { clientX: 10, clientY: 10, button: 0 })
+    fireEvent.mouseMove(document, { clientX: 200, clientY: 10 })
+    fireEvent.mouseUp(document)
+
+    expect(first.className).not.toContain('z-20')
+    expect(compose$.tabs.get().map((tab) => tab.threadId)).toEqual(['t-a', 't-b'])
   })
 })

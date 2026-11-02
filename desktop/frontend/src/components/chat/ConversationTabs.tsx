@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { DndContext, closestCenter } from '@dnd-kit/core'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS as DndCSS } from '@dnd-kit/utilities'
 import { MessageSquare, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { closeMessageTab, closeMessageTabs, activateConversationTab } from '../../states/compose'
+import { closeMessageTab, closeMessageTabs, activateConversationTab, moveMessageTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
@@ -10,6 +14,7 @@ import type { MessageTab } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
+import { useTaskDragSensors } from '../tasks/taskDrag'
 
 // A wheel line or page in pixels, for devices that report deltas in those
 // units (deltaMode 1 and 2) rather than pixels.
@@ -118,6 +123,7 @@ export function ConversationTabs() {
   }, [hasTabs, tabs.length, hasCurrentConversation])
 
   const [menu, setMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
+  const sensors = useTaskDragSensors()
 
   if (!hasTabs) return null
 
@@ -164,57 +170,95 @@ export function ConversationTabs() {
             </button>
           </div>
         )}
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            data-tab-id={tab.id}
-            onClick={() => {
-              // Activate the tab before retargeting selectedThread so the Current
-              // tab's remembered thread (conversationThread) isn't overwritten.
-              compose$.activeTab.set(tab.id)
-              if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
-            }}
-            className={`group relative flex ${TAB_WIDTH} cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
-              activeTab === tab.id ? ACTIVE_TAB : INACTIVE_TAB
-            }`}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              setMenu({ x: event.clientX, y: event.clientY, tabId: tab.id })
-            }}
-            title={tab.subject}
-          >
-            {tab.kind === 'compose' ? (
-              <SquarePen size={12} className="shrink-0" />
-            ) : (
-              <Avatar
-                name={tab.from}
-                email={tab.fromAddr}
-                src={tab.feedIcon ? `/media/${tab.feedIcon}` : undefined}
-                size={18}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToHorizontalAxis]}
+          onDragEnd={({ active, over }) => {
+            if (over) moveMessageTab(String(active.id), String(over.id))
+          }}
+        >
+          <SortableContext items={tabs.map((tab) => tab.id)} strategy={horizontalListSortingStrategy}>
+            {tabs.map((tab) => (
+              <SortableTab
+                key={tab.id}
+                tab={tab}
+                active={activeTab === tab.id}
+                onMenu={(x, y) => setMenu({ x, y, tabId: tab.id })}
               />
-            )}
-            <span className={labelClass(activeTab === tab.id)}>{tab.subject}</span>
-            <button
-              onClick={(event) => {
-                event.stopPropagation()
-                void closeMessageTab(tab.id)
-              }}
-              // Overlay the label so revealing the × never consumes tab width.
-              className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
-                activeTab === tab.id
-                  ? ''
-                  : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
-              }`}
-              title={t('chat.closeTab')}
-            >
-              <X size={11} />
-            </button>
-          </div>
-        ))}
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
       {menu && (
         <TabContextMenu {...menu} tabs={tabs} hasCurrent={hasCurrentConversation} onClose={() => setMenu(null)} />
       )}
+    </div>
+  )
+}
+
+// One open tab, dragged anywhere but its × to reorder. Current isn't one of
+// these: it stays first, ahead of whatever is reordered.
+function SortableTab({
+  tab,
+  active,
+  onMenu,
+}: {
+  tab: MessageTab
+  active: boolean
+  onMenu: (x: number, y: number) => void
+}) {
+  const { t } = useTranslation()
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-tab-id={tab.id}
+      style={{ transform: DndCSS.Translate.toString(transform), transition: isDragging ? 'none' : transition }}
+      onClick={() => {
+        // Activate the tab before retargeting selectedThread so the Current
+        // tab's remembered thread (conversationThread) isn't overwritten.
+        compose$.activeTab.set(tab.id)
+        if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
+      }}
+      className={`group relative flex ${TAB_WIDTH} cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
+        active ? ACTIVE_TAB : INACTIVE_TAB
+      } ${isDragging ? 'z-20 bg-header' : ''}`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onMenu(event.clientX, event.clientY)
+      }}
+      title={tab.subject}
+      {...listeners}
+    >
+      {tab.kind === 'compose' ? (
+        <SquarePen size={12} className="shrink-0" />
+      ) : (
+        <Avatar
+          name={tab.from}
+          email={tab.fromAddr}
+          src={tab.feedIcon ? `/media/${tab.feedIcon}` : undefined}
+          size={18}
+        />
+      )}
+      <span className={labelClass(active)}>{tab.subject}</span>
+      <button
+        data-no-drag
+        onClick={(event) => {
+          event.stopPropagation()
+          void closeMessageTab(tab.id)
+        }}
+        // Overlay the label so revealing the × never consumes tab width.
+        className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
+          active
+            ? ''
+            : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+        }`}
+        title={t('chat.closeTab')}
+      >
+        <X size={11} />
+      </button>
     </div>
   )
 }

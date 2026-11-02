@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message, MessageTab } from '../types'
-import { restoreTabSession } from './compose'
+import { moveMessageTab, restoreTabSession } from './compose'
 import { COMPOSE_TABS_KEY, compose$ } from './composeState'
 import { kanban$ } from './kanban'
 import { ui$ } from './ui'
@@ -139,6 +139,14 @@ describe('restoreTabSession', () => {
     await settle()
     expect(kanban$.paneThreadId.peek()).toBe('')
     expect(ui$.selectedThread.peek()).toBe('')
+  })
+
+  it('persists a reordered strip', () => {
+    compose$.tabs.set([tab('a', 'reader', 't1'), tab('b', 'thread', 't2'), tab('c', 'reader', 't3')])
+    moveMessageTab('c', 'a')
+    expect(compose$.tabs.get().map((entry) => entry.id)).toEqual(['c', 'a', 'b'])
+    const stored = JSON.parse(localStorage.getItem(COMPOSE_TABS_KEY)!) as { id: string }[]
+    expect(stored.map((entry) => entry.id)).toEqual(['c', 'a', 'b'])
   })
 
   it('persists thread and reader tabs without their bodies', () => {
