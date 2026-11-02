@@ -14,6 +14,9 @@ import type { SignatureMark } from '../lib/signature'
 // their base64 payloads would quickly blow past localStorage's ~5MB budget.
 // Only text fields survive restarts; the user reattaches files if needed.
 export const COMPOSE_TABS_KEY = 'meron-compose-tabs'
+// Which tab was on screen and the conversation behind the tabs, so a restart
+// reopens where the user left off.
+export const TAB_VIEW_KEY = 'meron-tab-view'
 
 // Local placeholder used until the first save asks meron-core for the stable
 // RFC Message-ID. It is never sent to IMAP/SMTP.
@@ -35,53 +38,90 @@ export type PersistedComposeTab = {
   subject: string
   compose: Omit<ComposeDraft, 'attachments'> & { attachments: [] }
 }
+// Thread and reader tabs share the compose tabs' list so the strip keeps its
+// order, but only as references: a mail body could use up the quota the drafts
+// depend on. Reader tabs fetch theirs again at boot (restoreTabSession).
+export type PersistedMailTab = Pick<
+  MessageTab,
+  'id' | 'messageId' | 'threadId' | 'accountId' | 'folderId' | 'subject' | 'from' | 'fromAddr' | 'feedIcon' | 'viewMode'
+> & { kind: 'reader' | 'thread' }
+type PersistedTabView = { activeTab?: unknown; conversationThread?: unknown }
+
 export function hasExtraComposeHeaders(compose: Pick<ComposeDraft, 'cc' | 'bcc'>): boolean {
   return !!(compose.cc?.trim() || compose.bcc?.trim())
 }
-function loadPersistedComposeTabs(): MessageTab[] {
+function loadPersistedTabs(): MessageTab[] {
   try {
     const raw = localStorage.getItem(COMPOSE_TABS_KEY)
     if (!raw) return []
-    const parsed = JSON.parse(raw) as PersistedComposeTab[]
+    const parsed = JSON.parse(raw) as (PersistedComposeTab | PersistedMailTab)[]
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((t) => t && t.compose && typeof t.compose.to === 'string')
-      .map<MessageTab>((t) => ({
-        id: t.id,
-        kind: 'compose',
-        messageId: '',
-        threadId: '',
-        subject: t.subject || t.compose.subject || 'New message',
-        from: '',
-        body: '',
-        viewMode: 'plain',
-        compose: {
-          ...t.compose,
-          fromEmail: t.compose.fromEmail ?? '',
-          showCcBcc: t.compose.showCcBcc && hasExtraComposeHeaders(t.compose),
-          // Backfill for tabs persisted before draftMessageId existed, so the
-          // first autosave after restart still replaces rather than duplicates.
-          draftMessageId: t.compose.draftMessageId || newDraftMessageId(),
-          attachments: [],
+    return parsed.flatMap<MessageTab>((t) => {
+      if (!t) return []
+      if ('kind' in t) {
+        if (!t.id || !t.threadId) return []
+        return [{ ...t, body: '', bodyMissing: t.kind === 'reader' }]
+      }
+      if (!t.compose || typeof t.compose.to !== 'string') return []
+      return [
+        {
+          id: t.id,
+          kind: 'compose',
+          messageId: '',
+          threadId: '',
+          subject: t.subject || t.compose.subject || 'New message',
+          from: '',
+          body: '',
+          viewMode: 'plain',
+          compose: {
+            ...t.compose,
+            fromEmail: t.compose.fromEmail ?? '',
+            showCcBcc: t.compose.showCcBcc && hasExtraComposeHeaders(t.compose),
+            // Backfill for tabs persisted before draftMessageId existed, so the
+            // first autosave after restart still replaces rather than duplicates.
+            draftMessageId: t.compose.draftMessageId || newDraftMessageId(),
+            attachments: [],
+          },
         },
-      }))
+      ]
+    })
   } catch {
     return []
   }
 }
-const initialComposeTabs = loadPersistedComposeTabs()
+function loadPersistedTabView(): PersistedTabView {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TAB_VIEW_KEY) ?? 'null') as PersistedTabView | null
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+const initialTabs = loadPersistedTabs()
+const initialView = loadPersistedTabView()
+const initialConversationThread =
+  typeof initialView.conversationThread === 'string' ? initialView.conversationThread : ''
+// The saved tab when it can still be shown, else the last one: with no tab
+// active and nothing behind them, nothing would show the restored tabs, and the
+// kanban pane would stay closed with them stranded out of sight.
+const initialActiveTab = (() => {
+  const saved = initialView.activeTab
+  if (saved === '' && initialConversationThread) return ''
+  if (typeof saved === 'string' && initialTabs.some((tab) => tab.id === saved)) return saved
+  return initialTabs.at(-1)?.id ?? ''
+})()
 
 export const compose$ = observable({
   // Reader tabs for messages opened in "HTML mode"; activeTab "" = conversation view.
-  // Re-hydrate any compose tabs whose drafts were persisted from the previous run.
-  tabs: initialComposeTabs as MessageTab[],
-  activeTab: '',
+  // Re-hydrate the tabs persisted from the previous run.
+  tabs: initialTabs,
+  activeTab: initialActiveTab,
   // The thread shown by the "Current" conversation tab. The message pane renders a
   // single selectedThread, so a thread tab has to retarget selectedThread to load
   // its own messages. We remember the Current tab's thread here so switching to a
   // thread tab and back restores the conversation it was showing instead of
   // adopting the thread tab's. Kept in sync below while the Current tab is active.
-  conversationThread: '',
+  conversationThread: initialConversationThread,
   composer: '',
   composerAttachments: [] as ComposerAttachment[],
   // Server-side draft backing the active thread's quick reply, shared with the

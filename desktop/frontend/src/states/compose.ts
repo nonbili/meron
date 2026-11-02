@@ -24,6 +24,7 @@ import {
   type SignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
+import { closeCurrentConversation, kanban$ } from './kanban'
 import { resolveConversationMode, revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import {
@@ -46,7 +47,9 @@ import {
   COMPOSE_TABS_KEY,
   hasExtraComposeHeaders,
   newDraftMessageId,
+  TAB_VIEW_KEY,
   type PersistedComposeTab,
+  type PersistedMailTab,
 } from './composeState'
 import {
   cancelQuickReplyDraftSave,
@@ -258,25 +261,42 @@ export function pruneComposerMedia() {
   invoke('composer.pruneMedia', { keys: [...keys] }).catch(() => {})
 }
 
-// Persist compose tabs (full editor) on every tab change. We only store the
-// text portion of each compose draft — attachments are dropped because their
-// base64 payloads can blow past localStorage's quota. On boot the tabs come
-// back; the user reattaches files if needed.
+// Persist the tabs on every tab change. We only store the text portion of each
+// compose draft — attachments are dropped because their base64 payloads can blow
+// past localStorage's quota. On boot the tabs come back; the user reattaches
+// files if needed. Thread and reader tabs are stored as references.
 compose$.tabs.onChange(({ value: tabs }) => {
   pruneComposeSessions(new Set(tabs.map((tab) => tab.id)))
-  const persisted: PersistedComposeTab[] = tabs
-    .filter((t) => t.kind === 'compose' && t.compose)
-    .map((t) => ({
-      id: t.id,
-      subject: t.subject,
-      compose: { ...(t.compose as ComposeDraft), attachments: [] },
-    }))
+  const persisted = tabs.flatMap<PersistedComposeTab | PersistedMailTab>((t) => {
+    if (t.kind !== 'compose') {
+      const { id, kind, messageId, threadId, accountId, folderId, subject, from, fromAddr, feedIcon, viewMode } = t
+      return [{ id, kind, messageId, threadId, accountId, folderId, subject, from, fromAddr, feedIcon, viewMode }]
+    }
+    if (!t.compose) return []
+    return [{ id: t.id, subject: t.subject, compose: { ...t.compose, attachments: [] } }]
+  })
   try {
     localStorage.setItem(COMPOSE_TABS_KEY, JSON.stringify(persisted))
   } catch {
     // localStorage quota exceeded — drop silently.
   }
 })
+
+function persistTabView() {
+  try {
+    localStorage.setItem(
+      TAB_VIEW_KEY,
+      JSON.stringify({
+        activeTab: compose$.activeTab.peek(),
+        conversationThread: compose$.conversationThread.peek(),
+      }),
+    )
+  } catch {
+    // localStorage quota exceeded — drop silently.
+  }
+}
+compose$.activeTab.onChange(persistTabView)
+compose$.conversationThread.onChange(persistTabView)
 
 // Keep reader snapshots in sync with the loaded conversation: the body when
 // background fetching completes, and the read and star flags whenever they
@@ -314,15 +334,10 @@ function tabAvatar(message: Message): Pick<MessageTab, 'fromAddr' | 'feedIcon'> 
   return { fromAddr: message.from_addr }
 }
 
-export function openMessageTab(message: Message) {
-  const existing = compose$.tabs.get().find((tab) => tab.messageId === message.id)
-  if (existing) {
-    compose$.activeTab.set(existing.id)
-    return
-  }
+function readerTab(message: Message): MessageTab {
   const account = accounts$.get().find((acc) => acc.id === message.account_id)
   const preferHtml = account?.conversation_html ?? true
-  const tab: MessageTab = {
+  return {
     id: message.id,
     kind: 'reader',
     messageId: message.id,
@@ -356,8 +371,94 @@ export function openMessageTab(message: Message) {
     viewMode: message.body_html && preferHtml ? 'html' : 'plain',
     message,
   }
+}
+
+export function openMessageTab(message: Message) {
+  const existing = compose$.tabs.get().find((tab) => tab.messageId === message.id)
+  if (existing) {
+    compose$.activeTab.set(existing.id)
+    return
+  }
+  const tab = readerTab(message)
   compose$.tabs.push(tab)
   compose$.activeTab.set(tab.id)
+}
+
+// Put the persisted view back on screen. Call once at boot, after the kanban
+// session: a board's conversation is its open card. The conversation behind a
+// reader or compose tab stays unloaded until the user returns to it, so
+// restoring never reads a thread that isn't on screen.
+export function restoreTabSession() {
+  const onBoard = !!kanban$.activeBoardId.peek()
+  if (onBoard) {
+    compose$.conversationThread.set(kanban$.paneThreadId.peek())
+  } else {
+    kanban$.paneThreadId.set('')
+    kanban$.paneColumnKey.set('')
+  }
+  const active = compose$.tabs.peek().find((tab) => tab.id === compose$.activeTab.peek())
+  const conversation = compose$.conversationThread.peek()
+  if (active?.kind === 'thread') ui$.selectedThread.set(active.threadId)
+  else if (!active && conversation) ui$.selectedThread.set(conversation)
+  else if (!active) closeCurrentConversation()
+  if (compose$.activeTab.peek() || conversation) ui$.mobilePane.set('conversation')
+  void reconcileRestoredTabs()
+}
+
+async function restoredThreadPage(threadId: string, cursor: string) {
+  return invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
+    thread_id: threadId,
+    limit: CONVERSATION_PAGE_SIZE,
+    ...(cursor ? { before_cursor: cursor } : {}),
+  })
+}
+
+// Check each restored conversation against the mailbox, one at a time: anything
+// deleted or moved while the app was closed closes, and reader tabs get their
+// bodies back. A failed read proves nothing (offline, say), so it closes nothing.
+async function reconcileRestoredTabs() {
+  const threadIds = new Set(
+    compose$.tabs
+      .peek()
+      .filter((tab) => tab.kind !== 'compose')
+      .map((tab) => tab.threadId),
+  )
+  if (compose$.conversationThread.peek()) threadIds.add(compose$.conversationThread.peek())
+  for (const threadId of threadIds) {
+    try {
+      const wanted = new Set(
+        compose$.tabs
+          .peek()
+          .filter((tab) => tab.kind === 'reader' && tab.threadId === threadId)
+          .map((tab) => tab.messageId),
+      )
+      const found = new Map<string, Message>()
+      const cursors = new Set<string>()
+      let cursor = ''
+      let empty = true
+      do {
+        cursors.add(cursor)
+        const page = await restoredThreadPage(threadId, cursor)
+        if (page.messages.length > 0) empty = false
+        for (const message of page.messages) if (wanted.has(message.id)) found.set(message.id, message)
+        cursor = page.next_cursor ?? ''
+      } while (cursor && !cursors.has(cursor) && found.size < wanted.size)
+
+      const tabs = compose$.tabs.peek()
+      closeMessageTabs(
+        tabs
+          .filter((tab) => tab.threadId === threadId && (empty || (tab.kind === 'reader' && !found.has(tab.messageId))))
+          .map((tab) => tab.id),
+      )
+      if (empty && compose$.conversationThread.peek() === threadId) closeCurrentConversation()
+      for (const [index, tab] of compose$.tabs.peek().entries()) {
+        const message = tab.kind === 'reader' ? found.get(tab.messageId) : undefined
+        if (message) compose$.tabs[index].assign({ ...readerTab(message), viewMode: tab.viewMode })
+      }
+    } catch (error) {
+      console.error('restoring tab failed', error)
+    }
+  }
 }
 
 // Open a conversation itself as a tab. The tab stores enough thread metadata to

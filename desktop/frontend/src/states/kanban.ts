@@ -347,6 +347,10 @@ const activeBoardSession = persistedField(kanban$.activeBoardId, 'session_kanban
   return settings$.kanbanBoards.get().some((board) => board.id === raw) ? raw : ''
 })
 
+const parsePaneString = (raw: unknown) => (typeof raw === 'string' ? raw : undefined)
+const paneThreadSession = persistedField(kanban$.paneThreadId, 'session_kanban_pane_thread', parsePaneString)
+const paneColumnSession = persistedField(kanban$.paneColumnKey, 'session_kanban_pane_column', parsePaneString)
+
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
 export const KANBAN_SESSION_KEYS = [
   globalFilterSession.key,
@@ -354,6 +358,8 @@ export const KANBAN_SESSION_KEYS = [
   columnFiltersSession.key,
   columnAttachmentsSession.key,
   activeBoardSession.key,
+  paneThreadSession.key,
+  paneColumnSession.key,
 ]
 
 /** Seed kanban session state from persisted last session. Call once at boot. */
@@ -363,6 +369,8 @@ export function restoreKanbanSession(prefs: Record<string, unknown>) {
   columnFiltersSession.restore(prefs)
   columnAttachmentsSession.restore(prefs)
   activeBoardSession.restore(prefs)
+  paneThreadSession.restore(prefs)
+  paneColumnSession.restore(prefs)
 }
 
 // A saved search is its own column beside the folder's plain one, so its query is

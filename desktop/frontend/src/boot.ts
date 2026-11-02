@@ -6,7 +6,7 @@ import { ensureDefaultKanbanBoard, restoreKanbanSession, KANBAN_SESSION_KEYS } f
 import { restoreTasksSession, TASKS_SESSION_KEYS } from './states/tasks'
 import { CALENDAR_SESSION_KEYS, restoreCalendarSession } from './states/calendar'
 import { accounts$ } from './states/accounts'
-import { openMailtoCompose, pruneComposerMedia } from './states/compose'
+import { openMailtoCompose, pruneComposerMedia, restoreTabSession } from './states/compose'
 
 // App bootstrap: load the system check, accounts, and persisted settings in
 // parallel, seed the initial selection, and drain any mailto: links the OS
@@ -42,6 +42,7 @@ export async function boot() {
   await restoreTasksSession(prefs)
   restoreCalendarSession(prefs)
   ensureDefaultKanbanBoard()
+  restoreTabSession()
 
   const pendingMailto = await invoke<unknown>('mailto.consumePending').catch(() => [])
   if (Array.isArray(pendingMailto)) {

@@ -345,7 +345,7 @@ export type MessageTab = {
    *  grows the allowlist. Reader tabs only. */
   outgoing?: boolean
   /** The message a reader tab was opened from, for the actions its bottom bar
-   *  offers. Reader tabs are never persisted, so this lives only in memory. */
+   *  offers. Never persisted: a restored tab fetches it again at boot. */
   message?: Message
   /** Present only when kind === "compose". */
   compose?: ComposeDraft

@@ -33,11 +33,6 @@ export function useKanbanBoardSync(boardId: string, visibleColumns: KanbanColumn
   const watchedKanbanFoldersRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    kanban$.paneThreadId.set('')
-    kanban$.paneColumnKey.set('')
-  }, [boardId])
-
-  useEffect(() => {
     const desired = new Set<string>()
     for (const column of visibleColumns) {
       if (column.accountId === 'unified') {
