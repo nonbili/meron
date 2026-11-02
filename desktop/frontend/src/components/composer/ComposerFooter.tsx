@@ -8,6 +8,8 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 // One cloud for both save states, so only the mark inside it changes when a
 // save finishes: lucide's cloud-upload, with its arrow swapped for a check
 // mark of the same footprint (lucide's own cloud-check sits 2px lower).
+// Nudged down 1px: centred by its box, the cloud read high next to the
+// lowercase of "Discard" (measured on Linux, 2x).
 function CloudStatusIcon({ saved, size }: { saved: boolean; size: number }) {
   return (
     <svg
@@ -20,6 +22,7 @@ function CloudStatusIcon({ saved, size }: { saved: boolean; size: number }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      className="translate-y-px"
     >
       <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
       {saved ? (
