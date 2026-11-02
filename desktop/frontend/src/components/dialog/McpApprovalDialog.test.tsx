@@ -63,7 +63,7 @@ afterEach(cleanup)
 test('shows the complete send preview as text and approves once through Wails', async () => {
   const view = render(<McpApprovalDialog />)
   await view.findByRole('alertdialog')
-  // The prompt arrives from a poll outside act(), so flush its effects
+  // The initial backend response arrives outside act(), so flush its effects
   // (initial focus, the Escape handler) before asserting on them.
   await act(async () => {})
   expect(view.getByText('My assistant')).toBeTruthy()
@@ -93,7 +93,7 @@ test('shows exact deletion selection and Escape rejects it', async () => {
   }
   const view = render(<McpApprovalDialog />)
   await view.findByRole('alertdialog')
-  // The prompt arrives from a poll outside act(), so flush its effects
+  // The initial backend response arrives outside act(), so flush its effects
   // (initial focus, the Escape handler) before asserting on them.
   await act(async () => {})
   expect(view.getByText('Delete only this')).toBeTruthy()
@@ -127,15 +127,18 @@ test('a prompt arrives on the backend event, without polling for it', async () =
   const view = render(<McpApprovalDialog />)
   await act(async () => {})
   expect(view.queryByRole('alertdialog')).toBeNull()
-  const asked = calls.length
-  // Nothing is asked of the backend while there is nothing to approve.
+  const pendingCalls = () => calls.filter((call) => call.command === 'mcp.pending')
+  expect(pendingCalls()).toHaveLength(1)
+  // Count only approval requests: earlier tests may still be loading folders.
+  // Wait past the fallback polling interval to prove event delivery disables it.
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await new Promise((resolve) => setTimeout(resolve, 1600))
   })
-  expect(calls.length).toBe(asked)
+  expect(pendingCalls()).toHaveLength(1)
 
   requests = waiting
   await act(async () => events['mcp.approvals']?.())
+  expect(pendingCalls()).toHaveLength(2)
   await view.findByRole('alertdialog')
   expect(view.getByText('My assistant')).toBeTruthy()
 })
