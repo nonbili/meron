@@ -1,0 +1,8 @@
+- Add tags to mail, synced as IMAP keywords, with search, kanban columns and MCP tools
+- Add rules to automatically tag, mark read, star, move, copy or trash matching mail, with manual runs and an activity log
+- Add has:attachment search operator and a Has attachment search option
+- Add configurable event alerts with timed and all-day defaults and up to two alerts per event
+- Clear notifications when mail is read or removed on any device
+- Show Microsoft account profile photos
+- Show an unread badge on kanban boards in the side rail
+- Close the full composer with Esc, keeping the message in Drafts

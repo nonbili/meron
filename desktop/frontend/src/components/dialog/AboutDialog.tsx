@@ -11,9 +11,10 @@ import logo from '../../assets/logo.png'
 import wailsConfig from '../../../../wails.json'
 
 const DONATE_LINKS = [
-  { label: 'GitHub', url: 'https://github.com/sponsors/nonbili' },
+  { label: 'GitHub', url: 'https://github.com/sponsors/rnons' },
   { label: 'Liberapay', url: 'https://liberapay.com/rnons' },
   { label: 'PayPal', url: 'https://paypal.me/nonbili' },
+  { label: 'Stripe', url: 'https://donate.stripe.com/dRm8wP0PJ94K4F9a9P48003' },
 ]
 
 const SOURCE_URL = 'https://github.com/nonbili/meron'
@@ -72,7 +73,7 @@ export function AboutDialog() {
             <Heart size={14} className="text-accent" />
             <span>{t('about.supportDevelopment')}</span>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {DONATE_LINKS.map((link) => (
               <Button
                 key={link.url}

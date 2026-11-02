@@ -461,17 +461,22 @@ internal fun AboutDialog(
                         AboutLinkButton(
                             icon = Icons.Filled.Favorite,
                             label = tr("about.githubSponsors"),
-                            onClick = { onOpenUrl("https://github.com/sponsors/nonbili") },
+                            onClick = { onOpenUrl("https://github.com/sponsors/rnons") },
                         )
                         AboutLinkButton(
                             icon = Icons.Filled.Favorite,
                             label = tr("about.liberapay"),
-                            onClick = { onOpenUrl("https://liberapay.com/nonbili") },
+                            onClick = { onOpenUrl("https://liberapay.com/rnons") },
                         )
                         AboutLinkButton(
                             icon = Icons.Filled.CreditCard,
                             label = tr("about.paypal"),
                             onClick = { onOpenUrl("https://www.paypal.com/paypalme/nonbili") },
+                        )
+                        AboutLinkButton(
+                            icon = Icons.Filled.CreditCard,
+                            label = tr("about.stripe"),
+                            onClick = { onOpenUrl("https://donate.stripe.com/dRm8wP0PJ94K4F9a9P48003") },
                         )
                     }
                 }
