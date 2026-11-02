@@ -59,7 +59,10 @@ export function useAppEffects() {
   const activeBoardId = useValue(kanban$.activeBoardId)
   const startupSyncDone = useRef(false)
   const language = useValue(settings$.language)
-  const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
+  const showAccountBadges = useValue(settings$.showUnreadAccountBadge)
+  const showBoardBadges = useValue(() => settings$.kanbanBoards.get().some((board) => board.showUnreadBadge))
+  // Account and board badges both read every account's cached folder counts.
+  const showUnreadBadge = showAccountBadges || showBoardBadges
   const autoUpdateCheck = useValue(settings$.autoUpdateCheck)
 
   useEffect(() => {
@@ -139,7 +142,7 @@ export function useAppEffects() {
   }, [])
 
   useEffect(() => {
-    // When the avatar unread-badge setting is on, seed every account's folder
+    // When the avatar unread-badge setting (or any board's) is on, seed every account's folder
     // cache so badges show for all accounts — not just the selected one (which
     // loadFolders covers). Cache-only (refresh:false), so no IMAP round-trip;
     // mail.synced keeps these fresh afterwards. Covers paused accounts too.

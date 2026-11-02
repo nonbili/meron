@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "顯示於看板標題",
   "kanban.board.removeImage": "移除看板圖片",
   "kanban.board.settings": "看板設定...",
+  "kanban.board.showUnreadBadgeHint": "在側邊欄中顯示此看板各欄的未讀訊息數。",
   "kanban.board.subtitle": "{count, plural, one {看板 · {count} 個欄位} other {看板 · {count} 個欄位}}",
   "kanban.board.uploadImageFailed": "上傳看板圖片失敗",
   "kanban.columns.unifiedArchive": "統一封存",

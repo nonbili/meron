@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "Wyświetlana w nagłówku tablicy",
   "kanban.board.removeImage": "Usuń obraz tablicy",
   "kanban.board.settings": "Ustawienia tablicy...",
+  "kanban.board.showUnreadBadgeHint": "Pokaż liczbę nieprzeczytanych wiadomości w kolumnach tej tablicy na pasku bocznym.",
   "kanban.board.subtitle": "{count, plural, one {Tablica Kanban · {count} kolumna} other {Tablica Kanban · {count} kolumny}}",
   "kanban.board.uploadImageFailed": "Nie udało się przesłać obrazu tablicy",
   "kanban.columns.unifiedArchive": "Wspólne archiwum",

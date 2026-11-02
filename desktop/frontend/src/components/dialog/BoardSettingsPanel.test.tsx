@@ -33,3 +33,21 @@ describe('BoardPanel image', () => {
     expect(view.queryByRole('button', { name: 'Remove board image' })).toBeNull()
   })
 })
+
+describe('BoardPanel unread badge', () => {
+  afterEach(cleanup)
+
+  it('turns the rail unread badge on and off for this board', () => {
+    settings$.kanbanBoards.set([board()])
+    const view = render(<BoardPanel board={settings$.kanbanBoards.peek()[0]} />)
+    const toggle = view.getByRole('switch', { name: 'Show unread badge' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+
+    fireEvent.click(toggle)
+    expect(settings$.kanbanBoards.peek()[0].showUnreadBadge).toBe(true)
+
+    view.rerender(<BoardPanel board={settings$.kanbanBoards.peek()[0]} />)
+    fireEvent.click(view.getByRole('switch', { name: 'Show unread badge' }))
+    expect(settings$.kanbanBoards.peek()[0]).not.toHaveProperty('showUnreadBadge')
+  })
+})

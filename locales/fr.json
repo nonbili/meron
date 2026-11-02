@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "Affiché dans l'en-tête du tableau",
   "kanban.board.removeImage": "Supprimer l'image du tableau",
   "kanban.board.settings": "Paramètres du tableau...",
+  "kanban.board.showUnreadBadgeHint": "Afficher le nombre de messages non lus des colonnes de ce tableau dans la barre latérale.",
   "kanban.board.subtitle": "{count, plural, one {Tableau Kanban · {count} colonne} other {Tableau Kanban · {count} colonnes}}",
   "kanban.board.uploadImageFailed": "Échec du chargement de l'image de tableau",
   "kanban.columns.unifiedArchive": "Archives unifiées",

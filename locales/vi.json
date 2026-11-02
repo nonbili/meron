@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "Hiển thị ở tiêu đề bảng",
   "kanban.board.removeImage": "Xóa ảnh của bảng",
   "kanban.board.settings": "Cài đặt bảng...",
+  "kanban.board.showUnreadBadgeHint": "Hiển thị số lượng thư chưa đọc trong các cột của bảng này trên thanh bên.",
   "kanban.board.subtitle": "{count, plural, one {Bảng Kanban · {count} cột} other {Bảng Kanban · {count} cột}}",
   "kanban.board.uploadImageFailed": "Tải lên ảnh cho bảng thất bại",
   "kanban.columns.unifiedArchive": "Thư lưu trữ chung",

@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "Shown in the board header",
   "kanban.board.removeImage": "Remove board image",
   "kanban.board.settings": "Board settings...",
+  "kanban.board.showUnreadBadgeHint": "Show the unread message count of this board's columns in the sidebar.",
   "kanban.board.subtitle": "{count, plural, one {Kanban board · {count} column} other {Kanban board · {count} columns}}",
   "kanban.board.uploadImageFailed": "Failed to upload board image",
   "kanban.columns.unifiedArchive": "Unified archive",

@@ -505,6 +505,7 @@
   "kanban.board.namePlaceholder": "Pano başlığında gösterilir",
   "kanban.board.removeImage": "Pano resmini kaldır",
   "kanban.board.settings": "Pano ayarları...",
+  "kanban.board.showUnreadBadgeHint": "Kenar çubuğunda bu panonun sütunlarındaki okunmamış ileti sayısını göster.",
   "kanban.board.subtitle": "{count, plural, one {Kanban panosu · {count} sütun} other {Kanban panosu · {count} sütun}}",
   "kanban.board.uploadImageFailed": "Pano resmi yüklenemedi",
   "kanban.columns.unifiedArchive": "Birleşik arşiv",
