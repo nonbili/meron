@@ -87,6 +87,23 @@ it('saves the focused title when Escape closes the row', async () => {
   await waitFor(() => expect(updates).toEqual([{ task_id: task.id, title: 'New title' }]))
 })
 
+it('saves the focused title when Enter closes the row', async () => {
+  const view = render(<EditableEditor />)
+  const title = view.getAllByRole('textbox')[0]
+  fireEvent.change(title, { target: { value: 'New title' } })
+  fireEvent.keyDown(title, { key: 'Enter' })
+  expect(view.queryAllByRole('textbox')).toHaveLength(0)
+  await waitFor(() => expect(updates).toEqual([{ task_id: task.id, title: 'New title' }]))
+})
+
+it('keeps the row open for Enter in the notes and while composing the title', () => {
+  const view = render(<EditableEditor />)
+  const [title, notes] = view.getAllByRole('textbox')
+  fireEvent.keyDown(notes, { key: 'Enter' })
+  fireEvent.keyDown(title, { key: 'Enter', isComposing: true })
+  expect(view.queryAllByRole('textbox')).toHaveLength(2)
+})
+
 it('saves the focused title and closes on a click outside the row', async () => {
   const view = render(
     <>

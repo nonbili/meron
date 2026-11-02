@@ -157,6 +157,12 @@ export function TaskEditor({
           aria-label={t('tasks.titlePlaceholder')}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter confirms an IME candidate before it means anything here.
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.keyCode === 229) return
+            event.stopPropagation()
+            finishEditing()
+          }}
           onBlur={() => {
             if (title.trim() && title !== task.title) void updateTask(task.id, { title })
             else setTitle(task.title)
