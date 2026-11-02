@@ -54,6 +54,8 @@ class AppLanguageResolutionTest {
 
     @Test
     fun aRegionalLocaleFallsBackToItsLanguage() {
+        assertEquals("ru", resolveDeviceLanguageTag("ru-RU"))
+        assertEquals("ru", resolveDeviceLanguageTag("ru_BY"))
         assertEquals("fr", resolveDeviceLanguageTag("fr-FR"))
         assertEquals("de", resolveDeviceLanguageTag("de-AT"))
         assertEquals("ja", resolveDeviceLanguageTag("ja-JP"))

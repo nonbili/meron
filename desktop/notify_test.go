@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -105,11 +106,42 @@ func TestFirstNonEmpty(t *testing.T) {
 
 func TestFormatNativePlural(t *testing.T) {
 	template := "{count, plural, one {Eine neue Nachricht} other {{count} neue Nachrichten}}"
-	if got := formatNativePlural(template, 1); got != "Eine neue Nachricht" {
+	if got := formatNativePlural(template, 1, "de"); got != "Eine neue Nachricht" {
 		t.Fatalf("singular = %q", got)
 	}
-	if got := formatNativePlural(template, 3); got != "3 neue Nachrichten" {
+	if got := formatNativePlural(template, 3, "de"); got != "3 neue Nachrichten" {
 		t.Fatalf("plural = %q", got)
+	}
+}
+
+func TestFormatNativePluralRussian(t *testing.T) {
+	// Use the canonical catalog so notifications exercise the actual translation.
+	data, err := os.ReadFile("../locales/ru.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := map[string]string{}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		count int
+		want  string
+	}{
+		{0, "0 новых писем"}, {1, "1 новое письмо"}, {2, "2 новых письма"},
+		{4, "4 новых письма"}, {5, "5 новых писем"}, {11, "11 новых писем"},
+		{12, "12 новых писем"}, {14, "14 новых писем"}, {21, "21 новое письмо"},
+		{22, "22 новых письма"}, {25, "25 новых писем"}, {101, "101 новое письмо"},
+		{111, "111 новых писем"},
+	} {
+		for _, language := range []string{"ru", "ru-RU", "ru_RU"} {
+			if got := formatNativePlural(catalog["notify.newMessageCount"], tc.count, language); got != tc.want {
+				t.Errorf("%s count %d = %q, want %q", language, tc.count, got, tc.want)
+			}
+		}
+	}
+	if got := formatNativePlural("{count, plural, one {{count} file} other {{count} files}}", 22, "ru"); got != "22 files" {
+		t.Errorf("fallback = %q", got)
 	}
 }
 

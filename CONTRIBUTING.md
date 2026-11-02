@@ -85,5 +85,5 @@ generated message types with:
 ```sh
 bun run i18n:validate
 bun run i18n:generate
-bun run i18n:check
+bun run test:i18n
 ```

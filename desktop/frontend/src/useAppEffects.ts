@@ -89,6 +89,7 @@ export function useAppEffects() {
       void i18n.changeLanguage(targetLanguage)
     }
     void invoke('i18n.setNativeLabels', {
+      language: targetLanguage,
       trayShow: t('tray.showMeron'),
       trayHide: t('tray.hideToTray'),
       trayHideTooltip: t('tray.hideMeronTooltip'),

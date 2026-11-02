@@ -43,6 +43,7 @@ const supportedLocales = [
   'pl',
   'pt',
   'pt_BR',
+  'ru',
   'sv',
   'tr',
   'vi',
@@ -66,6 +67,7 @@ const languageNativeNames: Record<SupportedLocale, string> = {
   pl: 'Polski',
   pt: 'Português',
   pt_BR: 'Português (Brasil)',
+  ru: 'Русский',
   sv: 'Svenska',
   tr: 'Türkçe',
   vi: 'Tiếng Việt',
@@ -210,23 +212,39 @@ internal fun generatedIcuString(
         ?: generatedIcuStrings["en"]
         ?: emptyMap()
     val template = messages[key] ?: generatedIcuStrings["en"]?.get(key) ?: key
-    return formatGeneratedIcu(template, args)
+    return formatGeneratedIcu(template, args, locale)
 }
 
 private fun formatGeneratedIcu(
     template: String,
     args: Map<String, Any?>,
+    locale: String,
 ): String {
     val plural = parseGeneratedPlural(template)
     val selected = if (plural == null) template else {
         val count = (args[plural.argument] as? Number)?.toLong()
             ?: args[plural.argument]?.toString()?.toLongOrNull()
             ?: 0L
-        plural.variants[if (count == 1L) "one" else "other"]
+        val category = if (locale.substringBefore('-').substringBefore('_').lowercase() == "ru") {
+            russianPluralCategory(count)
+        } else {
+            if (count == 1L) "one" else "other"
+        }
+        plural.variants[category]
             ?: plural.variants["other"]
             ?: template
     }
     return replaceGeneratedPlaceholders(selected, args)
+}
+
+private fun russianPluralCategory(count: Long): String {
+    val lastTwo = kotlin.math.abs(count % 100)
+    val last = lastTwo % 10
+    return when {
+        last == 1L && lastTwo != 11L -> "one"
+        last in 2L..4L && lastTwo !in 12L..14L -> "few"
+        else -> "many"
+    }
 }
 
 private data class GeneratedPlural(
