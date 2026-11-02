@@ -1,3 +1,5 @@
+import type { ComposeDraft, ComposerAttachment } from '../types'
+
 type CloseComposeSession = () => Promise<void>
 
 export type ComposeSession = {
@@ -10,9 +12,36 @@ export type ComposeSession = {
   /** Closes the tab but keeps the message in Drafts (Esc). */
   closeKeepingDraft?: CloseComposeSession
   closing?: Promise<void>
+  /** A message's attachments on their way into the tab. */
+  attachmentFetches: Set<Promise<ComposerAttachment[]>>
 }
 
+/** A draft the Esc save wrote, and how to bring its closed tab back. */
+export type SavedDraft = { draftMessageId: string; reopen: () => void }
+
 const sessions = new Map<string, ComposeSession>()
+const draftSaves = new Map<Promise<SavedDraft | null>, ComposeDraft>()
+
+/** Track an Esc save, which outlives its tab. Resolves null when it failed. */
+export function trackDraftSave(save: Promise<SavedDraft | null>, draft: ComposeDraft) {
+  draftSaves.set(save, draft)
+  void save.finally(() => draftSaves.delete(save))
+}
+
+/** Whether an Esc save of a draft `matches` picks out is running. */
+export function draftSaveRunning(matches: (draft: ComposeDraft) => boolean): boolean {
+  return [...draftSaves.values()].some(matches)
+}
+
+/**
+ * Wait for the Esc saves of the drafts `matches` picks out, and no others: a
+ * slow save must not hold up a draft it has nothing to do with.
+ */
+export async function draftSavesSettled(matches: (draft: ComposeDraft) => boolean): Promise<SavedDraft[]> {
+  const pending = [...draftSaves].filter(([, draft]) => matches(draft)).map(([save]) => save)
+  const saved = await Promise.all(pending)
+  return saved.filter((save) => save !== null)
+}
 
 export function getComposeSession(tabId: string): ComposeSession {
   const existing = sessions.get(tabId)
@@ -21,6 +50,7 @@ export function getComposeSession(tabId: string): ComposeSession {
     saveChain: Promise.resolve(),
     saveGeneration: 0,
     savesStopped: false,
+    attachmentFetches: new Set(),
   }
   sessions.set(tabId, session)
   return session

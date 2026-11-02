@@ -26,7 +26,13 @@ import {
 import { settings$ } from './settings'
 import { resolveConversationMode, revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
-import { closeComposeSession, forgetComposeSession, pruneComposeSessions } from './composeSessions'
+import {
+  closeComposeSession,
+  draftSavesSettled,
+  forgetComposeSession,
+  getComposeSession,
+  pruneComposeSessions,
+} from './composeSessions'
 import {
   buildReplyRecipients,
   buildReplyThreading,
@@ -671,11 +677,20 @@ export async function editAsNewMessage(message: Message) {
   })
   if (!id) return
 
-  const valid = await readComposerAttachments(message.attachments ?? [], rich ? html : '')
-  if (valid.length === 0) return
+  await fetchComposeTabAttachments(id, message.attachments ?? [], rich ? html : '')
+}
 
-  // The tab may have been edited/closed while we fetched; bail if it's gone,
-  // otherwise merge onto whatever attachments it now holds.
+// Fill a tab just opened with a message's attachments. Until they land the
+// session holds the fetch, so an Esc save can wait for them: it would otherwise
+// keep the message without its attachments, and a saved draft replaced with
+// that copy would lose them for good. The tab may have been edited or closed
+// meanwhile; bail if it's gone, otherwise merge onto what it now holds.
+async function fetchComposeTabAttachments(id: string, attachments: Attachment[], inlineHtml: string) {
+  const session = getComposeSession(id)
+  const fetch = readComposerAttachments(attachments, inlineHtml)
+  session.attachmentFetches.add(fetch)
+  const valid = await fetch.finally(() => session.attachmentFetches.delete(fetch))
+  if (valid.length === 0) return
   const tab = compose$.tabs.get().find((t) => t.id === id)
   if (!tab?.compose) return
   updateComposeDraft(id, { attachments: [...tab.compose.attachments, ...valid] })
@@ -714,22 +729,36 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
   }
 }
 
+/** Whether a compose draft is the one this Drafts row holds a copy of. */
+function composeHoldsDraft(compose: ComposeDraft, draft: Message): boolean {
+  const source = compose.sourceDraft
+  return (
+    (!!draft.message_id && normalizeMessageId(compose.draftMessageId) === normalizeMessageId(draft.message_id)) ||
+    source?.messageId === draft.id ||
+    (source?.threadId === draft.thread_id && source?.folderId === draft.folder_id)
+  )
+}
+
 function activateOpenDraftCompose(draft: Message): boolean {
   const existing = compose$.tabs
     .get()
-    .find(
-      (tab) =>
-        tab.kind === 'compose' &&
-        tab.compose?.sourceDraft &&
-        (tab.compose.sourceDraft.messageId === draft.id ||
-          (!!draft.message_id &&
-            normalizeMessageId(tab.compose.draftMessageId) === normalizeMessageId(draft.message_id)) ||
-          (tab.compose.sourceDraft.threadId === draft.thread_id &&
-            tab.compose.sourceDraft.folderId === draft.folder_id)),
-    )
+    .find((tab) => tab.kind === 'compose' && !!tab.compose && composeHoldsDraft(tab.compose, draft))
   if (!existing) return false
   compose$.activeTab.set(existing.id)
   return true
+}
+
+/**
+ * Before opening a Drafts row, let this draft's Esc save finish. The row can be
+ * the copy that save is replacing, and a tab opened from it would autosave the
+ * older text over the newer. The tab comes back as it closed, as the store may
+ * not hold the new copy yet; when the save failed, the tab is already back.
+ * True when a tab now holds the draft.
+ */
+async function reopenAfterDraftSaves(draft: Message): Promise<boolean> {
+  const [saved] = await draftSavesSettled((compose) => composeHoldsDraft(compose, draft))
+  saved?.reopen()
+  return !!saved || activateOpenDraftCompose(draft)
 }
 
 export function draftShouldOpenConversation(messages: Message[], draft: Message): boolean {
@@ -745,11 +774,7 @@ async function openDraftMessageInCompose(draft: Message) {
   const id = openComposeTab(composeFromDraftMessage(draft))
   if (!id) return true
 
-  const valid = await readComposerAttachments(draft.attachments ?? [], draft.body_html ?? '')
-  if (valid.length > 0) {
-    const tab = compose$.tabs.get().find((t) => t.id === id)
-    if (tab?.compose) updateComposeDraft(id, { attachments: [...tab.compose.attachments, ...valid] })
-  }
+  await fetchComposeTabAttachments(id, draft.attachments ?? [], draft.body_html ?? '')
   return true
 }
 
@@ -767,6 +792,7 @@ export async function openDraftCompose(thread: Message) {
 
   const release = reserveOpeningDraft(thread)
   try {
+    if (await reopenAfterDraftSaves(thread)) return true
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
       thread_id: thread.thread_id,
       limit: CONVERSATION_PAGE_SIZE,
@@ -796,6 +822,7 @@ export async function openDraftConversationOrCompose(thread: Message) {
 
   const release = reserveOpeningDraft(thread)
   try {
+    if (await reopenAfterDraftSaves(thread)) return true
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
       thread_id: thread.thread_id,
       limit: CONVERSATION_PAGE_SIZE,
@@ -900,12 +927,7 @@ export async function forwardMessage(message: Message) {
   })
   if (!id) return
 
-  const valid = await readComposerAttachments(message.attachments ?? [], html)
-  if (valid.length === 0) return
-
-  const tab = compose$.tabs.get().find((t) => t.id === id)
-  if (!tab?.compose) return
-  updateComposeDraft(id, { attachments: [...tab.compose.attachments, ...valid] })
+  await fetchComposeTabAttachments(id, message.attachments ?? [], html)
 }
 
 export async function readComposerAttachments(
@@ -975,6 +997,32 @@ export function finishClosingMessageTab(id: string) {
       compose$.activeTab.set(nextTab.id)
     }
   }
+}
+
+// Bring a closed compose tab back as it was, or go to the tab already holding
+// that draft: it may have been reopened from Drafts in the meantime.
+export function reopenComposeTab(tab: MessageTab, compose: ComposeDraft) {
+  // The composer opens in the mail pane, which the calendar replaces.
+  ui$.calendarOpen.set(false)
+  const draftId = normalizeMessageId(compose.draftMessageId)
+  const open = compose$.tabs
+    .peek()
+    .find((t) => t.id === tab.id || (t.compose && normalizeMessageId(t.compose.draftMessageId) === draftId))
+  if (!open) compose$.tabs.set([...compose$.tabs.peek(), { ...tab, compose }])
+  compose$.activeTab.set(open?.id ?? tab.id)
+}
+
+// Bring back a compose tab whose last save failed. The tab is the only copy of
+// these edits, so it always comes back. If the draft was reopened from Drafts
+// meanwhile, that tab holds an older copy under the same id: this one becomes a
+// draft of its own, so neither can overwrite or discard the other.
+export function restoreComposeTabAfterFailedSave(tab: MessageTab, compose: ComposeDraft) {
+  ui$.calendarOpen.set(false)
+  const draftId = normalizeMessageId(compose.draftMessageId)
+  const held = compose$.tabs.peek().some((t) => t.compose && normalizeMessageId(t.compose.draftMessageId) === draftId)
+  const restored = held ? { ...compose, draftMessageId: newDraftMessageId(), sourceDraft: undefined } : compose
+  compose$.tabs.set([...compose$.tabs.peek(), { ...tab, compose: restored }])
+  compose$.activeTab.set(tab.id)
 }
 
 // The single close entry point used by tab buttons, hotkeys and the palette.

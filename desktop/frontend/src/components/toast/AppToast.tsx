@@ -10,6 +10,7 @@ export function AppToast() {
   const toast = useValue(ui$.toast)
   const toastTone = useValue(ui$.toastTone)
   const toastUndo = useValue(ui$.toastUndo)
+  const toastActionLabel = useValue(ui$.toastActionLabel)
   const toastPlacement = useValue(ui$.toastPlacement)
   const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
   // Over the Tasks panel: centred on its column, no wider than it, and lifted
@@ -64,7 +65,7 @@ export function AppToast() {
           onClick={runToastUndo}
           className="ml-1 shrink-0 rounded-full bg-white/15 px-2.5 py-1 font-bold text-white hover:bg-white/25 transition-colors cursor-pointer"
         >
-          Undo
+          {toastActionLabel || 'Undo'}
         </button>
       )}
       <button

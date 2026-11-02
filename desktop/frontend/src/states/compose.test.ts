@@ -784,6 +784,59 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyFrom.get()).toBe('me@example.com')
   })
 
+  it.each([
+    ['a rich body', { body_html: '<p>rich</p>' }],
+    ['a Bcc', { bcc: 'hidden@example.com' }],
+    ['a Reply-To', { reply_to: 'elsewhere@example.com' }],
+    ['other recipients', { to: 'someone-else@example.com' }],
+    ['added recipients', { cc: 'added@example.com' }],
+    ['another subject', { subject: 'Re: Reworded' }],
+  ])('leaves a draft with %s to the full composer', (_, draft) => {
+    const thread = message({ id: 'm1', thread_id: 't-2', folder_id: 'INBOX', date: 1000 })
+    mail$.threads.set([thread])
+    ui$.selectedThread.set('t-2')
+
+    mail$.messages.set([
+      thread,
+      message({
+        id: 'd1',
+        thread_id: 't-2',
+        folder_id: 'Drafts',
+        to: 'Sender <sender@example.com>',
+        subject: 'Re: Notification thread',
+        message_id: 'draft-1@example.com',
+        body: 'saved draft body',
+        date: 2000,
+        ...draft,
+      }),
+    ])
+
+    expect(compose$.composer.get()).toBe('')
+    expect(compose$.quickReplyDraftId.get()).toBe('')
+  })
+
+  it('takes a plain draft the quick reply could have written itself', () => {
+    const thread = message({ id: 'm1', thread_id: 't-2', folder_id: 'INBOX', date: 1000 })
+    mail$.threads.set([thread])
+    ui$.selectedThread.set('t-2')
+
+    mail$.messages.set([
+      thread,
+      message({
+        id: 'd1',
+        thread_id: 't-2',
+        folder_id: 'Drafts',
+        to: 'sender@example.com',
+        subject: 'Re: Notification thread',
+        message_id: 'draft-1@example.com',
+        body: 'saved draft body',
+        date: 2000,
+      }),
+    ])
+
+    expect(compose$.composer.get()).toBe('saved draft body')
+  })
+
   it('recognizes a draft hydrated before the quick-reply component mounts', () => {
     compose$.composer.set('Already hydrated')
     compose$.quickReplyDraftId.set('draft-1@example.com')
@@ -1089,6 +1142,9 @@ describe('quick reply draft sharing', () => {
       id: 'sent-draft-row',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-1',
       message_id: 'sent-draft@example.com',
       body: 'First reply',
@@ -1110,6 +1166,9 @@ describe('quick reply draft sharing', () => {
       id: 'new-draft-row',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-1',
       message_id: 'different-draft@example.com',
       body: 'Written elsewhere',
@@ -1422,6 +1481,9 @@ describe('quick reply draft sharing', () => {
       id: 'draft-row',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-1',
       message_id: 'safety-draft@example.com',
       body: 'Reply text',
@@ -3038,6 +3100,9 @@ describe('quick reply draft sharing', () => {
       id: 'draft-row',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-5',
       message_id: 'reopened-draft@example.com',
       body: 'Half-written answer',
@@ -3082,6 +3147,9 @@ describe('quick reply draft sharing', () => {
       id: 'draft-row-uid-42',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-1',
       message_id: '',
       body: '',
@@ -3122,6 +3190,9 @@ describe('quick reply draft sharing', () => {
       id: 'draft-row',
       account_id: 'acc-1',
       folder_id: 'Drafts',
+      to: 'them@example.com',
+      subject: 'Re: Notification thread',
+      outgoing: true,
       thread_id: 't-1',
       message_id: 'hydrated-draft@example.com',
       body: 'Half-written answer',
@@ -3817,6 +3888,9 @@ describe('signature in the quick reply', () => {
         account_id: 'acc-1',
         thread_id: 't-1',
         folder_id: 'Drafts',
+        to: 'them@example.com',
+        subject: 'Re: Notification thread',
+        outgoing: true,
         message_id: 'draft@example.com',
         body: 'half typed\n\nfrom u2',
         date: thread.date + 60,

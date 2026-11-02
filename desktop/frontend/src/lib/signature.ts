@@ -213,6 +213,15 @@ export function bodyWithSwappedSignature(
 }
 
 /**
+ * Whether a body shows nothing but its tracked signature. An edited signature
+ * is no longer tracked, so it counts as content, as an image in the body does.
+ */
+export function isBodyBlankWithoutSignature(body: ComposeBody, tracking: SignatureTracking): boolean {
+  const rest = bodyWithSwappedSignature(body, tracking, { html: '', text: '' }).body
+  return rest.rich ? isBlankSignature(rest.html) : !rest.text.trim()
+}
+
+/**
  * Where the tracked signature sits in the body, or -1 when it cannot be
  * identified — because the user has edited it, or because the body holds a
  * second block just like it and ours is no longer where it was put.

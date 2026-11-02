@@ -47,3 +47,13 @@ it('keeps the full undo window when a message is repeated', () => {
   expect(ui$.toast.get()).toBe('')
   expect(ui$.toastUndo.get()).toBeNull()
 })
+
+it('an undo toast replacing another runs its own undo', () => {
+  const ran: string[] = []
+  showUndoToast('First', () => ran.push('first'))
+  showUndoToast('Second', () => ran.push('second'))
+
+  runToastUndo()
+
+  expect(ran).toEqual(['second'])
+})
