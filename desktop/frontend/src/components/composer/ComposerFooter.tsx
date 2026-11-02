@@ -5,6 +5,27 @@ import { IconButton } from '../button/IconButton'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+// lucide's cloud-check (newer than the lucide-react pinned here), drawn on its
+// 24px grid with the 2px stroke so it matches the footer's other icons.
+function CloudCheckIcon({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m17 15-5.5 5.5L9 18" />
+      <path d="M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742" />
+    </svg>
+  )
+}
+
 // The composer's bottom action bar: attach/inline-image buttons, the rich/plain
 // toggle, autosave status and the Discard/Send buttons.
 export function ComposerFooter({
@@ -71,9 +92,15 @@ export function ComposerFooter({
           </span>
         )}
         {saveStatus === 'saved' && (
-          <span className="flex items-center gap-1.5 text-[0.6875rem] text-emerald-500 font-medium">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{t('composer.status.savedToServer')}</span>
+          // An icon, not the words: spelled out, the status wrapped onto three
+          // lines whenever the composer sat in a narrow pane.
+          <span
+            role="status"
+            aria-label={t('composer.status.savedToServer')}
+            title={t('composer.status.savedToServer')}
+            className="flex items-center text-emerald-500"
+          >
+            <CloudCheckIcon size={16} />
           </span>
         )}
         {saveStatus === 'error' && (
