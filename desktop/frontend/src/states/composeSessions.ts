@@ -7,6 +7,8 @@ export type ComposeSession = {
   savedAccountId?: string
   savedDraftMessageId?: string
   close?: CloseComposeSession
+  /** Closes the tab but keeps the message in Drafts (Esc). */
+  closeKeepingDraft?: CloseComposeSession
   closing?: Promise<void>
 }
 
@@ -24,18 +26,41 @@ export function getComposeSession(tabId: string): ComposeSession {
   return session
 }
 
-export function registerComposeSession(tabId: string, close: CloseComposeSession) {
-  getComposeSession(tabId).close = close
+export function registerComposeSession(
+  tabId: string,
+  close: CloseComposeSession,
+  closeKeepingDraft?: CloseComposeSession,
+) {
+  const session = getComposeSession(tabId)
+  session.close = close
+  session.closeKeepingDraft = closeKeepingDraft
 }
 
-export function closeComposeSession(tabId: string, fallback: CloseComposeSession): Promise<void> {
-  const session = getComposeSession(tabId)
+function runClose(session: ComposeSession, close: CloseComposeSession): Promise<void> {
   if (session.closing) return session.closing
-  const run = (session.close ?? fallback)().finally(() => {
+  const run = close().finally(() => {
     if (session.closing === run) session.closing = undefined
   })
   session.closing = run
   return run
+}
+
+export function closeComposeSession(tabId: string, fallback: CloseComposeSession): Promise<void> {
+  const session = getComposeSession(tabId)
+  return runClose(session, session.close ?? fallback)
+}
+
+/**
+ * Esc in a compose tab: close it, keeping the message in Drafts. Only a
+ * mounted composer can do that (it owns the last save), so for a tab without
+ * one this returns false and leaves the key to others. Shares `closing` with
+ * the × so the two never race.
+ */
+export function closeComposeSessionKeepingDraft(tabId: string): boolean {
+  const session = sessions.get(tabId)
+  if (!session?.closeKeepingDraft) return false
+  void runClose(session, session.closeKeepingDraft)
+  return true
 }
 
 export function forgetComposeSession(tabId: string) {

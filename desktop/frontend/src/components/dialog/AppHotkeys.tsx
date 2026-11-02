@@ -31,6 +31,7 @@ import {
 import { archiveThread, deleteThread, bulkArchiveSelected, bulkDeleteSelected } from '../../states/mailMoves'
 import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
+import { closeComposeSessionKeepingDraft } from '../../states/composeSessions'
 import { calendar$ } from '../../states/calendar'
 import { handleEditUndoKeyDown } from '../../lib/editUndo'
 import { inMessageScroller, pageOpenMessage, stepOpenMessage } from '../chat/messagePaging'
@@ -258,6 +259,21 @@ export function AppHotkeys() {
       if (event.key === 'Escape' && !isTyping(event.target) && !modalOpen() && selectedBulkItems().length > 0) {
         event.preventDefault()
         clearBulkSelection()
+        return
+      }
+
+      // Esc with a compose tab in front closes it and keeps the message in
+      // Drafts, before anything behind it closes. The composer handles the key
+      // itself while focus is inside it; this covers focus left elsewhere,
+      // e.g. on a footer button WebKit doesn't focus when clicked.
+      if (
+        event.key === 'Escape' &&
+        !isTyping(event.target) &&
+        !modalOpen() &&
+        !mailCovered() &&
+        closeComposeSessionKeepingDraft(compose$.activeTab.peek())
+      ) {
+        event.preventDefault()
         return
       }
 

@@ -37,6 +37,7 @@ export function Composer({ tabId }: { tabId: string }) {
     handleKeyDown,
     setLink,
     submit,
+    closeKeepingDraft,
   } = useComposer(tabId)
 
   // Two drop areas while files are dragged in: the message body, where images go
@@ -75,10 +76,23 @@ export function Composer({ tabId }: { tabId: string }) {
   // rich body), so send is bound to Cmd/Ctrl+Enter regardless of the global
   // send-shortcut setting. Bound on the outer container so it fires from any
   // field (To/Subject/body).
+  //
+  // Esc closes the tab and keeps the message in Drafts, from any field too.
+  // Menus, suggestion lists and dialogs inside take their Esc first
+  // (useEscapeKey stops it before it gets here), and an IME keeps the one
+  // that ends its composition. defaultPrevented is no sign of either:
+  // ProseMirror sets it on every Esc in the rich-text body.
   const handleSendShortcut = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
       e.preventDefault()
       void submit()
+      return
+    }
+    if (e.key === 'Escape' && !e.nativeEvent.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault()
+      // Not on to the app-wide Esc, which would close the conversation pane.
+      e.stopPropagation()
+      void closeKeepingDraft()
     }
   }
 

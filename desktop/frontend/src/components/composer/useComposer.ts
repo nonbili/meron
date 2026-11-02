@@ -66,6 +66,25 @@ const CiteBlockquote = Extension.create({
   },
 })
 
+/**
+ * A new message (not a reply, forward or reopened draft) with no recipients,
+ * subject or attachments and its body as it opened, i.e. only the seeded
+ * signature if any.
+ */
+function isUnwrittenNewMessage(draft: ComposeDraft, openedBody: { html: string; text: string }): boolean {
+  return (
+    !draft.sourceDraft &&
+    !draft.inReplyTo &&
+    !draft.quote &&
+    !draft.to.trim() &&
+    !draft.cc.trim() &&
+    !draft.bcc.trim() &&
+    !draft.subject.trim() &&
+    draft.attachments.length === 0 &&
+    (draft.rich ? draft.html === openedBody.html : draft.text === openedBody.text)
+  )
+}
+
 // All of the Composer's behaviour: the tiptap editor, attachment handling
 // (paste/drop/file-picker, inline images), rich/plain toggling, autosave, and
 // send. The component consumes the returned editor, draft and handlers and is
@@ -147,6 +166,60 @@ export function useComposer(tabId: string) {
     }
   }
   const [saveError, setSaveError] = useState('')
+  // The body as the tab opened, to tell a new message nobody wrote in.
+  const openedBody = useRef({ html: draft?.html ?? '', text: draft?.text ?? '' }).current
+
+  /**
+   * Esc: close the tab but keep the message in Drafts, unlike the × and
+   * Discard. The tab closes at once, as the × does: a Drafts server can take
+   * seconds and Esc must not seem dead meanwhile. The last save then runs
+   * from a copy of the draft, after any save in flight (which, finding the tab
+   * gone, cleans up a copy it allocated). If it fails, the tab comes back with
+   * the error, so nothing typed is lost. A new message with nothing written in
+   * it is discarded instead of filling Drafts with empty mail.
+   */
+  const closeKeepingDraft = async () => {
+    const closed = compose$.tabs.peek().find((t) => t.id === tabId)
+    const current = closed?.compose
+    if (!closed || !current?.accountId || session.savesStopped) return
+    if (isUnwrittenNewMessage(current, openedBody)) return discardAndClose()
+    const drained = stopSaving()
+    finishClosingMessageTab(tabId)
+    void drained.then(async () => {
+      try {
+        let content = composedContent(current)
+        let attachments = current.attachments
+        if (current.rich) {
+          const prepared = await prepareInlineImages(content, attachments)
+          content = inlineRichStyles(prepared.html)
+          attachments = prepared.attachments
+        }
+        await saveComposedDraft({
+          accountId: current.accountId,
+          from: current.fromEmail,
+          to: current.to.trim(),
+          cc: current.cc.trim(),
+          bcc: current.bcc.trim(),
+          replyTo: current.replyTo.trim(),
+          subject: current.subject.trim(),
+          rich: current.rich,
+          content,
+          inReplyTo: current.inReplyTo,
+          references: current.references,
+          draftMessageId: current.draftMessageId,
+          attachments,
+        })
+      } catch (err) {
+        console.error('Saving the draft on Esc failed:', err)
+        // Reopened under the id the failed save was writing, so a copy that
+        // landed anyway is replaced by the next save rather than duplicated.
+        const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
+        compose$.tabs.set([...compose$.tabs.peek(), { ...closed, compose: { ...current, draftMessageId } }])
+        compose$.activeTab.set(tabId)
+        showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
+      }
+    })
+  }
   const lastImagePasteAtRef = useRef(0)
   const previousFromEmailRef = useRef(draft?.fromEmail)
   // Captured once so the editor isn't reset on every keystroke / re-render.
@@ -217,7 +290,13 @@ export function useComposer(tabId: string) {
   })
 
   useEffect(() => {
-    if (draft) registerComposeSession(tabId, discardAndClose)
+    if (!draft) return
+    registerComposeSession(tabId, discardAndClose, closeKeepingDraft)
+    // Esc needs this composer's last save, so it goes with the composer; the
+    // × still discards a tab whose composer is gone.
+    return () => {
+      if (session.closeKeepingDraft === closeKeepingDraft) session.closeKeepingDraft = undefined
+    }
   }, [draft, session, tabId])
 
   useEffect(() => {
@@ -773,5 +852,6 @@ export function useComposer(tabId: string) {
     handleKeyDown,
     setLink,
     submit,
+    closeKeepingDraft,
   }
 }

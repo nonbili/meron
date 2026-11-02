@@ -10,6 +10,7 @@ import type { Account } from '../../types'
 import { Composer } from './Composer'
 import { ConversationTabs } from '../chat/ConversationTabs'
 import { AppConfirm } from '../dialog/AppConfirm'
+import { AppHotkeys } from '../dialog/AppHotkeys'
 
 const account = (id: string, signatureHtml: string): Account => ({
   id,
@@ -324,6 +325,129 @@ describe('Composer', () => {
     expect(draftOf(tabId)).toBeUndefined()
     const discarded = calls.filter((call) => call.command === 'mail.discardDraft')
     expect(discarded.map((call) => call.payload.draft_id)).toContain('allocated-1@example.com')
+  })
+
+  it('closes on Esc at once and keeps the message in Drafts', async () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    compose$.activeTab.set(tabId)
+    const view = render(<Composer tabId={tabId} />)
+
+    // A slow Drafts server: the tab must not wait for it.
+    holdAllocation = () => {}
+    await act(async () => {
+      fireEvent.keyDown(view.getByDisplayValue('Hello'), { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(draftOf(tabId)).toBeUndefined()
+
+    await act(async () => {
+      holdAllocation?.()
+      holdAllocation = null
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    // Saved without waiting for the autosave debounce, and never discarded.
+    expect(savedDraftIds()).toEqual(['allocated-1@example.com'])
+    expect(calls.some((call) => call.command === 'mail.discardDraft')).toBe(false)
+  })
+
+  it('closes on Esc from the rich-text body, which marks the key handled', async () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', html: '<p>hi</p>', rich: true })!
+    compose$.activeTab.set(tabId)
+    render(<Composer tabId={tabId} />)
+
+    // ProseMirror calls preventDefault on Esc (keyCode 27) in the editor.
+    await act(async () => {
+      fireEvent.keyDown(document.querySelector('.tiptap-body')!, { key: 'Escape', keyCode: 27 })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(draftOf(tabId)).toBeUndefined()
+    expect(savedDraftIds()).toEqual(['allocated-1@example.com'])
+  })
+
+  it('keeps the draft when Esc comes while an autosave allocates it', async () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    holdAllocation = () => {}
+    await act(async () => {
+      updateComposeDraft(tabId, { fromEmail: 'a@example.com' })
+    })
+    await act(async () => {
+      fireEvent.keyDown(view.getByDisplayValue('Hello'), { key: 'Escape' })
+      holdAllocation?.()
+      holdAllocation = null
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    // The autosave cleans up the copy it allocated for the closed tab; the
+    // save on Esc, which runs after it, writes the one that stays.
+    const order = calls.map((call) => call.command)
+    expect(order.lastIndexOf('mail.saveDraft')).toBeGreaterThan(order.lastIndexOf('mail.discardDraft'))
+    expect(savedDraftIds().at(-1)).toBe('allocated-2@example.com')
+  })
+
+  it('brings the tab back when the save on Esc fails', async () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    compose$.activeTab.set(tabId)
+    const view = render(<Composer tabId={tabId} />)
+
+    saveFailure = true
+    await act(async () => {
+      fireEvent.keyDown(view.getByDisplayValue('Hello'), { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(draftOf(tabId)?.text).toStartWith('hi')
+    expect(compose$.activeTab.peek()).toBe(tabId)
+    expect(calls.some((call) => call.command === 'mail.discardDraft')).toBe(false)
+  })
+
+  it('closes the compose tab in front on Esc from outside it, not the pane behind', async () => {
+    kanban$.activeBoardId.set('board')
+    kanban$.paneThreadId.set('a#INBOX#1')
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    compose$.activeTab.set(tabId)
+    render(
+      <>
+        <AppHotkeys />
+        <Composer tabId={tabId} />
+      </>,
+    )
+
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(savedDraftIds()).toEqual(['allocated-1@example.com'])
+    expect(draftOf(tabId)).toBeUndefined()
+    expect(kanban$.paneThreadId.peek()).toBe('a#INBOX#1')
+  })
+
+  it('leaves Esc to an IME composing text', async () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    await act(async () => {
+      fireEvent.keyDown(view.getByDisplayValue('Hello'), { key: 'Escape', isComposing: true })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(draftOf(tabId)).toBeDefined()
+  })
+
+  it('throws away a new message nothing was written in on Esc', async () => {
+    const tabId = openComposeTab({ rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    await act(async () => {
+      fireEvent.keyDown(view.container.querySelector('textarea')!, { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(savedDraftIds()).toEqual([])
+    expect(draftOf(tabId)).toBeUndefined()
   })
 
   it('deduplicates simultaneous footer and external close requests', async () => {
