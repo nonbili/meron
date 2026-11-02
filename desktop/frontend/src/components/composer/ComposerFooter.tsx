@@ -1,13 +1,14 @@
-import { CloudUpload, Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
+import { Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-// lucide's cloud-check (newer than the lucide-react pinned here), drawn on its
-// 24px grid with the 2px stroke so it matches the footer's other icons.
-function CloudCheckIcon({ size }: { size: number }) {
+// One cloud for both save states, so only the mark inside it changes when a
+// save finishes: lucide's cloud-upload, with its arrow swapped for a check
+// mark of the same footprint (lucide's own cloud-check sits 2px lower).
+function CloudStatusIcon({ saved, size }: { saved: boolean; size: number }) {
   return (
     <svg
       width={size}
@@ -20,8 +21,15 @@ function CloudCheckIcon({ size }: { size: number }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="m17 15-5.5 5.5L9 18" />
-      <path d="M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742" />
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+      {saved ? (
+        <path d="m8.5 17 2.5 2.5 5-5.5" />
+      ) : (
+        <g className="animate-pulse">
+          <path d="M12 13v8" />
+          <path d="m8 17 4-4 4 4" />
+        </g>
+      )}
     </svg>
   )
 }
@@ -94,7 +102,7 @@ export function ComposerFooter({
             title={t('composer.status.savingDraft')}
             className="flex items-center text-secondary"
           >
-            <CloudUpload size={16} className="animate-pulse" />
+            <CloudStatusIcon saved={false} size={16} />
           </span>
         )}
         {saveStatus === 'saved' && (
@@ -104,7 +112,7 @@ export function ComposerFooter({
             title={t('composer.status.savedToServer')}
             className="flex items-center text-emerald-500"
           >
-            <CloudCheckIcon size={16} />
+            <CloudStatusIcon saved size={16} />
           </span>
         )}
         {saveStatus === 'error' && (
