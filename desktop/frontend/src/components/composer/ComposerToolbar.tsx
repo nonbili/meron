@@ -9,8 +9,73 @@ import {
   Quote,
   Link2,
 } from 'lucide-react'
+import { useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { useTranslation } from '../../lib/i18n'
+import { MenuSurface } from '../menu/MenuSurface'
+import { useDismissOnOutside } from '../menu/useDismissOnOutside'
+
+// The Markdown mark (CC0, dcurtis/markdown-mark), redrawn on lucide's 24px
+// grid with its 2px stroke so it sits with the other toolbar icons.
+function MarkdownIcon({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M6 15V9l3 3 3-3v6" />
+      <path d="M17 9v6m-2-2 2 2 2-2" />
+    </svg>
+  )
+}
+
+// Shortcuts the editor turns into formatting as you type (StarterKit's input
+// rules). Syntax, not words, so it needs no translation.
+const MARKDOWN_EXAMPLES = ['**bold**', '*italic*', '~~strike~~', '# heading', '- list', '1. list', '> quote']
+
+// Behind an icon rather than inline: spelled out, the examples wrapped the
+// toolbar onto a second row whenever the composer sat in a narrow pane.
+function MarkdownHelp() {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useDismissOnOutside(
+    open,
+    (target) => Boolean(rootRef.current?.contains(target as Node)),
+    () => setOpen(false),
+  )
+
+  return (
+    <div ref={rootRef} className="relative">
+      <ToolbarButton active={open} onClick={() => setOpen((v) => !v)} title={t('composer.toolbar.markdown')}>
+        <MarkdownIcon size={17} />
+      </ToolbarButton>
+      {open && (
+        <MenuSurface role="dialog" className="absolute right-0 top-full z-50 mt-1 w-max max-w-[16rem] p-3">
+          <p className="mb-2 text-[0.6875rem] leading-snug text-secondary">{t('composer.toolbar.markdownHint')}</p>
+          <div className="flex flex-wrap gap-1">
+            {MARKDOWN_EXAMPLES.map((example) => (
+              <code
+                key={example}
+                className="rounded bg-black/[0.06] px-1 text-[0.6875rem] text-primary dark:bg-white/[0.08]"
+              >
+                {example}
+              </code>
+            ))}
+          </div>
+        </MenuSurface>
+      )}
+    </div>
+  )
+}
 
 export function ToolbarButton({
   active,
@@ -111,15 +176,7 @@ export function ComposerToolbar({
         <Link2 size={15} />
       </ToolbarButton>
       <div className="ml-auto flex items-center">
-        <span
-          className="hidden items-center gap-1 pr-1 text-[0.625rem] font-medium text-secondary/70 select-none min-[900px]:flex"
-          title={t('composer.toolbar.markdownHint')}
-        >
-          {t('composer.toolbar.markdown')}:
-          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">**bold**</code>
-          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]"># heading</code>
-          <code className="rounded bg-black/[0.06] px-1 dark:bg-white/[0.08]">- list</code>
-        </span>
+        <MarkdownHelp />
         {trailing}
       </div>
     </div>
