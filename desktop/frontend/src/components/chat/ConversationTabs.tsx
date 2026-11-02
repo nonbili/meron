@@ -158,11 +158,10 @@ export function ConversationTabs() {
               compose$.activeTab.set(tab.id)
               if (tab.kind === 'thread') ui$.selectedThread.set(tab.threadId)
             }}
-            // Every tab keeps room for its × (pr-7), shown on the active tab and on
-            // hover, so the × never covers the label and a tab keeps its width when
-            // it becomes active. The width cap is in rem so a larger text size
-            // doesn't squeeze the label.
-            className={`group relative flex max-w-[12.5rem] cursor-pointer items-center gap-1.5 pl-3 pr-7 text-xs border-b-2 transition-colors ${
+            // Like browser tabs: all the same width, sharing the strip as more open
+            // (the strip scrolls past min-w-24), so a tab keeps its width when it
+            // becomes active. In rem so a larger text size gets the same room.
+            className={`group relative flex w-[12.5rem] min-w-24 cursor-pointer items-center gap-1.5 px-3 text-xs border-b-2 transition-colors ${
               activeTab === tab.id ? ACTIVE_TAB : INACTIVE_TAB
             }`}
             onContextMenu={(event) => {
@@ -187,8 +186,7 @@ export function ConversationTabs() {
                 event.stopPropagation()
                 void closeMessageTab(tab.id)
               }}
-              // Drawn in the tab's right padding, so revealing it never changes the
-              // tab's width or covers the label.
+              // Overlay the label so revealing the × never consumes tab width.
               className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
                 activeTab === tab.id
                   ? ''
