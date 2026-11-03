@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { CheckCheck, Copy } from 'lucide-react'
+import { CheckCheck, Copy, Users } from 'lucide-react'
+import { openContact } from '../../states/contacts'
 import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
 
 import { parseAddressList, type AddressItem } from './messageHelpers'
 
-export function AddressPill({ name, original }: AddressItem) {
+export function AddressPill({ name, original, email }: AddressItem) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
@@ -17,19 +18,35 @@ export function AddressPill({ name, original }: AddressItem) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="group relative inline-flex max-w-[180px] min-w-0 items-center gap-1 rounded-md border border-accent/10 bg-accent/5 px-2 py-1 text-[0.625rem] font-normal text-primary outline-none transition-all duration-150 hover:border-accent/25 hover:bg-accent/10 active:scale-[0.98] dark:bg-accent/15 dark:hover:bg-accent/25 cursor-pointer select-none"
-      aria-label={t('chat.copyFullAddress')}
-      title={original}
-    >
-      <span className="min-w-0 truncate font-semibold">{name}</span>
+    <span className="inline-flex max-w-full items-center gap-0.5">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="group relative inline-flex max-w-[180px] min-w-0 items-center gap-1 rounded-md border border-accent/10 bg-accent/5 px-2 py-1 text-[0.625rem] font-normal text-primary outline-none transition-all duration-150 hover:border-accent/25 hover:bg-accent/10 active:scale-[0.98] dark:bg-accent/15 dark:hover:bg-accent/25 cursor-pointer select-none"
+        aria-label={t('chat.copyFullAddress')}
+        title={original}
+      >
+        <span className="min-w-0 truncate font-semibold">{name}</span>
 
-      <span className="opacity-0 group-hover:opacity-75 transition-opacity duration-150 shrink-0 text-accent">
-        {copied ? <CheckCheck size={10} className="text-emerald-500" /> : <Copy size={10} />}
-      </span>
-    </button>
+        <span className="opacity-0 group-hover:opacity-75 transition-opacity duration-150 shrink-0 text-accent">
+          {copied ? <CheckCheck size={10} className="text-emerald-500" /> : <Copy size={10} />}
+        </span>
+      </button>
+      {email.includes('@') && (
+        <button
+          type="button"
+          title={t('contacts.open')}
+          aria-label={t('contacts.open')}
+          className="rounded p-1 text-secondary hover:bg-accent/10 hover:text-accent cursor-pointer"
+          onClick={(event) => {
+            event.stopPropagation()
+            openContact({ name, addr: email })
+          }}
+        >
+          <Users size={12} />
+        </button>
+      )}
+    </span>
   )
 }
 

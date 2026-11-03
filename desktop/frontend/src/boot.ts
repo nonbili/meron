@@ -6,6 +6,7 @@ import { ensureDefaultKanbanBoard, restoreKanbanSession, KANBAN_SESSION_KEYS } f
 import { restoreTasksSession, TASKS_SESSION_KEYS } from './states/tasks'
 import { CALENDAR_SESSION_KEYS, restoreCalendarSession } from './states/calendar'
 import { accounts$ } from './states/accounts'
+import { CONTACTS_PREF_KEYS, restoreContacts } from './states/contacts'
 import { openMailtoCompose, pruneComposerMedia, restoreTabSession } from './states/compose'
 
 // App bootstrap: load the system check, accounts, and persisted settings in
@@ -25,6 +26,7 @@ export async function boot() {
         ...KANBAN_SESSION_KEYS,
         ...TASKS_SESSION_KEYS,
         ...CALENDAR_SESSION_KEYS,
+        ...CONTACTS_PREF_KEYS,
       ],
       // Reading our prefs is also how this window claims write ordering from
       // whatever session ran before it (see `activate_pref_session` in core).
@@ -41,6 +43,7 @@ export async function boot() {
   restoreKanbanSession(prefs)
   await restoreTasksSession(prefs)
   restoreCalendarSession(prefs)
+  restoreContacts(prefs)
   ensureDefaultKanbanBoard()
   restoreTabSession()
 

@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, Menu, SquareCheckBig } from 'lucide-react'
+import { CalendarClock, Menu, SquareCheckBig, Users } from 'lucide-react'
+import { toggleContactsPanel } from '../../states/contacts'
 import { useValue } from '@legendapp/state/react'
 import logo from '../../assets/logo.png'
 import { useTranslation } from '../../lib/i18n'
@@ -114,6 +115,7 @@ function TitleBarTools({ menu, setMenu }: { menu: MenuPosition; setMenu: Dispatc
   const windows = useValue(windowChrome$.platform) === 'windows'
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
+  const contactsOpen = useValue(ui$.contactsOpen)
   const calendarEnabled = useValue(settings$.calendarEnabled)
   const calendarPanelOpen = useValue(ui$.calendarPanelOpen)
   const narrow = useNarrowWindow()
@@ -129,6 +131,16 @@ function TitleBarTools({ menu, setMenu }: { menu: MenuPosition; setMenu: Dispatc
 
   return (
     <div className={`flex items-center gap-1 ${isMac ? '' : windows ? 'mr-2' : 'mr-1.5'}`}>
+      <button
+        type="button"
+        className={`${button} ${contactsOpen ? pressed : idle}`}
+        onClick={toggleContactsPanel}
+        title={t('contacts.title')}
+        aria-label={t('contacts.title')}
+        aria-pressed={contactsOpen}
+      >
+        <Users size={iconSize} />
+      </button>
       {calendarEnabled && (
         <button
           type="button"

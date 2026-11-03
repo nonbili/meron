@@ -1,5 +1,6 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
+import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
@@ -375,6 +376,7 @@ function readerTab(message: Message): MessageTab {
 }
 
 export function openMessageTab(message: Message) {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   const existing = compose$.tabs.get().find((tab) => tab.messageId === message.id)
   if (existing) {
     compose$.activeTab.set(existing.id)
@@ -465,6 +467,10 @@ async function reconcileRestoredTabs() {
 // Open a conversation itself as a tab. The tab stores enough thread metadata to
 // render even when the current mailbox/rail selection does not contain it.
 export function openThreadTab(thread: Message) {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
+  // The conversation shows in the mail pane, which the calendar replaces —
+  // even when its tab is the active one already, so no tab change says so.
+  ui$.calendarOpen.set(false)
   const id = `thread-${thread.thread_id}`
   const existing = compose$.tabs.get().find((tab) => tab.id === id)
   if (!existing) {
@@ -507,6 +513,7 @@ export async function openThreadTabById(
   notFoundMessage = t('compose.toast.couldNotOpenNotificationThread'),
 ) {
   if (!threadId) return
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   // The conversation shows in the mail pane, which the calendar replaces —
   // even when its tab is the active one already, so no tab change says so.
   ui$.calendarOpen.set(false)
@@ -591,6 +598,7 @@ type ComposeSeed = Partial<ComposeDraft> & {
 }
 
 export function openComposeTab(seed?: ComposeSeed): string | undefined {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   const sendable = accounts$.get().filter(isSendableAccount)
   if (sendable.length === 0) return undefined
   // The composer opens in the mail pane, which the calendar replaces.
@@ -1104,6 +1112,7 @@ export function finishClosingMessageTab(id: string) {
 // Bring a closed compose tab back as it was, or go to the tab already holding
 // that draft: it may have been reopened from Drafts in the meantime.
 export function reopenComposeTab(tab: MessageTab, compose: ComposeDraft) {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   // The composer opens in the mail pane, which the calendar replaces.
   ui$.calendarOpen.set(false)
   const draftId = normalizeMessageId(compose.draftMessageId)

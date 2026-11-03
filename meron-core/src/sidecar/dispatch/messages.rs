@@ -190,14 +190,37 @@ pub(crate) async fn dispatch(
             )
         })),
 
-        // Recipient autocomplete: distinct correspondents from cached messages,
-        // matched against `query` and ranked by frequency/recency.
+        "contacts.threads" => {
+            let addr = req_str(p, "addr")?;
+            anyhow::ensure!(!addr.trim().is_empty(), "addr is required");
+            let db = engine.db.lock().unwrap();
+            let limit = req_u32(p, "limit").unwrap_or(50).clamp(1, 200) as usize;
+            store::contact_thread_page(
+                &db,
+                &addr,
+                p.get("before_cursor").and_then(Value::as_str),
+                limit,
+            )
+        }
+
+        // Recipient autocomplete and the Contacts panel (`directory`):
+        // distinct correspondents from cached messages, matched against
+        // `query`, in the order `sort` names (frequency by default).
         "contacts.suggest" => {
             let account = req_str(p, "account").unwrap_or_default();
             let query = req_str(p, "query").unwrap_or_default();
             let limit = req_u32(p, "limit").unwrap_or(8);
-            let contacts =
-                store::suggest_contacts(&engine.db.lock().unwrap(), &account, &query, limit)?;
+            let sort =
+                store::ContactSort::parse(p.get("sort").and_then(Value::as_str).unwrap_or(""));
+            let directory = p.get("directory").and_then(Value::as_bool).unwrap_or(false);
+            let contacts = store::list_contacts(
+                &engine.db.lock().unwrap(),
+                &account,
+                &query,
+                limit,
+                sort,
+                directory,
+            )?;
             Ok(json!({ "contacts": contacts }))
         }
 

@@ -236,6 +236,15 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.appPrefsGet(payload)
 	case "app.prefsSet":
 		return a.appPrefsSet(payload)
+	case "contacts.noteGet", "contacts.noteSet":
+		if a.sidecar == nil || !a.sidecar.Started() {
+			return nil, a.engineUnavailable()
+		}
+		method := "app.prefsGet"
+		if command == "contacts.noteSet" {
+			method = "app.prefsSet"
+		}
+		return a.sidecar.Call(method, payload)
 	case "tray.setUnread":
 		return a.traySetUnread(payload)
 	case "tray.getStyle":
@@ -386,6 +395,15 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.sidecar.Call("identity.allocate", payload)
 	case "mail.suggestContacts":
 		return a.suggestContacts(payload)
+	case "mail.contactThreads":
+		if a.sidecar == nil || !a.sidecar.Started() {
+			return nil, a.engineUnavailable()
+		}
+		res, err := a.sidecar.Call("contacts.threads", payload)
+		if err != nil {
+			return nil, err
+		}
+		return threadsJSON("", "INBOX", res), nil
 	case "mail.threadRead":
 		return a.threadRead(payload)
 	case "mail.send":

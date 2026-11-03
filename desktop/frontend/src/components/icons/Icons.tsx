@@ -39,3 +39,25 @@ export function PdfIcon({ size = 16, className }: IconProps) {
     </svg>
   )
 }
+
+/** The Markdown mark (CC0, dcurtis/markdown-mark), redrawn on lucide's grid. */
+export function MarkdownIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M6 15V9l3 3 3-3v6" />
+      <path d="M17 9v6m-2-2 2 2 2-2" />
+    </svg>
+  )
+}

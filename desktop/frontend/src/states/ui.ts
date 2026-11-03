@@ -88,6 +88,7 @@ export const ui$ = observable({
   // for it.
   calendarPanelOpen: false,
   calendarOpen: false,
+  contactsOpen: false,
   // Command palette (⌘/Ctrl+K). Ephemeral: open flag, search query, and the
   // highlighted row index.
   paletteOpen: false,

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { leaveNarrowContacts } from '../../states/contacts'
 import {
   clearBulkSelection,
   selectedBulkItems,
@@ -375,6 +376,7 @@ export function AppHotkeys() {
           event.preventDefault()
           const activeBoard = kanban$.activeBoardId.peek()
           if (activeBoard) {
+            leaveNarrowContacts()
             closeKanbanBoard()
           } else {
             const board = settings$.kanbanBoards.peek()[0]

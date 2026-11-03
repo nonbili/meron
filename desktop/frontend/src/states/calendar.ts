@@ -109,6 +109,7 @@ export function restoreCalendarSession(prefs: Record<string, unknown>) {
  * same days, and is back beside mail or the board once the full view gives way
  * to them. */
 export function openCalendar() {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   ui$.calendarOpen.set(true)
   void loadCalendar()
 }

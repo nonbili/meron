@@ -7,8 +7,23 @@ let sequence = 0
 let email: string
 let calls: Array<{ command: string; payload: any }>
 let resolveImage: (image: { src: string; kind: string }) => void
+// The test DOM's IntersectionObserver never reports anything, so stand in one
+// that reports every avatar as on screen unless a test holds it back.
+const originalObserver = globalThis.IntersectionObserver
+let autoIntersect: boolean
+let reveal: () => void
 
 beforeEach(() => {
+  autoIntersect = true
+  globalThis.IntersectionObserver = class {
+    constructor(private callback: IntersectionObserverCallback) {}
+    observe() {
+      reveal = () =>
+        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+      if (autoIntersect) reveal()
+    }
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver
   email = `sender${sequence++}@example.com`
   calls = []
   settings$.showRealAvatars.set(true)
@@ -28,6 +43,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  globalThis.IntersectionObserver = originalObserver
   settings$.showRealAvatars.set(false)
   delete (window as any).go
 })
@@ -82,4 +98,15 @@ it('retries an empty result on remount instead of caching initials', async () =>
   await waitFor(() => expect(calls).toHaveLength(2))
   await act(async () => resolveImage({ src: 'data:image/png;base64,aGVsbG8=', kind: 'favicon' }))
   expect(second.getByRole('img')).toBeTruthy()
+})
+
+it('waits until the avatar nears the viewport before resolving it', async () => {
+  autoIntersect = false
+  render(<Avatar name="Cloudflare" email={email} />)
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30))
+  })
+  expect(calls).toHaveLength(0)
+  await act(async () => reveal())
+  await waitFor(() => expect(calls).toHaveLength(1))
 })

@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import type { DragEvent } from 'react'
-import { CalendarClock, CalendarDays, Mail, SquareCheckBig, MoreHorizontal, EyeOff, SquarePen } from 'lucide-react'
+import {
+  CalendarClock,
+  CalendarDays,
+  Mail,
+  SquareCheckBig,
+  MoreHorizontal,
+  EyeOff,
+  SquarePen,
+  Users,
+} from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { formatShortcut, isMac, RAIL_SHORTCUT_IDS } from '../../lib/shortcuts'
@@ -12,6 +21,7 @@ import { accounts$, isSendableAccount, reorderAccountIds } from '../../states/ac
 import { openComposeTab } from '../../states/compose'
 import { moveFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
 import { kanban$, openMailAccount, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
+import { toggleContactsPanel } from '../../states/contacts'
 import { mail$ } from '../../states/mail'
 import { inboxUnread } from '../../states/mailFolders'
 import { settings$, setCalendarSideNavVisible, setUnifiedInboxSideNavVisible } from '../../states/settings'
@@ -41,6 +51,7 @@ export function SideNav() {
   const tasksPanelOpen = useValue(ui$.tasksPanelOpen)
   const calendarEnabled = useValue(settings$.calendarEnabled)
   const calendarOpen = useValue(ui$.calendarOpen)
+  const contactsOpen = useValue(ui$.contactsOpen)
   const showCalendar = useValue(settings$.showCalendarInSideNav) && calendarEnabled
   const calendarPanelOpen = useValue(ui$.calendarPanelOpen)
   const narrow = useNarrowWindow()
@@ -316,6 +327,16 @@ export function SideNav() {
       {/* Utilities */}
       {utilities && (
         <div className="flex flex-col gap-3 items-center">
+          <button
+            type="button"
+            onClick={toggleContactsPanel}
+            title={t('contacts.title')}
+            aria-label={t('contacts.title')}
+            aria-pressed={contactsOpen}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl cursor-pointer ${contactsOpen ? 'bg-sidenav-ink/20 text-sidenav-ink' : 'bg-sidenav-ink/10 text-sidenav-ink/60 hover:bg-sidenav-ink/20'}`}
+          >
+            <Users size={18} />
+          </button>
           {calendarEnabled && (
             <button
               type="button"

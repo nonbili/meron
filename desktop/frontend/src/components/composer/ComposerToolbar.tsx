@@ -14,28 +14,7 @@ import type { Editor } from '@tiptap/react'
 import { useTranslation } from '../../lib/i18n'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
-
-// The Markdown mark (CC0, dcurtis/markdown-mark), redrawn on lucide's 24px
-// grid with its 2px stroke so it sits with the other toolbar icons.
-function MarkdownIcon({ size }: { size: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2" y="5" width="20" height="14" rx="2" />
-      <path d="M6 15V9l3 3 3-3v6" />
-      <path d="M17 9v6m-2-2 2 2 2-2" />
-    </svg>
-  )
-}
+import { MarkdownIcon } from '../icons/Icons'
 
 // Shortcuts the editor turns into formatting as you type (StarterKit's input
 // rules). Syntax, not words, so it needs no translation.

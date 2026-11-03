@@ -637,7 +637,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 22;
+pub(super) const SCHEMA_VERSION: i64 = 23;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -737,6 +737,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 22 {
         migrate_v22(&tx)?;
+    }
+    if version < 23 {
+        migrate_v23(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1039,13 +1042,41 @@ fn migrate_v16(conn: &Connection) -> Result<()> {
 /// the update trigger only fires when the addresses could have changed, as an
 /// envelope upsert rewrites `json` on every resync.
 fn contacts_ddl() -> String {
+    format!(
+        "CREATE TABLE IF NOT EXISTS contacts (
+           account  TEXT NOT NULL,
+           addr_key TEXT NOT NULL,   -- lower(trim(addr))
+           name     TEXT NOT NULL,   -- '' when the address came without one
+           addr     TEXT NOT NULL,
+           count    INTEGER NOT NULL DEFAULT 0,
+           PRIMARY KEY (account, addr_key, name)
+         ) WITHOUT ROWID;
+         {}",
+        contacts_triggers(false)
+    )
+}
+
+/// The `messages` triggers that keep `contacts` in step. With `track_date`
+/// (migration v23) they also keep `last_date`, the newest message an entry was
+/// seen on. Removing a message can't lower it without rescanning that
+/// address's mail, so it only ever moves forward until the entry goes.
+fn contacts_triggers(track_date: bool) -> String {
     let add = |row: &str| {
+        let (date_col, date_val, date_set) = if track_date {
+            (
+                ", last_date",
+                format!(", {row}.date"),
+                ", last_date = max(last_date, excluded.last_date)",
+            )
+        } else {
+            ("", String::new(), "")
+        };
         format!(
-            "INSERT INTO contacts(account, addr_key, name, addr, count)
-               SELECT {row}.account, lower(trim(addr)), trim(COALESCE(name, '')), max(trim(addr)), 1
+            "INSERT INTO contacts(account, addr_key, name, addr, count{date_col})
+               SELECT {row}.account, lower(trim(addr)), trim(COALESCE(name, '')), max(trim(addr)), 1{date_val}
                FROM ({occurrences}) WHERE {row}.uid <> 0 AND trim(COALESCE(addr, '')) <> ''
                GROUP BY lower(trim(addr)), trim(COALESCE(name, ''))
-             ON CONFLICT(account, addr_key, name) DO UPDATE SET count = count + 1;",
+             ON CONFLICT(account, addr_key, name) DO UPDATE SET count = count + 1{date_set};",
             occurrences = contact_occurrences(row),
         )
     };
@@ -1063,28 +1094,28 @@ fn contacts_ddl() -> String {
         )
     };
     let addressees = |row: &str| format!("json_extract({row}.json, '$.to', '$.cc')");
+    // The date only matters to `last_date`, so without it a date change
+    // alone doesn't rewrite the directory.
+    let date_changed = if track_date {
+        "\n             OR old.date IS NOT new.date"
+    } else {
+        ""
+    };
+    let date_column = if track_date { ", date" } else { "" };
     format!(
-        "CREATE TABLE IF NOT EXISTS contacts (
-           account  TEXT NOT NULL,
-           addr_key TEXT NOT NULL,   -- lower(trim(addr))
-           name     TEXT NOT NULL,   -- '' when the address came without one
-           addr     TEXT NOT NULL,
-           count    INTEGER NOT NULL DEFAULT 0,
-           PRIMARY KEY (account, addr_key, name)
-         ) WITHOUT ROWID;
-         CREATE TRIGGER IF NOT EXISTS contacts_ai AFTER INSERT ON messages BEGIN
+        "CREATE TRIGGER IF NOT EXISTS contacts_ai AFTER INSERT ON messages BEGIN
            {add_new}
          END;
          CREATE TRIGGER IF NOT EXISTS contacts_ad AFTER DELETE ON messages BEGIN
            {remove_old}
          END;
          CREATE TRIGGER IF NOT EXISTS contacts_au
-           AFTER UPDATE OF account, uid, from_name, from_addr, json ON messages
+           AFTER UPDATE OF account, uid, from_name, from_addr, json{date_column} ON messages
            WHEN old.account IS NOT new.account
              OR (old.uid <> 0) IS NOT (new.uid <> 0)
              OR old.from_name IS NOT new.from_name
              OR old.from_addr IS NOT new.from_addr
-             OR {old_addressees} IS NOT {new_addressees}
+             OR {old_addressees} IS NOT {new_addressees}{date_changed}
          BEGIN
            {remove_old}
            {add_new}
@@ -1457,6 +1488,46 @@ fn migrate_v22(conn: &Connection) -> Result<()> {
          );
          PRAGMA user_version = 22;",
         key = super::tags::TAG_KEY_SQL,
+    ))?;
+    Ok(())
+}
+
+/// When each contact was last seen (migration v23), so the Contacts panel can
+/// list the most recent correspondents first. The triggers are replaced with
+/// ones that keep `last_date`, and the directory is rebuilt the way v17 built
+/// it, now with each entry's newest message date.
+fn migrate_v23(conn: &Connection) -> Result<()> {
+    let list = |path: &str| {
+        format!(
+            "SELECT m.id, m.account, m.date, json_extract(e.value, '$.name'), json_extract(e.value, '$.addr')
+               FROM messages m, json_each(m.json, '{path}') e
+               WHERE m.uid <> 0 AND e.type = 'object'"
+        )
+    };
+    conn.execute_batch(&format!(
+        "DROP TRIGGER IF EXISTS contacts_ai;
+         DROP TRIGGER IF EXISTS contacts_ad;
+         DROP TRIGGER IF EXISTS contacts_au;
+         ALTER TABLE contacts ADD COLUMN last_date INTEGER NOT NULL DEFAULT 0;
+         {triggers}
+         DELETE FROM contacts;
+         INSERT INTO contacts(account, addr_key, name, addr, count, last_date)
+           SELECT account, addr_key, name, max(addr), count(*), max(date) FROM (
+             SELECT id, account, max(date) AS date, lower(trim(addr)) AS addr_key,
+                    trim(COALESCE(name, '')) AS name, max(trim(addr)) AS addr
+             FROM (
+               SELECT id, account, date, from_name AS name, from_addr AS addr FROM messages WHERE uid <> 0
+               UNION ALL {to} UNION ALL {cc}
+             )
+             WHERE trim(COALESCE(addr, '')) <> ''
+             GROUP BY id, lower(trim(addr)), trim(COALESCE(name, ''))
+           )
+           WHERE true
+           GROUP BY account, addr_key, name;
+         PRAGMA user_version = 23;",
+        triggers = contacts_triggers(true),
+        to = list("$.to"),
+        cc = list("$.cc"),
     ))?;
     Ok(())
 }

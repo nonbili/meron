@@ -17,6 +17,7 @@ import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { copyText, openExternal } from '../../lib/native'
 import { downloadAttachment, openAttachment } from '../../states/mail'
+import { openContact } from '../../states/contacts'
 import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
@@ -154,6 +155,10 @@ export function ConversationDetailsPanel({
               onOpenFiles={() => setView('files')}
               onComposeTo={onComposeTo}
               onOpenPersonMenu={setPersonMenu}
+              onOpenContact={(person) => {
+                openContact({ name: person.name, addr: person.email })
+                onClose()
+              }}
             />
           ) : view === 'media' ? (
             media.length === 0 ? (
@@ -276,6 +281,15 @@ export function ConversationDetailsPanel({
           onContextMenu={(event) => event.preventDefault()}
         >
           <MenuItem
+            icon={<Users size={13} className="text-accent" />}
+            label={t('contacts.open')}
+            onClick={() => {
+              openContact({ name: personMenu.person.name, addr: personMenu.person.email })
+              setPersonMenu(null)
+              onClose()
+            }}
+          />
+          <MenuItem
             icon={<Search size={13} className="text-accent" />}
             label={t('chat.viewMessagesWith', { name: personMenu.person.name || personMenu.person.email })}
             onClick={() => {
@@ -305,6 +319,7 @@ function Overview({
   onOpenFiles,
   onComposeTo,
   onOpenPersonMenu,
+  onOpenContact,
 }: {
   mediaCount: number
   filesCount: number
@@ -313,6 +328,7 @@ function Overview({
   onOpenFiles: () => void
   onComposeTo: (person: Participant) => void
   onOpenPersonMenu: (menu: { x: number; y: number; person: Participant }) => void
+  onOpenContact: (person: Participant) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -332,7 +348,12 @@ function Overview({
           <Users size={15} />
           <span>{t('chat.people', { count: participants.length })}</span>
         </div>
-        <PeopleList participants={participants} onComposeTo={onComposeTo} onOpenPersonMenu={onOpenPersonMenu} />
+        <PeopleList
+          participants={participants}
+          onComposeTo={onComposeTo}
+          onOpenPersonMenu={onOpenPersonMenu}
+          onOpenContact={onOpenContact}
+        />
       </div>
     </div>
   )
@@ -355,10 +376,12 @@ function PeopleList({
   participants,
   onComposeTo,
   onOpenPersonMenu,
+  onOpenContact,
 }: {
   participants: Participant[]
   onComposeTo: (person: Participant) => void
   onOpenPersonMenu: (menu: { x: number; y: number; person: Participant }) => void
+  onOpenContact: (person: Participant) => void
 }) {
   const { t } = useTranslation()
   if (participants.length === 0) {
@@ -393,6 +416,15 @@ function PeopleList({
             </p>
             <p className="truncate text-[0.6875rem] text-secondary selectable-text">{person.email}</p>
           </div>
+          <button
+            type="button"
+            title={t('contacts.open')}
+            aria-label={t('contacts.open')}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary hover:bg-accent/10 hover:text-accent cursor-pointer"
+            onClick={() => onOpenContact(person)}
+          >
+            <Users size={15} />
+          </button>
           <button
             type="button"
             onClick={() => onComposeTo(person)}

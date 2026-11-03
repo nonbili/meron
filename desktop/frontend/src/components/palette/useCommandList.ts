@@ -30,6 +30,7 @@ import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply } from '..
 import { selectTheme, settings$ } from '../../states/settings'
 import { useChosenThemeIds } from '../../lib/useThemeChoice'
 import { accounts$ } from '../../states/accounts'
+import { leaveNarrowContacts } from '../../states/contacts'
 import { BUILTIN_THEMES } from '../../lib/themes'
 import {
   closeKanbanBoard,
@@ -160,7 +161,10 @@ export function useCommandList(): Command[] {
         icon: icon(List),
         keywords: 'layout list conversation account',
         active: !activeBoardId,
-        run: run(() => closeKanbanBoard()),
+        run: run(() => {
+          leaveNarrowContacts()
+          closeKanbanBoard()
+        }),
       },
       {
         id: 'kanban.create',
@@ -316,7 +320,10 @@ export function useCommandList(): Command[] {
         icon: icon(Inbox),
         keywords: 'open mailbox',
         active: selectedFolder === folder.id,
-        run: run(() => ui$.selectedFolder.set(folder.id)),
+        run: run(() => {
+          leaveNarrowContacts()
+          ui$.selectedFolder.set(folder.id)
+        }),
       })
     }
 

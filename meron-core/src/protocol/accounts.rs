@@ -497,8 +497,13 @@ pub(crate) fn suggest_mobile_contacts(data_dir: &str, params: &Value) -> Result<
     }
     let query = opt_str(params, "query");
     let limit = opt_u32(params, "limit").unwrap_or(8);
+    let sort = store::ContactSort::parse(&opt_str(params, "sort"));
+    let directory = params
+        .get("directory")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     with_mobile_db(data_dir, |conn| {
-        let contacts = store::suggest_contacts(&conn, &account, &query, limit)
+        let contacts = store::list_contacts(&conn, &account, &query, limit, sort, directory)
             .map_err(|err| err.to_string())?;
         Ok(json!({ "contacts": contacts }))
     })

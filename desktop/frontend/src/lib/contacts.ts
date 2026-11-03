@@ -18,11 +18,14 @@ export async function suggestContacts(accountId: string, query: string, limit = 
 }
 
 // Render a contact as a recipient header entry: "Name <addr>" when a distinct
-// display name exists, otherwise the bare address.
+// display name exists, otherwise the bare address. A name holding an RFC 5322
+// special (the comma in "Doe, Jane") is quoted, or the address list would split
+// it into a bogus recipient.
 export function formatContact(c: Contact): string {
   const name = c.name.trim()
   if (name && name.toLowerCase() !== c.addr.toLowerCase()) {
-    return `${name} <${c.addr}>`
+    const display = /[()<>[\]:;@\\,."]/.test(name) ? `"${name.replace(/["\\]/g, '\\$&')}"` : name
+    return `${display} <${c.addr}>`
   }
   return c.addr
 }

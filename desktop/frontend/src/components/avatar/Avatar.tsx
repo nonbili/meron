@@ -94,6 +94,21 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   const initialImage = showRealAvatars && email && !src ? cachedAvatar(avatarKey(email, size)) : undefined
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(src || initialImage?.src)
   const [sourceKind, setSourceKind] = useState<SourceKind>(src ? 'manual' : (initialImage?.kind ?? 'none'))
+  // Resolution waits until the avatar is near the viewport, so a long list
+  // (hundreds of contacts) doesn't look up pictures nobody has scrolled to.
+  const [node, setNode] = useState<HTMLElement | null>(null)
+  const [nearView, setNearView] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    if (nearView || !node) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setNearView(true)
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [node, nearView])
 
   useEffect(() => {
     if (src) {
@@ -116,9 +131,10 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
       return
     }
 
-    let cancelled = false
     setResolvedSrc(undefined)
     setSourceKind('none')
+    if (!nearView) return
+    let cancelled = false
     const cancelIdle = onIdle(() => {
       invoke<ResolvedImage>('avatar.resolve', { email, size: size * 2 })
         .then((image) => {
@@ -135,7 +151,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
       cancelled = true
       cancelIdle()
     }
-  }, [src, email, showRealAvatars, size])
+  }, [src, email, showRealAvatars, size, nearView])
 
   const handleImageError = () => {
     if (email && !src) avatarCache.delete(avatarKey(email, size))
@@ -146,6 +162,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   if (resolvedSrc && sourceKind === 'favicon') {
     return (
       <span
+        ref={setNode}
         style={{ width: size, height: size }}
         className={`flex shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-black/5 dark:ring-white/10 ${className}`}
       >
@@ -166,6 +183,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   if (resolvedSrc && sourceKind !== 'none') {
     return (
       <img
+        ref={setNode}
         src={resolvedSrc}
         alt={name}
         onError={handleImageError}
@@ -180,6 +198,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
 
   return (
     <div
+      ref={setNode}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-tr font-semibold text-white shadow-sm ring-1 ring-white/10 saturate-[0.8] ${avatarColor(name)} ${className}`}
     >

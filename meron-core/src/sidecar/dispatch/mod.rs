@@ -131,6 +131,7 @@ pub(crate) async fn dispatch(
         | "messages.stillUnread"
         | "identity.allocate"
         | "contacts.suggest"
+        | "contacts.threads"
         | "messages.sync"
         | "messages.read"
         | "messages.thread"

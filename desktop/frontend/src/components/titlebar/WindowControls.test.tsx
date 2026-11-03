@@ -91,13 +91,21 @@ describe('TitleBar', () => {
     settings$.tasksEnabled.set(false)
     settings$.calendarEnabled.set(false)
     render(<TitleBar />)
-    expect(labels(screen.getAllByRole('button'))).toEqual(['Close', 'Search options', 'More', 'Minimize'])
+    expect(labels(screen.getAllByRole('button'))).toEqual(['Close', 'Search options', 'Contacts', 'More', 'Minimize'])
     act(() => settings$.tasksEnabled.set(true))
-    expect(labels(screen.getAllByRole('button'))).toEqual(['Close', 'Search options', 'Tasks', 'More', 'Minimize'])
+    expect(labels(screen.getAllByRole('button'))).toEqual([
+      'Close',
+      'Search options',
+      'Contacts',
+      'Tasks',
+      'More',
+      'Minimize',
+    ])
     act(() => settings$.calendarEnabled.set(true))
     expect(labels(screen.getAllByRole('button'))).toEqual([
       'Close',
       'Search options',
+      'Contacts',
       'Calendar panel',
       'Tasks',
       'More',

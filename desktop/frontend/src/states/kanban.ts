@@ -1,4 +1,5 @@
 import { observable } from '@legendapp/state'
+import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { ChatWallpaper, Folder, Message } from '../types'
 import { isFilterMode, pauseMailFolderPersist, persistMailFolder, ui$, showToast, type FilterMode } from './ui'
 import { mail$ } from './mail'
@@ -94,6 +95,7 @@ export function activeKanbanBoard(): KanbanBoard | null {
 
 export function selectKanbanBoard(boardId: string) {
   if (!settings$.kanbanBoards.get().some((board) => board.id === boardId)) return
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   // An open tab carries over to the board's pane, and an active thread tab owns
   // selectedThread (it renders only while the two match), so clearing it would
   // blank the tab's conversation. Only the card conversation behind it resets.
@@ -182,6 +184,7 @@ export function renameMailViewFolder(renames: Map<string, string>) {
  * view's folder (e.g. Unified starred) instead of snapping back to `folderId`.
  */
 export function openMailAccount(accountId: string, folderId = 'inbox', resumeCurrentFolder = true) {
+  if (isNarrowWindow()) ui$.contactsOpen.set(false)
   const resumesMailView =
     resumeCurrentFolder && !!kanban$.activeBoardId.peek() && ui$.selectedAccount.peek() === accountId
   if (!resumesMailView) {

@@ -11,11 +11,19 @@ import { invoke } from './bridge'
 // seeds it back at boot. The returned `restore` is re-exported by the store for
 // boot to call; the suppression guard lives here so seeding a value never echoes
 // straight back as a fresh write.
-export function persistedField<T>(obs$: ObservableParam<T>, key: string, parse: (raw: unknown) => T | undefined) {
+export function persistedField<T>(
+  obs$: ObservableParam<T>,
+  key: string,
+  parse: (raw: unknown) => T | undefined,
+  options?: { session: string },
+) {
   let restoring = false
+  let seq = 0
   obs$.onChange(({ value }) => {
     if (restoring) return
-    void invoke('app.prefsSet', { key, value }).catch(() => {})
+    void invoke('app.prefsSet', { key, value, ...(options ? { session: options.session, seq: ++seq } : {}) }).catch(
+      () => {},
+    )
   })
   return {
     key,
