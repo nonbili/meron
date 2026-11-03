@@ -71,6 +71,7 @@ export function Composer({ tabId }: { tabId: string }) {
   if (!draft) return null
 
   const showInlineDrop = fileDragging && draft.rich && mayHoldImages
+  const textareaFillsBody = !draft.rich && !draft.quote
 
   // In the full editor, bare Enter must always insert a newline (long-form /
   // rich body), so send is bound to Cmd/Ctrl+Enter regardless of the global
@@ -124,11 +125,13 @@ export function Composer({ tabId }: { tabId: string }) {
 
       {/* Body */}
       <div ref={bodyRef} className="relative flex min-h-0 flex-1 flex-col">
-        {/* With a folded quote the body only grows with what is typed, so the
-            quote's dots sit right under the text rather than below an empty
-            box; clicking the space left below still writes into the body. */}
+        {/* Without a quote the plain-text textarea is the only scroll owner.
+            It can shrink with the pane and holds the padding, so its scrollbar
+            sits at the pane edge and spans the full body height.
+            With a folded quote the body uses content rows rather than filling
+            the pane; clicking the space below still writes into the body. */}
         <div
-          className={`flex-1 overflow-y-auto px-4 py-3${draft.quote ? ' [&_.tiptap-body]:min-h-[4.5em]' : ''}`}
+          className={`min-h-0 flex-1 ${textareaFillsBody ? 'flex flex-col overflow-hidden' : 'overflow-y-auto px-4 py-3'}${draft.quote ? ' [&_.tiptap-body]:min-h-[4.5em]' : ''}`}
           onKeyDown={handleKeyDown}
           onMouseDown={(event) => {
             if (!draft.quote || event.target !== event.currentTarget) return
@@ -154,7 +157,7 @@ export function Composer({ tabId }: { tabId: string }) {
               placeholder={t('composer.placeholders.message')}
               spellCheck={spellCheck}
               rows={draft.quote ? Math.max(3, draft.text.split('\n').length + 1) : undefined}
-              className={`${draft.quote ? 'min-h-[4.5em]' : 'h-full min-h-[240px]'} w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
+              className={`${textareaFillsBody ? 'min-h-0 flex-1 px-4 py-3' : 'min-h-[4.5em]'} block w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
             />
           )}
           {draft.quote && <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />}

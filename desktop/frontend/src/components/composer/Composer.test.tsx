@@ -121,6 +121,45 @@ describe('Composer', () => {
     expect(body?.className).toContain('var(--me-message-scale)')
   })
 
+  it('assigns scrolling and padding to the shrinkable plain-text body', () => {
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    // These assertions check the layout contract, not browser geometry.
+    // The textarea owns scrolling; its flex wrapper must not scroll too.
+    const body = view.container.querySelector('textarea')!
+    const classes = body.className.split(' ')
+    expect(classes).toContain('block')
+    expect(classes).toContain('px-4')
+    expect(classes).toContain('py-3')
+    expect(classes).toContain('min-h-0')
+    expect(classes).toContain('flex-1')
+    expect(classes).not.toContain('min-h-[240px]')
+    expect(classes).not.toContain('h-full')
+    const wrapperClasses = body.parentElement!.className.split(' ')
+    expect(wrapperClasses).toContain('flex')
+    expect(wrapperClasses).toContain('flex-col')
+    expect(wrapperClasses).toContain('min-h-0')
+    expect(wrapperClasses).toContain('overflow-hidden')
+    expect(wrapperClasses).not.toContain('overflow-y-auto')
+    expect(body.parentElement!.className.split(' ')).not.toContain('px-4')
+    expect(body.parentElement!.className.split(' ')).not.toContain('py-3')
+  })
+
+  it('keeps the side padding on the scrolling body above a folded quote', () => {
+    const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> Lunch?' }
+    const tabId = openComposeTab({ to: 'them@example.com', rich: false, text: 'Sounds good', quote })!
+    const view = render(<Composer tabId={tabId} />)
+
+    const body = view.container.querySelector('textarea')!
+    expect(body.className.split(' ')).toContain('block')
+    expect(body.className.split(' ')).not.toContain('px-4')
+    expect(body.className.split(' ')).not.toContain('py-3')
+    expect(body.parentElement!.className.split(' ')).toContain('px-4')
+    expect(body.parentElement!.className.split(' ')).toContain('py-3')
+    expect(body.parentElement!.className.split(' ')).toContain('overflow-y-auto')
+  })
+
   it('scales the rich-text body with the message text size', () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', rich: true })!
     render(<Composer tabId={tabId} />)
