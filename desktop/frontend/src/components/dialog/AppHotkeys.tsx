@@ -17,9 +17,9 @@ import {
   selectKanbanBoard,
   closeKanbanBoard,
   openMailAccount,
-  closeCurrentConversation,
   kanbanPaneThreadId,
 } from '../../states/kanban'
+import { closeConversationToCard } from '../kanban/closeConversationToCard'
 import { openThreadSearch, thread$ } from '../../states/thread'
 import { getActiveThread, syncMail, selectAdjacentThread } from '../../states/mail'
 import {
@@ -288,7 +288,7 @@ export function AppHotkeys() {
         kanban$.paneThreadId.peek()
       ) {
         event.preventDefault()
-        closeCurrentConversation()
+        closeConversationToCard()
         return
       }
 
@@ -503,7 +503,7 @@ export function AppHotkeys() {
       // the frame. On a board that closes the conversation pane.
       if (chord.key === 'Escape') {
         if (modalOpen() || mailCovered()) return
-        if (kanban$.activeBoardId.peek() && kanban$.paneThreadId.peek()) closeCurrentConversation()
+        if (kanban$.activeBoardId.peek() && kanban$.paneThreadId.peek()) closeConversationToCard()
         else if (!focusActiveThreadRow()) return
         event.preventDefault()
         return

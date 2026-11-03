@@ -147,6 +147,27 @@ describe('useQuickReply Escape in the kanban pane', () => {
     expect(JSON.stringify(saves.at(-1)?.payload)).toContain('First words, then more')
   })
 
+  it("hands focus to the closed conversation's card", async () => {
+    const view = render(
+      <>
+        <section data-thread-list data-kanban-column="board-1:acc-1:INBOX">
+          <button data-thread-row data-active>
+            opened card
+          </button>
+        </section>
+        <ReplyBox />
+      </>,
+    )
+    view.getByTestId('reply').focus()
+    await act(async () => {
+      fireEvent.keyDown(view.getByTestId('reply'), { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(kanban$.paneThreadId.get()).toBe('')
+    expect(document.activeElement).toBe(view.getByText('opened card'))
+  })
+
   it('closes an empty box without saving a draft', async () => {
     const { getByTestId } = render(<ReplyBox />)
     await act(async () => {

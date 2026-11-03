@@ -16,7 +16,8 @@ import {
 } from '../../states/quickReply'
 import { sendReply } from '../../states/quickReplySend'
 import { showToast, ui$ } from '../../states/ui'
-import { closeCurrentConversation, kanban$ } from '../../states/kanban'
+import { kanban$ } from '../../states/kanban'
+import { closeConversationToCard } from '../kanban/closeConversationToCard'
 import {
   readAttachment,
   reportUnattachedFiles,
@@ -251,7 +252,7 @@ export function useQuickReply() {
       e.preventDefault()
       const paneThreadId = kanban$.paneThreadId.peek()
       await saveQuickReplyDraftNow()
-      if (kanban$.paneThreadId.peek() === paneThreadId) closeCurrentConversation()
+      if (kanban$.paneThreadId.peek() === paneThreadId) closeConversationToCard()
       return
     }
     const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')

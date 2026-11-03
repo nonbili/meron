@@ -4,6 +4,7 @@ import { isMac } from '../../lib/shortcuts'
 import { calendar$ } from '../../states/calendar'
 import { mail$ } from '../../states/mailState'
 import { ui$ } from '../../states/ui'
+import { kanban$ } from '../../states/kanban'
 import { AppHotkeys } from './AppHotkeys'
 
 const original = (window as any).go
@@ -163,5 +164,64 @@ describe('AppHotkeys', () => {
 
     fireEvent.keyDown(document.body, { key: 'ArrowDown' })
     expect(ui$.selectedThread.peek()).toBe('acct#INBOX#8')
+  })
+
+  it("hands focus to the closed conversation's card when Esc closes the kanban pane", () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-a">
+            <button data-thread-row data-active>
+              same thread, other column
+            </button>
+          </section>
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row>other</button>
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+          <div data-message-scroller tabIndex={-1}>
+            <p>body</p>
+          </div>
+        </>,
+      )
+      fireEvent.keyDown(view.getByText('body'), { key: 'Escape' })
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(view.getByText('opened card'))
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+    }
+  })
+
+  it("hands focus to the closed conversation's card when Esc comes from a message frame", () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+        </>,
+      )
+      window.dispatchEvent(new CustomEvent('meron.frameKeyDown', { detail: { key: 'Escape' }, cancelable: true }))
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(view.getByText('opened card'))
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+    }
   })
 })
