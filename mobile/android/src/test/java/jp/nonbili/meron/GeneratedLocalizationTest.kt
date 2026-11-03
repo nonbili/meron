@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.Locale
 
 class GeneratedLocalizationTest {
     @Test
@@ -33,6 +34,12 @@ class GeneratedLocalizationTest {
         assertTrue(generatedIcuString("ar", "chat.fileItems", mapOf("count" to 2)).contains("2"))
         assertEquals("1 件の新しいメッセージ", generatedIcuString("ja", "notify.newMessageCount", mapOf("count" to 1)))
         assertEquals("3 件の新しいメッセージ", generatedIcuString("ja", "notify.newMessageCount", mapOf("count" to 3)))
+    }
+
+    @Test
+    fun russianDeviceLocalesResolveToTheRussianCatalog() {
+        assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru")))
+        assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru-RU")))
     }
 
     @Test
