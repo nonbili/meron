@@ -448,6 +448,20 @@ export function scheduleQuickReplyDraftSave() {
   }, QUICK_REPLY_DRAFT_SAVE_DELAY_MS)
 }
 
+/** Run a pending autosave now, for a caller about to leave the thread: a save
+ * reads the box as it starts, so it has to start before leaving clears the box.
+ * Resolves once the save has read the box, not when it lands. A blank box is
+ * left as leaving it does today. */
+export async function saveQuickReplyDraftNow(): Promise<void> {
+  if (!quickReplyDraftSaveTimer) return
+  cancelQuickReplyDraftSave()
+  // A save still on the wire would hold this one back until after the box is
+  // gone: let it land first.
+  while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
+  if (isQuickReplyBlank()) return
+  void saveQuickReplyDraft()
+}
+
 /** Cancel any pending debounced draft save — used when a send, thread switch,
  * or escalation to the full editor should preempt it. */
 export function cancelQuickReplyDraftSave() {
