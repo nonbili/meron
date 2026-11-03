@@ -1458,6 +1458,7 @@ private fun MeronMobileScreenContent(
                             core = core,
                             state = contactsState,
                             accounts = coreAccounts,
+                            foldersByAccount = foldersByAccount,
                             showSenderImages = showSenderImages,
                             initialContact = contactToOpen,
                             onInitialContactConsumed = { contactToOpen = null },

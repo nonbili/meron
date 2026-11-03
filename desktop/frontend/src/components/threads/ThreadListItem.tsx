@@ -14,6 +14,7 @@ export function ThreadListItem({
   thread,
   active = false,
   badgeAccount,
+  folderLabel,
   onSelect,
   onOpenInNewTab,
   onContextMenu,
@@ -31,6 +32,9 @@ export function ThreadListItem({
   // The account the thread belongs to, badged on the avatar in lists that mix
   // accounts; omitted elsewhere.
   badgeAccount?: Account
+  // The thread's folder, chipped beside the date in lists that mix folders
+  // (contact history); omitted where the list is already one folder.
+  folderLabel?: string
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void
   // Double-click opens the row in its own tab (single click previews it).
   onOpenInNewTab?: () => void
@@ -142,9 +146,18 @@ export function ThreadListItem({
                 <span className="shrink-0 text-[0.75rem] font-normal text-secondary/70">{thread.message_count}</span>
               )}
             </div>
+            {folderLabel && (
+              <span
+                className="ml-auto min-w-0 max-w-24 shrink-0 truncate rounded bg-secondary/10 px-1 text-[0.625rem] font-medium leading-4 text-secondary"
+                title={folderLabel}
+              >
+                {folderLabel}
+              </span>
+            )}
             <time
               className={clsx(
-                'ml-auto shrink-0 text-[0.6875rem]',
+                'shrink-0 text-[0.6875rem]',
+                !folderLabel && 'ml-auto',
                 unread ? 'font-medium text-primary' : 'font-normal text-secondary/65',
               )}
             >

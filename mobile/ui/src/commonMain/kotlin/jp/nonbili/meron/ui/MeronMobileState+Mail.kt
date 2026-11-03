@@ -1335,9 +1335,7 @@ internal fun MeronMobileState.createMailFolder(
 
 /** Ask for [folder]'s new name; see [renameMailFolder]. */
 internal fun MeronMobileState.promptRenameFolder(folder: FolderSummary) {
-    // No delimiter means a flat namespace: punctuation is part of the name, and
-    // the whole name is the folder's own.
-    val leaf = folder.delimiter.takeIf { it.isNotEmpty() }?.let(folder.displayName::substringAfterLast) ?: folder.displayName
+    val leaf = folderLeafName(folder)
     folderNameInput = leaf
     pendingRenameFolder =
         RenameFolderTarget(

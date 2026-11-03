@@ -986,6 +986,7 @@ describe('labels', () => {
       'kanban.columns.unifiedArchive': 'Unified archive',
       'kanban.columns.unifiedJunk': 'Unified junk',
       'kanban.columns.unifiedTrash': 'Unified trash',
+      'folders.roles.inbox': 'Inbox',
     })[key] ?? key
 
   const accounts = [
@@ -1006,17 +1007,17 @@ describe('labels', () => {
     expect(folderLabel({ accountId: 'unified', folderId: 'inbox' }, folders, accs, t)).toBe('Unified inbox')
     expect(isUnifiedStarredColumn({ accountId: 'unified', folderId: 'starred' })).toBe(true)
     expect(folderLabel({ accountId: 'unified', folderId: 'starred' }, folders, accs, t)).toBe('Unified starred')
-    expect(folderLabel({ accountId: 'acc1', folderId: 'INBOX' }, folders, accs)).toBe('Inbox')
-    expect(folderLabel({ accountId: 'acc1', folderId: 'f1' }, folders, accs)).toBe('Receipts')
-    expect(folderLabel({ accountId: 'acc1', folderId: 'f2' }, folders, accs)).toBe('f2')
+    expect(folderLabel({ accountId: 'acc1', folderId: 'INBOX' }, folders, accs, t)).toBe('Inbox')
+    expect(folderLabel({ accountId: 'acc1', folderId: 'f1' }, folders, accs, t)).toBe('Receipts')
+    expect(folderLabel({ accountId: 'acc1', folderId: 'f2' }, folders, accs, t)).toBe('f2')
   })
 
   it('folderLabel names local folders without an inbox after the account', () => {
     const local = { ...account('local'), display_name: 'Local Folders' }
     const folders = [{ account_id: 'local', id: 'INBOX', name: 'INBOX', delimiter: '/' } as Folder]
-    expect(folderLabel({ accountId: 'local', folderId: 'inbox' }, [], [local])).toBe('Local Folders')
+    expect(folderLabel({ accountId: 'local', folderId: 'inbox' }, [], [local], t)).toBe('Local Folders')
     // A local folder the user named "inbox" is stored as INBOX and is real.
-    expect(folderLabel({ accountId: 'local', folderId: 'INBOX' }, folders, [local])).toBe('INBOX')
+    expect(folderLabel({ accountId: 'local', folderId: 'INBOX' }, folders, [local], t)).toBe('INBOX')
   })
 
   it('folderLabel names a nested folder by its last path segment', () => {
@@ -1025,15 +1026,15 @@ describe('labels', () => {
       { account_id: 'acc1', id: 'INBOX.Later', name: 'INBOX.Later', delimiter: '.' } as Folder,
     ]
     const accs = [account('acc1')]
-    expect(folderLabel({ accountId: 'acc1', folderId: '[Gmail]/Now' }, folders, accs)).toBe('Now')
-    expect(folderLabel({ accountId: 'acc1', folderId: 'INBOX.Later' }, folders, accs)).toBe('Later')
+    expect(folderLabel({ accountId: 'acc1', folderId: '[Gmail]/Now' }, folders, accs, t)).toBe('Now')
+    expect(folderLabel({ accountId: 'acc1', folderId: 'INBOX.Later' }, folders, accs, t)).toBe('Later')
     expect(searchColumnLabel({ accountId: 'acc1', folderId: '[Gmail]/Now' }, folders, accs)).toBe('acc1 / Now')
   })
 
   it('folderLabel keeps an RSS feed title whole', () => {
     // Feed titles are not IMAP paths: a "/" in one is part of the name.
     const folders = [{ account_id: 'rss-1', id: 'feed1', name: 'News / Tech' } as Folder]
-    expect(folderLabel({ accountId: 'rss-1', folderId: 'feed1' }, folders, [])).toBe('News / Tech')
+    expect(folderLabel({ accountId: 'rss-1', folderId: 'feed1' }, folders, [], t)).toBe('News / Tech')
   })
 
   it('searchColumnLabel names a unified column by its role', () => {

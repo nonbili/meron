@@ -108,6 +108,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.ContactSuggestion
+import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.folderIsDrafts
@@ -134,6 +135,7 @@ internal fun ContactsScreen(
     onInitialContactConsumed: () -> Unit = {},
     active: Boolean = true,
     accounts: List<AccountSummary> = emptyList(),
+    foldersByAccount: Map<String, List<FolderSummary>> = emptyMap(),
     showSenderImages: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
@@ -324,6 +326,7 @@ internal fun ContactsScreen(
                     onCopy = onCopy,
                     canCompose = canCompose,
                     accounts = accounts,
+                    foldersByAccount = foldersByAccount,
                     showSenderImages = showSenderImages,
                 )
             }
@@ -629,6 +632,7 @@ private fun ContactDetails(
     onCopy: (String, String) -> Unit,
     canCompose: Boolean,
     accounts: List<AccountSummary>,
+    foldersByAccount: Map<String, List<FolderSummary>>,
     showSenderImages: Boolean,
 ) {
     val scope = rememberCoroutineScope()
@@ -637,6 +641,7 @@ private fun ContactDetails(
     var copied by remember(contact.addr) { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
+    val inboxLabel = tr("folders.roles.inbox")
     val displayName = contact.name.ifBlank { contact.addr }
     val hasDistinctName = contact.name.isNotBlank() && !contact.name.equals(contact.addr, ignoreCase = true)
     LaunchedEffect(copied) {
@@ -743,6 +748,13 @@ private fun ContactDetails(
             ContactThreadRow(
                 thread = thread,
                 account = accountsById[thread.accountId],
+                // History spans folders, so each row names where it lives.
+                folderLabel =
+                    thread.folder
+                        .takeIf { it.isNotBlank() }
+                        ?.let { folder ->
+                            threadFolderLabel(folder, foldersByAccount[thread.accountId].orEmpty(), inboxLabel)
+                        }.orEmpty(),
                 showSenderImages = showSenderImages,
                 onOpen = { onOpenThread(thread) },
             )
@@ -812,6 +824,7 @@ private fun ContactCopyAddressButton(
 private fun ContactThreadRow(
     thread: ThreadSummary,
     account: AccountSummary?,
+    folderLabel: String,
     showSenderImages: Boolean,
     onOpen: () -> Unit,
 ) {
@@ -879,14 +892,14 @@ private fun ContactThreadRow(
                         )
                     }
                 }
-                if (thread.folder.isNotBlank()) {
+                if (folderLabel.isNotBlank()) {
                     Surface(
                         modifier = Modifier.widthIn(max = 96.dp),
                         shape = RoundedCornerShape(4.dp),
                         color = colors.surfaceContainerHigh,
                     ) {
                         Text(
-                            thread.folder,
+                            folderLabel,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,

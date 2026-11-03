@@ -4,6 +4,7 @@ import { ContactsView } from './ContactsView'
 import { ui$ } from '../../states/ui'
 import { contacts$, openContact } from '../../states/contacts'
 import { AddressRow } from '../chat/AddressList'
+import { mail$ } from '../../states/mail'
 import type { Message } from '../../types'
 
 afterEach(() => {
@@ -15,6 +16,7 @@ afterEach(() => {
   contacts$.sort.set('frequent')
   ui$.contactsOpen.set(false)
   ui$.calendarOpen.set(false)
+  mail$.foldersByAccount.set({})
 })
 
 async function settle() {
@@ -238,4 +240,43 @@ it('closes the full calendar when reopening the active conversation from contact
   ui$.calendarOpen.set(true)
   fireEvent.click(view.getByTitle('Lunch'))
   expect(ui$.calendarOpen.peek()).toBe(false)
+})
+
+it('names the folder of each conversation in contact history', async () => {
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string) => {
+          if (method !== 'mail.contactThreads') return { contacts: [], prefs: {} }
+          return {
+            threads: [
+              {
+                thread_id: 'a',
+                subject: 'In inbox',
+                from_addr: 'alice@example.com',
+                folder_id: 'INBOX',
+                account_id: 'acct',
+                date: 2,
+              },
+              {
+                thread_id: 'b',
+                subject: 'Filed',
+                from_addr: 'alice@example.com',
+                folder_id: 'f1',
+                account_id: 'acct',
+                date: 1,
+              },
+            ] as Message[],
+            next_cursor: '',
+          }
+        },
+      },
+    },
+  }
+  mail$.foldersByAccount.set({ acct: [{ id: 'f1', name: 'Projects/Now', delimiter: '/', account_id: 'acct' } as any] })
+  openContact({ name: 'Alice', addr: 'alice@example.com' })
+  const view = render(<ContactsView />)
+  await settle()
+  expect(view.getByTitle('Inbox')).toBeTruthy()
+  expect(view.getByTitle('Now')).toBeTruthy()
 })

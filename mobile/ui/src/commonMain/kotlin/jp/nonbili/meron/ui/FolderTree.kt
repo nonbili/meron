@@ -18,6 +18,28 @@ internal data class FolderTreeRow(
     val depth: Int,
 )
 
+/**
+ * A folder's own decoded name, without the parent path it is nested under
+ * ("Now" for "[Gmail]/Now"). Only the server-reported delimiter splits it:
+ * without one the namespace is flat and punctuation is part of the name.
+ */
+internal fun folderLeafName(folder: FolderSummary): String = folder.delimiter.takeIf { it.isNotEmpty() }?.let(folder.displayName::substringAfterLast) ?: folder.displayName
+
+/**
+ * How a thread row names the folder it lives in, for lists that mix folders:
+ * the translated [inboxLabel] for the inbox, else the folder's decoded leaf
+ * name, falling back to the bare id while folders are not loaded yet.
+ */
+internal fun threadFolderLabel(
+    folderId: String,
+    folders: List<FolderSummary>,
+    inboxLabel: String,
+): String {
+    val folder = folders.firstOrNull { it.name == folderId } ?: folders.firstOrNull { it.name.equals(folderId, ignoreCase = true) }
+    if (folder?.role == INBOX_FOLDER || folderId.equals(INBOX_FOLDER, ignoreCase = true)) return inboxLabel
+    return folder?.let(::folderLeafName) ?: folderId
+}
+
 /** Pick the hierarchy delimiter: prefer the server-reported one, else infer. */
 internal fun folderTreeDelimiter(folders: List<FolderSummary>): String =
     when {

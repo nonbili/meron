@@ -5,6 +5,7 @@ import { invoke } from '../../lib/bridge'
 import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
 import { formatContact } from '../../lib/contacts'
+import { folderLabel } from '../../lib/kanbanData'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { openComposeTab, openThreadTab } from '../../states/compose'
 import type { Contact, Message } from '../../types'
@@ -16,6 +17,7 @@ import { MenuItem } from '../menu/MenuItem'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { ui$ } from '../../states/ui'
+import { mail$ } from '../../states/mail'
 import { IconButton } from '../button/IconButton'
 import { useNarrowWindow } from '../../lib/useNarrowWindow'
 import { ContactNotes } from './ContactNotes'
@@ -33,6 +35,8 @@ export function ContactsView() {
   const narrow = useNarrowWindow()
   const accounts = useValue(accounts$)
   const canSend = accounts.some(isSendableAccount)
+  const foldersByAccount = useValue(mail$.foldersByAccount)
+  const currentFolders = useValue(mail$.folders)
   const [copied, setCopied] = useState(false)
   const sort = useValue(contacts$.sort)
   const [sortOpen, setSortOpen] = useState(false)
@@ -328,6 +332,13 @@ export function ContactsView() {
                     key={thread.thread_id}
                     thread={thread}
                     badgeAccount={accounts.find((account) => account.id === thread.account_id)}
+                    // History spans folders, so each row names where it lives.
+                    folderLabel={folderLabel(
+                      { accountId: thread.account_id, folderId: thread.folder_id },
+                      [...(foldersByAccount[thread.account_id] ?? []), ...currentFolders],
+                      accounts,
+                      t,
+                    )}
                     onSelect={() => {
                       openThreadTab(thread)
                       if (narrow) ui$.contactsOpen.set(false)

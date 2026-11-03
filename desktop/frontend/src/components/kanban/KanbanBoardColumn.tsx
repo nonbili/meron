@@ -458,7 +458,7 @@ function KanbanColumnContent({
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <h3 className={clsx('flex min-w-0 text-xs font-bold', isPaused ? 'text-secondary' : 'text-primary')}>
               {isRss ? (
-                <span className="truncate">{folderLabel(column, labelFolders, accounts)}</span>
+                <span className="truncate">{folderLabel(column, labelFolders, accounts, t)}</span>
               ) : (
                 <FolderSwitcher
                   accountId={column.accountId}

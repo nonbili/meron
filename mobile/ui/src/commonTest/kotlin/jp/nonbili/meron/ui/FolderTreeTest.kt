@@ -126,4 +126,24 @@ class FolderTreeTest {
         assertEquals(listOf("Work" to 0, "Acme" to 1, "Personal" to 0), rows.map { it.node.name to it.depth })
         assertTrue(rows.all { it.node.folder != null })
     }
+
+    @Test
+    fun threadFolderLabelTranslatesInboxAndShowsTheDecodedLeaf() {
+        val folders =
+            listOf(
+                FolderSummary(accountId = "acc1", name = "INBOX", role = "inbox"),
+                FolderSummary(accountId = "acc1", name = "[Gmail]/Sent Mail", role = "sent", delimiter = "/"),
+                FolderSummary(accountId = "acc1", name = "t2/&MMYwuTDI-", displayName = "t2/テスト", delimiter = "/"),
+                FolderSummary(accountId = "acc1", name = "a.b"),
+            )
+
+        assertEquals("Inbox", threadFolderLabel("INBOX", folders, "Inbox"))
+        assertEquals("Inbox", threadFolderLabel("INBOX", emptyList(), "Inbox"))
+        assertEquals("Sent Mail", threadFolderLabel("[Gmail]/Sent Mail", folders, "Inbox"))
+        assertEquals("テスト", threadFolderLabel("t2/&MMYwuTDI-", folders, "Inbox"))
+        // No delimiter: punctuation is part of the name.
+        assertEquals("a.b", threadFolderLabel("a.b", folders, "Inbox"))
+        // Folders not loaded yet: the bare id rather than nothing.
+        assertEquals("Archive", threadFolderLabel("Archive", folders, "Inbox"))
+    }
 }

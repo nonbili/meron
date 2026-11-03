@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Rss } from 'lucide-react'
 import { folderIcon } from '../../lib/folderIcon'
+import { useTranslation } from '../../lib/i18n'
 import { kanbanColumnKey } from '../../states/kanban'
 import { Checkbox } from '../field/Checkbox'
 import { selectableFolderIds, type TreeNode } from '../../lib/folderTree'
@@ -23,6 +24,7 @@ export function FolderTreeRow({
   selected: Set<string>
   onToggle: (keys: string[], next: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
   const checkboxRef = useRef<HTMLInputElement>(null)
   const hasChildren = node.children.length > 0
@@ -41,7 +43,7 @@ export function FolderTreeRow({
 
   const isInbox =
     !!node.folder && (node.folder.id.toLowerCase() === 'inbox' || node.folder.name.toLowerCase() === 'inbox')
-  const displayName = isInbox ? (isRSS ? 'Feed' : 'Inbox') : node.name
+  const displayName = isInbox ? (isRSS ? 'Feed' : t('folders.roles.inbox')) : node.name
   const Icon = isRSS && isInbox ? Rss : folderIcon(node.folder)
 
   return (

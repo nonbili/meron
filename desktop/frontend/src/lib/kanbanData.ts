@@ -182,12 +182,7 @@ export function isUnifiedStarredColumn(column: KanbanColumn): boolean {
   return column.accountId === 'unified' && column.folderId.toLowerCase() === 'starred'
 }
 
-export function folderLabel(
-  column: KanbanColumn,
-  folders: Folder[],
-  accounts: Account[],
-  t: (key: string) => string = (key) => key,
-) {
+export function folderLabel(column: KanbanColumn, folders: Folder[], accounts: Account[], t: (key: string) => string) {
   const isInbox = column.folderId.toLowerCase() === 'inbox'
   // The unified view's synthetic folders are named after their role alone
   // ("Sent", "Archive") for the side nav, where the selected account already
@@ -201,7 +196,7 @@ export function folderLabel(
   if (isLocalAccountId(column.accountId)) {
     return found?.name ? folderLeafName(found) : accountLabel(column.accountId, accounts)
   }
-  if (isInbox) return isRSS ? 'Feed' : 'Inbox'
+  if (isInbox) return isRSS ? 'Feed' : t('folders.roles.inbox')
   if (!found?.name) return column.folderId
   // A column names its folder without the path above it ("Now", not
   // "[Gmail]/Now"); the folder switcher's tree still shows where it sits. Feed
@@ -216,7 +211,7 @@ export function searchColumnLabel(
   t: (key: string) => string = (key) => key,
 ) {
   if (column.accountId === 'unified') return unifiedFolderLabel(column.folderId, t)
-  return `${accountLabel(column.accountId, accounts)} / ${folderLabel(column, folders, accounts)}`
+  return `${accountLabel(column.accountId, accounts)} / ${folderLabel(column, folders, accounts, t)}`
 }
 
 /// Every column an account-wide cache change can touch. `mail.sentCopyCached`
