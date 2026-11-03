@@ -102,3 +102,21 @@ describe('platform mapping helpers', () => {
     expect(androidEscape('Version %1$s · Package %2$s')).toBe('Version %1$s · Package %2$s')
   })
 })
+
+describe('Russian catalog', () => {
+  test('covers every English key and preserves named and positional placeholders', async () => {
+    const en = (await import('../../locales/en.json')).default
+    const ru = (await import('../../locales/ru.json')).default
+    expect(() => validateCatalogs({ en, ru })).not.toThrow()
+    for (const key of Object.keys(en) as (keyof typeof en)[]) {
+      expect(ru[key].match(/%\d+\$[sd]/g) ?? []).toEqual(en[key].match(/%\d+\$[sd]/g) ?? [])
+      if (en[key].includes(', plural,')) {
+        for (const category of ['one', 'few', 'many', 'other']) {
+          expect(ru[key]).toContain(`${category} {`)
+        }
+      }
+    }
+    expect(androidLocaleDir('ru')).toBe('values-ru')
+    expect(iosLocale('ru')).toBe('ru')
+  })
+})

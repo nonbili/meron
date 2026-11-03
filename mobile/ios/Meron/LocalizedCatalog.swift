@@ -7,7 +7,8 @@ func localizedCatalogString(
     bundle: Bundle = .main
 ) -> String {
     let template = localizedCatalogTemplate(key, localeIdentifier: localeIdentifier, bundle: bundle)
-    return formatLocalizedCatalogTemplate(template, args: args)
+    let language = localeIdentifier ?? bundle.preferredLocalizations.first ?? "en"
+    return formatLocalizedCatalogTemplate(template, args: args, localeIdentifier: language)
 }
 
 private func localizedCatalogTemplate(
@@ -25,15 +26,29 @@ private func localizedCatalogTemplate(
     return localizedBundle.localizedString(forKey: key, value: nil, table: nil)
 }
 
-private func formatLocalizedCatalogTemplate(_ template: String, args: [String: Any]) -> String {
+private func formatLocalizedCatalogTemplate(
+    _ template: String,
+    args: [String: Any],
+    localeIdentifier: String
+) -> String {
     if let plural = parseLocalizedCatalogPlural(template) {
         let count = localizedCatalogInt(args[plural.argument]) ?? 0
-        let selected = plural.variants[count == 1 ? "one" : "other"]
+        let language = localeIdentifier.replacingOccurrences(of: "_", with: "-").components(separatedBy: "-")[0].lowercased()
+        let category = language == "ru" ? russianPluralCategory(count) : (count == 1 ? "one" : "other")
+        let selected = plural.variants[category]
             ?? plural.variants["other"]
             ?? template
         return replaceLocalizedCatalogPlaceholders(selected, args: args)
     }
     return replaceLocalizedCatalogPlaceholders(template, args: args)
+}
+
+private func russianPluralCategory(_ count: Int) -> String {
+    let lastTwo = abs(count % 100)
+    let last = lastTwo % 10
+    if last == 1, lastTwo != 11 { return "one" }
+    if (2 ... 4).contains(last), !(12 ... 14).contains(lastTwo) { return "few" }
+    return "many"
 }
 
 private struct LocalizedCatalogPlural {

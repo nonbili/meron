@@ -316,6 +316,7 @@
 				pl,
 				pt,
 				"pt-BR",
+				ru,
 				sv,
 				tr,
 				vi,

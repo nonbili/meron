@@ -17,6 +17,7 @@ var (
 )
 
 type nativeLabels struct {
+	language                                              string
 	calendar, tasks                                       string
 	trayShow, trayHide, trayHideTooltip, trayQuit         string
 	newMessage, newMessageCount, noSubject, unknownSender string
@@ -47,6 +48,7 @@ func (a *App) setNativeLabels(payload map[string]any) (any, error) {
 			*field = value
 		}
 	}
+	set(&currentLabels.language, "language")
 	set(&currentLabels.trayShow, "trayShow")
 	set(&currentLabels.calendar, "calendar")
 	set(&currentLabels.tasks, "tasks")
@@ -78,11 +80,11 @@ func (a *App) setNativeLabels(payload map[string]any) (any, error) {
 	return map[string]any{"ok": true}, nil
 }
 
-func formatNativePlural(template string, count int) string {
+func formatNativePlural(template string, count int, locale string) string {
 	selected := template
 	if strings.HasPrefix(template, "{count, plural,") {
 		branches := map[string]string{}
-		for _, category := range []string{"one", "other"} {
+		for _, category := range []string{"one", "few", "many", "other"} {
 			marker := category + " {"
 			start := strings.Index(template, marker)
 			if start < 0 {
@@ -103,10 +105,28 @@ func formatNativePlural(template string, count int) string {
 				branches[category] = template[start : end-1]
 			}
 		}
-		if count == 1 {
-			selected = branches["one"]
-		} else {
-			selected = branches["other"]
+		category := "other"
+		if strings.EqualFold(strings.Split(strings.ReplaceAll(locale, "_", "-"), "-")[0], "ru") {
+			lastTwo := count % 100
+			if lastTwo < 0 {
+				lastTwo = -lastTwo
+			}
+			last := lastTwo % 10
+			switch {
+			case last == 1 && lastTwo != 11:
+				category = "one"
+			case last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14):
+				category = "few"
+			default:
+				category = "many"
+			}
+		} else if count == 1 {
+			category = "one"
+		}
+		if branch, ok := branches[category]; ok {
+			selected = branch
+		} else if branch, ok := branches["other"]; ok {
+			selected = branch
 		}
 	}
 	return strings.ReplaceAll(selected, "{count}", fmt.Sprint(count))
@@ -323,7 +343,7 @@ func (a *App) notifyNewMail(detail any) {
 			title = fmt.Sprintf("%s - %s", title, accountName)
 		}
 	} else {
-		title = formatNativePlural(labels.newMessageCount, count)
+		title = formatNativePlural(labels.newMessageCount, count, labels.language)
 		if accountName != "" {
 			title = fmt.Sprintf("%s - %s", title, accountName)
 		}

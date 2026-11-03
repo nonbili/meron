@@ -21,7 +21,7 @@ internal fun localizedString(
             ?: generatedStrings["en"]
             ?: emptyMap()
     val template = messages[key] ?: generatedStrings["en"]?.get(key) ?: key
-    return formatIcu(template, args)
+    return formatIcu(template, args, locale)
 }
 
 /** Composable string lookup keyed by the current [LocalAppLocale]. */
@@ -89,6 +89,7 @@ private fun formatPositional(
 private fun formatIcu(
     template: String,
     args: Map<String, Any?>,
+    locale: String,
 ): String {
     val plural = parsePlural(template)
     val selected =
@@ -99,11 +100,27 @@ private fun formatIcu(
                 (args[plural.argument] as? Number)?.toLong()
                     ?: args[plural.argument]?.toString()?.toLongOrNull()
                     ?: 0L
-            plural.variants[if (count == 1L) "one" else "other"]
+            val category =
+                if (locale.substringBefore('-').substringBefore('_').lowercase() == "ru") {
+                    russianPluralCategory(count)
+                } else {
+                    if (count == 1L) "one" else "other"
+                }
+            plural.variants[category]
                 ?: plural.variants["other"]
                 ?: template
         }
     return replacePlaceholders(selected, args)
+}
+
+private fun russianPluralCategory(count: Long): String {
+    val lastTwo = kotlin.math.abs(count % 100)
+    val last = lastTwo % 10
+    return when {
+        last == 1L && lastTwo != 11L -> "one"
+        last in 2L..4L && lastTwo !in 12L..14L -> "few"
+        else -> "many"
+    }
 }
 
 private data class IcuPlural(

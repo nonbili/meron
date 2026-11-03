@@ -56,6 +56,22 @@ final class LocalizationContractTests: XCTestCase {
         )
     }
 
+    func testRussianCatalogFormatsPluralForms() throws {
+        let bundle = try XCTUnwrap(Bundle(identifier: "jp.nonbili.meron"))
+        XCTAssertEqual(localizedCatalogString("buttons.cancel", localeIdentifier: "ru", bundle: bundle), "Отмена")
+        let endings = [
+            0: "писем", 1: "письмо", 2: "письма", 4: "письма", 5: "писем",
+            11: "писем", 12: "писем", 14: "писем", 21: "письмо", 22: "письма",
+            25: "писем", 101: "письмо", 111: "писем",
+        ]
+        for (count, ending) in endings {
+            XCTAssertEqual(
+                localizedCatalogString("chat.messagesCount", localeIdentifier: "ru", args: ["count": count], bundle: bundle),
+                "\(count) \(ending)"
+            )
+        }
+    }
+
     func testIosAppLanguageOptionsUseGeneratedCatalogLocaleIdentifiers() {
         XCTAssertEqual(iosNormalizedAppLanguageTag("pt-BR"), "pt-BR")
         XCTAssertEqual(iosNormalizedAppLanguageTag("zh-Hans"), "zh-Hans")
