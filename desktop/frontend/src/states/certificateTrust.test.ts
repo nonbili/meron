@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { certTrust$, dismissCertificatePrompt, trustPromptedCertificate } from './certificateTrust'
 import { retrySend } from './quickReplySend'
 import { setPendingSend, getPendingSend, type PendingSend } from './pendingSends'
@@ -23,8 +23,10 @@ const pending = (): PendingSend => ({
 describe('certificate trust on the send path', () => {
   const calls: { command: string; payload: any }[] = []
   let sendFailures = 1
+  let previousGo: unknown
 
   beforeEach(() => {
+    previousGo = (window as any).go
     calls.length = 0
     sendFailures = 1
     dismissCertificatePrompt()
@@ -70,6 +72,11 @@ describe('certificate trust on the send path', () => {
         },
       },
     }
+  })
+
+  // The stubs below fail every command; later files must get the bridge back.
+  afterEach(() => {
+    ;(window as any).go = previousGo
   })
 
   it('offers the submission server certificate instead of a dead-end failure', async () => {
