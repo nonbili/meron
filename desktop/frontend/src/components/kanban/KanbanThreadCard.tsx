@@ -64,8 +64,8 @@ export function KanbanThreadCard({
   // conversation, so it reads as selected while that tab is on screen. Its
   // thread_id is the whole feed's, so match the tab by the item's own id.
   const activeTab = useValue(compose$.activeTab)
-  // The card Esc closed the conversation of keeps its highlight while it has
-  // the keyboard and nothing else is on screen in the pane.
+  // The card selected from the keyboard (Esc, then the arrow keys) reads as
+  // selected while nothing is on screen in the pane.
   const keyboardCard = useValue(kanban$.keyboardCard)
   const keyboardSelected =
     !paneThreadId &&

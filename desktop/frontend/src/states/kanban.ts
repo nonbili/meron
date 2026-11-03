@@ -65,13 +65,15 @@ export const kanban$ = observable({
   // The column of the card last opened, as a conversation or in a tab: j/k
   // steps through it first.
   paneColumnKey: '',
-  // The card Esc closed the conversation of, which keeps keyboard focus and
-  // reads as selected until a conversation opens or focus moves on.
+  // The card selected from the keyboard while no conversation is open: the one
+  // Esc closed the conversation of, then wherever the arrow keys move. It has
+  // keyboard focus and reads as selected until a conversation opens or focus
+  // moves on.
   keyboardCard: null as KanbanCardRef | null,
 })
 
-// The highlight stays with the open conversation's card; the card Esc left
-// behind gives it up the moment a conversation opens or the board changes.
+// The highlight belongs to the open conversation's card: the keyboard's card
+// gives it up the moment a conversation opens or the board changes.
 kanban$.paneThreadId.onChange(({ value }) => {
   if (value) kanban$.keyboardCard.set(null)
 })
@@ -839,19 +841,16 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
   ui$.mobilePane.set('conversation')
 }
 
-// Move the open kanban conversation through the visible cards in its current
-// column. This mirrors chat-list adjacent navigation but uses the active board.
-// It starts from whatever the pane shows, a tab included.
 /** A card on the board: its thread, and the column (board column key) it sits in. */
 export type KanbanCardRef = { threadId: string; columnKey: string }
 
-/** Step to the next or previous card from the conversation on screen, opening
- * it, or, with none open, move the selection from `from` (the focused card) or
- * the selected card without opening anything. Without either, start at the
- * first column's end. */
+// Move through the visible cards of the active board, its current column first.
+// This mirrors chat-list adjacent navigation. With a conversation or tab in the
+// pane it steps from whatever the pane shows and opens the next card; with none,
+// it only moves the selection (kanban$.keyboardCard), from `from` (the focused
+// card) or the selected card, and Return opens it. With neither, it starts at
+// the first column's end.
 export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) {
-  // With no conversation or tab in the pane, the arrow keys only move the
-  // selection (kanban$.keyboardCard); Return opens the card it lands on.
   const paneOpen = !!(kanbanPaneThreadId() || compose$.activeTab.get())
   const open = kanbanPaneThreadId() || ui$.selectedThread.get()
   const origin = open ? undefined : (from ?? kanban$.keyboardCard.get() ?? undefined)
