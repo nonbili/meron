@@ -6,13 +6,14 @@ import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.ThreadReadPage
 import jp.nonbili.meron.shared.ThreadSummary
 
-internal enum class Screen { Mail, Kanban, Tasks, Calendar, Thread, Compose, AddAccount, Settings }
+internal enum class Screen { Mail, Kanban, Tasks, Calendar, Contacts, Thread, Compose, AddAccount, Settings }
 
 internal object AppRoutes {
     const val Mail = "mail"
     const val Kanban = "kanban"
     const val Tasks = "tasks"
     const val Calendar = "calendar"
+    const val Contacts = "contacts"
     const val Compose = "compose"
     const val AddAccount = "add-account"
     const val Settings = "settings"
@@ -26,6 +27,7 @@ internal fun Screen.route(): String =
         Screen.Kanban -> AppRoutes.Kanban
         Screen.Tasks -> AppRoutes.Tasks
         Screen.Calendar -> AppRoutes.Calendar
+        Screen.Contacts -> AppRoutes.Contacts
         Screen.Thread -> AppRoutes.Mail
         Screen.Compose -> AppRoutes.Compose
         Screen.AddAccount -> AppRoutes.AddAccount
@@ -38,6 +40,7 @@ internal fun appRouteToScreen(route: String?): Screen? =
         AppRoutes.Kanban -> Screen.Kanban
         AppRoutes.Tasks -> Screen.Tasks
         AppRoutes.Calendar -> Screen.Calendar
+        AppRoutes.Contacts -> Screen.Contacts
         AppRoutes.Compose -> Screen.Compose
         AppRoutes.AddAccount -> Screen.AddAccount
         AppRoutes.Settings -> Screen.Settings

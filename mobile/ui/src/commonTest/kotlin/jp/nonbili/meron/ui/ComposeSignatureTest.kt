@@ -22,6 +22,17 @@ import kotlin.test.assertTrue
 /** The signature a compose body carries as accounts and entry points change. */
 class ComposeSignatureTest {
     @Test
+    fun composingFromContactsReturnsToContacts() {
+        val state = composeState()
+        state.screen = Screen.Contacts
+        state.openComposeTo("Contact <contact@example.com>", "b", returnScreen = Screen.Contacts)
+        assertEquals(Screen.Compose, state.screen)
+        assertEquals(Screen.Contacts, state.composeReturnScreen)
+        assertEquals("Contact <contact@example.com>", state.to)
+        assertEquals("\n\nFrom B", state.body)
+    }
+
+    @Test
     fun newComposeCarriesTheSendingAccountsSignature() {
         val state = composeState()
 

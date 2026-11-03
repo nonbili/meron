@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -25,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +35,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.MessageBody
+
+internal val LocalOpenContact = staticCompositionLocalOf<((ContactSuggestion) -> Unit)?> { null }
 
 // Sender and recipients as tappable chips — the mobile counterpart of the
 // desktop bubble's address popover. A tap copies the full address; a long press
@@ -120,6 +125,7 @@ private fun AddressChip(
     var menuOpen by remember(item.full) { mutableStateOf(false) }
     val emailLabel = tr("accounts.fields.emailAddress")
     val email = item.email.ifBlank { item.display }
+    val openContact = LocalOpenContact.current
     Box {
         Surface(
             shape = RoundedCornerShape(6.dp),
@@ -161,6 +167,16 @@ private fun AddressChip(
                 },
             )
             if (email.contains("@")) {
+                if (openContact != null) {
+                    DropdownMenuItem(
+                        text = { Text(tr("contacts.open")) },
+                        leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            openContact(ContactSuggestion(name = item.display, addr = email))
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(tr("composer.actions.newMessage")) },
                     leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },

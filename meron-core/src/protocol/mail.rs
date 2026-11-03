@@ -804,6 +804,20 @@ pub(crate) fn rename_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
     })
 }
 
+/// Cached threads involving an exact address, across all accounts and folders.
+/// The store builds ordinary thread-list cards, including actionable identities.
+pub(crate) fn list_mobile_contact_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let addr = req_str(params, "addr")?;
+    if addr.trim().is_empty() {
+        return Err("addr is required".to_string());
+    }
+    let limit = opt_u32(params, "limit").unwrap_or(50).clamp(1, 200) as usize;
+    let cursor = params.get("before_cursor").and_then(Value::as_str);
+    with_mobile_db(data_dir, |conn| {
+        store::contact_thread_page(&conn, &addr, cursor, limit).map_err(|err| format!("{err:#}"))
+    })
+}
+
 pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
     if account_id == "unified" {

@@ -49,6 +49,7 @@ object MobileCommand {
     const val FolderRename = "mail.folderRename"
     const val FolderSetNotify = "mail.folderSetNotify"
     const val ContactSuggest = "mail.suggestContacts"
+    const val ContactThreads = "mail.contactThreads"
     const val ThreadList = "mail.threadList"
     const val StarredItems = "mail.starredItems"
     const val AllocateIdentity = "mail.allocateIdentity"
@@ -705,14 +706,33 @@ data class FolderSetNotifyParams(
 }
 
 data class ContactSuggestParams(
-    val accountId: String,
+    val accountId: String = "",
     val query: String = "",
     val limit: Int = 8,
+    // frequent (autocomplete default), name, or recent.
+    val sort: String = "frequent",
+    val directory: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
             "account" to accountId.jsonString(),
             "query" to query.jsonString(),
+            "limit" to limit.toString(),
+            "sort" to if (sort == "frequent") null else sort.jsonString(),
+            "directory" to if (directory) "true" else null,
+        )
+}
+
+/** Exact-address, cache-only history across all accounts and folders. */
+data class ContactThreadsParams(
+    val addr: String,
+    val beforeCursor: String? = null,
+    val limit: Int = 50,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "addr" to addr.jsonString(),
+            "before_cursor" to beforeCursor?.jsonString(),
             "limit" to limit.toString(),
         )
 }
@@ -1338,6 +1358,8 @@ class MobileMailCommandClient(
 
     suspend fun suggestContacts(params: ContactSuggestParams): String = core.invoke(MobileCommand.ContactSuggest, params.toJson())
 
+    suspend fun contactThreads(params: ContactThreadsParams): String = core.invoke(MobileCommand.ContactThreads, params.toJson())
+
     suspend fun listThreads(params: ThreadListParams): String = core.invoke(MobileCommand.ThreadList, params.toJson())
 
     suspend fun listStarredItems(params: StarredItemsParams = StarredItemsParams()): String = core.invoke(MobileCommand.StarredItems, params.toJson())
@@ -1641,6 +1663,11 @@ fun contactSuggestRequest(
     id: Long = 1,
     params: ContactSuggestParams,
 ): CoreRequest = CoreRequest(id, MobileCommand.ContactSuggest, params.toJson())
+
+fun contactThreadsRequest(
+    id: Long = 1,
+    params: ContactThreadsParams,
+): CoreRequest = CoreRequest(id, MobileCommand.ContactThreads, params.toJson())
 
 fun threadListRequest(
     id: Long = 1,

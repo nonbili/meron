@@ -459,6 +459,11 @@ internal fun ViewsDrawer(
                 screen = Screen.Settings
                 scope.launch { drawerState.close() }
             },
+            onOpenContacts = {
+                previousTopScreen = screen
+                screen = Screen.Contacts
+                scope.launch { drawerState.close() }
+            },
             onShowAbout = {
                 showAboutDialog = true
                 scope.launch { drawerState.close() }

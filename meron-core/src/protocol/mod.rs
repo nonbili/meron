@@ -92,6 +92,9 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "app.proxySet" => Ok(json!({ "ok": true })),
         "account.reorder" => Ok(json!({ "ok": true })),
         "contacts.suggest" | "mail.suggestContacts" => Ok(json!({ "contacts": [] })),
+        "contacts.threads" | "mail.contactThreads" => {
+            Ok(json!({ "threads": [], "next_cursor": null }))
+        }
         "feed.add" | "rss.addFeed" => Ok(json!({ "ok": true })),
         "feed.remove" | "rss.removeFeed" => Ok(json!({ "ok": true })),
         "feed.move" | "rss.moveFeed" => Ok(json!({ "ok": true, "moved": 0 })),
@@ -208,6 +211,9 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "account.reorder" => reorder_mobile_accounts(data_dir, &req.params),
         "contacts.suggest" | "mail.suggestContacts" => {
             suggest_mobile_contacts(data_dir, &req.params)
+        }
+        "contacts.threads" | "mail.contactThreads" => {
+            list_mobile_contact_threads(data_dir, &req.params)
         }
         "feed.add" | "rss.addFeed" => add_mobile_rss_feed(data_dir, &req.params),
         "feed.remove" | "rss.removeFeed" => remove_mobile_rss_feed(data_dir, &req.params),

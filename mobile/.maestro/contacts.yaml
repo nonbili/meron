@@ -1,0 +1,30 @@
+appId: jp.nonbili.meron
+---
+# Non-destructive contacts smoke check. Requires at least one cached-mail account.
+# Contacts strings currently have identical English fallbacks in every locale.
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "Search contacts|Open navigation|ナビゲーションを開く"
+    timeout: 20000
+- runFlow:
+    when:
+      notVisible: "Search contacts"
+    commands:
+      - tapOn:
+          text: "Open navigation|ナビゲーションを開く"
+      - scrollUntilVisible:
+          element: "Contacts"
+          direction: DOWN
+      - tapOn: "Contacts"
+- extendedWaitUntil:
+    visible: "Search contacts"
+    timeout: 20000
+- tapOn: "Search contacts"
+- inputText: "meron-contacts-no-match-89231@example.invalid"
+- extendedWaitUntil:
+    visible: "No contacts found in cached mail."
+    timeout: 20000
+- eraseText: 60
+- hideKeyboard
+- takeScreenshot: contacts-directory

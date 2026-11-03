@@ -397,6 +397,9 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
 
 fun parseThreadListResponse(responseJson: String): List<ThreadSummary> = parseThreadListPage(responseJson).threads
 
+/** Contact history uses the mailbox card shape and an opaque paging cursor. */
+fun parseContactThreadsPage(responseJson: String): ThreadListPage = parseThreadListPage(responseJson)
+
 data class ThreadReadPage(
     val messages: List<MessageBody>,
     val nextCursor: String,

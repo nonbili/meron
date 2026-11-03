@@ -206,6 +206,19 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun contactHistoryReusesThreadCardsAndOpaqueCursor() {
+        val response =
+            """{"result":{"threads":[{"id":"other#Archive#t","account_id":"other","folder_id":"Archive","folder_role":"archive","subject":"Hello","from_name":"Alice","unread":true,"unread_count":2,"message_count":3,"tags":["Work"],"starred":true}],"next_cursor":"[200,\"other\\nkey\"]"}}"""
+        val page = parseContactThreadsPage(response)
+        assertEquals(parseThreadListPage(response), page)
+        assertEquals("[200,\"other\\nkey\"]", page.nextCursor)
+        assertEquals("other", page.threads.single().accountId)
+        assertEquals("Archive", page.threads.single().folder)
+        assertEquals(listOf("Work"), page.threads.single().tags)
+        assertEquals("", parseContactThreadsPage("""{"threads":[],"next_cursor":null}""").nextCursor)
+    }
+
+    @Test
     fun parsesThreadFilesFromTopLevelKeysOnly() {
         val threads =
             parseThreadListResponse(

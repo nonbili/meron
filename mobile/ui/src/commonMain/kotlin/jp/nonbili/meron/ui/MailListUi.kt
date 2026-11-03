@@ -793,7 +793,7 @@ private const val MAX_ATTACHMENT_CHIPS = 2
 // Gmail-style attachment chips under a mail row: the first files by name, then
 // a count of the rest. Display only — the row itself is the click target.
 @Composable
-private fun MailRowAttachmentChips(
+internal fun MailRowAttachmentChips(
     files: List<MessageAttachment>,
     modifier: Modifier = Modifier,
 ) {
@@ -902,6 +902,7 @@ internal fun SenderAvatar(
     label: String,
     enabled: Boolean,
     size: Dp,
+    fallbackName: String = label,
 ) {
     val core = LocalAvatarCore.current
     val email = remember(label) { extractEmail(label) }
@@ -922,7 +923,7 @@ internal fun SenderAvatar(
             modifier = Modifier.size(size).clip(CircleShape),
         )
     } else {
-        Avatar(label, size)
+        Avatar(fallbackName, size)
     }
 }
 

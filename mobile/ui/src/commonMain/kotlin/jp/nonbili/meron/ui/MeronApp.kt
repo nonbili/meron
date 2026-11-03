@@ -441,781 +441,782 @@ private fun MeronMobileScreenContent(
     coreProtocolVersion: Int,
 ) {
     with(state) {
-        MailTaskListPicker(state)
-        val navController = rememberNavController()
-        val currentBackStackEntry by navController.currentBackStackEntryAsState()
-        val startRoute = remember { screen.route() }
-        var pendingRoute by remember { mutableStateOf<String?>(null) }
-        // A conversation is drawn over the screen it was opened from, which
-        // stays the current route underneath it, live, for as long as it is open.
-        var threadHostRoute by remember { mutableStateOf(AppRoutes.Mail) }
-        LaunchedEffect(screen) {
-            val currentEntry = currentBackStackEntry
-            val currentRoute = currentEntry?.destination?.route
-            if (screen == Screen.Thread && currentRoute != null) {
-                // Opened over whatever is showing; back from the editor, over
-                // what the editor was opened on.
-                threadHostRoute =
-                    if (currentRoute == AppRoutes.Compose) {
-                        navController.previousBackStackEntry?.destination?.route ?: threadHostRoute
-                    } else {
-                        currentRoute
+        var contactToOpen by remember { mutableStateOf<ContactSuggestion?>(null) }
+        val contactsState = rememberContactsScreenState(core)
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalOpenContact provides { contact: ContactSuggestion ->
+                contactToOpen = contact
+                flushQuickReplyAutosave()
+                if (screen != Screen.Contacts && screen != Screen.Thread) previousTopScreen = screen
+                screen = Screen.Contacts
+            },
+        ) {
+            MailTaskListPicker(state)
+            val navController = rememberNavController()
+            val currentBackStackEntry by navController.currentBackStackEntryAsState()
+            val startRoute = remember { screen.route() }
+            var pendingRoute by remember { mutableStateOf<String?>(null) }
+            // A conversation is drawn over the screen it was opened from, which
+            // stays the current route underneath it, live, for as long as it is open.
+            var threadHostRoute by remember { mutableStateOf(AppRoutes.Mail) }
+            LaunchedEffect(screen) {
+                val currentEntry = currentBackStackEntry
+                val currentRoute = currentEntry?.destination?.route
+                if (screen == Screen.Thread && currentRoute != null) {
+                    // Opened over whatever is showing; back from the editor, over
+                    // what the editor was opened on.
+                    threadHostRoute =
+                        if (currentRoute == AppRoutes.Compose) {
+                            navController.previousBackStackEntry?.destination?.route ?: threadHostRoute
+                        } else {
+                            currentRoute
+                        }
+                }
+                val targetRoute = if (screen == Screen.Thread) threadHostRoute else screen.route()
+                if (currentRoute == null) {
+                    pendingRoute = targetRoute
+                } else if (currentRoute != targetRoute) {
+                    if (!currentEntry.awaitSettled()) return@LaunchedEffect
+                    if (!navController.popBackStack(targetRoute, inclusive = false)) {
+                        navController.navigate(targetRoute) {
+                            launchSingleTop = true
+                        }
                     }
+                }
             }
-            val targetRoute = if (screen == Screen.Thread) threadHostRoute else screen.route()
-            if (currentRoute == null) {
-                pendingRoute = targetRoute
-            } else if (currentRoute != targetRoute) {
-                if (!currentEntry.awaitSettled()) return@LaunchedEffect
-                if (!navController.popBackStack(targetRoute, inclusive = false)) {
-                    navController.navigate(targetRoute) {
+            LaunchedEffect(currentBackStackEntry?.destination?.route) {
+                val currentEntry = currentBackStackEntry
+                val currentRoute = currentEntry?.destination?.route
+                val queuedRoute = pendingRoute
+                if (queuedRoute != null && currentRoute != null && currentRoute != queuedRoute) {
+                    pendingRoute = null
+                    if (!currentEntry.awaitSettled()) return@LaunchedEffect
+                    navController.navigate(queuedRoute) {
                         launchSingleTop = true
                     }
+                    return@LaunchedEffect
                 }
-            }
-        }
-        LaunchedEffect(currentBackStackEntry?.destination?.route) {
-            val currentEntry = currentBackStackEntry
-            val currentRoute = currentEntry?.destination?.route
-            val queuedRoute = pendingRoute
-            if (queuedRoute != null && currentRoute != null && currentRoute != queuedRoute) {
                 pendingRoute = null
-                if (!currentEntry.awaitSettled()) return@LaunchedEffect
-                navController.navigate(queuedRoute) {
-                    launchSingleTop = true
-                }
-                return@LaunchedEffect
-            }
-            pendingRoute = null
-            val destinationScreen = appRouteToScreen(currentRoute)
-            // A conversation open over its route is where the app is, too.
-            val overHost = screen == Screen.Thread && currentRoute == threadHostRoute
-            if (destinationScreen != null && screen != destinationScreen && !overHost) {
-                screen = destinationScreen
-            }
-        }
-        val popAppBack: () -> Unit = {
-            if (screen == Screen.Thread) {
-                flushQuickReplyAutosave()
-                // The screen underneath never left; closing the conversation
-                // only uncovers it.
-                screen = appRouteToScreen(navController.currentBackStackEntry?.destination?.route) ?: previousTopScreen
-            } else if (canMutateBackStack(navController.currentBackStackEntry?.lifecycle?.currentState)) {
-                if (!navController.popBackStack()) {
-                    screen = previousTopScreen
+                val destinationScreen = appRouteToScreen(currentRoute)
+                // A conversation open over its route is where the app is, too.
+                val overHost = screen == Screen.Thread && currentRoute == threadHostRoute
+                if (destinationScreen != null && screen != destinationScreen && !overHost) {
+                    screen = destinationScreen
                 }
             }
-        }
-        DisposableEffect(Unit) {
-            val handle =
-                if (coreLoaded) {
-                    core.events().subscribe { event ->
-                        when (event.name) {
-                            "mail.newMessages" -> {
-                                if (!liveMailPushEnabled) {
-                                    mobileHost.notifyNewMail(event.detailJson)
+            val popAppBack: () -> Unit = {
+                if (screen == Screen.Thread) {
+                    flushQuickReplyAutosave()
+                    // The screen underneath never left; closing the conversation
+                    // only uncovers it.
+                    screen = appRouteToScreen(navController.currentBackStackEntry?.destination?.route) ?: previousTopScreen
+                } else if (canMutateBackStack(navController.currentBackStackEntry?.lifecycle?.currentState)) {
+                    if (screen == Screen.Contacts && navController.previousBackStackEntry == null) {
+                        val destination = rootBackDestination(screen, previousTopScreen)
+                        navController.navigate(destination.route()) {
+                            popUpTo(AppRoutes.Contacts) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                        screen = destination
+                    } else if (!navController.popBackStack()) {
+                        screen = rootBackDestination(screen, previousTopScreen)
+                    }
+                }
+            }
+            DisposableEffect(Unit) {
+                val handle =
+                    if (coreLoaded) {
+                        core.events().subscribe { event ->
+                            when (event.name) {
+                                "mail.newMessages" -> {
+                                    if (!liveMailPushEnabled) {
+                                        mobileHost.notifyNewMail(event.detailJson)
+                                    }
+                                    val eventAccount = event.detailJson.jsonStringValue("account")
+                                    val eventFolder = event.detailJson.jsonStringValue("folder")
+                                    scope.launch {
+                                        reloadVisibleMailboxFor(eventAccount, eventFolder)
+                                        refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
+                                        refreshOpenThreadFor(eventAccount)
+                                    }
                                 }
-                                val eventAccount = event.detailJson.jsonStringValue("account")
-                                val eventFolder = event.detailJson.jsonStringValue("folder")
-                                scope.launch {
-                                    reloadVisibleMailboxFor(eventAccount, eventFolder)
-                                    refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
-                                    refreshOpenThreadFor(eventAccount)
+
+                                "mail.synced" -> {
+                                    val eventAccount = event.detailJson.jsonStringValue("account")
+                                    val eventFolder = event.detailJson.jsonStringValue("folder")
+                                    scope.launch {
+                                        reloadVisibleMailboxFor(eventAccount, eventFolder)
+                                        refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
+                                        refreshOpenThreadFor(eventAccount)
+                                    }
                                 }
-                            }
 
-                            "mail.synced" -> {
-                                val eventAccount = event.detailJson.jsonStringValue("account")
-                                val eventFolder = event.detailJson.jsonStringValue("folder")
-                                scope.launch {
-                                    reloadVisibleMailboxFor(eventAccount, eventFolder)
-                                    refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
-                                    refreshOpenThreadFor(eventAccount)
+                                // A mailbox changed outside the UI — a notification's
+                                // Archive or Mark as read. The mail is already gone
+                                // from the server, so the open list is stale in
+                                // exactly the way a sync would have corrected.
+                                "mail.mailboxChanged" -> {
+                                    val eventAccount = event.detailJson.jsonStringValue("account")
+                                    val eventFolder = event.detailJson.jsonStringValue("folder")
+                                    scope.launch {
+                                        reloadVisibleMailboxFor(eventAccount, eventFolder)
+                                        refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
+                                        refreshOpenThreadFor(eventAccount)
+                                    }
                                 }
-                            }
 
-                            // A mailbox changed outside the UI — a notification's
-                            // Archive or Mark as read. The mail is already gone
-                            // from the server, so the open list is stale in
-                            // exactly the way a sync would have corrected.
-                            "mail.mailboxChanged" -> {
-                                val eventAccount = event.detailJson.jsonStringValue("account")
-                                val eventFolder = event.detailJson.jsonStringValue("folder")
-                                scope.launch {
-                                    reloadVisibleMailboxFor(eventAccount, eventFolder)
-                                    refreshKanbanColumnsForMailEvent(eventAccount, eventFolder)
-                                    refreshOpenThreadFor(eventAccount)
+                                // A Sent copy the provider filed seconds after SMTP
+                                // returned, too late for the reload the send itself
+                                // ran. It adds a message to its conversation, so the
+                                // row's count (which spans folders) is one short. It
+                                // names no folder: the row sits in whichever mailbox
+                                // holds the conversation, so every column of the
+                                // account re-reads.
+                                "mail.sentCopyCached" -> {
+                                    val eventAccount = event.detailJson.jsonStringValue("account")
+                                    scope.launch {
+                                        reloadVisibleMailboxFor(eventAccount, "")
+                                        refreshKanbanColumnsForAccount(eventAccount)
+                                        refreshOpenThreadFor(eventAccount)
+                                    }
                                 }
-                            }
 
-                            // A Sent copy the provider filed seconds after SMTP
-                            // returned, too late for the reload the send itself
-                            // ran. It adds a message to its conversation, so the
-                            // row's count (which spans folders) is one short. It
-                            // names no folder: the row sits in whichever mailbox
-                            // holds the conversation, so every column of the
-                            // account re-reads.
-                            "mail.sentCopyCached" -> {
-                                val eventAccount = event.detailJson.jsonStringValue("account")
-                                scope.launch {
-                                    reloadVisibleMailboxFor(eventAccount, "")
-                                    refreshKanbanColumnsForAccount(eventAccount)
-                                    refreshOpenThreadFor(eventAccount)
+                                // The deferred sync tail (body prefetch, Sent/Drafts
+                                // headers) never changes the open folder's thread
+                                // list, so only the open thread needs a refresh —
+                                // reloading the list here would reset pagination.
+                                "mail.tailSynced" -> {
+                                    val eventAccount = event.detailJson.jsonStringValue("account")
+                                    scope.launch {
+                                        refreshOpenThreadFor(eventAccount)
+                                    }
                                 }
-                            }
 
-                            // The deferred sync tail (body prefetch, Sent/Drafts
-                            // headers) never changes the open folder's thread
-                            // list, so only the open thread needs a refresh —
-                            // reloading the list here would reset pagination.
-                            "mail.tailSynced" -> {
-                                val eventAccount = event.detailJson.jsonStringValue("account")
-                                scope.launch {
-                                    refreshOpenThreadFor(eventAccount)
+                                "account.needsReconnect" -> {
+                                    refreshAccountReconnectState(event.detailJson.jsonStringValue("account"))
                                 }
-                            }
 
-                            "account.needsReconnect" -> {
-                                refreshAccountReconnectState(event.detailJson.jsonStringValue("account"))
-                            }
-
-                            "error" -> {
-                                // Watcher/runtime failures are regular core events,
-                                // not `log` events. Keep them visible in Logcat and
-                                // the redacted on-device diagnostic log.
-                                Log.e("core/event", event.detailJson.jsonStringValue("message"))
-                            }
-
-                            "log" -> {
-                                // Surface Rust core logs through the platform logger
-                                // (os_log / Logcat); they'd otherwise be invisible
-                                // on device.
-                                val tag = "core/" + event.detailJson.jsonStringValue("tag")
-                                val message = event.detailJson.jsonStringValue("message")
-                                when (event.detailJson.jsonStringValue("level")) {
-                                    "DEBUG" -> Log.d(tag, message)
-                                    "INFO" -> Log.i(tag, message)
-                                    "WARN" -> Log.w(tag, message)
-                                    else -> Log.e(tag, message)
+                                "error" -> {
+                                    // Watcher/runtime failures are regular core events,
+                                    // not `log` events. Keep them visible in Logcat and
+                                    // the redacted on-device diagnostic log.
+                                    Log.e("core/event", event.detailJson.jsonStringValue("message"))
                                 }
-                                // A core panic aborts the process right after
-                                // this line, so mark it here; the JVM crash
-                                // handler never runs for a native abort.
-                                if (tag == "core/panic") {
-                                    mobileHost.noteCoreCrash(message)
+
+                                "log" -> {
+                                    // Surface Rust core logs through the platform logger
+                                    // (os_log / Logcat); they'd otherwise be invisible
+                                    // on device.
+                                    val tag = "core/" + event.detailJson.jsonStringValue("tag")
+                                    val message = event.detailJson.jsonStringValue("message")
+                                    when (event.detailJson.jsonStringValue("level")) {
+                                        "DEBUG" -> Log.d(tag, message)
+                                        "INFO" -> Log.i(tag, message)
+                                        "WARN" -> Log.w(tag, message)
+                                        else -> Log.e(tag, message)
+                                    }
+                                    // A core panic aborts the process right after
+                                    // this line, so mark it here; the JVM crash
+                                    // handler never runs for a native abort.
+                                    if (tag == "core/panic") {
+                                        mobileHost.noteCoreCrash(message)
+                                    }
                                 }
                             }
                         }
+                    } else {
+                        null
                     }
-                } else {
-                    null
+                onDispose { handle?.close() }
+            }
+            LaunchedEffect(liveMailPushEnabled) {
+                mobileHost.syncLiveMailPush(liveMailPushEnabled)
+            }
+            LaunchedEffect(backgroundSyncEnabled) {
+                mobileHost.syncBackgroundRefresh(backgroundSyncEnabled)
+            }
+            // Foreground poll for platforms without a real background channel (iOS):
+            // re-sync the visible mailbox on the chosen interval while the app is
+            // open. Honors "Off" (interval 0). The timer suspends with the app and
+            // resumes on return; the foreground signal below covers the gap after a
+            // long suspension.
+            if (!mobileHost.supportsBackgroundPush) {
+                LaunchedEffect(pollIntervalMinutes, coreLoaded) {
+                    if (!coreLoaded || pollIntervalMinutes <= 0) return@LaunchedEffect
+                    while (true) {
+                        delay(pollIntervalMinutes * 60_000L)
+                        syncCoreThreads(
+                            accountOverride = selectedCoreAccountId,
+                            folderOverride = selectedCoreFolder,
+                            syncFirst = true,
+                        )
+                    }
                 }
-            onDispose { handle?.close() }
-        }
-        LaunchedEffect(liveMailPushEnabled) {
-            mobileHost.syncLiveMailPush(liveMailPushEnabled)
-        }
-        LaunchedEffect(backgroundSyncEnabled) {
-            mobileHost.syncBackgroundRefresh(backgroundSyncEnabled)
-        }
-        // Foreground poll for platforms without a real background channel (iOS):
-        // re-sync the visible mailbox on the chosen interval while the app is
-        // open. Honors "Off" (interval 0). The timer suspends with the app and
-        // resumes on return; the foreground signal below covers the gap after a
-        // long suspension.
-        if (!mobileHost.supportsBackgroundPush) {
-            LaunchedEffect(pollIntervalMinutes, coreLoaded) {
-                if (!coreLoaded || pollIntervalMinutes <= 0) return@LaunchedEffect
-                while (true) {
-                    delay(pollIntervalMinutes * 60_000L)
+            }
+            // Refresh the visible mailbox whenever the app comes back to the
+            // foreground. Something else kept mail arriving while it was away —
+            // Android's background worker, iOS's poll — and on Android the activity
+            // may have been stopped for all of it, leaving the list showing what was
+            // on screen when the user left even though the store has moved on. A
+            // store re-read is enough to close that gap, so only platforms that have
+            // to fetch for themselves (iOS, and only when its poll is on) go to the
+            // network here.
+            LaunchedEffect(coreLoaded, pollIntervalMinutes) {
+                if (!coreLoaded) return@LaunchedEffect
+                AppForegroundSignal.events.collect {
                     syncCoreThreads(
                         accountOverride = selectedCoreAccountId,
                         folderOverride = selectedCoreFolder,
-                        syncFirst = true,
+                        syncFirst = !mobileHost.supportsBackgroundPush && pollIntervalMinutes > 0,
                     )
                 }
             }
-        }
-        // Refresh the visible mailbox whenever the app comes back to the
-        // foreground. Something else kept mail arriving while it was away —
-        // Android's background worker, iOS's poll — and on Android the activity
-        // may have been stopped for all of it, leaving the list showing what was
-        // on screen when the user left even though the store has moved on. A
-        // store re-read is enough to close that gap, so only platforms that have
-        // to fetch for themselves (iOS, and only when its poll is on) go to the
-        // network here.
-        LaunchedEffect(coreLoaded, pollIntervalMinutes) {
-            if (!coreLoaded) return@LaunchedEffect
-            AppForegroundSignal.events.collect {
-                syncCoreThreads(
-                    accountOverride = selectedCoreAccountId,
-                    folderOverride = selectedCoreFolder,
-                    syncFirst = !mobileHost.supportsBackgroundPush && pollIntervalMinutes > 0,
-                )
+            LaunchedEffect(Unit) {
+                NotificationPermissionSignal.events.collect {
+                    notificationPermissionGranted = mobileHost.notificationsEnabled()
+                }
             }
-        }
-        LaunchedEffect(Unit) {
-            NotificationPermissionSignal.events.collect {
-                notificationPermissionGranted = mobileHost.notificationsEnabled()
-            }
-        }
-        val importOpml: (PickedFile?) -> Unit = { picked ->
-            if (picked != null) {
-                runCatching { picked.bytes.decodeToString() }
-                    .onSuccess { opml ->
-                        val accountId = selectedCoreAccountId
-                        if (accountId == UNIFIED_ACCOUNT_ID || accountId.isBlank()) {
-                            status = trs("mobile.status.selectRssAccountFirst")
-                            return@onSuccess
-                        }
-                        if (!coreLoaded) {
-                            status = coreUnavailableMessage
-                            return@onSuccess
-                        }
-                        scope.launchThreadListRead(threadRemovalGuard) { read ->
-                            runCatching {
-                                withContext(ioDispatcher) {
-                                    val client = MobileMailCommandClient(core)
-                                    val importJson = client.importOpml(ImportOpmlParams(accountId = accountId, opml = opml))
-                                    client.syncRss(SyncRssParams(accountId = accountId))
-                                    val foldersJson = client.listFolders(FolderListParams(accountId = accountId))
-                                    val threadsJson =
-                                        client.listThreads(
-                                            ThreadListParams(
-                                                accountId = accountId,
-                                                folderId = INBOX_FOLDER,
-                                                query = mailSearch.trim(),
-                                                filter = mailFilter.protocolValue(),
-                                                attachments = mailAttachmentsOnly,
-                                            ),
-                                        )
-                                    Triple(importJson, foldersJson, threadsJson)
-                                }
-                            }.onSuccess { (importJson, foldersJson, threadsJson) ->
-                                val imported = parseOpmlImportCountResponse(importJson)
-                                coreFolders = parseFolderListResponse(foldersJson)
-                                coreThreads = withLocalDraftFlags(read.filter(parseThreadListResponse(threadsJson)))
-                                selectedCoreFolder = INBOX_FOLDER
-                                visibleMailboxKey =
-                                    mailboxCacheKey(accountId, INBOX_FOLDER, mailSearch, mailFilter, mailAttachmentsOnly)
-                                mailboxPageDepth = MAILBOX_PAGE_SIZE
-                                status = if (imported == 0) trs("feeds.toast.noNewFeedsToImport") else trs("feeds.toast.importedFeeds", mapOf("count" to imported))
-                            }.onFailure {
-                                status = trsError("mobile.status.opmlImportFailed", it)
-                            }
-                        }
-                    }.onFailure {
-                        status = trsError("mobile.status.opmlReadFailed", it)
-                    }
-            }
-        }
-        launchOpmlExport = { fileName ->
-            val document = pendingOpmlExport
-            services.saveFile(document.encodeToByteArray(), fileName, "text/xml") { result ->
-                result
-                    .onSuccess { saved ->
-                        if (saved) {
-                            pendingOpmlExport = ""
-                            status = trs("feeds.toast.feedsExported")
-                        }
-                    }.onFailure { status = trsError("mobile.status.opmlExportFailed", it) }
-            }
-        }
-        launchBackupExport = { fileName ->
-            val document = pendingBackupExport
-            pendingBackupExport = ""
-            services.saveFile(document.encodeToByteArray(), fileName, "application/json") { result ->
-                result
-                    .onSuccess { saved ->
-                        if (saved) status = trs("settings.backup.exported")
-                    }.onFailure { status = trsError("mobile.status.backupExportFailed", it) }
-            }
-        }
-        // Restore starts at the file picker; the core decides whether what came
-        // back needs a passphrase.
-        val pickBackupFile: () -> Unit = {
-            services.pickFile(listOf("application/json", "text/plain", "*/*")) { picked ->
+            val importOpml: (PickedFile?) -> Unit = { picked ->
                 if (picked != null) {
                     runCatching { picked.bytes.decodeToString() }
-                        .onSuccess { document -> importBackup(document) }
-                        .onFailure { status = trsError("settings.backup.restoreFailed", it) }
-                }
-            }
-        }
-        launchAttachmentSave = { fileName ->
-            val attachment = pendingAttachmentSave
-            pendingAttachmentSave = null
-            if (attachment != null) {
-                scope.launch {
-                    runCatching {
-                        withContext(ioDispatcher) { readAttachmentBytes(attachment) }
-                    }.onSuccess { bytes ->
-                        val resolved = normalizedRemoteImage(attachment, bytes)
-                        services.saveFile(bytes, safeAttachmentFilename(resolved), resolved.mimeType.ifBlank { "application/octet-stream" }) { result ->
-                            result
-                                .onSuccess { saved ->
-                                    if (saved) status = trs("chat.savedAttachment", mapOf("filename" to attachment.filename.ifBlank { fileName }))
-                                }.onFailure { status = trsError("mobile.status.attachmentSaveFailed", it) }
-                        }
-                    }.onFailure {
-                        status = trsError("mobile.status.attachmentSaveFailed", it)
-                    }
-                }
-            }
-        }
-        val pickAttachmentInto: ((DraftAttachment) -> Unit) -> Unit = { onPicked ->
-            services.pickFile(listOf("*/*")) { picked ->
-                if (picked != null) {
-                    runCatching { picked.toDraftAttachment() }
-                        .onSuccess {
-                            onPicked(it)
-                            status = trs("mobile.status.attachedFile", mapOf("name" to it.displayName))
-                        }.onFailure {
-                            status = trsError("mobile.status.attachFailed", it)
-                        }
-                }
-            }
-        }
-        val pickAccountMedia: () -> Unit = {
-            val target = accountMediaUploadTarget
-            accountMediaUploadTarget = null
-            if (target != null) {
-                services.pickImage { picked ->
-                    if (picked == null) return@pickImage
-                    runCatching {
-                        AccountMediaFileParams(
-                            accountId = target.account.id,
-                            filename = picked.name,
-                            mime = picked.mimeType.ifBlank { "application/octet-stream" },
-                            data = Base64.Default.encode(picked.bytes),
-                        )
-                    }.onSuccess { params ->
-                        if (!coreLoaded) {
-                            status = coreUnavailableMessage
-                            return@onSuccess
-                        }
-                        scope.launch {
-                            runCatching {
-                                withContext(ioDispatcher) {
-                                    val client = MobileMailCommandClient(core)
-                                    val uploadJson =
-                                        if (target.wallpaper) {
-                                            client.writeAccountChatWallpaperFile(params)
-                                        } else {
-                                            client.writeAccountAvatarFile(params)
-                                        }
-                                    val mediaUrl = parseMediaFileUrlResponse(uploadJson)
-                                    if (mediaUrl.isBlank()) error("Media upload returned no URL")
-                                    if (target.wallpaper) {
-                                        client.setAccountChatWallpaper(AccountChatWallpaperParams(target.account.id, customUrl = mediaUrl))
-                                    } else {
-                                        client.setAccountAvatar(AccountAvatarParams(target.account.id, mediaUrl))
+                        .onSuccess { opml ->
+                            val accountId = selectedCoreAccountId
+                            if (accountId == UNIFIED_ACCOUNT_ID || accountId.isBlank()) {
+                                status = trs("mobile.status.selectRssAccountFirst")
+                                return@onSuccess
+                            }
+                            if (!coreLoaded) {
+                                status = coreUnavailableMessage
+                                return@onSuccess
+                            }
+                            scope.launchThreadListRead(threadRemovalGuard) { read ->
+                                runCatching {
+                                    withContext(ioDispatcher) {
+                                        val client = MobileMailCommandClient(core)
+                                        val importJson = client.importOpml(ImportOpmlParams(accountId = accountId, opml = opml))
+                                        client.syncRss(SyncRssParams(accountId = accountId))
+                                        val foldersJson = client.listFolders(FolderListParams(accountId = accountId))
+                                        val threadsJson =
+                                            client.listThreads(
+                                                ThreadListParams(
+                                                    accountId = accountId,
+                                                    folderId = INBOX_FOLDER,
+                                                    query = mailSearch.trim(),
+                                                    filter = mailFilter.protocolValue(),
+                                                    attachments = mailAttachmentsOnly,
+                                                ),
+                                            )
+                                        Triple(importJson, foldersJson, threadsJson)
                                     }
-                                    client.listAccounts()
+                                }.onSuccess { (importJson, foldersJson, threadsJson) ->
+                                    val imported = parseOpmlImportCountResponse(importJson)
+                                    coreFolders = parseFolderListResponse(foldersJson)
+                                    coreThreads = withLocalDraftFlags(read.filter(parseThreadListResponse(threadsJson)))
+                                    selectedCoreFolder = INBOX_FOLDER
+                                    visibleMailboxKey =
+                                        mailboxCacheKey(accountId, INBOX_FOLDER, mailSearch, mailFilter, mailAttachmentsOnly)
+                                    mailboxPageDepth = MAILBOX_PAGE_SIZE
+                                    status = if (imported == 0) trs("feeds.toast.noNewFeedsToImport") else trs("feeds.toast.importedFeeds", mapOf("count" to imported))
+                                }.onFailure {
+                                    status = trsError("mobile.status.opmlImportFailed", it)
                                 }
-                            }.onSuccess {
-                                accountJson = it
-                                coreAccounts = parseAccountListResponse(it)
-                                status = trs(if (target.wallpaper) "mobile.status.chatWallpaperUpdated" else "mobile.status.avatarUpdated")
+                            }
+                        }.onFailure {
+                            status = trsError("mobile.status.opmlReadFailed", it)
+                        }
+                }
+            }
+            launchOpmlExport = { fileName ->
+                val document = pendingOpmlExport
+                services.saveFile(document.encodeToByteArray(), fileName, "text/xml") { result ->
+                    result
+                        .onSuccess { saved ->
+                            if (saved) {
+                                pendingOpmlExport = ""
+                                status = trs("feeds.toast.feedsExported")
+                            }
+                        }.onFailure { status = trsError("mobile.status.opmlExportFailed", it) }
+                }
+            }
+            launchBackupExport = { fileName ->
+                val document = pendingBackupExport
+                pendingBackupExport = ""
+                services.saveFile(document.encodeToByteArray(), fileName, "application/json") { result ->
+                    result
+                        .onSuccess { saved ->
+                            if (saved) status = trs("settings.backup.exported")
+                        }.onFailure { status = trsError("mobile.status.backupExportFailed", it) }
+                }
+            }
+            // Restore starts at the file picker; the core decides whether what came
+            // back needs a passphrase.
+            val pickBackupFile: () -> Unit = {
+                services.pickFile(listOf("application/json", "text/plain", "*/*")) { picked ->
+                    if (picked != null) {
+                        runCatching { picked.bytes.decodeToString() }
+                            .onSuccess { document -> importBackup(document) }
+                            .onFailure { status = trsError("settings.backup.restoreFailed", it) }
+                    }
+                }
+            }
+            launchAttachmentSave = { fileName ->
+                val attachment = pendingAttachmentSave
+                pendingAttachmentSave = null
+                if (attachment != null) {
+                    scope.launch {
+                        runCatching {
+                            withContext(ioDispatcher) { readAttachmentBytes(attachment) }
+                        }.onSuccess { bytes ->
+                            val resolved = normalizedRemoteImage(attachment, bytes)
+                            services.saveFile(bytes, safeAttachmentFilename(resolved), resolved.mimeType.ifBlank { "application/octet-stream" }) { result ->
+                                result
+                                    .onSuccess { saved ->
+                                        if (saved) status = trs("chat.savedAttachment", mapOf("filename" to attachment.filename.ifBlank { fileName }))
+                                    }.onFailure { status = trsError("mobile.status.attachmentSaveFailed", it) }
+                            }
+                        }.onFailure {
+                            status = trsError("mobile.status.attachmentSaveFailed", it)
+                        }
+                    }
+                }
+            }
+            val pickAttachmentInto: ((DraftAttachment) -> Unit) -> Unit = { onPicked ->
+                services.pickFile(listOf("*/*")) { picked ->
+                    if (picked != null) {
+                        runCatching { picked.toDraftAttachment() }
+                            .onSuccess {
+                                onPicked(it)
+                                status = trs("mobile.status.attachedFile", mapOf("name" to it.displayName))
                             }.onFailure {
-                                status = trsError(if (target.wallpaper) "wallpaper.uploadFailed" else "settings.toast.failedToUploadAvatar", it)
+                                status = trsError("mobile.status.attachFailed", it)
                             }
+                    }
+                }
+            }
+            val pickAccountMedia: () -> Unit = {
+                val target = accountMediaUploadTarget
+                accountMediaUploadTarget = null
+                if (target != null) {
+                    services.pickImage { picked ->
+                        if (picked == null) return@pickImage
+                        runCatching {
+                            AccountMediaFileParams(
+                                accountId = target.account.id,
+                                filename = picked.name,
+                                mime = picked.mimeType.ifBlank { "application/octet-stream" },
+                                data = Base64.Default.encode(picked.bytes),
+                            )
+                        }.onSuccess { params ->
+                            if (!coreLoaded) {
+                                status = coreUnavailableMessage
+                                return@onSuccess
+                            }
+                            scope.launch {
+                                runCatching {
+                                    withContext(ioDispatcher) {
+                                        val client = MobileMailCommandClient(core)
+                                        val uploadJson =
+                                            if (target.wallpaper) {
+                                                client.writeAccountChatWallpaperFile(params)
+                                            } else {
+                                                client.writeAccountAvatarFile(params)
+                                            }
+                                        val mediaUrl = parseMediaFileUrlResponse(uploadJson)
+                                        if (mediaUrl.isBlank()) error("Media upload returned no URL")
+                                        if (target.wallpaper) {
+                                            client.setAccountChatWallpaper(AccountChatWallpaperParams(target.account.id, customUrl = mediaUrl))
+                                        } else {
+                                            client.setAccountAvatar(AccountAvatarParams(target.account.id, mediaUrl))
+                                        }
+                                        client.listAccounts()
+                                    }
+                                }.onSuccess {
+                                    accountJson = it
+                                    coreAccounts = parseAccountListResponse(it)
+                                    status = trs(if (target.wallpaper) "mobile.status.chatWallpaperUpdated" else "mobile.status.avatarUpdated")
+                                }.onFailure {
+                                    status = trsError(if (target.wallpaper) "wallpaper.uploadFailed" else "settings.toast.failedToUploadAvatar", it)
+                                }
+                            }
+                        }.onFailure {
+                            status = trsError("mobile.status.mediaReadFailed", it)
                         }
-                    }.onFailure {
-                        status = trsError("mobile.status.mediaReadFailed", it)
                     }
                 }
             }
-        }
-        val pickKanbanBoardMedia: () -> Unit = {
-            val target = kanbanBoardMediaTarget
-            kanbanBoardMediaTarget = null
-            if (target != null) {
-                services.pickImage { picked ->
-                    if (picked == null) return@pickImage
-                    val mediaUrl = "data:${picked.mimeType.ifBlank { "application/octet-stream" }};base64,${Base64.Default.encode(picked.bytes)}"
-                    if (target.wallpaper) {
-                        updateKanbanBoard(
-                            target.board.id,
-                            target.board.name,
-                            target.board.avatarUrl,
-                            "",
-                            mediaUrl,
-                        )
-                        status = trs("mobile.status.boardWallpaperUpdated")
-                    } else {
-                        updateKanbanBoard(
-                            target.board.id,
-                            target.board.name,
-                            mediaUrl,
-                            target.board.wallpaperPresetId,
-                            target.board.wallpaperUrl,
-                        )
-                        status = trs("mobile.status.boardAvatarUpdated")
+            val pickKanbanBoardMedia: () -> Unit = {
+                val target = kanbanBoardMediaTarget
+                kanbanBoardMediaTarget = null
+                if (target != null) {
+                    services.pickImage { picked ->
+                        if (picked == null) return@pickImage
+                        val mediaUrl = "data:${picked.mimeType.ifBlank { "application/octet-stream" }};base64,${Base64.Default.encode(picked.bytes)}"
+                        if (target.wallpaper) {
+                            updateKanbanBoard(
+                                target.board.id,
+                                target.board.name,
+                                target.board.avatarUrl,
+                                "",
+                                mediaUrl,
+                            )
+                            status = trs("mobile.status.boardWallpaperUpdated")
+                        } else {
+                            updateKanbanBoard(
+                                target.board.id,
+                                target.board.name,
+                                mediaUrl,
+                                target.board.wallpaperPresetId,
+                                target.board.wallpaperUrl,
+                            )
+                            status = trs("mobile.status.boardAvatarUpdated")
+                        }
                     }
                 }
             }
-        }
 
-        LaunchedEffect(storageClearConfirming) {
-            if (storageClearConfirming) {
-                delay(4_000)
-                storageClearConfirming = false
-            }
-        }
-
-        LaunchedEffect(status, statusIsError) {
-            if (status.isNotBlank()) {
-                snackbarHost.showSnackbar(
-                    message = status,
-                    withDismissAction = statusIsError,
-                    duration = if (statusIsError) SnackbarDuration.Indefinite else SnackbarDuration.Short,
-                )
-                if (statusIsError) status = ""
-            }
-        }
-
-        // A `mailto:` link can arrive before the core has answered with the
-        // accounts and the app-wide signature — on a cold start it usually
-        // does. Composing then would seed a draft from an empty account list
-        // and record that it has no signature, so this waits for both.
-        LaunchedEffect(incomingMailtoDraft, initialAccountsLoaded, appSignatureLoaded) {
-            if (!initialAccountsLoaded || !appSignatureLoaded) return@LaunchedEffect
-            incomingMailtoDraft?.let { draft ->
-                openMailtoCompose(draft) {
-                    onMailtoDraftConsumed()
-                    status = trs("mobile.status.composeDraftLoaded")
+            LaunchedEffect(storageClearConfirming) {
+                if (storageClearConfirming) {
+                    delay(4_000)
+                    storageClearConfirming = false
                 }
             }
-        }
 
-        LaunchedEffect(incomingOAuthCallbackUrl) {
-            incomingOAuthCallbackUrl?.let { rawUrl ->
-                handleOAuthCallback(rawUrl)
-                onOAuthCallbackConsumed()
+            LaunchedEffect(status, statusIsError) {
+                if (status.isNotBlank()) {
+                    snackbarHost.showSnackbar(
+                        message = status,
+                        withDismissAction = statusIsError,
+                        duration = if (statusIsError) SnackbarDuration.Indefinite else SnackbarDuration.Short,
+                    )
+                    if (statusIsError) status = ""
+                }
             }
-        }
 
-        LaunchedEffect(incomingNotificationThreadTarget) {
-            incomingNotificationThreadTarget?.let { target ->
-                openNotificationThread(target)
-                onNotificationThreadTargetConsumed()
+            // A `mailto:` link can arrive before the core has answered with the
+            // accounts and the app-wide signature — on a cold start it usually
+            // does. Composing then would seed a draft from an empty account list
+            // and record that it has no signature, so this waits for both.
+            LaunchedEffect(incomingMailtoDraft, initialAccountsLoaded, appSignatureLoaded) {
+                if (!initialAccountsLoaded || !appSignatureLoaded) return@LaunchedEffect
+                incomingMailtoDraft?.let { draft ->
+                    openMailtoCompose(draft) {
+                        onMailtoDraftConsumed()
+                        status = trs("mobile.status.composeDraftLoaded")
+                    }
+                }
             }
-        }
 
-        // Load persisted accounts once on startup so they survive app restarts.
-        LaunchedEffect(Unit) {
-            if (coreLoaded && coreAccounts.isEmpty()) {
-                listAccounts()
-            } else if (!coreLoaded) {
-                initialAccountsLoaded = true
+            LaunchedEffect(incomingOAuthCallbackUrl) {
+                incomingOAuthCallbackUrl?.let { rawUrl ->
+                    handleOAuthCallback(rawUrl)
+                    onOAuthCallbackConsumed()
+                }
             }
-            // The proxy lives in the core store, so it needs a read of its own.
-            loadAppProxy()
-            loadAppSignature()
-            loadRemoteImageSenders()
-            loadAlertDefaults()
-        }
 
-        // Once accounts are known, surface whatever the local store already holds so
-        // a cold start shows the cached inbox instead of an empty "Nothing here yet".
-        // A server sync still happens on pull-to-refresh / "Sync now".
-        LaunchedEffect(coreAccounts) {
-            if (coreAccounts.isNotEmpty() && coreThreads.isEmpty() && activeMailboxLoadKey == null) {
-                syncCoreThreads(syncFirst = false)
+            LaunchedEffect(incomingNotificationThreadTarget) {
+                incomingNotificationThreadTarget?.let { target ->
+                    openNotificationThread(target)
+                    onNotificationThreadTargetConsumed()
+                }
             }
-        }
 
-        LaunchedEffect(coreAccounts, activeKanbanBoardId) {
-            if (coreAccounts.isNotEmpty() && screen == Screen.Kanban) {
-                loadKanbanBoard(refresh = false)
+            // Load persisted accounts once on startup so they survive app restarts.
+            LaunchedEffect(Unit) {
+                if (coreLoaded && coreAccounts.isEmpty()) {
+                    listAccounts()
+                } else if (!coreLoaded) {
+                    initialAccountsLoaded = true
+                }
+                // The proxy lives in the core store, so it needs a read of its own.
+                loadAppProxy()
+                loadAppSignature()
+                loadRemoteImageSenders()
+                loadAlertDefaults()
             }
-        }
 
-        val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
-        val selectedAccountIsRss = selectedAccount != null && accountSummaryIsRss(selectedAccount)
-        val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
-        val selectedThreadAccountId = selectedThreadAccount?.id.orEmpty()
-        val drawerFolders = foldersByAccount.values.flatten().ifEmpty { coreFolders }
-        val selectedThreadPreferHtml =
-            selectedThreadAccount?.let { account ->
-                conversationHtmlOverrides[account.id] ?: account.conversationHtml
-            } ?: true
-        val activeKanbanBoard = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: kanbanBoards.firstOrNull()
-        val appBarTitle = tr(if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) "kanban.columns.unifiedInbox" else "folders.roles.inbox")
-        val appBarSubtitle =
-            if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
-                tr("kanban.allAccounts")
-            } else {
-                selectedAccount?.email?.ifBlank { selectedAccount.displayName }.orEmpty()
+            // Once accounts are known, surface whatever the local store already holds so
+            // a cold start shows the cached inbox instead of an empty "Nothing here yet".
+            // A server sync still happens on pull-to-refresh / "Sync now".
+            LaunchedEffect(coreAccounts) {
+                if (coreAccounts.isNotEmpty() && coreThreads.isEmpty() && activeMailboxLoadKey == null) {
+                    syncCoreThreads(syncFirst = false)
+                }
             }
-        val selectedMailThreads =
-            (coreThreads + kanbanColumns.values.flatMap { it.threads })
-                .distinctBy { it.id }
-                .filter { it.id in selectedMailThreadIds }
-        val mailSelectionActive = selectedMailThreadIds.isNotEmpty()
 
-        LaunchedEffect(screen, coreThreads, kanbanColumns) {
-            val visibleThreadIds =
-                if (screen == Screen.Kanban) {
-                    kanbanColumns.values
-                        .flatMap { it.threads }
-                        .map { it.id }
-                        .toSet()
+            LaunchedEffect(coreAccounts, activeKanbanBoardId) {
+                if (coreAccounts.isNotEmpty() && screen == Screen.Kanban) {
+                    loadKanbanBoard(refresh = false)
+                }
+            }
+
+            val selectedAccount = coreAccounts.firstOrNull { it.id == selectedCoreAccountId }
+            val selectedAccountIsRss = selectedAccount != null && accountSummaryIsRss(selectedAccount)
+            val selectedThreadAccount = selectedCoreThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
+            val selectedThreadAccountId = selectedThreadAccount?.id.orEmpty()
+            val drawerFolders = foldersByAccount.values.flatten().ifEmpty { coreFolders }
+            val selectedThreadPreferHtml =
+                selectedThreadAccount?.let { account ->
+                    conversationHtmlOverrides[account.id] ?: account.conversationHtml
+                } ?: true
+            val activeKanbanBoard = kanbanBoards.firstOrNull { it.id == activeKanbanBoardId } ?: kanbanBoards.firstOrNull()
+            val appBarTitle = tr(if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) "kanban.columns.unifiedInbox" else "folders.roles.inbox")
+            val appBarSubtitle =
+                if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+                    tr("kanban.allAccounts")
                 } else {
-                    coreThreads.map { it.id }.toSet()
+                    selectedAccount?.email?.ifBlank { selectedAccount.displayName }.orEmpty()
                 }
-            val retainedThreadIds = selectedMailThreadIds.intersect(visibleThreadIds)
-            if (retainedThreadIds.size != selectedMailThreadIds.size) {
-                selectedMailThreadIds = retainedThreadIds
-            }
-        }
+            val selectedMailThreads =
+                (coreThreads + kanbanColumns.values.flatMap { it.threads })
+                    .distinctBy { it.id }
+                    .filter { it.id in selectedMailThreadIds }
+            val mailSelectionActive = selectedMailThreadIds.isNotEmpty()
 
-        // MailRouteContent leaves composition while another route is open.
-        // Keep its per-mailbox list states above the NavHost so returning to
-        // the thread list restores the position that was visible before.
-        val mailListStates = remember { mutableMapOf<MailboxCacheKey, MailListPosition>() }
-
-        val threadOpen = screen == Screen.Thread
-        val threadStateHolder = rememberSaveableStateHolder()
-        LaunchedEffect(screen) {
-            if (screen != Screen.Thread && screen != Screen.Compose) threadStateHolder.removeState(THREAD_STATE_KEY)
-        }
-        val threadVisibility = remember { MutableTransitionState(threadOpen) }
-        threadVisibility.targetState = threadOpen
-        val pull = rememberPullToDismissState()
-        val focusManager = LocalFocusManager.current
-        LaunchedEffect(threadOpen) {
-            if (threadOpen) {
-                // Each opening starts the conversation in place, after a pull
-                // took the last one off screen.
-                pull.reset()
-                // The screen underneath stays composed, a search field in it
-                // focused, keyboard and all.
-                focusManager.clearFocus(force = true)
-            } else {
-                // Closed some other way while a pull was settling.
-                pull.stop()
-            }
-        }
-        // The screen underneath, fully hidden by a settled conversation: it
-        // keeps its state but is neither drawn nor read out.
-        val pulledAway by remember { derivedStateOf { pull.distancePx > 0f } }
-        val hostCovered by remember {
-            derivedStateOf { threadVisibility.isIdle && threadVisibility.currentState && pull.distancePx == 0f }
-        }
-
-        Box(Modifier.fillMaxSize()) {
-            NavHost(
-                navController = navController,
-                startDestination = startRoute,
-                modifier =
-                    Modifier
-                        .drawWithContent { if (!hostCovered) drawContent() }
-                        // Nor can focus move into it under the conversation.
-                        .focusProperties { onEnter = { if (threadOpen) cancelFocusChange() } }
-                        .then(if (hostCovered) Modifier.clearAndSetSemantics {} else Modifier),
-            ) {
-                composable(AppRoutes.Compose) {
-                    BackHandler(
-                        onBack = { closeCompose() },
-                    )
-                    ComposeScreen(
-                        sendIdentities = composeIdentityCandidates(),
-                        selectedFromKey = selectedComposeIdentity()?.let { identityKey(it) }.orEmpty(),
-                        onFromChange = { key ->
-                            val split = key.indexOf('|')
-                            if (split > 0) {
-                                changeComposeIdentity(key.substring(0, split), key.substring(split + 1))
-                            }
-                        },
-                        to = to,
-                        onToChange = {
-                            to = it
-                            loadRecipientSuggestions("to", it)
-                        },
-                        cc = cc,
-                        onCcChange = {
-                            cc = it
-                            loadRecipientSuggestions("cc", it)
-                        },
-                        bcc = bcc,
-                        onBccChange = {
-                            bcc = it
-                            loadRecipientSuggestions("bcc", it)
-                        },
-                        subject = subject,
-                        onSubjectChange = { subject = it },
-                        body = body,
-                        onBodyChange = { body = it },
-                        hasFoldedQuote = composeFoldedQuote != null,
-                        onExpandQuote = {
-                            expandComposeQuote()
-                            autoSaveComposeDraft()
-                        },
-                        onRemoveQuote = {
-                            removeComposeQuote()
-                            autoSaveComposeDraft()
-                        },
-                        attachments = attachments,
-                        recipientSuggestionField = recipientSuggestionField,
-                        recipientSuggestions = recipientSuggestions,
-                        onRecipientFocus = { field, value -> loadRecipientSuggestions(field, value) },
-                        onAcceptRecipientSuggestion = ::acceptRecipientSuggestion,
-                        onAttach = {
-                            pickAttachmentInto { picked ->
-                                attachments = attachments + picked
-                            }
-                        },
-                        onClearAttachments = { attachments = emptyList() },
-                        onRemoveAttachment = { draftAttachment ->
-                            attachments = attachments.filter { it.id != draftAttachment.id }
-                        },
-                        sendShortcutMode = sendShortcutMode,
-                        onSaveDraft = ::saveComposeDraft,
-                        onAutoSaveDraft = ::autoSaveComposeDraft,
-                        onDiscardDraft = ::discardComposeDraft,
-                        onSend = ::sendMail,
-                        onBack = ::closeCompose,
-                        sending = composeSendInFlight,
-                        snackbarHost = { SnackbarHost(snackbarHost) },
-                    )
-                }
-
-                composable(AppRoutes.AddAccount) {
-                    LaunchedEffect(Unit) {
-                        if (rssDisplayName.isBlank()) {
-                            rssDisplayName = nextRssAccountDisplayName(coreAccounts)
-                        }
+            LaunchedEffect(screen, coreThreads, kanbanColumns) {
+                val visibleThreadIds =
+                    if (screen == Screen.Kanban) {
+                        kanbanColumns.values
+                            .flatMap { it.threads }
+                            .map { it.id }
+                            .toSet()
+                    } else {
+                        coreThreads.map { it.id }.toSet()
                     }
-                    AddAccountScreen(
-                        onBack = popAppBack,
-                        initialSection = addSection,
-                        // Reconnect pre-fills the address of an account core can no
-                        // longer sign in to; any other address is a new account.
-                        reconnecting = coreAccounts.any { it.needsReconnect && it.email.equals(email.trim(), ignoreCase = true) },
-                        displayName = displayName,
-                        onDisplayNameChange = { displayName = it },
-                        senderName = senderName,
-                        onSenderNameChange = { senderName = it },
-                        email = email,
-                        onEmailChange = { email = it },
-                        username = username,
-                        onUsernameChange = { username = it },
-                        password = password,
-                        onPasswordChange = { password = it },
-                        host = host,
-                        onHostChange = {
-                            host = it
-                            hostTouched = it.isNotBlank()
-                        },
-                        imapPort = imapPort,
-                        onImapPortChange = {
-                            imapPort = it
-                            imapSecurity = mailSecurityAfterPortEdit(imapSecurity, imapSecurityTouched, it)
-                            imapPortTouched = it.isNotBlank()
-                        },
-                        imapSecurity = imapSecurity,
-                        onImapSecurityChange = {
-                            imapSecurity = it
-                            imapSecurityTouched = true
-                        },
-                        smtpHost = smtpHost,
-                        onSmtpHostChange = {
-                            smtpHost = it
-                            smtpHostTouched = it.isNotBlank()
-                        },
-                        smtpPort = smtpPort,
-                        onSmtpPortChange = {
-                            smtpPort = it
-                            smtpSecurity = mailSecurityAfterPortEdit(smtpSecurity, smtpSecurityTouched, it)
-                            smtpPortTouched = it.isNotBlank()
-                        },
-                        smtpSecurity = smtpSecurity,
-                        onSmtpSecurityChange = {
-                            smtpSecurity = it
-                            smtpSecurityTouched = true
-                        },
-                        serverSettingsOpen = passwordServerSettingsOpen,
-                        onServerSettingsOpenChange = { passwordServerSettingsOpen = it },
-                        onAutodiscover = ::autodiscoverPasswordAccount,
-                        onEmailBlur = { autodiscoverPasswordAccount(auto = true) },
-                        onAddPassword = ::addPasswordAccount,
-                        oauthAuthorizationCode = oauthAuthorizationCode,
-                        onLaunchOAuth = {
-                            oauthProvider = "outlook"
-                            launchOAuthFlow()
-                        },
-                        onConnectGoogleDeviceAccount = {
-                            oauthProvider = "gmail"
-                            connectGoogleDeviceAccount()
-                        },
-                        rssFeedUrl = rssFeedUrl,
-                        onRssFeedUrlChange = { rssFeedUrl = it },
-                        rssDisplayName = rssDisplayName,
-                        onRssDisplayNameChange = { rssDisplayName = it },
-                        rssAccountAdding = rssAccountAdding,
-                        onAddRss = ::addRssAccount,
-                    )
+                val retainedThreadIds = selectedMailThreadIds.intersect(visibleThreadIds)
+                if (retainedThreadIds.size != selectedMailThreadIds.size) {
+                    selectedMailThreadIds = retainedThreadIds
                 }
+            }
 
-                composable(AppRoutes.Settings) {
-                    LaunchedEffect(Unit) { loadStorageUsage() }
-                    SettingsScreen(
-                        rulesPage = { modifier -> RulesPage(modifier) },
-                        onOpenTags = { showTagsDialog = true },
-                        onBack = popAppBack,
-                        initialGeneral = settingsGeneralTarget,
-                        onConsumeInitialGeneral = { settingsGeneralTarget = false },
-                        initialAccountId = accountSettingsTargetId,
-                        initialAccountProxy =
-                            accountSettingsTargetId != null &&
-                                accountSettingsTargetId == accountSettingsProxyTargetId,
-                        onConsumeInitialAccount = {
-                            accountSettingsTargetId = null
-                            accountSettingsProxyTargetId = null
-                        },
-                        initialKanbanBoardId = kanbanSettingsTargetId,
-                        onConsumeInitialKanbanBoard = { kanbanSettingsTargetId = null },
-                        accounts = coreAccounts,
-                        hiddenNavigationAccountIds = hiddenNavigationAccountIds,
-                        kanbanBoards = kanbanBoards,
-                        onSaveKanbanBoard = { board, name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
-                            updateKanbanBoard(board.id, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
-                        },
-                        onDeleteKanbanBoard = { board ->
-                            deleteKanbanBoard(board.id)
-                        },
-                        onCreateKanbanBoard = ::createKanbanBoard,
-                        onAddMailAccount = {
-                            resetPasswordAccountForm()
-                            addSection = 0
-                            previousTopScreen = Screen.Settings
-                            screen = Screen.AddAccount
-                        },
-                        onAddFeedAccount = {
-                            resetPasswordAccountForm()
-                            addSection = 2
-                            previousTopScreen = Screen.Settings
-                            screen = Screen.AddAccount
-                        },
-                        onSaveAccountSettings = {
-                            account,
-                            displayName,
-                            senderName,
-                            avatarUrl,
-                            wallpaperPresetId,
-                            loadRemoteImages,
-                            conversationHtml,
-                            includedInUnified,
-                            showInNavigation,
-                            muted,
-                            paused,
-                            interval,
-                            aliases,
-                            ->
-                            setAccountNavigationVisible(account, showInNavigation)
-                            saveAccountSettings(
+            // MailRouteContent leaves composition while another route is open.
+            // Keep its per-mailbox list states above the NavHost so returning to
+            // the thread list restores the position that was visible before.
+            val mailListStates = remember { mutableMapOf<MailboxCacheKey, MailListPosition>() }
+
+            val threadOpen = screen == Screen.Thread
+            val threadStateHolder = rememberSaveableStateHolder()
+            LaunchedEffect(screen) {
+                if (screen != Screen.Thread && screen != Screen.Compose) threadStateHolder.removeState(THREAD_STATE_KEY)
+            }
+            val threadVisibility = remember { MutableTransitionState(threadOpen) }
+            threadVisibility.targetState = threadOpen
+            val pull = rememberPullToDismissState()
+            val focusManager = LocalFocusManager.current
+            LaunchedEffect(threadOpen) {
+                if (threadOpen) {
+                    // Each opening starts the conversation in place, after a pull
+                    // took the last one off screen.
+                    pull.reset()
+                    // The screen underneath stays composed, a search field in it
+                    // focused, keyboard and all.
+                    focusManager.clearFocus(force = true)
+                } else {
+                    // Closed some other way while a pull was settling.
+                    pull.stop()
+                }
+            }
+            // The screen underneath, fully hidden by a settled conversation: it
+            // keeps its state but is neither drawn nor read out.
+            val pulledAway by remember { derivedStateOf { pull.distancePx > 0f } }
+            val hostCovered by remember {
+                derivedStateOf { threadVisibility.isIdle && threadVisibility.currentState && pull.distancePx == 0f }
+            }
+
+            Box(Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = navController,
+                    startDestination = startRoute,
+                    modifier =
+                        Modifier
+                            .drawWithContent { if (!hostCovered) drawContent() }
+                            // Nor can focus move into it under the conversation.
+                            .focusProperties { onEnter = { if (threadOpen) cancelFocusChange() } }
+                            .then(if (hostCovered) Modifier.clearAndSetSemantics {} else Modifier),
+                ) {
+                    composable(AppRoutes.Compose) {
+                        BackHandler(
+                            onBack = { closeCompose() },
+                        )
+                        ComposeScreen(
+                            sendIdentities = composeIdentityCandidates(),
+                            selectedFromKey = selectedComposeIdentity()?.let { identityKey(it) }.orEmpty(),
+                            onFromChange = { key ->
+                                val split = key.indexOf('|')
+                                if (split > 0) {
+                                    changeComposeIdentity(key.substring(0, split), key.substring(split + 1))
+                                }
+                            },
+                            to = to,
+                            onToChange = {
+                                to = it
+                                loadRecipientSuggestions("to", it)
+                            },
+                            cc = cc,
+                            onCcChange = {
+                                cc = it
+                                loadRecipientSuggestions("cc", it)
+                            },
+                            bcc = bcc,
+                            onBccChange = {
+                                bcc = it
+                                loadRecipientSuggestions("bcc", it)
+                            },
+                            subject = subject,
+                            onSubjectChange = { subject = it },
+                            body = body,
+                            onBodyChange = { body = it },
+                            hasFoldedQuote = composeFoldedQuote != null,
+                            onExpandQuote = {
+                                expandComposeQuote()
+                                autoSaveComposeDraft()
+                            },
+                            onRemoveQuote = {
+                                removeComposeQuote()
+                                autoSaveComposeDraft()
+                            },
+                            attachments = attachments,
+                            recipientSuggestionField = recipientSuggestionField,
+                            recipientSuggestions = recipientSuggestions,
+                            onRecipientFocus = { field, value -> loadRecipientSuggestions(field, value) },
+                            onAcceptRecipientSuggestion = ::acceptRecipientSuggestion,
+                            onAttach = {
+                                pickAttachmentInto { picked ->
+                                    attachments = attachments + picked
+                                }
+                            },
+                            onClearAttachments = { attachments = emptyList() },
+                            onRemoveAttachment = { draftAttachment ->
+                                attachments = attachments.filter { it.id != draftAttachment.id }
+                            },
+                            sendShortcutMode = sendShortcutMode,
+                            onSaveDraft = ::saveComposeDraft,
+                            onAutoSaveDraft = ::autoSaveComposeDraft,
+                            onDiscardDraft = ::discardComposeDraft,
+                            onSend = ::sendMail,
+                            onBack = ::closeCompose,
+                            sending = composeSendInFlight,
+                            snackbarHost = { SnackbarHost(snackbarHost) },
+                        )
+                    }
+
+                    composable(AppRoutes.AddAccount) {
+                        LaunchedEffect(Unit) {
+                            if (rssDisplayName.isBlank()) {
+                                rssDisplayName = nextRssAccountDisplayName(coreAccounts)
+                            }
+                        }
+                        AddAccountScreen(
+                            onBack = popAppBack,
+                            initialSection = addSection,
+                            // Reconnect pre-fills the address of an account core can no
+                            // longer sign in to; any other address is a new account.
+                            reconnecting = coreAccounts.any { it.needsReconnect && it.email.equals(email.trim(), ignoreCase = true) },
+                            displayName = displayName,
+                            onDisplayNameChange = { displayName = it },
+                            senderName = senderName,
+                            onSenderNameChange = { senderName = it },
+                            email = email,
+                            onEmailChange = { email = it },
+                            username = username,
+                            onUsernameChange = { username = it },
+                            password = password,
+                            onPasswordChange = { password = it },
+                            host = host,
+                            onHostChange = {
+                                host = it
+                                hostTouched = it.isNotBlank()
+                            },
+                            imapPort = imapPort,
+                            onImapPortChange = {
+                                imapPort = it
+                                imapSecurity = mailSecurityAfterPortEdit(imapSecurity, imapSecurityTouched, it)
+                                imapPortTouched = it.isNotBlank()
+                            },
+                            imapSecurity = imapSecurity,
+                            onImapSecurityChange = {
+                                imapSecurity = it
+                                imapSecurityTouched = true
+                            },
+                            smtpHost = smtpHost,
+                            onSmtpHostChange = {
+                                smtpHost = it
+                                smtpHostTouched = it.isNotBlank()
+                            },
+                            smtpPort = smtpPort,
+                            onSmtpPortChange = {
+                                smtpPort = it
+                                smtpSecurity = mailSecurityAfterPortEdit(smtpSecurity, smtpSecurityTouched, it)
+                                smtpPortTouched = it.isNotBlank()
+                            },
+                            smtpSecurity = smtpSecurity,
+                            onSmtpSecurityChange = {
+                                smtpSecurity = it
+                                smtpSecurityTouched = true
+                            },
+                            serverSettingsOpen = passwordServerSettingsOpen,
+                            onServerSettingsOpenChange = { passwordServerSettingsOpen = it },
+                            onAutodiscover = ::autodiscoverPasswordAccount,
+                            onEmailBlur = { autodiscoverPasswordAccount(auto = true) },
+                            onAddPassword = ::addPasswordAccount,
+                            oauthAuthorizationCode = oauthAuthorizationCode,
+                            onLaunchOAuth = {
+                                oauthProvider = "outlook"
+                                launchOAuthFlow()
+                            },
+                            onConnectGoogleDeviceAccount = {
+                                oauthProvider = "gmail"
+                                connectGoogleDeviceAccount()
+                            },
+                            rssFeedUrl = rssFeedUrl,
+                            onRssFeedUrlChange = { rssFeedUrl = it },
+                            rssDisplayName = rssDisplayName,
+                            onRssDisplayNameChange = { rssDisplayName = it },
+                            rssAccountAdding = rssAccountAdding,
+                            onAddRss = ::addRssAccount,
+                        )
+                    }
+
+                    composable(AppRoutes.Settings) {
+                        LaunchedEffect(Unit) { loadStorageUsage() }
+                        SettingsScreen(
+                            rulesPage = { modifier -> RulesPage(modifier) },
+                            onOpenTags = { showTagsDialog = true },
+                            onBack = popAppBack,
+                            initialGeneral = settingsGeneralTarget,
+                            onConsumeInitialGeneral = { settingsGeneralTarget = false },
+                            initialAccountId = accountSettingsTargetId,
+                            initialAccountProxy =
+                                accountSettingsTargetId != null &&
+                                    accountSettingsTargetId == accountSettingsProxyTargetId,
+                            onConsumeInitialAccount = {
+                                accountSettingsTargetId = null
+                                accountSettingsProxyTargetId = null
+                            },
+                            initialKanbanBoardId = kanbanSettingsTargetId,
+                            onConsumeInitialKanbanBoard = { kanbanSettingsTargetId = null },
+                            accounts = coreAccounts,
+                            hiddenNavigationAccountIds = hiddenNavigationAccountIds,
+                            kanbanBoards = kanbanBoards,
+                            onSaveKanbanBoard = { board, name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
+                                updateKanbanBoard(board.id, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
+                            },
+                            onDeleteKanbanBoard = { board ->
+                                deleteKanbanBoard(board.id)
+                            },
+                            onCreateKanbanBoard = ::createKanbanBoard,
+                            onAddMailAccount = {
+                                resetPasswordAccountForm()
+                                addSection = 0
+                                previousTopScreen = Screen.Settings
+                                screen = Screen.AddAccount
+                            },
+                            onAddFeedAccount = {
+                                resetPasswordAccountForm()
+                                addSection = 2
+                                previousTopScreen = Screen.Settings
+                                screen = Screen.AddAccount
+                            },
+                            onSaveAccountSettings = {
                                 account,
                                 displayName,
                                 senderName,
@@ -1224,735 +1225,772 @@ private fun MeronMobileScreenContent(
                                 loadRemoteImages,
                                 conversationHtml,
                                 includedInUnified,
+                                showInNavigation,
                                 muted,
                                 paused,
                                 interval,
                                 aliases,
-                            )
-                        },
-                        onPickAccountAvatar = { account ->
-                            accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
-                            pickAccountMedia()
-                        },
-                        onPickAccountWallpaper = { account ->
-                            accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
-                            pickAccountMedia()
-                        },
-                        onPickKanbanBoardAvatar = { board ->
-                            kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = false)
-                            pickKanbanBoardMedia()
-                        },
-                        onPickKanbanBoardWallpaper = { board ->
-                            kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = true)
-                            pickKanbanBoardMedia()
-                        },
-                        onMoveAccountUp = { account -> moveAccount(account, -1) },
-                        onMoveAccountDown = { account -> moveAccount(account, 1) },
-                        onRemoveAccount = ::removeAccount,
-                        themeChoice = themeChoice,
-                        systemDark = systemDark,
-                        onThemeChoiceChange = onThemeChoiceChange,
-                        customThemes = customThemes,
-                        onImportCustomTheme = onImportCustomTheme,
-                        onDeleteCustomTheme = onDeleteCustomTheme,
-                        onShareCustomTheme = { theme -> mobileHost.shareText(serializeThemeSource(theme.source)) },
-                        appLanguageTag = appLanguageTag,
-                        onAppLanguageChange = onAppLanguageChange,
-                        showSenderImages = showSenderImages,
-                        onToggleSenderImages = {
-                            showSenderImages = !showSenderImages
-                            saveAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, showSenderImages)
-                        },
-                        darkMailBodies = darkMailBodies,
-                        onToggleDarkMailBodies = {
-                            darkMailBodies = !darkMailBodies
-                            saveAppBoolean(prefs, DARK_MAIL_BODIES_PREF, darkMailBodies)
-                        },
-                        chatFullMessages = chatFullMessages,
-                        onToggleChatFullMessages = {
-                            chatFullMessages = !chatFullMessages
-                            saveAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, chatFullMessages)
-                        },
-                        autoFitMessages = autoFitMessages,
-                        onToggleAutoFitMessages = {
-                            autoFitMessages = !autoFitMessages
-                            saveAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, autoFitMessages)
-                        },
-                        readerBottomActions = readerBottomActions,
-                        onToggleReaderBottomActions = {
-                            readerBottomActions = !readerBottomActions
-                            saveAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, readerBottomActions)
-                        },
-                        showUnreadBadges = showUnreadBadges,
-                        onToggleUnreadBadges = {
-                            showUnreadBadges = !showUnreadBadges
-                            saveAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
-                        },
-                        showUnifiedInboxNav = showUnifiedInboxNav,
-                        onToggleUnifiedInboxNav = {
-                            showUnifiedInboxNav = !showUnifiedInboxNav
-                            saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
-                        },
-                        tasksEnabled = tasksEnabled,
-                        onToggleTasks = {
-                            tasksEnabled = !tasksEnabled
-                            saveAppBoolean(prefs, TASKS_ENABLED_PREF, tasksEnabled)
-                            if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
-                        },
-                        calendarEnabled = calendarEnabled,
-                        onToggleCalendar = {
-                            calendarEnabled = !calendarEnabled
-                            saveAppBoolean(prefs, CALENDAR_ENABLED_PREF, calendarEnabled)
-                            if (!calendarEnabled && screen == Screen.Calendar) screen = Screen.Mail
-                        },
-                        reminderLeadMinutes = reminderLeadMinutes,
-                        reminderAllDayDays = reminderAllDayDays,
-                        onAlertDefaultChange = ::saveAlertDefault,
-                        sendShortcutMode = sendShortcutMode,
-                        onToggleSendShortcut = {
-                            val next = sendShortcutMode.next()
-                            sendShortcutMode = next
-                            saveSendShortcutMode(prefs, next)
-                        },
-                        quoteReplies = quoteReplies,
-                        onToggleQuoteReplies = {
-                            quoteReplies = !quoteReplies
-                            saveAppBoolean(prefs, QUOTE_REPLIES_PREF, quoteReplies)
-                        },
-                        conversationLayout = conversationLayout,
-                        onToggleConversationLayout = {
-                            val next = conversationLayout.next()
-                            conversationLayout = next
-                            saveConversationLayout(prefs, next)
-                        },
-                        messageFontScale = messageFontScale,
-                        onMessageFontScaleChange = { scale ->
-                            messageFontScale = coerceMessageFontScale(scale)
-                            saveMessageFontScale(prefs, messageFontScale)
-                        },
-                        appProxy = appProxy,
-                        onSaveAppProxy = ::saveAppProxy,
-                        appSignatureHtml = appSignatureHtml,
-                        onSaveAppSignature = ::saveAppSignature,
-                        remoteImageSenders = remoteImageSenders,
-                        onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
-                        onSaveAccountSignature = ::saveAccountSignature,
-                        onSaveAccountProxy = ::saveAccountProxy,
-                        onSaveAccountServerSettings = ::saveAccountServerSettings,
-                        foldersByAccount = foldersByAccount,
-                        onRequestAccountFolders = { account -> ensureAccountFolders(account.id) },
-                        onSetFolderNotify = { folder, enabled ->
-                            setMailFolderNotify(
-                                accountId = folder.accountId,
-                                folderId = folder.name,
-                                folderName = folder.displayName,
-                                enabled = enabled,
-                            )
-                        },
-                        kanbanColumnWidth = kanbanColumnWidth,
-                        onCycleKanbanColumnWidth = {
-                            val next = nextKanbanColumnWidth(kanbanColumnWidth)
-                            kanbanColumnWidth = next
-                            saveAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, next)
-                        },
-                        notificationsNeedPermission = !notificationPermissionGranted,
-                        onEnableNotifications = {
-                            mobileHost.requestNotificationPermission()
-                            notificationPermissionGranted = mobileHost.notificationsEnabled()
-                        },
-                        supportsBackgroundPush = mobileHost.supportsBackgroundPush,
-                        liveMailPushEnabled = liveMailPushEnabled,
-                        onToggleLiveMailPush = {
-                            val next = !liveMailPushEnabled
-                            liveMailPushEnabled = next
-                            saveAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, next)
-                            mobileHost.syncLiveMailPush(next)
-                            status = trs(if (next) "mobile.status.liveMailPushEnabled" else "mobile.ios.liveMailPushDisabled")
-                        },
-                        backgroundSyncEnabled = backgroundSyncEnabled,
-                        onToggleBackgroundSync = {
-                            val next = !backgroundSyncEnabled
-                            backgroundSyncEnabled = next
-                            saveAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, next)
-                            mobileHost.syncBackgroundRefresh(next)
-                            status = trs(if (next) "mobile.status.backgroundSyncEnabled" else "mobile.status.backgroundSyncDisabled")
-                        },
-                        onRefreshBackground = {
-                            mobileHost.runBackgroundRefreshOnce()
-                            status = trs("mobile.status.backgroundRefreshQueued")
-                        },
-                        readDiagnosticLog = { mobileHost.readDiagnosticLog() },
-                        onShareDiagnosticLog = { mobileHost.shareDiagnosticLog() },
-                        pollIntervalMinutes = pollIntervalMinutes,
-                        onCyclePollInterval = {
-                            val next = nextPollIntervalMinutes(pollIntervalMinutes)
-                            pollIntervalMinutes = next
-                            saveAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, next)
-                        },
-                        storageUsage = storageUsage,
-                        storageBusy = storageBusy,
-                        storageClearConfirming = storageClearConfirming,
-                        onRefreshStorage = { loadStorageUsage(showStatus = true) },
-                        onClearStorageCache = ::clearStorageCache,
-                        onExportBackup = {
-                            backupPassphraseError = ""
-                            backupPassphraseMode = BackupPassphraseMode.Export
-                        },
-                        onRestoreBackup = pickBackupFile,
-                        backupBusy = backupBusy,
-                    )
-                    backupPassphraseMode?.let { mode ->
-                        BackupPassphraseDialog(
-                            mode = mode,
-                            busy = backupBusy,
-                            error = backupPassphraseError,
-                            onDismiss = ::closeBackupPassphrase,
-                            onConfirm = { passphrase, includeSecrets ->
-                                when (mode) {
-                                    BackupPassphraseMode.Export -> exportBackup(includeSecrets, passphrase)
-                                    BackupPassphraseMode.Restore -> retryBackupRestore(passphrase)
-                                }
+                                ->
+                                setAccountNavigationVisible(account, showInNavigation)
+                                saveAccountSettings(
+                                    account,
+                                    displayName,
+                                    senderName,
+                                    avatarUrl,
+                                    wallpaperPresetId,
+                                    loadRemoteImages,
+                                    conversationHtml,
+                                    includedInUnified,
+                                    muted,
+                                    paused,
+                                    interval,
+                                    aliases,
+                                )
                             },
+                            onPickAccountAvatar = { account ->
+                                accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
+                                pickAccountMedia()
+                            },
+                            onPickAccountWallpaper = { account ->
+                                accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
+                                pickAccountMedia()
+                            },
+                            onPickKanbanBoardAvatar = { board ->
+                                kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = false)
+                                pickKanbanBoardMedia()
+                            },
+                            onPickKanbanBoardWallpaper = { board ->
+                                kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = true)
+                                pickKanbanBoardMedia()
+                            },
+                            onMoveAccountUp = { account -> moveAccount(account, -1) },
+                            onMoveAccountDown = { account -> moveAccount(account, 1) },
+                            onRemoveAccount = ::removeAccount,
+                            themeChoice = themeChoice,
+                            systemDark = systemDark,
+                            onThemeChoiceChange = onThemeChoiceChange,
+                            customThemes = customThemes,
+                            onImportCustomTheme = onImportCustomTheme,
+                            onDeleteCustomTheme = onDeleteCustomTheme,
+                            onShareCustomTheme = { theme -> mobileHost.shareText(serializeThemeSource(theme.source)) },
+                            appLanguageTag = appLanguageTag,
+                            onAppLanguageChange = onAppLanguageChange,
+                            showSenderImages = showSenderImages,
+                            onToggleSenderImages = {
+                                showSenderImages = !showSenderImages
+                                saveAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, showSenderImages)
+                            },
+                            darkMailBodies = darkMailBodies,
+                            onToggleDarkMailBodies = {
+                                darkMailBodies = !darkMailBodies
+                                saveAppBoolean(prefs, DARK_MAIL_BODIES_PREF, darkMailBodies)
+                            },
+                            chatFullMessages = chatFullMessages,
+                            onToggleChatFullMessages = {
+                                chatFullMessages = !chatFullMessages
+                                saveAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, chatFullMessages)
+                            },
+                            autoFitMessages = autoFitMessages,
+                            onToggleAutoFitMessages = {
+                                autoFitMessages = !autoFitMessages
+                                saveAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, autoFitMessages)
+                            },
+                            readerBottomActions = readerBottomActions,
+                            onToggleReaderBottomActions = {
+                                readerBottomActions = !readerBottomActions
+                                saveAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, readerBottomActions)
+                            },
+                            showUnreadBadges = showUnreadBadges,
+                            onToggleUnreadBadges = {
+                                showUnreadBadges = !showUnreadBadges
+                                saveAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
+                            },
+                            showUnifiedInboxNav = showUnifiedInboxNav,
+                            onToggleUnifiedInboxNav = {
+                                showUnifiedInboxNav = !showUnifiedInboxNav
+                                saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
+                            },
+                            tasksEnabled = tasksEnabled,
+                            onToggleTasks = {
+                                tasksEnabled = !tasksEnabled
+                                saveAppBoolean(prefs, TASKS_ENABLED_PREF, tasksEnabled)
+                                if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
+                            },
+                            calendarEnabled = calendarEnabled,
+                            onToggleCalendar = {
+                                calendarEnabled = !calendarEnabled
+                                saveAppBoolean(prefs, CALENDAR_ENABLED_PREF, calendarEnabled)
+                                if (!calendarEnabled && screen == Screen.Calendar) screen = Screen.Mail
+                            },
+                            reminderLeadMinutes = reminderLeadMinutes,
+                            reminderAllDayDays = reminderAllDayDays,
+                            onAlertDefaultChange = ::saveAlertDefault,
+                            sendShortcutMode = sendShortcutMode,
+                            onToggleSendShortcut = {
+                                val next = sendShortcutMode.next()
+                                sendShortcutMode = next
+                                saveSendShortcutMode(prefs, next)
+                            },
+                            quoteReplies = quoteReplies,
+                            onToggleQuoteReplies = {
+                                quoteReplies = !quoteReplies
+                                saveAppBoolean(prefs, QUOTE_REPLIES_PREF, quoteReplies)
+                            },
+                            conversationLayout = conversationLayout,
+                            onToggleConversationLayout = {
+                                val next = conversationLayout.next()
+                                conversationLayout = next
+                                saveConversationLayout(prefs, next)
+                            },
+                            messageFontScale = messageFontScale,
+                            onMessageFontScaleChange = { scale ->
+                                messageFontScale = coerceMessageFontScale(scale)
+                                saveMessageFontScale(prefs, messageFontScale)
+                            },
+                            appProxy = appProxy,
+                            onSaveAppProxy = ::saveAppProxy,
+                            appSignatureHtml = appSignatureHtml,
+                            onSaveAppSignature = ::saveAppSignature,
+                            remoteImageSenders = remoteImageSenders,
+                            onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
+                            onSaveAccountSignature = ::saveAccountSignature,
+                            onSaveAccountProxy = ::saveAccountProxy,
+                            onSaveAccountServerSettings = ::saveAccountServerSettings,
+                            foldersByAccount = foldersByAccount,
+                            onRequestAccountFolders = { account -> ensureAccountFolders(account.id) },
+                            onSetFolderNotify = { folder, enabled ->
+                                setMailFolderNotify(
+                                    accountId = folder.accountId,
+                                    folderId = folder.name,
+                                    folderName = folder.displayName,
+                                    enabled = enabled,
+                                )
+                            },
+                            kanbanColumnWidth = kanbanColumnWidth,
+                            onCycleKanbanColumnWidth = {
+                                val next = nextKanbanColumnWidth(kanbanColumnWidth)
+                                kanbanColumnWidth = next
+                                saveAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, next)
+                            },
+                            notificationsNeedPermission = !notificationPermissionGranted,
+                            onEnableNotifications = {
+                                mobileHost.requestNotificationPermission()
+                                notificationPermissionGranted = mobileHost.notificationsEnabled()
+                            },
+                            supportsBackgroundPush = mobileHost.supportsBackgroundPush,
+                            liveMailPushEnabled = liveMailPushEnabled,
+                            onToggleLiveMailPush = {
+                                val next = !liveMailPushEnabled
+                                liveMailPushEnabled = next
+                                saveAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, next)
+                                mobileHost.syncLiveMailPush(next)
+                                status = trs(if (next) "mobile.status.liveMailPushEnabled" else "mobile.ios.liveMailPushDisabled")
+                            },
+                            backgroundSyncEnabled = backgroundSyncEnabled,
+                            onToggleBackgroundSync = {
+                                val next = !backgroundSyncEnabled
+                                backgroundSyncEnabled = next
+                                saveAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, next)
+                                mobileHost.syncBackgroundRefresh(next)
+                                status = trs(if (next) "mobile.status.backgroundSyncEnabled" else "mobile.status.backgroundSyncDisabled")
+                            },
+                            onRefreshBackground = {
+                                mobileHost.runBackgroundRefreshOnce()
+                                status = trs("mobile.status.backgroundRefreshQueued")
+                            },
+                            readDiagnosticLog = { mobileHost.readDiagnosticLog() },
+                            onShareDiagnosticLog = { mobileHost.shareDiagnosticLog() },
+                            pollIntervalMinutes = pollIntervalMinutes,
+                            onCyclePollInterval = {
+                                val next = nextPollIntervalMinutes(pollIntervalMinutes)
+                                pollIntervalMinutes = next
+                                saveAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, next)
+                            },
+                            storageUsage = storageUsage,
+                            storageBusy = storageBusy,
+                            storageClearConfirming = storageClearConfirming,
+                            onRefreshStorage = { loadStorageUsage(showStatus = true) },
+                            onClearStorageCache = ::clearStorageCache,
+                            onExportBackup = {
+                                backupPassphraseError = ""
+                                backupPassphraseMode = BackupPassphraseMode.Export
+                            },
+                            onRestoreBackup = pickBackupFile,
+                            backupBusy = backupBusy,
+                        )
+                        backupPassphraseMode?.let { mode ->
+                            BackupPassphraseDialog(
+                                mode = mode,
+                                busy = backupBusy,
+                                error = backupPassphraseError,
+                                onDismiss = ::closeBackupPassphrase,
+                                onConfirm = { passphrase, includeSecrets ->
+                                    when (mode) {
+                                        BackupPassphraseMode.Export -> exportBackup(includeSecrets, passphrase)
+                                        BackupPassphraseMode.Restore -> retryBackupRestore(passphrase)
+                                    }
+                                },
+                            )
+                        }
+                    }
+
+                    composable(AppRoutes.Kanban) {
+                        KanbanRouteContent(
+                            state = state,
+                            drawerState = drawerState,
+                            drawerFolders = drawerFolders,
+                            mailSelectionActive = mailSelectionActive,
+                            selectedMailThreads = selectedMailThreads,
+                            activeKanbanBoard = activeKanbanBoard,
+                        )
+                    }
+
+                    composable(AppRoutes.Tasks) {
+                        TasksRouteContent(
+                            state = state,
+                            drawerState = drawerState,
+                            drawerFolders = drawerFolders,
+                        )
+                    }
+
+                    composable(AppRoutes.Contacts) {
+                        ContactsScreen(
+                            core = core,
+                            state = contactsState,
+                            accounts = coreAccounts,
+                            showSenderImages = showSenderImages,
+                            initialContact = contactToOpen,
+                            onInitialContactConsumed = { contactToOpen = null },
+                            active = screen == Screen.Contacts,
+                            canCompose = composeIdentityCandidates().isNotEmpty(),
+                            onBack = {
+                                contactToOpen = null
+                                popAppBack()
+                            },
+                            onCompose = { address -> openComposeTo(address, defaultSendAccountId(), returnScreen = Screen.Contacts) },
+                            onOpenThread = { thread -> readCoreThread(thread) },
+                            onCopy = { label, value -> services.copyText(label, value) },
+                        )
+                    }
+
+                    composable(AppRoutes.Calendar) {
+                        CalendarRouteContent(
+                            state = state,
+                            drawerState = drawerState,
+                            drawerFolders = drawerFolders,
+                        )
+                    }
+
+                    composable(AppRoutes.Mail) {
+                        MailRouteContent(
+                            state = state,
+                            drawerState = drawerState,
+                            drawerFolders = drawerFolders,
+                            selectedAccount = selectedAccount,
+                            selectedAccountIsRss = selectedAccountIsRss,
+                            mailSelectionActive = mailSelectionActive,
+                            selectedMailThreads = selectedMailThreads,
+                            importOpml = importOpml,
+                            mailListStates = mailListStates,
                         )
                     }
                 }
 
-                composable(AppRoutes.Kanban) {
-                    KanbanRouteContent(
-                        state = state,
-                        drawerState = drawerState,
-                        drawerFolders = drawerFolders,
-                        mailSelectionActive = mailSelectionActive,
-                        selectedMailThreads = selectedMailThreads,
-                        activeKanbanBoard = activeKanbanBoard,
-                    )
-                }
-
-                composable(AppRoutes.Tasks) {
-                    TasksRouteContent(
-                        state = state,
-                        drawerState = drawerState,
-                        drawerFolders = drawerFolders,
-                    )
-                }
-
-                composable(AppRoutes.Calendar) {
-                    CalendarRouteContent(
-                        state = state,
-                        drawerState = drawerState,
-                        drawerFolders = drawerFolders,
-                    )
-                }
-
-                composable(AppRoutes.Mail) {
-                    MailRouteContent(
-                        state = state,
-                        drawerState = drawerState,
-                        drawerFolders = drawerFolders,
-                        selectedAccount = selectedAccount,
-                        selectedAccountIsRss = selectedAccountIsRss,
-                        mailSelectionActive = mailSelectionActive,
-                        selectedMailThreads = selectedMailThreads,
-                        importOpml = importOpml,
-                        mailListStates = mailListStates,
-                    )
-                }
-            }
-
-            // The open conversation, over the route it was opened from.
-            AnimatedVisibility(
-                visibleState = threadVisibility,
-                enter = fadeIn(tween(700)),
-                // Pulled away, it is off screen already, and must not keep the
-                // screen it uncovered from its touches while it fades.
-                exit = if (pulledAway) ExitTransition.None else fadeOut(tween(700)),
-            ) {
-                // Kept while the editor is open over it, so a reply written in
-                // full comes back to the conversation as it was left.
-                threadStateHolder.SaveableStateProvider(THREAD_STATE_KEY) {
-                    BackHandler(enabled = threadOpen, onBack = popAppBack)
-                    // Without a summary there is nothing to show and nothing to
-                    // load, so leave rather than sit on an endless spinner (the
-                    // thread was moved away, or the route was restored without it).
-                    LaunchedEffect(selectedCoreThread == null) {
-                        if (selectedCoreThread == null && threadOpen) popAppBack()
-                    }
-                    val threadSwipe = rememberThreadSwipeState()
-                    // Pages beside the open one never show a snackbar; theirs goes nowhere.
-                    val previewSnackbarHost = remember { SnackbarHostState() }
-                    val (newerThread, olderThread) = threadBrowseNeighbors()
-                    LaunchedEffect(newerThread?.id, newerThread?.dateEpochSeconds, olderThread?.id, olderThread?.dateEpochSeconds) {
-                        prefetchThreadPreviews(listOfNotNull(newerThread, olderThread))
-                    }
-                    // Swiping away would drop what is typed in the reply bar, which
-                    // only saves once its debounce runs.
-                    val swipeable = quickReplyIsBlank()
-                    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-                    // The open conversation, with the ones beside it in its list a
-                    // page to either side: newer towards the start, older towards
-                    // the end. Keyed by thread, so the page swiped over to keeps its
-                    // composition (scroll, loaded bodies) as it becomes the open one.
-                    val pages =
-                        listOfNotNull(
-                            newerThread?.let { it to if (rtl) 1 else -1 },
-                            selectedCoreThread to 0,
-                            olderThread?.let { it to if (rtl) -1 else 1 },
-                        )
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            // Covers the screen underneath to its touches too.
-                            .pointerInput(Unit) { detectTapGestures { } }
-                            .pullToDismissLayer(pull)
-                            .onSizeChanged { threadSwipe.pageWidthPx = it.width.toFloat() },
-                    ) {
-                        for ((pageThread, slot) in pages) {
-                            key(pageThread?.id) {
-                                val active = slot == 0
-                                val pageAccount = pageThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
-                                val pagePreferHtml = pageAccount?.let { conversationHtmlOverrides[it.id] ?: it.conversationHtml } ?: true
-                                val preview = pageThread?.let { threadPreviews[it.id]?.page }
-                                val pageMessages = if (active) visibleThreadMessages() else preview?.messages.orEmpty()
-                                val pageCursor = if (active) messageCursor else preview?.nextCursor.orEmpty()
-                                ThreadScreen(
-                                    active = active,
-                                    modifier = Modifier.graphicsLayer { translationX = threadSwipe.offsetPx + slot * size.width },
-                                    loadPrintMessages = ::loadThreadForPrinting,
-                                    onPrintError = { status = it },
-                                    thread = pageThread,
-                                    messages = pageMessages,
-                                    accountEmail = pageAccount?.email.orEmpty(),
-                                    wallpaperPresetId = pageAccount?.chatWallpaperPresetId.orEmpty(),
-                                    wallpaperCustomUrl =
-                                        pageAccount
-                                            ?.takeIf { it.chatWallpaperKind == "custom" }
-                                            ?.chatWallpaperUrl
-                                            .orEmpty(),
-                                    preferHtml = pagePreferHtml,
-                                    onPreferHtmlChange = { preferHtml ->
-                                        if (selectedThreadAccountId.isNotBlank()) {
-                                            conversationHtmlOverrides = conversationHtmlOverrides + (selectedThreadAccountId to preferHtml)
-                                        }
-                                    },
-                                    onBack = popAppBack,
-                                    onArchive = {
-                                        selectedCoreThread?.let {
-                                            archiveOrRemove(it)
-                                            popAppBack()
-                                        }
-                                    },
-                                    onDelete = {
-                                        selectedCoreThread?.let {
-                                            deleteThread(it)
-                                            popAppBack()
-                                        }
-                                    },
-                                    onToggleStar = {
-                                        selectedCoreThread?.let { t ->
-                                            toggleStar(t)
-                                            selectedCoreThread = t.copy(starred = !t.starred)
-                                        }
-                                    },
-                                    onTags =
-                                        selectedCoreThread
-                                            ?.takeIf { !threadIdIsRss(it.id) }
-                                            ?.let { thread -> { selectedTagThread = thread } },
-                                    onAddToTasks =
-                                        selectedCoreThread
-                                            ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
-                                            ?.let { thread ->
-                                                {
-                                                    scope.launch {
-                                                        requestAddMailToTasks(thread)
+                // The open conversation, over the route it was opened from.
+                AnimatedVisibility(
+                    visibleState = threadVisibility,
+                    enter = fadeIn(tween(700)),
+                    // Pulled away, it is off screen already, and must not keep the
+                    // screen it uncovered from its touches while it fades.
+                    exit = if (pulledAway) ExitTransition.None else fadeOut(tween(700)),
+                ) {
+                    // Kept while the editor is open over it, so a reply written in
+                    // full comes back to the conversation as it was left.
+                    threadStateHolder.SaveableStateProvider(THREAD_STATE_KEY) {
+                        BackHandler(enabled = threadOpen, onBack = popAppBack)
+                        // Without a summary there is nothing to show and nothing to
+                        // load, so leave rather than sit on an endless spinner (the
+                        // thread was moved away, or the route was restored without it).
+                        LaunchedEffect(selectedCoreThread == null) {
+                            if (selectedCoreThread == null && threadOpen) popAppBack()
+                        }
+                        val threadSwipe = rememberThreadSwipeState()
+                        // Pages beside the open one never show a snackbar; theirs goes nowhere.
+                        val previewSnackbarHost = remember { SnackbarHostState() }
+                        val (newerThread, olderThread) = threadBrowseNeighbors()
+                        LaunchedEffect(newerThread?.id, newerThread?.dateEpochSeconds, olderThread?.id, olderThread?.dateEpochSeconds) {
+                            prefetchThreadPreviews(listOfNotNull(newerThread, olderThread))
+                        }
+                        // Swiping away would drop what is typed in the reply bar, which
+                        // only saves once its debounce runs.
+                        val swipeable = quickReplyIsBlank()
+                        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                        // The open conversation, with the ones beside it in its list a
+                        // page to either side: newer towards the start, older towards
+                        // the end. Keyed by thread, so the page swiped over to keeps its
+                        // composition (scroll, loaded bodies) as it becomes the open one.
+                        val pages =
+                            listOfNotNull(
+                                newerThread?.let { it to if (rtl) 1 else -1 },
+                                selectedCoreThread to 0,
+                                olderThread?.let { it to if (rtl) -1 else 1 },
+                            )
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                // Covers the screen underneath to its touches too.
+                                .pointerInput(Unit) { detectTapGestures { } }
+                                .pullToDismissLayer(pull)
+                                .onSizeChanged { threadSwipe.pageWidthPx = it.width.toFloat() },
+                        ) {
+                            for ((pageThread, slot) in pages) {
+                                key(pageThread?.id) {
+                                    val active = slot == 0
+                                    val pageAccount = pageThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
+                                    val pagePreferHtml = pageAccount?.let { conversationHtmlOverrides[it.id] ?: it.conversationHtml } ?: true
+                                    val preview = pageThread?.let { threadPreviews[it.id]?.page }
+                                    val pageMessages = if (active) visibleThreadMessages() else preview?.messages.orEmpty()
+                                    val pageCursor = if (active) messageCursor else preview?.nextCursor.orEmpty()
+                                    ThreadScreen(
+                                        active = active,
+                                        modifier = Modifier.graphicsLayer { translationX = threadSwipe.offsetPx + slot * size.width },
+                                        loadPrintMessages = ::loadThreadForPrinting,
+                                        onPrintError = { status = it },
+                                        thread = pageThread,
+                                        messages = pageMessages,
+                                        accountEmail = pageAccount?.email.orEmpty(),
+                                        wallpaperPresetId = pageAccount?.chatWallpaperPresetId.orEmpty(),
+                                        wallpaperCustomUrl =
+                                            pageAccount
+                                                ?.takeIf { it.chatWallpaperKind == "custom" }
+                                                ?.chatWallpaperUrl
+                                                .orEmpty(),
+                                        preferHtml = pagePreferHtml,
+                                        onPreferHtmlChange = { preferHtml ->
+                                            if (selectedThreadAccountId.isNotBlank()) {
+                                                conversationHtmlOverrides = conversationHtmlOverrides + (selectedThreadAccountId to preferHtml)
+                                            }
+                                        },
+                                        onBack = popAppBack,
+                                        onArchive = {
+                                            selectedCoreThread?.let {
+                                                archiveOrRemove(it)
+                                                popAppBack()
+                                            }
+                                        },
+                                        onDelete = {
+                                            selectedCoreThread?.let {
+                                                deleteThread(it)
+                                                popAppBack()
+                                            }
+                                        },
+                                        onToggleStar = {
+                                            selectedCoreThread?.let { t ->
+                                                toggleStar(t)
+                                                selectedCoreThread = t.copy(starred = !t.starred)
+                                            }
+                                        },
+                                        onTags =
+                                            selectedCoreThread
+                                                ?.takeIf { !threadIdIsRss(it.id) }
+                                                ?.let { thread -> { selectedTagThread = thread } },
+                                        onAddToTasks =
+                                            selectedCoreThread
+                                                ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
+                                                ?.let { thread ->
+                                                    {
+                                                        scope.launch {
+                                                            requestAddMailToTasks(thread)
+                                                        }
+                                                        Unit
                                                     }
-                                                    Unit
+                                                },
+                                        moveFolders =
+                                            coreAccounts
+                                                .filterNot { accountSummaryIsRss(it) }
+                                                .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                                        transferAccounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
+                                        loadTransferFolders = {
+                                            selectedCoreThread?.let { thread -> ensureThreadActionFolders(thread, includeAllMailAccounts = true) {} }
+                                        },
+                                        copyFolders =
+                                            coreAccounts
+                                                .filterNot { accountSummaryIsRss(it) }
+                                                .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                                        onMoveToFolder = { folder ->
+                                            selectedCoreThread?.let { thread ->
+                                                moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
+                                                    popAppBack()
                                                 }
-                                            },
-                                    moveFolders =
-                                        coreAccounts
-                                            .filterNot { accountSummaryIsRss(it) }
-                                            .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                                    transferAccounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
-                                    loadTransferFolders = {
-                                        selectedCoreThread?.let { thread -> ensureThreadActionFolders(thread, includeAllMailAccounts = true) {} }
-                                    },
-                                    copyFolders =
-                                        coreAccounts
-                                            .filterNot { accountSummaryIsRss(it) }
-                                            .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                                    onMoveToFolder = { folder ->
-                                        selectedCoreThread?.let { thread ->
-                                            moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
-                                                popAppBack()
                                             }
-                                        }
-                                    },
-                                    recentTransfers = if (active) recentTransferItems(selectedCoreThread) else emptyList(),
-                                    loadRecentTransferFolders = { loadRecentTransferFolders(selectedCoreThread) },
-                                    onCreateFolderAndMove = { name ->
-                                        selectedCoreThread?.let { thread ->
-                                            createFolderAndMoveThread(thread, name) {
-                                                popAppBack()
+                                        },
+                                        recentTransfers = if (active) recentTransferItems(selectedCoreThread) else emptyList(),
+                                        loadRecentTransferFolders = { loadRecentTransferFolders(selectedCoreThread) },
+                                        onCreateFolderAndMove = { name ->
+                                            selectedCoreThread?.let { thread ->
+                                                createFolderAndMoveThread(thread, name) {
+                                                    popAppBack()
+                                                }
                                             }
-                                        }
-                                    },
-                                    onCopyToFolder = { folder ->
-                                        selectedCoreThread?.let { thread ->
-                                            copyThreadToFolder(thread, folder)
-                                        }
-                                    },
-                                    quickReplyBody = if (active) quickReplyBody else pageThread?.let(::seededQuickReplyBody).orEmpty(),
-                                    canLoadOlder = pageCursor.isNotBlank(),
-                                    loadingOlder = active && loadingMoreMessages,
-                                    onLoadOlder = ::loadMoreThreadMessages,
-                                    onQuickReplyChange = ::onQuickReplyBodyChange,
-                                    quickReplyAttachments = if (active) quickReplyAttachments else emptyList(),
-                                    quickReplyFailure = if (active) quickReplyFailure else "",
-                                    quickReplyHasContent = active && !quickReplyIsBlank(),
-                                    quickReplySending = active && quickReplySendInFlight,
-                                    sendShortcutMode = sendShortcutMode,
-                                    conversationLayout = conversationLayout,
-                                    onQuickReplyAttach = {
-                                        pickAttachmentInto { picked ->
-                                            quickReplyAttachments = quickReplyAttachments + picked
+                                        },
+                                        onCopyToFolder = { folder ->
+                                            selectedCoreThread?.let { thread ->
+                                                copyThreadToFolder(thread, folder)
+                                            }
+                                        },
+                                        quickReplyBody = if (active) quickReplyBody else pageThread?.let(::seededQuickReplyBody).orEmpty(),
+                                        canLoadOlder = pageCursor.isNotBlank(),
+                                        loadingOlder = active && loadingMoreMessages,
+                                        onLoadOlder = ::loadMoreThreadMessages,
+                                        onQuickReplyChange = ::onQuickReplyBodyChange,
+                                        quickReplyAttachments = if (active) quickReplyAttachments else emptyList(),
+                                        quickReplyFailure = if (active) quickReplyFailure else "",
+                                        quickReplyHasContent = active && !quickReplyIsBlank(),
+                                        quickReplySending = active && quickReplySendInFlight,
+                                        sendShortcutMode = sendShortcutMode,
+                                        conversationLayout = conversationLayout,
+                                        onQuickReplyAttach = {
+                                            pickAttachmentInto { picked ->
+                                                quickReplyAttachments = quickReplyAttachments + picked
+                                                ++quickReplyGeneration
+                                                quickReplyFailure = ""
+                                                autoSaveQuickReplyDraft()
+                                            }
+                                        },
+                                        onRemoveQuickReplyAttachment = { attachment ->
+                                            quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
                                             ++quickReplyGeneration
                                             quickReplyFailure = ""
-                                            autoSaveQuickReplyDraft()
-                                        }
-                                    },
-                                    onRemoveQuickReplyAttachment = { attachment ->
-                                        quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
-                                        ++quickReplyGeneration
-                                        quickReplyFailure = ""
-                                        if (quickReplyIsBlank()) {
-                                            discardQuickReplyDraftIfEmpty()
-                                        } else {
-                                            autoSaveQuickReplyDraft()
-                                        }
-                                    },
-                                    onOpenFullReply = { openQuickReplyInFullEditor() },
-                                    onReplyAll = { openQuickReplyInFullEditor(replyAll = true) },
-                                    canReplyAllToThread = canReplyAllToThread(pageThread, pageMessages),
-                                    onSendReply = ::sendQuickReply,
-                                    onRetryReply = ::retryQuickReplySend,
-                                    quickReplyFromIdentities = quickReplyIdentities(pageThread),
-                                    quickReplyRecipients = quickReplyRecipients(pageThread, pageMessages),
-                                    quickReplySelectedFrom = selectedQuickReplyIdentity(pageThread, pageMessages),
-                                    onSelectQuickReplyFrom = { identity ->
-                                        quickReplyFrom = identity.email
-                                        ++quickReplyGeneration
-                                        // The saved draft carries the From header, so re-save it
-                                        // against the newly chosen identity instead of waiting
-                                        // for the next keystroke's debounce.
-                                        if (quickReplyDraftSaved) autoSaveQuickReplyDraft()
-                                    },
-                                    onForward = { openMessageCompose(it, forward = true) },
-                                    onReplyToMessage = { replyToMessage(it, replyAll = false) },
-                                    onReplyAllToMessage = ::replyAllToMessage,
-                                    canReplyAllToMessage = ::canReplyAllToMessage,
-                                    onEditAsNew = { openMessageCompose(it, forward = false) },
-                                    readerBottomActions = readerBottomActions,
-                                    onOpenDraft = { message ->
-                                        selectedCoreThread?.let { thread ->
-                                            openDraftCompose(message, thread, returnScreen = Screen.Thread)
-                                        }
-                                    },
-                                    onToggleMessageRead = ::toggleMessageRead,
-                                    onToggleMessageStarred = ::toggleMessageStarred,
-                                    onDeleteMessage = ::deleteMessage,
-                                    onOpenAttachment = ::openMessageAttachment,
-                                    onSaveAttachment = ::saveMessageAttachment,
-                                    onShareImageAttachment = ::shareImageAttachment,
-                                    onCopyImageAttachment = ::copyImageAttachment,
-                                    loadImageAttachment = { attachment ->
-                                        val cacheKey = attachment.key.ifBlank { attachment.url }
-                                        loadCachedImageBitmap(cacheKey) {
-                                            if (attachment.key.isNotBlank()) {
-                                                withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                                            if (quickReplyIsBlank()) {
+                                                discardQuickReplyDraftIfEmpty()
                                             } else {
-                                                loadImageBitmapRef(attachment.url)
+                                                autoSaveQuickReplyDraft()
                                             }
-                                        }
-                                    },
-                                    remoteContentPolicy =
-                                        RemoteContentPolicy(
-                                            // Feed accounts load remote content by definition —
-                                            // a feed item is little else — which is what the
-                                            // core defaults them to (see `load_remote_images`).
-                                            accountAllows = pageAccount?.loadRemoteImages ?: false,
-                                            allowedSenders = remoteImageSenders,
-                                        ),
-                                    onAllowRemoteSender = { addr -> setRemoteImageSender(addr, true) },
-                                    onComposeTo = { email ->
-                                        openComposeTo(email, selectedCoreThread?.accountId ?: selectedCoreAccountId)
-                                    },
-                                    onCopyMessageText = { label, value ->
-                                        services.copyText(label, value)
-                                        status = trs("common.copied")
-                                    },
-                                    onRetryLoadMessages = { retryOpenThreadLoad() },
-                                    onRespondToInvite = { message, response -> scope.launch { respondToInvite(message, response) } },
-                                    onRemoveInviteEvent = { message -> scope.launch { removeInviteFromCalendar(message) } },
-                                    onAddInviteToCalendar = { message -> scope.launch { addInviteToCalendar(message) } },
-                                    onMessagesRead = ::markMessagesReadOnScroll,
-                                    onViewedToBottom = ::markThreadReadOnScroll,
-                                    snackbarHost = if (active) snackbarHost else previewSnackbarHost,
-                                    swipe = threadSwipe,
-                                    pull = pull,
-                                    onSwipeToPrevious = newerThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
-                                    onSwipeToNext = olderThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
-                                )
+                                        },
+                                        onOpenFullReply = { openQuickReplyInFullEditor() },
+                                        onReplyAll = { openQuickReplyInFullEditor(replyAll = true) },
+                                        canReplyAllToThread = canReplyAllToThread(pageThread, pageMessages),
+                                        onSendReply = ::sendQuickReply,
+                                        onRetryReply = ::retryQuickReplySend,
+                                        quickReplyFromIdentities = quickReplyIdentities(pageThread),
+                                        quickReplyRecipients = quickReplyRecipients(pageThread, pageMessages),
+                                        quickReplySelectedFrom = selectedQuickReplyIdentity(pageThread, pageMessages),
+                                        onSelectQuickReplyFrom = { identity ->
+                                            quickReplyFrom = identity.email
+                                            ++quickReplyGeneration
+                                            // The saved draft carries the From header, so re-save it
+                                            // against the newly chosen identity instead of waiting
+                                            // for the next keystroke's debounce.
+                                            if (quickReplyDraftSaved) autoSaveQuickReplyDraft()
+                                        },
+                                        onForward = { openMessageCompose(it, forward = true) },
+                                        onReplyToMessage = { replyToMessage(it, replyAll = false) },
+                                        onReplyAllToMessage = ::replyAllToMessage,
+                                        canReplyAllToMessage = ::canReplyAllToMessage,
+                                        onEditAsNew = { openMessageCompose(it, forward = false) },
+                                        readerBottomActions = readerBottomActions,
+                                        onOpenDraft = { message ->
+                                            selectedCoreThread?.let { thread ->
+                                                openDraftCompose(message, thread, returnScreen = Screen.Thread)
+                                            }
+                                        },
+                                        onToggleMessageRead = ::toggleMessageRead,
+                                        onToggleMessageStarred = ::toggleMessageStarred,
+                                        onDeleteMessage = ::deleteMessage,
+                                        onOpenAttachment = ::openMessageAttachment,
+                                        onSaveAttachment = ::saveMessageAttachment,
+                                        onShareImageAttachment = ::shareImageAttachment,
+                                        onCopyImageAttachment = ::copyImageAttachment,
+                                        loadImageAttachment = { attachment ->
+                                            val cacheKey = attachment.key.ifBlank { attachment.url }
+                                            loadCachedImageBitmap(cacheKey) {
+                                                if (attachment.key.isNotBlank()) {
+                                                    withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                                                } else {
+                                                    loadImageBitmapRef(attachment.url)
+                                                }
+                                            }
+                                        },
+                                        remoteContentPolicy =
+                                            RemoteContentPolicy(
+                                                // Feed accounts load remote content by definition —
+                                                // a feed item is little else — which is what the
+                                                // core defaults them to (see `load_remote_images`).
+                                                accountAllows = pageAccount?.loadRemoteImages ?: false,
+                                                allowedSenders = remoteImageSenders,
+                                            ),
+                                        onAllowRemoteSender = { addr -> setRemoteImageSender(addr, true) },
+                                        onComposeTo = { email ->
+                                            openComposeTo(email, selectedCoreThread?.accountId ?: selectedCoreAccountId)
+                                        },
+                                        onCopyMessageText = { label, value ->
+                                            services.copyText(label, value)
+                                            status = trs("common.copied")
+                                        },
+                                        onRetryLoadMessages = { retryOpenThreadLoad() },
+                                        onRespondToInvite = { message, response -> scope.launch { respondToInvite(message, response) } },
+                                        onRemoveInviteEvent = { message -> scope.launch { removeInviteFromCalendar(message) } },
+                                        onAddInviteToCalendar = { message -> scope.launch { addInviteToCalendar(message) } },
+                                        onMessagesRead = ::markMessagesReadOnScroll,
+                                        onViewedToBottom = ::markThreadReadOnScroll,
+                                        snackbarHost = if (active) snackbarHost else previewSnackbarHost,
+                                        swipe = threadSwipe,
+                                        pull = pull,
+                                        onSwipeToPrevious = newerThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
+                                        onSwipeToNext = olderThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (showAddFeedDialog) {
-            AddFeedDialog(
-                url = addFeedUrl,
-                onUrlChange = {
-                    addFeedUrl = it
-                    addFeedError = ""
-                },
-                error = addFeedError,
-                submitting = addFeedSubmitting,
-                onAdd = ::addFeedToSelectedRssAccount,
-                onDismiss = {
-                    if (!addFeedSubmitting) {
-                        showAddFeedDialog = false
+            if (showAddFeedDialog) {
+                AddFeedDialog(
+                    url = addFeedUrl,
+                    onUrlChange = {
+                        addFeedUrl = it
                         addFeedError = ""
-                    }
-                },
-            )
-        }
+                    },
+                    error = addFeedError,
+                    submitting = addFeedSubmitting,
+                    onAdd = ::addFeedToSelectedRssAccount,
+                    onDismiss = {
+                        if (!addFeedSubmitting) {
+                            showAddFeedDialog = false
+                            addFeedError = ""
+                        }
+                    },
+                )
+            }
 
-        selectedTagThread?.let { thread ->
-            TagDialog(thread = thread, onDismiss = { selectedTagThread = null })
-        }
+            selectedTagThread?.let { thread ->
+                TagDialog(thread = thread, onDismiss = { selectedTagThread = null })
+            }
 
-        if (showTagsDialog) {
-            TagsDialog(onDismiss = { showTagsDialog = false })
-        }
+            if (showTagsDialog) {
+                TagsDialog(onDismiss = { showTagsDialog = false })
+            }
 
-        selectedMailMoveThread?.let { thread ->
-            MoveThreadDialog(
-                thread = thread,
-                accounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
-                folders =
-                    coreAccounts
-                        .filterNot { accountSummaryIsRss(it) }
-                        .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                recentTransfers = recentTransferItems(thread),
-                onMove = { folder ->
-                    selectedMailMoveThread = null
-                    moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
+            selectedMailMoveThread?.let { thread ->
+                MoveThreadDialog(
+                    thread = thread,
+                    accounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
+                    folders =
+                        coreAccounts
+                            .filterNot { accountSummaryIsRss(it) }
+                            .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                    recentTransfers = recentTransferItems(thread),
+                    onMove = { folder ->
+                        selectedMailMoveThread = null
+                        moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
+                            selectedMailThreadIds = emptySet()
+                        }
+                    },
+                    onCreateAndMove = { name ->
+                        selectedMailMoveThread = null
+                        createFolderAndMoveThread(thread, name) {
+                            selectedMailThreadIds = emptySet()
+                        }
+                    },
+                    onDismiss = { selectedMailMoveThread = null },
+                )
+            }
+
+            selectedMailCopyThread?.let { thread ->
+                CopyThreadDialog(
+                    thread = thread,
+                    accounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
+                    folders =
+                        coreAccounts
+                            .filterNot { accountSummaryIsRss(it) }
+                            .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                    recentTransfers = recentTransferItems(thread),
+                    onCopy = { folder ->
+                        selectedMailCopyThread = null
+                        copyThreadToFolder(thread, folder)
                         selectedMailThreadIds = emptySet()
-                    }
-                },
-                onCreateAndMove = { name ->
-                    selectedMailMoveThread = null
-                    createFolderAndMoveThread(thread, name) {
-                        selectedMailThreadIds = emptySet()
-                    }
-                },
-                onDismiss = { selectedMailMoveThread = null },
-            )
-        }
+                    },
+                    onDismiss = { selectedMailCopyThread = null },
+                )
+            }
 
-        selectedMailCopyThread?.let { thread ->
-            CopyThreadDialog(
-                thread = thread,
-                accounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
-                folders =
-                    coreAccounts
-                        .filterNot { accountSummaryIsRss(it) }
-                        .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                recentTransfers = recentTransferItems(thread),
-                onCopy = { folder ->
-                    selectedMailCopyThread = null
-                    copyThreadToFolder(thread, folder)
-                    selectedMailThreadIds = emptySet()
-                },
-                onDismiss = { selectedMailCopyThread = null },
-            )
-        }
+            pendingEmptyFolder?.let { target ->
+                EmptyFolderDialog(
+                    folderName = target.folderName,
+                    onConfirm = {
+                        pendingEmptyFolder = null
+                        emptyMailFolder(
+                            accountId = target.accountId,
+                            folderId = target.folderId,
+                            column = target.column,
+                        )
+                    },
+                    onDismiss = { pendingEmptyFolder = null },
+                )
+            }
 
-        pendingEmptyFolder?.let { target ->
-            EmptyFolderDialog(
-                folderName = target.folderName,
-                onConfirm = {
-                    pendingEmptyFolder = null
-                    emptyMailFolder(
-                        accountId = target.accountId,
-                        folderId = target.folderId,
-                        column = target.column,
-                    )
-                },
-                onDismiss = { pendingEmptyFolder = null },
-            )
-        }
+            pendingDeleteFolder?.let { target ->
+                DeleteFolderDialog(
+                    folderName = target.folderName,
+                    nested = target.nested,
+                    onConfirm = {
+                        pendingDeleteFolder = null
+                        deleteMailFolder(
+                            accountId = target.accountId,
+                            folderId = target.folderId,
+                            column = target.column,
+                        )
+                    },
+                    onDismiss = { pendingDeleteFolder = null },
+                )
+            }
 
-        pendingDeleteFolder?.let { target ->
-            DeleteFolderDialog(
-                folderName = target.folderName,
-                nested = target.nested,
-                onConfirm = {
-                    pendingDeleteFolder = null
-                    deleteMailFolder(
-                        accountId = target.accountId,
-                        folderId = target.folderId,
-                        column = target.column,
-                    )
-                },
-                onDismiss = { pendingDeleteFolder = null },
-            )
-        }
+            certPrompt?.let { prompt ->
+                CertificateTrustDialog(
+                    server = "${prompt.host}:${prompt.port}",
+                    certificate = prompt.certificate,
+                    busy = certPromptBusy,
+                    onTrust = ::trustPromptedCertificate,
+                    onDismiss = ::dismissCertificatePrompt,
+                )
+            }
 
-        certPrompt?.let { prompt ->
-            CertificateTrustDialog(
-                server = "${prompt.host}:${prompt.port}",
-                certificate = prompt.certificate,
-                busy = certPromptBusy,
-                onTrust = ::trustPromptedCertificate,
-                onDismiss = ::dismissCertificatePrompt,
-            )
-        }
+            if (showAboutDialog) {
+                AboutDialog(
+                    appVersion = appVersion,
+                    onOpenUrl = services::openUrl,
+                    onShowChangelog = {
+                        showAboutDialog = false
+                        showChangelogDialog = true
+                        loadChangelog()
+                    },
+                    onDismiss = { showAboutDialog = false },
+                )
+            }
 
-        if (showAboutDialog) {
-            AboutDialog(
-                appVersion = appVersion,
-                onOpenUrl = services::openUrl,
-                onShowChangelog = {
-                    showAboutDialog = false
-                    showChangelogDialog = true
-                    loadChangelog()
-                },
-                onDismiss = { showAboutDialog = false },
-            )
-        }
+            if (pendingCrashReport.isNotBlank()) {
+                CrashReportDialog(
+                    summary = pendingCrashReport,
+                    onSend = {
+                        pendingCrashReport = ""
+                        mobileHost.clearPendingCrashReport()
+                        mobileHost.shareDiagnosticLog()
+                    },
+                    onDismiss = {
+                        pendingCrashReport = ""
+                        mobileHost.clearPendingCrashReport()
+                    },
+                )
+            }
 
-        if (pendingCrashReport.isNotBlank()) {
-            CrashReportDialog(
-                summary = pendingCrashReport,
-                onSend = {
-                    pendingCrashReport = ""
-                    mobileHost.clearPendingCrashReport()
-                    mobileHost.shareDiagnosticLog()
-                },
-                onDismiss = {
-                    pendingCrashReport = ""
-                    mobileHost.clearPendingCrashReport()
-                },
-            )
-        }
+            if (showChangelogDialog) {
+                ChangelogDialog(
+                    releases = changelog,
+                    loading = changelogLoading,
+                    error = changelogError,
+                    onDismiss = { showChangelogDialog = false },
+                )
+            }
 
-        if (showChangelogDialog) {
-            ChangelogDialog(
-                releases = changelog,
-                loading = changelogLoading,
-                error = changelogError,
-                onDismiss = { showChangelogDialog = false },
-            )
-        }
+            imagePreview?.let { preview ->
+                ImagePreviewDialog(
+                    preview = preview,
+                    onShare = { shareImagePreview(preview) },
+                    onCopy = { copyImagePreview(preview) },
+                    onDismiss = { imagePreview = null },
+                )
+            }
 
-        imagePreview?.let { preview ->
-            ImagePreviewDialog(
-                preview = preview,
-                onShare = { shareImagePreview(preview) },
-                onCopy = { copyImagePreview(preview) },
-                onDismiss = { imagePreview = null },
-            )
-        }
+            if (showKanbanColumnDialog && screen == Screen.Kanban) {
+                KanbanColumnDialog(
+                    accounts = coreAccounts,
+                    board = activeKanbanBoard,
+                    foldersByAccount = foldersByAccount,
+                    onApply = {
+                        applyKanbanColumns(it)
+                        showKanbanColumnDialog = false
+                    },
+                    onCreateFolder = { promptNewFolder(it, NewFolderPlacement.AddColumn(activeKanbanBoardId)) },
+                    onDismiss = { showKanbanColumnDialog = false },
+                )
+            }
 
-        if (showKanbanColumnDialog && screen == Screen.Kanban) {
-            KanbanColumnDialog(
-                accounts = coreAccounts,
-                board = activeKanbanBoard,
-                foldersByAccount = foldersByAccount,
-                onApply = {
-                    applyKanbanColumns(it)
-                    showKanbanColumnDialog = false
-                },
-                onCreateFolder = { promptNewFolder(it, NewFolderPlacement.AddColumn(activeKanbanBoardId)) },
-                onDismiss = { showKanbanColumnDialog = false },
-            )
-        }
+            pendingNewFolder?.let { target ->
+                FolderNameDialog(
+                    title = tr("folders.newFolderOrLabel"),
+                    confirmLabel = tr("folders.create"),
+                    name = folderNameInput,
+                    hint =
+                        tr(
+                            "folders.subfolderHint",
+                            mapOf("delimiter" to folderTreeDelimiter(foldersByAccount[target.account.id].orEmpty())),
+                        ),
+                    onNameChange = { folderNameInput = it },
+                    onConfirm = { createMailFolder(target, folderNameInput) },
+                    onDismiss = { pendingNewFolder = null },
+                )
+            }
 
-        pendingNewFolder?.let { target ->
-            FolderNameDialog(
-                title = tr("folders.newFolderOrLabel"),
-                confirmLabel = tr("folders.create"),
-                name = folderNameInput,
-                hint =
-                    tr(
-                        "folders.subfolderHint",
-                        mapOf("delimiter" to folderTreeDelimiter(foldersByAccount[target.account.id].orEmpty())),
-                    ),
-                onNameChange = { folderNameInput = it },
-                onConfirm = { createMailFolder(target, folderNameInput) },
-                onDismiss = { pendingNewFolder = null },
-            )
-        }
+            pendingRenameFolder?.let { target ->
+                FolderNameDialog(
+                    title = tr("folders.rename.title", mapOf("folder" to target.folderName)),
+                    confirmLabel = tr("folders.rename.confirmButton"),
+                    name = folderNameInput,
+                    onNameChange = { folderNameInput = it },
+                    onConfirm = { renameMailFolder(target, folderNameInput) },
+                    onDismiss = { pendingRenameFolder = null },
+                )
+            }
 
-        pendingRenameFolder?.let { target ->
-            FolderNameDialog(
-                title = tr("folders.rename.title", mapOf("folder" to target.folderName)),
-                confirmLabel = tr("folders.rename.confirmButton"),
-                name = folderNameInput,
-                onNameChange = { folderNameInput = it },
-                onConfirm = { renameMailFolder(target, folderNameInput) },
-                onDismiss = { pendingRenameFolder = null },
-            )
-        }
-
-        kanbanActionThread?.let { thread ->
-            KanbanThreadActionDialog(
-                thread = thread,
-                board = activeKanbanBoard,
-                accounts = coreAccounts,
-                onDismiss = { kanbanActionThread = null },
-                onOpen = {
-                    kanbanActionThread = null
-                    readCoreThread(thread)
-                },
-                onToggleStar = {
-                    kanbanActionThread = null
-                    toggleStar(thread)
-                },
-                onToggleRead = {
-                    kanbanActionThread = null
-                    toggleRead(thread)
-                },
-                onArchive = {
-                    kanbanActionThread = null
-                    archiveOrRemove(thread)
-                },
-                onDelete = {
-                    kanbanActionThread = null
-                    deleteThread(thread)
-                },
-                onTags = {
-                    kanbanActionThread = null
-                    selectedTagThread = thread
-                },
-                onAddTag = { tag ->
-                    kanbanActionThread = null
-                    changeThreadTags(thread, add = listOf(tag)) { tags ->
-                        status = trs(if (tags == null) "tags.invalid" else "tags.added", mapOf("tag" to tag))
-                    }
-                },
-                onCopyFeedUrl = {
-                    kanbanActionThread = null
-                    services.copyText(trs("chat.feedUrl"), thread.feedUrl)
-                    status = trs("common.copied")
-                },
-                onMove = { target ->
-                    kanbanActionThread = null
-                    moveThreadToColumn(thread, target)
-                },
-            )
+            kanbanActionThread?.let { thread ->
+                KanbanThreadActionDialog(
+                    thread = thread,
+                    board = activeKanbanBoard,
+                    accounts = coreAccounts,
+                    onDismiss = { kanbanActionThread = null },
+                    onOpen = {
+                        kanbanActionThread = null
+                        readCoreThread(thread)
+                    },
+                    onToggleStar = {
+                        kanbanActionThread = null
+                        toggleStar(thread)
+                    },
+                    onToggleRead = {
+                        kanbanActionThread = null
+                        toggleRead(thread)
+                    },
+                    onArchive = {
+                        kanbanActionThread = null
+                        archiveOrRemove(thread)
+                    },
+                    onDelete = {
+                        kanbanActionThread = null
+                        deleteThread(thread)
+                    },
+                    onTags = {
+                        kanbanActionThread = null
+                        selectedTagThread = thread
+                    },
+                    onAddTag = { tag ->
+                        kanbanActionThread = null
+                        changeThreadTags(thread, add = listOf(tag)) { tags ->
+                            status = trs(if (tags == null) "tags.invalid" else "tags.added", mapOf("tag" to tag))
+                        }
+                    },
+                    onCopyFeedUrl = {
+                        kanbanActionThread = null
+                        services.copyText(trs("chat.feedUrl"), thread.feedUrl)
+                        status = trs("common.copied")
+                    },
+                    onMove = { target ->
+                        kanbanActionThread = null
+                        moveThreadToColumn(thread, target)
+                    },
+                )
+            }
         }
     }
 }

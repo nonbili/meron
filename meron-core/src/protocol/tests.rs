@@ -553,6 +553,21 @@ fn mobile_protocol_suggests_contacts_from_cached_messages() {
         "{filtered}"
     );
 
+    for (sort, first) in [("name", "aki@example.com"), ("recent", "bea@example.com")] {
+        let directory = invoke_mobile_protocol_json(
+            &json!({
+                "id": 95, "method": "mail.suggestContacts",
+                "params": {"query": "", "limit": 100, "sort": sort, "directory": true}
+            })
+            .to_string(),
+            Some(data_dir.to_str().unwrap()),
+        );
+        assert_eq!(
+            directory["result"]["contacts"][0]["addr"], first,
+            "{directory}"
+        );
+    }
+
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -1676,6 +1691,96 @@ fn mobile_protocol_lists_threads_from_store() {
     );
     assert_eq!(synced["result"]["folder_synced"], true);
 
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
+    let data_dir = unique_data_dir("contact-threads");
+    seed_mobile_account(&data_dir, "me@example.com");
+    seed_mobile_account(&data_dir, "other@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    for (account, folder, uid, addr, date) in [
+        ("me@example.com", "INBOX", 1, "Alice@example.com", 300),
+        ("other@example.com", "Archive", 2, "alice@example.com", 200),
+        ("me@example.com", "INBOX", 3, "notalice@example.com", 400),
+    ] {
+        store::upsert_messages(
+            &conn,
+            account,
+            folder,
+            &[MessageHeader {
+                uid,
+                subject: format!("Topic {uid}"),
+                from_name: "Alice".to_string(),
+                from_addr: addr.to_string(),
+                date,
+                thread_key: format!("mid:{uid}"),
+                starred: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    }
+    drop(conn);
+    let invoke = |method: &str, params: Value| {
+        invoke_mobile_protocol_json(
+            &json!({"id": 1, "method": method, "params": params}).to_string(),
+            Some(data_dir.to_str().unwrap()),
+        )
+    };
+    let first = invoke(
+        "mail.contactThreads",
+        json!({"addr": " alice@example.com ", "limit": 1}),
+    );
+    let cards = first["result"]["threads"].as_array().unwrap();
+    assert_eq!(cards.len(), 1, "{first}");
+    assert_eq!(cards[0]["account_id"], "me@example.com");
+    assert_eq!(cards[0]["folder_id"], "INBOX");
+    assert_eq!(cards[0]["id"], cards[0]["thread_id"]);
+    assert_eq!(cards[0]["unread"], true);
+    assert_eq!(cards[0]["starred"], true);
+    let mailbox = invoke(
+        "mail.threadList",
+        json!({"account_id": "me@example.com", "folder_id": "INBOX"}),
+    );
+    assert!(
+        mailbox["result"]["threads"]
+            .as_array()
+            .unwrap()
+            .contains(&cards[0])
+    );
+    let second = invoke(
+        "contacts.threads",
+        json!({
+            "addr": "alice@example.com", "limit": 1,
+            "before_cursor": first["result"]["next_cursor"],
+        }),
+    );
+    assert_eq!(
+        second["result"]["threads"][0]["account_id"],
+        "other@example.com"
+    );
+    assert_eq!(second["result"]["threads"][0]["folder_id"], "Archive");
+    assert!(second["result"]["next_cursor"].is_null());
+    assert!(
+        invoke("contacts.threads", json!({"addr": "nobody@example.com"}))["result"]["threads"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    for params in [
+        json!({}),
+        json!({"addr": "  "}),
+        json!({"addr": "alice@example.com", "before_cursor": "invalid"}),
+    ] {
+        assert!(invoke("mail.contactThreads", params)["error"]["message"].is_string());
+    }
+    let clamped = invoke(
+        "contacts.threads",
+        json!({"addr": "alice@example.com", "limit": 0}),
+    );
+    assert_eq!(clamped["result"]["threads"].as_array().unwrap().len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

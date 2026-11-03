@@ -1033,6 +1033,7 @@ internal fun MeronMobileState.openMessageCompose(
 internal fun MeronMobileState.openComposeTo(
     email: String,
     accountId: String,
+    returnScreen: Screen = Screen.Thread,
 ) {
     openSignatureCompose {
         clearComposeDraftState()
@@ -1040,7 +1041,7 @@ internal fun MeronMobileState.openComposeTo(
         composeFromEmail = ""
         to = email
         body = seedBodyWithSignature("", accountId.ifBlank { defaultSendAccountId() })
-        composeReturnScreen = Screen.Thread
+        composeReturnScreen = returnScreen
         rememberComposeSeed()
         screen = Screen.Compose
     }

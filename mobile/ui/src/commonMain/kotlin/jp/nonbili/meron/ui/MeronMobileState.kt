@@ -446,7 +446,7 @@ internal class MeronMobileState(
         get() = screenState
         set(value) {
             screenState = value
-            if (value == Screen.Mail || value == Screen.Kanban || value == Screen.Tasks || value == Screen.Calendar) {
+            if (value == Screen.Mail || value == Screen.Kanban || value == Screen.Tasks || value == Screen.Calendar || value == Screen.Contacts) {
                 saveLastTopScreen(prefs, value)
             }
         }

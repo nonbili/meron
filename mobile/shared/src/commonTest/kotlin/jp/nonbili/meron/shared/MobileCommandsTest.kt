@@ -438,6 +438,30 @@ class MobileCommandsTest {
     }
 
     @Test
+    fun contactsDirectoryAndHistoryUseSharedCommands() {
+        assertEquals(
+            """{"account":"","query":"","limit":100,"sort":"name","directory":true}""",
+            ContactSuggestParams(limit = 100, sort = "name", directory = true).toJson(),
+        )
+        assertEquals(
+            """{"account":"","query":"ali","limit":8,"sort":"recent","directory":true}""",
+            ContactSuggestParams(query = "ali", sort = "recent", directory = true).toJson(),
+        )
+        assertEquals(
+            """{"id":28,"method":"mail.contactThreads","params":{"addr":"alice@example.com","limit":50}}""",
+            contactThreadsRequest(id = 28, params = ContactThreadsParams(addr = "alice@example.com")).toJson(),
+        )
+        val core = FakeMeronCore("""{"threads":[]}""")
+        val client = MobileMailCommandClient(core)
+        runSuspend { client.contactThreads(ContactThreadsParams("alice@example.com", "[200,\"account\\nkey\"]", 20)) }
+        assertEquals(MobileCommand.ContactThreads, core.lastCommand)
+        assertEquals(
+            """{"addr":"alice@example.com","before_cursor":"[200,\"account\\nkey\"]","limit":20}""",
+            core.lastPayloadJson,
+        )
+    }
+
+    @Test
     fun taskClientMethodsUseSharedCoreCommandNames() {
         val core = FakeMeronCore("""{"ok":true}""")
         val client = MobileMailCommandClient(core)

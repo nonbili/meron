@@ -251,7 +251,7 @@ internal fun MeronMobileState.readCoreThread(
     activeThreadReadToken = readToken
     val returnScreen =
         when (screen) {
-            Screen.Kanban -> screen
+            Screen.Kanban, Screen.Contacts -> screen
 
             // Swiped over from the conversation beside it: back still leads
             // to the list it was opened from.

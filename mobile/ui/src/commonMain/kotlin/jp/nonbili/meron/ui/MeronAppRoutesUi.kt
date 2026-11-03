@@ -90,6 +90,13 @@ import kotlinx.coroutines.withContext
 // dropped rather than held for the lifetime of the process.
 private const val MAX_REMEMBERED_MAIL_LIST_STATES = 12
 
+// Contacts can be restored as the root. Its history return target is Contacts,
+// not the destination to leave the directory for when no earlier route exists.
+internal fun rootBackDestination(
+    screen: Screen,
+    threadReturnScreen: Screen,
+): Screen = if (screen == Screen.Contacts) Screen.Mail else threadReturnScreen
+
 internal fun rememberedMailListKeysToEvict(
     existingKeys: List<MailboxCacheKey>,
     requestedKey: MailboxCacheKey,
@@ -256,6 +263,11 @@ internal fun KanbanRouteContent(
                     onOpenSettings = {
                         previousTopScreen = screen
                         screen = Screen.Settings
+                        scope.launch { drawerState.close() }
+                    },
+                    onOpenContacts = {
+                        previousTopScreen = screen
+                        screen = Screen.Contacts
                         scope.launch { drawerState.close() }
                     },
                     onShowAbout = {
@@ -752,6 +764,11 @@ internal fun MailRouteContent(
                     onOpenSettings = {
                         previousTopScreen = screen
                         screen = Screen.Settings
+                        scope.launch { drawerState.close() }
+                    },
+                    onOpenContacts = {
+                        previousTopScreen = screen
+                        screen = Screen.Contacts
                         scope.launch { drawerState.close() }
                     },
                     onShowAbout = {

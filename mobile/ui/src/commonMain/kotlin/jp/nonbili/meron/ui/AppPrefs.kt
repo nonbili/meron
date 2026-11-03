@@ -40,7 +40,7 @@ internal fun saveAppStringSet(
 ) = prefs.putStringSet(key, value.filter { it.isNotBlank() }.toSet())
 
 /**
- * Restore the last top-level screen the user was on (Mail/Kanban/Tasks/Calendar only).
+ * Restore the last top-level screen (Mail/Kanban/Tasks/Calendar/Contacts).
  * Transient screens (Thread/Compose/AddAccount/Settings) are never persisted, so a
  * cold start always lands on a navigable top-level screen.
  */
@@ -49,6 +49,7 @@ internal fun loadLastTopScreen(prefs: AppPreferences): Screen =
         "kanban" -> Screen.Kanban
         "tasks" -> Screen.Tasks
         "calendar" -> Screen.Calendar
+        "contacts" -> Screen.Contacts
         else -> Screen.Mail
     }
 
@@ -61,6 +62,7 @@ internal fun saveLastTopScreen(
         Screen.Kanban -> "kanban"
         Screen.Tasks -> "tasks"
         Screen.Calendar -> "calendar"
+        Screen.Contacts -> "contacts"
         else -> "mail"
     },
 )
