@@ -856,6 +856,27 @@ describe('kanbanPaneThreadId', () => {
   })
 })
 
+describe('kanban$.keyboardCard', () => {
+  afterEach(() => {
+    kanban$.keyboardCard.set(null)
+    kanban$.paneThreadId.set('')
+    kanban$.activeBoardId.set('')
+  })
+
+  it('forgets the card Esc left the keyboard on once a conversation opens', () => {
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: 'b1:acc1:INBOX' })
+    kanban$.paneThreadId.set('t2')
+    expect(kanban$.keyboardCard.get()).toBeNull()
+  })
+
+  it('forgets it when another board is shown', () => {
+    kanban$.activeBoardId.set('b1')
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: 'b1:acc1:INBOX' })
+    kanban$.activeBoardId.set('b2')
+    expect(kanban$.keyboardCard.get()).toBeNull()
+  })
+})
+
 describe('selectAdjacentKanbanThread', () => {
   const inbox = { accountId: 'acc1', folderId: 'INBOX' }
   const starred = { accountId: 'unified', folderId: 'starred' }

@@ -195,10 +195,12 @@ describe('AppHotkeys', () => {
       fireEvent.keyDown(view.getByText('body'), { key: 'Escape' })
       expect(kanban$.paneThreadId.peek()).toBe('')
       expect(document.activeElement).toBe(view.getByText('opened card'))
+      expect(kanban$.keyboardCard.peek()).toEqual({ threadId: 'acct#INBOX#7', columnKey: 'board-1:col-b' })
     } finally {
       kanban$.activeBoardId.set('')
       kanban$.paneThreadId.set('')
       kanban$.paneColumnKey.set('')
+      kanban$.keyboardCard.set(null)
     }
   })
 

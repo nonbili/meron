@@ -64,7 +64,15 @@ export function KanbanThreadCard({
   // conversation, so it reads as selected while that tab is on screen. Its
   // thread_id is the whole feed's, so match the tab by the item's own id.
   const activeTab = useValue(compose$.activeTab)
-  const active = starredFeed ? activeTab === thread.id : thread.thread_id === paneThreadId
+  // The card Esc closed the conversation of keeps its highlight while it has
+  // the keyboard and nothing else is on screen in the pane.
+  const keyboardCard = useValue(kanban$.keyboardCard)
+  const keyboardSelected =
+    !paneThreadId &&
+    !activeTab &&
+    keyboardCard?.threadId === thread.thread_id &&
+    keyboardCard.columnKey === kanbanBoardColumnKey(boardId, column)
+  const active = starredFeed ? activeTab === thread.id : thread.thread_id === paneThreadId || keyboardSelected
 
   // Follow the card for as long as the pane slides open: the pane narrows the
   // board after the card is selected, so a card that fits now can end up under it.
@@ -102,11 +110,24 @@ export function KanbanThreadCard({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...pointerListeners} data-kanban-thread={thread.thread_id}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...pointerListeners}
+      data-kanban-thread={thread.thread_id}
+      onBlur={(event) => {
+        // Focus moving on within the window ends the Esc highlight; the window
+        // itself losing focus (another app) keeps it for when it comes back.
+        if (!keyboardSelected || !document.hasFocus()) return
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        kanban$.keyboardCard.set(null)
+      }}
+    >
       <ThreadListItem
         thread={thread}
         contextMenuOpen={threadMenu.isOpen(thread, ownerKey)}
-        active={starredColumn ? active : thread.thread_id === paneThreadId}
+        active={starredColumn ? active : thread.thread_id === paneThreadId || keyboardSelected}
         rootRef={active ? selectedItemRef : undefined}
         badgeAccount={column.accountId === 'unified' ? account : undefined}
         // The margin reaches past the column's own padding and border to the

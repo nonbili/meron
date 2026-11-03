@@ -65,7 +65,17 @@ export const kanban$ = observable({
   // The column of the card last opened, as a conversation or in a tab: j/k
   // steps through it first.
   paneColumnKey: '',
+  // The card Esc closed the conversation of, which keeps keyboard focus and
+  // reads as selected until a conversation opens or focus moves on.
+  keyboardCard: null as KanbanCardRef | null,
 })
+
+// The highlight stays with the open conversation's card; the card Esc left
+// behind gives it up the moment a conversation opens or the board changes.
+kanban$.paneThreadId.onChange(({ value }) => {
+  if (value) kanban$.keyboardCard.set(null)
+})
+kanban$.activeBoardId.onChange(() => kanban$.keyboardCard.set(null))
 
 function newBoardId(): string {
   const fallback = `${Date.now()}-${Math.random().toString(16).slice(2)}`
