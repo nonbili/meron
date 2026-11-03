@@ -4,7 +4,9 @@ import { isMac } from '../../lib/shortcuts'
 import { calendar$ } from '../../states/calendar'
 import { mail$ } from '../../states/mailState'
 import { ui$ } from '../../states/ui'
-import { kanban$ } from '../../states/kanban'
+import { kanban$, kanbanBoardColumnKey, kanbanColumnKey } from '../../states/kanban'
+import { settings$ } from '../../states/settings'
+import { compose$ } from '../../states/composeState'
 import { AppHotkeys } from './AppHotkeys'
 
 const original = (window as any).go
@@ -220,6 +222,47 @@ describe('AppHotkeys', () => {
       expect(document.activeElement).toBe(view.getByText('opened card'))
     } finally {
       kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+    }
+  })
+
+  it('steps from the focused card while no conversation is open', () => {
+    const inbox = { accountId: 'acct', folderId: 'inbox' }
+    const card = (n: number) => ({ id: `m${n}`, thread_id: `t${n}`, account_id: 'acct', folder_id: 'inbox' }) as any
+    const previousBoards = settings$.kanbanBoards.peek()
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [inbox] }] as any)
+    kanban$.activeBoardId.set('b1')
+    kanban$.threads.set({ [kanbanColumnKey(inbox)]: [card(1), card(2), card(3), card(4)] })
+    kanban$.paneThreadId.set('')
+    kanban$.paneColumnKey.set('')
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    ui$.selectedThread.set('')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column={kanbanBoardColumnKey('b1', inbox)}>
+            <div data-kanban-thread="t2">
+              <button data-thread-row>card 2</button>
+            </div>
+          </section>
+        </>,
+      )
+      view.getByText('card 2').focus()
+      fireEvent.keyDown(view.getByText('card 2'), { key: 'ArrowDown' })
+      expect(kanban$.paneThreadId.peek()).toBe('t3')
+
+      kanban$.paneThreadId.set('')
+      ui$.selectedThread.set('')
+      view.getByText('card 2').focus()
+      fireEvent.keyDown(view.getByText('card 2'), { key: 'j' })
+      expect(kanban$.paneThreadId.peek()).toBe('t3')
+    } finally {
+      settings$.kanbanBoards.set(previousBoards)
+      kanban$.activeBoardId.set('')
+      kanban$.threads.set({})
       kanban$.paneThreadId.set('')
       kanban$.paneColumnKey.set('')
     }

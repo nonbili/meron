@@ -102,7 +102,7 @@ export function KanbanThreadCard({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...pointerListeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...pointerListeners} data-kanban-thread={thread.thread_id}>
       <ThreadListItem
         thread={thread}
         contextMenuOpen={threadMenu.isOpen(thread, ownerKey)}

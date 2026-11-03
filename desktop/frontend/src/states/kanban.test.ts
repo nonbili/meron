@@ -917,6 +917,21 @@ describe('selectAdjacentKanbanThread', () => {
     expect(kanban$.paneThreadId.get()).toBe('t1')
   })
 
+  it('steps from the given card while no conversation is open (keyboard focus after Esc)', () => {
+    selectAdjacentKanbanThread(1, { threadId: 't2', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    expect(kanban$.paneThreadId.get()).toBe('t3')
+  })
+
+  it('steps from the open conversation, not the given card', () => {
+    kanban$.paneThreadId.set('t1')
+    ui$.selectedThread.set('t1')
+
+    selectAdjacentKanbanThread(1, { threadId: 't2', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    expect(kanban$.paneThreadId.get()).toBe('t2')
+  })
+
   it('walks feed items by their own id and keeps them out of the card conversation', () => {
     kanban$.paneColumnKey.set(kanbanBoardColumnKey('b1', starred))
     compose$.tabs.set([{ ...threadTab('feed-1'), id: 'rss-1:item2', kind: 'reader', messageId: 'rss-1:item2' }])

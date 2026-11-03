@@ -18,6 +18,7 @@ import {
   closeKanbanBoard,
   openMailAccount,
   kanbanPaneThreadId,
+  type KanbanCardRef,
 } from '../../states/kanban'
 import { closeConversationToCard } from '../kanban/closeConversationToCard'
 import { openThreadSearch, thread$ } from '../../states/thread'
@@ -106,8 +107,18 @@ function activeThreadId(): string {
 // j/k (and the arrow keys) step through whichever list is on screen: the chat
 // thread list, or the active board's cards.
 function selectAdjacentThreadForView(delta: number) {
-  if (kanban$.activeBoardId.peek()) selectAdjacentKanbanThread(delta)
+  if (kanban$.activeBoardId.peek()) selectAdjacentKanbanThread(delta, focusedKanbanCard())
   else selectAdjacentThread(delta)
+}
+
+// The card keyboard focus is on (Esc puts it on the card whose conversation it
+// closed), for stepping on from there while no conversation is open.
+function focusedKanbanCard(): KanbanCardRef | undefined {
+  const card = document.activeElement?.closest<HTMLElement>('[data-kanban-thread]')
+  const column = card?.closest<HTMLElement>('[data-kanban-column]')
+  const threadId = card?.dataset.kanbanThread
+  const columnKey = column?.dataset.kanbanColumn
+  return threadId && columnKey ? { threadId, columnKey } : undefined
 }
 
 function handleKanbanArrowNavigation(key: string, target: EventTarget | null): boolean {
@@ -119,7 +130,7 @@ function handleKanbanArrowNavigation(key: string, target: EventTarget | null): b
   ) {
     return false
   }
-  selectAdjacentKanbanThread(key === 'ArrowDown' ? 1 : -1)
+  selectAdjacentKanbanThread(key === 'ArrowDown' ? 1 : -1, focusedKanbanCard())
   return true
 }
 

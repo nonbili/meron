@@ -93,6 +93,9 @@ describe('useQuickReply Escape in the kanban pane', () => {
     kanban$.activeBoardId.set('')
     kanban$.paneThreadId.set('')
     kanban$.paneColumnKey.set('')
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    ui$.selectedThread.set('')
     if (previousGo === undefined) delete (window as any).go
     else (window as any).go = previousGo
   })

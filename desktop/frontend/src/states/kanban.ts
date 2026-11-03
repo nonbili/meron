@@ -832,8 +832,15 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
 // Move the open kanban conversation through the visible cards in its current
 // column. This mirrors chat-list adjacent navigation but uses the active board.
 // It starts from whatever the pane shows, a tab included.
-export function selectAdjacentKanbanThread(delta: number) {
-  const selected = kanbanPaneThreadId() || ui$.selectedThread.get()
+/** A card on the board: its thread, and the column (board column key) it sits in. */
+export type KanbanCardRef = { threadId: string; columnKey: string }
+
+/** Step to the next or previous card from the conversation on screen, or, with
+ * none open, from `from`: the card keyboard focus is on after Esc closed its
+ * conversation. Without either, start at the first column's end. */
+export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) {
+  const open = kanbanPaneThreadId() || ui$.selectedThread.get()
+  const selected = open || from?.threadId || ''
   // Items of one feed share a thread_id, so a reader tab's card is found by
   // the item's own id first.
   const activeTab = compose$.activeTab.get()
@@ -849,7 +856,7 @@ export function selectAdjacentKanbanThread(delta: number) {
   const globalFilter = kanban$.globalFilter.get()
   const columnAttachmentsOnly = kanban$.attachmentsOnly.get()
   const globalAttachmentsOnly = kanban$.globalAttachmentsOnly.get()
-  const preferredKey = kanban$.paneColumnKey.get()
+  const preferredKey = (open ? '' : from?.columnKey) || kanban$.paneColumnKey.get()
   const orderedColumns = preferredKey
     ? [
         ...columns.filter((column) => kanbanBoardColumnKey(boardId, column) === preferredKey),
