@@ -904,12 +904,14 @@ describe('selectAdjacentKanbanThread', () => {
     })
     kanban$.paneThreadId.set('')
     kanban$.paneColumnKey.set('')
+    kanban$.keyboardCard.set(null)
     compose$.tabs.set([])
     compose$.activeTab.set('')
     ui$.selectedThread.set('')
   })
 
   afterEach(() => {
+    kanban$.keyboardCard.set(null)
     kanban$.activeBoardId.set('')
     kanban$.threads.set({})
     compose$.tabs.set([])
@@ -938,10 +940,28 @@ describe('selectAdjacentKanbanThread', () => {
     expect(kanban$.paneThreadId.get()).toBe('t1')
   })
 
-  it('steps from the given card while no conversation is open (keyboard focus after Esc)', () => {
+  it('moves the selection from the given card without opening it while no conversation is open', () => {
     selectAdjacentKanbanThread(1, { threadId: 't2', columnKey: kanbanBoardColumnKey('b1', inbox) })
 
-    expect(kanban$.paneThreadId.get()).toBe('t3')
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't3', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('moves on from the selected card on the next step', () => {
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    selectAdjacentKanbanThread(1)
+    selectAdjacentKanbanThread(1)
+
+    expect(kanban$.keyboardCard.get()?.threadId).toBe('t3')
+    expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('selects the first card, without opening it, when nothing is selected or open', () => {
+    selectAdjacentKanbanThread(1)
+
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    expect(kanban$.paneThreadId.get()).toBe('')
   })
 
   it('steps from the open conversation, not the given card', () => {

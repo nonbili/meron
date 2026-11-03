@@ -229,7 +229,7 @@ describe('AppHotkeys', () => {
     }
   })
 
-  it('steps from the focused card while no conversation is open', () => {
+  it('moves the selection from the focused card, without opening it, while no conversation is open', () => {
     const inbox = { accountId: 'acct', folderId: 'inbox' }
     const card = (n: number) => ({ id: `m${n}`, thread_id: `t${n}`, account_id: 'acct', folder_id: 'inbox' }) as any
     const previousBoards = settings$.kanbanBoards.peek()
@@ -254,15 +254,17 @@ describe('AppHotkeys', () => {
       )
       view.getByText('card 2').focus()
       fireEvent.keyDown(view.getByText('card 2'), { key: 'ArrowDown' })
-      expect(kanban$.paneThreadId.peek()).toBe('t3')
+      expect(kanban$.keyboardCard.peek()?.threadId).toBe('t3')
+      expect(kanban$.paneThreadId.peek()).toBe('')
 
-      kanban$.paneThreadId.set('')
-      ui$.selectedThread.set('')
+      kanban$.keyboardCard.set(null)
       view.getByText('card 2').focus()
       fireEvent.keyDown(view.getByText('card 2'), { key: 'j' })
-      expect(kanban$.paneThreadId.peek()).toBe('t3')
+      expect(kanban$.keyboardCard.peek()?.threadId).toBe('t3')
+      expect(kanban$.paneThreadId.peek()).toBe('')
     } finally {
       settings$.kanbanBoards.set(previousBoards)
+      kanban$.keyboardCard.set(null)
       kanban$.activeBoardId.set('')
       kanban$.threads.set({})
       kanban$.paneThreadId.set('')

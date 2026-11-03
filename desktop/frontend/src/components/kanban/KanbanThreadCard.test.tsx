@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { DndContext } from '@dnd-kit/core'
 import { compose$ } from '../../states/composeState'
 import { kanban$, kanbanBoardColumnKey, type KanbanColumn } from '../../states/kanban'
@@ -27,6 +27,18 @@ const thread: Message = {
 
 const inbox = { accountId: 'acc-1', folderId: 'INBOX' } as KanbanColumn
 const threadMenu: ThreadContextMenuController = { menu: null, close: () => {}, isOpen: () => false, open: () => {} }
+
+function renderTwoCards() {
+  const second = { ...thread, id: 'root-2', thread_id: 't-2', subject: 'Second' }
+  const view = render(
+    <DndContext>
+      <KanbanThreadCard boardId="board-1" thread={thread} column={inbox} threadMenu={threadMenu} ownerKey="col-1" />
+      <KanbanThreadCard boardId="board-1" thread={second} column={inbox} threadMenu={threadMenu} ownerKey="col-1" />
+    </DndContext>,
+  )
+  const row = (text: string) => view.getByText(text).closest<HTMLElement>('[data-thread-row]')!
+  return { first: row('Subject'), second: row('Second') }
+}
 
 function renderCard(column: KanbanColumn = inbox) {
   const view = render(
@@ -69,5 +81,18 @@ describe('KanbanThreadCard after Esc', () => {
     row.focus()
     view.getByText('elsewhere').focus()
     expect(kanban$.keyboardCard.get()).toBeNull()
+  })
+
+  it('takes keyboard focus when the arrow keys select it, so Return opens it', () => {
+    const { first, second } = renderTwoCards()
+    act(() => kanban$.keyboardCard.set({ threadId: 't-1', columnKey: kanbanBoardColumnKey('board-1', inbox) }))
+    expect(document.activeElement).toBe(first)
+
+    act(() => kanban$.keyboardCard.set({ threadId: 't-2', columnKey: kanbanBoardColumnKey('board-1', inbox) }))
+    expect(document.activeElement).toBe(second)
+    // The card it moved away from must not drop the new selection as it blurs.
+    expect(kanban$.keyboardCard.get()?.threadId).toBe('t-2')
+    expect(second.hasAttribute('data-active')).toBe(true)
+    expect(first.hasAttribute('data-active')).toBe(false)
   })
 })

@@ -845,12 +845,21 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
 /** A card on the board: its thread, and the column (board column key) it sits in. */
 export type KanbanCardRef = { threadId: string; columnKey: string }
 
-/** Step to the next or previous card from the conversation on screen, or, with
- * none open, from `from`: the card keyboard focus is on after Esc closed its
- * conversation. Without either, start at the first column's end. */
+/** Step to the next or previous card from the conversation on screen, opening
+ * it, or, with none open, move the selection from `from` (the focused card) or
+ * the selected card without opening anything. Without either, start at the
+ * first column's end. */
 export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) {
+  // With no conversation or tab in the pane, the arrow keys only move the
+  // selection (kanban$.keyboardCard); Return opens the card it lands on.
+  const paneOpen = !!(kanbanPaneThreadId() || compose$.activeTab.get())
   const open = kanbanPaneThreadId() || ui$.selectedThread.get()
-  const selected = open || from?.threadId || ''
+  const origin = open ? undefined : (from ?? kanban$.keyboardCard.get() ?? undefined)
+  const step = (thread: Message, column: KanbanColumn, boardKey: string) => {
+    if (paneOpen) openAdjacentKanbanCard(thread, column, boardKey)
+    else kanban$.keyboardCard.set({ threadId: thread.thread_id, columnKey: boardKey })
+  }
+  const selected = open || origin?.threadId || ''
   // Items of one feed share a thread_id, so a reader tab's card is found by
   // the item's own id first.
   const activeTab = compose$.activeTab.get()
@@ -866,7 +875,7 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
   const globalFilter = kanban$.globalFilter.get()
   const columnAttachmentsOnly = kanban$.attachmentsOnly.get()
   const globalAttachmentsOnly = kanban$.globalAttachmentsOnly.get()
-  const preferredKey = (open ? '' : from?.columnKey) || kanban$.paneColumnKey.get()
+  const preferredKey = origin?.columnKey || kanban$.paneColumnKey.get()
   const orderedColumns = preferredKey
     ? [
         ...columns.filter((column) => kanbanBoardColumnKey(boardId, column) === preferredKey),
@@ -894,11 +903,11 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
     const target = list[next]
     if (!target || next === current) return
 
-    openAdjacentKanbanCard(target, column, boardKey)
+    step(target, column, boardKey)
     return
   }
 
   if (fallback) {
-    openAdjacentKanbanCard(fallback.thread, fallback.column, fallback.key)
+    step(fallback.thread, fallback.column, fallback.key)
   }
 }

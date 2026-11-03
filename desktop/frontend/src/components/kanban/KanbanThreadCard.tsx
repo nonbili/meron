@@ -88,6 +88,13 @@ export function KanbanThreadCard({
     return () => cancelAnimationFrame(frame)
   }, [active])
 
+  // The selected card has the keyboard (Esc, the arrow keys), so Return opens it.
+  useEffect(() => {
+    if (!keyboardSelected) return
+    const row = selectedItemRef.current?.querySelector<HTMLElement>('[data-thread-row]')
+    if (row && document.activeElement !== row) row.focus()
+  }, [keyboardSelected])
+
   // Ctrl/Cmd+click and double-click. Starred feed items are single articles and
   // open in a reader tab, as their plain click does. The pane shows for any
   // active tab, so paneThreadId stays the card conversation behind the tabs:
@@ -117,7 +124,7 @@ export function KanbanThreadCard({
       {...pointerListeners}
       data-kanban-thread={thread.thread_id}
       onBlur={(event) => {
-        // Focus moving on within the window ends the Esc highlight; the window
+        // Focus moving on within the window ends the selection; the window
         // itself losing focus (another app) keeps it for when it comes back.
         if (!keyboardSelected || !document.hasFocus()) return
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
