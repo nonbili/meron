@@ -10,6 +10,9 @@ import kotlinx.coroutines.withContext
  *  on any failure (caller falls back to a generated avatar). */
 expect suspend fun loadImageBytes(ref: String): ByteArray?
 
+// Remote actions require a loader that enforces the size limit while reading.
+internal expect val boundedRemoteImageActions: Boolean
+
 internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? =
     loadCachedImageBitmap(ref) {
         loadImageBytes(ref)?.let { bytes ->

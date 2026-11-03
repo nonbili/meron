@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -263,6 +264,11 @@ internal fun ThreadImageGallery(
                 modifier = Modifier.weight(1f),
             )
             Box {
+                IconButton(onClick = { onSave(current.attachment) }) {
+                    Icon(Icons.Filled.Save, contentDescription = tr("buttons.save"), tint = Color.White)
+                }
+            }
+            Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = tr("common.more"), tint = Color.White)
                 }
@@ -345,6 +351,8 @@ internal fun ThreadImageGallery(
                             }
                         }
                     }
+                }.pointerInput(current.ref) {
+                    detectTapGestures(onLongPress = { menuOpen = true })
                 }.pointerInput(current.ref) {
                     // Only track multi-touch here so a single-finger drag is left
                     // unconsumed for the horizontal-drag detector above to see —

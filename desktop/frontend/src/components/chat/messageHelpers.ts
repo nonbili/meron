@@ -125,6 +125,26 @@ export function mediaFilename(key: string, attachments: Attachment[] | undefined
   return attachments?.find((attachment) => attachment.key === key)?.filename ?? key.split('/').pop() ?? key
 }
 
+/** Sources the native save/copy flow can handle. Do not fetch until selected. */
+export function imageSource(src: string): { key: string | null; url?: string; filename: string } | null {
+  const key = mediaKeyFromSrc(src)
+  if (key) return { key, filename: mediaFilename(key, undefined) }
+  try {
+    const url = new URL(src)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    let filename = url.pathname.split('/').pop() || 'image'
+    try {
+      filename = decodeURIComponent(filename)
+    } catch {
+      // Some image servers use legacy or literal percent escapes.
+    }
+    filename = filename.replace(/[\\/:\x00-\x1f]/g, '_')
+    return { key: null, url: url.href, filename }
+  } catch {
+    return null
+  }
+}
+
 export function htmlReferencesMedia(html: string | undefined, media: Attachment): boolean {
   if (!html) return false
   if (media.key && html.includes(`/media/${media.key}`)) return true

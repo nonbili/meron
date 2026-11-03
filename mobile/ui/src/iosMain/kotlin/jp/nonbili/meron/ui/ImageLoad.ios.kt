@@ -12,6 +12,8 @@ import platform.Foundation.dataWithContentsOfFile
 import platform.Foundation.dataWithContentsOfURL
 import platform.posix.memcpy
 
+internal actual val boundedRemoteImageActions = false
+
 @OptIn(ExperimentalForeignApi::class)
 actual suspend fun loadImageBytes(ref: String): ByteArray? {
     val data: NSData? =

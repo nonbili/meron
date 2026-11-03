@@ -254,6 +254,7 @@ internal fun ThreadScreen(
     // the sender is the decision that outlives it.
     var revealedRemote by remember(thread?.id) { mutableStateOf(emptySet<String>()) }
     var galleryIndex by remember(thread?.id) { mutableStateOf<Int?>(null) }
+    var htmlGalleryImage by remember(thread?.id) { mutableStateOf<jp.nonbili.meron.shared.ThreadGalleryImage?>(null) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     val printThread = rememberPrintThread(preferHtml)
@@ -278,6 +279,7 @@ internal fun ThreadScreen(
     }
     val galleryImages =
         remember(messages, remoteContentPolicy, revealedRemote) { buildThreadGalleryImages(messages, remoteAllowed) }
+    val displayedGalleryImages = galleryImages + listOfNotNull(htmlGalleryImage)
     val mediaItems =
         remember(messages, remoteContentPolicy, revealedRemote) { buildThreadMediaItems(messages, remoteAllowed) }
     val targetMoveFolders =
@@ -722,9 +724,13 @@ internal fun ThreadScreen(
         galleryIndexForAttachment(attachment)?.let { galleryIndex = it } ?: onOpenAttachment(attachment)
     }
 
-    fun openGalleryForHtmlSrc(src: String) {
+    fun openGalleryForHtmlSrc(
+        src: String,
+        message: MessageBody,
+    ) {
         val normalized = src.trim()
         if (normalized.isBlank()) return
+        if (!normalized.startsWith("/media/") && !remoteAllowed(message)) return
         val idx =
             galleryImages.indexOfFirst { image ->
                 image.ref == normalized ||
@@ -733,6 +739,13 @@ internal fun ThreadScreen(
             }
         if (idx >= 0) {
             galleryIndex = idx
+        } else if (boundedRemoteImageActions && (normalized.startsWith("https://") || normalized.startsWith("http://"))) {
+            // HTML-only feed pictures need not appear in the attachment list.
+            val attachment = remoteHtmlImageAttachment(normalized)
+            htmlGalleryImage =
+                jp.nonbili.meron.shared
+                    .ThreadGalleryImage(attachment, normalized, attachment.filename, "")
+            galleryIndex = galleryImages.size
         } else {
             services.openUrl(normalized)
         }
@@ -1092,7 +1105,7 @@ internal fun ThreadScreen(
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
                                         onOpenImageAttachment = ::openGalleryForAttachment,
-                                        onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                                        onOpenHtmlImage = { openGalleryForHtmlSrc(it, message) },
                                         onCopyMessageText = onCopyMessageText,
                                         onComposeTo = onComposeTo,
                                         onOpenUrl = services::openUrl,
@@ -1126,7 +1139,7 @@ internal fun ThreadScreen(
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
                                         onOpenImageAttachment = ::openGalleryForAttachment,
-                                        onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                                        onOpenHtmlImage = { openGalleryForHtmlSrc(it, message) },
                                         onCopyMessageText = onCopyMessageText,
                                         onComposeTo = onComposeTo,
                                         onOpenMessage = { readerMessage = it },
@@ -1378,17 +1391,20 @@ internal fun ThreadScreen(
                 onSaveAttachment = onSaveAttachment,
                 loadImageAttachment = loadImageAttachment,
                 onOpenImageAttachment = ::openGalleryForAttachment,
-                onOpenHtmlImage = ::openGalleryForHtmlSrc,
+                onOpenHtmlImage = { openGalleryForHtmlSrc(it, reader) },
                 onOpenUrl = services::openUrl,
             )
         }
         galleryIndex?.let { index ->
-            if (galleryImages.getOrNull(index) != null) {
+            if (displayedGalleryImages.getOrNull(index) != null) {
                 ThreadImageGallery(
-                    images = galleryImages,
+                    images = displayedGalleryImages,
                     index = index,
                     onIndexChange = { galleryIndex = it },
-                    onClose = { galleryIndex = null },
+                    onClose = {
+                        galleryIndex = null
+                        htmlGalleryImage = null
+                    },
                     onSave = onSaveAttachment,
                     onShare = onShareImageAttachment,
                     onCopy = onCopyImageAttachment,

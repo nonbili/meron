@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -12,6 +13,8 @@ import java.net.URL
 private const val REMOTE_IMAGE_CACHE_MAX_BYTES = 1024L * 1024L * 1024L
 private const val REMOTE_IMAGE_CONNECT_TIMEOUT_MS = 10_000
 private const val REMOTE_IMAGE_READ_TIMEOUT_MS = 15_000
+
+internal actual val boundedRemoteImageActions = true
 
 /** Set by the Android host at startup so image refs that need app storage
  *  (the `/media/` dir, `content://`) can resolve. */
@@ -114,7 +117,20 @@ private fun loadRemoteImageBytes(
         }
     return try {
         if (connection.responseCode !in 200..299) return null
-        val bytes = connection.inputStream.use { it.readBytes() }
+        val maxBytes = 50 * 1024 * 1024
+        if (connection.contentLengthLong > maxBytes) return null
+        val bytes =
+            connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (output.size() + count > maxBytes) return null
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            }
         if (bytes.isEmpty()) return null
         val ext = sniffImageExtension(bytes, connection.contentType)
         if (cacheDir != null && ext != null) {

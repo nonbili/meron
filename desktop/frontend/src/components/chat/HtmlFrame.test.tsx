@@ -207,8 +207,10 @@ it('rewires a reader at load after an earlier interactive ready callback', () =>
   expect(disposed).toEqual(['complete'])
 })
 
-it("forwards a cached picture's right-click with its media key, leaving a remote one native", () => {
-  const { container } = render(<HtmlFrame html="<p>Message</p>" title="Message" forwardContextMenu="except-images" />)
+it("forwards cached and remote pictures to the app's image context menu", () => {
+  const { container } = render(
+    <HtmlFrame html="<p>Message</p>" title="Message" forwardContextMenu="except-images" allowRemoteImages />,
+  )
   const frame = container.querySelector('iframe')!
   const doc = new DOMParser().parseFromString(
     `<p>Message</p><img id="cached" src="${window.location.origin}/media/msg/0.png"><img id="remote" src="https://example.com/a.png">`,
@@ -217,8 +219,10 @@ it("forwards a cached picture's right-click with its media key, leaving a remote
   Object.defineProperty(doc, 'readyState', { value: 'complete' })
   Object.defineProperty(frame, 'contentDocument', { get: () => doc })
   fireEvent.load(frame)
-  const forwarded: (string | undefined)[] = []
+  const forwarded: (string | null | undefined)[] = []
   frame.addEventListener('contextmenu', (event) => forwarded.push((event as { meronImageKey?: string }).meronImageKey))
+  const images: unknown[] = []
+  frame.addEventListener('contextmenu', (event) => images.push((event as any).meronImage))
 
   const cached = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
   doc.getElementById('cached')!.dispatchEvent(cached)
@@ -227,6 +231,7 @@ it("forwards a cached picture's right-click with its media key, leaving a remote
 
   const remote = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
   doc.getElementById('remote')!.dispatchEvent(remote)
-  expect(remote.defaultPrevented).toBe(false)
-  expect(forwarded).toEqual(['msg/0.png'])
+  expect(remote.defaultPrevented).toBe(true)
+  expect(forwarded).toEqual(['msg/0.png', null])
+  expect(images[1]).toEqual({ key: null, url: 'https://example.com/a.png', filename: 'a.png' })
 })

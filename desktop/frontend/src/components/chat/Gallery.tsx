@@ -5,13 +5,13 @@ import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { copyAttachmentImage, downloadAttachment } from '../../states/mail'
 import { MenuItem } from '../menu/MenuItem'
-import { mediaKeyFromSrc } from './messageHelpers'
+import { imageSource } from './messageHelpers'
 import { VideoAttachment } from './VideoAttachment'
 
 // The native WebKitGTK image context menu ("Save Image As", "Open Image in New
 // Window") is dead inside the Wails webview — there's no browser download or
-// navigation backing it. The media key behind a cached picture's src (see
-// mediaKeyFromSrc) lets us save through the bridge instead.
+// navigation backing it. Cached media and remote images both save through the
+// native bridge instead.
 
 const MIN_SCALE = 1
 const MAX_SCALE = 8
@@ -164,17 +164,21 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
 
   const saveCurrent = () => {
     setMenu(null)
-    const key = mediaKeyFromSrc(current.src)
-    if (!key) return
-    void downloadAttachment({ key, filename: current.filename, mime: current.mime })
+    const source = imageSource(current.src)
+    if (!source) return
+    void downloadAttachment({
+      ...source,
+      filename: source.key ? current.filename : source.filename,
+      mime: current.mime,
+    })
   }
   const copyCurrent = () => {
     setMenu(null)
-    const key = mediaKeyFromSrc(current.src)
-    if (!key) return
-    void copyAttachmentImage({ key })
+    const source = imageSource(current.src)
+    if (!source) return
+    void copyAttachmentImage(source)
   }
-  const canSave = mediaKeyFromSrc(current.src) !== null
+  const canSave = imageSource(current.src) !== null
 
   // Portal to <body> so the fixed overlay isn't trapped inside a transformed or
   // overflow-clipped ancestor (e.g. a chat bubble's slide-up animation), which
@@ -257,7 +261,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
             draggable={false}
             onClick={(event) => event.stopPropagation()}
             onContextMenu={(event) => {
-              if (!canSave) return // let the default menu show for remote URLs
+              if (!canSave) return // unsupported sources keep the native menu
               event.preventDefault()
               event.stopPropagation()
               setMenu({ x: event.clientX, y: event.clientY })

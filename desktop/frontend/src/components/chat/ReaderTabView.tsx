@@ -9,7 +9,7 @@ import { messageCanReplyAll } from '../../states/composeReply'
 import { deleteMessage } from '../../states/mailMoves'
 import { mail$ } from '../../states/mailState'
 import { normalizeSenderAddr, settings$ } from '../../states/settings'
-import { thread$ } from '../../states/thread'
+import { thread$, type MessageContextMenuState } from '../../states/thread'
 import type { Account, Message, MessageTab } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { Composer } from '../composer/Composer'
@@ -27,6 +27,7 @@ import {
   isInlineMedia,
   isVideo,
   mediaFilename,
+  imageSource,
   parseAddressList,
 } from './messageHelpers'
 
@@ -78,8 +79,8 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
     <div
       className="relative flex min-h-0 flex-1 flex-col"
       // Right-clicking the message, the email's frame included, opens its menu
-      // as it does on a card; on a link, the link's; on a cached picture, its
-      // save and copy. A selection or a remote picture keeps the native menu.
+      // as it does on a card; on a link, the link's; on a picture, save/copy.
+      // A text selection keeps the native menu.
       onContextMenu={(event) => {
         // React bubbles events up from portals too: the image viewer and the
         // menu itself are not the message.
@@ -89,7 +90,11 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         // or an attachment's in the grid.
         const imageEl = (event.target as Element | null)?.closest?.('[data-media-key]') as HTMLElement | null
         const imageKey = (event.nativeEvent as { meronImageKey?: string }).meronImageKey ?? imageEl?.dataset.mediaKey
-        if (!imageKey && (event.target as Element | null)?.closest?.('img')) return
+        const img = (event.target as Element | null)?.closest?.('img') as HTMLImageElement | null
+        const frameImage =
+          (event.nativeEvent as { meronImage?: MessageContextMenuState['image'] }).meronImage ??
+          (img ? (imageSource(img.currentSrc || img.src) ?? undefined) : undefined)
+        if (!imageKey && !frameImage && (event.target as Element | null)?.closest?.('img')) return
         event.preventDefault()
         const image = imageKey
           ? {
@@ -97,7 +102,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
               filename: mediaFilename(imageKey, tab.attachments),
               mime: tab.attachments?.find((att) => att.key === imageKey)?.mime,
             }
-          : undefined
+          : frameImage
         const anchor = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
         const linkUrl: string | undefined =
           (event.nativeEvent as { meronLinkUrl?: string }).meronLinkUrl ?? anchor?.href
@@ -299,7 +304,7 @@ type ReaderMenuAt = {
   x: number
   y: number
   linkUrl?: string
-  image?: { key: string; filename: string; mime?: string }
+  image?: MessageContextMenuState['image']
   tabId: string
 }
 

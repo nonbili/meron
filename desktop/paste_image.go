@@ -185,6 +185,9 @@ func (a *App) copyImage(payload map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if ext := strings.ToLower(filepath.Ext(src)); strings.HasPrefix(key, "remote-images/") && ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" && ext != ".bmp" {
+		return nil, errors.New("unsupported clipboard image format")
+	}
 	if err := copyImageToClipboard(src); err != nil {
 		log.Printf("[gallery-copy] failed: %v", err)
 		return nil, err

@@ -3,7 +3,7 @@ import type { CSSProperties, Ref } from 'react'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { chordFromEvent, isArrowKey, shortcutForChord, spaceActivatesTarget } from '../../lib/shortcuts'
 import { openExternal } from '../../lib/native'
-import { mediaKeyFromSrc } from './messageHelpers'
+import { imageSource } from './messageHelpers'
 import { trackInternalDrags } from '../../lib/useFileDrop'
 
 const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
@@ -26,10 +26,10 @@ interface HtmlFrameProps {
   // When set, right-clicks inside the frame are blocked from showing WebKit's
   // native menu and re-dispatched as a `contextmenu` event on the iframe
   // element, so a custom menu registered on a parent element fires instead.
-  // A cached picture's right-click carries its media key as `meronImageKey`,
-  // for the menu's save and copy actions. 'except-images' leaves any other picture's
-  // right-click to the native menu.
+  // Pictures carry `meronImage` for save/copy, plus `meronImageKey` when cached.
+  // 'except-images' leaves unsupported sources (e.g. data URLs) native.
   forwardContextMenu?: boolean | 'except-images'
+  allowRemoteImages?: boolean
   // Call `onReady` as soon as the document is parsed instead of waiting for
   // its `load` event, which waits for every picture: one slow image would
   // otherwise hold back whatever `onReady` does. For handlers that cope with
@@ -114,6 +114,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
     onUserScrollIntent,
     onScroll,
     forwardContextMenu,
+    allowRemoteImages = false,
     readyWhenParsed,
   }: HtmlFrameProps,
   forwardedRef: Ref<HTMLIFrameElement>,
@@ -146,6 +147,8 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   const onScrollRef = useRef(onScroll)
   const onUserScrollIntentRef = useRef(onUserScrollIntent)
   const forwardContextMenuRef = useRef(forwardContextMenu)
+  const allowRemoteImagesRef = useRef(allowRemoteImages)
+  allowRemoteImagesRef.current = allowRemoteImages
 
   useEffect(() => {
     onFrameClickRef.current = onFrameClick
@@ -246,8 +249,10 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
         const target = event.target as Element | null
         const img = target?.closest?.('img') as HTMLImageElement | null
-        const imageKey = img ? mediaKeyFromSrc(img.currentSrc || img.src) : null
-        if (forwardContextMenuRef.current === 'except-images' && img && !imageKey) return
+        const source = img ? imageSource(img.currentSrc || img.src) : null
+        const blocked = !!source?.url && !allowRemoteImagesRef.current
+        const image = blocked ? null : source
+        if (forwardContextMenuRef.current === 'except-images' && img && !image && !blocked) return
         const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null
         let linkUrl: string | undefined = undefined
         if (anchor) {
@@ -279,8 +284,9 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
         if (linkUrl) {
           ;(customEvent as any).meronLinkUrl = linkUrl
         }
-        if (imageKey) {
-          ;(customEvent as any).meronImageKey = imageKey
+        if (image) {
+          ;(customEvent as any).meronImageKey = image.key
+          ;(customEvent as any).meronImage = image
         }
         frame.dispatchEvent(customEvent)
       })

@@ -14,6 +14,7 @@ import {
   isImage,
   isVideo,
   mediaFilename,
+  imageSource,
   mediaKeyFromSrc,
   mediaSrc,
   messageSearchText,
@@ -306,6 +307,15 @@ describe('fileIconFor', () => {
   it('falls back to a generic file, and ignores a name with no extension', () => {
     expect(fileIconFor('mystery.bin', 'application/octet-stream')).toBe(File)
     expect(fileIconFor('ics', 'application/octet-stream')).toBe(File)
+  })
+})
+
+describe('imageSource', () => {
+  it('keeps malformed percent escapes usable and sanitizes decoded separators', () => {
+    expect(imageSource('https://example.com/100%.png')?.filename).toBe('100%.png')
+    expect(imageSource('https://example.com/caf%E9.jpg')?.filename).toBe('caf%E9.jpg')
+    expect(imageSource('https://example.com/https%3A%2F%2Fhost%2Fa.jpeg')?.filename).toBe('https___host_a.jpeg')
+    expect(imageSource('file:///private/a.png')).toBeNull()
   })
 })
 

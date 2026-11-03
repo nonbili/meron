@@ -137,8 +137,16 @@ export function BubbleHtmlFrame({
       event.preventDefault()
       event.stopPropagation()
       if (!img.currentSrc && !img.src) return
+      if (
+        !allowRemote &&
+        /^https?:\/\//i.test(img.currentSrc || img.src) &&
+        !mediaKeyFromSrc(img.currentSrc || img.src)
+      )
+        return
       const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((el) => {
         if (!el.currentSrc && !el.src) return false
+        if (!allowRemote && /^https?:\/\//i.test(el.currentSrc || el.src) && !mediaKeyFromSrc(el.currentSrc || el.src))
+          return false
         const w = el.getAttribute('width') || ''
         const h = el.getAttribute('height') || ''
         if ((w === '1' || w === '0') && (h === '1' || h === '0')) return false
@@ -154,7 +162,7 @@ export function BubbleHtmlFrame({
       )
       setGalleryIndex(Math.max(0, imgs.indexOf(img)))
     },
-    [attachments],
+    [attachments, allowRemote],
   )
 
   const handleFrameClick = useCallback(
@@ -528,6 +536,7 @@ export function BubbleHtmlFrame({
       <div ref={hostRef} style={{ height }} className="w-full">
         {nearViewport && (
           <HtmlFrame
+            allowRemoteImages={allowRemote}
             html={html}
             prepareHtml={prepareHtml}
             title={t('chat.messageHtml')}

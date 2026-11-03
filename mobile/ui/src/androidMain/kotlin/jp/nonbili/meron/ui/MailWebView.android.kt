@@ -145,6 +145,10 @@ actual fun MailWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setOnLongClickListener {
+                    webViewImageUrl(hitTestResult.type, hitTestResult.extra)?.let { ref ->
+                        latestOnOpenImage.value(ref)
+                        return@setOnLongClickListener true
+                    }
                     val url = webViewLinkUrl(hitTestResult.type, hitTestResult.extra) ?: return@setOnLongClickListener false
                     // The menu is Compose-side so it can open at the press, which a
                     // PopupMenu anchored to the (full-page) web view cannot do.
@@ -413,6 +417,12 @@ internal fun webViewLinkUrl(
                         hitType == WebView.HitTestResult.SRC_ANCHOR_TYPE
                 )
         }
+
+@Suppress("DEPRECATION")
+internal fun webViewImageUrl(
+    hitType: Int,
+    extra: String?,
+): String? = if (hitType == WebView.HitTestResult.IMAGE_TYPE || hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) extra?.let(::mailImageRef) else null
 
 internal actual val MailWebViewFollowsSystemFontScale: Boolean = true
 

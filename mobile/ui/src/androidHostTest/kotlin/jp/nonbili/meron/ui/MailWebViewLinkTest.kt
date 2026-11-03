@@ -65,6 +65,14 @@ class MailWebViewLinkTest {
     }
 
     @Test
+    fun imageLongPressOpensGalleryAndDoesNotStealLinkLongPress() {
+        assertEquals("https://example.com/photo.png", webViewImageUrl(WebView.HitTestResult.IMAGE_TYPE, "https://example.com/photo.png"))
+        assertEquals("/media/acct/photo.png", webViewImageUrl(WebView.HitTestResult.IMAGE_TYPE, "${MAIL_WEB_VIEW_ORIGIN}media/acct/photo.png"))
+        assertNull(webViewImageUrl(WebView.HitTestResult.IMAGE_TYPE, "file:///private/photo.png"))
+        assertNull(webViewImageUrl(WebView.HitTestResult.SRC_ANCHOR_TYPE, "https://example.com/article"))
+    }
+
+    @Test
     fun zoomedPageKeepsSidewaysDrags() {
         assertEquals(true, ownsDrag(dx = 40f, dy = 10f, touchSlop = 16, canPan = true))
         assertEquals(true, ownsDrag(dx = -40f, dy = 10f, touchSlop = 16, canPan = true))

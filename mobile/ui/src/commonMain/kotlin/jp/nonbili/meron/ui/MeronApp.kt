@@ -750,7 +750,8 @@ private fun MeronMobileScreenContent(
                     runCatching {
                         withContext(ioDispatcher) { readAttachmentBytes(attachment) }
                     }.onSuccess { bytes ->
-                        services.saveFile(bytes, fileName, attachment.mimeType.ifBlank { "application/octet-stream" }) { result ->
+                        val resolved = normalizedRemoteImage(attachment, bytes)
+                        services.saveFile(bytes, safeAttachmentFilename(resolved), resolved.mimeType.ifBlank { "application/octet-stream" }) { result ->
                             result
                                 .onSuccess { saved ->
                                     if (saved) status = trs("chat.savedAttachment", mapOf("filename" to attachment.filename.ifBlank { fileName }))

@@ -192,12 +192,34 @@ export async function openAttachment(att: { key: string | null; filename: string
 
 // Save a local attachment to disk via the native save dialog. The bytes already
 // live in the media cache (keyed); the bridge copies them to the chosen path.
-export async function downloadAttachment(att: { key: string | null; filename: string; mime?: string }) {
-  if (!att.key) return
-  const filename = attachmentSaveFilename(att.filename, att.key, att.mime)
+const remoteImageRequests = new Map<string, Promise<{ key: string; mime: string }>>()
+
+async function cacheRemoteImage(url: string) {
+  const pending = remoteImageRequests.get(url)
+  if (pending) return pending
+  showToast(t('common.loading'))
+  const request = invoke<{ key: string; mime: string }>('mail.cacheRemoteImage', { url })
+  remoteImageRequests.set(url, request)
   try {
+    return await request
+  } finally {
+    remoteImageRequests.delete(url)
+  }
+}
+
+export async function downloadAttachment(att: {
+  key: string | null
+  url?: string | null
+  filename: string
+  mime?: string
+}) {
+  if (!att.key && !att.url) return
+  let filename = att.filename
+  try {
+    const cached = att.key ? att : await cacheRemoteImage(att.url!)
+    filename = attachmentSaveFilename(att.filename, cached.key!, cached.mime)
     const res = await invoke<{ saved: boolean; path?: string }>('mail.saveAttachment', {
-      key: att.key,
+      key: cached.key,
       filename,
     })
     if (res?.saved) showToast(t('chat.savedAttachment', { filename }))
@@ -228,10 +250,11 @@ export async function saveMessageAsEml(message: Message) {
 // Copy a keyed image onto the system clipboard. The webview's native "Copy
 // Image" is inert in the Wails webview, so the bridge shells out to the same
 // clipboard helpers used for pasting.
-export async function copyAttachmentImage(att: { key: string | null }) {
-  if (!att.key) return
+export async function copyAttachmentImage(att: { key: string | null; url?: string }) {
+  if (!att.key && !att.url) return
   try {
-    await invoke('mail.copyImage', { key: att.key })
+    const cached = att.key ? att : await cacheRemoteImage(att.url!)
+    await invoke('mail.copyImage', { key: cached.key })
     showToast(t('chat.imageCopied'))
   } catch {
     showToast(t('chat.couldNotCopyImage'))

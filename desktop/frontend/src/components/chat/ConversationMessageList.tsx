@@ -11,11 +11,17 @@ import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
 import { MessageRow } from './MessageRow'
-import { formatDateDivider, mediaFilename } from './messageHelpers'
+import { formatDateDivider, mediaFilename, imageSource } from './messageHelpers'
 import { MESSAGE_PAGE_EVENT } from './messagePaging'
 import { ConversationScrollContext } from './useConversationScroll'
 
 const AUTO_LOAD_EARLIER_THRESHOLD_PX = 400
+
+function remoteContextImage(target: Element | null) {
+  if (!target?.closest?.('[data-media-src]')) return undefined
+  const img = target?.closest?.('img') as HTMLImageElement | null
+  return img ? (imageSource(img.currentSrc || img.src) ?? undefined) : undefined
+}
 
 function hasSelectedText(): boolean {
   return !!window.getSelection()?.toString().trim()
@@ -335,7 +341,7 @@ export function ConversationMessageList({
                       ? { key: imageEl.dataset.mediaKey!, filename: imageEl.dataset.mediaFilename ?? '' }
                       : frameImageKey
                         ? { key: frameImageKey, filename: mediaFilename(frameImageKey, message.attachments) }
-                        : undefined
+                        : ((event.nativeEvent as any)?.meronImage ?? remoteContextImage(target))
                     thread$.messageContextMenu.set({ x: event.clientX, y: event.clientY, message, linkUrl, image })
                   }}
                   className={`rounded-2xl transition-shadow ${traditional ? 'space-y-2' : 'space-y-4'} ${

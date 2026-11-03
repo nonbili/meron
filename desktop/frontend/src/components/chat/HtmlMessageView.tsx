@@ -183,8 +183,16 @@ export function HtmlMessageView({
       event.preventDefault()
       event.stopPropagation()
       if (!img.currentSrc && !img.src) return
+      if (
+        !allowRemote &&
+        /^https?:\/\//i.test(img.currentSrc || img.src) &&
+        !mediaKeyFromSrc(img.currentSrc || img.src)
+      )
+        return
       const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((el) => {
         if (!el.currentSrc && !el.src) return false
+        if (!allowRemote && /^https?:\/\//i.test(el.currentSrc || el.src) && !mediaKeyFromSrc(el.currentSrc || el.src))
+          return false
         const w = el.getAttribute('width') || ''
         const h = el.getAttribute('height') || ''
         if ((w === '1' || w === '0') && (h === '1' || h === '0')) return false
@@ -200,7 +208,7 @@ export function HtmlMessageView({
       )
       setGalleryIndex(Math.max(0, imgs.indexOf(img)))
     },
-    [attachments],
+    [attachments, allowRemote],
   )
 
   const handleFrameClick = useCallback(
@@ -338,6 +346,7 @@ export function HtmlMessageView({
             onReady={handleFrameReady}
             onLinkHover={setHoveredLink}
             forwardContextMenu="except-images"
+            allowRemoteImages={allowRemote}
             // The frame starts out a placeholder's height and sizes itself to
             // the body, so it can't wait on a slow picture to be measured; the
             // observers track what the pictures add.
@@ -376,6 +385,7 @@ function AttachmentImageGrid({ images, onOpen }: { images: Attachment[]; onOpen:
           onClick={() => onOpen(index)}
           // Read by the reader's context menu to offer save/copy.
           data-media-key={image.key ?? undefined}
+          data-media-src={mediaSrc(image)}
           title={image.filename}
           className="overflow-hidden rounded-lg border border-border bg-black/[0.03] cursor-zoom-in"
         >

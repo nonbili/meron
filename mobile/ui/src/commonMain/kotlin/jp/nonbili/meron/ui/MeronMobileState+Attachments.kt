@@ -14,6 +14,10 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 @OptIn(ExperimentalEncodingApi::class)
 internal suspend fun MeronMobileState.readAttachmentBytes(attachment: MessageAttachment): ByteArray {
+    if (attachment.key.isBlank() && attachment.url.isNotBlank()) {
+        check(boundedRemoteImageActions) { "Remote image actions are not supported on this platform" }
+        return readRemoteAttachmentBytes(attachment, ::loadImageBytes)
+    }
     val client = MobileMailCommandClient(core)
     val response =
         withManagedGoogleAuth(client, selectedCoreThread?.accountId.orEmpty()) {
@@ -24,13 +28,28 @@ internal suspend fun MeronMobileState.readAttachmentBytes(attachment: MessageAtt
     return Base64.Default.decode(data)
 }
 
+internal suspend fun readRemoteAttachmentBytes(
+    attachment: MessageAttachment,
+    load: suspend (String) -> ByteArray?,
+): ByteArray {
+    require(attachment.url.startsWith("https://") || attachment.url.startsWith("http://")) { "Invalid remote image URL" }
+    require(attachment.mimeType.startsWith("image/")) { "Remote attachment is not an image" }
+    val bytes = load(attachment.url)?.takeIf { it.isNotEmpty() } ?: error("Remote image data is empty")
+    require(bytes.size <= 50 * 1024 * 1024) { "Remote image is too large" }
+    require(remoteImageFormat(bytes) != null) { "Remote resource is not a supported image" }
+    return bytes
+}
+
 internal fun MeronMobileState.saveMessageAttachment(attachment: MessageAttachment) {
-    if (attachment.key.isBlank()) {
-        status =
-            trs(if (attachment.url.isNotBlank()) "mobile.status.attachmentRemoteNotCached" else "mobile.status.attachmentNotCached")
+    if (attachment.key.isBlank() && attachment.url.isNotBlank() && (!boundedRemoteImageActions || !attachment.mimeType.startsWith("image/"))) {
+        status = trs("mobile.status.attachmentRemoteNotCached")
         return
     }
-    if (!coreLoaded) {
+    if (attachment.key.isBlank() && attachment.url.isBlank()) {
+        status = trs("mobile.status.attachmentNotCached")
+        return
+    }
+    if (attachment.key.isNotBlank() && !coreLoaded) {
         status = coreUnavailableMessage
         return
     }
@@ -101,11 +120,11 @@ internal fun MeronMobileState.copyImagePreview(preview: ImagePreview) {
 }
 
 internal fun MeronMobileState.shareImageAttachment(attachment: MessageAttachment) {
-    if (attachment.url.isNotBlank()) {
+    if (!boundedRemoteImageActions && attachment.url.isNotBlank()) {
         services.openUrl(attachment.url)
         return
     }
-    if (attachment.key.isBlank()) {
+    if (attachment.key.isBlank() && attachment.url.isBlank()) {
         status = trs("mobile.status.attachmentNotCached")
         return
     }
@@ -113,6 +132,7 @@ internal fun MeronMobileState.shareImageAttachment(attachment: MessageAttachment
         runCatching {
             withContext(ioDispatcher) { readAttachmentBytes(attachment) }
         }.onSuccess { bytes ->
+            val attachment = normalizedRemoteImage(attachment, bytes)
             services.shareFile(
                 bytes,
                 safeAttachmentFilename(attachment),
@@ -125,7 +145,7 @@ internal fun MeronMobileState.shareImageAttachment(attachment: MessageAttachment
 }
 
 internal fun MeronMobileState.copyImageAttachment(attachment: MessageAttachment) {
-    if (attachment.key.isBlank()) {
+    if (attachment.key.isBlank() && attachment.url.isBlank()) {
         status = trs("mobile.status.attachmentNotCached")
         return
     }
@@ -133,6 +153,7 @@ internal fun MeronMobileState.copyImageAttachment(attachment: MessageAttachment)
         runCatching {
             withContext(ioDispatcher) { readAttachmentBytes(attachment) }
         }.onSuccess { bytes ->
+            val attachment = normalizedRemoteImage(attachment, bytes)
             services.copyImage(bytes, attachment.mimeType.ifBlank { "image/*" }, attachment.filename.ifBlank { trs("mobile.status.imageTitle") })
             status = trs("chat.imageCopied")
         }.onFailure {
