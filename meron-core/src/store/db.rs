@@ -637,7 +637,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 23;
+pub(super) const SCHEMA_VERSION: i64 = 24;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -740,6 +740,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 23 {
         migrate_v23(&tx)?;
+    }
+    if version < 24 {
+        migrate_v24(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1419,6 +1422,127 @@ mod tests {
         drop(open_at(&path).unwrap());
         assert!(!is_encrypted_database(&path), "plaintext file");
     }
+
+    fn contact_message(conn: &Connection, id: i64, folder: &str, date: i64) {
+        conn.execute(
+            "INSERT INTO messages(id, account, folder, msg_id, uid, from_name, from_addr, date, json)
+             VALUES(?1, 'a', ?2, ?1, ?1, 'Person', 'person@example.com', ?3,
+               '{\"to\":[{\"name\":\"Person\",\"addr\":\"person@example.com\"}],\"cc\":[]}')",
+            params![id, folder, date],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn contact_participants_track_moves_deletes_and_lower_dates() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        contact_message(&conn, 1, "INBOX", 10);
+        contact_message(&conn, 2, "INBOX", 20);
+        let tally = |folder: &str| {
+            conn.query_row(
+                "SELECT count, last_date FROM contacts WHERE account = 'a' AND folder = ?1",
+                [folder],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .optional()
+            .unwrap()
+        };
+        // A sender repeated in To counts only once on each message.
+        assert_eq!(tally("INBOX"), Some((2, 20)));
+        conn.execute("UPDATE messages SET folder = 'Trash' WHERE id = 2", [])
+            .unwrap();
+        assert_eq!(tally("INBOX"), Some((1, 10)));
+        assert_eq!(tally("Trash"), Some((1, 20)));
+        conn.execute(
+            "UPDATE messages SET folder = 'INBOX', date = 5 WHERE id = 2",
+            [],
+        )
+        .unwrap();
+        assert_eq!(tally("Trash"), None);
+        assert_eq!(tally("INBOX"), Some((2, 10)));
+        conn.execute("DELETE FROM messages WHERE id = 1", [])
+            .unwrap();
+        assert_eq!(tally("INBOX"), Some((1, 5)));
+        conn.execute("UPDATE messages SET uid = 0 WHERE id = 2", [])
+            .unwrap();
+        assert_eq!(tally("INBOX"), None);
+    }
+
+    #[test]
+    fn contact_exclusion_uses_current_metadata_and_name_fallback() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        contact_message(&conn, 1, "Odd mailbox", 10);
+        let visible = || {
+            super::super::list_contacts(
+                &conn,
+                "a",
+                "",
+                20,
+                super::super::ContactSort::Frequent,
+                false,
+            )
+            .unwrap()
+            .len()
+        };
+        assert_eq!(visible(), 1);
+        conn.execute(
+            "INSERT INTO folders(account, name, special_use) VALUES('a', 'Odd mailbox', 'junk')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(visible(), 0);
+        conn.execute("UPDATE folders SET special_use = 'trash'", [])
+            .unwrap();
+        assert_eq!(visible(), 0);
+        conn.execute("UPDATE folders SET special_use = NULL", [])
+            .unwrap();
+        assert_eq!(visible(), 1);
+        conn.execute("UPDATE messages SET folder = 'Trash'", [])
+            .unwrap();
+        assert_eq!(visible(), 0);
+        conn.execute(
+            "INSERT INTO folders(account, name, special_use) VALUES('a', 'Trash', ?1)",
+            [super::super::LOCAL_SPECIAL_USE],
+        )
+        .unwrap();
+        assert_eq!(visible(), 1);
+    }
+
+    #[test]
+    fn contact_v24_backfills_existing_cache_and_is_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        // Restore the v23 directory shape without changing the message cache.
+        conn.execute_batch(
+            "DROP TRIGGER contacts_ai; DROP TRIGGER contacts_ad; DROP TRIGGER contacts_au;
+             DROP TABLE contact_participants; DROP TABLE contacts;
+             CREATE TABLE contacts(account TEXT, addr_key TEXT, name TEXT, addr TEXT,
+               count INTEGER, last_date INTEGER);
+             PRAGMA user_version = 23;",
+        )
+        .unwrap();
+        contact_message(&conn, 1, "INBOX", 10);
+        contact_message(&conn, 2, "Trash", 20);
+        run_migrations(&conn).unwrap();
+        run_migrations(&conn).unwrap();
+        let entries: i64 = conn
+            .query_row("SELECT count(*) FROM contact_participants", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(entries, 2);
+        let contacts = super::super::suggest_contacts(&conn, "a", "person", 10).unwrap();
+        assert_eq!(contacts.len(), 1);
+        conn.execute("DELETE FROM messages WHERE folder = 'INBOX'", [])
+            .unwrap();
+        assert!(
+            super::super::suggest_contacts(&conn, "a", "person", 10)
+                .unwrap()
+                .is_empty()
+        );
+    }
 }
 
 /// Local notification delivery receipts; deliberately excluded from backups.
@@ -1528,6 +1652,117 @@ fn migrate_v23(conn: &Connection) -> Result<()> {
         triggers = contacts_triggers(true),
         to = list("$.to"),
         cc = list("$.cc"),
+    ))?;
+    Ok(())
+}
+
+/// Folder-scoped contacts let readers apply the *current* folder roles, even
+/// when LIST metadata arrives after the mail. Participant rows are a compact
+/// reverse index: removing the newest message can find the next date with an
+/// indexed lookup rather than scanning/parsing that correspondent's mail.
+fn migrate_v24(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "DROP TRIGGER IF EXISTS contacts_ai;
+         DROP TRIGGER IF EXISTS contacts_ad;
+         DROP TRIGGER IF EXISTS contacts_au;
+         DROP TABLE contacts;
+         CREATE TABLE contacts (
+           account   TEXT NOT NULL,
+           folder    TEXT NOT NULL,
+           addr_key  TEXT NOT NULL,
+           name      TEXT NOT NULL,
+           addr      TEXT NOT NULL,
+           count     INTEGER NOT NULL,
+           last_date INTEGER NOT NULL,
+           PRIMARY KEY (account, folder, addr_key, name)
+         ) WITHOUT ROWID;
+         CREATE TABLE contact_participants (
+           message_id INTEGER NOT NULL,
+           account    TEXT NOT NULL,
+           folder     TEXT NOT NULL,
+           addr_key   TEXT NOT NULL,
+           name       TEXT NOT NULL,
+           addr       TEXT NOT NULL,
+           date       INTEGER NOT NULL,
+           PRIMARY KEY (message_id, addr_key, name)
+         ) WITHOUT ROWID;",
+    )?;
+    let list = |path: &str| {
+        format!(
+            "SELECT m.id, m.account, m.folder, m.date,
+                    json_extract(e.value, '$.name'), json_extract(e.value, '$.addr')
+             FROM messages m, json_each(m.json, '{path}') e
+             WHERE m.uid <> 0 AND e.type = 'object'"
+        )
+    };
+    // Build once from cached headers, before installing maintenance triggers.
+    conn.execute_batch(&format!(
+        "INSERT INTO contact_participants(message_id, account, folder, addr_key, name, addr, date)
+           SELECT id, account, folder, lower(trim(addr)), trim(COALESCE(name, '')),
+                  max(trim(addr)), date
+           FROM (
+             SELECT id, account, folder, date, from_name AS name, from_addr AS addr
+             FROM messages WHERE uid <> 0
+             UNION ALL {to} UNION ALL {cc}
+           )
+           WHERE trim(COALESCE(addr, '')) <> ''
+           GROUP BY id, lower(trim(addr)), trim(COALESCE(name, ''));
+         CREATE INDEX contact_participants_date_idx
+           ON contact_participants(account, folder, addr_key, name, date DESC);
+         INSERT INTO contacts(account, folder, addr_key, name, addr, count, last_date)
+           SELECT account, folder, addr_key, name, max(addr), count(*), max(date)
+           FROM contact_participants GROUP BY account, folder, addr_key, name;",
+        to = list("$.to"),
+        cc = list("$.cc"),
+    ))?;
+    let add = format!(
+        "INSERT INTO contact_participants(message_id, account, folder, addr_key, name, addr, date)
+           SELECT new.id, new.account, new.folder, lower(trim(addr)), trim(COALESCE(name, '')),
+                  max(trim(addr)), new.date
+           FROM ({}) WHERE new.uid <> 0 AND trim(COALESCE(addr, '')) <> ''
+           GROUP BY lower(trim(addr)), trim(COALESCE(name, ''));",
+        contact_occurrences("new"),
+    );
+    conn.execute_batch(&format!(
+        "CREATE TRIGGER contact_participants_ai AFTER INSERT ON contact_participants BEGIN
+           INSERT INTO contacts(account, folder, addr_key, name, addr, count, last_date)
+           VALUES(new.account, new.folder, new.addr_key, new.name, new.addr, 1, new.date)
+           ON CONFLICT(account, folder, addr_key, name) DO UPDATE SET
+             count = count + 1, addr = max(addr, excluded.addr),
+             last_date = max(last_date, excluded.last_date);
+         END;
+         CREATE TRIGGER contact_participants_ad AFTER DELETE ON contact_participants BEGIN
+           DELETE FROM contacts
+             WHERE account = old.account AND folder = old.folder
+               AND addr_key = old.addr_key AND name = old.name AND count = 1;
+           UPDATE contacts SET count = count - 1,
+             last_date = CASE WHEN last_date = old.date THEN (
+               SELECT date FROM contact_participants
+               WHERE account = old.account AND folder = old.folder
+                 AND addr_key = old.addr_key AND name = old.name
+               ORDER BY date DESC LIMIT 1
+             ) ELSE last_date END
+             WHERE account = old.account AND folder = old.folder
+               AND addr_key = old.addr_key AND name = old.name;
+         END;
+         CREATE TRIGGER contacts_ai AFTER INSERT ON messages BEGIN
+           {add}
+         END;
+         CREATE TRIGGER contacts_ad AFTER DELETE ON messages BEGIN
+           DELETE FROM contact_participants WHERE message_id = old.id;
+         END;
+         CREATE TRIGGER contacts_au
+           AFTER UPDATE OF id, account, folder, uid, from_name, from_addr, json, date ON messages
+           WHEN old.id IS NOT new.id OR old.account IS NOT new.account
+             OR old.folder IS NOT new.folder OR (old.uid <> 0) IS NOT (new.uid <> 0)
+             OR old.from_name IS NOT new.from_name OR old.from_addr IS NOT new.from_addr
+             OR json_extract(old.json, '$.to', '$.cc') IS NOT json_extract(new.json, '$.to', '$.cc')
+             OR old.date IS NOT new.date
+         BEGIN
+           DELETE FROM contact_participants WHERE message_id = old.id;
+           {add}
+         END;
+         PRAGMA user_version = 24;"
     ))?;
     Ok(())
 }

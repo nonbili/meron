@@ -2633,6 +2633,93 @@ fn contact_history_matches_exact_participants_across_accounts_and_folders() {
 }
 
 #[test]
+fn contacts_exclude_junk_and_trash_using_live_folder_roles() {
+    let conn = test_conn();
+    let folder = |name: &str, role: &str| Folder {
+        name: name.into(),
+        special_use: Some(role.into()),
+        ..Default::default()
+    };
+    upsert_folders(
+        &conn,
+        "acct",
+        &[
+            folder("迷惑メール", "junk"),
+            folder("Deleted items custom", "trash"),
+            folder("Spam", LOCAL_SPECIAL_USE),
+        ],
+    )
+    .unwrap();
+    let header = |uid, addr: &str, date| crate::imap::MessageHeader {
+        uid,
+        from_addr: addr.into(),
+        date,
+        subject: addr.into(),
+        thread_key: format!("mid:{uid}"),
+        message_id: format!("{uid}@example.com"),
+        ..Default::default()
+    };
+    for (name, message) in [
+        ("INBOX", header(1, "alice@example.com", 10)),
+        ("迷惑メール", header(2, "alice@example.com", 100)),
+        (
+            "Deleted items custom",
+            header(3, "deleted@example.com", 200),
+        ),
+        ("Junk", header(4, "junkonly@example.com", 300)),
+        ("Spam", header(5, "local@example.com", 20)),
+        ("Projects", header(6, "bob@example.com", 30)),
+    ] {
+        upsert_messages(&conn, "acct", name, &[message]).unwrap();
+    }
+    let addresses = |sort| {
+        list_contacts(&conn, "", "", 20, sort, true)
+            .unwrap()
+            .into_iter()
+            .map(|c| c.addr)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        addresses(ContactSort::Recent),
+        vec!["bob@example.com", "local@example.com", "alice@example.com"]
+    );
+    assert_eq!(
+        contact_messages(&conn, "alice@example.com").unwrap().len(),
+        1
+    );
+    assert!(
+        contact_messages(&conn, "deleted@example.com")
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        contact_messages(&conn, "junkonly@example.com")
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        contact_messages(&conn, "local@example.com").unwrap().len(),
+        1
+    );
+    assert!(
+        list_contacts(&conn, "", "deleted@", 20, ContactSort::Name, true)
+            .unwrap()
+            .is_empty()
+    );
+    // Metadata arrives after mail caching or is corrected by the provider.
+    upsert_folders(&conn, "acct", &[folder("Projects", "trash")]).unwrap();
+    assert!(!addresses(ContactSort::Recent).contains(&"bob@example.com".to_string()));
+    assert!(
+        contact_thread_page(&conn, "bob@example.com", None, 50).unwrap()["threads"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    upsert_folders(&conn, "acct", &[folder("Projects", LOCAL_SPECIAL_USE)]).unwrap();
+    assert!(addresses(ContactSort::Recent).contains(&"bob@example.com".to_string()));
+}
+
+#[test]
 fn list_contacts_sorts_by_frequency_name_or_recency() {
     let conn = test_conn();
     let at = |uid: u32, name: &str, addr: &str, date: i64| {
@@ -3049,7 +3136,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 24);
 
     for table in [
         "accounts",
@@ -3087,7 +3174,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 24);
 }
 
 #[test]
@@ -3115,7 +3202,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 24);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -4843,7 +4930,7 @@ fn tasks_tables_arrive_on_an_existing_install() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 23);
+    assert_eq!(version, 24);
 
     // Cached mail is untouched, and the new tables are writable.
     let messages: i64 = conn

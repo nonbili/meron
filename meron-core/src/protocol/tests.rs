@@ -1704,6 +1704,8 @@ fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
         ("me@example.com", "INBOX", 1, "Alice@example.com", 300),
         ("other@example.com", "Archive", 2, "alice@example.com", 200),
         ("me@example.com", "INBOX", 3, "notalice@example.com", 400),
+        ("me@example.com", "Spam", 4, "alice@example.com", 900),
+        ("other@example.com", "Trash", 5, "alice@example.com", 1000),
     ] {
         store::upsert_messages(
             &conn,

@@ -43,11 +43,25 @@ pub fn contact_messages(
             Ok(matches.then_some((account, header)))
         },
     )?;
-    Ok(rows
-        .collect::<rusqlite::Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect())
+    let candidates = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut excluded = std::collections::HashMap::new();
+    let mut messages = Vec::new();
+    for (account, header) in candidates.into_iter().flatten() {
+        let key = (account.clone(), header.folder.clone());
+        let hidden = match excluded.get(&key) {
+            Some(hidden) => *hidden,
+            None => {
+                let role = super::folder_role(conn, &account, &header.folder)?;
+                let hidden = matches!(role.as_str(), "junk" | "trash");
+                excluded.insert(key, hidden);
+                hidden
+            }
+        };
+        if !hidden {
+            messages.push((account, header));
+        }
+    }
+    Ok(messages)
 }
 
 /// Build details only for the requested page. Grouping first preserves thread
@@ -194,13 +208,30 @@ pub fn list_contacts(
         HashSet::new()
     };
     let hide_automated = directory && q.is_empty();
+    // Resolve metadata once, not once per contact. Folder roles can change
+    // after messages were cached, so exclusion belongs on the read side, not
+    // in the participant triggers. Missing metadata still uses name heuristics.
+    let mut folder_roles = HashMap::new();
+    let mut folders = conn.prepare("SELECT account, name, special_use FROM folders")?;
+    for row in folders.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
+    })? {
+        let (account, name, special_use) = row?;
+        let role = super::classify_folder_role(&name, special_use.as_deref());
+        folder_roles.insert((account, name), role);
+    }
     let account_filter = if account.is_empty() {
         "?1 = ''"
     } else {
         "account = ?1"
     };
     let mut stmt = conn.prepare(&format!(
-        "SELECT addr_key, addr, name, count, last_date FROM contacts WHERE {account_filter}
+        "SELECT addr_key, addr, name, count, last_date, account, folder
+         FROM contacts WHERE {account_filter}
          ORDER BY addr_key, name"
     ))?;
     let rows = stmt.query_map(params![account], |row| {
@@ -210,6 +241,8 @@ pub fn list_contacts(
             row.get::<_, String>(2)?,
             row.get::<_, u32>(3)?,
             row.get::<_, i64>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
         ))
     })?;
 
@@ -222,7 +255,13 @@ pub fn list_contacts(
     }
     let mut tallies: HashMap<String, Tally> = HashMap::new();
     for row in rows {
-        let (key, addr, name, count, last_date) = row?;
+        let (key, addr, name, count, last_date, account, folder) = row?;
+        let role = folder_roles
+            .entry((account, folder.clone()))
+            .or_insert_with(|| super::classify_folder_role(&folder, None));
+        if matches!(*role, "junk" | "trash") {
+            continue;
+        }
         // Folded again: SQLite's `lower()` leaves non-ASCII capitals alone.
         let entry = tallies.entry(key.to_lowercase()).or_insert_with(|| Tally {
             names: Vec::new(),
