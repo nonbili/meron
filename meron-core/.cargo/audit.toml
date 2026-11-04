@@ -1,0 +1,12 @@
+# cargo audit configuration (https://github.com/rustsec/rustsec/tree/main/cargo-audit).
+# Every ignored advisory names why it can't be fixed yet and what would fix it.
+[advisories]
+ignore = [
+  # quick-xml 0.37.5, used directly (account autoconfig XML, OPML import) and by
+  # feed-rs 2.3 (RSS/Atom): a hostile feed or autoconfig server can make the
+  # parser slow (quadratic duplicate-attribute check) or allocate without bound
+  # (NsReader namespaces). Fixed in quick-xml 0.41; needs quick-xml 0.42 in
+  # Cargo.toml and feed-rs 3.0, both major updates.
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+]
