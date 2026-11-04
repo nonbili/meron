@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SearchBox } from './SearchBox'
 
 beforeEach(() => {
@@ -44,7 +44,11 @@ it('gives focus back to the search input when the options form closes', async ()
       options={{ onSearch: () => undefined }}
     />,
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Search options' }))
+  // Opening awaits search.parse. Flush that update and its effects so Escape's
+  // handler is installed; autofocus happens before passive effects run.
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Search options' }))
+  })
   await waitFor(() => expect(document.activeElement?.closest('form')).toBeTruthy())
   fireEvent.keyDown(window, { key: 'Escape' })
   await waitFor(() => expect(document.querySelector('form')).toBeNull())

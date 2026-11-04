@@ -9,7 +9,7 @@
     "prebuild": "bun ../../scripts/i18n/catalog.ts generate",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "bun test",
+    "test": "bun test --isolate",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\""

@@ -15,7 +15,7 @@
     "test:go": "cd desktop && go test ./...",
     "test:rust": "cargo test --manifest-path meron-core/Cargo.toml",
     "test:i18n": "bun test scripts/i18n/catalog.test.ts",
-    "test:frontend": "cd desktop/frontend && bun run typecheck && bun test",
+    "test:frontend": "cd desktop/frontend && bun run typecheck && bun run test",
     "test:integration": "cargo build --manifest-path meron-core/Cargo.toml && cd desktop && go test -tags integration -v -timeout 10m ."
   },
   "dependencies": {}

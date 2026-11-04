@@ -68,7 +68,8 @@ jobs:
         run: bun scripts/i18n/catalog.ts generate
       - run: bun run typecheck
         working-directory: desktop/frontend
-      - run: bun test
+      # Frontend tests mutate shared stores, browser globals, and module mocks.
+      - run: bun test --isolate
         working-directory: desktop/frontend
 
   mobile:
