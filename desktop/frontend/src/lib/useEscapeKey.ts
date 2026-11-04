@@ -17,6 +17,19 @@ function onWindowKeyDown(event: KeyboardEvent) {
 }
 
 /**
+ * Closes the topmost Escape layer, as a real Esc would. For an Esc that never
+ * reached the window: one pressed inside a message frame arrives only as the
+ * frame's forwarded chord, and must close a preview open over the
+ * conversation before anything behind it. True when a layer was closed.
+ */
+export function closeTopEscapeLayer(): boolean {
+  const top = handlers[handlers.length - 1]
+  if (!top) return false
+  top()
+  return true
+}
+
+/**
  * Closes a dialog or popup on Escape. Listens on the window so the key works
  * no matter which element inside holds focus.
  */

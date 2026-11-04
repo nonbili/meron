@@ -9,6 +9,7 @@ import { settings$ } from '../../states/settings'
 import { compose$ } from '../../states/composeState'
 import { accounts$ } from '../../states/accounts'
 import { AppHotkeys } from './AppHotkeys'
+import { useEscapeKey } from '../../lib/useEscapeKey'
 
 const original = (window as any).go
 let calls: string[] = []
@@ -340,6 +341,39 @@ describe('AppHotkeys', () => {
       kanban$.activeBoardId.set('')
       kanban$.paneThreadId.set('')
       kanban$.paneColumnKey.set('')
+    }
+  })
+
+  // A preview opened from the conversation (the image gallery) closes on Esc
+  // through the Escape stack. With focus left in the message frame, the key
+  // reaches the app only as the frame's forwarded chord: it must close the
+  // preview, not the conversation behind it.
+  it('closes an open preview, not the conversation, when Esc comes from a message frame', () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    let closed = 0
+    function Preview() {
+      useEscapeKey(() => closed++)
+      return null
+    }
+    try {
+      render(
+        <>
+          <AppHotkeys />
+          <Preview />
+        </>,
+      )
+      const forwarded = new CustomEvent('meron.frameKeyDown', { detail: { key: 'Escape' }, cancelable: true })
+      window.dispatchEvent(forwarded)
+      expect(closed).toBe(1)
+      expect(kanban$.paneThreadId.peek()).toBe('acct#INBOX#7')
+      expect(forwarded.defaultPrevented).toBe(true)
+    } finally {
+      // The forwarded key marks the keyboard as in the message (module state);
+      // a click elsewhere resets that, as the user's next click would.
+      fireEvent.pointerDown(document.body)
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
     }
   })
 

@@ -37,6 +37,7 @@ import { compose$ } from '../../states/composeState'
 import { closeComposeSessionKeepingDraft } from '../../states/composeSessions'
 import { calendar$ } from '../../states/calendar'
 import { handleEditUndoKeyDown } from '../../lib/editUndo'
+import { closeTopEscapeLayer } from '../../lib/useEscapeKey'
 import { inMessageScroller, pageOpenMessage, stepOpenMessage } from '../chat/messagePaging'
 import {
   isArrowKey,
@@ -525,6 +526,12 @@ export function AppHotkeys() {
       // Esc from inside the message: back to the list, as from the pane around
       // the frame. On a board that closes the conversation pane.
       if (chord.key === 'Escape') {
+        // A preview or menu open over the conversation closes first: focus in
+        // the frame kept the key from its own Escape listener.
+        if (closeTopEscapeLayer()) {
+          event.preventDefault()
+          return
+        }
         if (modalOpen() || mailCovered()) return
         if (kanban$.activeBoardId.peek() && kanban$.paneThreadId.peek()) closeConversationToCard()
         else if (!focusActiveThreadRow()) return
