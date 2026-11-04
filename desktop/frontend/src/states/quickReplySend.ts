@@ -27,7 +27,7 @@ import {
   textToHtml,
 } from './compose'
 import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
-import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
+import { addressQuickReply, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
 import { allocateMessageIdentity, compose$, newDraftMessageId } from './composeState'
 import {
   cancelQuickReplyDraftSave,
@@ -158,9 +158,11 @@ export async function sendReply() {
   // was delivered to. Ignore this send's own bubble after it is inserted: in a
   // sent-only thread, pickReplyTarget otherwise falls back to that newest local
   // message while it is still waiting for its Message-ID.
+  // Who the box had added from its recipient line, read now: it is cleared below.
+  const added = compose$.quickReplyAdded.peek()
   const addressReply = () => {
     const target = pickReplyTarget(activeT, tempId)
-    const { to, cc } = buildReplyRecipients(target)
+    const { to, cc } = addressQuickReply(target, added)
     const { in_reply_to, references } = buildReplyThreading(target)
     return { target, to, cc, in_reply_to, references, from: resolveQuickReplyFrom(target, activeAcc) }
   }
@@ -218,9 +220,12 @@ export async function sendReply() {
     text: compose$.composer.peek(),
     attachments,
     from: compose$.quickReplyFrom.peek(),
+    added,
     signature: compose$.quickReplySignature.peek(),
   }
   compose$.composerAttachments.set([])
+  // The next reply in this thread starts as a plain one.
+  compose$.quickReplyAdded.set([])
   clearQuickReplyDraftOwnership()
   // Back to a fresh quick reply rather than an empty box: the next reply in
   // this thread gets a signature just like the one just sent did.
@@ -314,6 +319,7 @@ export async function sendReply() {
       compose$.composer.set(box.text)
       compose$.composerAttachments.set(box.attachments)
       compose$.quickReplyFrom.set(box.from)
+      compose$.quickReplyAdded.set(box.added)
       compose$.quickReplySignature.set(box.signature)
       // The box holds the claim's reply again, so releasing hands it back.
       claim.generation = quickReplyBoxGeneration

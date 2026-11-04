@@ -146,6 +146,11 @@ export const compose$ = observable({
   // the original was delivered to (detectAliasFrom). Reset on thread switch, so
   // an override never leaks into the next conversation.
   quickReplyFrom: '',
+  // People Reply all would reach whom the user added to the quick reply's Cc
+  // from its recipient line (or a draft saved that way), as bare lowercased
+  // addresses. Reset like quickReplyFrom on a thread switch, and after a send
+  // or an escalation to the full editor.
+  quickReplyAdded: [] as string[],
   // The signature this app seeded into the quick reply, or null when there is
   // none to account for — the account sends none, or the body was hydrated from
   // a saved draft that already carries its own.

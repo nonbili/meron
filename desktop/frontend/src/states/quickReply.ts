@@ -19,10 +19,18 @@ import {
   resolveSignatureFor,
   saveComposedDraft,
 } from './compose'
-import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
+import {
+  buildReplyRecipients,
+  buildReplyThreading,
+  pickReplyTarget,
+  addressQuickReply,
+  quickReplyAddressing,
+  resolveQuickReplyFrom,
+} from './composeReply'
 import { compose$, newDraftMessageId } from './composeState'
 import { draftSaveRunning } from './composeSessions'
 import { parseAddressList } from '../components/chat/messageHelpers'
+import { bareAddr, splitAddressList } from '../lib/address'
 
 // Quick-reply draft lifecycle: signature seeding, autosave, hydration from a
 // thread's tail draft, and ownership hand-offs with compose tabs and sends.
@@ -160,7 +168,7 @@ async function performQuickReplyDraftSave() {
   if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss' || isLocalAccountId(replyAccountId)) return
 
   const target = pickReplyTarget(activeT)
-  const { to, cc } = buildReplyRecipients(target)
+  const { to, cc } = quickReplyAddressing(target)
   const { in_reply_to, references } = buildReplyThreading(target)
   const fromEmail = resolveQuickReplyFrom(target, activeAcc)
   const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
@@ -376,6 +384,9 @@ compose$.composerAttachments.onChange(() => {
 compose$.quickReplyFrom.onChange(() => {
   quickReplyBoxGeneration += 1
 })
+compose$.quickReplyAdded.onChange(() => {
+  quickReplyBoxGeneration += 1
+})
 ui$.selectedThread.onChange(() => {
   quickReplyBoxGeneration += 1
 })
@@ -473,6 +484,16 @@ export async function saveQuickReplyDraftNow(): Promise<void> {
   void saveQuickReplyDraft()
 }
 
+/** Copy one of the people Reply all reaches on the quick reply (picked from
+ * its recipient line). A reply in progress is saved again, so its draft is
+ * addressed the same way. */
+export function addToQuickReply(entry: string) {
+  const addr = bareAddr(entry)
+  if (!addr || compose$.quickReplyAdded.peek().includes(addr)) return
+  compose$.quickReplyAdded.set([...compose$.quickReplyAdded.peek(), addr])
+  if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+}
+
 /** Cancel any pending debounced draft save — used when a send, thread switch,
  * or escalation to the full editor should preempt it. */
 export function cancelQuickReplyDraftSave() {
@@ -499,6 +520,7 @@ ui$.selectedThread.onChange(({ value }) => {
   compose$.composerAttachments.set([])
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
+  compose$.quickReplyAdded.set([])
   compose$.quickReplySignature.set(null)
 })
 
@@ -512,18 +534,24 @@ const addressesOf = (raw: string | undefined) =>
 // from the thread, so a draft it can't reproduce must stay out of the box: its
 // next autosave would flatten the body and redirect the reply. That is a draft
 // the full composer kept with Esc, or another client wrote. It stays a bubble,
-// which opens in the full composer.
-function quickReplyCanHoldDraft(draft: Message): boolean {
-  if (draft.body_html?.trim() || draft.bcc?.trim() || draft.reply_to?.trim()) return false
+// which opens in the full composer. Returns the people the box would have
+// added from its recipient line (none for a plain reply).
+function quickReplyCanHoldDraft(draft: Message): { added: string[] } | null {
+  if (draft.body_html?.trim() || draft.bcc?.trim() || draft.reply_to?.trim()) return null
   const activeT = getActiveThread()
-  if (!activeT) return true
-  const { to, cc } = buildReplyRecipients(pickReplyTarget(activeT))
+  if (!activeT) return { added: [] }
   const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
-  return (
-    addressesOf(draft.to) === addressesOf(to) &&
-    addressesOf(draft.cc) === addressesOf(cc) &&
-    (draft.subject ?? '').trim() === subject.trim()
-  )
+  if ((draft.subject ?? '').trim() !== subject.trim()) return null
+  const target = pickReplyTarget(activeT)
+  // The extras the draft copies beyond the plain reply, if all are people
+  // Reply all would reach; then the box can address it the same way.
+  const plainCc = new Set(splitAddressList(buildReplyRecipients(target).cc).map(bareAddr))
+  const added = splitAddressList(draft.cc)
+    .map(bareAddr)
+    .filter((addr) => !plainCc.has(addr))
+  const { to, cc } = addressQuickReply(target, added)
+  if (addressesOf(draft.to) !== addressesOf(to) || addressesOf(draft.cc) !== addressesOf(cc)) return null
+  return { added }
 }
 
 // Pre-fills the quick reply with an already-saved draft sitting at the tail of
@@ -562,7 +590,8 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   // editors on one server draft, and hand this box a draft it may then discard.
   if (draftOpenInComposeTab(tailDraftId)) return
   if (normalizeMessageId(compose$.quickReplyDraftId.peek()) === normalizedTailDraftId) return
-  if (!quickReplyCanHoldDraft(tail)) return
+  const holds = quickReplyCanHoldDraft(tail)
+  if (!holds) return
   // Only into a box that is free. Hydration fills an empty quick reply from a
   // saved draft; it is not entitled to replace a reply in progress — one the
   // user began while this very draft was still a header-less row, say — nor to
@@ -586,6 +615,7 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   compose$.composerAttachments.set([])
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
+  compose$.quickReplyAdded.set(holds.added)
   // The saved body already carries whatever signature it was written with, so
   // none of it is this app's to strip, re-seed, or discount as "not content".
   compose$.quickReplySignature.set(null)

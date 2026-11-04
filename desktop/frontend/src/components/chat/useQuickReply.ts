@@ -165,6 +165,7 @@ export function useQuickReply() {
     if (quickReplyDraftBelongsToThread(selectedThreadId)) return
     clearQuickReplyDraftOwnership()
     compose$.quickReplyFrom.set('')
+    compose$.quickReplyAdded.set([])
     // Starts the new thread's box on the replying account's signature rather
     // than blank — the box is what gets sent, so it shows what will go out.
     seedQuickReplySignature()

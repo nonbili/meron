@@ -193,4 +193,15 @@ describe('useQuickReply draft ownership', () => {
     expect(compose$.quickReplyDraftThreadId.get()).toBe('')
     expect(compose$.quickReplyFrom.get()).toBe('')
   })
+
+  it('starts the next thread as a plain reply', async () => {
+    renderHook(() => useQuickReply())
+    compose$.quickReplyAdded.set(['alice@example.com'])
+
+    await act(async () => {
+      ui$.selectedThread.set('t-2')
+    })
+
+    expect(compose$.quickReplyAdded.get()).toEqual([])
+  })
 })

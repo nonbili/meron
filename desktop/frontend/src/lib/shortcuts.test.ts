@@ -68,6 +68,15 @@ describe('matchShortcut', () => {
   })
 })
 
+describe('reply all', () => {
+  it('matches bare A as Reply all, a key no other default uses, listed beside Reply', () => {
+    expect(matchShortcut(keydown('a'))).toBe('reply.all')
+    expect(shortcutConflict('reply.all', DEFAULT_SHORTCUTS['reply.all'])).toBeNull()
+    const mail = SHORTCUT_GROUPS.find((group) => group.title === 'Mail')?.ids ?? []
+    expect(mail.indexOf('reply.all')).toBe(mail.indexOf('reply.focus') + 1)
+  })
+})
+
 describe('message paging', () => {
   it('pages the open message with Space and Shift+Space, keys no other default uses', () => {
     expect(matchShortcut(keydown(' '))).toBe('message.pageDown')

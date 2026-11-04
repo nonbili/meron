@@ -7,6 +7,7 @@ import { ui$ } from '../../states/ui'
 import { kanban$, kanbanBoardColumnKey, kanbanColumnKey } from '../../states/kanban'
 import { settings$ } from '../../states/settings'
 import { compose$ } from '../../states/composeState'
+import { accounts$ } from '../../states/accounts'
 import { AppHotkeys } from './AppHotkeys'
 
 const original = (window as any).go
@@ -65,6 +66,59 @@ describe('AppHotkeys', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(ui$.calendarOpen.peek()).toBe(true)
     expect(calendar$.editor.peek()).not.toBeNull()
+  })
+
+  it('opens a reply to everyone in the full editor with A', () => {
+    const thread = {
+      id: 'acct#INBOX#7',
+      thread_id: 'acct#INBOX#7',
+      account_id: 'acct',
+      folder_id: 'inbox',
+      from_name: 'Them',
+      from_addr: 'them@example.com',
+      subject: 'Plans',
+      reply: {
+        to: 'Them <them@example.com>',
+        cc: '',
+        all_to: 'Them <them@example.com>',
+        all_cc: 'Alice <alice@example.com>',
+        all_adds_recipients: true,
+      },
+    } as any
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    const previousAccounts = accounts$.peek()
+    accounts$.set([
+      {
+        id: 'acct',
+        email: 'me@example.com',
+        display_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+    try {
+      render(<AppHotkeys />)
+      fireEvent.keyDown(document.body, { key: 'a' })
+      expect(compose$.tabs.peek()[0]?.compose?.cc).toBe('Alice <alice@example.com>')
+    } finally {
+      accounts$.set(previousAccounts)
+      mail$.messages.set([])
+      compose$.tabs.set([])
+      compose$.activeTab.set('')
+    }
+  })
+
+  it('leaves A alone without an open conversation', () => {
+    ui$.selectedThread.set('')
+    render(<AppHotkeys />)
+    fireEvent.keyDown(document.body, { key: 'a' })
+    expect(compose$.tabs.peek()).toEqual([])
   })
 
   it('still archives the selected thread with the calendar closed', async () => {
