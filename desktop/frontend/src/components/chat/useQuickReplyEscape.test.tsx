@@ -150,6 +150,40 @@ describe('useQuickReply Escape in the kanban pane', () => {
     expect(JSON.stringify(saves.at(-1)?.payload)).toContain('First words, then more')
   })
 
+  it('keeps text an autosave queued behind one still on the wire had yet to read', async () => {
+    let landFirstSave = () => {}
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.saveDraft' && calls.filter((call) => call.command === 'mail.saveDraft').length === 1) {
+        await new Promise<void>((resolve) => (landFirstSave = resolve))
+      }
+      if (command === 'mail.allocateIdentity') return { message_id: 'draft-allocated@example.com' }
+      return {}
+    }
+    const { getByTestId } = render(<ReplyBox />)
+    await act(async () => {
+      await Promise.resolve()
+      compose$.composer.set('First words')
+      await new Promise((resolve) => setTimeout(resolve, 1_300))
+    })
+    // The second autosave fires too, and waits behind the first.
+    await act(async () => {
+      compose$.composer.set('First words, then more')
+      await new Promise((resolve) => setTimeout(resolve, 1_300))
+    })
+
+    await act(async () => {
+      fireEvent.keyDown(getByTestId('reply'), { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      landFirstSave()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+
+    expect(kanban$.paneThreadId.get()).toBe('')
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(JSON.stringify(saves.at(-1)?.payload)).toContain('First words, then more')
+  })
+
   it("hands focus to the closed conversation's card", async () => {
     const view = render(
       <>

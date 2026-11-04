@@ -450,15 +450,16 @@ export function scheduleQuickReplyDraftSave() {
 
 /** Run a pending autosave now, for a caller about to leave the thread: a save
  * reads the box as it starts, so it has to start before leaving clears the box.
- * Resolves once the save has read the box, not when it lands. A blank box is
- * left as leaving it does today. */
+ * Resolves once every save has read the box, not when the last one lands. A
+ * blank box is left as leaving it does today. */
 export async function saveQuickReplyDraftNow(): Promise<void> {
-  if (!quickReplyDraftSaveTimer) return
+  const pending = quickReplyDraftSaveTimer !== null
   cancelQuickReplyDraftSave()
-  // A save still on the wire would hold this one back until after the box is
-  // gone: let it land first.
+  // A save still on the wire holds back any queued behind it (an autosave
+  // that fired meanwhile, or this one), and those read the box only once it
+  // lands: let the whole queue drain while the box is still there.
   while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
-  if (isQuickReplyBlank()) return
+  if (!pending || isQuickReplyBlank()) return
   void saveQuickReplyDraft()
 }
 

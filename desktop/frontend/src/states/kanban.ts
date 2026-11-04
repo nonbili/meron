@@ -816,6 +816,18 @@ export async function markBoardAllRead(boardId: string) {
   }
 }
 
+// A feed item in the unified starred column: items of one feed share a
+// thread_id, so it is told apart by its own id.
+function isStarredFeedItem(thread: Message, column: KanbanColumn): boolean {
+  return (
+    isUnifiedStarredColumn(column) &&
+    isRssAccount(
+      accounts$.get().find((item) => item.id === thread.account_id),
+      thread.account_id,
+    )
+  )
+}
+
 // Open a card the keyboard moved onto, the same way clicking it would. Feed
 // rows in the starred column carry their full body and live in a reader tab,
 // leaving the card conversation behind the tabs alone; everything else opens in
@@ -823,13 +835,7 @@ export async function markBoardAllRead(boardId: string) {
 // renders the active tab over the conversation, so the old item would otherwise
 // stay on screen while only the card highlight moved.
 function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey: string) {
-  if (
-    isUnifiedStarredColumn(column) &&
-    isRssAccount(
-      accounts$.get().find((item) => item.id === thread.account_id),
-      thread.account_id,
-    )
-  ) {
+  if (isStarredFeedItem(thread, column)) {
     openMessageTab(thread)
   } else {
     focusKanbanThreadFolder(thread.folder_id)
@@ -841,8 +847,10 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
   ui$.mobilePane.set('conversation')
 }
 
-/** A card on the board: its thread, and the column (board column key) it sits in. */
-export type KanbanCardRef = { threadId: string; columnKey: string }
+/** A card on the board: its thread, and the column (board column key) it sits
+ * in. A starred feed item also carries its own id, as its feed's items share
+ * the thread. */
+export type KanbanCardRef = { threadId: string; columnKey: string; itemId?: string }
 
 // Move through the visible cards of the active board, its current column first.
 // This mirrors chat-list adjacent navigation. With a conversation or tab in the
@@ -856,13 +864,19 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
   const origin = open ? undefined : (from ?? kanban$.keyboardCard.get() ?? undefined)
   const step = (thread: Message, column: KanbanColumn, boardKey: string) => {
     if (paneOpen) openAdjacentKanbanCard(thread, column, boardKey)
-    else kanban$.keyboardCard.set({ threadId: thread.thread_id, columnKey: boardKey })
+    else
+      kanban$.keyboardCard.set({
+        threadId: thread.thread_id,
+        columnKey: boardKey,
+        ...(isStarredFeedItem(thread, column) ? { itemId: thread.id } : {}),
+      })
   }
   const selected = open || origin?.threadId || ''
-  // Items of one feed share a thread_id, so a reader tab's card is found by
-  // the item's own id first.
+  // Items of one feed share a thread_id, so a reader tab's card, or a selected
+  // feed item, is found by the item's own id first.
   const activeTab = compose$.activeTab.get()
-  const selectedId = compose$.tabs.get().find((tab) => tab.id === activeTab && tab.kind === 'reader')?.messageId
+  const selectedId =
+    compose$.tabs.get().find((tab) => tab.id === activeTab && tab.kind === 'reader')?.messageId ?? origin?.itemId
   const indexOfSelected = (list: Message[]) => {
     const byId = selectedId ? list.findIndex((thread) => thread.id === selectedId) : -1
     return byId !== -1 ? byId : list.findIndex((thread) => thread.thread_id === selected)
@@ -882,10 +896,15 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
       ]
     : columns
 
+  // A minimized column doesn't render its cards, so the selection (which only
+  // shows on a card) skips it; opening a card shows it in the pane instead.
+  const minimized = settings$.kanbanMinimizedColumns.get()
+
   let fallback: { key: string; thread: Message; column: KanbanColumn } | undefined
   for (const column of orderedColumns) {
     const sourceKey = kanbanColumnKey(column)
     const boardKey = kanbanBoardColumnKey(boardId, column)
+    if (!paneOpen && minimized[boardKey]) continue
     const rawThreads = allThreads[sourceKey] ?? []
     const filterMode = filters[sourceKey] ?? globalFilter
     const attachmentsOnly = columnAttachmentsOnly[sourceKey] ?? globalAttachmentsOnly

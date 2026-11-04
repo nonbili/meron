@@ -19,6 +19,10 @@ beforeEach(() => {
   ui$.selectedFolder.set('inbox')
   ui$.selectedThread.set('acct#INBOX#7')
   mail$.threads.set([{ id: 'acct#INBOX#7', account_id: 'acct', folder_id: 'inbox' } as any])
+  // Tabs another test file left open would come forward as Esc closes a card
+  // conversation, and keep the keyboard off its card.
+  compose$.tabs.set([])
+  compose$.activeTab.set('')
 })
 
 afterEach(() => {
@@ -197,6 +201,42 @@ describe('AppHotkeys', () => {
       expect(document.activeElement).toBe(view.getByText('opened card'))
       expect(kanban$.keyboardCard.peek()).toEqual({ threadId: 'acct#INBOX#7', columnKey: 'board-1:col-b' })
     } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+      kanban$.keyboardCard.set(null)
+    }
+  })
+
+  it('leaves focus alone when Esc closes the conversation behind a tab', () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    compose$.tabs.set([{ id: 'tab-1', kind: 'thread', threadId: 'acct#INBOX#9' } as any])
+    compose$.activeTab.set('tab-1')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+          <div data-message-scroller tabIndex={-1}>
+            <p>tab body</p>
+          </div>
+        </>,
+      )
+      const scroller = view.getByText('tab body').parentElement!
+      scroller.focus()
+      fireEvent.keyDown(scroller, { key: 'Escape' })
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(scroller)
+      expect(kanban$.keyboardCard.peek()).toBeNull()
+    } finally {
+      compose$.tabs.set([])
+      compose$.activeTab.set('')
       kanban$.activeBoardId.set('')
       kanban$.paneThreadId.set('')
       kanban$.paneColumnKey.set('')

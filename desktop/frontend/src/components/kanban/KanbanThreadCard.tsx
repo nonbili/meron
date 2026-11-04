@@ -70,9 +70,11 @@ export function KanbanThreadCard({
   const keyboardSelected =
     !paneThreadId &&
     !activeTab &&
-    keyboardCard?.threadId === thread.thread_id &&
-    keyboardCard.columnKey === kanbanBoardColumnKey(boardId, column)
-  const active = starredFeed ? activeTab === thread.id : thread.thread_id === paneThreadId || keyboardSelected
+    keyboardCard?.columnKey === kanbanBoardColumnKey(boardId, column) &&
+    (starredFeed ? keyboardCard.itemId === thread.id : keyboardCard.threadId === thread.thread_id)
+  const active = starredFeed
+    ? activeTab === thread.id || keyboardSelected
+    : thread.thread_id === paneThreadId || keyboardSelected
 
   // Follow the card for as long as the pane slides open: the pane narrows the
   // board after the card is selected, so a card that fits now can end up under it.
@@ -123,6 +125,7 @@ export function KanbanThreadCard({
       {...attributes}
       {...pointerListeners}
       data-kanban-thread={thread.thread_id}
+      data-kanban-item={starredFeed ? thread.id : undefined}
       onBlur={(event) => {
         // Focus moving on within the window ends the selection; the window
         // itself losing focus (another app) keeps it for when it comes back.

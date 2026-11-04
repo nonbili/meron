@@ -118,7 +118,9 @@ function focusedKanbanCard(): KanbanCardRef | undefined {
   const column = card?.closest<HTMLElement>('[data-kanban-column]')
   const threadId = card?.dataset.kanbanThread
   const columnKey = column?.dataset.kanbanColumn
-  return threadId && columnKey ? { threadId, columnKey } : undefined
+  const itemId = card?.dataset.kanbanItem
+  if (!threadId || !columnKey) return undefined
+  return itemId ? { threadId, columnKey, itemId } : { threadId, columnKey }
 }
 
 function handleKanbanArrowNavigation(key: string, target: EventTarget | null): boolean {

@@ -964,6 +964,18 @@ describe('selectAdjacentKanbanThread', () => {
     expect(kanban$.paneThreadId.get()).toBe('')
   })
 
+  it('skips a minimized column when moving the selection', () => {
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [starred, inbox] }])
+    settings$.kanbanMinimizedColumns.set({ [kanbanBoardColumnKey('b1', starred)]: true })
+    try {
+      selectAdjacentKanbanThread(1)
+
+      expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    } finally {
+      settings$.kanbanMinimizedColumns.set({})
+    }
+  })
+
   it('steps from the open conversation, not the given card', () => {
     kanban$.paneThreadId.set('t1')
     ui$.selectedThread.set('t1')
@@ -982,5 +994,17 @@ describe('selectAdjacentKanbanThread', () => {
 
     expect(compose$.activeTab.get()).toBe('rss-1:item3')
     expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('moves the selection through feed items by their own id while no conversation is open', () => {
+    const columnKey = kanbanBoardColumnKey('b1', starred)
+    kanban$.keyboardCard.set({ threadId: 'feed-1', columnKey, itemId: 'rss-1:item1' })
+
+    selectAdjacentKanbanThread(1)
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 'feed-1', columnKey, itemId: 'rss-1:item2' })
+    selectAdjacentKanbanThread(1, { threadId: 'feed-1', columnKey, itemId: 'rss-1:item2' })
+
+    expect(kanban$.keyboardCard.get()?.itemId).toBe('rss-1:item3')
+    expect(compose$.activeTab.get()).toBe('')
   })
 })
