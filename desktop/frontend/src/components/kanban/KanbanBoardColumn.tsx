@@ -569,6 +569,7 @@ function KanbanColumnContent({
       {headerContextMenu}
       <div
         data-thread-list
+        data-kanban-column={boardKey}
         className="flex-1 space-y-1 overflow-y-auto p-1"
         onScroll={(event) => {
           if (!hasMore || loadingMore) return

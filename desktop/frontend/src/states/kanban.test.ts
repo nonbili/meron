@@ -856,6 +856,27 @@ describe('kanbanPaneThreadId', () => {
   })
 })
 
+describe('kanban$.keyboardCard', () => {
+  afterEach(() => {
+    kanban$.keyboardCard.set(null)
+    kanban$.paneThreadId.set('')
+    kanban$.activeBoardId.set('')
+  })
+
+  it('forgets the card Esc left the keyboard on once a conversation opens', () => {
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: 'b1:acc1:INBOX' })
+    kanban$.paneThreadId.set('t2')
+    expect(kanban$.keyboardCard.get()).toBeNull()
+  })
+
+  it('forgets it when another board is shown', () => {
+    kanban$.activeBoardId.set('b1')
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: 'b1:acc1:INBOX' })
+    kanban$.activeBoardId.set('b2')
+    expect(kanban$.keyboardCard.get()).toBeNull()
+  })
+})
+
 describe('selectAdjacentKanbanThread', () => {
   const inbox = { accountId: 'acc1', folderId: 'INBOX' }
   const starred = { accountId: 'unified', folderId: 'starred' }
@@ -883,12 +904,14 @@ describe('selectAdjacentKanbanThread', () => {
     })
     kanban$.paneThreadId.set('')
     kanban$.paneColumnKey.set('')
+    kanban$.keyboardCard.set(null)
     compose$.tabs.set([])
     compose$.activeTab.set('')
     ui$.selectedThread.set('')
   })
 
   afterEach(() => {
+    kanban$.keyboardCard.set(null)
     kanban$.activeBoardId.set('')
     kanban$.threads.set({})
     compose$.tabs.set([])
@@ -917,6 +940,51 @@ describe('selectAdjacentKanbanThread', () => {
     expect(kanban$.paneThreadId.get()).toBe('t1')
   })
 
+  it('moves the selection from the given card without opening it while no conversation is open', () => {
+    selectAdjacentKanbanThread(1, { threadId: 't2', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't3', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('moves on from the selected card on the next step', () => {
+    kanban$.keyboardCard.set({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    selectAdjacentKanbanThread(1)
+    selectAdjacentKanbanThread(1)
+
+    expect(kanban$.keyboardCard.get()?.threadId).toBe('t3')
+    expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('selects the first card, without opening it, when nothing is selected or open', () => {
+    selectAdjacentKanbanThread(1)
+
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('skips a minimized column when moving the selection', () => {
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [starred, inbox] }])
+    settings$.kanbanMinimizedColumns.set({ [kanbanBoardColumnKey('b1', starred)]: true })
+    try {
+      selectAdjacentKanbanThread(1)
+
+      expect(kanban$.keyboardCard.get()).toEqual({ threadId: 't1', columnKey: kanbanBoardColumnKey('b1', inbox) })
+    } finally {
+      settings$.kanbanMinimizedColumns.set({})
+    }
+  })
+
+  it('steps from the open conversation, not the given card', () => {
+    kanban$.paneThreadId.set('t1')
+    ui$.selectedThread.set('t1')
+
+    selectAdjacentKanbanThread(1, { threadId: 't2', columnKey: kanbanBoardColumnKey('b1', inbox) })
+
+    expect(kanban$.paneThreadId.get()).toBe('t2')
+  })
+
   it('walks feed items by their own id and keeps them out of the card conversation', () => {
     kanban$.paneColumnKey.set(kanbanBoardColumnKey('b1', starred))
     compose$.tabs.set([{ ...threadTab('feed-1'), id: 'rss-1:item2', kind: 'reader', messageId: 'rss-1:item2' }])
@@ -926,5 +994,17 @@ describe('selectAdjacentKanbanThread', () => {
 
     expect(compose$.activeTab.get()).toBe('rss-1:item3')
     expect(kanban$.paneThreadId.get()).toBe('')
+  })
+
+  it('moves the selection through feed items by their own id while no conversation is open', () => {
+    const columnKey = kanbanBoardColumnKey('b1', starred)
+    kanban$.keyboardCard.set({ threadId: 'feed-1', columnKey, itemId: 'rss-1:item1' })
+
+    selectAdjacentKanbanThread(1)
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: 'feed-1', columnKey, itemId: 'rss-1:item2' })
+    selectAdjacentKanbanThread(1, { threadId: 'feed-1', columnKey, itemId: 'rss-1:item2' })
+
+    expect(kanban$.keyboardCard.get()?.itemId).toBe('rss-1:item3')
+    expect(compose$.activeTab.get()).toBe('')
   })
 })

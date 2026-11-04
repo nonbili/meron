@@ -18,9 +18,11 @@ import {
   selectKanbanBoard,
   closeKanbanBoard,
   openMailAccount,
-  closeCurrentConversation,
   kanbanPaneThreadId,
+  kanbanKeyboardThreadId,
+  type KanbanCardRef,
 } from '../../states/kanban'
+import { closeConversationToCard } from '../kanban/closeConversationToCard'
 import { openThreadSearch, thread$ } from '../../states/thread'
 import { getActiveThread, syncMail, selectAdjacentThread } from '../../states/mail'
 import {
@@ -98,17 +100,30 @@ const MAIL_VIEW_ACTIONS = new Set<ShortcutId>([
 
 // The thread a bare action applies to. On a board it's the one the pane shows:
 // an RSS card opens in a reader tab without retargeting ui$.selectedThread,
-// which would otherwise leave a stale chat-list selection as the target.
+// which would otherwise leave a stale chat-list selection as the target. With
+// nothing in the pane, it's the card selected from the keyboard.
 function activeThreadId(): string {
-  if (kanban$.activeBoardId.peek()) return kanbanPaneThreadId() || ui$.selectedThread.peek()
+  if (kanban$.activeBoardId.peek()) return kanbanPaneThreadId() || kanbanKeyboardThreadId() || ui$.selectedThread.peek()
   return ui$.selectedThread.peek()
 }
 
 // j/k (and the arrow keys) step through whichever list is on screen: the chat
 // thread list, or the active board's cards.
 function selectAdjacentThreadForView(delta: number) {
-  if (kanban$.activeBoardId.peek()) selectAdjacentKanbanThread(delta)
+  if (kanban$.activeBoardId.peek()) selectAdjacentKanbanThread(delta, focusedKanbanCard())
   else selectAdjacentThread(delta)
+}
+
+// The card keyboard focus is on (Esc puts it on the card whose conversation it
+// closed), for stepping on from there while no conversation is open.
+function focusedKanbanCard(): KanbanCardRef | undefined {
+  const card = document.activeElement?.closest<HTMLElement>('[data-kanban-thread]')
+  const column = card?.closest<HTMLElement>('[data-kanban-column]')
+  const threadId = card?.dataset.kanbanThread
+  const columnKey = column?.dataset.kanbanColumn
+  const itemId = card?.dataset.kanbanItem
+  if (!threadId || !columnKey) return undefined
+  return itemId ? { threadId, columnKey, itemId } : { threadId, columnKey }
 }
 
 function handleKanbanArrowNavigation(key: string, target: EventTarget | null): boolean {
@@ -120,7 +135,7 @@ function handleKanbanArrowNavigation(key: string, target: EventTarget | null): b
   ) {
     return false
   }
-  selectAdjacentKanbanThread(key === 'ArrowDown' ? 1 : -1)
+  selectAdjacentKanbanThread(key === 'ArrowDown' ? 1 : -1, focusedKanbanCard())
   return true
 }
 
@@ -289,7 +304,7 @@ export function AppHotkeys() {
         kanban$.paneThreadId.peek()
       ) {
         event.preventDefault()
-        closeCurrentConversation()
+        closeConversationToCard()
         return
       }
 
@@ -505,7 +520,7 @@ export function AppHotkeys() {
       // the frame. On a board that closes the conversation pane.
       if (chord.key === 'Escape') {
         if (modalOpen() || mailCovered()) return
-        if (kanban$.activeBoardId.peek() && kanban$.paneThreadId.peek()) closeCurrentConversation()
+        if (kanban$.activeBoardId.peek() && kanban$.paneThreadId.peek()) closeConversationToCard()
         else if (!focusActiveThreadRow()) return
         event.preventDefault()
         return

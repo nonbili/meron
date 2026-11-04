@@ -6,7 +6,7 @@ import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
-import { kanban$ } from './kanban'
+import { kanban$, kanbanKeyboardCardAfterRemoving, type KanbanCardRef } from './kanban'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import {
   captureKeys,
@@ -127,6 +127,10 @@ function kanbanNeighbourThreadId(threadId: string): string {
   return threadsInPaneColumn().find((thread) => thread.thread_id !== threadId)?.thread_id ?? ''
 }
 
+function sameCard(a: KanbanCardRef | null, b: KanbanCardRef | null): boolean {
+  return a?.threadId === b?.threadId && a?.columnKey === b?.columnKey && a?.itemId === b?.itemId
+}
+
 function restoreRemovedThread(current: Message[], previous: Message[], threadId: string): Message[] {
   const thread = previous.find((item) => item.thread_id === threadId)
   if (!thread || current.some((item) => item.thread_id === threadId)) return current
@@ -170,6 +174,11 @@ function removeThreadLocally(threadId: string) {
       nextSelected = neighbour?.thread_id ?? ''
     }
   }
+  // The card selected from the keyboard moves on the same way, so the next
+  // action doesn't land on the thread that just left.
+  const previousKeyboardCard = kanban$.keyboardCard.get()
+  const keyboardCardLeaves = previousKeyboardCard?.threadId === threadId
+  const nextKeyboardCard = keyboardCardLeaves ? kanbanKeyboardCardAfterRemoving(previousKeyboardCard) : null
   const nextThreads = previousThreads.filter((thread) => thread.thread_id !== threadId)
   const unsuppress = suppressRemovedThread(threadId)
 
@@ -186,6 +195,7 @@ function removeThreadLocally(threadId: string) {
   if (previousPaneThreadId === threadId) {
     kanban$.paneThreadId.set(nextSelected)
   }
+  if (keyboardCardLeaves) kanban$.keyboardCard.set(nextKeyboardCard)
 
   return {
     complete: () => completeRemovedThread(threadId),
@@ -210,6 +220,9 @@ function removeThreadLocally(threadId: string) {
       if (ui$.selectedThread.get() === nextSelected) ui$.selectedThread.set(previousSelected)
       if (previousPaneThreadId === threadId && kanban$.paneThreadId.get() === nextSelected) {
         kanban$.paneThreadId.set(previousPaneThreadId)
+      }
+      if (keyboardCardLeaves && sameCard(kanban$.keyboardCard.get(), nextKeyboardCard)) {
+        kanban$.keyboardCard.set(previousKeyboardCard)
       }
     },
   }

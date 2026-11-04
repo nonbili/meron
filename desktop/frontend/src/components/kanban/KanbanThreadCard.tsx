@@ -64,7 +64,17 @@ export function KanbanThreadCard({
   // conversation, so it reads as selected while that tab is on screen. Its
   // thread_id is the whole feed's, so match the tab by the item's own id.
   const activeTab = useValue(compose$.activeTab)
-  const active = starredFeed ? activeTab === thread.id : thread.thread_id === paneThreadId
+  // The card selected from the keyboard (Esc, then the arrow keys) reads as
+  // selected while nothing is on screen in the pane.
+  const keyboardCard = useValue(kanban$.keyboardCard)
+  const keyboardSelected =
+    !paneThreadId &&
+    !activeTab &&
+    keyboardCard?.columnKey === kanbanBoardColumnKey(boardId, column) &&
+    (starredFeed ? keyboardCard.itemId === thread.id : keyboardCard.threadId === thread.thread_id)
+  const active = starredFeed
+    ? activeTab === thread.id || keyboardSelected
+    : thread.thread_id === paneThreadId || keyboardSelected
 
   // Follow the card for as long as the pane slides open: the pane narrows the
   // board after the card is selected, so a card that fits now can end up under it.
@@ -79,6 +89,13 @@ export function KanbanThreadCard({
     })
     return () => cancelAnimationFrame(frame)
   }, [active])
+
+  // The selected card has the keyboard (Esc, the arrow keys), so Return opens it.
+  useEffect(() => {
+    if (!keyboardSelected) return
+    const row = selectedItemRef.current?.querySelector<HTMLElement>('[data-thread-row]')
+    if (row && document.activeElement !== row) row.focus()
+  }, [keyboardSelected])
 
   // Ctrl/Cmd+click and double-click. Starred feed items are single articles and
   // open in a reader tab, as their plain click does. The pane shows for any
@@ -102,11 +119,25 @@ export function KanbanThreadCard({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...pointerListeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...pointerListeners}
+      data-kanban-thread={thread.thread_id}
+      data-kanban-item={starredFeed ? thread.id : undefined}
+      onBlur={(event) => {
+        // Focus moving on within the window ends the selection; the window
+        // itself losing focus (another app) keeps it for when it comes back.
+        if (!keyboardSelected || !document.hasFocus()) return
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        kanban$.keyboardCard.set(null)
+      }}
+    >
       <ThreadListItem
         thread={thread}
         contextMenuOpen={threadMenu.isOpen(thread, ownerKey)}
-        active={starredColumn ? active : thread.thread_id === paneThreadId}
+        active={starredColumn ? active : thread.thread_id === paneThreadId || keyboardSelected}
         rootRef={active ? selectedItemRef : undefined}
         badgeAccount={column.accountId === 'unified' ? account : undefined}
         // The margin reaches past the column's own padding and border to the

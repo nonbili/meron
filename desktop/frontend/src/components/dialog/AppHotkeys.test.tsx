@@ -4,6 +4,9 @@ import { isMac } from '../../lib/shortcuts'
 import { calendar$ } from '../../states/calendar'
 import { mail$ } from '../../states/mailState'
 import { ui$ } from '../../states/ui'
+import { kanban$, kanbanBoardColumnKey, kanbanColumnKey } from '../../states/kanban'
+import { settings$ } from '../../states/settings'
+import { compose$ } from '../../states/composeState'
 import { AppHotkeys } from './AppHotkeys'
 
 const original = (window as any).go
@@ -16,6 +19,10 @@ beforeEach(() => {
   ui$.selectedFolder.set('inbox')
   ui$.selectedThread.set('acct#INBOX#7')
   mail$.threads.set([{ id: 'acct#INBOX#7', account_id: 'acct', folder_id: 'inbox' } as any])
+  // Tabs another test file left open would come forward as Esc closes a card
+  // conversation, and keep the keyboard off its card.
+  compose$.tabs.set([])
+  compose$.activeTab.set('')
 })
 
 afterEach(() => {
@@ -163,5 +170,165 @@ describe('AppHotkeys', () => {
 
     fireEvent.keyDown(document.body, { key: 'ArrowDown' })
     expect(ui$.selectedThread.peek()).toBe('acct#INBOX#8')
+  })
+
+  it("hands focus to the closed conversation's card when Esc closes the kanban pane", () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-a">
+            <button data-thread-row data-active>
+              same thread, other column
+            </button>
+          </section>
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row>other</button>
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+          <div data-message-scroller tabIndex={-1}>
+            <p>body</p>
+          </div>
+        </>,
+      )
+      fireEvent.keyDown(view.getByText('body'), { key: 'Escape' })
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(view.getByText('opened card'))
+      expect(kanban$.keyboardCard.peek()).toEqual({ threadId: 'acct#INBOX#7', columnKey: 'board-1:col-b' })
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+      kanban$.keyboardCard.set(null)
+    }
+  })
+
+  it('leaves focus alone when Esc closes the conversation behind a tab', () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    compose$.tabs.set([{ id: 'tab-1', kind: 'thread', threadId: 'acct#INBOX#9' } as any])
+    compose$.activeTab.set('tab-1')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+          <div data-message-scroller tabIndex={-1}>
+            <p>tab body</p>
+          </div>
+        </>,
+      )
+      const scroller = view.getByText('tab body').parentElement!
+      scroller.focus()
+      fireEvent.keyDown(scroller, { key: 'Escape' })
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(scroller)
+      expect(kanban$.keyboardCard.peek()).toBeNull()
+    } finally {
+      compose$.tabs.set([])
+      compose$.activeTab.set('')
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+      kanban$.keyboardCard.set(null)
+    }
+  })
+
+  it('applies action shortcuts to the card selected from the keyboard', () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('')
+    ui$.selectedThread.set('')
+    kanban$.keyboardCard.set({ threadId: 'acct#INBOX#7', columnKey: 'board-1:col-b' })
+    const invoked: Array<{ command: string; payload: any }> = []
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      invoked.push({ command, payload })
+      return {}
+    }
+    try {
+      render(<AppHotkeys />)
+      fireEvent.keyDown(document.body, { key: 'e' })
+      expect(invoked.find((call) => call.command === 'mail.archive')?.payload).toEqual({ thread_id: 'acct#INBOX#7' })
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.keyboardCard.set(null)
+    }
+  })
+
+  it("hands focus to the closed conversation's card when Esc comes from a message frame", () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('acct#INBOX#7')
+    kanban$.paneColumnKey.set('board-1:col-b')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column="board-1:col-b">
+            <button data-thread-row data-active>
+              opened card
+            </button>
+          </section>
+        </>,
+      )
+      window.dispatchEvent(new CustomEvent('meron.frameKeyDown', { detail: { key: 'Escape' }, cancelable: true }))
+      expect(kanban$.paneThreadId.peek()).toBe('')
+      expect(document.activeElement).toBe(view.getByText('opened card'))
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+    }
+  })
+
+  it('moves the selection from the focused card, without opening it, while no conversation is open', () => {
+    const inbox = { accountId: 'acct', folderId: 'inbox' }
+    const card = (n: number) => ({ id: `m${n}`, thread_id: `t${n}`, account_id: 'acct', folder_id: 'inbox' }) as any
+    const previousBoards = settings$.kanbanBoards.peek()
+    settings$.kanbanBoards.set([{ id: 'b1', name: 'Board', columns: [inbox] }] as any)
+    kanban$.activeBoardId.set('b1')
+    kanban$.threads.set({ [kanbanColumnKey(inbox)]: [card(1), card(2), card(3), card(4)] })
+    kanban$.paneThreadId.set('')
+    kanban$.paneColumnKey.set('')
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    ui$.selectedThread.set('')
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <section data-thread-list data-kanban-column={kanbanBoardColumnKey('b1', inbox)}>
+            <div data-kanban-thread="t2">
+              <button data-thread-row>card 2</button>
+            </div>
+          </section>
+        </>,
+      )
+      view.getByText('card 2').focus()
+      fireEvent.keyDown(view.getByText('card 2'), { key: 'ArrowDown' })
+      expect(kanban$.keyboardCard.peek()?.threadId).toBe('t3')
+      expect(kanban$.paneThreadId.peek()).toBe('')
+
+      kanban$.keyboardCard.set(null)
+      view.getByText('card 2').focus()
+      fireEvent.keyDown(view.getByText('card 2'), { key: 'j' })
+      expect(kanban$.keyboardCard.peek()?.threadId).toBe('t3')
+      expect(kanban$.paneThreadId.peek()).toBe('')
+    } finally {
+      settings$.kanbanBoards.set(previousBoards)
+      kanban$.keyboardCard.set(null)
+      kanban$.activeBoardId.set('')
+      kanban$.threads.set({})
+      kanban$.paneThreadId.set('')
+      kanban$.paneColumnKey.set('')
+    }
   })
 })

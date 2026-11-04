@@ -66,7 +66,19 @@ export const kanban$ = observable({
   // The column of the card last opened, as a conversation or in a tab: j/k
   // steps through it first.
   paneColumnKey: '',
+  // The card selected from the keyboard while no conversation is open: the one
+  // Esc closed the conversation of, then wherever the arrow keys move. It has
+  // keyboard focus and reads as selected until a conversation opens or focus
+  // moves on.
+  keyboardCard: null as KanbanCardRef | null,
 })
+
+// The highlight belongs to the open conversation's card: the keyboard's card
+// gives it up the moment a conversation opens or the board changes.
+kanban$.paneThreadId.onChange(({ value }) => {
+  if (value) kanban$.keyboardCard.set(null)
+})
+kanban$.activeBoardId.onChange(() => kanban$.keyboardCard.set(null))
 
 function newBoardId(): string {
   const fallback = `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -807,6 +819,18 @@ export async function markBoardAllRead(boardId: string) {
   }
 }
 
+// A feed item in the unified starred column: items of one feed share a
+// thread_id, so it is told apart by its own id.
+function isStarredFeedItem(thread: Message, column: KanbanColumn): boolean {
+  return (
+    isUnifiedStarredColumn(column) &&
+    isRssAccount(
+      accounts$.get().find((item) => item.id === thread.account_id),
+      thread.account_id,
+    )
+  )
+}
+
 // Open a card the keyboard moved onto, the same way clicking it would. Feed
 // rows in the starred column carry their full body and live in a reader tab,
 // leaving the card conversation behind the tabs alone; everything else opens in
@@ -814,13 +838,7 @@ export async function markBoardAllRead(boardId: string) {
 // renders the active tab over the conversation, so the old item would otherwise
 // stay on screen while only the card highlight moved.
 function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey: string) {
-  if (
-    isUnifiedStarredColumn(column) &&
-    isRssAccount(
-      accounts$.get().find((item) => item.id === thread.account_id),
-      thread.account_id,
-    )
-  ) {
+  if (isStarredFeedItem(thread, column)) {
     openMessageTab(thread)
   } else {
     focusKanbanThreadFolder(thread.folder_id)
@@ -832,15 +850,78 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
   ui$.mobilePane.set('conversation')
 }
 
-// Move the open kanban conversation through the visible cards in its current
-// column. This mirrors chat-list adjacent navigation but uses the active board.
-// It starts from whatever the pane shows, a tab included.
-export function selectAdjacentKanbanThread(delta: number) {
-  const selected = kanbanPaneThreadId() || ui$.selectedThread.get()
-  // Items of one feed share a thread_id, so a reader tab's card is found by
-  // the item's own id first.
+/** The thread of the card selected from the keyboard, while it shows as
+ * selected (no conversation or tab in the pane): what a bare action applies to. */
+export function kanbanKeyboardThreadId(): string {
+  if (kanban$.paneThreadId.peek() || compose$.activeTab.peek()) return ''
+  return kanban$.keyboardCard.peek()?.threadId ?? ''
+}
+
+// The cards a column shows: its threads under the column's filters (or the
+// board's), with what was read this session kept, as KanbanBoardColumn renders
+// them. `keepId` stays in whatever the filters say.
+function visibleKanbanColumnThreads(column: KanbanColumn, keepId?: string): Message[] {
+  const sourceKey = kanbanColumnKey(column)
+  const filterMode = kanban$.filters[sourceKey].get() ?? kanban$.globalFilter.get()
+  const attachmentsOnly = kanban$.attachmentsOnly[sourceKey].get() ?? kanban$.globalAttachmentsOnly.get()
+  const threads = kanban$.threads[sourceKey].get() ?? []
+  return filterThreads(threads, filterMode, keepId, mail$.readThreads.get(), attachmentsOnly)
+}
+
+/** Where the keyboard selection goes when its card's thread is removed from
+ * the board (archived, deleted): the next card in its column, or the previous
+ * if it was last, as the open conversation does. Null when none is left. */
+export function kanbanKeyboardCardAfterRemoving(card: KanbanCardRef): KanbanCardRef | null {
+  const boardId = kanban$.activeBoardId.peek()
+  const column = getKanbanColumns(boardId).find((item) => kanbanBoardColumnKey(boardId, item) === card.columnKey)
+  if (!column) return null
+  // The leaving card is kept in, to find its place among the cards on screen.
+  const threads = visibleKanbanColumnThreads(column, card.threadId)
+  const index = threads.findIndex((thread) =>
+    card.itemId ? thread.id === card.itemId : thread.thread_id === card.threadId,
+  )
+  if (index === -1) return null
+  // A feed's items share its thread, and all of them go with it.
+  const others = (list: Message[]) => list.find((thread) => thread.thread_id !== card.threadId)
+  const neighbour = others(threads.slice(index + 1)) ?? others(threads.slice(0, index).reverse())
+  if (!neighbour) return null
+  return {
+    threadId: neighbour.thread_id,
+    columnKey: card.columnKey,
+    ...(isStarredFeedItem(neighbour, column) ? { itemId: neighbour.id } : {}),
+  }
+}
+
+/** A card on the board: its thread, and the column (board column key) it sits
+ * in. A starred feed item also carries its own id, as its feed's items share
+ * the thread. */
+export type KanbanCardRef = { threadId: string; columnKey: string; itemId?: string }
+
+// Move through the visible cards of the active board, its current column first.
+// This mirrors chat-list adjacent navigation. With a conversation or tab in the
+// pane it steps from whatever the pane shows and opens the next card; with none,
+// it only moves the selection (kanban$.keyboardCard), from `from` (the focused
+// card) or the selected card, and Return opens it. With neither, it starts at
+// the first column's end.
+export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) {
+  const paneOpen = !!(kanbanPaneThreadId() || compose$.activeTab.get())
+  const open = kanbanPaneThreadId() || ui$.selectedThread.get()
+  const origin = open ? undefined : (from ?? kanban$.keyboardCard.get() ?? undefined)
+  const step = (thread: Message, column: KanbanColumn, boardKey: string) => {
+    if (paneOpen) openAdjacentKanbanCard(thread, column, boardKey)
+    else
+      kanban$.keyboardCard.set({
+        threadId: thread.thread_id,
+        columnKey: boardKey,
+        ...(isStarredFeedItem(thread, column) ? { itemId: thread.id } : {}),
+      })
+  }
+  const selected = open || origin?.threadId || ''
+  // Items of one feed share a thread_id, so a reader tab's card, or a selected
+  // feed item, is found by the item's own id first.
   const activeTab = compose$.activeTab.get()
-  const selectedId = compose$.tabs.get().find((tab) => tab.id === activeTab && tab.kind === 'reader')?.messageId
+  const selectedId =
+    compose$.tabs.get().find((tab) => tab.id === activeTab && tab.kind === 'reader')?.messageId ?? origin?.itemId
   const indexOfSelected = (list: Message[]) => {
     const byId = selectedId ? list.findIndex((thread) => thread.id === selectedId) : -1
     return byId !== -1 ? byId : list.findIndex((thread) => thread.thread_id === selected)
@@ -848,11 +929,7 @@ export function selectAdjacentKanbanThread(delta: number) {
   const boardId = kanban$.activeBoardId.get()
   const columns = getKanbanColumns(boardId)
   const allThreads = kanban$.threads.get()
-  const filters = kanban$.filters.get()
-  const globalFilter = kanban$.globalFilter.get()
-  const columnAttachmentsOnly = kanban$.attachmentsOnly.get()
-  const globalAttachmentsOnly = kanban$.globalAttachmentsOnly.get()
-  const preferredKey = kanban$.paneColumnKey.get()
+  const preferredKey = origin?.columnKey || kanban$.paneColumnKey.get()
   const orderedColumns = preferredKey
     ? [
         ...columns.filter((column) => kanbanBoardColumnKey(boardId, column) === preferredKey),
@@ -860,14 +937,17 @@ export function selectAdjacentKanbanThread(delta: number) {
       ]
     : columns
 
+  // A minimized column doesn't render its cards, so the selection (which only
+  // shows on a card) skips it; opening a card shows it in the pane instead.
+  const minimized = settings$.kanbanMinimizedColumns.get()
+
   let fallback: { key: string; thread: Message; column: KanbanColumn } | undefined
   for (const column of orderedColumns) {
     const sourceKey = kanbanColumnKey(column)
     const boardKey = kanbanBoardColumnKey(boardId, column)
+    if (!paneOpen && minimized[boardKey]) continue
     const rawThreads = allThreads[sourceKey] ?? []
-    const filterMode = filters[sourceKey] ?? globalFilter
-    const attachmentsOnly = columnAttachmentsOnly[sourceKey] ?? globalAttachmentsOnly
-    const list = filterThreads(rawThreads, filterMode, selected, mail$.readThreads.get(), attachmentsOnly)
+    const list = visibleKanbanColumnThreads(column, selected)
     if (!fallback && list.length > 0) {
       fallback = { key: boardKey, thread: delta >= 0 ? list[0] : list[list.length - 1], column }
     }
@@ -880,11 +960,11 @@ export function selectAdjacentKanbanThread(delta: number) {
     const target = list[next]
     if (!target || next === current) return
 
-    openAdjacentKanbanCard(target, column, boardKey)
+    step(target, column, boardKey)
     return
   }
 
   if (fallback) {
-    openAdjacentKanbanCard(fallback.thread, fallback.column, fallback.key)
+    step(fallback.thread, fallback.column, fallback.key)
   }
 }
