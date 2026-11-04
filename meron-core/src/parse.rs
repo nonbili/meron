@@ -1199,7 +1199,15 @@ fn write_media_with_cap(
             .extension()
             .and_then(|e| e.to_str())
             .filter(|e| !e.is_empty())
-            .or_else(|| mime.rsplit('/').next().filter(|e| !e.is_empty()))
+            // The MIME subtype without its structured-syntax suffix (RFC 6838):
+            // `image/svg+xml` is an `.svg`, which the desktop's file server
+            // serves as an image; `.svg_xml` would go out as text/plain.
+            .or_else(|| {
+                mime.rsplit('/')
+                    .next()
+                    .and_then(|sub| sub.split('+').next())
+                    .filter(|e| !e.is_empty())
+            })
             .unwrap_or("bin"),
     );
     let key = format!(
@@ -2299,6 +2307,41 @@ AQID\r\n\
         let bytes = std::fs::read(root.join(key)).expect("file written");
         assert_eq!(bytes, vec![1, 2, 3]);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // An inline image without a filename (Meron's own composer sends them so)
+    // is keyed by its MIME type. `image/svg+xml` must give `.svg`, the type the
+    // desktop's file server knows: `.svg_xml` was served as text/plain, and a
+    // browser doesn't draw an SVG of that type.
+    #[test]
+    fn an_inline_svg_without_filename_is_keyed_svg() {
+        let raw = b"From: a@b.com\r\n\
+Subject: x\r\n\
+Content-Type: multipart/related; boundary=sep\r\n\
+\r\n\
+--sep\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<p><img src=\"cid:logo@x\"></p>\r\n\
+--sep\r\n\
+Content-Type: image/svg+xml\r\n\
+Content-Disposition: inline\r\n\
+Content-ID: <logo@x>\r\n\
+\r\n\
+<svg xmlns=\"http://www.w3.org/2000/svg\"/>\r\n\
+--sep--\r\n";
+        let root =
+            std::env::temp_dir().join(format!("meron-svg-key-test-{}", std::process::id()));
+        let ctx = MediaCtx {
+            root: root.clone(),
+            account: "acct".to_string(),
+            folder: "INBOX".to_string(),
+            uid: 7,
+        };
+        let msg = parse_message(raw, Some(&ctx));
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(msg.attachments.len(), 1);
+        assert_eq!(msg.attachments[0].key.as_deref(), Some("acct/INBOX/7/0.svg"));
     }
 
     #[test]
