@@ -42,6 +42,7 @@ export type ShortcutId =
   | 'thread.details'
   | 'thread.viewMode'
   | 'reply.focus'
+  | 'reply.all'
   | 'app.quit'
   | RailShortcutId
 
@@ -125,6 +126,8 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutId, Chord> = {
   // H for HTML: switches the open conversation between HTML and plain text.
   'thread.viewMode': { key: 'h' },
   'reply.focus': { key: 'r' },
+  // A for Reply all, as in Gmail: the full editor, addressed to everyone.
+  'reply.all': { key: 'a' },
 }
 
 export const SHORTCUT_IDS = Object.keys(DEFAULT_SHORTCUTS) as ShortcutId[]
@@ -218,6 +221,7 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   'compose.new': 'Compose new message',
   'compose.replyFull': 'Reply in full editor',
   'reply.focus': 'Reply (focus quick reply)',
+  'reply.all': 'Reply all (in full editor)',
   'mail.sync': 'Sync mailbox',
   'search.thread': 'Search current thread',
   'search.global': 'Search all messages',
@@ -271,7 +275,15 @@ export const SHORTCUT_GROUPS: { title: string; ids: ShortcutId[] }[] = [
   },
   {
     title: 'Mail',
-    ids: ['compose.new', 'reply.focus', 'compose.replyFull', 'mail.sync', 'search.thread', 'search.global'],
+    ids: [
+      'compose.new',
+      'reply.focus',
+      'reply.all',
+      'compose.replyFull',
+      'mail.sync',
+      'search.thread',
+      'search.global',
+    ],
   },
   { title: 'View', ids: ['view.toggle', 'tab.close'] },
   // Every rail slot gets a row, so all nine are visible and rebindable.

@@ -37,6 +37,7 @@ import {
 } from './composeSessions'
 import {
   buildReplyRecipients,
+  quickReplyAddressing,
   buildReplyThreading,
   detectAliasFrom,
   pickReplyTarget,
@@ -684,7 +685,8 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const subject = t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`
   const target = pickReplyTarget(t)
   const accounts = accounts$.get()
-  const { to, cc } = buildReplyRecipients(target, options?.replyAll)
+  // Everyone the quick reply was already going to, when it was.
+  const { to, cc } = options?.replyAll ? buildReplyRecipients(target, true) : quickReplyAddressing(target)
   const { in_reply_to, references } = buildReplyThreading(target)
   const replyAcc = accounts.find((acc) => acc.id === t.account_id)
   // Hand off any draft already saved for this quick reply so the full editor
@@ -729,6 +731,7 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   compose$.composerAttachments.set([])
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
+  compose$.quickReplyAdded.set([])
   // The thread stays open behind the new tab, so the box the user comes back to
   // is a fresh quick reply — signature and all.
   seedQuickReplySignature()

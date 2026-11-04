@@ -135,7 +135,45 @@ export function quickReplyRecipients(): { to: string; cc: string } {
   const accounts = accounts$.get()
   const acc = accounts.find((a) => a.id === (thread.account_id || ui$.selectedAccount.get())) ?? accounts[0] ?? null
   if (!isSendableAccount(acc)) return none
-  return buildReplyRecipients(pickReplyTarget(thread))
+  return addressQuickReply(pickReplyTarget(thread), compose$.quickReplyAdded.get())
+}
+
+/** The people Reply all would add to a reply to `target`, as address-list
+ * entries with their display names: everyone in its reply-all form whom the
+ * plain reply doesn't reach. */
+export function replyAllExtras(target: Message): string[] {
+  if (!replyAllAddsRecipients(target)) return []
+  const plain = buildReplyRecipients(target)
+  const reached = new Set(splitAddressList(`${plain.to}, ${plain.cc}`).map(bareAddr))
+  const all = buildReplyRecipients(target, true)
+  return splitAddressList(`${all.to}, ${all.cc}`).filter((entry) => !reached.has(bareAddr(entry)))
+}
+
+/** The plain reply to `target`, with those of Reply all's extra people whose
+ * (bare, lowercased) addresses are in `added` copied as well. */
+export function addressQuickReply(target: Message, added: string[]): { to: string; cc: string } {
+  const plain = buildReplyRecipients(target)
+  if (added.length === 0) return plain
+  const extra = replyAllExtras(target).filter((entry) => added.includes(bareAddr(entry)))
+  return { to: plain.to, cc: [plain.cc, ...extra].filter((part) => part.trim()).join(', ') }
+}
+
+/** The To/Cc the quick reply sends to and saves under: the plain reply plus
+ * whoever was added from the recipient line. Not reactive. */
+export function quickReplyAddressing(target: Message): { to: string; cc: string } {
+  return addressQuickReply(target, compose$.quickReplyAdded.peek())
+}
+
+/** The people the recipient line offers to add to the quick reply: Reply all's
+ * extras not added yet. Reactive. */
+export function quickReplyAddable(): string[] {
+  const thread = getActiveThread()
+  if (!thread) return []
+  const accounts = accounts$.get()
+  const acc = accounts.find((a) => a.id === (thread.account_id || ui$.selectedAccount.get())) ?? accounts[0] ?? null
+  if (!isSendableAccount(acc)) return []
+  const added = compose$.quickReplyAdded.get()
+  return replyAllExtras(pickReplyTarget(thread)).filter((entry) => !added.includes(bareAddr(entry)))
 }
 
 /** The To/Cc a reply to this message gets, as the core decided them (see

@@ -26,10 +26,12 @@ import {
   quickReplyRecipients,
   replyAllAddsRecipients,
   pickReplyTarget,
+  quickReplyAddable,
   resolveQuickReplyFrom,
 } from './composeReply'
 import { compose$ } from './composeState'
 import {
+  addToQuickReply,
   cancelQuickReplyDraftSave,
   discardQuickReplyDraftIfEmpty,
   isQuickReplyBlank,
@@ -4138,6 +4140,216 @@ describe('quick reply recipient line', () => {
 
   it('reports nothing without an open conversation, which hides the line', () => {
     expect(quickReplyRecipients()).toEqual({ to: '', cc: '' })
+  })
+})
+
+describe('adding people to the quick reply', () => {
+  // We were copied on a message to Alice and Bob, so a plain reply goes to the
+  // sender alone, and Reply all would also copy both.
+  const calls: { command: string; payload: unknown }[] = []
+  const reply = {
+    to: 'Them <them@example.com>',
+    cc: '',
+    all_to: 'Them <them@example.com>',
+    all_cc: 'Alice <alice@example.com>, Bob <bob@example.com>',
+    all_adds_recipients: true,
+  }
+  const setUpThread = (overrides: Partial<Message> = {}) => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_name: 'Them',
+      from_addr: 'them@example.com',
+      to: 'Alice <alice@example.com>, Bob <bob@example.com>',
+      cc: 'me@example.com',
+      subject: 'Plans',
+      message_id: 'root@example.com',
+      date: 1000,
+      reply,
+      ...overrides,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    return thread
+  }
+
+  beforeEach(() => {
+    cancelQuickReplyDraftSave()
+    calls.length = 0
+    compose$.tabs.set([])
+    compose$.activeTab.set('')
+    compose$.composer.set('')
+    compose$.composerAttachments.set([])
+    compose$.quickReplyDraftId.set('')
+    compose$.quickReplyDraftSaved.set(false)
+    compose$.quickReplyDraftThreadId.set('')
+    compose$.quickReplyFrom.set('')
+    compose$.quickReplyAdded.set([])
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    mail$.messages.set([])
+    mail$.threads.set([])
+    mail$.folders.set([])
+    mail$.foldersByAccount.set({})
+    ui$.selectedThread.set('')
+    ui$.selectedAccount.set('acc-1')
+    accounts$.set([
+      {
+        id: 'acc-1',
+        email: 'me@example.com',
+        display_name: 'Me',
+        provider: 'custom',
+        auth_type: 'password',
+        imap_host: 'imap.example.com',
+        imap_port: 993,
+        smtp_host: 'smtp.example.com',
+        smtp_port: 465,
+        tls: true,
+      },
+    ])
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            if (command === 'mail.allocateIdentity') return { message_id: 'draft-core@example.com' }
+            if (command === 'mail.folderList') return { folders: [] }
+            if (command === 'mail.threadList') return { threads: mail$.threads.get() }
+            return {}
+          },
+        },
+      },
+    }
+  })
+
+  it('offers the people Reply all would add, one by one, until each is in', () => {
+    setUpThread()
+    expect(quickReplyAddable()).toEqual(['Alice <alice@example.com>', 'Bob <bob@example.com>'])
+
+    addToQuickReply('Bob <bob@example.com>')
+
+    expect(quickReplyRecipients()).toEqual({ to: 'Them <them@example.com>', cc: 'Bob <bob@example.com>' })
+    expect(quickReplyAddable()).toEqual(['Alice <alice@example.com>'])
+  })
+
+  it('offers nobody when Reply all reaches no one new', () => {
+    setUpThread({ reply: { ...reply, all_cc: '', all_adds_recipients: false } })
+
+    expect(quickReplyAddable()).toEqual([])
+  })
+
+  it('saves and sends the reply to the people added', async () => {
+    setUpThread()
+    addToQuickReply('Alice <alice@example.com>')
+    compose$.composer.set('Sounds good')
+
+    await saveQuickReplyDraft()
+    const saved = calls.find((c) => c.command === 'mail.saveDraft')?.payload as { to: string; cc: string }
+    expect(saved.cc).toBe('Alice <alice@example.com>')
+
+    await sendReply()
+    const sent = calls.find((c) => c.command === 'mail.send')?.payload as { to: string; cc: string }
+    expect(sent.to).toBe('Them <them@example.com>')
+    expect(sent.cc).toBe('Alice <alice@example.com>')
+    // The next reply in the box starts as a plain one.
+    expect(compose$.quickReplyAdded.get()).toEqual([])
+  })
+
+  it('re-saves a reply in progress when someone is added', async () => {
+    setUpThread()
+    compose$.composer.set('Sounds good')
+
+    addToQuickReply('Alice <alice@example.com>')
+    await new Promise((resolve) => setTimeout(resolve, 1300))
+
+    const saved = calls.find((c) => c.command === 'mail.saveDraft')?.payload as { cc: string }
+    expect(saved?.cc).toBe('Alice <alice@example.com>')
+  })
+
+  it('puts the people added back when a send never gets off the ground', async () => {
+    setUpThread()
+    addToQuickReply('Alice <alice@example.com>')
+    compose$.composer.set('Sounds good')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') throw new Error('offline')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: mail$.threads.get() }
+      return {}
+    }
+
+    await sendReply().catch(() => undefined)
+
+    expect(compose$.composer.get()).toBe('Sounds good')
+    expect(compose$.quickReplyAdded.get()).toEqual(['alice@example.com'])
+  })
+
+  it('carries the people added into the full editor', () => {
+    setUpThread()
+    addToQuickReply('Alice <alice@example.com>')
+    compose$.composer.set('Sounds good')
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()[0].compose?.cc).toBe('Alice <alice@example.com>')
+    expect(compose$.quickReplyAdded.get()).toEqual([])
+  })
+
+  it('starts the next conversation as a plain reply', () => {
+    setUpThread()
+    addToQuickReply('Alice <alice@example.com>')
+
+    ui$.selectedThread.set('')
+
+    expect(compose$.quickReplyAdded.get()).toEqual([])
+  })
+
+  it('takes back a saved draft with some of them added', () => {
+    const thread = setUpThread()
+    mail$.messages.set([
+      thread,
+      message({
+        id: 'd1',
+        account_id: 'acc-1',
+        thread_id: 't-1',
+        folder_id: 'Drafts',
+        from_addr: 'me@example.com',
+        to: 'Them <them@example.com>',
+        cc: 'Bob <bob@example.com>',
+        subject: 'Re: Plans',
+        message_id: 'draft-1@example.com',
+        body: 'saved draft body',
+        date: 2000,
+      }),
+    ])
+
+    expect(compose$.composer.get()).toBe('saved draft body')
+    expect(compose$.quickReplyAdded.get()).toEqual(['bob@example.com'])
+  })
+
+  it('leaves a draft copying someone Reply all would not reach to the full composer', () => {
+    const thread = setUpThread()
+    mail$.messages.set([
+      thread,
+      message({
+        id: 'd1',
+        account_id: 'acc-1',
+        thread_id: 't-1',
+        folder_id: 'Drafts',
+        from_addr: 'me@example.com',
+        to: 'Them <them@example.com>',
+        cc: 'Bob <bob@example.com>, Carol <carol@example.com>',
+        subject: 'Re: Plans',
+        message_id: 'draft-1@example.com',
+        body: 'saved draft body',
+        date: 2000,
+      }),
+    ])
+
+    expect(compose$.composer.get()).toBe('')
   })
 })
 

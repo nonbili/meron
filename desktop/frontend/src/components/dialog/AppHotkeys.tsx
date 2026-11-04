@@ -94,6 +94,7 @@ const MAIL_VIEW_ACTIONS = new Set<ShortcutId>([
   'thread.details',
   'thread.viewMode',
   'reply.focus',
+  'reply.all',
   'compose.replyFull',
   'search.thread',
 ])
@@ -501,6 +502,11 @@ export function AppHotkeys() {
           if (!threadSearchVisible()) return
           event.preventDefault()
           focusQuickReply()
+          break
+        case 'reply.all':
+          if (!threadSearchVisible()) return
+          event.preventDefault()
+          openReplyInFullEditor({ replyAll: true })
           break
       }
     }

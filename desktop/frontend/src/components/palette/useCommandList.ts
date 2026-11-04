@@ -13,6 +13,7 @@ import {
   Maximize2,
   Plus,
   Reply,
+  ReplyAll,
   RefreshCw,
   Search,
   SearchCheck,
@@ -49,6 +50,7 @@ import { markAllRead, toggleStarWithUndo, markUnreadWithUndo } from '../../state
 import { archiveThread, deleteThread } from '../../states/mailMoves'
 import { openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
+import { canReplyAllToThread } from '../../states/composeReply'
 import { RAIL_SHORTCUT_IDS, type ShortcutId } from '../../lib/shortcuts'
 import type { Command } from './paletteCommands'
 
@@ -70,6 +72,7 @@ export function useCommandList(): Command[] {
   const accounts = useValue(accounts$)
   const folders = useValue(mail$.folders)
   const activeTab = useValue(compose$.activeTab)
+  const replyAll = useValue(canReplyAllToThread)
 
   return useMemo<Command[]>(() => {
     const run = (fn: () => void) => () => {
@@ -233,6 +236,18 @@ export function useCommandList(): Command[] {
           shortcut: 'reply.focus',
           run: run(() => focusQuickReply()),
         },
+        ...(replyAll
+          ? [
+              {
+                id: 'reply.all',
+                label: 'Reply all',
+                icon: icon(ReplyAll),
+                keywords: 'respond everyone cc',
+                shortcut: 'reply.all' as const,
+                run: run(() => openReplyInFullEditor({ replyAll: true })),
+              },
+            ]
+          : []),
         {
           id: 'compose.replyFull',
           label: 'Reply in full editor',
@@ -343,5 +358,6 @@ export function useCommandList(): Command[] {
     accounts,
     folders,
     activeTab,
+    replyAll,
   ])
 }
