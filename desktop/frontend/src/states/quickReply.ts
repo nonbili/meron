@@ -44,6 +44,9 @@ export function clearQuickReplyDraftOwnership() {
 // navigation. Thread-tab activations set activeTab first, so this guard skips
 // their selectedThread retarget and leaves the Current tab's thread intact.
 ui$.selectedThread.onChange(({ value }) => {
+  // The box still holds the thread being left: leaving, not the user, is what
+  // blanks it from here (see quickReplyLeftWithReplyTick).
+  if (!isQuickReplyBlank()) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()
   if (compose$.activeTab.peek() === '') compose$.conversationThread.set(value)
 })
 
@@ -238,8 +241,9 @@ async function performQuickReplyDraftSave() {
   // in that window saw quickReplyDraftSaved still false and bailed. Drop the
   // draft we just wrote instead of letting it resurrect on the next thread open.
   const sameThread = ui$.selectedThread.peek() === activeT.thread_id
+  const leftWithReply = quickReplyLeftWithReplyTick > startTick
   // ...unless something else took this exact draft over in the meantime.
-  if (sameThread && isQuickReplyBlank() && !draftClaimedElsewhere(savedDraftId)) {
+  if (sameThread && !leftWithReply && isQuickReplyBlank() && !draftClaimedElsewhere(savedDraftId)) {
     if (compose$.quickReplyDraftId.peek() === savedDraftId) {
       clearQuickReplyDraftOwnership()
     }
@@ -352,6 +356,12 @@ export let quickReplyOwnershipTick = 0
 export function nextQuickReplyOwnershipTick(): number {
   return ++quickReplyOwnershipTick
 }
+
+// The tick at which the reader last left a thread with a reply still in the box
+// (Esc on a board saves it just before). A save that started earlier and finds
+// the box blank on landing, back on that thread, sees what leaving cleared, not
+// a reply the user deleted, and must keep the copy it wrote.
+let quickReplyLeftWithReplyTick = 0
 // Bumped whenever the box changes hands: the user typing or attaching, or the
 // conversation switching. A send captures it at the click and resets the box
 // only if it hasn't moved since — comparing content instead can't tell "they
@@ -473,6 +483,9 @@ export function cancelQuickReplyDraftSave() {
 }
 
 ui$.selectedThread.onChange(({ value }) => {
+  // The box still holds the thread being left: leaving, not the user, is what
+  // blanks it from here (see quickReplyLeftWithReplyTick).
+  if (!isQuickReplyBlank()) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()
   // A failed send keeps its consumed draft suppressed while the user remains
   // in that editor. Once they leave, make the server safety copy available for
   // a later reopen; in-flight sends remain guarded across navigation.

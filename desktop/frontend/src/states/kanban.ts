@@ -847,6 +847,48 @@ function openAdjacentKanbanCard(thread: Message, column: KanbanColumn, boardKey:
   ui$.mobilePane.set('conversation')
 }
 
+/** The thread of the card selected from the keyboard, while it shows as
+ * selected (no conversation or tab in the pane): what a bare action applies to. */
+export function kanbanKeyboardThreadId(): string {
+  if (kanban$.paneThreadId.peek() || compose$.activeTab.peek()) return ''
+  return kanban$.keyboardCard.peek()?.threadId ?? ''
+}
+
+// The cards a column shows: its threads under the column's filters (or the
+// board's), with what was read this session kept, as KanbanBoardColumn renders
+// them. `keepId` stays in whatever the filters say.
+function visibleKanbanColumnThreads(column: KanbanColumn, keepId?: string): Message[] {
+  const sourceKey = kanbanColumnKey(column)
+  const filterMode = kanban$.filters[sourceKey].get() ?? kanban$.globalFilter.get()
+  const attachmentsOnly = kanban$.attachmentsOnly[sourceKey].get() ?? kanban$.globalAttachmentsOnly.get()
+  const threads = kanban$.threads[sourceKey].get() ?? []
+  return filterThreads(threads, filterMode, keepId, mail$.readThreads.get(), attachmentsOnly)
+}
+
+/** Where the keyboard selection goes when its card's thread is removed from
+ * the board (archived, deleted): the next card in its column, or the previous
+ * if it was last, as the open conversation does. Null when none is left. */
+export function kanbanKeyboardCardAfterRemoving(card: KanbanCardRef): KanbanCardRef | null {
+  const boardId = kanban$.activeBoardId.peek()
+  const column = getKanbanColumns(boardId).find((item) => kanbanBoardColumnKey(boardId, item) === card.columnKey)
+  if (!column) return null
+  // The leaving card is kept in, to find its place among the cards on screen.
+  const threads = visibleKanbanColumnThreads(column, card.threadId)
+  const index = threads.findIndex((thread) =>
+    card.itemId ? thread.id === card.itemId : thread.thread_id === card.threadId,
+  )
+  if (index === -1) return null
+  // A feed's items share its thread, and all of them go with it.
+  const others = (list: Message[]) => list.find((thread) => thread.thread_id !== card.threadId)
+  const neighbour = others(threads.slice(index + 1)) ?? others(threads.slice(0, index).reverse())
+  if (!neighbour) return null
+  return {
+    threadId: neighbour.thread_id,
+    columnKey: card.columnKey,
+    ...(isStarredFeedItem(neighbour, column) ? { itemId: neighbour.id } : {}),
+  }
+}
+
 /** A card on the board: its thread, and the column (board column key) it sits
  * in. A starred feed item also carries its own id, as its feed's items share
  * the thread. */
@@ -884,10 +926,6 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
   const boardId = kanban$.activeBoardId.get()
   const columns = getKanbanColumns(boardId)
   const allThreads = kanban$.threads.get()
-  const filters = kanban$.filters.get()
-  const globalFilter = kanban$.globalFilter.get()
-  const columnAttachmentsOnly = kanban$.attachmentsOnly.get()
-  const globalAttachmentsOnly = kanban$.globalAttachmentsOnly.get()
   const preferredKey = origin?.columnKey || kanban$.paneColumnKey.get()
   const orderedColumns = preferredKey
     ? [
@@ -906,9 +944,7 @@ export function selectAdjacentKanbanThread(delta: number, from?: KanbanCardRef) 
     const boardKey = kanbanBoardColumnKey(boardId, column)
     if (!paneOpen && minimized[boardKey]) continue
     const rawThreads = allThreads[sourceKey] ?? []
-    const filterMode = filters[sourceKey] ?? globalFilter
-    const attachmentsOnly = columnAttachmentsOnly[sourceKey] ?? globalAttachmentsOnly
-    const list = filterThreads(rawThreads, filterMode, selected, mail$.readThreads.get(), attachmentsOnly)
+    const list = visibleKanbanColumnThreads(column, selected)
     if (!fallback && list.length > 0) {
       fallback = { key: boardKey, thread: delta >= 0 ? list[0] : list[list.length - 1], column }
     }

@@ -18,6 +18,7 @@ import {
   closeKanbanBoard,
   openMailAccount,
   kanbanPaneThreadId,
+  kanbanKeyboardThreadId,
   type KanbanCardRef,
 } from '../../states/kanban'
 import { closeConversationToCard } from '../kanban/closeConversationToCard'
@@ -98,9 +99,10 @@ const MAIL_VIEW_ACTIONS = new Set<ShortcutId>([
 
 // The thread a bare action applies to. On a board it's the one the pane shows:
 // an RSS card opens in a reader tab without retargeting ui$.selectedThread,
-// which would otherwise leave a stale chat-list selection as the target.
+// which would otherwise leave a stale chat-list selection as the target. With
+// nothing in the pane, it's the card selected from the keyboard.
 function activeThreadId(): string {
-  if (kanban$.activeBoardId.peek()) return kanbanPaneThreadId() || ui$.selectedThread.peek()
+  if (kanban$.activeBoardId.peek()) return kanbanPaneThreadId() || kanbanKeyboardThreadId() || ui$.selectedThread.peek()
   return ui$.selectedThread.peek()
 }
 

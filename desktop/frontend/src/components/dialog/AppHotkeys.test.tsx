@@ -244,6 +244,26 @@ describe('AppHotkeys', () => {
     }
   })
 
+  it('applies action shortcuts to the card selected from the keyboard', () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.paneThreadId.set('')
+    ui$.selectedThread.set('')
+    kanban$.keyboardCard.set({ threadId: 'acct#INBOX#7', columnKey: 'board-1:col-b' })
+    const invoked: Array<{ command: string; payload: any }> = []
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      invoked.push({ command, payload })
+      return {}
+    }
+    try {
+      render(<AppHotkeys />)
+      fireEvent.keyDown(document.body, { key: 'e' })
+      expect(invoked.find((call) => call.command === 'mail.archive')?.payload).toEqual({ thread_id: 'acct#INBOX#7' })
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.keyboardCard.set(null)
+    }
+  })
+
   it("hands focus to the closed conversation's card when Esc comes from a message frame", () => {
     kanban$.activeBoardId.set('board-1')
     kanban$.paneThreadId.set('acct#INBOX#7')

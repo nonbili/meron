@@ -2,7 +2,8 @@ import { afterEach, expect, it } from 'bun:test'
 import { accounts$ } from './accounts'
 import { mail$, loadThreads, releaseRemovedThread } from './mail'
 import { archiveThread, bulkArchiveSelected, deleteThread, moveThreadToFolder } from './mailMoves'
-import { kanban$ } from './kanban'
+import { kanban$, kanbanBoardColumnKey, kanbanColumnKey } from './kanban'
+import { settings$ } from './settings'
 import { ui$, type BulkSelectionItem } from './ui'
 import { loadKanbanColumn } from '../lib/kanbanData'
 import type { Account, Message } from '../types'
@@ -43,6 +44,7 @@ function setup(invoke: (command: string, payload: any) => Promise<any>) {
   ;(window as any).go = { main: { App: { Invoke: invoke } } }
 }
 afterEach(() => {
+  kanban$.keyboardCard.set(null)
   accounts$.set(previousAccounts)
   releaseRemovedThread(id)
   kanban$.activeBoardId.set('')
@@ -289,4 +291,63 @@ it('restores a failed archive to its kanban date position without restoring late
   reject(new Error('Rejected'))
   await failed
   expect(kanban$.threads['review\nINBOX'].get().map((x) => x.date)).toEqual([30, 10])
+})
+
+it('moves the keyboard selection off a card as it is archived, and back if that fails', async () => {
+  let reject!: (reason: Error) => void
+  const archived: string[] = []
+  setup(async (command, payload) => {
+    if (command !== 'mail.archive') return {}
+    archived.push(payload.thread_id)
+    return new Promise((_resolve, fail) => {
+      reject = fail
+    })
+  })
+  const column = { accountId: 'review', folderId: 'INBOX' }
+  const previousBoards = settings$.kanbanBoards.get()
+  settings$.kanbanBoards.set([{ id: 'review-board', name: 'Board', columns: [column] }] as any)
+  try {
+    kanban$.activeBoardId.set('review-board')
+    const nextId = 'review#INBOX#t.next'
+    kanban$.threads[kanbanColumnKey(column)].set([row(), row(nextId, 20)])
+    const columnKey = kanbanBoardColumnKey('review-board', column)
+    kanban$.keyboardCard.set({ threadId: id, columnKey })
+
+    const archive = archiveThread(id)
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: nextId, columnKey })
+
+    reject(new Error('Rejected'))
+    await archive
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: id, columnKey })
+  } finally {
+    settings$.kanbanBoards.set(previousBoards)
+  }
+})
+
+it('moves the keyboard selection past cards the column filters out', async () => {
+  setup(async () => ({ moved: 1 }))
+  const column = { accountId: 'review', folderId: 'INBOX' }
+  const previousBoards = settings$.kanbanBoards.get()
+  settings$.kanbanBoards.set([{ id: 'review-board', name: 'Board', columns: [column] }] as any)
+  try {
+    kanban$.activeBoardId.set('review-board')
+    const sourceKey = kanbanColumnKey(column)
+    kanban$.filters[sourceKey].set('unread')
+    const hiddenId = 'review#INBOX#t.read'
+    const shownId = 'review#INBOX#t.unread'
+    kanban$.threads[sourceKey].set([
+      { ...row(), unread: true },
+      row(hiddenId, 20),
+      { ...row(shownId, 10), unread: true },
+    ])
+    const columnKey = kanbanBoardColumnKey('review-board', column)
+    kanban$.keyboardCard.set({ threadId: id, columnKey })
+
+    await archiveThread(id)
+
+    expect(kanban$.keyboardCard.get()).toEqual({ threadId: shownId, columnKey })
+  } finally {
+    kanban$.filters.set({})
+    settings$.kanbanBoards.set(previousBoards)
+  }
 })

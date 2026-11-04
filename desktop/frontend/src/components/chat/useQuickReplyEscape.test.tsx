@@ -184,6 +184,38 @@ describe('useQuickReply Escape in the kanban pane', () => {
     expect(JSON.stringify(saves.at(-1)?.payload)).toContain('First words, then more')
   })
 
+  it('keeps the saved reply when the card reopens before the save lands', async () => {
+    let landSave = () => {}
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.saveDraft') await new Promise<void>((resolve) => (landSave = resolve))
+      if (command === 'mail.allocateIdentity') return { message_id: 'draft-allocated@example.com' }
+      return {}
+    }
+    const { getByTestId } = render(<ReplyBox />)
+    await act(async () => {
+      await Promise.resolve()
+      compose$.composer.set('Keep me')
+    })
+    await act(async () => {
+      fireEvent.keyDown(getByTestId('reply'), { key: 'Escape' })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(kanban$.paneThreadId.get()).toBe('')
+
+    // Enter on the card Esc left the keyboard on, while the save is on the wire.
+    await act(async () => {
+      ui$.selectedThread.set('t-1')
+      kanban$.paneThreadId.set('t-1')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      landSave()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+
+    expect(JSON.stringify(calls.find((call) => call.command === 'mail.saveDraft')?.payload)).toContain('Keep me')
+    expect(calls.some((call) => call.command === 'mail.discardDraft' || call.command === 'mail.delete')).toBe(false)
+  })
+
   it("hands focus to the closed conversation's card", async () => {
     const view = render(
       <>
