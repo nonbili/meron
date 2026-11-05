@@ -409,10 +409,9 @@ export function useAppEffects() {
       (detail: { account?: string; folder?: string; folderName?: string; count?: number }) => {
         // A successful fetch proves connectivity is back for this account.
         clearSyncErrorFor(detail?.account ?? null)
-        // New mail arrived somewhere, so the tray should reflect unread immediately —
-        // independent of which account/folder is selected. Clearing back to "read" is
-        // handled by the reactive tray effect once the folder cache refreshes.
-        setTrayUnread(true)
+        // Let the refreshed INBOX counts drive the tray effect above. An arrival
+        // may be outside INBOX or already read; forcing the tray on here can
+        // leave it stuck when the refresh returns unchanged folder counts.
         // Keep the side navigation's per-account (and unified) unread badges honest for
         // *every* account, not just the selected one. get_folders recomputes unread
         // live, so this cache-only refresh picks up the new mail even when the
