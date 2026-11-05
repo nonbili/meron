@@ -1,0 +1,8 @@
+- Add contacts side panel with pinned contacts, Markdown notes, and message history
+- Reorder message tabs by dragging, with equal widths and session restore after restart
+- Support delayed rules after reading and by message age
+- Accept spreadsheet and space-separated recipient lists in composer
+- Reply all with shortcut A, and expand recipients from the quick reply
+- Add Russian localization
+- Close open image previews with Esc without closing the conversation
+- Display inline SVG images in mail

@@ -63,6 +63,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.4.11" date="2026-11-05">
+      <description>
+        <ul>
+          <li>Add contacts side panel with pinned contacts, Markdown notes, and message history</li>
+          <li>Reorder message tabs by dragging, with equal widths and session restore after restart</li>
+          <li>Support delayed rules after reading and by message age</li>
+          <li>Accept spreadsheet and space-separated recipient lists in composer</li>
+          <li>Reply all with shortcut A, and expand recipients from the quick reply</li>
+          <li>Add Russian localization</li>
+          <li>Close open image previews with Esc without closing the conversation</li>
+          <li>Display inline SVG images in mail</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.10" date="2026-11-02">
       <description>
         <ul>
