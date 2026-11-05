@@ -1,0 +1,33 @@
+name: audit
+
+# RustSec advisories in meron-core's dependencies. Exceptions, each with its
+# reason, are in meron-core/.cargo/audit.toml. Runs where dependencies change,
+# and weekly for advisories published since, so a new advisory doesn't turn
+# unrelated pull requests red.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - meron-core/Cargo.toml
+      - meron-core/Cargo.lock
+      - meron-core/.cargo/audit.toml
+      - .github/workflows/audit.yml
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit@0.22.2
+      - run: cargo audit
+        working-directory: meron-core
