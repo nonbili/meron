@@ -7,13 +7,24 @@ const handlers: Array<() => void> = []
 
 function onWindowKeyDown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
-  const top = handlers[handlers.length - 1]
-  if (!top) return
+  if (!closeTopEscapeLayer()) return
   // Capture-phase, so the app-wide Escape shortcut never sees the key while a
   // dialog or menu is open.
   event.preventDefault()
   event.stopPropagation()
+}
+
+/**
+ * Closes the topmost Escape layer, as a real Esc would. For an Esc that never
+ * reached the window: one pressed inside a message frame arrives only as the
+ * frame's forwarded chord, and must close a preview open over the
+ * conversation before anything behind it. True when a layer was closed.
+ */
+export function closeTopEscapeLayer(): boolean {
+  const top = handlers[handlers.length - 1]
+  if (!top) return false
   top()
+  return true
 }
 
 /**
