@@ -94,10 +94,10 @@ fn message_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageH
     })
 }
 
-/// [`message_header_from_row`] for the cached search reads, which select the
-/// Message-ID as a tenth column. A search page spans folders, so the grouping
-/// that turns it into cards needs the id to see the two copies of a self-sent
-/// message as one message rather than two.
+/// [`message_header_from_row`] for cached list reads that select the
+/// Message-ID as a tenth column. Card grouping needs the id to see two copies
+/// of one message — a self-sent message in Inbox and Sent, or a message
+/// delivered twice to one folder — as one message rather than two.
 fn search_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageHeader> {
     let mut header = message_header_from_row(row)?;
     header.message_id = row.get(9)?;

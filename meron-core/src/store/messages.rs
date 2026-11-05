@@ -266,7 +266,8 @@ pub fn get_recent_page(
     // (two messages can share a second), so it gives a stable, gap-free walk.
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
+                json_extract(json, '$.to'),
+                COALESCE(json_extract(json, '$.message_id'), '') FROM messages
          WHERE account = ?1 AND folder = ?2
            AND (?6 = 0 OR seen = 0)
            AND (?7 = 0 OR files IS NOT NULL
@@ -307,6 +308,9 @@ pub fn get_recent_page(
                     .filter(|key| !key.is_empty())
                     .unwrap_or_else(|| format!("uid:{}", uid)),
                 to: parse_recipients_json(row.get::<_, Option<String>>(8)?),
+                // Lets card grouping fold two deliveries of one message in this
+                // folder, as the cached tally and the reader do.
+                message_id: row.get(9)?,
                 folder: String::new(),
                 ..Default::default()
             })
@@ -523,11 +527,12 @@ pub fn get_starred(
 ) -> Result<Vec<MessageHeader>> {
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
+                json_extract(json, '$.to'),
+                COALESCE(json_extract(json, '$.message_id'), '') FROM messages
          WHERE account = ?1 AND folder = ?2 AND starred <> 0 AND uid <> 0
          ORDER BY date DESC, uid DESC LIMIT ?3",
     )?;
-    let rows = stmt.query_map(params![account, folder, limit], message_header_from_row)?;
+    let rows = stmt.query_map(params![account, folder, limit], search_header_from_row)?;
     let mut out = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     for header in &mut out {
         header.folder = folder.to_string();

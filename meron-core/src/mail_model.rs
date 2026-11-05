@@ -715,6 +715,48 @@ mod tests {
         assert_eq!(both.len(), 2, "{both:?}");
     }
 
+    // A sender can deliver one message twice to the same folder (GitHub sends a
+    // notification once per reason). The reader shows it once, so the card read
+    // off the folder's page must count it once too, not floor the cached tally
+    // with an unfolded page.
+    #[test]
+    fn a_message_delivered_twice_to_one_folder_counts_once_on_its_card() {
+        let conn = Connection::open_in_memory().unwrap();
+        store::run_migrations(&conn).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        let delivery = |uid: u32, date: i64| MessageHeader {
+            uid,
+            subject: "Issue".to_string(),
+            date,
+            thread_key: "gmthrid:1".to_string(),
+            message_id: "issue@example.com".to_string(),
+            ..Default::default()
+        };
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[delivery(1, 100), delivery(2, 105)],
+        )
+        .unwrap();
+
+        let (page, _) = store::get_recent_page(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            50,
+            None,
+            store::RecentFilter::default(),
+        )
+        .unwrap();
+        assert_eq!(page.len(), 2);
+        let cards =
+            thread_cards_json(&conn, "me@example.com", "INBOX", page, &HashSet::new()).unwrap();
+
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0]["message_count"], 1);
+    }
+
     // A search page is a slice of the merged mailbox+Sent results. When the
     // thread's copy in the searched mailbox sits below the page — an old hit,
     // pushed down by the reply that was just sent — the page alone would leave
