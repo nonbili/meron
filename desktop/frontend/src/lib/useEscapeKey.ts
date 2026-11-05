@@ -7,13 +7,11 @@ const handlers: Array<() => void> = []
 
 function onWindowKeyDown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
-  const top = handlers[handlers.length - 1]
-  if (!top) return
+  if (!closeTopEscapeLayer()) return
   // Capture-phase, so the app-wide Escape shortcut never sees the key while a
   // dialog or menu is open.
   event.preventDefault()
   event.stopPropagation()
-  top()
 }
 
 /**
