@@ -90,6 +90,8 @@ private fun MeronMobileState.ruleSummary(
     rule: Rule,
 ): String =
     listOfNotNull(
+        (tr("rules.trigger.${rule.trigger}") + " · " + tr("rules.delaySummary", mapOf("minutes" to (rule.delaySeconds / 60.0).toString().removeSuffix(".0"))))
+            .takeIf { rule.trigger != "arrival" || rule.delaySeconds != 0L },
         tr("rules.summaryTags", mapOf("tags" to rule.tags.joinToString(", "))).takeIf { rule.tags.isNotEmpty() },
         tr("notification.actionMarkRead").takeIf { rule.markRead },
         tr("chat.star").takeIf { rule.star },
@@ -340,7 +342,7 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
         modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(tr("rules.hint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("rules.timingHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (rules?.isEmpty() == true && !formOpen) {
             Text(tr("rules.empty"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -512,6 +514,33 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
             }) { Text(tr("rules.add")) }
         } else {
             Text(tr("rules.when"), style = MaterialTheme.typography.titleSmall)
+            RuleTargetRow(
+                title = tr("rules.trigger"),
+                value = tr("rules.trigger.${draft.trigger}"),
+                accounts = emptyList(),
+                options =
+                    listOf("arrival", "read", "age").map { trigger ->
+                        tr("rules.trigger.$trigger") to { change(draft.copy(trigger = trigger)) }
+                    },
+                onPick = { _, _ -> },
+            )
+            var delayText by remember(draft.id, draft.delaySeconds) {
+                mutableStateOf((draft.delaySeconds / 60.0).toString().removeSuffix(".0"))
+            }
+            OutlinedTextField(
+                value = delayText,
+                onValueChange = { value ->
+                    delayText = value
+                    val minutes = value.toDoubleOrNull()
+                    if (minutes != null && minutes.isFinite() && minutes in 0.0..5256000.0) {
+                        change(draft.copy(delaySeconds = kotlin.math.round(minutes * 60).toLong()))
+                    }
+                },
+                isError = delayText.toDoubleOrNull()?.let { !it.isFinite() || it !in 0.0..5256000.0 } ?: true,
+                singleLine = true,
+                label = { Text(tr("rules.delayMinutes")) },
+                modifier = Modifier.fillMaxWidth(),
+            )
             if (mailAccounts.size > 1 || scoped) {
                 SettingsToggleRow(
                     icon = Icons.Filled.Person,
@@ -610,7 +639,9 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = ::reset) { Text(tr("buttons.cancel")) }
                 TextButton(
-                    enabled = !saving && rules != null && !(scoped && chosenAccounts.isEmpty()),
+                    enabled =
+                        !saving && rules != null && !(scoped && chosenAccounts.isEmpty()) &&
+                            (delayText.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..5256000.0 } == true),
                     onClick = {
                         // As it stands now: Cancel stays available during the save.
                         val submitted = draft

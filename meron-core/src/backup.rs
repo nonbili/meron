@@ -659,7 +659,13 @@ pub fn apply(
     }
 
     for (key, value) in &data.settings {
-        store::setting_set(&tx, key, value)?;
+        if key == "rules" {
+            // Restored event rules start at import, just as rules created in
+            // settings do; they must not act on this device's older events.
+            store::set_rules(&tx, serde_json::from_value(value.clone())?)?;
+        } else {
+            store::setting_set(&tx, key, value)?;
+        }
         summary.settings += 1;
     }
 

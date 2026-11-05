@@ -18,6 +18,7 @@ import {
   stopRule,
   type Rule,
   type RuleMove,
+  type RuleTrigger,
   type RuleStatus,
 } from '../../states/mailRules'
 import { confirmAction, showToast } from '../../states/ui'
@@ -36,6 +37,8 @@ import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
 
 type Draft = {
   fields: SearchFields
+  trigger: RuleTrigger
+  delay_seconds: number
   tags: string
   mark_read: boolean
   star: boolean
@@ -53,6 +56,8 @@ const ACTIVITY_SHOWN = 20
 
 const EMPTY_DRAFT: Draft = {
   fields: EMPTY_FIELDS,
+  trigger: 'arrival',
+  delay_seconds: 0,
   tags: '',
   mark_read: false,
   star: false,
@@ -297,7 +302,13 @@ export function RulesPanel() {
     const { query: _, id: __, ...actions } = rule
     const fields = await ruleFields(rule.query)
     if (request !== formRequest.current) return
-    setDraft({ ...actions, fields, tags: rule.tags.join(' ') })
+    setDraft({
+      ...actions,
+      trigger: rule.trigger ?? 'arrival',
+      delay_seconds: rule.delay_seconds ?? 0,
+      fields,
+      tags: rule.tags.join(' '),
+    })
     setEditing(rule.id)
     setAdding(false)
     setScoped(rule.accounts.length > 0)
@@ -350,6 +361,9 @@ export function RulesPanel() {
 
   const summary = (rule: Rule) =>
     [
+      (rule.trigger && rule.trigger !== 'arrival') || rule.delay_seconds
+        ? `${t(`rules.trigger.${rule.trigger ?? 'arrival'}`)} · ${t('rules.delaySummary', { minutes: (rule.delay_seconds ?? 0) / 60 })}`
+        : '',
       rule.tags.length > 0 && t('rules.summaryTags', { tags: rule.tags.join(', ') }),
       rule.mark_read && t('notification.actionMarkRead'),
       rule.star && t('chat.star'),
@@ -363,7 +377,7 @@ export function RulesPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[0.75rem] text-secondary">{t('rules.hint')}</p>
+      <p className="text-[0.75rem] text-secondary">{t('rules.timingHint')}</p>
 
       {rules?.length === 0 && !formOpen && <p className="text-xs text-secondary">{t('rules.empty')}</p>}
       {rules && rules.length > 0 && (
@@ -484,6 +498,32 @@ export function RulesPanel() {
         <>
           {/* The address suggestions open below their field, past the card when it is the last. */}
           <SettingsGroup title={t('rules.when')} overflowVisible>
+            <Row label={t('rules.trigger')}>
+              <select
+                aria-label={t('rules.trigger')}
+                className={inputClass}
+                value={draft.trigger}
+                onChange={(event) => change({ trigger: event.target.value as RuleTrigger })}
+              >
+                {(['arrival', 'read', 'age'] as const).map((trigger) => (
+                  <option key={trigger} value={trigger}>
+                    {t(`rules.trigger.${trigger}`)}
+                  </option>
+                ))}
+              </select>
+            </Row>
+            <Row label={t('rules.delayMinutes')}>
+              <input
+                aria-label={t('rules.delayMinutes')}
+                type="number"
+                min={0}
+                max={5256000}
+                step="any"
+                className={inputClass}
+                value={draft.delay_seconds / 60}
+                onChange={(event) => change({ delay_seconds: Math.round(Number(event.target.value) * 60) })}
+              />
+            </Row>
             {(mailAccounts.length > 1 || scoped) && (
               <>
                 <SegmentedRow
@@ -627,7 +667,14 @@ export function RulesPanel() {
             </Button>
             <Button
               leftIcon={editing ? undefined : Plus}
-              disabled={saving || !rules || (scoped && chosenAccounts.length === 0)}
+              disabled={
+                saving ||
+                !rules ||
+                (scoped && chosenAccounts.length === 0) ||
+                !Number.isFinite(draft.delay_seconds) ||
+                draft.delay_seconds < 0 ||
+                draft.delay_seconds > 315360000
+              }
               onClick={() => void submit()}
             >
               {editing ? t('buttons.save') : t('rules.add')}

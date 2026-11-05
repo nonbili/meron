@@ -637,7 +637,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 24;
+pub(super) const SCHEMA_VERSION: i64 = 28;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -743,6 +743,18 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 24 {
         migrate_v24(&tx)?;
+    }
+    if version < 25 {
+        migrate_v25(&tx)?;
+    }
+    if version < 26 {
+        migrate_v26(&tx)?;
+    }
+    if version < 27 {
+        migrate_v27(&tx)?;
+    }
+    if version < 28 {
+        migrate_v28(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1514,9 +1526,15 @@ mod tests {
     fn contact_v24_backfills_existing_cache_and_is_idempotent() {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
-        // Restore the v23 directory shape without changing the message cache.
+        // Restore the v23 shape without changing the message cache.
         conn.execute_batch(
-            "DROP TRIGGER contacts_ai; DROP TRIGGER contacts_ad; DROP TRIGGER contacts_au;
+            "DROP TRIGGER rule_tag_evaluations_ai; DROP TRIGGER rule_tag_evaluations_au; DROP TRIGGER rule_tag_evaluations_ad;
+             DROP TRIGGER rule_evaluations_au;
+             DROP TRIGGER rule_arrival_au;
+             DROP TABLE rule_activation; DROP TABLE rule_evaluations; DROP TABLE rule_event_sequence;
+             DROP TRIGGER rule_events_ai; DROP TRIGGER rule_events_au; DROP TRIGGER rule_events_ad;
+             DROP TABLE rule_events; DROP TABLE rule_firings;
+             DROP TRIGGER contacts_ai; DROP TRIGGER contacts_ad; DROP TRIGGER contacts_au;
              DROP TABLE contact_participants; DROP TABLE contacts;
              CREATE TABLE contacts(account TEXT, addr_key TEXT, name TEXT, addr TEXT,
                count INTEGER, last_date INTEGER);
@@ -1763,6 +1781,128 @@ fn migrate_v24(conn: &Connection) -> Result<()> {
            {add}
          END;
          PRAGMA user_version = 24;"
+    ))?;
+    Ok(())
+}
+
+/// Event clocks are independent of envelope JSON, which is replaced on sync.
+/// Read transitions include bulk updates and changes observed from other clients.
+fn migrate_v25(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE rule_events (
+            message INTEGER PRIMARY KEY,
+            arrived_at INTEGER,
+            read_at INTEGER
+         );
+         INSERT INTO rule_events (message) SELECT id FROM messages WHERE uid <> 0;
+         CREATE TABLE rule_firings (
+            message INTEGER NOT NULL,
+            rule_id TEXT NOT NULL,
+            PRIMARY KEY (message, rule_id)
+         ) WITHOUT ROWID;
+         CREATE TRIGGER rule_events_ai AFTER INSERT ON messages WHEN new.uid <> 0 BEGIN
+            INSERT INTO rule_events (message) VALUES (new.id);
+         END;
+         CREATE TRIGGER rule_events_au AFTER UPDATE OF seen ON messages
+         WHEN new.uid <> 0 AND old.seen <> new.seen BEGIN
+            UPDATE rule_events SET read_at = CASE WHEN new.seen <> 0
+                THEN unixepoch() ELSE NULL END WHERE message = new.id;
+         END;
+         CREATE TRIGGER rule_events_ad AFTER DELETE ON messages BEGIN
+            DELETE FROM rule_events WHERE message = old.id;
+            DELETE FROM rule_firings WHERE message = old.id;
+         END;
+         PRAGMA user_version = 25;",
+    )?;
+    Ok(())
+}
+
+/// Sequence numbers distinguish events before and after a rule is saved even
+/// within the same second. Existing v25 clocks remain eligible for saved rules.
+fn migrate_v26(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE rule_event_sequence (id INTEGER PRIMARY KEY CHECK (id = 1), value INTEGER NOT NULL);
+         INSERT INTO rule_event_sequence VALUES (1, 1);
+         ALTER TABLE rule_events ADD COLUMN arrived_sequence INTEGER NOT NULL DEFAULT 1;
+         ALTER TABLE rule_events ADD COLUMN read_sequence INTEGER NOT NULL DEFAULT 1;
+         CREATE TABLE rule_activation (rule_id TEXT PRIMARY KEY, event_sequence INTEGER NOT NULL) WITHOUT ROWID;
+         CREATE TABLE rule_evaluations (
+            message INTEGER NOT NULL,
+            rule_id TEXT NOT NULL,
+            event_sequence INTEGER NOT NULL,
+            query TEXT NOT NULL,
+            PRIMARY KEY (message, rule_id)
+         ) WITHOUT ROWID;
+         CREATE TRIGGER rule_arrival_au AFTER UPDATE OF arrived_at ON rule_events
+         WHEN old.arrived_at IS NULL AND new.arrived_at IS NOT NULL BEGIN
+            UPDATE rule_event_sequence SET value = value + 1;
+            UPDATE rule_events SET arrived_sequence = (SELECT value FROM rule_event_sequence) WHERE message = new.message;
+         END;
+         DROP TRIGGER rule_events_au;
+         CREATE TRIGGER rule_events_au AFTER UPDATE OF seen ON messages
+         WHEN new.uid <> 0 AND old.seen <> new.seen BEGIN
+            UPDATE rule_event_sequence SET value = value + 1 WHERE new.seen <> 0;
+            UPDATE rule_events SET
+                read_at = CASE WHEN new.seen <> 0 THEN unixepoch() ELSE NULL END,
+                read_sequence = (SELECT value FROM rule_event_sequence)
+            WHERE message = new.id;
+         END;
+         DROP TRIGGER rule_events_ad;
+         CREATE TRIGGER rule_events_ad AFTER DELETE ON messages BEGIN
+            DELETE FROM rule_events WHERE message = old.id;
+            DELETE FROM rule_firings WHERE message = old.id;
+            DELETE FROM rule_evaluations WHERE message = old.id;
+         END;
+         PRAGMA user_version = 26;",
+    )?;
+    Ok(())
+}
+
+/// A later envelope or metadata fill can correct headers used by a rule.
+/// Reuse negative checks only while those values remain unchanged.
+fn migrate_v27(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TRIGGER rule_evaluations_au AFTER UPDATE OF subject, from_name, from_addr, date, json, files ON messages
+         WHEN new.subject IS NOT old.subject OR new.from_name IS NOT old.from_name
+           OR new.from_addr IS NOT old.from_addr OR new.date IS NOT old.date
+           OR new.json IS NOT old.json OR new.files IS NOT old.files BEGIN
+            DELETE FROM rule_evaluations WHERE message = new.id;
+         END;
+         PRAGMA user_version = 27;",
+    )?;
+    Ok(())
+}
+
+/// Negative checks remain reusable for mutable conditions until their inputs
+/// change. Tag keys cover all mailbox copies carrying the same Message-ID.
+fn migrate_v28(conn: &Connection) -> Result<()> {
+    let key = super::tags::TAG_KEY_SQL;
+    conn.execute_batch(&format!(
+        "DROP TRIGGER rule_evaluations_au;
+         CREATE TRIGGER rule_evaluations_au AFTER UPDATE OF subject, from_name, from_addr, date, json, files, recipients, seen, starred ON messages
+         WHEN new.subject IS NOT old.subject OR new.from_name IS NOT old.from_name
+           OR new.from_addr IS NOT old.from_addr OR new.date IS NOT old.date
+           OR new.json IS NOT old.json OR new.files IS NOT old.files
+           OR new.recipients IS NOT old.recipients OR new.seen IS NOT old.seen
+           OR new.starred IS NOT old.starred BEGIN
+            DELETE FROM rule_evaluations WHERE message = new.id;
+         END;
+         CREATE TRIGGER rule_tag_evaluations_ai AFTER INSERT ON message_tags BEGIN
+            DELETE FROM rule_evaluations WHERE message IN
+                (SELECT id FROM messages WHERE uid <> 0 AND account = new.account AND {key} = new.tag_key);
+         END;
+         CREATE TRIGGER rule_tag_evaluations_ad AFTER DELETE ON message_tags BEGIN
+            DELETE FROM rule_evaluations WHERE message IN
+                (SELECT id FROM messages WHERE uid <> 0 AND account = old.account AND {key} = old.tag_key);
+         END;
+         CREATE TRIGGER rule_tag_evaluations_au AFTER UPDATE ON message_tags
+         WHEN new.state IS NOT old.state OR new.tag IS NOT old.tag
+           OR new.account IS NOT old.account OR new.tag_key IS NOT old.tag_key BEGIN
+            DELETE FROM rule_evaluations WHERE message IN
+                (SELECT id FROM messages WHERE uid <> 0 AND account = old.account AND {key} = old.tag_key
+                 UNION SELECT id FROM messages WHERE uid <> 0 AND account = new.account AND {key} = new.tag_key);
+         END;
+         PRAGMA user_version = 28;"
     ))?;
     Ok(())
 }

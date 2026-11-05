@@ -135,12 +135,12 @@ it('takes all new mail when no condition is filled in, warning before Trash', as
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
   fireEvent.click(view.getByRole('button', { name: 'Move to' }))
   fireEvent.click(view.getByText('Trash'))
-  expect(view.getByText(/All new mail goes to Trash/)).toBeTruthy()
+  expect(view.getByText(/All matching mail goes to Trash/)).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
   expect(saved[0][0].query).toBe('')
-  await waitFor(() => expect(view.getByText('All new mail')).toBeTruthy())
+  await waitFor(() => expect(view.getByText('All mail')).toBeTruthy())
 })
 
 it('keeps the form and says why when the core refuses', async () => {
@@ -381,4 +381,22 @@ it('says when a rule uses a removed account, and keeps it off', async () => {
 
   fireEvent.click(view.getByRole('switch', { name: 'Rule on' }))
   expect(saved).toEqual([])
+})
+
+it('saves and edits a five-minute delay after reading', async () => {
+  const saved = stubCore([bills])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Edit rule' }))
+  await waitFor(() => expect(view.getByLabelText('Run after')).toBeTruthy())
+  fireEvent.change(view.getByLabelText('Run after'), { target: { value: 'read' } })
+  fireEvent.change(view.getByLabelText('Delay (minutes)'), { target: { value: '5' } })
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0].trigger).toBe('read')
+  expect(saved[0][0].delay_seconds).toBe(300)
+  await waitFor(() => expect(view.getByText(/Mail is read · Delay: 5 min/)).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Edit rule' }))
+  await waitFor(() => expect((view.getByLabelText('Delay (minutes)') as HTMLInputElement).value).toBe('5'))
+  expect((view.getByLabelText('Run after') as HTMLSelectElement).value).toBe('read')
 })

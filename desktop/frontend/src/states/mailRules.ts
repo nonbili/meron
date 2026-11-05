@@ -1,11 +1,15 @@
 import { EMPTY_FIELDS, type SearchFields } from '../components/search/searchFields'
 import { invoke } from '../lib/bridge'
 
+export type RuleTrigger = 'arrival' | 'read' | 'age'
+
 export type RuleMove = '' | 'archive' | 'trash' | 'folder'
 
 export type Rule = {
   id: string
   query: string
+  trigger?: RuleTrigger
+  delay_seconds?: number
   tags: string[]
   mark_read: boolean
   star: boolean

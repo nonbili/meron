@@ -170,7 +170,7 @@ fn one_turn(mut actions: Vec<RuleAction>) -> Vec<RuleAction> {
 /// Move batches earliest run first, as the first move of a message is the one
 /// that counts, and what it is mustn't depend on what else a run wants done.
 fn in_queue_order(mut batches: Vec<Vec<RuleAction>>) -> Vec<Vec<RuleAction>> {
-    batches.sort_by_key(|batch| batch.first().map_or(0, |action| action.run));
+    batches.sort_by_key(|batch| batch.first().map_or(0, |action| action.run.unsigned_abs()));
     batches
 }
 
@@ -669,6 +669,26 @@ mod tests {
         assert_eq!(
             order.iter().map(|batch| batch[0].run).collect::<Vec<_>>(),
             [1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn scheduled_and_manual_moves_keep_their_queue_order() {
+        let batches = [0, -20, 10, -5]
+            .into_iter()
+            .map(|run| {
+                vec![RuleAction {
+                    run,
+                    ..Default::default()
+                }]
+            })
+            .collect();
+        assert_eq!(
+            in_queue_order(batches)
+                .iter()
+                .map(|b| b[0].run)
+                .collect::<Vec<_>>(),
+            [0, -5, 10, -20]
         );
     }
 

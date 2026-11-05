@@ -790,6 +790,15 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun ruleTimingDefaultsAndRoundTrips() {
+        val old = parseRulesResponse("""{"rules":[{"id":"old","query":"","star":true}]}""").single()
+        assertEquals("arrival", old.trigger)
+        assertEquals(0L, old.delaySeconds)
+        val timed = old.copy(trigger = "read", delaySeconds = 300)
+        assertEquals(timed, parseRulesResponse("""{"rules":[${timed.toJson()}]}""").single())
+    }
+
+    @Test
     fun parsesRuleStatus() {
         val status =
             parseRuleStatusResponse(

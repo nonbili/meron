@@ -988,6 +988,13 @@ async fn sync_messages_with_policy(
             "account={account} folder={folder}: rules skipped: {err:#}"
         );
     }
+    if let Err(err) = store::apply_due_rules(&db, account, folder, batch.uidvalidity, store::now_unix()) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={account} folder={folder}: delayed rules skipped: {err:#}"
+        );
+    }
     let phase_started = std::time::Instant::now();
     store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)?;
     let state_time = phase_started.elapsed();

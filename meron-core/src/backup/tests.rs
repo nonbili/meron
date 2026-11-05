@@ -977,3 +977,48 @@ fn calendar_events_round_trip_once() {
         "Dentist (moved)"
     );
 }
+
+#[test]
+fn restored_read_rules_do_not_replay_events_from_before_import() {
+    let source = test_conn();
+    store::set_rules(
+        &source,
+        vec![store::Rule {
+            id: "read-rule".into(),
+            trigger: store::RuleTrigger::Read,
+            delay_seconds: 300,
+            move_to: "trash".into(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    let data = parse(
+        &export(&source, false, None, Host::default(), &no_secrets).unwrap(),
+        None,
+    )
+    .unwrap();
+    let target = test_conn();
+    store::upsert_messages(
+        &target,
+        "a",
+        "INBOX",
+        &[crate::imap::MessageHeader {
+            uid: 1,
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    store::update_message_seen(&target, "a", "INBOX", 1, true).unwrap();
+    let sink = SecretSink::default();
+    apply(&target, &data, &sink.saver()).unwrap();
+    store::apply_due_rules(&target, "a", "INBOX", 7, store::now_unix() + 600).unwrap();
+    assert!(
+        store::pending_rule_actions(&target, "a", "INBOX")
+            .unwrap()
+            .is_empty()
+    );
+    store::update_message_seen(&target, "a", "INBOX", 1, false).unwrap();
+    store::update_message_seen(&target, "a", "INBOX", 1, true).unwrap();
+    store::apply_due_rules(&target, "a", "INBOX", 7, store::now_unix() + 600).unwrap();
+    assert!(store::pending_rule_actions(&target, "a", "INBOX").unwrap()[0].trash);
+}

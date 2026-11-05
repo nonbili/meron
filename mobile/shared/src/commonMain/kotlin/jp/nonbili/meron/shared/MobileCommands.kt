@@ -1186,6 +1186,8 @@ data class SetTagsParams(
 data class Rule(
     val id: String = "",
     val query: String,
+    val trigger: String = "arrival",
+    val delaySeconds: Long = 0,
     val tags: List<String> = emptyList(),
     val markRead: Boolean = false,
     val star: Boolean = false,
@@ -1205,6 +1207,8 @@ data class Rule(
             "id" to id.jsonString(),
             "query" to query.jsonString(),
             "tags" to tags.jsonStringArray(),
+            "trigger" to trigger.jsonString(),
+            "delay_seconds" to delaySeconds.toString(),
             "mark_read" to markRead.toString(),
             "star" to star.toString(),
             "move_to" to moveTo.jsonString(),
