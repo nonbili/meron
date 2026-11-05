@@ -13,7 +13,7 @@ import (
 	"slices"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // On Linux, WebKitGTK hands the page a file dragged from the file manager only

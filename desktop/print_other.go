@@ -1,4 +1,4 @@
-//go:build !darwin && (!linux || !webkit2_41 || bindings)
+//go:build !darwin && (!linux || !gtk3 || bindings)
 
 package main
 

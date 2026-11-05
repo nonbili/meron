@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build a release Meron binary with the Rust core engine sidecar baked in.
 #
-# Plain `wails build` resolves the sidecar via a working-directory-relative
+# Plain `bun run build` resolves the sidecar via a working-directory-relative
 # path, so the resulting binary only works when launched from the repo root.
 # This script builds the sidecar in release mode, stages it where the
 # `embed_sidecar` build tag expects it, and embeds it into the Go binary so the
@@ -18,6 +18,6 @@ mkdir -p desktop/build/sidecar
 cp meron-core/target/release/meron-core desktop/build/sidecar/meron-core
 
 echo "==> Building Wails app with embedded sidecar"
-(cd desktop && wails build -tags embed_sidecar "$@")
+bun scripts/build-desktop.ts -tags embed_sidecar "$@"
 
 echo "==> Done: desktop/build/bin/meron"

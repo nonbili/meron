@@ -1,15 +1,5 @@
---- a/vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/single_instance.go
-+++ b/vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/single_instance.go
-@@ -20,10 +20,8 @@
- }
- 
- func SetupSingleInstance(uniqueID string) {
--	id := "wails_app_" + strings.ReplaceAll(strings.ReplaceAll(uniqueID, "-", "_"), ".", "_")
--
--	dbusName := "org." + id + ".SingleInstance"
--	dbusPath := "/org/" + id + "/SingleInstance"
-+	dbusName := strings.ReplaceAll(uniqueID, "-", "_")
-+	dbusPath := "/" + strings.ReplaceAll(dbusName, ".", "/") + "/SingleInstance"
- 
- 	conn, err := dbus.ConnectSessionBus()
- 	// if we will reach any error during establishing connection or sending message we will just continue.
+--- a/vendor/github.com/wailsapp/wails/v3/pkg/application/single_instance_linux.go
++++ b/vendor/github.com/wailsapp/wails/v3/pkg/application/single_instance_linux.go
+@@ -64 +64 @@
+-	busName = uniqueID + ".SingleInstance"
++	busName = uniqueID

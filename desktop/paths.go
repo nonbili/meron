@@ -178,7 +178,7 @@ func appUniqueID() string {
 }
 
 func isWailsDevLaunch() bool {
-	return os.Getenv("devserver") != "" || os.Getenv("frontenddevserverurl") != ""
+	return os.Getenv("FRONTEND_DEVSERVER_URL") != "" || os.Getenv("devserver") != "" || os.Getenv("frontenddevserverurl") != ""
 }
 
 func cacheHome() string {

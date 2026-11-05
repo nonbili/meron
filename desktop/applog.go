@@ -9,7 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // maxLogViewLines caps how much of meron.log the in-app viewer and the export

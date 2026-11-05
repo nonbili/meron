@@ -1,12 +1,6 @@
 {
-  "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "meron",
   "outputfilename": "meron",
-  "frontend:install": "bun install",
-  "frontend:build": "bun run build",
-  "frontend:dev:watcher": "bun run dev -- --host 127.0.0.1 --port 5178 --strictPort",
-  "frontend:dev:serverUrl": "http://127.0.0.1:5178",
-  "build:tags": "webkit2_41",
   "info": {
     "productName": "Meron",
     "productVersion": "0.4.11",

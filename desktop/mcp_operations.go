@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 type mcpPermission string

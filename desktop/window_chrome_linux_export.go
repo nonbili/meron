@@ -7,7 +7,7 @@ package main
 
 import "C"
 
-import wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+import wailsRuntime "meron/internal/desktopruntime"
 
 //export goWindowStateChanged
 func goWindowStateChanged() {

@@ -1,0 +1,14 @@
+version: '3'
+
+tasks:
+  build:
+    cmds:
+      - bun ../scripts/build-desktop.ts {{if eq .DEV "true"}}--dev{{end}} -tags "{{.EXTRA_TAGS}}"
+  run:
+    cmds:
+      - '{{if eq OS "darwin"}}build/bin/meron.app/Contents/MacOS/meron{{else if eq OS "windows"}}build/bin/meron.exe{{else}}build/bin/meron{{end}}'
+  frontend:
+    aliases: [common:dev:frontend]
+    dir: frontend
+    cmds:
+      - bun run dev -- --host 127.0.0.1 --port {{.WAILS_VITE_PORT | default 9245}} --strictPort

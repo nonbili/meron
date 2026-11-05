@@ -53,6 +53,23 @@ type fakeWindow struct {
 	desktopFrame bool
 }
 
+func TestShouldQuitPreservesStateSavedBeforeWindowDestruction(t *testing.T) {
+	w := &fakeWindow{width: 1200, height: 800, maximised: true}
+	stubWindowState(t, w)
+	app := newWindowStateApp(t)
+	app.closeToTray.Store(false)
+	if app.beforeClose(app.ctx) {
+		t.Fatal("close should proceed")
+	}
+	w.width, w.height, w.maximised = 0, 0, false
+	if !app.shouldQuit() {
+		t.Fatal("quit should proceed")
+	}
+	if saved := loadWindowState(app.windowStatePath); !saved.Maximised {
+		t.Fatalf("destroyed window overwrote saved state: %+v", saved)
+	}
+}
+
 func stubWindowState(t *testing.T, w *fakeWindow) {
 	t.Helper()
 	size, isMaximised, isNormal, isTiled, drawsFrame := windowGetSize, windowIsMaximised, windowIsNormal, windowIsTiled, windowDrawsFrame

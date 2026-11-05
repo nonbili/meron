@@ -7,7 +7,7 @@ import (
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // Configuration grants are app-wide and deliberately independent of mail grants.

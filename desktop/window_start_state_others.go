@@ -5,8 +5,8 @@ package main
 import (
 	"context"
 
-	"github.com/wailsapp/wails/v2/pkg/options"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	options "meron/internal/desktopruntime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 const startWindowHidden = true

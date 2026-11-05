@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // localAccountID is the one account whose folders live on this computer

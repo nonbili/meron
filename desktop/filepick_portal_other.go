@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 func openFilePicker(

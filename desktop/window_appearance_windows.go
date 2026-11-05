@@ -11,9 +11,15 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Windows needs nothing here: the wails runtime's theme call already switches
-// the DWM caption between light and dark.
-func setNativeWindowDark(dark bool) {}
+func setNativeWindowDark(dark bool) {
+	if hwnd := findMainWindow(); hwnd != 0 {
+		var enabled uint32
+		if dark {
+			enabled = 1
+		}
+		setDwmColor(hwnd, 20, enabled) // DWMWA_USE_IMMERSIVE_DARK_MODE
+	}
+}
 
 const (
 	dwmwaCaptionColor = 35

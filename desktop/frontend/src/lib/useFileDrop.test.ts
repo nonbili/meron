@@ -32,6 +32,30 @@ function dragEvent(types: string[], files: File[] = [], defaultPrevented = false
 describe('useFileDrop', () => {
   afterEach(() => resetFileDropStateForTests())
 
+  it('reflects native Wails hover state in the attachment overlay', async () => {
+    const element = document.createElement('div')
+    const { result, rerender, unmount } = renderHook(({ enabled }) => useFileDrop(() => {}, { enabled }), {
+      initialProps: { enabled: false },
+    })
+    act(() => result.current.dropHandlers.ref(element))
+    rerender({ enabled: true })
+    expect(element.hasAttribute('data-file-drop-target')).toBe(true)
+    await act(async () => {
+      element.classList.add('file-drop-target-active')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(result.current.dragging).toBe(true)
+    expect(result.current.mayHoldImages).toBe(true)
+    expect(result.current.mayBeLink).toBe(false)
+    await act(async () => {
+      element.classList.remove('file-drop-target-active')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(result.current.dragging).toBe(false)
+    unmount()
+    expect(element.hasAttribute('data-file-drop-target')).toBe(false)
+  })
+
   it('shows the drop state only for drags that carry files', () => {
     const { result } = renderHook(() => useFileDrop(() => {}))
     act(() => result.current.dropHandlers.onDragEnter(dragEvent(['text/plain'])))

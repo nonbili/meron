@@ -3,14 +3,16 @@ package main
 import (
 	"context"
 	"embed"
+	"io/fs"
 	"log"
 	"net/http"
+	"runtime"
+	"strings"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"meron/internal/desktopruntime"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -46,59 +48,88 @@ func main() {
 	integratedTitlebar.Store(integrated)
 	installWindowChrome(integrated)
 
-	err := wails.Run(&options.App{
-		Title:                    appTitle(),
-		Width:                    app.window.Width,
-		Height:                   app.window.Height,
-		WindowStartState:         startWindowState(startMaximised),
-		StartHidden:              startWindowHidden,
-		HideWindowOnClose:        hideOnCloseNatively,
-		Frameless:                framelessTitlebar && integrated,
-		EnableDefaultContextMenu: true,
-		BackgroundColour:         windowBackgroundColour(),
-		AssetServer: &assetserver.Options{
-			Assets:     assets,
-			Handler:    mediaHandler(),
+	native := application.New(application.Options{
+		Name:                        appTitle(),
+		Icon:                        appIconPNG,
+		Windows:                     application.WindowsOptions{WndClass: "wailsWindow"},
+		Mac:                         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		Services:                    []application.Service{application.NewService(&desktopService{app: app})},
+		DisableDefaultSignalHandler: true,
+		ShouldQuit:                  app.shouldQuit,
+		Assets: application.AssetOptions{
+			Handler:    desktopAssetHandler(),
 			Middleware: cspMiddleware,
 		},
-		// Linux only: see filedrop.go.
-		DragAndDrop: &options.DragAndDrop{EnableFileDrop: nativeFileDrop},
-		Linux: &linux.Options{
-			Icon:                appIconPNG,
-			WindowIsTranslucent: roundedWindowCorners,
-		},
-		Mac: &mac.Options{
-			// Hide the native title bar and extend content to the top edge,
-			// keeping the traffic-light buttons. TitleBar.tsx draws the 40px
-			// draggable bar; alignNativeTitlebar centres the native buttons.
-			TitleBar:  mac.TitleBarHidden(),
-			OnUrlOpen: app.openMailtoURL,
-		},
-		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: appUniqueID(),
-			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: appUniqueID(),
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				app.HandleSecondInstanceLaunch(data.Args)
 			},
 		},
-		OnStartup: app.Startup,
-		OnDomReady: func(ctx context.Context) {
-			alignNativeTitlebar()
-			maximiseOnDomReady(ctx, startMaximised)
-		},
-		OnBeforeClose: app.beforeClose,
-		OnShutdown:    app.Shutdown,
-		Bind: []interface{}{
-			app,
-		},
+		OnShutdown: func() { app.Shutdown(app.ctx) },
 	})
-	if err != nil {
+	desktopruntime.App = native
+	native.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) {
+		app.openMailtoURL(event.Context().URL())
+	})
+	options := application.WebviewWindowOptions{
+		Title: appTitle(), Width: app.window.Width, Height: app.window.Height,
+		StartState: startWindowState(startMaximised), Hidden: startWindowHidden,
+		Frameless: framelessTitlebar && integrated, EnableFileDrop: nativeFileDrop || runtime.GOOS == "windows",
+		Mac: application.MacWindow{TitleBar: application.MacTitleBarHidden},
+	}
+	if roundedWindowCorners {
+		options.BackgroundType = application.BackgroundTypeTransparent
+	}
+	desktopruntime.Window = native.Window.NewWithOptions(options)
+	desktopruntime.Window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		alignNativeTitlebar()
+		maximiseOnDomReady(app.ctx, startMaximised)
+	})
+	desktopruntime.Window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if hideOnCloseNatively && !app.quitting.Load() && app.closeToTray.Load() {
+			app.hideMainWindow()
+			event.Cancel()
+		} else if app.beforeClose(app.ctx) {
+			event.Cancel()
+		}
+	})
+	if err := native.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// desktopService exposes only the command bridge, not lifecycle methods.
+type desktopService struct{ app *App }
+
+func (s *desktopService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	s.app.Startup(ctx)
+	return nil
+}
+
+func (s *desktopService) Invoke(command string, payload map[string]any) (any, error) {
+	return s.app.Invoke(command, payload)
+}
+
+func desktopAssetHandler() http.Handler {
+	return desktopAssetHandlerWithAssets(assets)
+}
+
+func desktopAssetHandlerWithAssets(assets fs.FS) http.Handler {
+	frontend := application.AssetFileServerFS(assets)
+	media := mediaHandler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/media/") {
+			media.ServeHTTP(w, r)
+			return
+		}
+		frontend.ServeHTTP(w, r)
+	})
+}
+
 // contentSecurityPolicy is defined per build tag: the strict same-origin policy
 // in csp_prod.go (production builds) and a relaxed policy in csp_dev.go that lets
-// the Vite dev server's inline preamble and HMR websockets through. In `wails dev`
+// the Vite dev server's inline preamble and HMR websockets through. In `wails3 dev`
 // the page is served from wails.localhost and proxied to Vite, so this middleware
 // runs on dev responses too — hence the dev variant.
 func cspMiddleware(next http.Handler) http.Handler {

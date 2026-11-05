@@ -9,6 +9,11 @@
 /desktop/build/windows/info.json
 /desktop/build/windows/wails.exe.manifest
 /desktop/frontend/wailsjs/
+/desktop/frontend/bindings/
+/desktop/*.syso
+/desktop/build/windows/info.generated.json
+/desktop/build/windows/manifest.generated.xml
+/desktop/build/windows/MicrosoftEdgeWebview2Setup.exe
 /desktop/frontend/package.json.md5
 
 # Generated localization artifacts (source of truth: locales/*.json, see scripts/i18n/catalog.ts).

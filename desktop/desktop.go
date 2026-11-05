@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // installDesktopEntry writes a .desktop file and icon into the user's

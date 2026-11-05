@@ -1,4 +1,4 @@
-//go:build !linux || (linux && (!webkit2_41 || bindings))
+//go:build !linux || (linux && (!gtk3 || bindings))
 
 package main
 

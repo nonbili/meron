@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 func (a *App) accountAddRSS(payload map[string]any) (any, error) {

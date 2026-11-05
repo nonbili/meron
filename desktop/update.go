@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // The updater reads a manifest published as a release asset. GitHub serves

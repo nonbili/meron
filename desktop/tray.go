@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"fyne.io/systray"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // First-run default; saved style is restored natively before publication and

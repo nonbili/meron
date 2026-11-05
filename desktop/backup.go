@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // backupFilename is the name offered in the save dialog. Dated so successive

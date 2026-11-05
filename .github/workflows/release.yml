@@ -20,7 +20,7 @@ jobs:
             platform: linux/amd64
             target: x86_64-unknown-linux-gnu
             artifact: meron-linux-amd64
-            tags: 'embed_sidecar webkit2_41'
+            tags: 'embed_sidecar gtk3'
           - os: windows-latest
             platform: windows/amd64
             target: x86_64-pc-windows-msvc
@@ -79,7 +79,7 @@ jobs:
 
       - name: install wails
         shell: bash
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: use Strawberry Perl for vendored OpenSSL on Windows
         if: startsWith(matrix.os, 'windows')
@@ -165,15 +165,10 @@ jobs:
           # exe; it is only valid on Windows.
           extra=""
           if [[ "${{ matrix.os }}" == windows* ]]; then extra="-nsis"; fi
-          cd desktop
           if [[ "${{ matrix.os }}" == ubuntu* ]]; then
-            # Wails claims org.wails_app_<id>.SingleInstance, which the Snap
-            # Store holds for manual review. Claim the app ID itself instead:
-            # the snap declaration already grants jp.nonbili.meron.
-            go mod vendor
-            patch -p1 < build/linux/wails-single-instance-dbus-name.patch
+            (cd desktop && go mod vendor && patch -p1 < build/linux/wails-single-instance-dbus-name.patch)
           fi
-          wails build -clean -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}" $extra
+          bun scripts/build-desktop.ts -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}" $extra
 
       - name: package macOS dmg
         if: startsWith(matrix.os, 'macos')
@@ -342,7 +337,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          # wails -nsis emits desktop/build/bin/<name>-<arch>-installer.exe
+          # The desktop builder emits desktop/build/bin/<name>-<arch>-installer.exe
           installer=$(ls desktop/build/bin/*installer.exe)
           cp "$installer" "dist/${{ matrix.artifact }}.exe"
 
@@ -353,9 +348,8 @@ jobs:
           set -euo pipefail
           # The appx ships meron-core.exe beside meron.exe, so its exe is built
           # without embed_sidecar rather than carrying a second, unused copy.
-          # -s reuses the frontend assets from the release build above.
           cd desktop
-          wails build -s -platform ${{ matrix.platform }} -o meron-appx.exe
+          bun ../scripts/build-desktop.ts -platform ${{ matrix.platform }} -o meron-appx.exe
 
       - name: package windows appx
         if: startsWith(matrix.os, 'windows')

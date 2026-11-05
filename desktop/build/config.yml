@@ -1,0 +1,21 @@
+version: '3'
+
+# Release metadata remains in wails.json, shared with the updater and store tools.
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir: [.git, node_modules, frontend, build]
+    file: ['*_test.go']
+    watched_extension: ['*.go']
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    # Use Wails' standard command so it gates startup on the selected dev port.
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary
+      exit_policy: shutdown

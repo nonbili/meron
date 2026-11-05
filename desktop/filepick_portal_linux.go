@@ -13,7 +13,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/google/uuid"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 const (

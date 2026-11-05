@@ -1,4 +1,4 @@
-//go:build linux && webkit2_41 && !bindings
+//go:build linux && gtk3 && !bindings
 
 package main
 

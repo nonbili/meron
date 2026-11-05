@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 const (
@@ -180,6 +180,16 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 
 // appQuit is a var so tests can tell a quit from a hide without a running app.
 var appQuit = wailsRuntime.Quit
+
+// Wails may ask to quit after the closing window has already been destroyed.
+// The close hook saved its state while it was still available; do not replace
+// that snapshot with the destroyed window's zero/default values.
+func (a *App) shouldQuit() bool {
+	if !a.closing.Load() {
+		a.rememberWindowState(a.ctx)
+	}
+	return true
+}
 
 // quit exits the app, bypassing close-to-tray.
 func (a *App) quit() {

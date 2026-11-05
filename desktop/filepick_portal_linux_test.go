@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus/v5"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 func TestPortalFilePaths(t *testing.T) {

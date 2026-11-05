@@ -4,8 +4,7 @@ import (
 	"regexp"
 	"runtime"
 
-	"github.com/wailsapp/wails/v2/pkg/options"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	options "meron/internal/desktopruntime"
 )
 
 // opaqueHexColor is the only title bar color form the native layers accept.
@@ -21,19 +20,11 @@ var roundedWindowCorners = runtime.GOOS == "linux"
 // the title bar above all — match the theme picked in settings instead of
 // staying light under a dark theme.
 //
-// The wails runtime's theme calls only do something on Windows (the DWM dark
-// caption); Linux and macOS are handled by setNativeWindowDark, whose
-// implementation is per platform. setNativeTitlebarColors then paints the
+// setNativeWindowDark applies the platform's native appearance.
+// setNativeTitlebarColors then paints the
 // title bar in the side nav's colors where the platform allows it.
 func (a *App) setWindowAppearance(payload map[string]any) (any, error) {
 	dark, _ := payload["dark"].(bool)
-	if a.ctx != nil {
-		if dark {
-			wailsRuntime.WindowSetDarkTheme(a.ctx)
-		} else {
-			wailsRuntime.WindowSetLightTheme(a.ctx)
-		}
-	}
 	setNativeWindowDark(dark)
 	bg, _ := payload["titlebar"].(string)
 	fg, _ := payload["titlebarText"].(string)

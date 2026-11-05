@@ -7,6 +7,9 @@ import { windowChromeReady } from './lib/windowChrome'
 import { invoke } from './lib/bridge'
 import { usesNativeScrollbars } from './lib/nativeScrollbars'
 import './index.css'
+import { installDesktopRuntime } from './lib/wails'
+
+installDesktopRuntime()
 
 document.documentElement.classList.toggle('native-scrollbars', usesNativeScrollbars(navigator.userAgent))
 

@@ -242,6 +242,46 @@ export function useFileDrop(
     }
   }, [show])
 
+  // Wails v3 intercepts native Linux drops before WebKit's DOM drop event.
+  // Mark only enabled drop areas, then read the paths retained by Go after
+  // Wails has verified that the native drop hit one of these areas.
+  useEffect(() => {
+    const element = elementRef.current
+    if (!enabled || !element) return
+    element.setAttribute('data-file-drop-target', '')
+    // GTK intercepts DOM drag-enter/over/leave. Wails mirrors native hover
+    // onto the target's class list; feed that into the same overlay state.
+    const syncNativeHover = () => {
+      const active = element.classList.contains('file-drop-target-active')
+      setDragging(active)
+      if (active) {
+        fileDragSeen = true
+        setMayHoldImages(true)
+        setMayBeLink(false)
+      }
+    }
+    const hover = new MutationObserver(syncNativeHover)
+    hover.observe(element, { attributes: true, attributeFilter: ['class'] })
+    const eventsOn = (window as any).runtime?.EventsOn
+    const off = eventsOn?.('window.filesDropped', async (target: { x: number; y: number }) => {
+      const hit = document.elementFromPoint(target.x, target.y)
+      if (hit?.closest('[data-file-drop-target]') !== element) return
+      depthRef.current = 0
+      setDragging(false)
+      const scopeAtDrop = scopeRef.current
+      const zone = zoneOfRef.current?.(hit) ?? null
+      const files = await readNativeDrop([])
+      if (mountedRef.current && enabledRef.current && scopeRef.current === scopeAtDrop && files.length > 0) {
+        onFilesRef.current(files, { handledByChild: false, zone })
+      }
+    })
+    return () => {
+      hover.disconnect()
+      element.removeAttribute('data-file-drop-target')
+      if (typeof off === 'function') off()
+    }
+  }, [enabled])
+
   // Turned off mid-drag (a reader tab opened in front, the conversation went
   // away): no leave or drop will be taken to put the overlay away.
   useEffect(() => {

@@ -128,7 +128,7 @@ sign_awake codesign --force --timestamp=none --sign "$APP_IDENTITY" "$signing_pr
        If it is already unlocked, check this key's access permissions in Keychain Access."
 rm -f "$signing_probe"
 
-command -v wails >/dev/null || die "wails not found; go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0"
+command -v wails3 >/dev/null || die "wails3 not found; go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0"
 command -v cargo >/dev/null || die "cargo not found"
 
 VERSION="$(/usr/bin/plutil -extract info.productVersion raw desktop/wails.json 2>/dev/null \
@@ -195,7 +195,7 @@ if [ "${MAS_SKIP_BUILD:-0}" = "1" ]; then
   echo "==> Reusing the existing $BUILT_APP (MAS_SKIP_BUILD=1)"
 else
   echo "==> Building the Wails app ($MAS_ARCHS)"
-  (cd desktop && wails build -clean -platform "$wails_platform")
+  bun scripts/build-desktop.ts -platform "$wails_platform"
 fi
 
 [ -d "$BUILT_APP" ] || die "wails did not produce $BUILT_APP"

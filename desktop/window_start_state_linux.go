@@ -6,8 +6,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/wailsapp/wails/v2/pkg/options"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	options "meron/internal/desktopruntime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // Keep the window mapped so GTK/WebKit can render and the window manager can

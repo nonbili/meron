@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"sync/atomic"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // titlebarSystem is windowState.Titlebar for someone who turned the

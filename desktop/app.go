@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 type App struct {

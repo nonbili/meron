@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // The OS light/dark preference, for the "Match system" theme setting.

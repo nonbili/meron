@@ -32,7 +32,7 @@ cp "meron-core/target/$TARGET/release/meron-core.exe" desktop/build/sidecar/mero
 echo "==> Building Wails app for windows/amd64"
 (
   cd desktop
-  CGO_ENABLED=0 wails build -clean -platform windows/amd64 -tags embed_sidecar
+  CGO_ENABLED=0 bun ../scripts/build-desktop.ts -platform windows/amd64 -tags embed_sidecar
 )
 
 echo "==> Done: desktop/build/bin/meron.exe"
