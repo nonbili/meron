@@ -21,8 +21,8 @@ jni = "0.21"
 async-imap = { version = "0.11.2", default-features = false, features = ["runtime-tokio"] }
 socket2 = "0.6.3"
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
-rustls = { version = "0.23.40", default-features = false, features = ["ring", "std", "tls12"] }
-webpki-roots = "1.0.7"
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1.0.11"
 futures = "0.3.32"
 mailparse = "0.16.1"
 html-to-markdown-rs = { version = "3.4.1", default-features = false }
@@ -37,7 +37,7 @@ feed-rs = "2.3.1"
 quick-xml = "0.37.5"
 scraper = "0.27.0"
 ego-tree = "0.11.0"
-ammonia = "4.1.2"
+ammonia = "4.2.4"
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
 psl = "2"
 sha2 = "0.11.0"
