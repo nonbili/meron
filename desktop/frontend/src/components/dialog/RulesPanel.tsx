@@ -4,7 +4,7 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
-import { GripVertical, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { ArrowLeft, GripVertical, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
@@ -27,6 +27,7 @@ import { IconButton } from '../button/IconButton'
 import { AccountAvatar } from '../avatar/AccountAvatar'
 import { RecipientInput } from '../composer/RecipientInput'
 import { Checkbox } from '../field/Checkbox'
+import { SelectInput, TextInput } from '../field/Field'
 import { EMPTY_FIELDS, fieldsEmpty, type SearchFields } from '../search/searchFields'
 import { inputClass, Row } from '../search/SearchOptions'
 import { TagInput } from '../search/TagInput'
@@ -35,10 +36,28 @@ import { accountLabel } from '../threads/ThreadMoveCopyItems'
 import { SegmentedRow, SettingRow, SettingsGroup, Switch, ToggleRow } from './AccountSettingsRows'
 import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
 
+type Timing = 'now' | RuleTrigger
+type Unit = 'minutes' | 'hours' | 'days'
+
+const TIMINGS: Timing[] = ['now', 'arrival', 'read', 'age']
+const UNITS: Unit[] = ['minutes', 'hours', 'days']
+const UNIT_SECONDS: Record<Unit, number> = { minutes: 60, hours: 3600, days: 86400 }
+const MAX_DELAY_SECONDS = 315360000
+
+// The largest unit that holds the delay whole, so 30 days isn't shown as 43200 minutes.
+function splitDelay(seconds: number): { amount: number; unit: Unit } {
+  const unit =
+    (['days', 'hours'] as const).find((unit) => seconds > 0 && seconds % UNIT_SECONDS[unit] === 0) ?? 'minutes'
+  return { amount: seconds / UNIT_SECONDS[unit], unit }
+}
+
 type Draft = {
   fields: SearchFields
-  trigger: RuleTrigger
-  delay_seconds: number
+  // "Right away" is arrival with no delay, kept apart so that choosing "After
+  // it arrives" doesn't fall back to it while the amount is still empty.
+  timing: Timing
+  amount: string
+  unit: Unit
   tags: string
   mark_read: boolean
   star: boolean
@@ -51,13 +70,23 @@ type Draft = {
   disabled: boolean
 }
 
+/** The draft's delay in seconds, or null while the amount isn't a usable one. */
+function draftDelay({ timing, amount, unit }: Draft) {
+  if (timing === 'now') return 0
+  const value = Number(amount)
+  if (!amount.trim() || !Number.isFinite(value) || value < 0) return null
+  const seconds = Math.round(value * UNIT_SECONDS[unit])
+  return seconds <= MAX_DELAY_SECONDS ? seconds : null
+}
+
 const RUN_POLL_MS = 1500
 const ACTIVITY_SHOWN = 20
 
 const EMPTY_DRAFT: Draft = {
   fields: EMPTY_FIELDS,
-  trigger: 'arrival',
-  delay_seconds: 0,
+  timing: 'now',
+  amount: '',
+  unit: 'minutes',
   tags: '',
   mark_read: false,
   star: false,
@@ -74,7 +103,6 @@ type RuleRowProps = {
   id: string
   at: number
   locked: boolean
-  editing: boolean
   onMove: (to: number) => void
   children: ReactNode
 }
@@ -82,7 +110,7 @@ type RuleRowProps = {
 // Dragged by its handle, since the rest of the row is controls. The arrow keys
 // move it instead of dnd-kit's keyboard sensor, which would lose Escape to the
 // dialog around it.
-function RuleRow({ id, at, locked, editing, onMove, children }: RuleRowProps) {
+function RuleRow({ id, at, locked, onMove, children }: RuleRowProps) {
   const { t } = useTranslation()
   const { listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -102,9 +130,7 @@ function RuleRow({ id, at, locked, editing, onMove, children }: RuleRowProps) {
       ref={setNodeRef}
       data-rule={id}
       style={{ transform: CSS.Translate.toString(transform), transition: isDragging ? 'none' : transition }}
-      className={`flex items-center gap-2 px-3.5 py-2 text-xs ${
-        isDragging ? 'relative z-10 bg-raised' : editing ? 'bg-active/60' : ''
-      }`}
+      className={`flex items-center gap-2 px-3.5 py-2 text-xs ${isDragging ? 'relative z-10 bg-raised' : ''}`}
     >
       <button
         ref={(node) => {
@@ -281,15 +307,19 @@ export function RulesPanel() {
   const submit = async () => {
     if (!rules) return
     const tags = draft.tags.split(/[\s,]+/).filter(Boolean)
-    const { fields, ...actions } = draft
+    const { fields, timing, amount: _, unit: __, ...actions } = draft
+    const delay = draftDelay(draft)
+    if (delay === null) return
     const saved = await save(async () => {
       const rule: Rule = {
         ...actions,
+        trigger: timing === 'now' ? 'arrival' : timing,
+        delay_seconds: delay,
         id: editing ?? '',
         query: await ruleQuery(fields),
         tags,
         accounts: chosenAccounts,
-        // The list's switch stays live while the form is open.
+        // Editing doesn't turn a rule on or off.
         disabled: rules.find((item) => item.id === editing)?.disabled ?? false,
       }
       return editing ? rules.map((item) => (item.id === editing ? rule : item)) : [...rules, rule]
@@ -299,13 +329,16 @@ export function RulesPanel() {
 
   const edit = async (rule: Rule) => {
     const request = ++formRequest.current
-    const { query: _, id: __, ...actions } = rule
+    const { query: _, id: __, trigger = 'arrival', delay_seconds: delay = 0, ...actions } = rule
     const fields = await ruleFields(rule.query)
     if (request !== formRequest.current) return
+    const timing = trigger === 'arrival' && delay === 0 ? 'now' : trigger
+    const { amount, unit } = splitDelay(delay)
     setDraft({
       ...actions,
-      trigger: rule.trigger ?? 'arrival',
-      delay_seconds: rule.delay_seconds ?? 0,
+      timing,
+      amount: timing === 'now' ? '' : String(amount),
+      unit,
       fields,
       tags: rule.tags.join(' '),
     })
@@ -359,11 +392,22 @@ export function RulesPanel() {
   const copyLabel = ({ copy_account, copy_folder }: Draft | Rule) =>
     targetLabel({ accountId: copy_account, folderId: copy_folder })
 
+  const timingSummary = ({ trigger = 'arrival', delay_seconds: delay = 0 }: Rule) => {
+    if (trigger === 'arrival' && delay === 0) return ''
+    const { amount, unit } = splitDelay(delay)
+    return t(`rules.summary.${trigger}`, { duration: t(`rules.duration.${unit}`, { count: amount }) })
+  }
+
+  // A delayed choice starts from a typical amount rather than an empty, unsavable one.
+  const pickTiming = (timing: Timing) => {
+    if (timing === 'now') change({ timing, amount: '' })
+    else if (draft.amount) change({ timing })
+    else change({ timing, ...(timing === 'age' ? { amount: '30', unit: 'days' } : { amount: '5', unit: 'minutes' }) })
+  }
+
   const summary = (rule: Rule) =>
     [
-      (rule.trigger && rule.trigger !== 'arrival') || rule.delay_seconds
-        ? `${t(`rules.trigger.${rule.trigger ?? 'arrival'}`)} · ${t('rules.delaySummary', { minutes: (rule.delay_seconds ?? 0) / 60 })}`
-        : '',
+      timingSummary(rule),
       rule.tags.length > 0 && t('rules.summaryTags', { tags: rule.tags.join(', ') }),
       rule.mark_read && t('notification.actionMarkRead'),
       rule.star && t('chat.star'),
@@ -374,12 +418,236 @@ export function RulesPanel() {
       .join(' · ')
 
   const formOpen = adding || editing !== null
+  const delay = draftDelay(draft)
+
+  // Adding or editing takes over the panel, as an MCP client does: the list
+  // stays an overview, and the form isn't read as part of it.
+  if (formOpen) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={t('buttons.back')}
+            title={t('buttons.back')}
+            onClick={reset}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary transition-colors hover:bg-active hover:text-primary cursor-pointer"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <h2 className="truncate text-base font-bold leading-tight tracking-tight">
+            {editing ? t('rules.edit') : t('rules.add')}
+          </h2>
+        </div>
+        {/* The address suggestions open below their field, past the card when it is the last. */}
+        <SettingsGroup title={t('rules.when')} overflowVisible>
+          {(mailAccounts.length > 1 || scoped) && (
+            <>
+              <SegmentedRow
+                title={t('rules.scope')}
+                value={scoped ? 'selected' : 'all'}
+                options={[
+                  { value: 'all', label: t('kanban.allAccounts') },
+                  { value: 'selected', label: t('rules.selectedAccounts') },
+                ]}
+                onChange={(value) => {
+                  setScoped(value === 'selected')
+                  if (value === 'all') change({ accounts: [] })
+                }}
+              />
+              {scoped && (
+                <div className="flex flex-col gap-2 px-3.5 py-2.5">
+                  {mailAccounts.map((account) => (
+                    <label
+                      key={account.id}
+                      className="flex cursor-pointer items-center gap-2 text-xs text-primary select-none"
+                    >
+                      <Checkbox
+                        checked={draft.accounts.includes(account.id)}
+                        onChange={(event) =>
+                          change({
+                            accounts: event.target.checked
+                              ? [...draft.accounts, account.id]
+                              : draft.accounts.filter((id) => id !== account.id),
+                          })
+                        }
+                      />
+                      <AccountAvatar
+                        accountId={account.id}
+                        name={accountLabel(account)}
+                        src={account.avatar_url}
+                        size={18}
+                        className="shrink-0"
+                      />
+                      <span className="min-w-0 truncate">{accountLabel(account)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          <div className="flex flex-col gap-2 px-3.5 py-2.5">
+            <Row label={t('composer.fields.from')}>
+              <RecipientInput
+                bare
+                value={draft.fields.from}
+                onChange={(from) => changeFields({ from })}
+                accountId=""
+                className={`${inputClass} w-full`}
+              />
+            </Row>
+            <Row label={t('composer.fields.to')}>
+              <RecipientInput
+                bare
+                value={draft.fields.to}
+                onChange={(to) => changeFields({ to })}
+                accountId=""
+                className={`${inputClass} w-full`}
+              />
+            </Row>
+            <Row label={t('composer.fields.subject')}>
+              <input
+                value={draft.fields.subject}
+                onChange={(event) => changeFields({ subject: event.target.value })}
+                className={inputClass}
+              />
+            </Row>
+            <Row label={t('search.hasWords')}>
+              <input
+                value={draft.fields.words}
+                onChange={(event) => changeFields({ words: event.target.value })}
+                className={inputClass}
+              />
+            </Row>
+            <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-primary select-none">
+              <Checkbox
+                checked={draft.fields.has_attachment}
+                onChange={(event) => changeFields({ has_attachment: event.target.checked })}
+              />
+              {t('filters.hasAttachment')}
+            </label>
+            <p className="text-[0.6875rem] text-secondary">{t('rules.queryHint')}</p>
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup title={t('rules.timing')}>
+          <SettingRow
+            title={t('rules.runWhen')}
+            control={
+              <SelectInput
+                aria-label={t('rules.timing')}
+                value={draft.timing}
+                onChange={(event) => pickTiming(event.target.value as Timing)}
+                className="w-48 rounded-xl py-1.5 pl-3 font-semibold"
+              >
+                {TIMINGS.map((timing) => (
+                  <option key={timing} value={timing} className="bg-chats text-primary">
+                    {t(`rules.timing.${timing}`)}
+                  </option>
+                ))}
+              </SelectInput>
+            }
+          />
+          {draft.timing !== 'now' && (
+            <SettingRow
+              title={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
+              control={
+                <div className="flex items-center gap-2">
+                  <TextInput
+                    aria-label={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={draft.amount}
+                    invalid={delay === null}
+                    aria-invalid={delay === null}
+                    onChange={(event) => change({ amount: event.target.value })}
+                    className="w-20 font-semibold"
+                  />
+                  <SelectInput
+                    aria-label={t('rules.unit')}
+                    value={draft.unit}
+                    onChange={(event) => change({ unit: event.target.value as Unit })}
+                    className="w-28 rounded-xl py-1.5 pl-3 font-semibold"
+                  >
+                    {UNITS.map((unit) => (
+                      <option key={unit} value={unit} className="bg-chats text-primary">
+                        {t(`rules.unit.${unit}`)}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </div>
+              }
+            />
+          )}
+          <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.timingHint')}</p>
+        </SettingsGroup>
+
+        {/* The tag suggestions open below their row, past the card when it is the last. */}
+        <SettingsGroup title={t('rules.then')} overflowVisible>
+          <div className="flex min-h-11 items-center gap-4 px-3.5 py-2">
+            <span className="shrink-0 text-xs font-normal text-primary">{t('rules.addTags')}</span>
+            <TagInput value={draft.tags} onChange={(tags) => change({ tags })} />
+          </div>
+          <ToggleRow
+            title={t('notification.actionMarkRead')}
+            checked={draft.mark_read}
+            onChange={() => change({ mark_read: !draft.mark_read })}
+          />
+          <ToggleRow title={t('chat.star')} checked={draft.star} onChange={() => change({ star: !draft.star })} />
+          <SettingRow
+            title={t('rules.copyTo')}
+            control={
+              <RuleFolderPicker
+                label={t('rules.copyTo')}
+                value={draft.copy_folder ? copyLabel(draft) : t('rules.copyNone')}
+                options={[{ label: t('rules.copyNone'), onPick: () => change({ copy_account: '', copy_folder: '' }) }]}
+                onPick={({ accountId, folderId }) => change({ copy_account: accountId, copy_folder: folderId })}
+              />
+            }
+          />
+          <SettingRow
+            title={t('rules.moveTo')}
+            control={
+              <RuleFolderPicker
+                label={t('rules.moveTo')}
+                value={draft.move_to ? moveLabel(draft) : t('rules.moveNone')}
+                options={[
+                  { label: t('rules.moveNone'), onPick: () => pickMove('') },
+                  { label: t('folders.roles.archive'), onPick: () => pickMove('archive') },
+                  { label: t('folders.roles.trash'), onPick: () => pickMove('trash') },
+                ]}
+                onPick={({ accountId, folderId }) => pickMove('folder', folderId, accountId)}
+              />
+            }
+          />
+          {draft.move_to === 'trash' && (
+            <p className="px-3.5 py-2.5 text-[0.6875rem] font-medium text-rose-500">
+              {t(fieldsEmpty(draft.fields) ? 'rules.trashAllHint' : 'rules.trashHint')}
+            </p>
+          )}
+        </SettingsGroup>
+
+        {invalid && <p className="text-[0.6875rem] font-medium text-rose-500">{t('rules.invalid')}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={reset}>
+            {t('buttons.cancel')}
+          </Button>
+          <Button
+            leftIcon={editing ? undefined : Plus}
+            disabled={saving || !rules || (scoped && chosenAccounts.length === 0) || delay === null}
+            onClick={() => void submit()}
+          >
+            {editing ? t('buttons.save') : t('rules.add')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[0.75rem] text-secondary">{t('rules.timingHint')}</p>
-
-      {rules?.length === 0 && !formOpen && <p className="text-xs text-secondary">{t('rules.empty')}</p>}
+      {rules?.length === 0 && <p className="text-xs text-secondary">{t('rules.empty')}</p>}
       {rules && rules.length > 0 && (
         <DndContext
           sensors={sensors}
@@ -398,14 +666,7 @@ export function RulesPanel() {
                 const failure = lastFailure(rule)
                 const lost = lostAccount(rule)
                 return (
-                  <RuleRow
-                    key={rule.id}
-                    id={rule.id}
-                    at={at}
-                    locked={saving}
-                    editing={editing === rule.id}
-                    onMove={(to) => void move(at, to)}
-                  >
+                  <RuleRow key={rule.id} id={rule.id} at={at} locked={saving} onMove={(to) => void move(at, to)}>
                     <Switch
                       checked={!rule.disabled}
                       label={t('rules.enabled')}
@@ -451,7 +712,7 @@ export function RulesPanel() {
                         iconSize={13}
                         label={t('rules.run')}
                         size="sm"
-                        disabled={saving || starting !== null || editing === rule.id || rule.disabled}
+                        disabled={saving || starting !== null || rule.disabled}
                         onClick={() => void run(rule)}
                       />
                     )}
@@ -479,211 +740,20 @@ export function RulesPanel() {
         </DndContext>
       )}
 
-      {!formOpen && (
-        <div>
-          <Button
-            leftIcon={Plus}
-            disabled={!rules}
-            onClick={() => {
-              formRequest.current += 1
-              setAdding(true)
-            }}
-          >
-            {t('rules.add')}
-          </Button>
-        </div>
-      )}
+      <div>
+        <Button
+          leftIcon={Plus}
+          disabled={!rules}
+          onClick={() => {
+            formRequest.current += 1
+            setAdding(true)
+          }}
+        >
+          {t('rules.add')}
+        </Button>
+      </div>
 
-      {formOpen && (
-        <>
-          {/* The address suggestions open below their field, past the card when it is the last. */}
-          <SettingsGroup title={t('rules.when')} overflowVisible>
-            <Row label={t('rules.trigger')}>
-              <select
-                aria-label={t('rules.trigger')}
-                className={inputClass}
-                value={draft.trigger}
-                onChange={(event) => change({ trigger: event.target.value as RuleTrigger })}
-              >
-                {(['arrival', 'read', 'age'] as const).map((trigger) => (
-                  <option key={trigger} value={trigger}>
-                    {t(`rules.trigger.${trigger}`)}
-                  </option>
-                ))}
-              </select>
-            </Row>
-            <Row label={t('rules.delayMinutes')}>
-              <input
-                aria-label={t('rules.delayMinutes')}
-                type="number"
-                min={0}
-                max={5256000}
-                step="any"
-                className={inputClass}
-                value={draft.delay_seconds / 60}
-                onChange={(event) => change({ delay_seconds: Math.round(Number(event.target.value) * 60) })}
-              />
-            </Row>
-            {(mailAccounts.length > 1 || scoped) && (
-              <>
-                <SegmentedRow
-                  title={t('rules.scope')}
-                  value={scoped ? 'selected' : 'all'}
-                  options={[
-                    { value: 'all', label: t('kanban.allAccounts') },
-                    { value: 'selected', label: t('rules.selectedAccounts') },
-                  ]}
-                  onChange={(value) => {
-                    setScoped(value === 'selected')
-                    if (value === 'all') change({ accounts: [] })
-                  }}
-                />
-                {scoped && (
-                  <div className="flex flex-col gap-2 px-3.5 py-2.5">
-                    {mailAccounts.map((account) => (
-                      <label
-                        key={account.id}
-                        className="flex cursor-pointer items-center gap-2 text-xs text-primary select-none"
-                      >
-                        <Checkbox
-                          checked={draft.accounts.includes(account.id)}
-                          onChange={(event) =>
-                            change({
-                              accounts: event.target.checked
-                                ? [...draft.accounts, account.id]
-                                : draft.accounts.filter((id) => id !== account.id),
-                            })
-                          }
-                        />
-                        <AccountAvatar
-                          accountId={account.id}
-                          name={accountLabel(account)}
-                          src={account.avatar_url}
-                          size={18}
-                          className="shrink-0"
-                        />
-                        <span className="min-w-0 truncate">{accountLabel(account)}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-            <div className="flex flex-col gap-2 px-3.5 py-2.5">
-              <Row label={t('composer.fields.from')}>
-                <RecipientInput
-                  bare
-                  value={draft.fields.from}
-                  onChange={(from) => changeFields({ from })}
-                  accountId=""
-                  className={`${inputClass} w-full`}
-                />
-              </Row>
-              <Row label={t('composer.fields.to')}>
-                <RecipientInput
-                  bare
-                  value={draft.fields.to}
-                  onChange={(to) => changeFields({ to })}
-                  accountId=""
-                  className={`${inputClass} w-full`}
-                />
-              </Row>
-              <Row label={t('composer.fields.subject')}>
-                <input
-                  value={draft.fields.subject}
-                  onChange={(event) => changeFields({ subject: event.target.value })}
-                  className={inputClass}
-                />
-              </Row>
-              <Row label={t('search.hasWords')}>
-                <input
-                  value={draft.fields.words}
-                  onChange={(event) => changeFields({ words: event.target.value })}
-                  className={inputClass}
-                />
-              </Row>
-              <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-primary select-none">
-                <Checkbox
-                  checked={draft.fields.has_attachment}
-                  onChange={(event) => changeFields({ has_attachment: event.target.checked })}
-                />
-                {t('filters.hasAttachment')}
-              </label>
-              <p className="text-[0.6875rem] text-secondary">{t('rules.queryHint')}</p>
-            </div>
-          </SettingsGroup>
-
-          {/* The tag suggestions open below their row, past the card when it is the last. */}
-          <SettingsGroup title={t('rules.then')} overflowVisible>
-            <div className="flex min-h-11 items-center gap-4 px-3.5 py-2">
-              <span className="shrink-0 text-xs font-normal text-primary">{t('rules.addTags')}</span>
-              <TagInput value={draft.tags} onChange={(tags) => change({ tags })} />
-            </div>
-            <ToggleRow
-              title={t('notification.actionMarkRead')}
-              checked={draft.mark_read}
-              onChange={() => change({ mark_read: !draft.mark_read })}
-            />
-            <ToggleRow title={t('chat.star')} checked={draft.star} onChange={() => change({ star: !draft.star })} />
-            <SettingRow
-              title={t('rules.copyTo')}
-              control={
-                <RuleFolderPicker
-                  label={t('rules.copyTo')}
-                  value={draft.copy_folder ? copyLabel(draft) : t('rules.copyNone')}
-                  options={[
-                    { label: t('rules.copyNone'), onPick: () => change({ copy_account: '', copy_folder: '' }) },
-                  ]}
-                  onPick={({ accountId, folderId }) => change({ copy_account: accountId, copy_folder: folderId })}
-                />
-              }
-            />
-            <SettingRow
-              title={t('rules.moveTo')}
-              control={
-                <RuleFolderPicker
-                  label={t('rules.moveTo')}
-                  value={draft.move_to ? moveLabel(draft) : t('rules.moveNone')}
-                  options={[
-                    { label: t('rules.moveNone'), onPick: () => pickMove('') },
-                    { label: t('folders.roles.archive'), onPick: () => pickMove('archive') },
-                    { label: t('folders.roles.trash'), onPick: () => pickMove('trash') },
-                  ]}
-                  onPick={({ accountId, folderId }) => pickMove('folder', folderId, accountId)}
-                />
-              }
-            />
-            {draft.move_to === 'trash' && (
-              <p className="px-3.5 py-2.5 text-[0.6875rem] font-medium text-rose-500">
-                {t(fieldsEmpty(draft.fields) ? 'rules.trashAllHint' : 'rules.trashHint')}
-              </p>
-            )}
-          </SettingsGroup>
-
-          {invalid && <p className="text-[0.6875rem] font-medium text-rose-500">{t('rules.invalid')}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={reset}>
-              {t('buttons.cancel')}
-            </Button>
-            <Button
-              leftIcon={editing ? undefined : Plus}
-              disabled={
-                saving ||
-                !rules ||
-                (scoped && chosenAccounts.length === 0) ||
-                !Number.isFinite(draft.delay_seconds) ||
-                draft.delay_seconds < 0 ||
-                draft.delay_seconds > 315360000
-              }
-              onClick={() => void submit()}
-            >
-              {editing ? t('buttons.save') : t('rules.add')}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {!formOpen && status.log.length > 0 && (
+      {status.log.length > 0 && (
         <SettingsGroup title={t('rules.activity')}>
           {status.log.slice(0, ACTIVITY_SHOWN).map((entry, at) => (
             <div key={at} className="flex items-baseline justify-between gap-3 px-3.5 py-2 text-xs">

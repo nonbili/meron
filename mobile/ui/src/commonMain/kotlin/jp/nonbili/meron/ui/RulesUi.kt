@@ -1,11 +1,13 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
@@ -24,6 +26,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -40,6 +43,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +62,39 @@ private val NEW_RULE = Rule(query = "")
 
 private const val RUN_POLL_MS = 1500L
 private const val ACTIVITY_SHOWN = 20
+
+// "now" is arrival with no delay, kept apart so that choosing "After it
+// arrives" doesn't fall back to it while the amount is still empty.
+private val TIMINGS = listOf("now", "arrival", "read", "age")
+private val UNITS = listOf("minutes", "hours", "days")
+private val UNIT_SECONDS = mapOf("minutes" to 60L, "hours" to 3600L, "days" to 86400L)
+private const val MAX_DELAY_SECONDS = 315_360_000L
+
+/** The largest unit that holds the delay whole, so 30 days isn't shown as 43200 minutes. */
+private fun splitDelay(seconds: Long): Pair<String, String> {
+    val unit = listOf("days", "hours").firstOrNull { seconds > 0 && seconds % UNIT_SECONDS.getValue(it) == 0L } ?: "minutes"
+    return (seconds.toDouble() / UNIT_SECONDS.getValue(unit)).toString().removeSuffix(".0") to unit
+}
+
+/** The delay in seconds, or null while the amount isn't a usable one. */
+private fun delaySeconds(
+    timing: String,
+    amount: String,
+    unit: String,
+): Long? {
+    if (timing == "now") return 0
+    val value = amount.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return null
+    return kotlin.math
+        .round(value * UNIT_SECONDS.getValue(unit))
+        .toLong()
+        .takeIf { it <= MAX_DELAY_SECONDS }
+}
+
+/** What the settings bar shows while a rule is open: its title, and how back closes it. */
+internal class RuleEditorBar(
+    val title: String,
+    val close: () -> Unit,
+)
 
 private fun accountLabel(account: AccountSummary): String = account.displayName.ifEmpty { account.email }
 
@@ -90,8 +127,12 @@ private fun MeronMobileState.ruleSummary(
     rule: Rule,
 ): String =
     listOfNotNull(
-        (tr("rules.trigger.${rule.trigger}") + " · " + tr("rules.delaySummary", mapOf("minutes" to (rule.delaySeconds / 60.0).toString().removeSuffix(".0"))))
-            .takeIf { rule.trigger != "arrival" || rule.delaySeconds != 0L },
+        if (rule.trigger == "arrival" && rule.delaySeconds == 0L) {
+            null
+        } else {
+            val (amount, unit) = splitDelay(rule.delaySeconds)
+            tr("rules.summary.${rule.trigger}", mapOf("duration" to tr("rules.duration.$unit", mapOf("count" to amount))))
+        },
         tr("rules.summaryTags", mapOf("tags" to rule.tags.joinToString(", "))).takeIf { rule.tags.isNotEmpty() },
         tr("notification.actionMarkRead").takeIf { rule.markRead },
         tr("chat.star").takeIf { rule.star },
@@ -194,7 +235,10 @@ private fun ruleCondition(fields: SearchFields): String {
  * no field for stay in that text across an edit.
  */
 @Composable
-internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
+internal fun MeronMobileState.RulesPage(
+    modifier: Modifier = Modifier,
+    onEditor: (RuleEditorBar?) -> Unit = {},
+) {
     // Each save replaces the whole list, so nothing may start from a stale one:
     // not before the list has loaded, and not while another save is on its way.
     var rules by remember { mutableStateOf<List<Rule>?>(null) }
@@ -203,6 +247,9 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
     var fields by remember { mutableStateOf(SearchFields()) }
     var conditions by remember { mutableStateOf(emptyMap<String, SearchFields>()) }
     var tags by remember { mutableStateOf("") }
+    var timing by remember { mutableStateOf("now") }
+    var amount by remember { mutableStateOf("") }
+    var unit by remember { mutableStateOf("minutes") }
     var adding by remember { mutableStateOf(false) }
     // Apart from `draft.accounts`: turning "all" off starts with none picked,
     // which as a list would mean all of them.
@@ -241,6 +288,9 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
         draft = NEW_RULE
         fields = SearchFields()
         tags = ""
+        timing = "now"
+        amount = ""
+        unit = "minutes"
         scoped = false
         adding = false
         invalid = false
@@ -286,6 +336,18 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
 
     fun change(next: Rule) {
         draft = next
+        invalid = false
+    }
+
+    // A delayed choice starts from a typical amount rather than an empty, unsavable one.
+    fun pickTiming(next: String) {
+        if (next == "now") {
+            amount = ""
+        } else if (amount.isEmpty()) {
+            amount = if (next == "age") "30" else "5"
+            unit = if (next == "age") "days" else "minutes"
+        }
+        timing = next
         invalid = false
     }
 
@@ -338,209 +400,193 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
         )
     }
     val formOpen = adding || editing
+    // Adding or editing takes over the page, with the settings bar's back closing it.
+    val editorTitle = if (formOpen) tr(if (editing) "rules.edit" else "rules.add") else null
+    LaunchedEffect(editorTitle) { onEditor(editorTitle?.let { RuleEditorBar(it) { reset() } }) }
+    DisposableEffect(Unit) { onDispose { onEditor(null) } }
+    val delay = delaySeconds(timing, amount, unit)
+    val scroll = rememberScrollState()
+    // The editor and the list are different pages: neither opens partway down.
+    LaunchedEffect(formOpen) { scroll.scrollTo(0) }
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.verticalScroll(scroll).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(tr("rules.timingHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (rules?.isEmpty() == true && !formOpen) {
-            Text(tr("rules.empty"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        val notice = runStarted?.let { tr("rules.runStarted", mapOf("count" to it.toString())) } ?: runNotice
-        if (notice.isNotEmpty()) {
-            Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-        }
-        val known = { id: String -> coreAccounts.any { it.id == id } }
-        // The labels are read here: accessibility actions run outside composition.
-        val moveUp = tr("rules.moveUp")
-        val moveDown = tr("rules.moveDown")
-        val reorder = tr("rules.reorder")
-        ReorderableColumn(
-            list = rules.orEmpty(),
-            onSettle = ::move,
-            onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) { at, rule, dragging ->
-            key(rule.id) {
-                val left = status.running[rule.id]
-                val failure = status.log.firstOrNull { it.ruleId == rule.id }?.takeIf { it.failed }
-                // A rule keeps a removed account until edited, so that it says what
-                // is wrong instead of quietly becoming a different rule.
-                val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
-                ReorderableItem {
-                    Surface(
-                        color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-                        shadowElevation = if (dragging) 6.dp else 0.dp,
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        rule.accounts.forEach { id ->
-                                            val account = coreAccounts.firstOrNull { it.id == id }
-                                            AccountBadgeAvatar(
-                                                label = account?.let(::accountLabel) ?: id,
-                                                avatarUrl = account?.avatarUrl.orEmpty(),
-                                                size = 16.dp,
+        if (!formOpen) {
+            if (rules?.isEmpty() == true) {
+                Text(tr("rules.empty"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val notice = runStarted?.let { tr("rules.runStarted", mapOf("count" to it.toString())) } ?: runNotice
+            if (notice.isNotEmpty()) {
+                Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            }
+            val known = { id: String -> coreAccounts.any { it.id == id } }
+            // The labels are read here: accessibility actions run outside composition.
+            val moveUp = tr("rules.moveUp")
+            val moveDown = tr("rules.moveDown")
+            val reorder = tr("rules.reorder")
+            ReorderableColumn(
+                list = rules.orEmpty(),
+                onSettle = ::move,
+                onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) { at, rule, dragging ->
+                key(rule.id) {
+                    val left = status.running[rule.id]
+                    val failure = status.log.firstOrNull { it.ruleId == rule.id }?.takeIf { it.failed }
+                    // A rule keeps a removed account until edited, so that it says what
+                    // is wrong instead of quietly becoming a different rule.
+                    val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
+                    ReorderableItem {
+                        Surface(
+                            color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                            shadowElevation = if (dragging) 6.dp else 0.dp,
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            rule.accounts.forEach { id ->
+                                                val account = coreAccounts.firstOrNull { it.id == id }
+                                                AccountBadgeAvatar(
+                                                    label = account?.let(::accountLabel) ?: id,
+                                                    avatarUrl = account?.avatarUrl.orEmpty(),
+                                                    size = 16.dp,
+                                                )
+                                            }
+                                            Text(
+                                                conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
+                                                fontSize = 13.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
                                             )
                                         }
                                         Text(
-                                            conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
-                                            fontSize = 13.sp,
+                                            ruleSummary(mailAccounts, rule),
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.primary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
+                                        if (left != null) {
+                                            Text(tr("rules.runLeft", mapOf("count" to left.toString())), fontSize = 12.sp)
+                                        }
+                                        if (lost) {
+                                            Text(tr("rules.accountGone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                        }
+                                        if (failure != null) {
+                                            Text(
+                                                "${tr("rules.lastFailed")}: ${failure.detail}",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.error,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
                                     }
-                                    Text(
-                                        ruleSummary(mailAccounts, rule),
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                    Switch(
+                                        checked = !rule.disabled,
+                                        enabled = !saving && !(rule.disabled && lost),
+                                        onCheckedChange = { on ->
+                                            save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
+                                        },
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.DragHandle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier =
+                                            Modifier
+                                                .draggableHandle(
+                                                    enabled = !saving,
+                                                    onDragStarted = {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                    },
+                                                ).semantics {
+                                                    contentDescription = reorder
+                                                    // A drag can't be performed from a screen reader.
+                                                    customActions =
+                                                        listOfNotNull(
+                                                            CustomAccessibilityAction(moveUp) {
+                                                                move(at, at - 1)
+                                                                true
+                                                            }.takeIf { at > 0 },
+                                                            CustomAccessibilityAction(moveDown) {
+                                                                move(at, at + 1)
+                                                                true
+                                                            }.takeIf { at < rules.orEmpty().lastIndex },
+                                                        )
+                                                }.padding(12.dp),
                                     )
                                     if (left != null) {
-                                        Text(tr("rules.runLeft", mapOf("count" to left.toString())), fontSize = 12.sp)
-                                    }
-                                    if (lost) {
-                                        Text(tr("rules.accountGone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                                    }
-                                    if (failure != null) {
-                                        Text(
-                                            "${tr("rules.lastFailed")}: ${failure.detail}",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.error,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                                Switch(
-                                    checked = !rule.disabled,
-                                    enabled = !saving && !(rule.disabled && lost),
-                                    onCheckedChange = { on ->
-                                        save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
-                                    },
-                                )
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.DragHandle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier =
-                                        Modifier
-                                            .draggableHandle(
-                                                enabled = !saving,
-                                                onDragStarted = {
-                                                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                                },
-                                            ).semantics {
-                                                contentDescription = reorder
-                                                // A drag can't be performed from a screen reader.
-                                                customActions =
-                                                    listOfNotNull(
-                                                        CustomAccessibilityAction(moveUp) {
-                                                            move(at, at - 1)
-                                                            true
-                                                        }.takeIf { at > 0 },
-                                                        CustomAccessibilityAction(moveDown) {
-                                                            move(at, at + 1)
-                                                            true
-                                                        }.takeIf { at < rules.orEmpty().lastIndex },
-                                                    )
-                                            }.padding(12.dp),
-                                )
-                                if (left != null) {
-                                    TextButton(
-                                        onClick = {
-                                            coroutines.launch {
-                                                if (!stopRule(rule.id)) runNotice = failed
-                                                loadRuleStatus()?.let { status = it }
-                                            }
-                                        },
-                                    ) { Text(tr("rules.stop")) }
-                                } else {
-                                    TextButton(
-                                        enabled = !saving && draft.id != rule.id && !rule.disabled,
-                                        onClick = {
-                                            coroutines.launch {
-                                                val count = ruleMatches(rule.id)
-                                                runStarted = null
-                                                when (count) {
-                                                    null -> runNotice = failed
-                                                    0 -> runNotice = nothing
-                                                    else -> confirmRun = rule to count
+                                        TextButton(
+                                            onClick = {
+                                                coroutines.launch {
+                                                    if (!stopRule(rule.id)) runNotice = failed
+                                                    loadRuleStatus()?.let { status = it }
                                                 }
-                                            }
+                                            },
+                                        ) { Text(tr("rules.stop")) }
+                                    } else {
+                                        TextButton(
+                                            enabled = !saving && !rule.disabled,
+                                            onClick = {
+                                                coroutines.launch {
+                                                    val count = ruleMatches(rule.id)
+                                                    runStarted = null
+                                                    when (count) {
+                                                        null -> runNotice = failed
+                                                        0 -> runNotice = nothing
+                                                        else -> confirmRun = rule to count
+                                                    }
+                                                }
+                                            },
+                                        ) { Text(tr("rules.runAction")) }
+                                    }
+                                    TextButton(
+                                        enabled = !saving,
+                                        onClick = {
+                                            opening?.cancel()
+                                            opening =
+                                                coroutines.launch {
+                                                    val parsed = parseSearchQuery(rule.query)
+                                                    // Its failure handling also swallows being cancelled.
+                                                    ensureActive()
+                                                    fields = parsed ?: SearchFields(words = rule.query)
+                                                    draft = rule
+                                                    val (ruleAmount, ruleUnit) = splitDelay(rule.delaySeconds)
+                                                    timing = if (rule.trigger == "arrival" && rule.delaySeconds == 0L) "now" else rule.trigger
+                                                    amount = if (timing == "now") "" else ruleAmount
+                                                    unit = ruleUnit
+                                                    tags = rule.tags.joinToString(", ")
+                                                    scoped = rule.accounts.isNotEmpty()
+                                                    adding = false
+                                                    invalid = false
+                                                }
                                         },
-                                    ) { Text(tr("rules.runAction")) }
+                                    ) { Text(tr("buttons.edit")) }
+                                    TextButton(
+                                        enabled = !saving,
+                                        onClick = { confirmDelete = rule },
+                                    ) { Text(tr("buttons.delete")) }
                                 }
-                                TextButton(
-                                    enabled = !saving,
-                                    onClick = {
-                                        opening?.cancel()
-                                        opening =
-                                            coroutines.launch {
-                                                val parsed = parseSearchQuery(rule.query)
-                                                // Its failure handling also swallows being cancelled.
-                                                ensureActive()
-                                                fields = parsed ?: SearchFields(words = rule.query)
-                                                draft = rule
-                                                tags = rule.tags.joinToString(", ")
-                                                scoped = rule.accounts.isNotEmpty()
-                                                adding = false
-                                                invalid = false
-                                            }
-                                    },
-                                ) { Text(tr("buttons.edit")) }
-                                TextButton(
-                                    enabled = !saving,
-                                    onClick = { confirmDelete = rule },
-                                ) { Text(tr("buttons.delete")) }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (!formOpen) {
             TextButton(enabled = rules != null, onClick = {
                 opening?.cancel()
                 adding = true
             }) { Text(tr("rules.add")) }
         } else {
             Text(tr("rules.when"), style = MaterialTheme.typography.titleSmall)
-            RuleTargetRow(
-                title = tr("rules.trigger"),
-                value = tr("rules.trigger.${draft.trigger}"),
-                accounts = emptyList(),
-                options =
-                    listOf("arrival", "read", "age").map { trigger ->
-                        tr("rules.trigger.$trigger") to { change(draft.copy(trigger = trigger)) }
-                    },
-                onPick = { _, _ -> },
-            )
-            var delayText by remember(draft.id, draft.delaySeconds) {
-                mutableStateOf((draft.delaySeconds / 60.0).toString().removeSuffix(".0"))
-            }
-            OutlinedTextField(
-                value = delayText,
-                onValueChange = { value ->
-                    delayText = value
-                    val minutes = value.toDoubleOrNull()
-                    if (minutes != null && minutes.isFinite() && minutes in 0.0..5256000.0) {
-                        change(draft.copy(delaySeconds = kotlin.math.round(minutes * 60).toLong()))
-                    }
-                },
-                isError = delayText.toDoubleOrNull()?.let { !it.isFinite() || it !in 0.0..5256000.0 } ?: true,
-                singleLine = true,
-                label = { Text(tr("rules.delayMinutes")) },
-                modifier = Modifier.fillMaxWidth(),
-            )
             if (mailAccounts.size > 1 || scoped) {
                 SettingsToggleRow(
                     icon = Icons.Filled.Person,
@@ -590,6 +636,46 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
                 onToggle = { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) },
             )
             Text(tr("rules.queryHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("rules.timing"), style = MaterialTheme.typography.titleSmall)
+            RuleTargetRow(
+                title = tr("rules.runWhen"),
+                value = tr("rules.timing.$timing"),
+                accounts = emptyList(),
+                options = TIMINGS.map { option -> tr("rules.timing.$option") to { pickTiming(option) } },
+                onPick = { _, _ -> },
+            )
+            if (timing != "now") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = {
+                            amount = it
+                            invalid = false
+                        },
+                        isError = delay == null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        label = { Text(tr(if (timing == "age") "rules.age" else "rules.wait")) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    var unitMenu by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick = { unitMenu = true }) { Text(tr("rules.unit.$unit")) }
+                        DropdownMenu(expanded = unitMenu, onDismissRequest = { unitMenu = false }) {
+                            UNITS.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(tr("rules.unit.$option")) },
+                                    onClick = {
+                                        unit = option
+                                        unitMenu = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Text(tr("rules.timingHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(tr("rules.then"), style = MaterialTheme.typography.titleSmall)
             OutlinedTextField(
                 value = tags,
@@ -640,11 +726,14 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
                 TextButton(onClick = ::reset) { Text(tr("buttons.cancel")) }
                 TextButton(
                     enabled =
-                        !saving && rules != null && !(scoped && chosenAccounts.isEmpty()) &&
-                            (delayText.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..5256000.0 } == true),
+                        !saving && rules != null && !(scoped && chosenAccounts.isEmpty()) && delay != null,
                     onClick = {
                         // As it stands now: Cancel stays available during the save.
-                        val submitted = draft
+                        val submitted =
+                            draft.copy(
+                                trigger = if (timing == "now") "arrival" else timing,
+                                delaySeconds = delay ?: return@TextButton,
+                            )
                         val submittedFields = fields
                         val accounts = chosenAccounts
                         val tagList = tags.split(",").map(String::trim).filter(String::isNotEmpty)
@@ -652,7 +741,7 @@ internal fun MeronMobileState.RulesPage(modifier: Modifier = Modifier) {
                         save({
                             buildSearchQuery(submittedFields)?.let { query ->
                                 val rule = submitted.copy(query = query, tags = tagList, accounts = accounts)
-                                // The list's switch stays live while the form is open.
+                                // Editing doesn't turn a rule on or off.
                                 val live = rules.orEmpty().firstOrNull { it.id == rule.id }
                                 val edited = rule.copy(disabled = live?.disabled ?: rule.disabled)
                                 if (editing) current.map { if (it.id == rule.id) edited else it } else current + rule

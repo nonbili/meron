@@ -105,7 +105,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun SettingsScreen(
-    rulesPage: @Composable (Modifier) -> Unit,
+    rulesPage: @Composable (Modifier, (RuleEditorBar?) -> Unit) -> Unit,
     onOpenTags: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
@@ -232,6 +232,8 @@ internal fun SettingsScreen(
     var selectedSettingsBoardId by remember { mutableStateOf<String?>(null) }
     var focusAccountProxy by remember { mutableStateOf(false) }
     var directOpenRoute by remember { mutableStateOf<String?>(null) }
+    // An open rule takes over the Rules page, and back closes it first.
+    var ruleEditor by remember { mutableStateOf<RuleEditorBar?>(null) }
     val page =
         when (settingsBackStackEntry?.destination?.route ?: SettingsRoutes.Root) {
             SettingsRoutes.General -> SettingsPage.General
@@ -292,7 +294,10 @@ internal fun SettingsScreen(
         )
     }
     val handleBack: () -> Unit = {
-        if (settingsBackStackEntry?.destination?.route == directOpenRoute) {
+        val editor = ruleEditor
+        if (page == SettingsPage.Rules && editor != null) {
+            editor.close()
+        } else if (settingsBackStackEntry?.destination?.route == directOpenRoute) {
             directOpenRoute = null
             onBack()
         } else if (!settingsNavController.popBackStack()) {
@@ -310,7 +315,7 @@ internal fun SettingsScreen(
                             SettingsPage.General -> tr("settings.sections.general")
                             SettingsPage.Messages -> tr("settings.sections.messages")
                             SettingsPage.Composer -> tr("settings.sections.composer")
-                            SettingsPage.Rules -> tr("rules.title")
+                            SettingsPage.Rules -> ruleEditor?.title ?: tr("rules.title")
                             is SettingsPage.AccountDetail -> tr("settings.account.account")
                             is SettingsPage.AccountWallpaper -> tr("settings.account.chatBackground")
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
@@ -416,7 +421,7 @@ internal fun SettingsScreen(
             }
 
             composable(SettingsRoutes.Rules) {
-                rulesPage(Modifier.fillMaxSize())
+                rulesPage(Modifier.fillMaxSize()) { ruleEditor = it }
             }
 
             composable(SettingsRoutes.Composer) {

@@ -1179,7 +1179,7 @@ private fun MeronMobileScreenContent(
                     composable(AppRoutes.Settings) {
                         LaunchedEffect(Unit) { loadStorageUsage() }
                         SettingsScreen(
-                            rulesPage = { modifier -> RulesPage(modifier) },
+                            rulesPage = { modifier, onEditor -> RulesPage(modifier, onEditor) },
                             onOpenTags = { showTagsDialog = true },
                             onBack = popAppBack,
                             initialGeneral = settingsGeneralTarget,
