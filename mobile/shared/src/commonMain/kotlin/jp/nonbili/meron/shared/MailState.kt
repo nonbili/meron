@@ -432,62 +432,103 @@ fun formatContactSuggestion(contact: ContactSuggestion): String {
     }
 }
 
-// Index of the last comma that actually separates recipients — commas inside
-// a double-quoted display name or inside `<...>` don't count. -1 when none.
-fun lastRecipientSeparatorIndex(value: String): Int {
-    var inQuotes = false
-    var inBrackets = false
-    var last = -1
-    value.forEachIndexed { index, ch ->
-        when {
-            ch == '"' -> inQuotes = !inQuotes
-            ch == '<' && !inQuotes -> inBrackets = true
-            ch == '>' && !inQuotes -> inBrackets = false
-            ch == ',' && !inQuotes && !inBrackets -> last = index
-        }
-    }
-    return last
-}
+// Composer separators, not RFC header parsing. Spaces only separate bare emails;
+// quoted display names and angle-bracket addresses remain intact.
+private val bareRecipientEmailPattern = Regex("^[^\\s<>@,;\"\\\\]+@[^\\s<>@,;\"\\\\]+$")
 
-// Split on recipient-separating commas only, preserving raw (untrimmed)
-// segments so callers keep their own whitespace semantics.
-fun splitRecipientEntries(value: String): List<String> {
-    val parts = mutableListOf<String>()
-    var start = 0
+private fun isBareRecipientEmail(value: String): Boolean = bareRecipientEmailPattern.matches(value)
+
+private fun recipientSeparatorIndices(value: String): List<Int> {
     var inQuotes = false
-    var inBrackets = false
+    var depth = 0
+    var escaped = false
+    var start = 0
+    val indices = mutableListOf<Int>()
     value.forEachIndexed { index, ch ->
+        // A malformed cell must not swallow the rest of a spreadsheet paste.
+        if (ch in "\t\r\n") {
+            indices.add(index)
+            start = index + 1
+            inQuotes = false
+            depth = 0
+            escaped = false
+            return@forEachIndexed
+        }
+        if (inQuotes && escaped) {
+            escaped = false
+            return@forEachIndexed
+        }
         when {
+            ch == '\\' && inQuotes -> {
+                escaped = true
+            }
+
             ch == '"' -> {
                 inQuotes = !inQuotes
             }
 
             ch == '<' && !inQuotes -> {
-                inBrackets = true
+                depth++
             }
 
-            ch == '>' && !inQuotes -> {
-                inBrackets = false
+            ch == '>' && !inQuotes && depth > 0 -> {
+                depth--
             }
 
-            ch == ',' && !inQuotes && !inBrackets -> {
-                parts.add(value.substring(start, index))
-                start = index + 1
+            !inQuotes && depth == 0 -> {
+                val space =
+                    if (ch == ' ' && isBareRecipientEmail(value.substring(start, index).trim())) {
+                        val rest = value.substring(index + 1).trimStart()
+                        val next = rest.takeWhile { !it.isWhitespace() && it != ',' && it != ';' }
+                        rest.isEmpty() || isBareRecipientEmail(next)
+                    } else {
+                        false
+                    }
+                if (ch == ',' || ch == ';' || space) {
+                    indices.add(index)
+                    start = index + 1
+                }
             }
         }
     }
+    return indices
+}
+
+fun lastRecipientSeparatorIndex(value: String): Int = recipientSeparatorIndices(value).lastOrNull() ?: -1
+
+// Preserve untrimmed segments, including the active (possibly empty) tail.
+fun splitRecipientEntries(value: String): List<String> {
+    val parts = mutableListOf<String>()
+    var start = 0
+    recipientSeparatorIndices(value).forEach { index ->
+        parts.add(value.substring(start, index))
+        start = index + 1
+    }
     parts.add(value.substring(start))
     return parts
+}
+
+fun normalizeRecipientInput(value: String): String {
+    val parts = splitRecipientEntries(value)
+    if (parts.size == 1) return value
+    val completed = parts.dropLast(1).map { it.trim() }.filter { it.isNotEmpty() }
+    val tail = parts.last().trimStart()
+    return joinRecipientEntries(completed + tail)
+}
+
+// Used whenever chips are rebuilt, not just on paste: malformed entries must
+// keep a hard boundary through focus changes, deletion and autocomplete.
+fun joinRecipientEntries(entries: List<String>): String {
+    val separator = if (entries.any { !recipientSeparatorIndices("$it,").contains(it.length) }) "\t" else ", "
+    return entries.joinToString(separator)
 }
 
 fun replaceRecipientTail(
     value: String,
     contact: ContactSuggestion,
 ): String {
-    val index = lastRecipientSeparatorIndex(value)
-    val head = if (index < 0) "" else value.substring(0, index + 1)
-    val prefix = if (head.isBlank()) "" else "$head "
-    return "$prefix${formatContactSuggestion(contact)}, "
+    val completed = splitRecipientEntries(value).dropLast(1).map { it.trim() }.filter { it.isNotEmpty() }
+    return joinRecipientEntries(completed + formatContactSuggestion(contact) + "")
 }
 
 fun recipientTail(value: String): String {

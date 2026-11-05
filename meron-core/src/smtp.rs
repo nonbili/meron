@@ -136,7 +136,7 @@ pub struct AttachmentInput {
     pub inline_id: String,
 }
 
-/// Split a comma-separated recipient string into trimmed, non-empty entries.
+/// Split composer recipients, including spreadsheet rows/columns and Outlook lists.
 /// Commas inside a double-quoted display name (`"Doe, Jane" <j@x>`) or inside
 /// the `<...>` address brackets don't split, so quoted contact names survive.
 fn parse_addrs(raw: &str) -> Vec<String> {
@@ -144,8 +144,30 @@ fn parse_addrs(raw: &str) -> Vec<String> {
     let mut current = String::new();
     let mut in_quotes = false;
     let mut in_brackets = false;
-    for ch in raw.chars() {
+    let mut escaped = false;
+    for (index, ch) in raw.char_indices() {
+        // Recover at spreadsheet cell boundaries, including malformed cells.
+        if matches!(ch, '\t' | '\r' | '\n') {
+            let entry = current.trim();
+            if !entry.is_empty() {
+                out.push(entry.to_string());
+            }
+            current.clear();
+            in_quotes = false;
+            in_brackets = false;
+            escaped = false;
+            continue;
+        }
+        if in_quotes && escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
         match ch {
+            '\\' if in_quotes => {
+                escaped = true;
+                current.push(ch);
+            }
             '"' => {
                 in_quotes = !in_quotes;
                 current.push(ch);
@@ -158,12 +180,25 @@ fn parse_addrs(raw: &str) -> Vec<String> {
                 in_brackets = false;
                 current.push(ch);
             }
-            ',' if !in_quotes && !in_brackets => {
+            ',' | ';' if !in_quotes && !in_brackets => {
                 let entry = current.trim();
                 if !entry.is_empty() {
                     out.push(entry.to_string());
                 }
                 current.clear();
+            }
+            ' ' if !in_quotes && !in_brackets && is_bare_email(current.trim()) => {
+                let rest = raw[index + 1..].trim_start();
+                let next = rest
+                    .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+                    .next()
+                    .unwrap_or("");
+                if rest.is_empty() || is_bare_email(next) {
+                    out.push(current.trim().to_string());
+                    current.clear();
+                } else {
+                    current.push(ch);
+                }
             }
             _ => current.push(ch),
         }
@@ -173,6 +208,18 @@ fn parse_addrs(raw: &str) -> Vec<String> {
         out.push(entry.to_string());
     }
     out
+}
+
+fn is_bare_email(value: &str) -> bool {
+    let mut parts = value.split('@');
+    let local = parts.next().unwrap_or("");
+    let domain = parts.next().unwrap_or("");
+    !local.is_empty()
+        && !domain.is_empty()
+        && parts.next().is_none()
+        && !value
+            .chars()
+            .any(|c| c.is_whitespace() || "<>,;\"\\".contains(c))
 }
 
 /// Split a `Name <addr>` (or bare `addr`) entry into its display name and
@@ -692,6 +739,38 @@ mod tests {
             vec!["a@x.com", "Bob <b@y.com>", "c@z.com"]
         );
         assert!(parse_addrs("").is_empty());
+    }
+
+    #[test]
+    fn parse_addrs_accepts_spreadsheet_and_outlook_lists() {
+        for malformed in ["Bob <b@y.com", "\"Bob <b@y.com"] {
+            assert_eq!(
+                parse_addrs(&format!("{malformed}\tc@z.com\r\nd@w.com\r\n")),
+                [malformed, "c@z.com", "d@w.com"]
+            );
+        }
+        for separator in [",", "; ", "\t", "\r\n", " ", "  "] {
+            assert_eq!(
+                parse_addrs(&format!("a@x.com{separator}b@y.com")),
+                ["a@x.com", "b@y.com"]
+            );
+        }
+        assert_eq!(
+            parse_addrs("a@x.com\tb@y.com\r\nc@z.com\td@z.com\r\n"),
+            ["a@x.com", "b@y.com", "c@z.com", "d@z.com"]
+        );
+        assert_eq!(
+            parse_addrs("Alice Smith <a@x.com>; \"Doe, Jane\" <b@y.com>"),
+            ["Alice Smith <a@x.com>", "\"Doe, Jane\" <b@y.com>"]
+        );
+        assert_eq!(
+            parse_addrs("Email\na@x.com\tinvalid"),
+            ["Email", "a@x.com", "invalid"]
+        );
+        assert_eq!(
+            parse_addrs(r#""A \" B" <a@x.com>; b@y.com"#),
+            [r#""A \" B" <a@x.com>"#, "b@y.com"]
+        );
     }
 
     #[test]

@@ -495,6 +495,49 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun normalizesSpreadsheetAndOutlookRecipients() {
+        listOf("Bob <b@y.com", "\"Bob <b@y.com").forEach { malformed ->
+            assertEquals(
+                "$malformed\tc@z.com\td@w.com\t",
+                normalizeRecipientInput("$malformed\tc@z.com\r\nd@w.com\r\n"),
+            )
+        }
+        listOf(",", "; ", "\t", "\r\n", " ", "  ").forEach { separator ->
+            assertEquals("a@x.com, b@y.com", normalizeRecipientInput("a@x.com${separator}b@y.com"))
+        }
+        assertEquals(
+            "a@x.com, b@y.com, c@z.com, d@z.com, ",
+            normalizeRecipientInput("a@x.com\tb@y.com\r\nc@z.com\td@z.com\r\n"),
+        )
+        assertEquals(
+            "Alice Smith <a@x.com>, \"Doe, Jane\" <b@y.com>",
+            normalizeRecipientInput("Alice Smith <a@x.com>; \"Doe, Jane\" <b@y.com>"),
+        )
+        assertEquals("Email, a@x.com, invalid", normalizeRecipientInput("Email\na@x.com\tinvalid"))
+        assertEquals("\"Doe,", normalizeRecipientInput("\"Doe,"))
+        assertEquals("a@x.com, ", normalizeRecipientInput("a@x.com "))
+        assertEquals(
+            "\"A \\\" B\" <a@x.com>, b@y.com",
+            normalizeRecipientInput("\"A \\\" B\" <a@x.com>; b@y.com"),
+        )
+    }
+
+    @Test
+    fun malformedRecipientBoundariesSurviveChipRebuilding() {
+        val completed = listOf("\"Bob <b@y.com", "c@z.com")
+        val typing = joinRecipientEntries(completed + "d@w.comx")
+        assertEquals(completed + "d@w.comx", splitRecipientEntries(typing))
+        val blurred = joinRecipientEntries(completed + "d@w.com" + "")
+        assertEquals(completed + "d@w.com" + "", splitRecipientEntries(blurred))
+        val deleted = joinRecipientEntries(completed.take(1) + "d@w.com")
+        assertEquals(listOf("\"Bob <b@y.com", "d@w.com"), splitRecipientEntries(deleted))
+        assertEquals(
+            "\"Bob <b@y.com\tc@z.com\tBea <bea@example.com>\t",
+            replaceRecipientTail(typing, ContactSuggestion(name = "Bea", addr = "bea@example.com")),
+        )
+    }
+
+    @Test
     fun buildsSendIdentitiesAndDetectsReplyAlias() {
         val account =
             AccountSummary(

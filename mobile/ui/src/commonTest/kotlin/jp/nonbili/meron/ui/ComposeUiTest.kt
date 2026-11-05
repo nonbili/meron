@@ -24,6 +24,13 @@ import kotlin.test.assertTrue
 
 class ComposeUiTest {
     @Test
+    fun testSpreadsheetRecipientsBecomeSeparateChips() {
+        val (completed, active) = parseRecipients("a@x.com\tb@y.com\r\nc@z.com\t")
+        assertEquals(listOf("a@x.com", "b@y.com", "c@z.com"), completed)
+        assertEquals("", active)
+    }
+
+    @Test
     fun testParseRecipientsEmpty() {
         val (completed, active) = parseRecipients("")
         assertEquals(emptyList(), completed)

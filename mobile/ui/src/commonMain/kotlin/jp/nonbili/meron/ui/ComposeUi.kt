@@ -204,9 +204,11 @@ import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.isOAuthCallbackUrl
 import jp.nonbili.meron.shared.isPotentialOAuthCallbackUrl
+import jp.nonbili.meron.shared.joinRecipientEntries
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
+import jp.nonbili.meron.shared.normalizeRecipientInput
 import jp.nonbili.meron.shared.ownAddressList
 import jp.nonbili.meron.shared.parseAccountListResponse
 import jp.nonbili.meron.shared.parseAttachmentDataResponse
@@ -877,7 +879,7 @@ internal fun RecipientChipsInput(
         if (!initialized) {
             initialized = true
             if (value.isNotEmpty() && !value.trim().endsWith(",")) {
-                onChange(value.trim() + ", ")
+                onChange(joinRecipientEntries(splitRecipientEntries(value).map { it.trim() }.filter { it.isNotEmpty() } + ""))
             }
         }
     }
@@ -904,7 +906,7 @@ internal fun RecipientChipsInput(
                         if (newCompleted.isEmpty()) {
                             activeInput
                         } else {
-                            newCompleted.joinToString(", ") + (if (activeInput.isNotEmpty()) ", $activeInput" else "")
+                            joinRecipientEntries(newCompleted + activeInput)
                         }
                     onChange(newValue)
                 },
@@ -917,25 +919,19 @@ internal fun RecipientChipsInput(
                 // Update local state immediately to preserve cursor position
                 activeInputState = newActiveState
 
-                val newActiveText = newActiveState.text
-                // Don't treat a comma inside an unfinished quoted name
-                // ("Doe,) as a commit — wait for the closing quote.
-                val quotesBalanced = newActiveText.count { it == '"' } % 2 == 0
+                val newActiveText = normalizeRecipientInput(newActiveState.text)
                 val committedValue =
-                    if (newActiveText.endsWith(",") && quotesBalanced) {
-                        val cleaned = newActiveText.removeSuffix(",").trim()
-                        if (cleaned.isNotEmpty()) {
-                            (completed + cleaned).joinToString(", ") + ", "
-                        } else {
-                            value
-                        }
+                    if (completed.isEmpty()) {
+                        newActiveText
                     } else {
-                        if (completed.isEmpty()) {
-                            newActiveText
-                        } else {
-                            completed.joinToString(", ") + ", " + newActiveText
-                        }
+                        joinRecipientEntries(completed + splitRecipientEntries(newActiveText))
                     }
+                // Update synchronously even when the parsed tail remains empty:
+                // LaunchedEffect(activeInput) would not rerun in that case.
+                val nextActive = parseRecipients(committedValue).second
+                if (nextActive != newActiveState.text) {
+                    activeInputState = TextFieldValue(nextActive, TextRange(nextActive.length))
+                }
                 onChange(committedValue)
             },
             keyboardOptions = keyboardOptions,
@@ -947,7 +943,7 @@ internal fun RecipientChipsInput(
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
-                            onChange((completed + activeInput.trim()).joinToString(", ") + ", ")
+                            onChange(joinRecipientEntries(completed + activeInput.trim() + ""))
                         }
                         onFocusChanged(focusState)
                     },

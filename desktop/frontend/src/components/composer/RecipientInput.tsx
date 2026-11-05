@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Contact } from '../../types'
 import { suggestContacts, formatContact } from '../../lib/contacts'
 import { useEscapeKey } from '../../lib/useEscapeKey'
+import { normalizeRecipientInput, pasteRecipientInput, recipientSeparatorIndices } from '../../lib/recipientInput'
 
 type RecipientInputProps = {
   value: string
@@ -21,12 +22,7 @@ type RecipientInputProps = {
 // quoted name like `"Lee, Ann"` holds one. Returns the leading portion
 // (including that comma) plus the active token being typed.
 function splitTail(value: string): { head: string; tail: string } {
-  let idx = -1
-  let quoted = false
-  for (let i = 0; i < value.length; i++) {
-    if (value[i] === '"') quoted = !quoted
-    else if (value[i] === ',' && !quoted) idx = i
-  }
+  const idx = recipientSeparatorIndices(value).at(-1) ?? -1
   if (idx === -1) return { head: '', tail: value }
   return { head: value.slice(0, idx + 1), tail: value.slice(idx + 1) }
 }
@@ -50,6 +46,14 @@ export function RecipientInput({
   const focusedRef = useRef(false)
   const suggestionsEnabledRef = useRef(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const caretRef = useRef<{ input: HTMLInputElement; position: number } | null>(null)
+  useLayoutEffect(() => {
+    const caret = caretRef.current
+    if (caret) {
+      caret.input.setSelectionRange(caret.position, caret.position)
+      caretRef.current = null
+    }
+  })
 
   const tail = splitTail(value).tail.trim()
   // The account and token the held suggestions were looked up for.
@@ -138,7 +142,26 @@ export function RecipientInput({
         className={className}
         onChange={(e) => {
           suggestionsEnabledRef.current = true
-          onChange(e.target.value)
+          const input = e.currentTarget
+          const raw = input.value
+          // Leave deletions and mid-field typing alone: users must be able to
+          // backspace through separators and edit without losing their caret.
+          const deleting = (e.nativeEvent as InputEvent).inputType?.startsWith('delete') || raw.length < value.length
+          const atEnd = input.selectionStart === raw.length && input.selectionEnd === raw.length
+          const event = e.nativeEvent as InputEvent
+          const composing = event.isComposing || event.inputType === 'insertCompositionText'
+          onChange(deleting || !atEnd || composing ? raw : normalizeRecipientInput(raw))
+        }}
+        onPaste={(e) => {
+          // Read the clipboard before the single-line input removes tabs/newlines.
+          e.preventDefault()
+          const input = e.currentTarget
+          const start = input.selectionStart ?? value.length
+          const end = input.selectionEnd ?? start
+          const pasted = pasteRecipientInput(value, start, end, e.clipboardData.getData('text'))
+          suggestionsEnabledRef.current = true
+          caretRef.current = { input, position: pasted.caret }
+          onChange(pasted.value)
         }}
         onKeyDown={onKeyDown}
         onFocus={() => {

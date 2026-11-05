@@ -15,6 +15,54 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+it('does not normalize text during IME composition', () => {
+  const view = render(<Field onTab={() => {}} />)
+  const input = view.getByRole('textbox') as HTMLInputElement
+  fireEvent.change(input, { target: { value: 'a@x.com, ' } })
+  fireEvent.change(input, { target: { value: 'a@x.com,' } })
+  const event = new Event('change', { bubbles: true })
+  Object.defineProperty(event, 'isComposing', { value: true })
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  setter.call(input, 'a@x.com,や')
+  fireEvent(input, event)
+  expect(input.value).toBe('a@x.com,や')
+})
+
+it('allows backspacing through the trailing separator', () => {
+  const view = render(<Field onTab={() => {}} />)
+  const input = view.getByRole('textbox') as HTMLInputElement
+  fireEvent.change(input, { target: { value: 'a@x.com, ' } })
+  fireEvent.change(input, { target: { value: 'a@x.com,' } })
+  expect(input.value).toBe('a@x.com,')
+  fireEvent.change(input, { target: { value: 'a@x.com' } })
+  expect(input.value).toBe('a@x.com')
+})
+
+it('leaves mid-field edits and their caret intact', () => {
+  const view = render(<Field onTab={() => {}} />)
+  const input = view.getByRole('textbox') as HTMLInputElement
+  fireEvent.change(input, { target: { value: 'a@x.com, c@z.com' } })
+  fireEvent.change(input, { target: { value: 'a@x.com, b@y.com c@z.com', selectionStart: 17, selectionEnd: 17 } })
+  expect(input.value).toBe('a@x.com, b@y.com c@z.com')
+  expect(input.selectionStart).toBe(17)
+})
+
+it('pastes an Excel rectangle before the input strips its separators', () => {
+  const view = render(<Field onTab={() => {}} />)
+  const input = view.getByRole('textbox') as HTMLInputElement
+  fireEvent.paste(input, { clipboardData: { getData: () => 'a@x.com\tb@y.com\r\nc@z.com' } })
+  expect(input.value).toBe('a@x.com, b@y.com, c@z.com')
+})
+
+it('pastes at the selection without losing surrounding recipients', () => {
+  const view = render(<Field onTab={() => {}} />)
+  const input = view.getByRole('textbox') as HTMLInputElement
+  fireEvent.change(input, { target: { value: 'a@x.com, replace, d@z.com' } })
+  input.setSelectionRange(9, 16)
+  fireEvent.paste(input, { clipboardData: { getData: () => 'b@y.com\tc@z.com' } })
+  expect(input.value).toBe('a@x.com, b@y.com, c@z.com, d@z.com')
+})
+
 async function settle() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 160))
