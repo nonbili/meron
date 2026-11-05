@@ -4,7 +4,9 @@ import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
-import { ui$, showToast } from './ui'
+import { ui$, showToast, showUndoToast } from './ui'
+import { contextualErrorMessage } from '../lib/errors'
+import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { getActiveThread, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
@@ -18,6 +20,7 @@ import {
   bodyWithSignature,
   bodyWithSwappedSignature,
   type ComposeBody,
+  isBodyBlankWithoutSignature,
   resolveSignature,
   signatureForms,
   type Signature,
@@ -34,6 +37,8 @@ import {
   forgetComposeSession,
   getComposeSession,
   pruneComposeSessions,
+  type SavedDraft,
+  trackDraftSave,
 } from './composeSessions'
 import {
   buildReplyRecipients,
@@ -1167,9 +1172,10 @@ export async function closeMessageTab(id: string) {
   })
 }
 
-// Close several tabs at once (the tab strip's close others/left/right/all).
+// Close several tabs at once, e.g. those showing a renamed folder's mail.
 // Compose tabs are skipped: closing one discards its draft, which a bulk close
-// must never do behind the user's back.
+// must never do behind the user's back. (The tab strip's bulk close uses
+// closeMessageTabsKeepingDrafts, which saves them to Drafts instead.)
 export function closeMessageTabs(ids: string[]) {
   const wanted = new Set(ids)
   const closing = compose$.tabs
@@ -1180,6 +1186,133 @@ export function closeMessageTabs(ids: string[]) {
   const active = compose$.activeTab.get()
   for (const id of closing) if (id !== active) finishClosingMessageTab(id)
   if (closing.includes(active)) finishClosingMessageTab(active)
+}
+
+/**
+ * A new message (not a reply, forward or reopened draft) with no recipients,
+ * subject or attachments and nothing in its body but the signature, if any.
+ */
+export function isUnwrittenNewMessage(draft: ComposeDraft): boolean {
+  return (
+    !draft.sourceDraft &&
+    !draft.inReplyTo &&
+    !draft.quote &&
+    !draft.to.trim() &&
+    !draft.cc.trim() &&
+    !draft.bcc.trim() &&
+    !draft.subject.trim() &&
+    draft.attachments.length === 0 &&
+    isBodyBlankWithoutSignature(draft, draft.signature)
+  )
+}
+
+/**
+ * Close a compose tab but keep the message in Drafts (Esc, and the tab strip's
+ * bulk close). This works whether or not the tab's composer is mounted: the
+ * save runs from the draft the tab holds. The tab closes at once, since a
+ * Drafts server can take seconds. The last save then runs from a copy of the
+ * draft, after any save already running (which, finding the tab gone, cleans
+ * up any copy it allocated). If the save fails, the tab comes back with the
+ * error, so nothing typed is lost.
+ *
+ * A new message with nothing written in it goes through `discard` instead of
+ * filling Drafts with empty mail. Returns the save, which resolves to the
+ * saved draft (null when nothing was saved), or null when the tab can't
+ * close this way (no account, or already sending or closing).
+ */
+export function closeComposeTabKeepingDraft(
+  tabId: string,
+  discard: () => Promise<void>,
+): Promise<SavedDraft | null> | null {
+  const session = getComposeSession(tabId)
+  const closed = compose$.tabs.peek().find((t) => t.id === tabId)
+  const current = closed?.compose
+  if (!closed || !current?.accountId || session.savesStopped) return null
+  const fetches = [...session.attachmentFetches]
+  if (fetches.length === 0 && isUnwrittenNewMessage(current)) return discard().then(() => null)
+  // Stop autosaving and let whatever is already running finish first.
+  session.savesStopped = true
+  const drained = session.saveChain
+  finishClosingMessageTab(tabId)
+  const save = drained.then(async (): Promise<SavedDraft | null> => {
+    // The attachments still on their way, which the closed tab can't take in.
+    const fetched = (await Promise.all(fetches)).flat()
+    const closing = { ...current, attachments: [...current.attachments, ...fetched] }
+    try {
+      let content = composedContent(current)
+      let attachments = closing.attachments
+      if (current.rich) {
+        const prepared = await prepareInlineImages(content, attachments)
+        content = inlineRichStyles(prepared.html)
+        attachments = prepared.attachments
+      }
+      const draftMessageId = await saveComposedDraft({
+        accountId: current.accountId,
+        from: current.fromEmail,
+        to: current.to.trim(),
+        cc: current.cc.trim(),
+        bcc: current.bcc.trim(),
+        replyTo: current.replyTo.trim(),
+        subject: current.subject.trim(),
+        rich: current.rich,
+        content,
+        inReplyTo: current.inReplyTo,
+        references: current.references,
+        draftMessageId: current.draftMessageId,
+        attachments,
+      })
+      return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
+    } catch (err) {
+      console.error('Saving the draft on close failed:', err)
+      // Reopened under the id the failed save was writing, so a copy that
+      // landed anyway is replaced by the next save rather than duplicated.
+      const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
+      restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
+      showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
+      return null
+    }
+  })
+  trackDraftSave(save, current)
+  return save
+}
+
+/** Says where closed drafts went, with a way to bring them all back. */
+export function announceSavedDrafts(saved: SavedDraft[]) {
+  if (saved.length === 0) return
+  showUndoToast(
+    t('composer.status.savedToDrafts'),
+    () => {
+      for (const draft of saved) draft.reopen()
+    },
+    'app',
+    t('composer.actions.openDraft'),
+  )
+}
+
+/**
+ * The tab strip's close others/left/right/all. Unlike closeMessageTabs, this
+ * closes compose tabs too, keeping their messages in Drafts as Esc does (never
+ * discarding them, as the × does). One toast covers every saved draft.
+ */
+export function closeMessageTabsKeepingDrafts(ids: string[]) {
+  const wanted = new Set(ids)
+  const closing = compose$.tabs.get().filter((tab) => wanted.has(tab.id))
+  // Close the active tab last, so it falls back to a tab that stays open.
+  const active = compose$.activeTab.get()
+  const ordered = [...closing.filter((tab) => tab.id !== active), ...closing.filter((tab) => tab.id === active)]
+  const saves: Promise<SavedDraft | null>[] = []
+  for (const tab of ordered) {
+    if (tab.kind !== 'compose' || !tab.compose) {
+      finishClosingMessageTab(tab.id)
+      continue
+    }
+    // A tab already closing (its × or Esc) is left to that close.
+    if (getComposeSession(tab.id).closing) continue
+    const save = closeComposeTabKeepingDraft(tab.id, () => closeMessageTab(tab.id))
+    if (save) saves.push(save)
+  }
+  if (saves.length === 0) return
+  void Promise.all(saves).then((results) => announceSavedDrafts(results.filter((saved) => saved !== null)))
 }
 
 // Put a tab where another one sits, for reordering the strip. Either may have

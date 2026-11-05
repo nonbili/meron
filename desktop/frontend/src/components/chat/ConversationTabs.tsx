@@ -6,7 +6,12 @@ import { CSS as DndCSS } from '@dnd-kit/utilities'
 import { MessageSquare, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { closeMessageTab, closeMessageTabs, activateConversationTab, moveMessageTab } from '../../states/compose'
+import {
+  closeMessageTab,
+  closeMessageTabsKeepingDrafts,
+  activateConversationTab,
+  moveMessageTab,
+} from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
@@ -264,9 +269,10 @@ function SortableTab({
 }
 
 // Right-click menu for a tab, the Current tab ('') included: it sits first in
-// the strip and closes like the conversation header's X. The bulk entries skip
-// compose tabs (see closeMessageTabs) and are disabled when that leaves
-// nothing to close.
+// the strip and closes like the conversation header's X. The bulk entries
+// close compose tabs too, keeping their messages in Drafts (see
+// closeMessageTabsKeepingDrafts), and are disabled when there is nothing to
+// close.
 function TabContextMenu({
   x,
   y,
@@ -286,19 +292,17 @@ function TabContextMenu({
   const entries = [...(hasCurrent ? [''] : []), ...tabs.map((tab) => tab.id)]
   const index = entries.indexOf(tabId)
   if (index === -1) return null
-  const closable = (ids: string[]) =>
-    ids.filter((id) => id === '' || tabs.find((tab) => tab.id === id)?.kind !== 'compose')
   const close = (ids: string[]) => {
     onClose()
     // Tabs first: closing Current hands the pane to a tab still open.
-    closeMessageTabs(ids.filter((id) => id !== ''))
+    closeMessageTabsKeepingDrafts(ids.filter((id) => id !== ''))
     if (ids.includes('')) closeCurrentConversation()
   }
   const bulk = [
-    { label: t('chat.closeOtherTabs'), ids: closable(entries.filter((id) => id !== tabId)) },
-    { label: t('chat.closeTabsToLeft'), ids: closable(entries.slice(0, index)) },
-    { label: t('chat.closeTabsToRight'), ids: closable(entries.slice(index + 1)) },
-    { label: t('chat.closeAllTabs'), ids: closable(entries) },
+    { label: t('chat.closeOtherTabs'), ids: entries.filter((id) => id !== tabId) },
+    { label: t('chat.closeTabsToLeft'), ids: entries.slice(0, index) },
+    { label: t('chat.closeTabsToRight'), ids: entries.slice(index + 1) },
+    { label: t('chat.closeAllTabs'), ids: entries },
   ]
 
   return (

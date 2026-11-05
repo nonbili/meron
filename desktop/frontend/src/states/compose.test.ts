@@ -4,6 +4,7 @@ import {
   activateConversationTab,
   closeMessageTab,
   closeMessageTabs,
+  closeMessageTabsKeepingDrafts,
   draftShouldOpenConversation,
   openDraftCompose,
   openDraftConversationOrCompose,
@@ -30,6 +31,7 @@ import {
   resolveQuickReplyFrom,
 } from './composeReply'
 import { compose$ } from './composeState'
+import { draftSavesSettled } from './composeSessions'
 import {
   addToQuickReply,
   cancelQuickReplyDraftSave,
@@ -492,6 +494,38 @@ describe('tab navigation', () => {
     // The active tab closes last, so it lands on the compose tab still open
     // rather than on a tab that was about to go.
     expect(compose$.activeTab.get()).toBe(composeId)
+  })
+
+  it('bulk-closes compose tabs from the tab strip, saving them to Drafts', async () => {
+    const saves: unknown[] = []
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      if (command === 'mail.allocateIdentity') return { message_id: `draft-${saves.length}@example.com` }
+      if (command === 'mail.saveDraft') {
+        saves.push(payload)
+        return {}
+      }
+      return invoke(command, payload)
+    }
+    ui$.selectedThread.set('t-current')
+    openThreadTab(message({ thread_id: 't-2', id: 'm2' }))
+    openComposeTab({ subject: 'Unsent' })
+    // Nothing written: discarded rather than filling Drafts with empty mail.
+    openComposeTab()
+    ui$.toast.set('')
+
+    closeMessageTabsKeepingDrafts(compose$.tabs.get().map((tab) => tab.id))
+    expect(compose$.tabs.get()).toHaveLength(0)
+    await draftSavesSettled(() => true)
+    await Promise.resolve()
+    expect(saves).toHaveLength(1)
+    expect((saves[0] as { subject: string }).subject).toBe('Unsent')
+    expect(ui$.toast.get()).toBe('Saved to Drafts')
+
+    // The toast's Open brings the saved draft back.
+    const open = ui$.toastUndo.get() as (() => void) | null
+    open?.()
+    expect(compose$.tabs.get().map((tab) => tab.compose?.subject)).toEqual(['Unsent'])
   })
 })
 

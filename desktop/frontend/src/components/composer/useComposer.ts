@@ -4,9 +4,8 @@ import { TextSelection } from '@tiptap/pm/state'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { confirmAction, showToast, showUndoToast } from '../../states/ui'
+import { confirmAction, showToast } from '../../states/ui'
 import { settings$ } from '../../states/settings'
-import { isBodyBlankWithoutSignature } from '../../lib/signature'
 import type { ComposeDraft, ComposerAttachment } from '../../types'
 import {
   sendComposed,
@@ -15,9 +14,9 @@ import {
   draftIdOfFailedSave,
   updateComposeDraft,
   finishClosingMessageTab,
-  reopenComposeTab,
-  restoreComposeTabAfterFailedSave,
   composedContent,
+  closeComposeTabKeepingDraft,
+  announceSavedDrafts,
 } from '../../states/compose'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
@@ -33,7 +32,7 @@ import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
 import { discardClosedDraft, discardSentDraft } from '../../states/quickReply'
 import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
-import { getComposeSession, registerComposeSession, trackDraftSave } from '../../states/composeSessions'
+import { getComposeSession, registerComposeSession } from '../../states/composeSessions'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { ResizableImage } from './composerImage'
 import {
@@ -68,24 +67,6 @@ const CiteBlockquote = Extension.create({
     ]
   },
 })
-
-/**
- * A new message (not a reply, forward or reopened draft) with no recipients,
- * subject or attachments and nothing in its body but the signature, if any.
- */
-function isUnwrittenNewMessage(draft: ComposeDraft): boolean {
-  return (
-    !draft.sourceDraft &&
-    !draft.inReplyTo &&
-    !draft.quote &&
-    !draft.to.trim() &&
-    !draft.cc.trim() &&
-    !draft.bcc.trim() &&
-    !draft.subject.trim() &&
-    draft.attachments.length === 0 &&
-    isBodyBlankWithoutSignature(draft, draft.signature)
-  )
-}
 
 // All of the Composer's behaviour: the tiptap editor, attachment handling
 // (paste/drop/file-picker, inline images), rich/plain toggling, autosave, and
@@ -171,64 +152,15 @@ export function useComposer(tabId: string) {
 
   /**
    * Esc: close the tab but keep the message in Drafts, unlike the × and
-   * Discard. The tab closes at once, as the × does: a Drafts server can take
-   * seconds and Esc must not seem dead meanwhile. The last save then runs
-   * from a copy of the draft, after any save in flight (which, finding the tab
-   * gone, cleans up a copy it allocated). If it fails, the tab comes back with
-   * the error, so nothing typed is lost; if it lands, a toast says where the
-   * message went and can reopen the tab, as Esc is easily pressed by accident.
-   * A new message with nothing written in it is discarded instead of filling
-   * Drafts with empty mail.
+   * Discard (see closeComposeTabKeepingDraft). If the save lands, a toast says
+   * where the message went and can reopen the tab, as Esc is easily pressed
+   * by accident.
    */
   const closeKeepingDraft = async () => {
-    const closed = compose$.tabs.peek().find((t) => t.id === tabId)
-    const current = closed?.compose
-    if (!closed || !current?.accountId || session.savesStopped) return
-    const fetches = [...session.attachmentFetches]
-    if (fetches.length === 0 && isUnwrittenNewMessage(current)) return discardAndClose()
-    const drained = stopSaving()
-    finishClosingMessageTab(tabId)
-    const save = drained.then(async () => {
-      // The attachments still on their way, which the closed tab can't take in.
-      const fetched = (await Promise.all(fetches)).flat()
-      const closing = { ...current, attachments: [...current.attachments, ...fetched] }
-      try {
-        let content = composedContent(current)
-        let attachments = closing.attachments
-        if (current.rich) {
-          const prepared = await prepareInlineImages(content, attachments)
-          content = inlineRichStyles(prepared.html)
-          attachments = prepared.attachments
-        }
-        const draftMessageId = await saveComposedDraft({
-          accountId: current.accountId,
-          from: current.fromEmail,
-          to: current.to.trim(),
-          cc: current.cc.trim(),
-          bcc: current.bcc.trim(),
-          replyTo: current.replyTo.trim(),
-          subject: current.subject.trim(),
-          rich: current.rich,
-          content,
-          inReplyTo: current.inReplyTo,
-          references: current.references,
-          draftMessageId: current.draftMessageId,
-          attachments,
-        })
-        const reopen = () => reopenComposeTab(closed, { ...closing, draftMessageId })
-        showUndoToast(t('composer.status.savedToDrafts'), reopen, 'app', t('composer.actions.openDraft'))
-        return { draftMessageId, reopen }
-      } catch (err) {
-        console.error('Saving the draft on Esc failed:', err)
-        // Reopened under the id the failed save was writing, so a copy that
-        // landed anyway is replaced by the next save rather than duplicated.
-        const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
-        restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
-        showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
-        return null
-      }
+    const save = closeComposeTabKeepingDraft(tabId, discardAndClose)
+    void save?.then((saved) => {
+      if (saved) announceSavedDrafts([saved])
     })
-    trackDraftSave(save, current)
   }
   const lastImagePasteAtRef = useRef(0)
   const previousFromEmailRef = useRef(draft?.fromEmail)
