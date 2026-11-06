@@ -37,6 +37,26 @@ describe('replySubject', () => {
     expect(replySubject('Re: [...]', message({ subject: 'Testing This' }))).toBe('Re: Testing This')
   })
 
+  it('sees the placeholder behind every reply prefix the core strips', () => {
+    // The core's strip_reply_prefix: other languages, counts, a full-width colon.
+    const answered = message({ subject: 'Plans' })
+    for (const subject of [
+      'Tr: ...',
+      'VS: [...]',
+      'Res: ...',
+      'RV: ...',
+      'Re[2]: ...',
+      'Re(3): [...]',
+      '回复：...',
+      '答复: [...]',
+      '转发: ...',
+      'Fw: Re: ...',
+    ]) {
+      expect(replySubject(subject, answered)).toBe('Re: Plans')
+    }
+    expect(replySubject('Reply: ...', answered)).toBe('Re: Reply: ...')
+  })
+
   it('never takes a subject from another loaded thread', () => {
     // On the Mac a reply in one thread went out as "Re: Testing This", the
     // subject of a different thread.

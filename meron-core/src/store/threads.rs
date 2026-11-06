@@ -760,21 +760,15 @@ pub(super) struct RootCandidate {
     subject: String,
 }
 
-/// The subject an encrypted message carries outside its encryption (RFC 9788
-/// protected headers: `[...]`, Thunderbird `...`) until its body is decrypted.
-fn is_encrypted_subject_placeholder(subject: &str) -> bool {
-    matches!(subject.trim(), "..." | "[...]")
-}
-
 /// The title of a thread whose oldest message is `root`: its subject, unless
 /// that is still an encrypted message's placeholder, in which case the oldest
 /// message that does know its subject (decrypted, or not encrypted) titles it.
 /// Only the title: grouping keeps keying on the oldest message.
 fn thread_title(root: &RootCandidate, candidates: &[RootCandidate], read_folder: &str) -> String {
-    if is_encrypted_subject_placeholder(&root.subject) {
+    if is_encrypted_placeholder_subject(&root.subject) {
         let known: Vec<RootCandidate> = candidates
             .iter()
-            .filter(|candidate| !is_encrypted_subject_placeholder(&candidate.subject))
+            .filter(|candidate| !is_encrypted_placeholder_subject(&candidate.subject))
             .cloned()
             .collect();
         if let Some(titled) = pick_root(known, read_folder) {

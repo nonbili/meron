@@ -8,16 +8,14 @@ import { compose$ } from './composeState'
 
 // Reply addressing: which message to answer, from which identity, and to whom.
 
-/** Pick the source message to reply to: the most recent loaded message in the
- * active thread that wasn't sent by us — its Reply-To/Cc are the headers we
- * should honor — preferring one that accepts replies, so a no-reply
- * notification or a bounce doesn't take the reply (the core decides which, see
- * `accepts_replies`). Falls back to the thread header when no loaded message
- * matches. */
+// The reply prefixes the core's `strip_reply_prefix` takes off, with an
+// optional count (`Re[2]:`) and a full-width colon.
+const REPLY_PREFIXES = /^\s*((re|fwd?|aw|sv|vs|rv|res|tr|antw|wg|答复|回复|转发)(\[\d+\]|\(\d+\))?\s*[:：]\s*)+/i
+
 // An encrypted message's subject until it is decrypted (RFC 9788 protected
 // headers: `[...]`, Thunderbird `...`), reply prefixes aside.
 function isEncryptedPlaceholder(subject: string): boolean {
-  const core = subject.replace(/^\s*((re|aw|sv|wg|antw|fwd?)\s*:\s*)+/i, '').trim()
+  const core = subject.replace(REPLY_PREFIXES, '').trim()
   return core === '[...]' || core === '...'
 }
 
@@ -40,6 +38,12 @@ export function replySubject(subject: string, target?: Message): string {
   return base.startsWith('Re:') ? base : `Re: ${base}`
 }
 
+/** Pick the source message to reply to: the most recent loaded message in the
+ * active thread that wasn't sent by us — its Reply-To/Cc are the headers we
+ * should honor — preferring one that accepts replies, so a no-reply
+ * notification or a bounce doesn't take the reply (the core decides which, see
+ * `accepts_replies`). Falls back to the thread header when no loaded message
+ * matches. */
 export function pickReplyTarget(activeT: Message, excludedId = ''): Message {
   const messages = mail$.messages.get()
   const ownAddrs = ownAddressSet(accounts$.get())
