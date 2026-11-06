@@ -58,7 +58,7 @@ func main() {
 		ShouldQuit:                  app.shouldQuit,
 		Assets: application.AssetOptions{
 			Handler:    desktopAssetHandler(),
-			Middleware: cspMiddleware,
+			Middleware: application.ChainMiddleware(runtimeGuard, cspMiddleware),
 		},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: appUniqueID(),
