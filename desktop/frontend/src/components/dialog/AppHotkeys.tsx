@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { invoke } from '../../lib/bridge'
+import { openEmlFile } from '../../lib/eml'
 import { leaveNarrowContacts } from '../../states/contacts'
 import {
   clearBulkSelection,
@@ -381,7 +381,8 @@ export function AppHotkeys() {
           break
         case 'eml.open':
           event.preventDefault()
-          void invoke('eml.open').catch((error) => showToast(String(error), 'error'))
+          if (event.repeat) break
+          void openEmlFile().catch((error) => showToast(String(error), 'error'))
           break
         case 'compose.new':
           event.preventDefault()
@@ -523,7 +524,7 @@ export function AppHotkeys() {
     // single-key shortcuts, plus bare ArrowUp/ArrowDown. The detail is the
     // chord HtmlFrame reconstructed.
     const onFrameKeyDown = (event: Event) => {
-      const chord = (event as CustomEvent<Chord | undefined>).detail
+      const chord = (event as CustomEvent<(Chord & { repeat?: boolean }) | undefined>).detail
       if (!chord?.key) return
       // Keys only come from a frame with focus in it, which is in the message,
       // whether or not the parent saw that focus arrive.
@@ -554,6 +555,7 @@ export function AppHotkeys() {
         // native behaviour inside the frame rather than being swallowed here.
         const replay = new KeyboardEvent('keydown', {
           key: chord.key,
+          repeat: !!chord.repeat,
           cancelable: true,
           ctrlKey: !!chord.mod && !isMac,
           metaKey: !!chord.mod && isMac,

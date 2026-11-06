@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { isMac, setShortcutOverrides } from '../../lib/shortcuts'
 import { calendar$ } from '../../states/calendar'
 import { mail$ } from '../../states/mailState'
@@ -38,9 +38,13 @@ afterEach(() => {
 })
 
 describe('AppHotkeys', () => {
-  it('opens EML files from the window and HTML frames, including a rebound shortcut', () => {
+  it('opens EML files from the window and HTML frames, including a rebound shortcut', async () => {
     render(<AppHotkeys />)
-    fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac, repeat: true })
+      expect(calls.filter((command) => command === 'eml.open')).toHaveLength(0)
+      fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+    })
     expect(calls.filter((command) => command === 'eml.open')).toHaveLength(1)
     try {
       setShortcutOverrides({ 'eml.open': { mod: true, shift: true, key: 'o' } })

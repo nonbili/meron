@@ -183,7 +183,9 @@ export function SideNav() {
             // tiles square up, and lifts on hover instead.
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-label transition-[background-color,color,box-shadow] duration-200 ease-out hover:bg-accent-hover hover:text-accent-hover-label hover:shadow-md cursor-pointer"
             onClick={() => openComposeTab()}
-            title={`${t('composer.actions.newMessage')} (${formatShortcut('compose.new').join(isMac ? '' : '+')})`}
+            title={[t('composer.actions.newMessage'), formatShortcut('compose.new').join(isMac ? '' : '+')]
+              .filter(Boolean)
+              .join(' — ')}
             aria-label={t('composer.actions.newMessage')}
           >
             <SquarePen size={18} />

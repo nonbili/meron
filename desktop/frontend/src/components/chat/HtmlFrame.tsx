@@ -321,7 +321,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
 
         const forwarded = new CustomEvent('meron.frameKeyDown', {
           cancelable: true,
-          detail: chord,
+          detail: { ...chord, repeat: event.repeat },
         })
         if (!window.dispatchEvent(forwarded) || forwarded.defaultPrevented) {
           event.preventDefault()

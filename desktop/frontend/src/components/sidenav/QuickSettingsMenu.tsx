@@ -1,7 +1,7 @@
 import { Columns3, FolderOpen, Info, Plus, RefreshCw, Settings, SquareChevronRight } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { invoke } from '../../lib/bridge'
+import { openEmlFile } from '../../lib/eml'
 import { showToast } from '../../states/ui'
 import { syncMail } from '../../states/mail'
 import { openCommandPalette, ui$ } from '../../states/ui'
@@ -11,11 +11,9 @@ import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 
 /** The chord a menu row triggers, so the keystroke is learnable from the menu. */
 function Hint({ id }: { id: ShortcutId }) {
-  return (
-    <kbd className="shrink-0 text-[0.625rem] font-normal text-secondary/60">
-      {formatShortcut(id).join(isMac ? '' : '+')}
-    </kbd>
-  )
+  const parts = formatShortcut(id)
+  if (!parts.length) return null
+  return <kbd className="shrink-0 text-[0.625rem] font-normal text-secondary/60">{parts.join(isMac ? '' : '+')}</kbd>
 }
 
 /**
@@ -63,7 +61,7 @@ export function QuickSettingsMenu({
         trailing={<Hint id="eml.open" />}
         onClick={() => {
           onClose()
-          void invoke('eml.open').catch((error) => showToast(String(error), 'error'))
+          void openEmlFile().catch((error) => showToast(String(error), 'error'))
         }}
       />
       <MenuItem

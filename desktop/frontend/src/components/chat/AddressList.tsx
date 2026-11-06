@@ -6,7 +6,12 @@ import { copyText } from '../../lib/native'
 
 import { parseAddressList, type AddressItem } from './messageHelpers'
 
-export function AddressPill({ name, original, email }: AddressItem) {
+export function AddressPill({
+  name,
+  original,
+  email,
+  showContactAction = true,
+}: AddressItem & { showContactAction?: boolean }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
@@ -32,7 +37,7 @@ export function AddressPill({ name, original, email }: AddressItem) {
           {copied ? <CheckCheck size={10} className="text-emerald-500" /> : <Copy size={10} />}
         </span>
       </button>
-      {email.includes('@') && (
+      {showContactAction && email.includes('@') && (
         <button
           type="button"
           title={t('contacts.open')}
@@ -50,7 +55,15 @@ export function AddressPill({ name, original, email }: AddressItem) {
   )
 }
 
-export function AddressRow({ label, rawList }: { label: string; rawList: string }) {
+export function AddressRow({
+  label,
+  rawList,
+  showContactAction = true,
+}: {
+  label: string
+  rawList: string
+  showContactAction?: boolean
+}) {
   const { t } = useTranslation()
   const items = useMemo(() => parseAddressList(rawList), [rawList])
   const [expanded, setExpanded] = useState(false)
@@ -68,7 +81,7 @@ export function AddressRow({ label, rawList }: { label: string; rawList: string 
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {visibleItems.map((item, idx) => (
-          <AddressPill key={idx} {...item} />
+          <AddressPill key={idx} {...item} showContactAction={showContactAction} />
         ))}
         {showMore && (
           <button
