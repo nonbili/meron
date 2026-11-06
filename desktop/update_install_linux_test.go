@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,7 +122,8 @@ func TestReplaceTargetRejectsManagedChannel(t *testing.T) {
 	}
 }
 
-// A read-only install dir (a root-owned /opt) must fail before anything moves.
+// Authorization is requested only after preparing a complete binary; failures
+// leave both the installed copy and downloaded payload available for a retry.
 func TestReplaceTargetUnwritableDir(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can write to a read-only directory")
@@ -140,12 +142,62 @@ func TestReplaceTargetUnwritableDir(t *testing.T) {
 	if err := os.WriteFile(payload, []byte("new image"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := replaceTarget(updateChannel{Kind: channelAppImage, Target: target}, payload)
-	if err == nil {
-		t.Fatal("expected an error")
+	for _, kind := range []string{channelAppImage, channelTarball} {
+		t.Run(kind, func(t *testing.T) {
+			if kind == channelTarball {
+				writeTarGz(t, payload, map[string]string{"meron": "new image"})
+			}
+			cancelled := errors.New("authorization cancelled")
+			var staged string
+			err := replaceTargetWithElevation(updateChannel{Kind: kind, Target: target}, payload, func(source, dest string) error {
+				staged = source
+				if dest != target {
+					t.Fatalf("target = %q, want %q", dest, target)
+				}
+				got, err := os.ReadFile(source)
+				if err != nil || string(got) != "new image" {
+					t.Fatalf("staged binary = %q, %v", got, err)
+				}
+				return cancelled
+			})
+			if !errors.Is(err, cancelled) {
+				t.Fatalf("error = %v, want authorization cancellation", err)
+			}
+			if _, err := os.Stat(staged); !os.IsNotExist(err) {
+				t.Fatalf("temporary binary was not cleaned up: %v", err)
+			}
+			got, _ := os.ReadFile(target)
+			if string(got) != "old binary" {
+				t.Fatalf("installed binary changed: %q", got)
+			}
+			if _, err := os.Stat(payload); err != nil {
+				t.Fatalf("download no longer available for retry: %v", err)
+			}
+		})
 	}
-	if !strings.Contains(err.Error(), "not writable") {
-		t.Fatalf("error = %v, want a not-writable error", err)
+
+	writeTarGz(t, payload, map[string]string{"README": "missing binary"})
+	err := replaceTargetWithElevation(updateChannel{Kind: channelTarball, Target: target}, payload, func(string, string) error {
+		t.Fatal("invalid archive must not request authorization")
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("error = %v, want missing binary", err)
+	}
+}
+
+func TestReplaceTargetDoesNotElevateForOtherErrors(t *testing.T) {
+	for _, channel := range []updateChannel{
+		{Kind: channelTarball, Target: filepath.Join(t.TempDir(), "missing", "meron")},
+		{Kind: channelTarball, Target: filepath.Join(t.TempDir(), "meron"), Managed: true},
+	} {
+		err := replaceTargetWithElevation(channel, "/dev/null", func(string, string) error {
+			t.Fatal("must not request authorization for missing directory or managed channel")
+			return nil
+		})
+		if err == nil {
+			t.Fatal("expected an error")
+		}
 	}
 }
 

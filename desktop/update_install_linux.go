@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,29 +25,37 @@ func applyUpdate(channel updateChannel, payload string) error {
 // replaceTarget is applyUpdate without the relaunch: everything that touches
 // the filesystem, so it can be exercised on its own.
 func replaceTarget(channel updateChannel, payload string) error {
+	return replaceTargetWithElevation(channel, payload, installWithPolicyKit)
+}
+
+func replaceTargetWithElevation(channel updateChannel, payload string, elevate func(string, string) error) error {
 	target := channel.Target
-	if target == "" {
+	if !channel.SelfUpdatable() || (channel.Kind != channelAppImage && channel.Kind != channelTarball) {
 		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
 	}
 	parent := filepath.Dir(target)
 	if err := ensureWritableDir(parent); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			// Extract before requesting authorization. The privileged helper only
+			// receives a binary stream, never an archive or a path to read as root.
+			dir, err := os.MkdirTemp("", "meron-update-")
+			if err != nil {
+				return err
+			}
+			defer os.RemoveAll(dir)
+			staging := filepath.Join(dir, "meron")
+			if err := stageLinuxUpdate(channel, payload, staging); err != nil {
+				return err
+			}
+			return elevate(staging, target)
+		}
 		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, err)
 	}
 
 	staging := filepath.Join(parent, fmt.Sprintf(".meron-update-%d", os.Getpid()))
 	_ = os.Remove(staging)
 
-	var err error
-	switch channel.Kind {
-	case channelAppImage:
-		// The payload is the new AppImage itself.
-		err = copyFile(payload, staging, 0o755)
-	case channelTarball:
-		err = extractBinaryFromTarGz(payload, "meron", staging)
-	default:
-		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
-	}
-	if err != nil {
+	if err := stageLinuxUpdate(channel, payload, staging); err != nil {
 		_ = os.Remove(staging)
 		return err
 	}
@@ -60,6 +69,17 @@ func replaceTarget(channel updateChannel, payload string) error {
 		return fmt.Errorf("update: could not replace %s: %w", target, err)
 	}
 	return nil
+}
+
+func stageLinuxUpdate(channel updateChannel, payload, staging string) error {
+	switch channel.Kind {
+	case channelAppImage:
+		return copyFile(payload, staging, 0o755)
+	case channelTarball:
+		return extractBinaryFromTarGz(payload, "meron", staging)
+	default:
+		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
+	}
 }
 
 // extractBinaryFromTarGz pulls a single entry out of the release tarball. The

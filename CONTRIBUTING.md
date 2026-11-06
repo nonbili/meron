@@ -64,6 +64,13 @@ Package-managed builds should launch Meron with
 `MERON_DISABLE_SELF_UPDATE=1`. This disables release polling and self-update
 controls so updates remain owned by the package manager.
 
+For standalone tarball and AppImage installations in a root-owned directory
+(for example `/opt/meron`), the updater requests administrator authorization
+through PolicyKit. This requires `pkexec` and a running desktop PolicyKit
+authentication agent. Only the binary replacement runs as root; Meron restarts
+as the original user. Cancelling authorization leaves the download available
+for another attempt. No custom PolicyKit rules are needed.
+
 ## Testing
 
 Run the full suite (Go, Rust, i18n, and frontend):
