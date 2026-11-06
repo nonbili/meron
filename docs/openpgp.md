@@ -234,7 +234,10 @@ Peer keys and verification marks are not in backups.
    only from the key's own valid self-signatures (`designated_revokers`: direct-key signatures and user-ID
    self-certifications, hashed area), so nobody else can add one. A third-party revocation counts only if the named
    revoker's public key is available (own or stored peer key, looked up by `Resolver`) and the revocation verifies
-   against its primary key (`verify_key_third_party`); otherwise it is ignored.
+   against its primary key (`verify_key_third_party`); otherwise it doesn't count. Such a revocation is still stored
+   when its issuer is a named revoker whose key Meron doesn't have yet (`pending_revocation`, at most
+   `MAX_PENDING_REVOCATIONS` = 4 per key), so it counts once that key arrives; one by anyone the key doesn't name is
+   dropped.
 2. **Invalid bindings:** no user ID whose newest verifying self-certification passes the binding hash policy
    (`binding_hash_ok`: MD5/RIPEMD-160 never; SHA-1 only if the signature is older than `SHA1_BINDING_CUTOFF`
    = 2023-02-01, Sequoia's standard-policy cutoff).
@@ -275,7 +278,8 @@ from its own database (`store::db_key`), the parser from the keyring snapshot it
 revocation signatures, direct-key signatures, user-ID certifications and subkey bindings it adds, plus new user IDs
 and subkeys. Only signatures that verify against the stored primary key are taken (nobody but the key's owner can
 change it), except revocations, which may also come from a designated revoker (checked against the merged
-self-signatures, so a designation and a revocation can arrive together); duplicates are skipped, and each component
+self-signatures, so a designation and a revocation can arrive together; one by a named revoker whose key isn't known yet
+is kept unverified, capped, and checked on every use); duplicates are skipped, and each component
 keeps at most 64 signatures. This runs before the usability
 check, so a **revoked copy is merged even though it would never be accepted as a new key**; the merged key then fails
 `check()` (Revoked) and drops out of encryption, and its signatures stop counting (§4).
@@ -643,8 +647,10 @@ message iframe.
 - Secret-key **exports** use CFB S2K without AEAD integrity (`keys::export`), the v4 default GnuPG/Thunderbird/
   OpenKeychain read. The file is user-held and passphrase-protected, so the risk is low; it is the shape the Key
   Overwriting attack needs. A deliberate interop choice; AEAD S2K becomes an option once GnuPG 2.4 reads it.
-- Supporting a key whose primary cannot sign (offline-primary + signing-subkey) is a possible future feature; such a
-  key is refused on import for now, since Meron signs with the primary.
+- Supporting a key whose primary is flagged not to sign (offline-primary + signing-subkey) is a possible future
+  feature; such a key is refused on import for now, since Meron signs with the primary. The flags come from the newest
+  verified self-signature that carries a key-flags subpacket; a key with none is judged by its algorithm
+  (`primary_can_sign`), as GnuPG does.
 
 **Suggestions for CI (maintainer's call):**
 - A `cargo audit` / `cargo deny` gate would need upstream's existing advisories triaged first.
@@ -666,6 +672,9 @@ message iframe.
 - Not supported: cleartext-signed messages, inline PGP in HTML, bzip2, SEIPDv2 for Meron's own keys, smartcards,
   revocation certificates for replaced keys, naming a designated revoker for Meron's own keys.
 - A designated revocation counts only once the revoker's key is known to Meron; until then the revoked key stays usable.
+  The revocation is kept meanwhile. Pending revocations are capped at four per key, so forgeries naming the revoker
+  can't crowd out verified ones; a genuine revocation arriving while four forgeries hold those slots is dropped until it
+  is seen again after the revoker's key is known.
 
 <sub>[↑ Back to contents](#contents)</sub>
 

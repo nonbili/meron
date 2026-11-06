@@ -408,13 +408,29 @@ fn self_signatures(key: &SignedPublicKey) -> impl Iterator<Item = &Signature> {
     direct.chain(certs)
 }
 
-/// Whether the key's primary is flagged to make data signatures, read from its
-/// newest verified self-signature. Meron signs with the primary key, so a key
-/// whose primary lacks this flag (an offline-primary + signing-subkey setup)
-/// would produce signatures strict verifiers reject; such a key is refused on
-/// import rather than used to sign silently-invalid mail.
+/// Whether the key's primary is flagged to make data signatures, read from the
+/// newest verified self-signature that carries key flags. A self-signature
+/// without a key-flags subpacket (a later direct-key signature naming a
+/// revoker, say) says nothing about them, and a key with no key flags at all
+/// can do what its algorithm can, as GnuPG reads it. Meron signs with the
+/// primary key, so a key whose primary is flagged not to sign (an
+/// offline-primary + signing-subkey setup) would produce signatures strict
+/// verifiers reject; such a key is refused on import rather than used to sign
+/// silently-invalid mail.
 pub fn primary_can_sign(key: &SignedPublicKey) -> bool {
-    newest(self_signatures(key)).is_some_and(|s| s.key_flags().sign())
+    match newest(self_signatures(key).filter(|s| has_key_flags(s))) {
+        Some(sig) => sig.key_flags().sign(),
+        None => key.primary_key.algorithm().can_sign(),
+    }
+}
+
+/// Whether `sig` carries a key-flags subpacket (`Signature::key_flags` reads an
+/// absent one as "no capabilities", which isn't what absence means).
+fn has_key_flags(sig: &Signature) -> bool {
+    sig.config().is_some_and(|c| {
+        c.hashed_subpackets()
+            .any(|p| matches!(p.data, pgp::packet::SubpacketData::KeyFlags(_)))
+    })
 }
 
 /// When the primary key expires, from its newest valid user-ID binding
@@ -588,6 +604,11 @@ pub fn subkey_valid_at_with(
 /// grow a stored one without bound.
 const MAX_SIGNATURES: usize = 64;
 
+/// Revocations kept for a designated revoker whose key Meron doesn't have yet
+/// (so they can't be verified). Capped separately, so forgeries naming the
+/// revoker can't fill [`MAX_SIGNATURES`] and crowd out verified revocations.
+const MAX_PENDING_REVOCATIONS: usize = 4;
+
 fn add_signatures(
     into: &mut Vec<Signature>,
     from: &[Signature],
@@ -709,22 +730,56 @@ pub fn merge_with(
         }
     }
     // Revocations last: designated revokers come from the (merged) self-signatures.
-    let candidates: Vec<Signature> = incoming
+    // A revocation by a named revoker whose key we don't have yet can't be
+    // checked now; it is kept (at most MAX_PENDING_REVOCATIONS of them) and
+    // counts once that key is known, since `is_revoked_with` verifies on use.
+    let revokers = designated_revokers(&out);
+    let mut pending = out
         .details
         .revocation_signatures
         .iter()
-        .filter(|s| !out.details.revocation_signatures.contains(s))
-        .filter(|s| revocation_valid(&out, s, resolve))
-        .cloned()
-        .collect();
-    for sig in candidates {
+        .filter(|s| !revocation_valid(&out, s, resolve))
+        .count();
+    for sig in &incoming.details.revocation_signatures {
         if out.details.revocation_signatures.len() >= MAX_SIGNATURES {
             break;
         }
-        out.details.revocation_signatures.push(sig);
-        changed = true;
+        if out.details.revocation_signatures.contains(sig) {
+            continue;
+        }
+        if revocation_valid(&out, sig, resolve) {
+            out.details.revocation_signatures.push(sig.clone());
+            changed = true;
+        } else if pending < MAX_PENDING_REVOCATIONS && pending_revocation(sig, &revokers, resolve) {
+            out.details.revocation_signatures.push(sig.clone());
+            pending += 1;
+            changed = true;
+        }
     }
     changed.then_some(out)
+}
+
+/// A key revocation whose issuer is one of `revokers` but whose key `resolve`
+/// can't provide yet, so it can't be verified now. Once the revoker's key is
+/// known it is verified like any other revocation; a forgery then never counts.
+fn pending_revocation(sig: &Signature, revokers: &[String], resolve: Resolver<'_>) -> bool {
+    if sig.typ() != Some(pgp::packet::SignatureType::KeyRevocation) {
+        return false;
+    }
+    let fingerprints: Vec<String> = sig
+        .issuer_fingerprint()
+        .iter()
+        .map(|f| hex_upper(f.as_bytes()))
+        .collect();
+    let key_ids: Vec<String> = sig
+        .issuer_key_id()
+        .iter()
+        .map(|id| hex_upper(id.as_ref()))
+        .collect();
+    revokers.iter().any(|r| {
+        (fingerprints.contains(r) || key_ids.iter().any(|id| r.ends_with(id.as_str())))
+            && resolve(r).is_none()
+    })
 }
 
 /// The subkey to encrypt to now, chosen like Delta Chat and the Autocrypt v2
@@ -1198,6 +1253,194 @@ pub(crate) mod tests {
                 &user.id,
             )
             .unwrap()
+    }
+
+    /// A self-signature by `secret`'s primary without a key-flags subpacket,
+    /// created now: a direct-key signature, or (`on_user`) a user-ID
+    /// self-certification.
+    fn self_sig_without_key_flags(secret: &SignedSecretKey, on_user: bool) -> Signature {
+        use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        use pgp::types::Timestamp;
+        let pubkey = secret.to_public_key();
+        let typ = if on_user {
+            SignatureType::CertPositive
+        } else {
+            SignatureType::Key
+        };
+        let mut config =
+            SignatureConfig::v4(typ, secret.primary_key.algorithm(), HashAlgorithm::Sha256);
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        if on_user {
+            let id = &pubkey.details.users[0].id;
+            config
+                .sign_certification(
+                    &secret.primary_key,
+                    &pubkey.primary_key,
+                    &Password::empty(),
+                    pgp::types::Tag::UserId,
+                    id,
+                )
+                .unwrap()
+        } else {
+            config
+                .sign_key(&secret.primary_key, &Password::empty(), &pubkey.primary_key)
+                .unwrap()
+        }
+    }
+
+    /// A key revocation of `target` signed by `signer` but naming `named` as its
+    /// issuer: a forgery that claims to come from a designated revoker. `n`
+    /// shifts the creation time so each forgery is a distinct signature.
+    fn revocation_claiming(
+        signer: &SignedSecretKey,
+        named: &SignedSecretKey,
+        target: &SignedPublicKey,
+        n: u32,
+    ) -> Signature {
+        use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        use pgp::types::Timestamp;
+        let mut config = SignatureConfig::v4(
+            SignatureType::KeyRevocation,
+            signer.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(Timestamp::from_secs(
+                now() - n,
+            )))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                named.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        config
+            .sign_key(&signer.primary_key, &Password::empty(), &target.primary_key)
+            .unwrap()
+    }
+
+    // A self-signature without key flags doesn't decide whether the primary
+    // can sign; with no flags anywhere, the primary's algorithm does.
+    #[test]
+    fn primary_can_sign_ignores_self_signatures_without_key_flags() {
+        let secret = secret("alice-secret.asc");
+        let mut newer_flagless = secret.to_public_key();
+        newer_flagless
+            .details
+            .direct_signatures
+            .push(self_sig_without_key_flags(&secret, false));
+        assert!(
+            primary_can_sign(&newer_flagless),
+            "a newer direct-key signature without flags"
+        );
+
+        let mut no_flags = secret.to_public_key();
+        no_flags.details.direct_signatures.clear();
+        no_flags.details.users[0].signatures = vec![self_sig_without_key_flags(&secret, true)];
+        assert!(
+            primary_can_sign(&no_flags),
+            "no key flags anywhere: EdDSA can sign"
+        );
+    }
+
+    // A revocation by a designated revoker whose key Meron doesn't have yet is
+    // kept, so it takes effect once that key is known: on first store and when
+    // it arrives as an update. A revocation by anyone the key doesn't name as a
+    // revoker is still dropped.
+    #[test]
+    fn a_designated_revocation_is_kept_until_the_revokers_key_is_known() {
+        let tess = parse_public(&fixture("tess-public.asc")).unwrap();
+        let dan = secret("dan-secret.asc");
+        let dan_pub = dan.to_public_key();
+        let dan_fpr = fingerprint_hex(&dan.primary_key);
+        let resolve_dan = |f: &str| (f == dan_fpr).then(|| dan_pub.clone());
+        let none = |_: &str| None;
+        let revoked = revoke_by(&dan, &tess);
+
+        let stored = minimize_with(&revoked, &none);
+        assert_eq!(
+            stored.details.revocation_signatures.len(),
+            1,
+            "kept while Dan's key is unknown"
+        );
+        assert_eq!(
+            check_with(&stored, now(), &none),
+            None,
+            "doesn't count without Dan's key"
+        );
+        assert_eq!(
+            check_with(&stored, now(), &resolve_dan),
+            Some(Unusable::Revoked),
+            "counts once it is known"
+        );
+
+        let updated = merge_with(&tess, &revoked, &none).expect("the pending revocation is new");
+        assert_eq!(
+            check_with(&updated, now(), &resolve_dan),
+            Some(Unusable::Revoked)
+        );
+
+        let mallory = secret("mallory-secret.asc");
+        let not_named = revoke_by(&mallory, &tess);
+        assert!(
+            minimize_with(&not_named, &none)
+                .details
+                .revocation_signatures
+                .is_empty()
+        );
+        assert!(merge_with(&tess, &not_named, &none).is_none());
+    }
+
+    // A forgery naming the designated revoker can be stored while that key is
+    // unknown, but never counts once it is known; such pending revocations are
+    // capped, so a genuine revocation still gets in.
+    #[test]
+    fn forged_pending_revocations_never_count_and_are_capped() {
+        let tess = parse_public(&fixture("tess-public.asc")).unwrap();
+        let dan = secret("dan-secret.asc");
+        let mallory = secret("mallory-secret.asc");
+        let dan_pub = dan.to_public_key();
+        let dan_fpr = fingerprint_hex(&dan.primary_key);
+        let resolve_dan = |f: &str| (f == dan_fpr).then(|| dan_pub.clone());
+        let none = |_: &str| None;
+        let mut spammed = tess.clone();
+        for n in 0..10 {
+            spammed
+                .details
+                .revocation_signatures
+                .push(revocation_claiming(&mallory, &dan, &tess, n));
+        }
+        let stored = minimize_with(&spammed, &none);
+        assert_eq!(
+            stored.details.revocation_signatures.len(),
+            MAX_PENDING_REVOCATIONS
+        );
+        assert_eq!(
+            check_with(&stored, now(), &resolve_dan),
+            None,
+            "forgeries never count"
+        );
+        // With Dan's key known the forgeries fail verification and aren't kept at all.
+        assert!(
+            minimize_with(&spammed, &resolve_dan)
+                .details
+                .revocation_signatures
+                .is_empty()
+        );
+
+        let genuine = revoke_by(&dan, &tess);
+        let merged =
+            merge_with(&stored, &genuine, &resolve_dan).expect("the genuine revocation is added");
+        assert_eq!(
+            check_with(&merged, now(), &resolve_dan),
+            Some(Unusable::Revoked)
+        );
     }
 
     // Meron signs with the primary key, so a key whose primary is not
