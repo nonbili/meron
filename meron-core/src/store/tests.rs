@@ -6042,14 +6042,37 @@ fn an_undecrypted_message_stays_in_its_threads_branch() {
         date,
         ..Default::default()
     };
-    let sent = header(5, "[Gmail]/Sent Mail", "[...]", 100);
+    // Encrypted (multipart/encrypted at fetch), not decrypted yet.
+    let sent = MessageHeader {
+        encrypted: true,
+        ..header(5, "[Gmail]/Sent Mail", "[...]", 100)
+    };
     let reply = header(9, "INBOX", "Re: Hopefully the last test", 200);
-    let later = header(6, "[Gmail]/Sent Mail", "...", 300);
+    let later = MessageHeader {
+        encrypted: true,
+        ..header(6, "[Gmail]/Sent Mail", "...", 300)
+    };
 
-    assert!(subject_in_branch(&sent.subject, "Hopefully the last test"));
-    assert!(subject_in_branch(&later.subject, "Hopefully the last test"));
-    assert!(subject_in_branch(&reply.subject, "Hopefully the last test"));
-    assert!(!subject_in_branch("Lunch", "Hopefully the last test"));
+    assert!(subject_in_branch(
+        &sent.subject,
+        sent.encrypted,
+        "Hopefully the last test"
+    ));
+    assert!(subject_in_branch(
+        &later.subject,
+        later.encrypted,
+        "Hopefully the last test"
+    ));
+    assert!(subject_in_branch(
+        &reply.subject,
+        reply.encrypted,
+        "Hopefully the last test"
+    ));
+    assert!(!subject_in_branch(
+        "Lunch",
+        false,
+        "Hopefully the last test"
+    ));
 
     let cards = group_thread_cards(vec![later, reply, sent], "INBOX");
     assert_eq!(cards.len(), 1, "one card, not a branch per subject");
@@ -6058,6 +6081,103 @@ fn an_undecrypted_message_stays_in_its_threads_branch() {
         "no 'changed subject' banner"
     );
     assert_eq!(cards[0].message_count, 3);
+}
+
+// Only an encrypted message's `...` is the protected-headers placeholder. A
+// plain message titled `...` has that as its real subject: it is a branch of
+// its own, not a member of every branch or of a titled one.
+#[test]
+fn a_plain_message_titled_like_a_placeholder_is_its_own_branch() {
+    use crate::imap::MessageHeader;
+    let header = |uid: u32, subject: &str, date: i64| MessageHeader {
+        uid,
+        folder: "INBOX".to_string(),
+        subject: subject.to_string(),
+        thread_key: "root@example.com".to_string(),
+        date,
+        ..Default::default()
+    };
+    let first = header(1, "Hopefully the last test", 100);
+    let plain = header(2, "...", 200);
+    assert!(!subject_in_branch(
+        &plain.subject,
+        plain.encrypted,
+        "Hopefully the last test"
+    ));
+    let cards = group_thread_cards(vec![plain, first], "INBOX");
+    assert_eq!(
+        cards.len(),
+        2,
+        "the plain `...` message is a branch of its own"
+    );
+}
+
+// Whether a message is encrypted is known from its headers before its body is
+// fetched, and it has to survive the cache: every read that decides branch
+// membership gets it back.
+#[test]
+fn the_encrypted_flag_survives_the_cache() {
+    use crate::imap::MessageHeader;
+    let conn = test_conn();
+    let header = |uid: u32, encrypted: bool| MessageHeader {
+        uid,
+        encrypted,
+        subject: "...".to_string(),
+        message_id: format!("m{uid}@example.com"),
+        thread_key: "root@example.com".to_string(),
+        date: 100 * uid as i64,
+        ..Default::default()
+    };
+    upsert_messages(&conn, "acct", "INBOX", &[header(1, true), header(2, false)]).unwrap();
+    let flags = |headers: Vec<MessageHeader>| {
+        headers
+            .into_iter()
+            .map(|h| (h.uid, h.encrypted))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        flags(get_thread_headers(&conn, "acct", "INBOX", "root@example.com").unwrap()),
+        vec![(1, true), (2, false)]
+    );
+    assert_eq!(
+        flags(get_thread_headers_all_folders(&conn, "acct", "root@example.com").unwrap()),
+        vec![(1, true), (2, false)]
+    );
+    let mapped = conn
+        .query_row(
+            &format!(
+                "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key, json_extract(json, '$.to'), {} \
+                 FROM messages WHERE uid = 1",
+                super::ENCRYPTED_COLUMN
+            ),
+            [],
+            super::message_header_from_row,
+        )
+        .unwrap();
+    assert!(mapped.encrypted, "the shared row mapper reads the column");
+
+    // A branch-wide action (mark read, move) takes the encrypted placeholder
+    // with its branch, but not a plain message titled `...`.
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[MessageHeader {
+            subject: "Plans".to_string(),
+            ..header(3, false)
+        }],
+    )
+    .unwrap();
+    let by_folder = thread_uids_by_folder(
+        &conn,
+        "acct",
+        "INBOX",
+        "root@example.com",
+        Some("Plans"),
+        false,
+    )
+    .unwrap();
+    assert_eq!(by_folder.get("INBOX"), Some(&vec![1, 3]));
 }
 
 // On Gmail, encrypted messages thread by their own headers (Gmail's thread id

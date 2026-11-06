@@ -278,6 +278,11 @@ pub struct Recipient {
 #[derive(serde::Serialize, Default, Clone)]
 pub struct MessageHeader {
     pub uid: u32,
+    /// The message is end-to-end encrypted (`Content-Type: multipart/encrypted`,
+    /// or decrypted since). Only then is a `...` / `[...]` subject the
+    /// protected-headers placeholder rather than a real subject.
+    #[serde(skip)]
+    pub encrypted: bool,
     /// IMAP folder this UID lives in. Populated only by cross-folder queries
     /// (thread views that merge Inbox + Sent); single-folder paths leave it
     /// empty and the caller supplies the folder out-of-band.
@@ -1056,6 +1061,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
         let ef = fetch.header().map(header_fields).unwrap_or_default();
         let thread_key = thread_key(
             fetch.gmail_thread_id().copied(),
+            ef.encrypted,
             &ef.subject,
             &ef.message_id,
             &ef.in_reply_to,
@@ -1064,6 +1070,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
         );
         out.push(MessageHeader {
             uid,
+            encrypted: ef.encrypted,
             subject: ef.subject,
             from_name: ef.from_name,
             from_addr: ef.from_addr,
@@ -1343,6 +1350,7 @@ pub async fn fetch_by_message_ids(
             let ef = fetch.header().map(header_fields).unwrap_or_default();
             let thread_key = thread_key(
                 fetch.gmail_thread_id().copied(),
+                ef.encrypted,
                 &ef.subject,
                 &ef.message_id,
                 &ef.in_reply_to,
@@ -1363,6 +1371,7 @@ pub async fn fetch_by_message_ids(
             out.push(FetchedMessage {
                 header: MessageHeader {
                     uid,
+                    encrypted: ef.encrypted,
                     folder: folder.to_string(),
                     subject: ef.subject,
                     from_name: ef.from_name,
@@ -1431,6 +1440,7 @@ pub async fn fetch_headers_by_uid(
             let ef = fetch.header().map(header_fields).unwrap_or_default();
             let thread_key = thread_key(
                 fetch.gmail_thread_id().copied(),
+                ef.encrypted,
                 &ef.subject,
                 &ef.message_id,
                 &ef.in_reply_to,
@@ -1439,6 +1449,7 @@ pub async fn fetch_headers_by_uid(
             );
             out.push(MessageHeader {
                 uid,
+                encrypted: ef.encrypted,
                 subject: ef.subject,
                 from_name: ef.from_name,
                 from_addr: ef.from_addr,
@@ -1469,6 +1480,7 @@ pub fn header_from_raw(raw: &[u8], uid: u32, seen: bool, starred: bool) -> Messa
     let ef = header_fields(raw);
     let thread_key = thread_key(
         None,
+        ef.encrypted,
         &ef.subject,
         &ef.message_id,
         &ef.in_reply_to,
@@ -1477,6 +1489,7 @@ pub fn header_from_raw(raw: &[u8], uid: u32, seen: bool, starred: bool) -> Messa
     );
     MessageHeader {
         uid,
+        encrypted: ef.encrypted,
         subject: ef.subject,
         from_name: ef.from_name,
         from_addr: ef.from_addr,
@@ -2632,6 +2645,8 @@ struct HeaderFields {
     references_root: String,
     to: Vec<Recipient>,
     cc: Vec<Recipient>,
+    /// `Content-Type: multipart/encrypted` (PGP/MIME).
+    encrypted: bool,
 }
 
 /// Everything the message list needs, parsed from `RFC822.HEADER`.
@@ -2684,6 +2699,13 @@ fn header_fields(header: &[u8]) -> HeaderFields {
             .unwrap_or_default(),
         to: header_addrs(headers, "To"),
         cc: header_addrs(headers, "Cc"),
+        encrypted: headers
+            .get_first_value("Content-Type")
+            .is_some_and(|value| {
+                mailparse::parse_content_type(&value)
+                    .mimetype
+                    .eq_ignore_ascii_case("multipart/encrypted")
+            }),
     }
 }
 
@@ -2832,6 +2854,7 @@ async fn supports_condstore(session: &mut Session) -> bool {
 
 fn thread_key(
     gmail_thrid: Option<u64>,
+    encrypted: bool,
     subject: &str,
     message_id: &str,
     in_reply_to: &str,
@@ -2845,8 +2868,9 @@ fn thread_key(
     // Not for encrypted mail: Gmail only sees the placeholder subject, the same
     // for every encrypted message, so it merges unrelated conversations between
     // the same people (even a new message). Those thread by their own headers.
-    let gmail_thrid =
-        gmail_thrid.filter(|_| !crate::store::is_encrypted_placeholder_subject(subject));
+    // A plain message that happens to be titled `...` is not one of them.
+    let gmail_thrid = gmail_thrid
+        .filter(|_| !(encrypted && crate::store::is_encrypted_placeholder_subject(subject)));
     if let Some(thrid) = gmail_thrid {
         return format!("gmthrid:{thrid}");
     }
@@ -3539,37 +3563,69 @@ mod tests {
     fn an_encrypted_placeholder_subject_ignores_gmails_thread_id() {
         for placeholder in ["[...]", "...", "Re: [...]"] {
             assert_eq!(
-                thread_key(Some(42), placeholder, "msgid", "", "", 7),
+                thread_key(Some(42), true, placeholder, "msgid", "", "", 7),
                 "msgid",
                 "{placeholder}"
             );
             assert_eq!(
-                thread_key(Some(42), placeholder, "msgid", "inreply", "refsroot", 7),
+                thread_key(
+                    Some(42),
+                    true,
+                    placeholder,
+                    "msgid",
+                    "inreply",
+                    "refsroot",
+                    7
+                ),
                 "refsroot"
             );
         }
         assert_eq!(
-            thread_key(Some(42), "Lunch", "msgid", "", "", 7),
+            thread_key(Some(42), true, "Lunch", "msgid", "", "", 7),
             "gmthrid:42"
         );
+    }
+
+    // Only an encrypted message's `...` is a placeholder: a plain Gmail message
+    // that happens to be titled `...` or `Re: [...]` keeps Gmail's threading.
+    #[test]
+    fn a_plain_message_titled_like_a_placeholder_keeps_gmails_thread_id() {
+        for subject in ["...", "[...]", "Re: [...]"] {
+            assert_eq!(
+                thread_key(Some(42), false, subject, "msgid", "inreply", "refsroot", 7),
+                "gmthrid:42",
+                "{subject}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_content_type_says_whether_a_message_is_encrypted() {
+        let encrypted = b"Subject: ...\r\nContent-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=b\r\n\r\n";
+        let plain = b"Subject: ...\r\nContent-Type: text/plain\r\n\r\n";
+        assert!(header_fields(encrypted).encrypted);
+        assert!(!header_fields(plain).encrypted);
     }
 
     #[test]
     fn gmail_thrid_takes_precedence() {
         // Even with full RFC headers present, a Gmail thrid wins and is namespaced.
-        let key = thread_key(Some(42), "Plans", "msgid", "inreply", "refsroot", 7);
+        let key = thread_key(Some(42), false, "Plans", "msgid", "inreply", "refsroot", 7);
         assert_eq!(key, "gmthrid:42");
     }
 
     #[test]
     fn falls_back_to_rfc_headers_without_thrid() {
         assert_eq!(
-            thread_key(None, "", "msgid", "inreply", "refsroot", 7),
+            thread_key(None, false, "", "msgid", "inreply", "refsroot", 7),
             "refsroot"
         );
-        assert_eq!(thread_key(None, "", "msgid", "inreply", "", 7), "inreply");
-        assert_eq!(thread_key(None, "", "msgid", "", "", 7), "msgid");
-        assert_eq!(thread_key(None, "", "", "", "", 7), "uid:7");
+        assert_eq!(
+            thread_key(None, false, "", "msgid", "inreply", "", 7),
+            "inreply"
+        );
+        assert_eq!(thread_key(None, false, "", "msgid", "", "", 7), "msgid");
+        assert_eq!(thread_key(None, false, "", "", "", "", 7), "uid:7");
     }
 }
 

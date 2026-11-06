@@ -104,7 +104,8 @@ pub fn thread_page_headers(
         store::get_thread_headers_all_folders(db, account, thread_key)?
     };
     if let Some(filter) = subject_filter {
-        headers.retain(|header| store::subject_in_branch(&header.subject, filter));
+        headers
+            .retain(|header| store::subject_in_branch(&header.subject, header.encrypted, filter));
     }
     let headers = store::collapse_thread_draft_headers(db, account, folder, headers)?;
 

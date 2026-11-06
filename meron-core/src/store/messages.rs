@@ -1,5 +1,6 @@
 //! Mail messages: upserts, recent pages, starred lists, and cached bodies.
 
+use super::ENCRYPTED_COLUMN;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -50,6 +51,11 @@ pub fn upsert_messages(
         }
         if m.files.is_some() {
             extra.insert("attachment_metadata".to_string(), json!(true));
+        }
+        // Known from the headers before the body is fetched; merged like the
+        // rest (json_patch), so a later resync without it doesn't clear it.
+        if m.encrypted {
+            extra.insert("encrypted".to_string(), json!(true));
         }
         let extra_json = Value::Object(extra).to_string();
         let mut thread_key = resolve_message_thread_key(&tx, account, &m.thread_key)?;
@@ -333,10 +339,10 @@ pub fn get_recent_page(
     // Newest-first by send time. The cursor is the (date, uid) of the last row of
     // the previous page; uid is the keyset tiebreaker because `date` is not unique
     // (two messages can share a second), so it gives a stable, gap-free walk.
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.to'),
-                COALESCE(json_extract(json, '$.message_id'), '') FROM messages
+                COALESCE(json_extract(json, '$.message_id'), ''), {ENCRYPTED_COLUMN} FROM messages
          WHERE account = ?1 AND folder = ?2
            AND (?6 = 0 OR seen = 0)
            AND (?7 = 0 OR files IS NOT NULL
@@ -348,7 +354,7 @@ pub fn get_recent_page(
            AND (?3 IS NULL
                 OR date < ?3
                 OR (date = ?3 AND uid < ?4))
-         ORDER BY date DESC, uid DESC LIMIT ?5",
+         ORDER BY date DESC, uid DESC LIMIT ?5"),
     )?;
     let cursor_date = before_cursor.map(|(date, _)| date);
     let cursor_uid = before_cursor.map(|(_, uid)| uid as i64).unwrap_or(0);
@@ -366,6 +372,7 @@ pub fn get_recent_page(
             let uid = row.get(0)?;
             Ok(MessageHeader {
                 uid,
+                encrypted: row.get::<_, Option<bool>>("encrypted")?.unwrap_or(false),
                 subject: row.get(1)?,
                 from_name: row.get(2)?,
                 from_addr: row.get(3)?,
@@ -545,15 +552,15 @@ pub fn new_unread_inbox_messages(
         return Ok(None);
     }
 
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.to'),
                 CAST(json_extract(json, '$.gmail_msg_id') AS TEXT),
-                json_extract(json, '$.message_id') FROM messages
+                json_extract(json, '$.message_id'), {ENCRYPTED_COLUMN} FROM messages
          WHERE account = ?1 AND folder = 'INBOX'
            AND uid >= ?2 AND uid < ?3 AND seen = 0
-         ORDER BY uid DESC",
-    )?;
+         ORDER BY uid DESC"
+    ))?;
     let rows = stmt.query_map(
         params![account, uid_next_before as i64, uid_next_after as i64],
         |row| {
@@ -594,13 +601,13 @@ pub fn get_starred(
     folder: &str,
     limit: u32,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.to'),
-                COALESCE(json_extract(json, '$.message_id'), '') FROM messages
+                COALESCE(json_extract(json, '$.message_id'), ''), {ENCRYPTED_COLUMN} FROM messages
          WHERE account = ?1 AND folder = ?2 AND starred <> 0 AND uid <> 0
-         ORDER BY date DESC, uid DESC LIMIT ?3",
-    )?;
+         ORDER BY date DESC, uid DESC LIMIT ?3"
+    ))?;
     let rows = stmt.query_map(params![account, folder, limit], search_header_from_row)?;
     let mut out = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     for header in &mut out {
@@ -652,12 +659,12 @@ pub fn get_starred_all_accounts(
     conn: &Connection,
     max_threads: u32,
 ) -> Result<Vec<(String, MessageHeader)>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to'), account, folder FROM messages
+                json_extract(json, '$.to'), account, folder, {ENCRYPTED_COLUMN} FROM messages
          WHERE starred <> 0 AND uid <> 0
-         ORDER BY date DESC, uid DESC",
-    )?;
+         ORDER BY date DESC, uid DESC"
+    ))?;
     let mut rows = stmt.query([])?;
     let mut out = Vec::new();
     let mut threads: HashSet<(String, String)> = HashSet::new();
@@ -689,16 +696,17 @@ pub fn get_thread_headers(
     folder: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.in_reply_to') FROM messages
+                json_extract(json, '$.in_reply_to'), {ENCRYPTED_COLUMN} FROM messages
          WHERE account = ?1 AND folder = ?2 AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?3
-         ORDER BY date ASC, uid ASC",
-    )?;
+         ORDER BY date ASC, uid ASC"
+    ))?;
     let rows = stmt.query_map(params![account, folder, thread_key], |row| {
         let uid = row.get(0)?;
         Ok(MessageHeader {
             uid,
+            encrypted: row.get::<_, Option<bool>>("encrypted")?.unwrap_or(false),
             subject: row.get(1)?,
             from_name: row.get(2)?,
             from_addr: row.get(3)?,
@@ -736,7 +744,7 @@ pub fn newest_thread_uids(
     let newest = get_thread_headers(conn, account, folder, thread_key)?
         .into_iter()
         .filter(|header| match subject_filter {
-            Some(filter) => subject_in_branch(&header.subject, filter),
+            Some(filter) => subject_in_branch(&header.subject, header.encrypted, filter),
             None => true,
         })
         .next_back();
@@ -761,13 +769,13 @@ pub fn thread_uids_by_folder(
     unseen_only: bool,
 ) -> Result<std::collections::BTreeMap<String, Vec<u32>>> {
     let only_folder = thread_key.starts_with("uid:").then_some(folder);
-    let mut stmt = conn.prepare(
-        "SELECT folder, uid, subject FROM messages
+    let mut stmt = conn.prepare(&format!(
+        "SELECT folder, uid, subject, {ENCRYPTED_COLUMN} FROM messages
          WHERE account = ?1 AND uid <> 0 AND (?4 = 0 OR seen = 0)
            AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?2
            AND (?3 IS NULL OR folder = ?3)
-         ORDER BY folder, uid",
-    )?;
+         ORDER BY folder, uid"
+    ))?;
     let rows = stmt.query_map(
         params![account, thread_key, only_folder, unseen_only],
         |row| {
@@ -775,13 +783,14 @@ pub fn thread_uids_by_folder(
                 row.get::<_, String>(0)?,
                 row.get::<_, u32>(1)?,
                 row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                row.get::<_, Option<bool>>("encrypted")?.unwrap_or(false),
             ))
         },
     )?;
     let mut by_folder = std::collections::BTreeMap::<String, Vec<u32>>::new();
     for row in rows {
-        let (folder, uid, subject) = row?;
-        if subject_filter.is_some_and(|filter| !subject_in_branch(&subject, filter)) {
+        let (folder, uid, subject, encrypted) = row?;
+        if subject_filter.is_some_and(|filter| !subject_in_branch(&subject, encrypted, filter)) {
             continue;
         }
         by_folder.entry(folder).or_default().push(uid);
@@ -835,7 +844,7 @@ pub fn resolve_message_uids(
     }
     let mut headers = get_thread_headers(conn, account, folder, thread_key)?;
     if let Some(filter) = subject_filter {
-        headers.retain(|header| subject_in_branch(&header.subject, filter));
+        headers.retain(|header| subject_in_branch(&header.subject, header.encrypted, filter));
     }
     Ok(headers.into_iter().map(|header| header.uid).collect())
 }

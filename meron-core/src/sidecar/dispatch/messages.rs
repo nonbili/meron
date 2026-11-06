@@ -369,7 +369,9 @@ pub(crate) async fn dispatch(
             let headers = headers
                 .into_iter()
                 .filter(|header| match subject_filter.as_deref() {
-                    Some(filter) => store::subject_in_branch(&header.subject, filter),
+                    Some(filter) => {
+                        store::subject_in_branch(&header.subject, header.encrypted, filter)
+                    }
                     None => true,
                 })
                 .map(|header| {

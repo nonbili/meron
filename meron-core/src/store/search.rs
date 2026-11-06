@@ -1,5 +1,6 @@
 //! Local message search and saved search snapshot pages.
 
+use super::ENCRYPTED_COLUMN_M;
 use anyhow::Result;
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
@@ -211,7 +212,7 @@ fn search_messages_among(
         "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
                 m.thread_key, json_extract(m.json, '$.to'),
                 COALESCE(json_extract(m.json, '$.message_id'), ''),
-                {scanned}
+                {scanned}, {ENCRYPTED_COLUMN_M}
          FROM messages m
          WHERE m.account = ?1 AND m.folder = ?2 AND m.uid <> 0
            AND (?3 IS NULL
@@ -427,17 +428,17 @@ pub fn cached_search_headers(
     folder: &str,
     uids: &[u32],
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare_cached(
+    let mut stmt = conn.prepare_cached(&format!(
         "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
                 m.thread_key, json_extract(m.json, '$.to'),
                 COALESCE(json_extract(m.json, '$.message_id'), ''),
                 CAST(json_extract(m.json, '$.gmail_msg_id') AS TEXT),
-                m.files
+                m.files, {ENCRYPTED_COLUMN_M}
          FROM messages m
          WHERE m.account = ?1 AND m.folder = ?2 AND m.uid = ?3
            AND (m.body IS NOT NULL
-                OR COALESCE(json_extract(m.json, '$.attachment_metadata'), 0) <> 0)",
-    )?;
+                OR COALESCE(json_extract(m.json, '$.attachment_metadata'), 0) <> 0)"
+    ))?;
     let mut headers = Vec::new();
     for &uid in uids {
         let header = stmt
@@ -604,18 +605,18 @@ pub fn get_search_snapshot_page(
     };
 
     let fetch_limit = limit.saturating_add(1);
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT m.uid, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred,
                 m.thread_key, json_extract(m.json, '$.to'), h.folder, h.position,
-                COALESCE(json_extract(m.json, '$.message_id'), '')
+                COALESCE(json_extract(m.json, '$.message_id'), ''), {ENCRYPTED_COLUMN_M}
          FROM mail_search_hits h
          JOIN messages m
            ON m.account = h.account AND m.folder = h.folder AND m.uid = h.uid
          WHERE h.token = ?1 AND h.account = ?2
            AND h.position >= ?3
          ORDER BY h.position
-         LIMIT ?4",
-    )?;
+         LIMIT ?4"
+    ))?;
     let rows = stmt.query_map(params![token, account, offset, fetch_limit], |row| {
         let mut message = message_header_from_row(row)?;
         message.folder = row.get(9)?;

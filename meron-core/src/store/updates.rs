@@ -40,9 +40,9 @@ pub fn starred_mutation_targets(
         let (root, subject) = split_thread_key(key);
         let matches_branch = |header: &MessageHeader| {
             header.uid != 0
-                && subject
-                    .as_deref()
-                    .is_none_or(|subject| subject_in_branch(&header.subject, subject))
+                && subject.as_deref().is_none_or(|subject| {
+                    subject_in_branch(&header.subject, header.encrypted, subject)
+                })
         };
         if starred {
             // Star the source mailbox's messages and their physical duplicates,

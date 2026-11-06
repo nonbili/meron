@@ -1,5 +1,6 @@
 //! Recipient autocomplete from correspondents seen in the store.
 
+use super::ENCRYPTED_COLUMN;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
@@ -22,7 +23,7 @@ pub fn contact_messages(
     let mut stmt = conn.prepare(&format!(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.to'), COALESCE(json_extract(json, '$.message_id'), ''),
-                account, folder, json_extract(json, '$.cc')
+                account, folder, json_extract(json, '$.cc'), {ENCRYPTED_COLUMN}
          FROM messages m WHERE uid <> 0 {candidate} AND ?1 IS NOT NULL
          ORDER BY date DESC, uid DESC, account, folder",
     ))?;

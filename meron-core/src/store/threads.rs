@@ -1,5 +1,6 @@
 //! Thread grouping: thread cards, root subjects, and reference gaps.
 
+use super::ENCRYPTED_COLUMN_M;
 use anyhow::Result;
 use rusqlite::{Connection, params, params_from_iter};
 use std::collections::BTreeMap;
@@ -110,14 +111,16 @@ pub fn group_thread_cards_with_drafts(
         let base_key = effective_thread_key(&message);
         let branch = should_branch_thread_by_subject(&base_key);
         // A message not yet decrypted joins its thread's titled branch rather
-        // than forming a card under the placeholder.
-        let titled_group = (branch && is_encrypted_placeholder_subject(&message.subject))
-            .then(|| {
-                roots
-                    .get(&group_key(&message, &base_key))
-                    .map(|root| root.group.clone())
-            })
-            .flatten();
+        // than forming a card under the placeholder. A plain message titled
+        // `...` is not one: that is its real subject.
+        let titled_group =
+            (branch && message.encrypted && is_encrypted_placeholder_subject(&message.subject))
+                .then(|| {
+                    roots
+                        .get(&group_key(&message, &base_key))
+                        .map(|root| root.group.clone())
+                })
+                .flatten();
         let group_subject = if let Some(group) = &titled_group {
             group.clone()
         } else if branch {
@@ -918,12 +921,14 @@ pub fn is_encrypted_placeholder_subject(subject: &str) -> bool {
     group == "..." || (group.is_empty() && subject.contains("[...]"))
 }
 
-/// Whether a message with `subject` belongs to the subject branch `filter`. A
-/// message not yet decrypted hasn't shown its subject, so it belongs to every
-/// branch of its thread: on Gmail our own Sent copies stay like that until
-/// fetched, and a branch filter dropped them all from the conversation.
-pub fn subject_in_branch(subject: &str, filter: &str) -> bool {
-    is_encrypted_placeholder_subject(subject) || thread_grouping_subject(subject) == filter
+/// Whether a message with `subject` belongs to the subject branch `filter`. An
+/// encrypted message not yet decrypted hasn't shown its subject, so it belongs
+/// to every branch of its thread: on Gmail our own Sent copies stay like that
+/// until fetched, and a branch filter dropped them all from the conversation.
+/// A plain message titled `...` belongs only to its own branch.
+pub fn subject_in_branch(subject: &str, encrypted: bool, filter: &str) -> bool {
+    (encrypted && is_encrypted_placeholder_subject(subject))
+        || thread_grouping_subject(subject) == filter
 }
 
 /// The branch-aware thread key a list card for `message` carries: the root
@@ -1132,9 +1137,9 @@ pub fn get_thread_headers_all_folders(
     account: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key,
-                json_extract(m.json, '$.in_reply_to')
+                json_extract(m.json, '$.in_reply_to'), {ENCRYPTED_COLUMN_M}
          FROM messages m
          WHERE m.account = ?1 AND m.uid <> 0
            AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
@@ -1146,12 +1151,13 @@ pub fn get_thread_headers_all_folders(
                AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
                AND (dup.seen < m.seen OR (dup.seen = m.seen AND dup.id < m.id))
            )
-         ORDER BY m.date ASC, m.uid ASC",
+         ORDER BY m.date ASC, m.uid ASC"),
     )?;
     let rows = stmt.query_map(params![account, thread_key], |row| {
         let uid: u32 = row.get(0)?;
         Ok(MessageHeader {
             uid,
+            encrypted: row.get::<_, Option<bool>>("encrypted")?.unwrap_or(false),
             folder: row.get(1)?,
             subject: row.get(2)?,
             from_name: row.get(3)?,
