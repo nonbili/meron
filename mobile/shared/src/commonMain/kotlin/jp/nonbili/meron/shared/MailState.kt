@@ -584,6 +584,19 @@ fun detectReplyFromIdentity(
     return if (match.email.equals(account.email, ignoreCase = true)) "" else match.email
 }
 
+/** The send-as address for a copy of a message ("edit as new"): the identity
+ * the original was sent from, when it is one of [account]'s; otherwise the
+ * primary. Like [detectReplyFromIdentity], "" stands for the primary. */
+fun detectSenderFromIdentity(
+    message: MessageBody,
+    account: AccountSummary,
+): String {
+    val sender = bareAddress(message.fromAddr).trim().lowercase()
+    if (sender.isBlank()) return ""
+    val match = accountSendIdentities(account).firstOrNull { it.email.trim().lowercase() == sender } ?: return ""
+    return if (match.email.equals(account.email, ignoreCase = true)) "" else match.email
+}
+
 fun forwardedSubject(subject: String): String {
     val trimmed = subject.trim()
     return when {

@@ -28,6 +28,7 @@ import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.bodyWithSignature
 import jp.nonbili.meron.shared.bodyWithSwappedSignature
 import jp.nonbili.meron.shared.detectReplyFromIdentity
+import jp.nonbili.meron.shared.detectSenderFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.forwardHtmlForSend
 import jp.nonbili.meron.shared.forwardInlineImages
@@ -1011,7 +1012,17 @@ internal fun MeronMobileState.openMessageCompose(
             composeForwardHtml = draft.html
             composeForwardInlineAttachments = inlineAttachments
             composeFromAccountId = selectedCoreThread?.accountId ?: selectedCoreAccountId.takeIf { it != UNIFIED_ACCOUNT_ID }.orEmpty()
-            composeFromEmail = ""
+            // A copy goes out as the identity that sent the original; a forward
+            // (or a copy of someone else's mail) starts from the primary.
+            composeFromEmail =
+                if (forward) {
+                    ""
+                } else {
+                    coreAccounts
+                        .firstOrNull { it.id == composeFromAccountId }
+                        ?.let { detectSenderFromIdentity(message, it) }
+                        .orEmpty()
+                }
             composeDraftId = ""
             composeDraftSaved = false
             composeDraftAccountId = ""

@@ -596,6 +596,23 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun detectsEditAsNewIdentityFromTheOriginalSender() {
+        val account =
+            AccountSummary(
+                id = "acc",
+                email = "me@example.com",
+                senderName = "Me",
+                aliases = listOf(AccountAlias(email = "alias@example.com")),
+            )
+
+        fun sentFrom(addr: String) = MessageBody(id = "m", from = "Me", fromAddr = addr, to = "", cc = "", subject = "", body = "")
+
+        assertEquals("alias@example.com", detectSenderFromIdentity(sentFrom("Alias@Example.com"), account))
+        assertEquals("", detectSenderFromIdentity(sentFrom("me@example.com"), account))
+        assertEquals("", detectSenderFromIdentity(sentFrom("ada@example.com"), account))
+    }
+
+    @Test
     fun parsesThreadReadEnvelope() {
         val messages =
             parseThreadReadResponse(

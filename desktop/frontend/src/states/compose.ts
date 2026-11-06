@@ -45,6 +45,7 @@ import {
   quickReplyAddressing,
   buildReplyThreading,
   detectAliasFrom,
+  detectSenderFrom,
   pickReplyTarget,
   resolveQuickReplyFrom,
 } from './composeReply'
@@ -781,8 +782,10 @@ export async function editAsNewMessage(message: Message) {
   }
   const rich = !!message.body_html
   const html = message.body_html ?? ''
+  const acc = accounts$.get().find((a) => a.id === message.account_id)
   const id = openComposeTab({
     accountId: message.account_id || undefined,
+    fromEmail: acc ? detectSenderFrom(message, acc) : '',
     to: message.to ?? '',
     cc: message.cc ?? '',
     showCcBcc: !!message.cc?.trim(),

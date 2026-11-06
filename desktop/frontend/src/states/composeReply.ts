@@ -63,6 +63,15 @@ export function detectAliasFrom(target: Message, acc: Account): string {
   return match && match.email.toLowerCase() !== acc.email.toLowerCase() ? match.email : ''
 }
 
+/** The send-as address for a copy of a message ("Edit as New"): the identity
+ * the original was sent from, when it is one of this account's; otherwise the
+ * primary. Like {@link detectAliasFrom}, "" stands for the primary. */
+export function detectSenderFrom(message: Message, acc: Account): string {
+  const from = (message.from_addr || '').trim().toLowerCase()
+  const match = accountIdentities(acc).find((id) => id.email.trim().toLowerCase() === from)
+  return match && match.email.toLowerCase() !== acc.email.toLowerCase() ? match.email : ''
+}
+
 /** Continue a thread with the identity used by its most recent outgoing
  * message. Returns null when the loaded thread has no message from one of this
  * account's configured identities; an empty string means the primary identity. */

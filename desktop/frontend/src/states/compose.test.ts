@@ -18,6 +18,7 @@ import {
   replyAllToMessage,
   replyToMessage,
   composedContent,
+  editAsNewMessage,
 } from './compose'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import {
@@ -3630,6 +3631,20 @@ describe('quick reply send-as identity', () => {
 
     expect(compose$.tabs.get()[0].compose?.fromEmail).toBe('sales@example.com')
     expect(compose$.quickReplyFrom.get()).toBe('')
+  })
+
+  it('keeps the sending alias when a sent message is edited as new', async () => {
+    const sent = setUpThread({ folder_id: 'Sent', from_addr: 'Sales@example.com', to: 'them@example.com' })
+
+    await editAsNewMessage(sent)
+
+    expect(compose$.tabs.get()[0].compose?.fromEmail).toBe('sales@example.com')
+  })
+
+  it('leaves a received message edited as new on the primary', async () => {
+    await editAsNewMessage(setUpThread())
+
+    expect(compose$.tabs.get()[0].compose?.fromEmail).toBe('')
   })
 })
 
