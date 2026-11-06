@@ -1,4 +1,4 @@
-import { ChevronDown, Code, FileText, Forward, MoreHorizontal, Reply, ReplyAll, Trash2 } from 'lucide-react'
+import { Forward, MoreHorizontal, Reply, ReplyAll, Trash2 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -10,26 +10,15 @@ import { deleteMessage } from '../../states/mailMoves'
 import { mail$ } from '../../states/mailState'
 import { normalizeSenderAddr, settings$ } from '../../states/settings'
 import { thread$, type MessageContextMenuState } from '../../states/thread'
-import type { Account, Message, MessageTab } from '../../types'
-import { Avatar } from '../avatar/Avatar'
+import type { Message, MessageTab } from '../../types'
 import { Composer } from '../composer/Composer'
 import { HtmlMessageView } from './HtmlMessageView'
-import { AddressRow } from './AddressList'
+import { ReaderViewMode } from './ReaderViewMode'
+import { ReaderCorrespondents } from './ReaderCorrespondents'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
 import { FrostedBand } from './FrostedBand'
 import { MessageContextMenu } from './MessageContextMenu'
-import {
-  extractAddr,
-  formatFullTimestamp,
-  formatRecipientSummary,
-  htmlHasRemoteMedia,
-  isImage,
-  isInlineMedia,
-  isVideo,
-  mediaFilename,
-  imageSource,
-  parseAddressList,
-} from './messageHelpers'
+import { htmlHasRemoteMedia, isImage, isInlineMedia, isVideo, mediaFilename, imageSource } from './messageHelpers'
 
 // Renders the active reader/compose tab: a compose tab shows the Composer, a
 // reader tab shows the message's subject, addresses and HTML/plain body in one
@@ -44,12 +33,6 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
   if (tab.kind === 'compose') {
     return <Composer key={tab.id} tabId={tab.id} />
   }
-
-  // A Reply-To equal to From is what most mail carries and says nothing, so it
-  // only earns a row when it points somewhere else — the same rule the bubbles
-  // and the mobile reader use.
-  const replyToDiffers =
-    !!tab.replyTo && extractAddr(tab.replyTo).toLowerCase() !== extractAddr(tab.fromRaw ?? '').toLowerCase()
 
   // The body was baked when the thread was read, so the tab has to re-apply the
   // decision as it stands now: the account toggle, the sender allowlist, or a
@@ -131,7 +114,6 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
               tab={tab}
               account={account}
               isRSS={isRSS}
-              replyToDiffers={replyToDiffers}
               remote={
                 <BlockedRemoteButton
                   messageId={tab.messageId}
@@ -151,26 +133,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
       {/* Frosted under the floating bar, through its bottom edge. */}
       <FrostedBand fade="bottom" className="left-0 right-3 top-0 h-16" />
       <div className="absolute right-5 top-3 z-10 flex items-center gap-1 rounded-full border border-border/40 bg-chats p-1 shadow-float select-none">
-        <div className="flex items-center gap-0.5 rounded-full bg-hover p-0.5">
-          <button
-            onClick={() => setTabViewMode(tab.id, 'html')}
-            className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[0.6875rem] font-semibold cursor-pointer ${
-              tab.viewMode === 'html' ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:text-primary'
-            }`}
-            title={t('chat.htmlView')}
-          >
-            <Code size={13} /> HTML
-          </button>
-          <button
-            onClick={() => setTabViewMode(tab.id, 'plain')}
-            className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[0.6875rem] font-semibold cursor-pointer ${
-              tab.viewMode === 'plain' ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:text-primary'
-            }`}
-            title={t('chat.plainView')}
-          >
-            <FileText size={13} /> {t('settings.account.conversationPlain')}
-          </button>
-        </div>
+        <ReaderViewMode mode={tab.viewMode} onChange={(mode) => setTabViewMode(tab.id, mode)} />
         {tab.message && (
           <button
             type="button"
@@ -206,95 +169,6 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
           allowRemote={allowRemote}
           onClose={() => setMenu(null)}
         />
-      )}
-    </div>
-  )
-}
-
-// Who sent the message and when, folded to the sender and a "to …" line like
-// the conversation's message headers: the full lists are rarely what the
-// reader came for. The chevron unfolds every list, each pill copying its full
-// address.
-function ReaderCorrespondents({
-  tab,
-  account,
-  isRSS,
-  replyToDiffers,
-  remote,
-}: {
-  tab: MessageTab
-  account: Account | undefined
-  isRSS: boolean
-  replyToDiffers: boolean
-  /** The remote-content affordance, beside the date. */
-  remote: ReactNode
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const from = parseAddressList(tab.fromRaw)[0]
-  const senderName = from?.name || tab.from
-  const senderAddr = from?.email || tab.fromAddr
-  const outgoing = !!tab.outgoing
-  const recipients = formatRecipientSummary(tab.to, tab.cc)
-  // A feed item has no recipients, so the lists could only repeat the feed
-  // name the header already shows.
-  const canOpen = !isRSS && !!(tab.to || tab.cc || tab.bcc || replyToDiffers)
-  const stamp = tab.date ? formatFullTimestamp(tab.date) : ''
-
-  return (
-    <div className="mt-3 rounded-xl border border-border/40 bg-chats px-4 py-3 shadow-card">
-      <div className="flex items-start gap-2.5">
-        <Avatar
-          name={(outgoing ? account?.display_name : '') || senderName}
-          email={outgoing ? undefined : senderAddr}
-          src={outgoing ? account?.avatar_url : tab.feedIcon ? `/media/${tab.feedIcon}` : undefined}
-          size={32}
-          className="mt-0.5 shrink-0"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-1.5">
-            <span className="truncate text-[0.84375rem] font-semibold text-primary">{senderName}</span>
-            {senderAddr && senderAddr !== senderName && (
-              <span className="truncate text-[0.71875rem] text-secondary/80">{senderAddr}</span>
-            )}
-          </div>
-          {(recipients || canOpen) && (
-            <div className="flex min-w-0 items-center gap-1">
-              {recipients && (
-                <span
-                  className="truncate text-[0.71875rem] text-secondary/80"
-                  title={[tab.to, tab.cc].filter(Boolean).join(', ')}
-                >
-                  {t('chat.toRecipients', { recipients })}
-                </span>
-              )}
-              {canOpen && (
-                <button
-                  type="button"
-                  onClick={() => setOpen((value) => !value)}
-                  title={open ? t('chat.hideDetails') : t('chat.showDetails')}
-                  aria-expanded={open}
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-secondary hover:bg-black/[0.05] hover:text-primary dark:hover:bg-white/[0.08] cursor-pointer transition-colors select-none"
-                >
-                  <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 text-[0.65625rem] text-secondary/80 select-none">
-          {remote}
-          {stamp && <span>{stamp}</span>}
-        </div>
-      </div>
-      {open && (
-        <div className="mt-2.5 space-y-1 border-t border-border/40 pt-2.5 text-secondary">
-          {tab.fromRaw && <AddressRow label={t('composer.fields.from')} rawList={tab.fromRaw} />}
-          {tab.to && <AddressRow label={t('composer.fields.to')} rawList={tab.to} />}
-          {tab.cc && <AddressRow label={t('composer.fields.cc')} rawList={tab.cc} />}
-          {tab.bcc && <AddressRow label={t('composer.fields.bcc')} rawList={tab.bcc} />}
-          {replyToDiffers && <AddressRow label={t('chat.replyTo')} rawList={tab.replyTo!} />}
-        </div>
       )}
     </div>
   )

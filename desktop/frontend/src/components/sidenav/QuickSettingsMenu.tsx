@@ -60,6 +60,7 @@ export function QuickSettingsMenu({
       <MenuItem
         icon={<FolderOpen size={13} className="text-secondary" />}
         label={t('eml.open')}
+        trailing={<Hint id="eml.open" />}
         onClick={() => {
           onClose()
           void invoke('eml.open').catch((error) => showToast(String(error), 'error'))

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import {
   Archive,
   Columns3,
+  FolderOpen,
   Inbox,
   List,
   Mail,
@@ -26,8 +27,10 @@ import {
   X,
 } from 'lucide-react'
 import { createElement } from 'react'
+import { invoke } from '../../lib/bridge'
+import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
-import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply } from '../../states/ui'
+import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply, showToast } from '../../states/ui'
 import { selectTheme, settings$ } from '../../states/settings'
 import { useChosenThemeIds } from '../../lib/useThemeChoice'
 import { accounts$ } from '../../states/accounts'
@@ -58,6 +61,7 @@ import type { Command } from './paletteCommands'
 // `run` closes the palette first, then performs its action. Returns a memoized
 // array recomputed only when the underlying selections change.
 export function useCommandList(): Command[] {
+  const { t } = useTranslation()
   const boards = useValue(settings$.kanbanBoards)
   const activeBoardId = useValue(kanban$.activeBoardId)
   const chosenThemeIds = useChosenThemeIds()
@@ -91,6 +95,14 @@ export function useCommandList(): Command[] {
     const railShortcut = (slot: number) => RAIL_SHORTCUT_IDS[slot - 1] as ShortcutId | undefined
 
     const list: Command[] = [
+      {
+        id: 'eml.open',
+        label: t('eml.open'),
+        icon: icon(FolderOpen),
+        keywords: 'open eml file email message',
+        shortcut: 'eml.open',
+        run: run(() => void invoke('eml.open').catch((error) => showToast(String(error), 'error'))),
+      },
       {
         id: 'compose.new',
         label: 'Compose new message',
@@ -344,6 +356,7 @@ export function useCommandList(): Command[] {
 
     return list
   }, [
+    t,
     boards,
     activeBoardId,
     chosenThemeIds,

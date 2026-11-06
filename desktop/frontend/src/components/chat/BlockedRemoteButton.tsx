@@ -21,8 +21,9 @@ export function BlockedRemoteButton({
   hiddenRemoteCount,
   senderAddress,
   size = 15,
+  onReveal,
 }: {
-  messageId: string
+  messageId?: string
   /** Whether this message is holding remote content back. */
   blocked: boolean
   /** Blocked attachment images/videos, 0 when only the body is held back. */
@@ -31,6 +32,8 @@ export function BlockedRemoteButton({
    *  when there is no sender worth trusting (an outgoing message). */
   senderAddress: string
   size?: number
+  /** Standalone readers reveal content within their own session. */
+  onReveal?: () => void
 }) {
   const { t } = useTranslation()
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
@@ -82,7 +85,8 @@ export function BlockedRemoteButton({
             }
             onClick={() => {
               setAnchor(null)
-              revealMessageRemote(messageId)
+              if (onReveal) onReveal()
+              else if (messageId) revealMessageRemote(messageId)
             }}
           />
           {!!senderAddress && (
