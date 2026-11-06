@@ -235,3 +235,50 @@ it("forwards cached and remote pictures to the app's image context menu", () => 
   expect(forwarded).toEqual(['msg/0.png', null])
   expect(images[1]).toEqual({ key: null, url: 'https://example.com/a.png', filename: 'a.png' })
 })
+
+it('never lets a message link navigate its frame', () => {
+  const opened: string[] = []
+  const runtime = (window as any).runtime
+  ;(window as any).runtime = { BrowserOpenURL: (url: string) => opened.push(url) }
+  try {
+    const { container } = render(
+      <HtmlFrame
+        html="<p>Message</p>"
+        title="Message"
+        // The reader opens the gallery for any picture, linked or not.
+        onFrameClick={(event) => !!(event.target as Element).closest('img')}
+      />,
+    )
+    const frame = container.querySelector('iframe')!
+    // The base stands in for the app's own `wails://` origin on Linux and macOS.
+    const doc = new DOMParser().parseFromString(
+      `<base href="wails://wails/">
+       <a id="media" href="/media/acct/inbox/1/0.html">open</a>
+       <a id="sibling" href="0.html">open</a>
+       <map><area id="area" href="/media/acct/inbox/1/0.html"></map>
+       <a href="/media/acct/inbox/1/0.html"><img id="image" src="/media/acct/inbox/1/1.png"></a>
+       <a id="fragment" href="#top">top</a>
+       <a id="external" href="https://example.com/x">site</a>`,
+      'text/html',
+    )
+    Object.defineProperty(doc, 'readyState', { value: 'complete' })
+    Object.defineProperty(frame, 'contentDocument', { get: () => doc })
+    fireEvent.load(frame)
+
+    const click = (id: string, type = 'click', button = 0) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button })
+      doc.getElementById(id)!.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    expect(click('media')).toBe(true)
+    expect(click('media', 'auxclick', 1)).toBe(true)
+    expect(click('sibling')).toBe(true)
+    expect(click('area')).toBe(true)
+    expect(click('image')).toBe(true)
+    expect(click('fragment')).toBe(false)
+    expect(click('external')).toBe(true)
+    expect(opened).toEqual(['https://example.com/x'])
+  } finally {
+    ;(window as any).runtime = runtime
+  }
+})

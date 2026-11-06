@@ -743,6 +743,14 @@ fn sanitize_email_html(source: &str) -> String {
             {
                 return None;
             }
+            // A link without a scheme resolves against the app's own origin, so
+            // following it would load an app page or a cached attachment (a
+            // sender's `.html`, or a `cid:` link rewritten to `/media/<key>`)
+            // inside the frame with the app's privileges. Only in-page
+            // `#fragment` links stay.
+            if attribute == "href" && !is_fragment_or_absolute_url(value) {
+                return None;
+            }
             if value.trim_start().to_ascii_lowercase().starts_with("data:") {
                 // Keep `data:image/...` only on `<img src>`; drop it anywhere else
                 // (e.g. an `href`) so it can't become a navigable script document.
@@ -757,6 +765,27 @@ fn sanitize_email_html(source: &str) -> String {
             Some(Cow::Borrowed(value))
         });
     builder.clean(source).to_string()
+}
+
+/// True for an in-page `#fragment` or a URL that names its own scheme, read the
+/// way a browser does: surrounding whitespace and controls trimmed, tabs and
+/// newlines removed. Everything else (`/media/…`, `//host/…`, `x.html`) is
+/// relative to the document and resolves against the app's origin.
+fn is_fragment_or_absolute_url(value: &str) -> bool {
+    let value: String = value
+        .trim_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    if value.starts_with('#') {
+        return true;
+    }
+    let Some((scheme, _)) = value.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
 }
 
 /// What a message declares on its own `<body>` for the whole page.
@@ -2657,6 +2686,64 @@ AQID\r\n\
         assert!(out.contains("/media/acct/inbox/1/0.png"));
         // The data:text/html navigation vector is dropped, href and all.
         assert!(!out.contains("data:text/html"));
+    }
+
+    #[test]
+    fn prepare_html_strips_links_that_resolve_against_the_app() {
+        let out = prepare_html(
+            "<a href=\"/media/acct/inbox/1/0.html\">a</a>\
+             <a href=\"//wails/media/x.html\">b</a>\
+             <a href=\"0.html\">c</a>\
+             <a href=\"\t/wails/runtime\">d</a>\
+             <map><area href=\"/media/acct/inbox/1/0.html\"></map>\
+             <a href=\"#top\">e</a>\
+             <a href=\"https://example.com/x\">f</a>\
+             <a href=\"mailto:a@example.com\">g</a>\
+             <img src=\"/media/acct/inbox/1/1.png\">",
+            false,
+        );
+        assert!(!out.contains(".html"), "{out}");
+        assert!(!out.contains("/wails"), "{out}");
+        assert!(out.contains("href=\"#top\""), "{out}");
+        assert!(out.contains("href=\"https://example.com/x\""), "{out}");
+        assert!(out.contains("href=\"mailto:a@example.com\""), "{out}");
+        // Inline images still load from the media cache.
+        assert!(out.contains("src=\"/media/acct/inbox/1/1.png\""), "{out}");
+    }
+
+    #[test]
+    fn a_cid_link_to_an_attachment_does_not_survive_rendering() {
+        let raw = b"From: a@b.com\r\n\
+Subject: x\r\n\
+Content-Type: multipart/related; boundary=sep\r\n\
+\r\n\
+--sep\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<p><a href=\"cid:page\">open</a></p>\r\n\
+--sep\r\n\
+Content-Type: text/html\r\n\
+Content-ID: <page>\r\n\
+Content-Disposition: attachment; filename=\"page.html\"\r\n\
+\r\n\
+<script src=\"1.js\"></script>\r\n\
+--sep--\r\n";
+        let root = std::env::temp_dir().join(format!("meron-cid-link-test-{}", std::process::id()));
+        let ctx = MediaCtx {
+            root: root.clone(),
+            account: "acct".to_string(),
+            folder: "inbox".to_string(),
+            uid: 7,
+        };
+        let msg = parse_message(raw, Some(&ctx));
+        let _ = std::fs::remove_dir_all(&root);
+        let html = msg.body_html.as_deref().expect("html kept");
+        // The rewrite still points the link at the cached page...
+        assert!(html.contains("href=\"/media/acct/inbox/7/"), "{html}");
+        // ...and rendering drops it.
+        let out = prepare_html(html, false);
+        assert!(out.contains(">open</a>"), "{out}");
+        assert!(!out.contains("/media/"), "{out}");
     }
 
     #[test]

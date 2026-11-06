@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,22 +74,6 @@ func loadDotEnvLocal() {
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		_ = os.Setenv(strings.TrimSpace(key), value)
 	}
-}
-
-// mediaHandler serves attachment files written by the sidecar at `/media/<key>`,
-// so image bytes load straight into the webview instead of round-tripping as
-// base64 through the JSON bridge. The AssetServer tries embedded frontend assets
-// first and only falls through here for unmatched paths. http.Dir cleans the
-// path and blocks `..` traversal out of the media root.
-func mediaHandler() http.Handler {
-	fs := http.StripPrefix("/media/", http.FileServer(http.Dir(mediaDir())))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/media/") {
-			http.NotFound(w, r)
-			return
-		}
-		fs.ServeHTTP(w, r)
-	})
 }
 
 // mediaDir is where the mail sidecar writes attachment files and the asset
