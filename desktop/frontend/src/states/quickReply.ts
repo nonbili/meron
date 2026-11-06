@@ -52,6 +52,11 @@ export function clearQuickReplyDraftOwnership() {
 // navigation. Thread-tab activations set activeTab first, so this guard skips
 // their selectedThread retarget and leaves the Current tab's thread intact.
 ui$.selectedThread.onChange(({ value }) => {
+  const activeTab = compose$.tabs.peek().find((tab) => tab.id === compose$.activeTab.peek())
+  // Selection also changes outside the tab strip: triage advances to a neighbour,
+  // folder changes clear it, and board navigation selects another card. Show that
+  // selection in Current so the displayed conversation and action target agree.
+  if (activeTab?.kind === 'thread' && activeTab.threadId !== value) compose$.activeTab.set('')
   // The box still holds the thread being left: leaving, not the user, is what
   // blanks it from here (see quickReplyLeftWithReplyTick).
   if (!isQuickReplyBlank()) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()

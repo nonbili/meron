@@ -1,7 +1,8 @@
+import { useConversationView } from './conversationView'
 import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { markMessagesRead } from '../../states/mailFlags'
-import { thread$ } from '../../states/thread'
+import { threadView, type SavedScrollAnchor } from '../../states/threadView'
 import type { Message } from '../../types'
 import {
   ANCHOR_GAP_PX,
@@ -45,11 +46,6 @@ function readScrollAnchor(container: HTMLElement): ScrollAnchor | null {
   }
 }
 
-/** A saved anchor plus whether the reader had it parked at the end of the
- *  thread, which decides whether returning restores the position or follows
- *  whatever arrived in the meantime. */
-type SavedScrollAnchor = ScrollAnchor & { atBottom: boolean }
-
 function readScrollMetrics(container: HTMLElement): ScrollMetrics {
   return {
     scrollTop: container.scrollTop,
@@ -69,6 +65,10 @@ export function useConversationScroll(
   activeTab: string,
   unreadKey: string,
 ) {
+  const { state: thread$, active: viewActive, scope: viewScope } = useConversationView()
+  const viewKey = viewScope || activeThreadId
+  const viewActiveRef = useRef(viewActive)
+  viewActiveRef.current = viewActive
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null)
   const messagesWrapperRef = useRef<HTMLDivElement | null>(null)
@@ -79,11 +79,10 @@ export function useConversationScroll(
   // shorter than the stick distance.
   const viewedScrollHeightRef = useRef(0)
   const markingMessageIdsRef = useRef(new Set<string>())
-  const conversationAnchorRef = useRef(new Map<string, SavedScrollAnchor>())
-  // Threads awaiting a scroll restore. A single slot would lose the first one
-  // when the reader leaves A for B and comes back: switching to A overwrites
-  // the pending thread with B, and A restores nothing.
-  const pendingScrollRestoreRef = useRef(new Set<string>())
+  // The messages as of the last render, so saving a position on the way out of
+  // a thread can tell whether the list still shows that thread.
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
   // Thread we've already done the one-time open positioning for, and the message
   // count at the last positioning — used to tell "thread opened" / "new message
   // arrived" apart from "read state changed" so we don't yank the user's scroll.
@@ -145,7 +144,7 @@ export function useConversationScroll(
   const setScrollTop = useCallback(
     (scrollTop: number) => {
       const container = scrollRef.current
-      if (container) applyScrollTop(container, scrollTop)
+      if (viewActiveRef.current && container) applyScrollTop(container, scrollTop)
     },
     [applyScrollTop],
   )
@@ -159,7 +158,7 @@ export function useConversationScroll(
   const releasePin = useCallback(() => {
     pinnedRef.current = null
     const container = scrollRef.current
-    if (container) container.style.overflowAnchor = ''
+    if (container) container.style.overflowAnchor = viewActiveRef.current ? '' : 'none'
   }, [])
 
   const releasePinForUserScroll = useCallback(() => {
@@ -272,23 +271,23 @@ export function useConversationScroll(
     (restoreOnReturn = false) => {
       const container = scrollRef.current
       if (!container || !activeThreadId) return
+      const view = threadView(viewKey)
+      // Leaving runs after the next thread may already have replaced the list:
+      // a view that is empty or shows another thread's messages says nothing
+      // about this one, and must not overwrite where the reader left it.
       const anchor = readScrollAnchor(container)
-      if (anchor) {
-        conversationAnchorRef.current.set(activeThreadId, {
-          ...anchor,
-          atBottom: isAtBottom(readScrollMetrics(container)),
-        })
+      const anchorMessage = anchor && messagesRef.current.find((message) => message.id === anchor.messageId)
+      if (anchor && anchorMessage?.thread_id === activeThreadId) {
+        view.scroll = { ...anchor, atBottom: isAtBottom(readScrollMetrics(container)) }
       }
-      if (restoreOnReturn) {
-        pendingScrollRestoreRef.current.add(activeThreadId)
-      }
+      if (restoreOnReturn && view.scroll) view.restoreScroll = true
     },
-    [activeThreadId],
+    [activeThreadId, viewKey],
   )
 
   const maybeMarkRead = useCallback(() => {
     const container = scrollRef.current
-    if (!container || !activeThreadId) return
+    if (!viewActive || !container || !activeThreadId) return
     // Mail arriving in the open thread while the window sits in the background
     // has not been seen yet; the focus listener below catches up on return.
     if (document.visibilityState === 'hidden' || !document.hasFocus()) return
@@ -336,9 +335,10 @@ export function useConversationScroll(
       }
       console.error('Failed to mark visible messages read:', error)
     })
-  }, [activeThreadId, messages])
+  }, [viewActive, activeThreadId, messages])
 
   const handleConversationScroll = useCallback(() => {
+    if (!viewActiveRef.current) return
     const container = scrollRef.current
     const ours = ownScrollPendingRef.current
     ownScrollPendingRef.current = false
@@ -365,12 +365,15 @@ export function useConversationScroll(
   }, [maybeMarkRead, releasePin, saveConversationScroll])
 
   useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (container) container.style.overflowAnchor = !viewActive || pinnedRef.current ? 'none' : ''
+  }, [viewActive])
+
+  useLayoutEffect(() => {
     return () => {
-      if (activeTab === '') {
-        saveConversationScroll(true)
-      }
+      saveConversationScroll(true)
     }
-  }, [activeTab, saveConversationScroll])
+  }, [saveConversationScroll])
 
   useEffect(() => {
     markingMessageIdsRef.current.clear()
@@ -452,7 +455,7 @@ export function useConversationScroll(
         positionedThreadRef.current = activeThreadId
         messageCountRef.current = messages.length
         newestMessageIdRef.current = messages[messages.length - 1]?.id ?? ''
-        pendingScrollRestoreRef.current.delete(activeThreadId)
+        threadView(viewKey).restoreScroll = false
         pinMessage(pendingScrollMessageId)
         applyScrollTop(container, anchorScrollTop(target.offsetTop, container.offsetTop))
         thread$.flashMessageId.set(pendingScrollMessageId)
@@ -476,8 +479,10 @@ export function useConversationScroll(
     newestMessageIdRef.current = newestMessageId
     let savedAnchor: SavedScrollAnchor | null = null
     let savedScrollTop: number | null = null
-    if (pendingScrollRestoreRef.current.delete(activeThreadId)) {
-      savedAnchor = conversationAnchorRef.current.get(activeThreadId) ?? null
+    const view = threadView(viewKey)
+    if (view.restoreScroll) {
+      view.restoreScroll = false
+      savedAnchor = view.scroll
       const saved = savedAnchor
         ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(savedAnchor.messageId)}"]`)
         : null
@@ -543,6 +548,10 @@ export function useConversationScroll(
     releasePin,
     applyScrollTop,
   ])
+
+  useEffect(() => {
+    if (viewActive) maybeMarkRead()
+  }, [viewActive])
 
   return useMemo(
     () => ({

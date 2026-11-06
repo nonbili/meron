@@ -116,11 +116,8 @@ export const compose$ = observable({
   // Re-hydrate the tabs persisted from the previous run.
   tabs: initialTabs,
   activeTab: initialActiveTab,
-  // The thread shown by the "Current" conversation tab. The message pane renders a
-  // single selectedThread, so a thread tab has to retarget selectedThread to load
-  // its own messages. We remember the Current tab's thread here so switching to a
-  // thread tab and back restores the conversation it was showing instead of
-  // adopting the thread tab's. Kept in sync below while the Current tab is active.
+  // The thread shown by Current while a pinned thread retargets selectedThread
+  // for actions and shortcuts. Current keeps its own mounted conversation.
   conversationThread: initialConversationThread,
   composer: '',
   composerAttachments: [] as ComposerAttachment[],

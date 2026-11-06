@@ -1,5 +1,6 @@
+import { ensureThreadData, threadData$, threadRequests } from './threadData'
 import { attachmentSaveFilename } from '../lib/attachmentFilename'
-import type { Folder, Message } from '../types'
+import type { Folder, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { ui$, showToast, type BulkSelectionItem } from './ui'
@@ -14,6 +15,26 @@ import { bareAddr, splitAddressList } from '../lib/address'
 import { decrementFolderUnread, isDraftFolder, updateCachedFolderUnread } from './mailFolders'
 import { mail$ } from './mailState'
 import { compose$ } from './composeState'
+
+export function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
+  if (fallback?.thread_id === tab.threadId) return fallback
+  return {
+    id: tab.messageId || tab.threadId,
+    account_id: tab.accountId ?? '',
+    folder_id: tab.folderId ?? 'inbox',
+    thread_id: tab.threadId,
+    from_name: '',
+    from_addr: tab.from,
+    to: '',
+    subject: tab.subject || '(no subject)',
+    preview: '',
+    body: '',
+    date: tab.date ?? 0,
+    unread: false,
+    starred: false,
+    has_attachments: false,
+  }
+}
 
 export { mail$ }
 
@@ -169,7 +190,7 @@ export function findLocalThread(threadId: string): Message | undefined {
     const match = threads.find((item) => item.thread_id === threadId)
     if (match) return match
   }
-  return mail$.messages.get().find((item) => item.thread_id === threadId)
+  return mail$.messages.get().find((item) => item.thread_id === threadId) ?? threadData$[threadId].messages.get()?.[0]
 }
 
 // Click-to-open an attachment: the bridge hands it to the OS default
@@ -302,10 +323,13 @@ export function getActiveThread() {
     const match = threads.find((thread) => thread.thread_id === selected)
     if (match) return match
   }
-  // The selected thread's row hasn't landed yet (a notification or kanban jump
-  // that outran the list load). Wait for it rather than showing an unrelated
-  // conversation from the list we happen to have.
-  return null
+  // Pinned tabs can outlive their list row. Keep actions and the shared reply
+  // composer bound to their selected thread, even before its page arrives.
+  const tab = compose$.tabs.get().find((item) => item.kind === 'thread' && item.threadId === selected)
+  if (!tab) return null
+  const loaded =
+    mail$.messages.get().find((message) => message.thread_id === selected) ?? threadData$[selected].messages.get()?.[0]
+  return loaded ?? threadFromTab(tab, null)
 }
 
 // Guards against a slow load repainting the list after a newer one already did.
@@ -971,38 +995,58 @@ export async function loadMoreThreads() {
 }
 
 export async function loadThread(threadId: string) {
-  mail$.threadLoading.set(true)
-  if (mail$.threadErrorId.get() === threadId) mail$.threadErrorId.set('')
+  const data = ensureThreadData(threadId)
+  const request = {}
+  threadRequests.set(threadId, request)
+  data.loading.set(true)
+  data.error.set(false)
+  if (ui$.selectedThread.peek() === threadId) {
+    mail$.threadLoading.set(true)
+    mail$.threadErrorId.set('')
+    mail$.messages.set(data.messages.peek())
+    mail$.messagesCursor.set(data.cursor.peek())
+    mail$.messagesCursorThread.set(threadId)
+    mail$.messagesLoadingMore.set(data.loadingMore.peek())
+  }
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
       thread_id: threadId,
       limit: CONVERSATION_PAGE_SIZE,
     })
-    // Guard against a stale response: the user may have switched threads while
-    // this was in flight (e.g. during the ancestor fetch). Don't overwrite the
-    // newer thread's messages — and let that newer load own the loading flag.
-    if (ui$.selectedThread.get() !== threadId) return
-    // Bodies still filling in the background arrive via the `mail.synced`
-    // re-read; until then hide their placeholders rather than render empty
-    // bubbles.
+    if (threadRequests.get(threadId) !== request) return
     const refreshed = result.messages.filter((message) => !message.body_missing)
-    const messages = mergeRefreshedThreadMessages(mail$.messages.get(), refreshed, threadId)
-    mail$.messages.set(messages)
-    mail$.messagesCursor.set(result.next_cursor ?? '')
-    mail$.messagesCursorThread.set(threadId)
-    mail$.messagesLoadingMore.set(false)
-    // Reconcile against the unfiltered page: a hidden placeholder can still be
-    // unread, and dropping it must not mark the thread read early.
+    const current = data.messages.peek()
+    // A refresh reads the newest page. Keep history already paged in, including
+    // its cursor, so activating a tab never removes the reader's scroll anchor.
+    const first = result.messages[0]
+    const older =
+      result.next_cursor && first
+        ? current.filter(
+            (message) =>
+              !isLocalSendId(message.id) &&
+              message.date <= first.date &&
+              !result.messages.some((item) => item.id === message.id),
+          )
+        : []
+    const messages = mergeRefreshedThreadMessages(current, [...older, ...refreshed], threadId)
+    const cursor = older.length ? data.cursor.peek() : (result.next_cursor ?? '')
+    data.assign({ messages, cursor })
+    if (ui$.selectedThread.peek() === threadId) {
+      mail$.messages.set(messages)
+      mail$.messagesCursor.set(cursor)
+      mail$.messagesCursorThread.set(threadId)
+      mail$.messagesLoadingMore.set(data.loadingMore.peek())
+    }
     reconcileThreadUnreadFromLoadedMessages(threadId, result.messages, result.next_cursor)
   } catch (err) {
-    // Without this the failure is silent: the finally below clears the
-    // spinner and the reader sits blank. Flag the thread so the pane can
-    // offer a retry; keep it only if the user is still looking at it.
+    if (threadRequests.get(threadId) !== request) return
     console.error('threadRead failed', err)
-    if (ui$.selectedThread.get() === threadId) mail$.threadErrorId.set(threadId)
+    data.error.set(true)
+    if (ui$.selectedThread.peek() === threadId) mail$.threadErrorId.set(threadId)
   } finally {
-    if (ui$.selectedThread.get() === threadId) {
-      mail$.threadLoading.set(false)
+    if (threadRequests.get(threadId) === request) {
+      data.loading.set(false)
+      if (ui$.selectedThread.peek() === threadId) mail$.threadLoading.set(false)
     }
   }
 }
@@ -1129,13 +1173,11 @@ export function normalizeMessageId(value: string | undefined): string {
 }
 
 export async function loadMoreMessages(threadId: string) {
-  const cursor = mail$.messagesCursor.get()
-  if (!cursor || mail$.messagesLoadingMore.get()) return
-  // Guard against a stale click after the thread switched out from under us.
-  if (ui$.selectedThread.get() !== threadId) return
-  // Paging the new thread with the previous thread's cursor would prepend to the
-  // wrong messages.
-  if (mail$.messagesCursorThread.get() !== threadId) return
+  const data = ensureThreadData(threadId)
+  const cursor = data.cursor.peek()
+  const instance = data.peek()
+  if (!cursor || data.loadingMore.peek() || ui$.selectedThread.peek() !== threadId) return
+  data.loadingMore.set(true)
   mail$.messagesLoadingMore.set(true)
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
@@ -1143,15 +1185,19 @@ export async function loadMoreMessages(threadId: string) {
       limit: CONVERSATION_PAGE_SIZE,
       before_cursor: cursor,
     })
-    if (ui$.selectedThread.get() !== threadId) return
-    // Prepend the older page; engine returns ascending order within the page.
-    const existing = mail$.messages.get()
+    if (data.peek() !== instance) return
+    const existing = data.messages.peek()
     const seen = new Set(existing.map((m) => m.id))
-    const merged = [...result.messages.filter((m) => !seen.has(m.id) && !m.body_missing), ...existing]
-    mail$.messages.set(merged)
-    mail$.messagesCursor.set(result.next_cursor ?? '')
+    const messages = [...result.messages.filter((m) => !seen.has(m.id) && !m.body_missing), ...existing]
+    data.assign({ messages, cursor: result.next_cursor ?? '' })
+    if (ui$.selectedThread.peek() === threadId) {
+      mail$.messages.set(messages)
+      mail$.messagesCursor.set(result.next_cursor ?? '')
+      mail$.messagesCursorThread.set(threadId)
+    }
   } finally {
-    mail$.messagesLoadingMore.set(false)
+    if (data.peek()) data.loadingMore.set(false)
+    if (ui$.selectedThread.peek() === threadId) mail$.messagesLoadingMore.set(false)
   }
 }
 

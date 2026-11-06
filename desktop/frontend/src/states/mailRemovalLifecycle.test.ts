@@ -1,3 +1,5 @@
+import { openThreadTab } from './compose'
+import { compose$ } from './composeState'
 import { afterEach, expect, it } from 'bun:test'
 import { accounts$ } from './accounts'
 import { mail$, loadThreads, releaseRemovedThread } from './mail'
@@ -31,6 +33,8 @@ function setup(invoke: (command: string, payload: any) => Promise<any>) {
   previousGo = (window as any).go
   previousAccounts = accounts$.get()
   releaseRemovedThread(id)
+  compose$.tabs.set([])
+  compose$.activeTab.set('')
   ui$.selectedAccount.set('review')
   ui$.selectedFolder.set('INBOX')
   ui$.selectedThread.set('')
@@ -44,6 +48,8 @@ function setup(invoke: (command: string, payload: any) => Promise<any>) {
   ;(window as any).go = { main: { App: { Invoke: invoke } } }
 }
 afterEach(() => {
+  compose$.tabs.set([])
+  compose$.activeTab.set('')
   kanban$.keyboardCard.set(null)
   accounts$.set(previousAccounts)
   releaseRemovedThread(id)
@@ -350,4 +356,27 @@ it('moves the keyboard selection past cards the column filters out', async () =>
     kanban$.filters.set({})
     settings$.kanbanBoards.set(previousBoards)
   }
+})
+
+it.each([
+  ['archive', archiveThread],
+  ['delete', deleteThread],
+] as const)('deactivates an active thread tab when %s advances selection', async (_label, action) => {
+  const neighbour = row('review#INBOX#t.next', 20)
+  setup(async (command) => (command === 'mail.threadList' ? { threads: [neighbour] } : { moved: 1, deleted: 1 }))
+  mail$.threads.set([row(), neighbour])
+  ui$.selectedThread.set(neighbour.thread_id)
+  openThreadTab(row())
+  expect(compose$.activeTab.peek()).toBe(`thread-${id}`)
+  expect(ui$.selectedThread.peek()).toBe(id)
+
+  const pending = action(id)
+  // Removal is optimistic: actions must already target the displayed neighbour
+  // while the archive/delete request is still in flight.
+  expect(compose$.activeTab.peek()).toBe('')
+  expect(ui$.selectedThread.peek()).toBe(neighbour.thread_id)
+  expect(compose$.conversationThread.peek()).toBe(neighbour.thread_id)
+  await pending
+  expect(compose$.activeTab.peek()).toBe('')
+  expect(ui$.selectedThread.peek()).toBe(neighbour.thread_id)
 })

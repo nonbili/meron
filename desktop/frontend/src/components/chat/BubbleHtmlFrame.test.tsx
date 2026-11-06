@@ -1,3 +1,5 @@
+import { ConversationViewContext } from './conversationView'
+import { thread$ } from '../../states/thread'
 import { afterEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import '../../states/compose'
@@ -123,4 +125,34 @@ it('retries a delayed image error after the frame consumes media recovery', asyn
   expect(requests).toBe(1)
   fireEvent.error(image)
   expect(requests).toBe(1)
+})
+
+it('keeps existing hidden frames and defers mounting new ones until activation', () => {
+  let visibility: (near: boolean) => void = () => {}
+  globalThis.IntersectionObserver = class {
+    constructor(callback: IntersectionObserverCallback) {
+      visibility = (near) =>
+        callback([{ isIntersecting: near } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+    }
+    observe() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver
+  const frame = (active: boolean) => (
+    <ConversationViewContext value={{ state: thread$, active, scope: 'test' }}>
+      <BubbleHtmlFrame html="<p>Keep only viewport frames</p>" />
+    </ConversationViewContext>
+  )
+  const view = render(frame(false))
+  act(() => visibility(true))
+  expect(view.container.querySelector('iframe') === null).toBe(true)
+  view.rerender(frame(true))
+  act(() => visibility(true))
+  const loaded = view.container.querySelector('iframe')
+  expect(loaded !== null).toBe(true)
+  view.rerender(frame(false))
+  act(() => visibility(false))
+  expect(view.container.querySelector('iframe') === loaded).toBe(true)
+  view.rerender(frame(true))
+  act(() => visibility(false))
+  expect(view.container.querySelector('iframe') === null).toBe(true)
 })

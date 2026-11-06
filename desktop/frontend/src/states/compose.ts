@@ -1,3 +1,4 @@
+import { forgetThreadView } from './threadView'
 import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
@@ -274,7 +275,14 @@ export function pruneComposerMedia() {
 // compose draft — attachments are dropped because their base64 payloads can blow
 // past localStorage's quota. On boot the tabs come back; the user reattaches
 // files if needed. Thread and reader tabs are stored as references.
+const threadTabScopes = (tabs: MessageTab[]) =>
+  new Set(tabs.filter((tab) => tab.kind === 'thread').map((tab) => `${tab.id}:${tab.threadId}`))
+let previousThreadTabScopes = threadTabScopes(compose$.tabs.peek())
 compose$.tabs.onChange(({ value: tabs }) => {
+  const scopes = threadTabScopes(tabs)
+  for (const key of previousThreadTabScopes) if (!scopes.has(key)) forgetThreadView(key)
+  previousThreadTabScopes = scopes
+
   pruneComposeSessions(new Set(tabs.map((tab) => tab.id)))
   const persisted = tabs.flatMap<PersistedComposeTab | PersistedMailTab>((t) => {
     if (t.kind !== 'compose') {
@@ -1329,9 +1337,9 @@ export function moveMessageTab(id: string, overId: string) {
 }
 
 // Reveal a message's remote content in the conversation and on any reader tab
-// already open for it. The tab needs its own copy because `resetThreadView`
-// clears the conversation's reveal map on the next thread switch while the tab
-// stays open — and an inactive tab is unmounted, so it cannot copy this itself.
+// already open for it. The tab keeps its own copy, which printing reads, and
+// which outlives the session map being cleared when an account is removed — an
+// inactive tab is unmounted, so it cannot copy this itself.
 export function revealMessageRemote(messageId: string) {
   revealRemote(messageId)
   compose$.tabs.set(

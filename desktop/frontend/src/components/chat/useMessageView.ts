@@ -1,3 +1,4 @@
+import { useConversationView } from './conversationView'
 import { useValue } from '@legendapp/state/react'
 import { accountIdentities, accounts$ } from '../../states/accounts'
 import { getActiveThread } from '../../states/mail'
@@ -35,6 +36,7 @@ export function useConversationMode(accountId?: string): ConversationMode {
  * so the two layouts differ only in chrome.
  */
 export function useMessageView(message: Message) {
+  const { state: thread$ } = useConversationView()
   const accounts = useValue(accounts$)
   const search = useValue(thread$.search)
   const activeSearchId = useValue(thread$.activeSearchId)
@@ -51,7 +53,7 @@ export function useMessageView(message: Message) {
     message.outgoing === true ||
     (!!account && accountIdentities(account).some((identity) => identity.email.trim().toLowerCase() === fromEmail))
   const isDraft = isDraftFolder(message.folder_id, message.account_id)
-  const activeAccount = activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null
+  const activeAccount = account ?? (activeThread ? accounts.find((acc) => acc.id === activeThread.account_id) : null)
   const isRSS = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
 
   const revealed = !!revealedMap[message.id]

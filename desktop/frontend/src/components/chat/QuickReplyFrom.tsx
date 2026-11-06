@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useConversationView } from './conversationView'
+import { useEffect, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -22,7 +23,9 @@ const MENU_GAP_PX = 6
 export function QuickReplyFrom() {
   const { t } = useTranslation()
   const { identities, selected } = useValue(quickReplyFromState)
+  const { active, scope } = useConversationView()
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  useEffect(() => setMenu(null), [active, scope])
 
   if (identities.length === 0 || !selected) return null
 
@@ -44,7 +47,7 @@ export function QuickReplyFrom() {
         <ChevronDown size={11} className="shrink-0" />
       </button>
 
-      {menu && (
+      {active && menu && (
         <FloatingContextMenu
           x={menu.x}
           y={menu.y}

@@ -1,7 +1,8 @@
+import { useConversationView } from './conversationView'
 import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'
-import { resolveConversationMode, thread$ } from '../../states/thread'
+import { resolveConversationMode } from '../../states/thread'
 import type { Message } from '../../types'
 import { messageSearchText } from './messageHelpers'
 import { messageMatchCount } from './threadSearchMatches'
@@ -19,6 +20,7 @@ type SearchOccurrence = { id: string; offset: number }
 // match into view. `accountId` is the thread's account, the fallback for a
 // message that carries none of its own.
 export function useThreadSearch(messages: Message[], accountId?: string) {
+  const { state: thread$ } = useConversationView()
   const threadSearch = useValue(thread$.search)
   const threadSearchOpen = useValue(thread$.searchOpen)
   const activeSearchIndex = useValue(thread$.activeSearchIndex)

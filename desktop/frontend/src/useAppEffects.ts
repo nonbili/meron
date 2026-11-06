@@ -1,3 +1,4 @@
+import { compose$ } from './states/composeState'
 import { useEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { boot } from './boot'
@@ -363,20 +364,16 @@ export function useAppEffects() {
       await loadThreads(false)
     }
 
-    // The open conversation pane shows whichever thread is selected, which may
-    // belong to a different account than the mailbox view — in a Kanban board or
-    // the Starred view it's independent of `selectedAccount`. So reload it on its
-    // own account's events, separately from the mailbox-list refresh below (which
-    // is rightly scoped to the selected account). Without this, new mail in the
-    // open thread updates the badge but never appears in the conversation.
+    // The foreground conversation can belong to an account outside the selected
+    // mailbox. Hidden conversations refresh when activated, avoiding a read per
+    // open tab on every sync event.
     const refreshOpenThread = (eventAccount?: string) => {
-      const openThread = ui$.selectedThread.get()
-      if (!openThread) return
-      if (eventAccount) {
-        const threadAccount = findLocalThread(openThread)?.account_id
-        if (threadAccount && threadAccount !== eventAccount) return
-      }
-      void loadThread(openThread).catch(console.error)
+      const threadId = ui$.selectedThread.peek()
+      const activeTab = compose$.tabs.peek().find((tab) => tab.id === compose$.activeTab.peek())
+      if (!threadId || (activeTab && activeTab.kind !== 'thread')) return
+      const threadAccount = findLocalThread(threadId)?.account_id ?? activeTab?.accountId
+      if (eventAccount && threadAccount && threadAccount !== eventAccount) return
+      void loadThread(threadId).catch(console.error)
     }
 
     // Mail sync/folder fetch failed (network down, bad creds, timeout) — surface a

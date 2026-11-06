@@ -1,4 +1,5 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useConversationView } from './conversationView'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
@@ -7,6 +8,7 @@ import { scrollbarHitWidth } from '../../lib/nativeScrollbars'
 import { loadMoreMessages } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
+import { threadView } from '../../states/threadView'
 import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
@@ -67,6 +69,7 @@ export function ConversationMessageList({
   wallpaperClassName: string
   wallpaperStyle?: CSSProperties
 }) {
+  const { state: thread$, active: viewActive, scope: viewScope } = useConversationView()
   const { t } = useTranslation()
   const traditional = useValue(settings$.conversationLayout) === 'traditional'
   const {
@@ -85,46 +88,55 @@ export function ConversationMessageList({
     // Releases expansion anchoring before input that intentionally moves the view.
     releasePinForUserScroll: onUserScrollIntent,
   } = useContext(ConversationScrollContext)!
-  // Traditional layout only: message ids the user has explicitly expanded or
-  // collapsed, overriding the default below. Cleared when the thread changes.
-  const [expandOverrides, setExpandOverrides] = useState<Record<string, boolean>>({})
+  // Traditional layout only: what the reader expanded or collapsed in this
+  // thread, overriding the default below. Remembered per thread, so switching
+  // to another tab or thread and back keeps it.
+  const expansion = threadView(viewScope || activeThreadId)
+  const expandOverrides = expansion.overrides
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  const setExpandOverrides = useCallback(
+    (threadId: string, update: (current: Record<string, boolean>) => Record<string, boolean>) => {
+      const target = threadView(viewScope || threadId)
+      const next = update(target.overrides)
+      if (next === target.overrides) return
+      target.overrides = next
+      rerender()
+    },
+    [viewScope],
+  )
   const pendingExpandedMessageIdRef = useRef('')
   const autoLoadInFlightRef = useRef(false)
+  const viewActiveRef = useRef(viewActive)
+  viewActiveRef.current = viewActive
   const activeThreadIdRef = useRef(activeThreadId)
   activeThreadIdRef.current = activeThreadId
-
-  // Which messages were unread when they first rendered. Scroll-driven read
-  // marking clears the flag while the user reads, so a default derived from the
-  // live one would collapse an open message out from under them — and reaching
-  // the bottom, which marks the whole thread read, would collapse every one of
-  // them at once.
-  const unreadOnArrivalRef = useRef<Set<string>>(new Set())
-
-  useEffect(() => {
-    setExpandOverrides({})
-    unreadOnArrivalRef.current = new Set()
-  }, [activeThreadId])
 
   // Expand all / collapse all, from the thread's menu: the default below gives
   // way to it, and so does every message toggled before. Heard as it is set
   // rather than on the render it causes, which is the last moment the view can
-  // still be read for the place to hold.
-  const expandAll = useValue(thread$.expandAll)
+  // still be read for the place to hold. Only this view's command state is
+  // observed, so a hidden conversation keeps its expansion untouched.
+  const expandAll = expansion.expandAll
   useEffect(
     () =>
       thread$.expandAll.onChange(({ value }) => {
         if (!value) return
         onHoldTopMessage(!value.expanded)
         pendingExpandedMessageIdRef.current = ''
-        setExpandOverrides({})
+        const target = threadView(viewScope || activeThreadIdRef.current)
+        target.expandAll = { expanded: value.expanded }
+        target.overrides = {}
+        rerender()
       }),
-    [onHoldTopMessage],
+    [onHoldTopMessage, thread$, viewScope],
   )
 
   useLayoutEffect(() => {
     if (!jumpMessageId) return
-    setExpandOverrides((current) => (current[jumpMessageId] === true ? current : { ...current, [jumpMessageId]: true }))
-  }, [jumpMessageId])
+    setExpandOverrides(activeThreadIdRef.current, (current) =>
+      current[jumpMessageId] === true ? current : { ...current, [jumpMessageId]: true },
+    )
+  }, [jumpMessageId, setExpandOverrides])
 
   useLayoutEffect(() => {
     const messageId = pendingExpandedMessageIdRef.current
@@ -136,8 +148,13 @@ export function ConversationMessageList({
     onScrollMessageToTop(messageId)
   }, [expandOverrides, onScrollMessageToTop])
 
+  // Which messages were unread when they first rendered. Scroll-driven read
+  // marking clears the flag while the user reads, so a default derived from the
+  // live one would collapse an open message out from under them — and reaching
+  // the bottom, which marks the whole thread read, would collapse every one of
+  // them at once. Messages still showing from the previous thread don't count.
   for (const message of messages) {
-    if (message.unread) unreadOnArrivalRef.current.add(message.id)
+    if (message.unread && message.thread_id === activeThreadId) expansion.unreadOnArrival.add(message.id)
   }
 
   // Mail-client default: the newest message is open, along with anything unread
@@ -154,7 +171,7 @@ export function ConversationMessageList({
     // Collapsing all still leaves the newest open: a thread of nothing but
     // summary lines has nothing to read, and it is the one a reply answers.
     if (expandAll) return expandAll.expanded || message.id === lastMessageId
-    return message.id === lastMessageId || unreadOnArrivalRef.current.has(message.id) || searchMatchSet.has(message.id)
+    return message.id === lastMessageId || expansion.unreadOnArrival.has(message.id) || searchMatchSet.has(message.id)
   }
   const expandAllAction =
     !traditional || showThreadLoading
@@ -171,11 +188,11 @@ export function ConversationMessageList({
   useEffect(() => () => thread$.expandAllAction.set(null), [])
   const setExpanded = (messageId: string, expanded: boolean) => {
     pendingExpandedMessageIdRef.current = expanded ? messageId : ''
-    setExpandOverrides((current) => ({ ...current, [messageId]: expanded }))
+    setExpandOverrides(activeThreadId, (current) => ({ ...current, [messageId]: expanded }))
   }
 
   const loadEarlier = useCallback(() => {
-    if (!messagesCursor || messagesLoadingMore || autoLoadInFlightRef.current) return
+    if (!viewActive || !messagesCursor || messagesLoadingMore || autoLoadInFlightRef.current) return
     const container = scrollRef.current
     const prevHeight = container?.scrollHeight ?? 0
     const prevTop = container?.scrollTop ?? 0
@@ -185,14 +202,14 @@ export function ConversationMessageList({
     const restoreScrollPosition = () => {
       requestAnimationFrame(() => {
         const el = scrollRef.current
-        if (el && activeThreadIdRef.current === loadingThreadId) {
+        if (el && viewActiveRef.current && activeThreadIdRef.current === loadingThreadId) {
           onSetScrollTop(prevTop + (el.scrollHeight - prevHeight))
         }
         autoLoadInFlightRef.current = false
       })
     }
     void loadMoreMessages(activeThreadId).then(restoreScrollPosition, restoreScrollPosition)
-  }, [activeThreadId, messagesCursor, messagesLoadingMore, scrollRef, onSetScrollTop])
+  }, [viewActive, activeThreadId, messagesCursor, messagesLoadingMore, scrollRef, onSetScrollTop])
 
   const handleScroll = useCallback(() => {
     onScroll()

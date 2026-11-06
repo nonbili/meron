@@ -3,6 +3,7 @@ import { t } from '../lib/i18n'
 import { invoke } from '../lib/bridge'
 import { boot } from '../boot'
 import type { Account, AccountProxy, AccountSignature, Alias, ChatWallpaper } from '../types'
+import { forgetThreadViews } from './threadView'
 import { confirmAction, ui$, showToast } from './ui'
 
 // Accounts state — maps 1:1 to the `accounts` DB table. The list is loaded by
@@ -194,6 +195,9 @@ export async function deleteAccount(accountId: string) {
   }
   try {
     await invoke('account.remove', { id: accountId })
+    // Views and reveals are kept by thread and message id, not by account, so
+    // the removed account's go the only way they can: all at once.
+    forgetThreadViews()
     showToast(t('accounts.toast.accountRemoved'))
     await boot()
   } catch (error) {

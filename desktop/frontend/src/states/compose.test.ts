@@ -52,6 +52,7 @@ import { ui$ } from './ui'
 import { mail$ } from './mail'
 import { deleteMessage } from './mailMoves'
 import { resetThreadView, thread$ } from './thread'
+import { forgetThreadViews } from './threadView'
 
 const message = (overrides: Partial<Message> = {}): Message => ({
   id: 'm1',
@@ -4030,7 +4031,7 @@ describe('revealMessageRemote', () => {
     expect(tab?.message?.starred).toBe(true)
   })
 
-  it('marks an open reader tab so a thread switch cannot re-block it', () => {
+  it('marks an open reader tab so clearing the session reveals cannot re-block it', () => {
     openMessageTab(message({ id: 'm1', body_html: '<p>hi</p>' }))
     openMessageTab(message({ id: 'm2', body_html: '<p>other</p>' }))
     // Reading the conversation, not the tab: the inactive tab is unmounted, so
@@ -4040,9 +4041,12 @@ describe('revealMessageRemote', () => {
     revealMessageRemote('m1')
     expect(thread$.revealedRemote.get().m1).toBe(true)
 
-    // The thread switch clears the conversation's reveal map; the tab keeps its
-    // own copy, and the message that was never revealed keeps none.
+    // A thread switch keeps the session's reveals.
     resetThreadView()
+    expect(thread$.revealedRemote.get().m1).toBe(true)
+    // Removing an account clears them; the tab keeps its own copy, and the
+    // message that was never revealed keeps none.
+    forgetThreadViews()
     const tabs = compose$.tabs.get()
     expect(tabs.find((tab) => tab.messageId === 'm1')?.revealRemote).toBe(true)
     expect(tabs.find((tab) => tab.messageId === 'm2')?.revealRemote).toBe(false)

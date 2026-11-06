@@ -44,7 +44,8 @@ export const thread$ = observable({
   pendingOwnSendId: '',
   // Message id briefly ring-highlighted after such a jump.
   flashMessageId: '',
-  // Message ids whose remote images the user revealed for this session.
+  // Remote images revealed in the active view. New views also inherit the
+  // session's reveals; existing hidden views keep their own live documents.
   revealedRemote: {} as Record<string, boolean>,
   // Index into galleryItems for the lightbox; null when closed.
   galleryIndex: null as number | null,
@@ -69,6 +70,20 @@ export const thread$ = observable({
   // Per-account override of the conversation render mode for this session.
   conversationModeOverrides: {} as Record<string, ConversationMode>,
 })
+
+// The active view publishes its reveal map to thread$, while navigation can
+// still seed a newly mounted view from everything revealed in this session.
+const sessionReveals: Record<string, boolean> = {}
+thread$.revealedRemote.onChange(({ value }) => {
+  for (const [id, revealed] of Object.entries(value)) if (revealed) sessionReveals[id] = true
+})
+export function sessionRemoteReveals() {
+  return { ...sessionReveals }
+}
+export function forgetRemoteReveals() {
+  for (const id of Object.keys(sessionReveals)) delete sessionReveals[id]
+  thread$.revealedRemote.set({})
+}
 
 export function openThreadSearch() {
   thread$.searchOpen.set(true)
@@ -100,7 +115,6 @@ export function resetThreadView() {
   // pendingScrollMessageId deliberately survives: it's set just before the
   // thread switch that triggers this reset.
   thread$.flashMessageId.set('')
-  thread$.revealedRemote.set({})
   thread$.galleryIndex.set(null)
   thread$.hoveredLink.set(null)
   thread$.messageContextMenu.set(null)

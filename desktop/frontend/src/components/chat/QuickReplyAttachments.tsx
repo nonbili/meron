@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useConversationView } from './conversationView'
+import { useEffect, useState } from 'react'
 import { compose$ } from '../../states/composeState'
 import type { ComposerAttachment } from '../../types'
 import { AttachmentImagePreview } from '../composer/AttachmentImagePreview'
@@ -7,6 +8,8 @@ import { PendingAttachmentList } from '../composer/PendingAttachmentList'
 // Preview deck of the quick-reply's pending attachments. Renders nothing empty.
 export function QuickReplyAttachments({ attachments }: { attachments: ComposerAttachment[] }) {
   const [previewAttachment, setPreviewAttachment] = useState<ComposerAttachment | null>(null)
+  const { active, scope } = useConversationView()
+  useEffect(() => setPreviewAttachment(null), [active, scope])
   if (attachments.length === 0) return null
 
   return (
@@ -18,7 +21,7 @@ export function QuickReplyAttachments({ attachments }: { attachments: ComposerAt
           onPreviewImage={setPreviewAttachment}
         />
       </div>
-      {previewAttachment && (
+      {active && previewAttachment && (
         <AttachmentImagePreview attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
     </>

@@ -1,3 +1,4 @@
+import { useConversationView } from './conversationView'
 import { useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Copy } from 'lucide-react'
@@ -57,6 +58,7 @@ export function MessageBubbleBody({
   onNaturalWidth?: (width: number | null) => void
 }) {
   const { t } = useTranslation()
+  const { active } = useConversationView()
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const releasePinForUserScroll = useContext(ConversationScrollIntentContext)
   // The active <mark> is scrolled to from here, where it is rendered — the pane
@@ -64,7 +66,7 @@ export function MessageBubbleBody({
   // render before this body has moved its highlight. (The HTML frame does the
   // same for the marks it places inside its document.)
   useEffect(() => {
-    if (activeSearchOffset < 0) return
+    if (!active || activeSearchOffset < 0) return
     const mark = bodyRef.current?.querySelector<HTMLElement>('[data-search-active="true"]')
     mark?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [activeSearchOffset, normalizedSearchQuery, message.id])

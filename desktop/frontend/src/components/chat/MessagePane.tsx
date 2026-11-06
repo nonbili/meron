@@ -1,3 +1,5 @@
+import { retainThreadView } from '../../states/threadView'
+import type { RefObject } from 'react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -5,10 +7,12 @@ import { openComposeTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { withoutHydratedQuickReplyDraft } from '../../states/quickReply'
 import { ui$ } from '../../states/ui'
-import { mail$, getActiveThread, loadThread } from '../../states/mail'
+import { findLocalThread, loadThread, threadFromTab } from '../../states/mail'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
-import { resetThreadView, thread$ } from '../../states/thread'
+import { thread$ } from '../../states/thread'
+import { ensureThreadData, retainThreadData, threadData$ } from '../../states/threadData'
+import { ConversationViewContext, useConversationState, useConversationView } from './conversationView'
 import { Gallery } from './Gallery'
 import { ConversationDetailsPanel } from './ConversationDetailsPanel'
 import { EmptyState } from '../empty-state/EmptyState'
@@ -38,61 +42,168 @@ import { wallpaperCss } from '../../lib/wallpapers'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { openCorrespondentMail } from '../../states/kanban'
 import { isRssAccount } from '../../lib/threadActions'
-import type { Message, MessageTab } from '../../types'
-
-function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
-  if (fallback?.thread_id === tab.threadId) return fallback
-  return {
-    id: tab.messageId || tab.threadId,
-    account_id: tab.accountId ?? '',
-    folder_id: tab.folderId ?? 'inbox',
-    thread_id: tab.threadId,
-    from_name: '',
-    from_addr: tab.from,
-    to: '',
-    subject: tab.subject || '(no subject)',
-    preview: '',
-    body: '',
-    date: tab.date ?? 0,
-    unread: false,
-    starred: false,
-    has_attachments: false,
-  }
-}
+import type { Message } from '../../types'
 
 export function MessagePane() {
-  const { t } = useTranslation()
-  const messages = useValue(mail$.messages)
-  const messagesCursor = useValue(mail$.messagesCursor)
-  const messagesLoadingMore = useValue(mail$.messagesLoadingMore)
-  const threadLoading = useValue(mail$.threadLoading)
-  const threadErrorId = useValue(mail$.threadErrorId)
-  const accounts = useValue(accounts$)
+  const tabs = useValue(compose$.tabs)
+  const activeTab = useValue(compose$.activeTab)
+  const currentThread = useValue(compose$.conversationThread)
+  const selectedThread = useValue(ui$.selectedThread)
   const mobilePane = useValue(ui$.mobilePane)
+  const accounts = useValue(accounts$)
+  const selectedAccount = useValue(ui$.selectedAccount)
+  const activeTabData = tabs.find((tab) => tab.id === activeTab)
+  const documentTab = activeTabData?.kind === 'reader' || activeTabData?.kind === 'compose' ? activeTabData : null
+  const currentId = activeTab === '' ? selectedThread : currentThread
+  const current = useValue(() =>
+    currentId ? (findLocalThread(currentId) ?? threadData$[currentId].messages.get()?.[0]) : null,
+  )
+  const activeThread =
+    activeTabData?.kind === 'thread'
+      ? threadFromTab(activeTabData, null)
+      : documentTab
+        ? (findLocalThread(selectedThread) ?? null)
+        : current
+  const accountId = activeThread?.account_id ?? selectedAccount
+  const account = accounts.find((item) => item.id === accountId)
+  const showComposer = !!activeThread && !isRssAccount(account, accountId) && !isLocalAccountId(accountId)
+  const composerRef = useRef<HTMLDivElement | null>(null)
+  const {
+    dragging: fileDragging,
+    mayBeLink,
+    dropHandlers,
+  } = useFileDrop(addQuickReplyAttachments, {
+    enabled: showComposer && !documentTab,
+    scope: selectedThread,
+  })
+
+  // Menus and lightboxes are transient interactions. They belong only to the
+  // foreground tab, unlike the mounted conversation's search and message bodies.
+  useLayoutEffect(() => {
+    thread$.galleryIndex.set(null)
+    thread$.mediaOpen.set(false)
+    thread$.hoveredLink.set(null)
+    thread$.messageContextMenu.set(null)
+    thread$.conversationMenu.set(null)
+  }, [activeTab, selectedThread])
+
+  return (
+    <div
+      className={`relative flex flex-1 flex-col overflow-hidden ${mobilePane === 'conversation' ? 'max-[768px]:flex' : 'max-[768px]:hidden'}`}
+    >
+      <ConversationTabs />
+      <div
+        className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${fileDragging && mayBeLink ? '[&_iframe]:pointer-events-none' : ''}`}
+        {...dropHandlers}
+      >
+        <KeptConversation
+          key={`current:${currentId}`}
+          scope={currentId}
+          active={activeTab === ''}
+          thread={current ?? null}
+          composerRef={composerRef}
+        />
+        {tabs
+          .filter((tab) => tab.kind === 'thread')
+          .map((tab) => (
+            <KeptConversation
+              key={tab.id}
+              tabOwned
+              scope={`${tab.id}:${tab.threadId}`}
+              active={activeTab === tab.id}
+              thread={threadFromTab(tab, findLocalThread(tab.threadId) ?? null)}
+              composerRef={composerRef}
+            />
+          ))}
+        {showComposer && (
+          <div
+            ref={composerRef}
+            aria-hidden={!!documentTab}
+            inert={!!documentTab}
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 ${documentTab ? 'invisible' : ''}`}
+          >
+            <FrostedBand fade="top" className="bottom-0 left-0 right-3 top-5" />
+            <div className="relative">
+              <ConversationViewContext value={{ state: thread$, active: !documentTab, scope: selectedThread }}>
+                <QuickReplyComposer />
+              </ConversationViewContext>
+            </div>
+          </div>
+        )}
+        {fileDragging && <DropOverlay passThrough={mayBeLink} />}
+        {documentTab && (
+          <div className="absolute inset-0 z-20 flex flex-col bg-chat">
+            <ReaderTabView tab={documentTab} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function KeptConversation({
+  active,
+  thread,
+  scope,
+  composerRef,
+  tabOwned = false,
+}: {
+  tabOwned?: boolean
+  active: boolean
+  thread: Message | null
+  scope: string
+  composerRef: RefObject<HTMLDivElement | null>
+}) {
+  useLayoutEffect(() => (scope ? retainThreadView(scope, tabOwned) : undefined), [scope, tabOwned])
+  const state = useConversationState(active)
+  const value = useMemo(() => ({ state, active, scope }), [state, active, scope])
+  return (
+    <ConversationViewContext value={value}>
+      <div
+        aria-hidden={!active}
+        inert={!active}
+        className={`absolute inset-0 flex flex-col ${active ? '' : 'invisible pointer-events-none'}`}
+      >
+        <ConversationPane activeThread={thread} composerRef={composerRef} />
+      </div>
+    </ConversationViewContext>
+  )
+}
+
+function ConversationPane({
+  activeThread,
+  composerRef,
+}: {
+  activeThread: Message | null
+  composerRef: RefObject<HTMLDivElement | null>
+}) {
+  const { t } = useTranslation()
+  const { state: thread$, active } = useConversationView()
+  const activeThreadId = activeThread?.thread_id ?? ''
+  const data = ensureThreadData(activeThreadId)
+  const messages = useValue(data.messages)
+  const messagesCursor = useValue(data.cursor)
+  const messagesLoadingMore = useValue(data.loadingMore)
+  const threadLoading = useValue(data.loading)
+  const threadError = useValue(data.error)
+  const accounts = useValue(accounts$)
   const selectedAccountId = useValue(ui$.selectedAccount)
-  const selectedThreadId = useValue(ui$.selectedThread)
   const revealedRemote = useValue(thread$.revealedRemote)
   const allowedSenders = useValue(settings$.remoteImageSenders)
   const galleryIndex = useValue(thread$.galleryIndex)
   const mediaOpen = useValue(thread$.mediaOpen)
-  // Ring-highlight for a message jumped to from the starred list; shares the
-  // search-match ring styling in ConversationMessageList.
   const flashMessageId = useValue(thread$.flashMessageId)
   const quickReplyDraftId = useValue(compose$.quickReplyDraftId)
   const quickReplyDraftSaved = useValue(compose$.quickReplyDraftSaved)
   const sendingDraftIds = useValue(compose$.sendingDraftIds)
-  const tabs = useValue(compose$.tabs)
-  const activeTab = useValue(compose$.activeTab)
-  const activeTabData = tabs.find((tab) => tab.id === activeTab) ?? null
-  const activeDocumentTab = activeTabData?.kind === 'reader' || activeTabData?.kind === 'compose' ? activeTabData : null
-  const conversationActiveTab = activeDocumentTab ? activeTab : ''
-  const listedActiveThread = useValue(getActiveThread)
-  const activeThread =
-    activeTabData?.kind === 'thread' && activeTabData.threadId === selectedThreadId
-      ? threadFromTab(activeTabData, listedActiveThread)
-      : listedActiveThread
+  const conversationActiveTab = active ? '' : 'hidden'
 
-  const detailsOpen = !!activeThread && !activeDocumentTab && mediaOpen
+  useEffect(() => (activeThreadId ? retainThreadData(activeThreadId) : undefined), [activeThreadId])
+  useEffect(() => {
+    if (activeThreadId && (active || !data.messages.peek().length) && !data.loading.peek())
+      void loadThread(activeThreadId)
+  }, [active, activeThreadId])
+  const detailsOpen = !!activeThread && active && mediaOpen
   // Slides open and shut beside the conversation on a wide window (index.css,
   // .details-slide), like the board's conversation pane.
   const detailsPhase = usePresence(detailsOpen, PANE_ANIMATION_MS)
@@ -101,7 +212,6 @@ export function MessagePane() {
     ? accounts.find((account) => account.id === activeThread.account_id)
     : (accounts.find((account) => account.id === selectedAccountId) ?? null)
   const isRSS = isRssAccount(activeAccount ?? undefined, activeThread?.account_id ?? selectedAccountId)
-  const activeThreadId = activeThread?.thread_id ?? ''
   const conversationWallpaper = wallpaperCss(activeAccount?.chat_wallpaper)
   // Show a spinner instead of the previous thread's messages while a freshly
   // selected thread loads. Suppressed once any loaded message belongs to the
@@ -110,9 +220,7 @@ export function MessagePane() {
   // The load failed and there's nothing of this thread to show — offer a retry
   // instead of a blank pane. Suppressed while a (re)load is in flight.
   const showThreadError =
-    !showThreadLoading &&
-    threadErrorId === activeThreadId &&
-    !messages.some((message) => message.thread_id === activeThreadId)
+    !showThreadLoading && threadError && !messages.some((message) => message.thread_id === activeThreadId)
   const retryThreadLoad = useCallback(() => {
     if (activeThreadId) void loadThread(activeThreadId).catch(console.error)
   }, [activeThreadId])
@@ -144,7 +252,6 @@ export function MessagePane() {
   const mobileThreadSearchInputRef = useRef<HTMLInputElement | null>(null)
   const { threadSearchOpen, searchMatches, activeSearchId } = useThreadSearch(displayMessages, activeThread?.account_id)
   const conversationRef = useRef<HTMLDivElement | null>(null)
-  const composerRef = useRef<HTMLDivElement | null>(null)
   const hasConversation = !!activeThread
   // The composer floats over the bottom of the message list, so messages scroll
   // on behind its rounded box instead of ending at a straight edge above it. The
@@ -156,50 +263,22 @@ export function MessagePane() {
   useLayoutEffect(() => {
     const host = conversationRef.current
     const composer = composerRef.current
-    if (!host || !composer) return
+    if (!active || !host || !composer) return
+    // The shared composer follows the message column when the details panel
+    // changes its width, just as it did when it lived inside that column.
+    composer.style.width = `${host.offsetWidth}px`
     host.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
-    return () => {
-      host.style.removeProperty(COMPOSER_OVERLAP_VAR)
-    }
-  }, [hasConversation, isRSS])
+  }, [active, hasConversation, isRSS])
   const conversationScroll = useConversationScroll(activeThreadId, displayMessages, conversationActiveTab, unreadKey)
   const { scrollRef, setScrollTop } = conversationScroll
 
   const contextMenu = useValue(thread$.messageContextMenu)
-
-  // Files dropped anywhere on the open conversation go to the reply as
-  // attachments; feeds have no reply box, and a reader tab in front isn't the
-  // conversation. Files that arrive late (Linux) are for the conversation they
-  // were dropped on, not the one open by then. A drag that may be a link
-  // (Linux) must still reach the reply box, so the overlay is only drawn; the
-  // message bodies' frames, which would swallow the drop, then let it through
-  // to the pane.
-  const {
-    dragging: fileDragging,
-    mayBeLink,
-    dropHandlers: { ref: dropRef, ...dropHandlers },
-  } = useFileDrop(addQuickReplyAttachments, {
-    enabled: !!activeThread && !isRSS && !activeDocumentTab,
-    scope: activeThreadId,
-  })
-  // The conversation element is both the drop area and `conversationRef`.
-  const setConversationElement = useCallback(
-    (element: HTMLDivElement | null) => {
-      conversationRef.current = element
-      dropRef(element)
-    },
-    [dropRef],
-  )
 
   const showMessageInConversation = useCallback((messageId: string) => {
     thread$.pendingScrollMessageId.set(messageId)
     thread$.galleryIndex.set(null)
     thread$.mediaOpen.set(false)
   }, [])
-
-  useEffect(() => {
-    resetThreadView()
-  }, [activeThreadId])
 
   // Keeps the overlap in step as the composer grows with a longer reply or an
   // attachment, and a reader at the bottom parked there. That goes through the
@@ -209,15 +288,17 @@ export function MessagePane() {
     const host = conversationRef.current
     const container = scrollRef.current
     const composer = composerRef.current
-    if (!host || !container || !composer) return
+    if (!active || !host || !container || !composer) return
     const observer = new ResizeObserver(() => {
       const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 1
+      composer.style.width = `${host.offsetWidth}px`
       host.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
       if (atBottom) setScrollTop(container.scrollHeight)
     })
     observer.observe(composer)
+    observer.observe(host)
     return () => observer.disconnect()
-  }, [hasConversation, isRSS, scrollRef, setScrollTop])
+  }, [active, hasConversation, isRSS, scrollRef, setScrollTop])
 
   useLayoutEffect(() => {
     return () => {
@@ -274,7 +355,7 @@ export function MessagePane() {
   }, [activeThreadId])
 
   useEffect(() => {
-    if (!threadSearchOpen) return
+    if (!active || !threadSearchOpen) return
     // threadSearchFocus also re-runs this when ⌘/Ctrl+F is pressed with the bar
     // already open — including from inside an HTML message frame, which is
     // where focus otherwise stays.
@@ -285,14 +366,14 @@ export function MessagePane() {
       input?.focus()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [threadSearchOpen, threadSearchFocus])
+  }, [active, threadSearchOpen, threadSearchFocus])
 
   // Bring the message holding the active match into view — which also mounts an
   // HTML body's frame. Each body then scrolls to the exact <mark> it rendered,
   // including when the search moves between two matches in the same message,
   // which is why the offset is deliberately not a dependency here.
   useEffect(() => {
-    if (!activeSearchId) return
+    if (!active || !activeSearchId) return
     const container = scrollRef.current
     const match = container?.querySelector<HTMLElement>(`[data-search-match-id="${CSS.escape(activeSearchId)}"]`)
     match?.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -334,19 +415,6 @@ export function MessagePane() {
           />
         </ConversationScrollIntentContext>
       </ConversationScrollContext>
-
-      {/* Local folders cannot send: a reply there starts from the full composer. */}
-      {!isRSS && !isLocalAccountId(activeThread?.account_id ?? selectedAccountId) && (
-        <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-          {/* What shows around the box is frosted, from a line the box itself
-              covers: below the footer's pt-1 and the curve of its rounded-2xl
-              corners, with no hard edge beside those corners. */}
-          <FrostedBand fade="top" className="bottom-0 left-0 right-3 top-5" />
-          <div className="relative">
-            <QuickReplyComposer />
-          </div>
-        </div>
-      )}
     </>
   ) : (
     <div
@@ -358,33 +426,15 @@ export function MessagePane() {
   )
 
   return (
-    <div
-      className={`relative flex flex-1 flex-col overflow-hidden ${
-        mobilePane === 'conversation' ? 'max-[768px]:flex' : 'max-[768px]:hidden'
-      }`}
-    >
-      <ConversationTabs />
-      {activeThread && !activeDocumentTab && (
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      {activeThread && (
         <ConversationHeader activeThread={activeThread} desktopSearchInputRef={desktopThreadSearchInputRef} />
       )}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <section className="relative flex flex-1 flex-col overflow-hidden bg-chat">
-          <div
-            ref={setConversationElement}
-            aria-hidden={!!activeDocumentTab}
-            className={`relative flex min-h-0 flex-1 flex-col ${
-              activeDocumentTab ? 'pointer-events-none invisible' : ''
-            } ${fileDragging && mayBeLink ? '[&_iframe]:pointer-events-none' : ''}`}
-            {...dropHandlers}
-          >
+          <div ref={conversationRef} className="relative flex min-h-0 flex-1 flex-col">
             {conversationContent}
-            {fileDragging && <DropOverlay passThrough={mayBeLink} />}
           </div>
-          {activeDocumentTab && (
-            <div className="absolute inset-0 z-20 flex flex-col bg-chat">
-              <ReaderTabView tab={activeDocumentTab} />
-            </div>
-          )}
         </section>
 
         {activeThread && detailsPhase !== 'closed' && (
@@ -425,7 +475,7 @@ export function MessagePane() {
         )}
       </div>
 
-      {galleryIndex !== null && galleryItems[galleryIndex] && (
+      {active && galleryIndex !== null && galleryItems[galleryIndex] && (
         <Gallery
           items={galleryItems}
           index={galleryIndex}
@@ -434,7 +484,7 @@ export function MessagePane() {
         />
       )}
 
-      {contextMenu && (
+      {active && contextMenu && (
         <MessageContextMenu state={contextMenu} isRSS={isRSS} onClose={() => thread$.messageContextMenu.set(null)} />
       )}
     </div>

@@ -1,3 +1,4 @@
+import { useConversationView } from './conversationView'
 import type { Attachment } from '../../types'
 import { useValue } from '@legendapp/state/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -70,6 +71,9 @@ export function BubbleHtmlFrame({
   /** Reports the width a text-only document needs, or null for one that should fill the bubble. */
   onNaturalWidth?: (width: number | null) => void
 }) {
+  const { active } = useConversationView()
+  const activeRef = useRef(active)
+  activeRef.current = active
   const { t } = useTranslation()
   const messageFont = useMessageFrameFont()
   const bubbleTheme = useBubbleTheme(outgoing, surface)
@@ -107,7 +111,7 @@ export function BubbleHtmlFrame({
   const cacheKey = `${documentKey}:${bubbleTheme.appearance}`
   const cachedHeight = measuredHeights.get(cacheKey)
   const [height, setHeight] = useState(() => cachedHeight ?? DEFAULT_FRAME_HEIGHT)
-  const [nearViewport, setNearViewport] = useState(() => typeof IntersectionObserver === 'undefined')
+  const [nearViewport, setNearViewport] = useState(() => active && typeof IntersectionObserver === 'undefined')
   const hostRef = useRef<HTMLDivElement | null>(null)
   const heightRef = useRef(height)
   // Whether the document in the frame has been themed and measured. Until then
@@ -201,7 +205,7 @@ export function BubbleHtmlFrame({
   useEffect(() => {
     const host = hostRef.current
     if (!host || typeof IntersectionObserver === 'undefined') {
-      setNearViewport(true)
+      if (active) setNearViewport(true)
       return
     }
 
@@ -209,6 +213,9 @@ export function BubbleHtmlFrame({
     const observer = new IntersectionObserver(
       ([entry]) => {
         const near = entry?.isIntersecting ?? false
+        // Hidden tabs keep their geometry and existing frames. Ignore callbacks
+        // there, but keep virtualizing bodies scrolled away in the active view.
+        if (!activeRef.current) return
         if (!near) setMeasured(false)
         setNearViewport(near)
       },
@@ -219,7 +226,11 @@ export function BubbleHtmlFrame({
     )
     observer.observe(host)
     return () => observer.disconnect()
-  }, [documentKey])
+  }, [documentKey, active])
+
+  useEffect(() => {
+    if (!active) setGalleryIndex(null)
+  }, [active])
 
   const handleReady = useCallback(
     (doc: Document) => {
@@ -524,7 +535,7 @@ export function BubbleHtmlFrame({
     // The frame doesn't scroll (it's sized to its content), so scrolling the
     // mark into view moves the conversation container around it — which is how
     // stepping between two hits inside one long message goes anywhere.
-    activeMark?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (activeRef.current) activeMark?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     return () => {
       // The document is gone once the frame reloads; ignore that case.
       if (frameDoc.defaultView) clearFrameHighlights(frameDoc)
@@ -544,7 +555,7 @@ export function BubbleHtmlFrame({
             style={{
               height,
               overflow: 'hidden',
-              visibility: measured && heightKeyRef.current === documentKey ? 'visible' : 'hidden',
+              visibility: active && measured && heightKeyRef.current === documentKey ? 'visible' : 'hidden',
             }}
             scrolling="no"
             onFrameClick={handleFrameClick}
@@ -556,7 +567,7 @@ export function BubbleHtmlFrame({
           />
         )}
       </div>
-      {galleryIndex !== null && galleryItems[galleryIndex] && (
+      {active && galleryIndex !== null && galleryItems[galleryIndex] && (
         <Gallery
           items={galleryItems}
           index={galleryIndex}

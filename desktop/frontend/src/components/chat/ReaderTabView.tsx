@@ -61,7 +61,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
     (account?.load_remote_images ?? false) ||
     (!!sender && allowedSenders.includes(sender)) ||
     // `revealMessageRemote` copies a reveal onto the tab as it happens; the
-    // live map still counts for a tab opened before this thread was switched.
+    // session map still counts for a tab opened before the reveal.
     !!revealedRemote[tab.messageId] ||
     !!tab.revealRemote
   // The same affordance the conversation offers, on the tab's own header: a tab

@@ -1,3 +1,4 @@
+import { useConversationView } from './conversationView'
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
@@ -30,7 +31,7 @@ import { settings$ } from '../../states/settings'
 import { starThread } from '../../states/mailFlags'
 import { deletesForever, isDraftFolder } from '../../states/mailFolders'
 import { archiveThread, deleteThread } from '../../states/mailMoves'
-import { goToSearchMatch, setAllMessagesExpanded, thread$ } from '../../states/thread'
+import { goToSearchMatch, setAllMessagesExpanded } from '../../states/thread'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
 import { exportThreadsAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
@@ -60,6 +61,7 @@ export function ConversationHeader({
   activeThread: Message
   desktopSearchInputRef: RefObject<HTMLInputElement | null>
 }) {
+  const { state: thread$, active: viewActive } = useConversationView()
   const { t } = useTranslation()
   const account = useValue(accounts$).find((acc) => acc.id === activeThread.account_id)
   const isRSS = isRssAccount(account, activeThread.account_id)
@@ -82,6 +84,9 @@ export function ConversationHeader({
 
   const [printing, setPrinting] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  useEffect(() => {
+    if (!viewActive) setActionsMenuOpen(false)
+  }, [viewActive])
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -408,7 +413,7 @@ export function ConversationHeader({
           </div>
         </div>
       </header>
-      {conversationMenu && (
+      {viewActive && conversationMenu && (
         <FloatingContextMenu
           x={conversationMenu.x}
           y={conversationMenu.y}

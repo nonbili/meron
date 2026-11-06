@@ -7,6 +7,7 @@ import type { ReactElement } from 'react'
 import '../../states/compose'
 import { settings$ } from '../../states/settings'
 import { setAllMessagesExpanded, thread$ } from '../../states/thread'
+import { forgetThreadViews } from '../../states/threadView'
 import type { Message } from '../../types'
 import { ConversationMessageList } from './ConversationMessageList'
 import { ConversationScrollContext, type ConversationScroll } from './useConversationScroll'
@@ -27,12 +28,12 @@ function withScroll(overrides: Partial<ConversationScroll>, list: ReactElement) 
   return <ConversationScrollContext value={scroll}>{list}</ConversationScrollContext>
 }
 
-function message(id: string, body: string): Message {
+function message(id: string, body: string, threadId = 'thread-1'): Message {
   return {
     id,
     account_id: 'account-1',
     folder_id: 'inbox',
-    thread_id: 'thread-1',
+    thread_id: threadId,
     from_name: 'Sender',
     from_addr: 'sender@example.com',
     to: 'me@example.com',
@@ -50,6 +51,7 @@ afterEach(() => {
   cleanup()
   settings$.conversationLayout.set('chat')
   thread$.expandAll.set(null)
+  forgetThreadViews()
 })
 
 describe('ConversationMessageList direct jumps', () => {
@@ -158,7 +160,7 @@ describe('ConversationMessageList direct jumps', () => {
 })
 
 describe('ConversationMessageList expand all', () => {
-  const list = (messages: Message[]) => (
+  const list = (messages: Message[], threadId = 'thread-1') => (
     <ConversationMessageList
       messages={messages}
       showThreadLoading={false}
@@ -166,7 +168,7 @@ describe('ConversationMessageList expand all', () => {
       onRetryThreadLoad={() => undefined}
       messagesCursor=""
       messagesLoadingMore={false}
-      activeThreadId="thread-1"
+      activeThreadId={threadId}
       searchMatches={[]}
       activeSearchId=""
       jumpMessageId=""
@@ -214,6 +216,47 @@ describe('ConversationMessageList expand all', () => {
 
     view.rerender(withScroll({}, list([message('earlier', 'Earlier'), ...messages])))
     expect(collapsed(view.container)).toEqual([])
+  })
+
+  it('keeps what was opened and closed when leaving the thread and coming back', () => {
+    settings$.conversationLayout.set('traditional')
+    const messages = [
+      { ...message('first', 'First'), unread: true },
+      message('second', 'Second'),
+      message('newest', 'Newest'),
+    ]
+    const other = [message('a', 'A', 'thread-2'), message('b', 'B', 'thread-2')]
+    const view = render(withScroll({}, list(messages)))
+    expect(collapsed(view.container)).toEqual(['second'])
+    fireEvent.click(view.container.querySelector('[data-message-id="second"] [title="Expand message"]')!)
+    fireEvent.click(view.container.querySelector('[data-message-id="newest"] [title="Collapse message"]')!)
+    expect(collapsed(view.container)).toEqual(['newest'])
+
+    view.rerender(withScroll({}, list(other, 'thread-2')))
+    expect(collapsed(view.container)).toEqual(['a'])
+    act(() => setAllMessagesExpanded(true))
+    expect(collapsed(view.container)).toEqual([])
+
+    // Back in the first thread, read by now and with the shared expand-all
+    // reset as it is on every switch.
+    act(() => thread$.expandAll.set(null))
+    view.rerender(withScroll({}, list(messages.map((m) => ({ ...m, unread: false })))))
+    expect(collapsed(view.container)).toEqual(['newest'])
+
+    view.rerender(withScroll({}, list(other, 'thread-2')))
+    expect(collapsed(view.container)).toEqual([])
+  })
+
+  it('keeps them when the conversation pane mounts again', () => {
+    settings$.conversationLayout.set('traditional')
+    const messages = [message('first', 'First'), message('second', 'Second'), message('newest', 'Newest')]
+    const view = render(withScroll({}, list(messages)))
+    fireEvent.click(view.container.querySelector('[data-message-id="first"] [title="Expand message"]')!)
+    expect(collapsed(view.container)).toEqual(['second'])
+    view.unmount()
+
+    const again = render(withScroll({}, list(messages)))
+    expect(collapsed(again.container)).toEqual(['second'])
   })
 
   it('offers nothing in the chat layout or for a single message', () => {
