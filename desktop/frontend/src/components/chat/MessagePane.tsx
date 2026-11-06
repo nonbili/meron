@@ -1,6 +1,5 @@
 import { retainThreadView } from '../../states/threadView'
-import type { RefObject } from 'react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { openComposeTab } from '../../states/compose'
@@ -67,7 +66,10 @@ export function MessagePane() {
   const accountId = activeThread?.account_id ?? selectedAccount
   const account = accounts.find((item) => item.id === accountId)
   const showComposer = !!activeThread && !isRssAccount(account, accountId) && !isLocalAccountId(accountId)
-  const composerRef = useRef<HTMLDivElement | null>(null)
+  // State rather than a ref: the composer renders after the conversations, so
+  // its ref is still unset while a conversation mounting in the same commit runs
+  // its layout effects. As state, attaching it re-runs their measurement.
+  const [composer, setComposer] = useState<HTMLDivElement | null>(null)
   const {
     dragging: fileDragging,
     mayBeLink,
@@ -101,7 +103,7 @@ export function MessagePane() {
           scope={currentId}
           active={activeTab === ''}
           thread={current ?? null}
-          composerRef={composerRef}
+          composer={composer}
         />
         {tabs
           .filter((tab) => tab.kind === 'thread')
@@ -112,12 +114,12 @@ export function MessagePane() {
               scope={`${tab.id}:${tab.threadId}`}
               active={activeTab === tab.id}
               thread={threadFromTab(tab, findLocalThread(tab.threadId) ?? null)}
-              composerRef={composerRef}
+              composer={composer}
             />
           ))}
         {showComposer && (
           <div
-            ref={composerRef}
+            ref={setComposer}
             aria-hidden={!!documentTab}
             inert={!!documentTab}
             className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 ${documentTab ? 'invisible' : ''}`}
@@ -145,14 +147,14 @@ function KeptConversation({
   active,
   thread,
   scope,
-  composerRef,
+  composer,
   tabOwned = false,
 }: {
   tabOwned?: boolean
   active: boolean
   thread: Message | null
   scope: string
-  composerRef: RefObject<HTMLDivElement | null>
+  composer: HTMLDivElement | null
 }) {
   useLayoutEffect(() => (scope ? retainThreadView(scope, tabOwned) : undefined), [scope, tabOwned])
   const state = useConversationState(active)
@@ -164,7 +166,7 @@ function KeptConversation({
         inert={!active}
         className={`absolute inset-0 flex flex-col ${active ? '' : 'invisible pointer-events-none'}`}
       >
-        <ConversationPane activeThread={thread} composerRef={composerRef} />
+        <ConversationPane activeThread={thread} composer={composer} />
       </div>
     </ConversationViewContext>
   )
@@ -172,10 +174,10 @@ function KeptConversation({
 
 function ConversationPane({
   activeThread,
-  composerRef,
+  composer,
 }: {
   activeThread: Message | null
-  composerRef: RefObject<HTMLDivElement | null>
+  composer: HTMLDivElement | null
 }) {
   const { t } = useTranslation()
   const { state: thread$, active } = useConversationView()
@@ -262,13 +264,12 @@ function ConversationPane({
   // would otherwise count the ones behind the composer as seen.
   useLayoutEffect(() => {
     const host = conversationRef.current
-    const composer = composerRef.current
     if (!active || !host || !composer) return
     // The shared composer follows the message column when the details panel
     // changes its width, just as it did when it lived inside that column.
     composer.style.width = `${host.offsetWidth}px`
     host.style.setProperty(COMPOSER_OVERLAP_VAR, `${composer.offsetHeight}px`)
-  }, [active, hasConversation, isRSS])
+  }, [active, hasConversation, isRSS, composer])
   const conversationScroll = useConversationScroll(activeThreadId, displayMessages, conversationActiveTab, unreadKey)
   const { scrollRef, setScrollTop } = conversationScroll
 
@@ -287,7 +288,6 @@ function ConversationPane({
   useLayoutEffect(() => {
     const host = conversationRef.current
     const container = scrollRef.current
-    const composer = composerRef.current
     if (!active || !host || !container || !composer) return
     const observer = new ResizeObserver(() => {
       const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 1
@@ -298,7 +298,7 @@ function ConversationPane({
     observer.observe(composer)
     observer.observe(host)
     return () => observer.disconnect()
-  }, [active, hasConversation, isRSS, scrollRef, setScrollTop])
+  }, [active, hasConversation, isRSS, composer, scrollRef, setScrollTop])
 
   useLayoutEffect(() => {
     return () => {
