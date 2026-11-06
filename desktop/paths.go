@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 func decode(payload map[string]any, out any) error {
@@ -82,37 +81,31 @@ func loadDotEnvLocal() {
 // plain attachment cache (meron-core parse::SECURE_MEDIA_PREFIX).
 const secureMediaPrefix = "e2ee/"
 
-// secureMediaDir holds attachments of decrypted mail. It must be both
-// ephemeral (gone on reboot, never persisted) and private to this
-// user (no other local user can read the plaintext or pre-plant the path).
-// Meron empties it at start and at quit (wipeSecureMedia), so
-// decrypted files exist only while it runs; a missing file makes the sidecar
-// fetch and decrypt the message again.
+// secureMediaDir holds attachments of decrypted mail. It is private to this
+// user and the same path in every run, so the wipe before the sidecar starts
+// (prepareSecureMedia) also clears what a crash or kill left behind. Meron
+// empties it at start and at quit, so decrypted files exist only while it runs
+// (after a crash, until the next start); a missing file makes the sidecar fetch
+// and decrypt the message again.
 //   - Linux desktop session: $XDG_RUNTIME_DIR (tmpfs, owner-only, per-user).
-//   - Otherwise (no logind session on Linux; macOS; Windows): an owner-only
-//     directory with an unguessable name created once under the temp dir. The
-//     former fixed $TMPDIR/meron/secure-media was a predictable path under the
-//     world-writable /tmp when $XDG_RUNTIME_DIR was unset, which another local
-//     user could read or pre-plant with a symlink. A random name created
-//     atomically (os.MkdirTemp, O_EXCL, mode 0700) cannot be, and stays
-//     ephemeral under the temp dir.
-var secureMediaOnce = &sync.Once{}
-var secureMediaPath string
-
+//   - Otherwise (no logind session on Linux; macOS; Windows): the per-user
+//     cache dir, which no other local user can write. Not the shared temp dir:
+//     a fixed name there could be read or pre-planted by another local user,
+//     and a random one (as before) can't be found again after a crash.
 func secureMediaDir() string {
 	if runtime := os.Getenv("XDG_RUNTIME_DIR"); runtime != "" {
 		return filepath.Join(runtime, appDirName(), "secure-media")
 	}
-	secureMediaOnce.Do(func() {
-		if base, err := os.MkdirTemp("", appDirName()+"-secure-"); err == nil {
-			secureMediaPath = filepath.Join(base, "secure-media")
-			return
-		}
-		// The temp dir is unusable: a per-user persistent dir is safer than a
-		// shared one (reboot no longer clears it, but no other user can read it).
-		secureMediaPath = filepath.Join(appCacheDir(), "secure-media")
-	})
-	return secureMediaPath
+	return filepath.Join(appCacheDir(), "secure-media")
+}
+
+// prepareSecureMedia empties the secure dir (what an earlier run left) and
+// recreates it owner-only (0700). The wipe removes whatever stood there, a
+// planted symlink included (never what it points to), so the dir is always
+// created fresh. Called before the sidecar starts.
+func prepareSecureMedia() error {
+	wipeSecureMedia()
+	return os.MkdirAll(secureMediaDir(), 0o700)
 }
 
 // wipeSecureMedia removes every decrypted attachment, and the copies opened

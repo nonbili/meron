@@ -133,8 +133,11 @@ func (a *App) Startup(ctx context.Context) {
 	// way it is re-downloadable, so start clean.
 	sweepReplacedExecutable()
 	cleanupUpdateCache()
-	// Decrypted attachments a crash or kill left behind.
-	wipeSecureMedia()
+	// Decrypted attachments a crash or kill left behind; the dir comes back
+	// owner-only.
+	if err := prepareSecureMedia(); err != nil {
+		a.logf("startup: secure media dir: %v", err)
+	}
 	a.startTray()
 	a.logf("startup: core path=%s", coreBinaryPath())
 	a.sidecar = NewSidecar(coreBinaryPath(), a.logWriter())

@@ -356,10 +356,12 @@ sequenceDiagram
   because `json_patch` merges and a missing field would keep stale values.
 - Decrypted plaintext goes into `messages.body` (full-text index, previews, notifications, MCP), by decision (§1).
 - Decrypted attachments are written under `parse::secure_media_root()` (`MERON_SECURE_MEDIA_DIR`, set by the desktop to
-  `$XDG_RUNTIME_DIR/<app>/secure-media`, a per-user tmpfs, and without `XDG_RUNTIME_DIR` (macOS, Windows) to the
-  per-user temp dir `os.TempDir()/<app>/secure-media`, never the persistent cache; mode 0700) and keyed `e2ee/…`;
-  `parse::media_file` resolves the prefix. **The desktop empties that dir at start (before the sidecar) and at quit
-  (after it), on every platform** (`wipeSecureMedia`): decrypted files exist only while Meron runs. A missing
+  `$XDG_RUNTIME_DIR/<app>/secure-media`, a per-user tmpfs, and without `XDG_RUNTIME_DIR` (macOS, Windows, Linux
+  without a logind session) to `<per-user cache>/<app>/secure-media`: a fixed path no other local user can write, not
+  the shared temp dir; mode 0700) and keyed `e2ee/…`; `parse::media_file` resolves the prefix. **The desktop empties
+  that dir at start (before the sidecar, `prepareSecureMedia`, which recreates it 0700) and at quit (after it), on
+  every platform** (`wipeSecureMedia`): decrypted files exist only while Meron runs. Because the path is the same in
+  every run, the wipe at start also clears what a crashed or killed run left. A missing
   file is reported by `missing_media_count`, and the message is fetched and decrypted again. The OS cleanup can't be
   relied on instead: macOS removes `$TMPDIR` files only after 3 days without access ("may be cleaned", not API),
   Windows only through Storage Sense if enabled. After a crash or kill the files stay until the next start.
@@ -627,7 +629,9 @@ message iframe.
   `outgoing::tests::gnupg_reads_our_pgp_mime_payload` run the system `gpg` (skipped if absent): GnuPG decrypts, verifies
   (`GOODSIG`, `DECRYPTION_OKAY`) and reads the protected Subject; the reverse direction is the fixture suite.
 - **Go** (`-tags gtk3`): `secure_media_test.go` covers e2ee media resolving inside the secure dir, traversal clamping,
-  the env passed to the sidecar, the temp-dir fallback and the wipe (mutation-checked). **Frontend:** component and
+  the env passed to the sidecar, the per-user fallback (fixed, private), the crash cleanup at the next start, a planted
+  symlink, and the wipe (mutation-checked; `Startup` itself, which starts the tray, sidecar and window, isn't run in
+  tests). **Frontend:** component and
   logic tests for the crypto UI (`components/crypto/*`, `lib/crypto.test.ts`) plus the composer/reply send-path tests;
   typecheck and i18n complete across all locales. A short `cargo-fuzz` smoke pass over the decrypt, key-parse and
   Autocrypt entry points surfaced one caught-panic case, since fixed.

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -40,37 +39,82 @@ func TestSidecarGetsTheSecureMediaDir(t *testing.T) {
 	t.Fatalf("sidecar env lacks %s", want)
 }
 
-// Without XDG_RUNTIME_DIR (no logind session on Linux; macOS;
-// Windows) decrypted attachments go to a directory that is both ephemeral
-// (under the temp dir, not the persistent cache) and private: an
-// unguessable, owner-only parent, not the old predictable path under the
-// world-writable /tmp that another local user could read or pre-plant.
-func TestSecureMediaDirFallbackIsEphemeralAndPrivate(t *testing.T) {
-	secureMediaOnce = &sync.Once{}
-	secureMediaPath = ""
-	t.Cleanup(func() { secureMediaOnce = &sync.Once{}; secureMediaPath = "" })
-	tmp := t.TempDir()
+// Without XDG_RUNTIME_DIR (no logind session on Linux; macOS; Windows)
+// decrypted attachments go to a fixed directory in the per-user cache: private
+// (no other local user can write there, unlike the shared temp dir) and the same
+// in every run, so the next start can clear what a crash left.
+func TestSecureMediaDirFallbackIsStableAndPrivate(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	dir := secureMediaDir()
-	if !strings.HasPrefix(dir, tmp+string(filepath.Separator)) {
-		t.Fatalf("secure media dir %s is not under the temp dir %s (it must be ephemeral)", dir, tmp)
+	if dir != filepath.Join(appCacheDir(), "secure-media") {
+		t.Fatalf("secure media dir %s is not in the per-user cache", dir)
 	}
-	if strings.HasPrefix(dir, appCacheDir()) {
-		t.Fatalf("secure media dir %s is in the persistent cache", dir)
+	if strings.HasPrefix(dir, tmp+string(filepath.Separator)) {
+		t.Fatalf("secure media dir %s is in the shared temp dir", dir)
 	}
-	// Not the old guessable shared path another local user could pre-plant.
-	if dir == filepath.Join(os.TempDir(), appDirName(), "secure-media") {
-		t.Fatalf("secure media dir is a predictable shared path: %s", dir)
+	if again := secureMediaDir(); again != dir {
+		t.Fatalf("secure media dir moved between calls: %s, then %s", dir, again)
 	}
-	// Its parent is owner-only (0700), so no other user can read the plaintext
-	// or plant a symlink there.
-	info, err := os.Stat(filepath.Dir(dir))
+	if err := prepareSecureMedia(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
 	if err != nil {
-		t.Fatalf("secure media parent not created: %v", err)
+		t.Fatalf("secure media dir not created: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		t.Fatalf("secure media parent %o is accessible to other users", perm)
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("secure media dir is %o, want 0700", perm)
+	}
+}
+
+// Something other than a directory where the secure dir belongs is refused.
+func TestPrepareSecureMediaRefusesASymlink(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	target := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(secureMediaDir()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, secureMediaDir()); err != nil {
+		t.Skip("no symlinks here")
+	}
+	// The wipe removes the link itself (never what it points to), so the dir is
+	// recreated as a real, private directory.
+	if err := prepareSecureMedia(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(secureMediaDir())
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		t.Fatalf("secure media dir is not a real directory: %v %v", info, err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("the link's target was touched: %v", err)
+	}
+}
+
+// A run that crashes or is killed never wipes at quit. The next start must
+// still clear what it left: the secure dir has to be the same path in every run.
+func TestStartupClearsWhatACrashedRunLeft(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	// Run 1 writes a decrypted attachment and is killed.
+	left := filepath.Join(secureMediaDir(), "acc", "INBOX", "7", "0.pdf")
+	if err := os.MkdirAll(filepath.Dir(left), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(left, []byte("plaintext"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Run 2 starts.
+	if err := prepareSecureMedia(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(left); !os.IsNotExist(err) {
+		t.Fatalf("a crashed run's decrypted file survived the next start: %v", err)
 	}
 }
 
