@@ -38,7 +38,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
   ...overrides,
 })
 
-// Audit H1 ("Re: What's up Johnny?"): an attacker can resend a ciphertext once
+// "Re: What's up Johnny?": an attacker can resend a ciphertext once
 // sent to us from their own address. Our reply would be encrypted to them, so
 // "only quote into encrypted replies" doesn't help: the quote itself must stay
 // out unless the sender is shown to have written it.

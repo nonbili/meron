@@ -1052,7 +1052,7 @@ describe('quick reply draft sharing', () => {
   })
 
   it('says plain to the core only when encryption was switched off, not when the flag is missing', async () => {
-    // Audit M1: a reply to encrypted mail that says neither is encrypted by the
+    // A reply to encrypted mail that says neither is encrypted by the
     // core, so a path that loses `encrypt` can't downgrade it by accident.
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })

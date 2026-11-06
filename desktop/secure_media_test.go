@@ -40,11 +40,11 @@ func TestSidecarGetsTheSecureMediaDir(t *testing.T) {
 	t.Fatalf("sidecar env lacks %s", want)
 }
 
-// Audit M2 + F1: without XDG_RUNTIME_DIR (no logind session on Linux; macOS;
+// Without XDG_RUNTIME_DIR (no logind session on Linux; macOS;
 // Windows) decrypted attachments go to a directory that is both ephemeral
-// (under the temp dir, not the persistent cache — M2) and private: an
+// (under the temp dir, not the persistent cache) and private: an
 // unguessable, owner-only parent, not the old predictable path under the
-// world-writable /tmp that another local user could read or pre-plant (F1).
+// world-writable /tmp that another local user could read or pre-plant.
 func TestSecureMediaDirFallbackIsEphemeralAndPrivate(t *testing.T) {
 	secureMediaOnce = &sync.Once{}
 	secureMediaPath = ""
@@ -54,27 +54,27 @@ func TestSecureMediaDirFallbackIsEphemeralAndPrivate(t *testing.T) {
 	t.Setenv("TMPDIR", tmp)
 	dir := secureMediaDir()
 	if !strings.HasPrefix(dir, tmp+string(filepath.Separator)) {
-		t.Fatalf("secure media dir %s is not under the temp dir %s (M2: ephemeral)", dir, tmp)
+		t.Fatalf("secure media dir %s is not under the temp dir %s (it must be ephemeral)", dir, tmp)
 	}
 	if strings.HasPrefix(dir, appCacheDir()) {
 		t.Fatalf("secure media dir %s is in the persistent cache", dir)
 	}
-	// Not the old guessable shared path another local user could pre-plant (F1).
+	// Not the old guessable shared path another local user could pre-plant.
 	if dir == filepath.Join(os.TempDir(), appDirName(), "secure-media") {
 		t.Fatalf("secure media dir is a predictable shared path: %s", dir)
 	}
 	// Its parent is owner-only (0700), so no other user can read the plaintext
-	// or plant a symlink there (F1).
+	// or plant a symlink there.
 	info, err := os.Stat(filepath.Dir(dir))
 	if err != nil {
 		t.Fatalf("secure media parent not created: %v", err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		t.Fatalf("secure media parent %o is accessible to other users (F1)", perm)
+		t.Fatalf("secure media parent %o is accessible to other users", perm)
 	}
 }
 
-// Audit M2: decrypted files live only while Meron runs. The wipe empties the
+// Decrypted files live only while Meron runs. The wipe empties the
 // secure dir and touches nothing beside it.
 func TestWipeSecureMediaRemovesDecryptedFilesOnly(t *testing.T) {
 	runtimeDir := t.TempDir()
@@ -100,7 +100,7 @@ func TestWipeSecureMediaRemovesDecryptedFilesOnly(t *testing.T) {
 	wipeSecureMedia() // nothing there: no panic, no error
 }
 
-// Audit M2: the copy handed to another app for a decrypted attachment stays in
+// The copy handed to another app for a decrypted attachment stays in
 // the secure dir (wiped), not in the persistent cache like a plain one.
 func TestDecryptedAttachmentsAreOpenedFromTheSecureDir(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
@@ -112,7 +112,7 @@ func TestDecryptedAttachmentsAreOpenedFromTheSecureDir(t *testing.T) {
 	}
 }
 
-// Audit M2: quitting wipes the secure dir.
+// Quitting wipes the secure dir.
 func TestShutdownWipesSecureMedia(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	if err := os.MkdirAll(secureMediaDir(), 0o700); err != nil {

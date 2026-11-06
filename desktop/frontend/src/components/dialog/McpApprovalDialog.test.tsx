@@ -84,7 +84,7 @@ test('shows the complete send preview as text and approves once through Wails', 
 })
 
 test('says when a reply to encrypted mail will go out encrypted', async () => {
-  // Audit M1: the core encrypts it whatever the tool asked; the preview says so.
+  // The core encrypts it whatever the tool asked; the preview says so.
   requests[0].preview.encrypted = true
   const view = render(<McpApprovalDialog />)
   await view.findByRole('alertdialog')

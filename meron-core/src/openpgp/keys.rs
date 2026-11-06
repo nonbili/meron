@@ -390,8 +390,8 @@ fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
 
 /// The key's verified self-signatures: direct-key signatures and user-ID
 /// self-certifications the primary key actually made. Expiry and feature flags
-/// must be read only from these, never from a signature a third party attached
-///: an unverified signature could otherwise move the expiry or turn
+/// must be read only from these, never from a signature a third party attached:
+/// an unverified signature could otherwise move the expiry or turn
 /// on SEIPDv2 for a key that can't read it.
 fn self_signatures(key: &SignedPublicKey) -> impl Iterator<Item = &Signature> {
     let direct = key
@@ -1127,7 +1127,7 @@ pub(crate) mod tests {
         out
     }
 
-    // K1: expiry and SEIPDv2 must be read only from verified self-signatures. A
+    // Expiry and SEIPDv2 must be read only from verified self-signatures. A
     // third party who serves someone's genuine key with a junk signature
     // attached must not be able to change when Meron thinks the key expires, or
     // trick Meron into sending SEIPDv2 (AEAD) to a key that can't read it.
@@ -1200,7 +1200,7 @@ pub(crate) mod tests {
             .unwrap()
     }
 
-    // L1: Meron signs with the primary key, so a key whose primary is not
+    // Meron signs with the primary key, so a key whose primary is not
     // flagged to sign (an offline-primary + signing-subkey setup) must be
     // detected — signing with it would make signatures strict verifiers reject.
     #[test]
@@ -1225,7 +1225,7 @@ pub(crate) mod tests {
         assert!(primary_can_sign(&still_can));
     }
 
-    // K1 (store side): a key is minimized before it is stored, so a third
+    // A key is minimized before it is stored, so a third
     // party's junk signature attached to a genuine key never reaches the store.
     #[test]
     fn minimize_drops_signatures_that_do_not_verify_and_keeps_the_key_usable() {

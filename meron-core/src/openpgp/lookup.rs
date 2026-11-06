@@ -341,7 +341,7 @@ mod tests {
         assert!(wkd_urls("nope").is_none());
     }
 
-    // L3/SSRF: a recipient whose domain is an IP literal or carries a port must
+    // A recipient whose domain is an IP literal or carries a port must
     // not produce a WKD URL, so a click-triggered lookup can't reach a local or
     // private service (e.g. x@127.0.0.1:631). WKD requires a real DNS name.
     #[test]

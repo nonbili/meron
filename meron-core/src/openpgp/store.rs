@@ -396,7 +396,7 @@ pub fn import_own(
         keys::Unlock::Ok(secret) => {
             // Meron signs with the primary key; a key whose primary can't sign
             // (offline primary + signing subkey) would make signatures strict
-            // verifiers reject, so refuse it rather than sign invalid mail (L1).
+            // verifiers reject, so refuse it rather than sign invalid mail.
             if !keys::primary_can_sign(&secret.to_public_key()) {
                 bail!(
                     "this key's primary key cannot make signatures; Meron signs with the primary key, so this key can't be used"
@@ -485,7 +485,7 @@ fn db_key(conn: &Connection, fingerprint: &str) -> Option<pgp::composed::SignedP
         .map(|k| k.to_public_key())
 }
 
-/// G2: folds `key` into the stored copy with the same fingerprint (every
+/// Folds `key` into the stored copy with the same fingerprint (every
 /// address row), so revocations and renewals published later take effect.
 /// Stored key bytes are only ever extended through [`keys::merge`] (which keeps
 /// only signatures made by the key itself), never replaced: an older copy
@@ -1267,7 +1267,7 @@ mod tests {
 
     #[test]
     fn a_future_date_header_cannot_pin_a_key_as_the_newest() {
-        // Audit H2: the Date header is the sender's claim. A forged mail dated
+        // The Date header is the sender's claim. A forged mail dated
         // far ahead must not make its key "seen last" forever, or the real
         // owner's later mail could never take encryption back.
         let conn = db();
@@ -1310,7 +1310,7 @@ mod tests {
 
     #[test]
     fn a_key_other_than_the_one_last_used_is_reported_until_it_is_used() {
-        // Audit H2, option 4: the composer warns when the key it would encrypt
+        // The composer warns when the key it would encrypt
         // to isn't the one Meron last encrypted to for that address.
         let conn = db();
         let carol = "carol@example.com".to_string();
@@ -1751,7 +1751,7 @@ mod tests {
         );
     }
 
-    // Audit M5: a build without an OpenPGP UI (mobile) restores no secret keys,
+    // A build without an OpenPGP UI (mobile) restores no secret keys,
     // so a desktop backup moved to a phone can't silently decrypt. The host
     // exercises both the gated (mobile) and ungated (desktop) restore directly.
     #[test]

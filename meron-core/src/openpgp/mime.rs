@@ -490,10 +490,10 @@ fn open_encrypted(
     let mut signed_inside = false;
     let mut inner_keys: Vec<SignedPublicKey> = Vec::new();
     // Gossip from the decrypted headers, held back until the signature is
-    // checked: it is recorded only for a message validly signed by its From
-    //, decided after signature verification below.
+    // checked: it is recorded only for a message validly signed by its From,
+    // decided after signature verification below.
     let mut inner_gossip: Vec<Announced> = Vec::new();
-    // The protected (inner) From, for G4: it must match the envelope From.
+    // The protected (inner) From: it must match the envelope From.
     let mut inner_from: Option<String> = None;
     if let Ok(inner) = mailparse::parse_mail(&bytes) {
         // Protected headers (RFC 9788): Subject and Autocrypt inside.
@@ -558,7 +558,7 @@ fn open_encrypted(
         status.signed = true;
         apply_signature(status, &checks, from, ring, &extra);
     }
-    // G3: the signer named intended recipients, but none is one of our keys —
+    // The signer named intended recipients, but none is one of our keys —
     // the message was encrypted to someone else and redirected to us.
     if status.problem.is_none()
         && let Some(valid) = checks.iter().find(|c| c.valid)
@@ -570,7 +570,7 @@ fn open_encrypted(
     {
         status.problem = Some(Problem::Redirected);
     }
-    // G4: the protected inner From differs from the envelope From — the
+    // The protected inner From differs from the envelope From — the
     // encrypted payload was lifted from a message by a different sender. Lists
     // legitimately rewrite From, so they are left out.
     if status.problem.is_none()
@@ -582,8 +582,8 @@ fn open_encrypted(
             status.problem = Some(Problem::Redirected);
         }
     }
-    // Record inner gossip only from a message validly signed by its From
-    //: an unsigned or mis-signed encrypted message cannot vouch for
+    // Record inner gossip only from a message validly signed by its From:
+    // an unsigned or mis-signed encrypted message cannot vouch for
     // third parties' keys.
     if status.signed && status.problem.is_none() && status.signer.is_some() {
         announced.extend(inner_gossip);
@@ -610,14 +610,14 @@ fn apply_signature(
     extra: &[SignedPublicKey],
 ) {
     status.weak_hash = checks.iter().any(|c| c.weak_hash);
-    // L5: verification broke the verifier (a caught rPGP panic). We could not
+    // Verification broke the verifier (a caught rPGP panic). We could not
     // validate the signature at all, so flag it invalid rather than leave it
     // looking merely unconfirmed.
     if checks.iter().any(|c| c.errored) && !checks.iter().any(|c| c.valid) {
         status.problem = Some(Problem::InvalidSignature);
         return;
     }
-    // G1: the signature verified, but its key was revoked or expired then.
+    // The signature verified, but its key was revoked or expired then.
     if !checks.iter().any(|c| c.valid) {
         if let Some(c) = checks.iter().find(|c| c.key_problem.is_some()) {
             status.issuer = c.signer.clone().or_else(|| c.issuer.clone());
@@ -747,19 +747,19 @@ mod tests {
 
     const SECRET: &str = "The meeting moved to Thursday";
 
-    // L5: a crafted detached signature panics rPGP's armor reader. The panic is
+    // A crafted detached signature panics rPGP's armor reader. The panic is
     // caught (the sidecar survives), but the message must not then be shown as a
     // bland "signed" with no problem: a signature we could not verify at all is
     // surfaced as invalid, never left looking merely unconfirmed.
     #[test]
     fn a_signature_that_panics_the_verifier_is_flagged_invalid_not_signed_ok() {
         let ring = alice_ring();
-        let m = parse("l5-panic-sig.bin", &ring);
+        let m = parse("panic-detached-sig.bin", &ring);
         let c = crypto(&m);
         assert_eq!(c.problem, Some(Problem::InvalidSignature));
     }
 
-    // H3: Mallory resends a message Alice sent (signed by Alice, encrypted to
+    // Mallory resends a message Alice sent (signed by Alice, encrypted to
     // Alice) as a new mail From her own address. Alice's own key must not vouch
     // for Mallory's From: no "verified", and a reply must not quote it.
     #[test]
@@ -798,7 +798,7 @@ mod tests {
         );
     }
 
-    // H4: a cleartext Autocrypt-Gossip header on an ordinary (unencrypted) mail
+    // A cleartext Autocrypt-Gossip header on an ordinary (unencrypted) mail
     // must not plant a key for the gossiped address.
     #[test]
     fn outer_gossip_in_plain_mail_is_ignored() {
@@ -843,10 +843,10 @@ mod tests {
         )
     }
 
-    // G3: a message encrypted to us but whose signature names only someone else
+    // A message encrypted to us but whose signature names only someone else
     // as the intended recipient was redirected to us, and is flagged.
     #[test]
-    fn a_message_whose_intended_recipient_is_not_us_is_flagged_g3() {
+    fn a_message_whose_intended_recipient_is_not_us_is_flagged() {
         let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
         let carol = secret_of("two-secret-keys.asc", "carol@example.com");
         let alice = ring.own[0].public.clone();
@@ -862,15 +862,15 @@ mod tests {
         assert_eq!(
             crypto(&m).problem,
             Some(Problem::Redirected),
-            "G3: intended recipients exclude us"
+            "intended recipients exclude us"
         );
         assert_ne!(crypto(&m).trust(&ring, &m.from_addr), Trust::Verified);
     }
 
-    // A normal message to us (intended includes us) is not flagged (no G3 false
+    // A normal message to us (intended includes us) is not flagged (no false
     // positive).
     #[test]
-    fn a_message_intended_for_us_is_not_flagged_g3() {
+    fn a_message_intended_for_us_is_not_flagged() {
         let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
         let carol = secret_of("two-secret-keys.asc", "carol@example.com");
         let alice = ring.own[0].public.clone();
@@ -888,10 +888,10 @@ mod tests {
         );
     }
 
-    // G4: the decrypted inner From differs from the envelope From — the payload
+    // The decrypted inner From differs from the envelope From — the payload
     // was lifted from a different sender's message.
     #[test]
-    fn a_message_whose_inner_from_differs_is_flagged_g4() {
+    fn a_message_whose_inner_from_differs_is_flagged() {
         let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
         let carol = secret_of("two-secret-keys.asc", "carol@example.com");
         let alice = ring.own[0].public.clone();
@@ -905,7 +905,7 @@ mod tests {
         assert_eq!(
             crypto(&m).problem,
             Some(Problem::Redirected),
-            "G4: inner From != outer From"
+            "inner From != outer From"
         );
     }
 

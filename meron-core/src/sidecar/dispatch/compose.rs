@@ -242,8 +242,8 @@ pub(crate) async fn dispatch(
             )?;
             // A draft of an encrypted message is itself encrypted (to us
             // only), or its text would sit on the server in the clear. So is a
-            // draft replying to encrypted mail that didn't say "plain" (audit
-            // M1); that needs only our own key, even with encryption turned off.
+            // draft replying to encrypted mail that didn't say "plain"; that
+            // needs only our own key, even with encryption turned off.
             let (encrypt, _) = reply_protection(engine, p, &account, &in_reply_to)?;
             let raw = if encrypt {
                 let ring = meron_core::openpgp::keyring::current();

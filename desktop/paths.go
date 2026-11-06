@@ -93,7 +93,7 @@ const secureMediaPrefix = "e2ee/"
 //     directory with an unguessable name created once under the temp dir. The
 //     former fixed $TMPDIR/meron/secure-media was a predictable path under the
 //     world-writable /tmp when $XDG_RUNTIME_DIR was unset, which another local
-//     user could read or pre-plant with a symlink (F1). A random name created
+//     user could read or pre-plant with a symlink. A random name created
 //     atomically (os.MkdirTemp, O_EXCL, mode 0700) cannot be, and stays
 //     ephemeral under the temp dir.
 var secureMediaOnce = &sync.Once{}

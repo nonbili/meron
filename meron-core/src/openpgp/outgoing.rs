@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn a_reply_to_encrypted_mail_is_encrypted_unless_plain_is_asked_for() {
-        // Audit M1: callers that say nothing (MCP, a path that forgot the flag)
+        // Callers that say nothing (MCP, a path that forgot the flag)
         // get encryption when the reply answers encrypted mail.
         use Protection::{Encrypt, Plain};
         assert_eq!(protection(true, false, false), Encrypt);
@@ -529,7 +529,6 @@ mod tests {
     #[test]
     fn gnupg_reads_our_pgp_mime_payload() {
         let Some(home) = crate::openpgp::crypt::tests::gpg_home() else {
-            eprintln!("gpg not installed: interop test skipped");
             return;
         };
         let me = keys::generate(&["me@example.org".into()]).unwrap();

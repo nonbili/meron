@@ -6176,7 +6176,7 @@ fn a_plain_gmail_reply_to_a_locally_cached_message_keeps_gmails_thread() {
     assert_eq!(key, "gmthrid:99");
 }
 
-// Audit M1: the core decides whether a reply answers encrypted mail from the
+// The core decides whether a reply answers encrypted mail from the
 // message it names in In-Reply-To, whatever the caller sends.
 #[test]
 fn a_reply_is_known_to_answer_encrypted_mail_by_its_in_reply_to() {
@@ -6213,7 +6213,7 @@ fn a_reply_is_known_to_answer_encrypted_mail_by_its_in_reply_to() {
     assert!(!answers("<unknown@example.com>"));
 }
 
-// Audit M1, as the sidecar applies it to send and save_draft.
+// The reply rule as the sidecar applies it to send and save_draft.
 #[test]
 fn a_reply_to_encrypted_mail_saying_nothing_is_encrypted_and_marked_implicit() {
     let conn = test_conn();

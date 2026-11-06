@@ -200,7 +200,7 @@ enum SigningPart<'a> {
 }
 
 impl SigningPart<'_> {
-    /// Whether this part's key was valid when `sig` was made (G1: signatures
+    /// Whether this part's key was valid when `sig` was made (signatures
     /// by revoked or expired keys don't count).
     fn valid_at(
         &self,
@@ -796,18 +796,57 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn gpg_home() -> Option<GpgHome> {
+    fn new_gpg_home() -> Option<GpgHome> {
         let dir = std::env::temp_dir().join(format!("meron-gpg-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir(&dir).ok()?;
         std::fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o700)).ok()?;
-        let home = GpgHome(dir);
-        gpg(home.path(), &["--version"], b"").map(|_| home)
+        Some(GpgHome(dir))
+    }
+
+    /// A throwaway GNUPGHOME for an interop test, or None (the reason on
+    /// stderr) when gpg is missing or can't use secret keys. Some CI images
+    /// (GitHub's ubuntu-26.04 runner) import a secret key, then gpg-agent
+    /// answers NO_SECKEY / "Bad secret key": that is the environment, not
+    /// Meron's output (the same GnuPG release decrypts it elsewhere), so the
+    /// tests skip there instead of failing.
+    pub(crate) fn gpg_home() -> Option<GpgHome> {
+        let home = new_gpg_home()?;
+        if gpg(home.path(), &["--version"], b"").is_none() {
+            eprintln!("gpg not installed: interop test skipped");
+            return None;
+        }
+        if !gpg_can_use_secret_keys() {
+            eprintln!(
+                "gpg can't use an imported secret key here (gpg-agent): interop test skipped"
+            );
+            return None;
+        }
+        Some(home)
+    }
+
+    /// What the interop tests need from gpg-agent: import a fresh secret key
+    /// into its own home and decrypt a message to it.
+    fn gpg_can_use_secret_keys() -> bool {
+        let Some(probe) = new_gpg_home() else {
+            return false;
+        };
+        let key = keys::generate(&["probe@example.org".into()]).unwrap();
+        let Ok(secret) = keys::binary_secret(&key) else {
+            return false;
+        };
+        if !gpg(probe.path(), &["--import"], &secret).is_some_and(|(ok, _, _)| ok) {
+            return false;
+        }
+        let Ok(armored) = encrypt(b"probe", &[&key.to_public_key()], &key) else {
+            return false;
+        };
+        gpg(probe.path(), &["--decrypt"], armored.as_bytes())
+            .is_some_and(|(ok, plain, _)| ok && plain == b"probe")
     }
 
     #[test]
     fn gnupg_decrypts_and_verifies_what_we_encrypt() {
         let Some(home) = gpg_home() else {
-            eprintln!("gpg not installed: interop test skipped");
             return;
         };
         let me = keys::generate(&["me@example.org".into()]).unwrap();
