@@ -75,7 +75,14 @@ describe('importBackup', () => {
   it('opens a file dialog when called with no path', async () => {
     stubBridge(calls, {
       ...bootResponses,
-      'backup.import': { accounts: 2, skipped: 1, feeds: 3, settings: 4, secrets: 2 },
+      'backup.import': {
+        accounts: 2,
+        skipped: 1,
+        feeds: 3,
+        settings: 4,
+        secrets: 2,
+        openpgpMissingSecret: ['acc-1'],
+      },
     })
 
     const outcome = await importBackup()
@@ -83,7 +90,7 @@ describe('importBackup', () => {
     expect(calls[0]).toEqual({ command: 'backup.import', payload: { path: '', passphrase: '' } })
     expect(outcome).toEqual({
       status: 'done',
-      summary: { accounts: 2, skipped: 1, feeds: 3, settings: 4, secrets: 2 },
+      summary: { accounts: 2, skipped: 1, feeds: 3, settings: 4, secrets: 2, openpgpMissingSecret: ['acc-1'] },
     })
   })
 
@@ -133,7 +140,7 @@ describe('importBackup', () => {
 
     expect(outcome).toEqual({
       status: 'done',
-      summary: { accounts: 0, skipped: 0, feeds: 0, settings: 0, secrets: 0 },
+      summary: { accounts: 0, skipped: 0, feeds: 0, settings: 0, secrets: 0, openpgpMissingSecret: [] },
     })
   })
 })

@@ -61,6 +61,13 @@ pub struct CryptoStatus {
     /// Primary fingerprint of the key whose signature verified.
     #[serde(default)]
     pub signer: Option<String>,
+    /// The part of `signer` that made it (the primary or a signing subkey).
+    #[serde(default)]
+    pub signing_key: Option<String>,
+    /// When the verified signature says it was made (unix seconds): a
+    /// revocation learned later is judged against this time.
+    #[serde(default)]
+    pub signed_at: Option<i64>,
     /// Issuer named by the signature when we couldn't verify it.
     #[serde(default)]
     pub issuer: Option<String>,
@@ -98,7 +105,18 @@ impl CryptoStatus {
         if self.problem.is_some() || self.partial || self.weak_hash {
             return Trust::Unconfirmed;
         }
+        // A revocation learned since the signature was checked: one that voids
+        // every signature (compromised, no reason), or one made before this
+        // signature (superseded, retired), of the key or its signing subkey.
+        // Without the signing time (older rows), only the first kind counts.
+        let when = self
+            .signed_at
+            .and_then(|t| u32::try_from(t).ok())
+            .unwrap_or(0);
         match &self.signer {
+            Some(fpr) if ring.revoked_at(fpr, self.signing_key.as_deref(), when) => {
+                Trust::Unconfirmed
+            }
             Some(fpr) => ring.trust_of(fpr, from_addr),
             None => Trust::Unconfirmed,
         }
@@ -495,6 +513,10 @@ fn open_encrypted(
     let mut inner_gossip: Vec<Announced> = Vec::new();
     // The protected (inner) From: it must match the envelope From.
     let mut inner_from: Option<String> = None;
+    // What the outer headers announced and what was attached before this
+    // payload added its own: restored if the payload can't vouch for its keys.
+    let outer_announced = announced.clone();
+    let attached_before = attached.len();
     if let Ok(inner) = mailparse::parse_mail(&bytes) {
         // Protected headers (RFC 9788): Subject and Autocrypt inside.
         if !inline {
@@ -544,12 +566,29 @@ fn open_encrypted(
             }
         }
         // There the protected headers sit on the signed part, one level down.
-        if signed_inside && inner_subject.is_none() && !inline {
-            inner_subject = inner
-                .subparts
-                .first()
-                .and_then(|part| part.headers.get_first_value("Subject"))
-                .filter(|s| !s.trim().is_empty());
+        // The multipart/signed wrapper around it isn't covered by the
+        // signature, so nothing is taken from it: whoever encrypted the
+        // signed part could have written anything there.
+        if signed_inside
+            && !inline
+            && let Some(part) = inner.subparts.first()
+        {
+            let signed = |name: &str| {
+                part.headers
+                    .get_first_value(name)
+                    .filter(|s| !s.trim().is_empty())
+            };
+            inner_subject = signed("Subject");
+            inner_from = signed("From");
+            *announced = outer_announced.clone();
+            let signed_announced = autocrypt::announced(&part.headers, from);
+            if signed_announced.iter().any(|a| !a.gossip) {
+                announced.retain(|a| a.gossip);
+            }
+            let (gossip, direct): (Vec<_>, Vec<_>) =
+                signed_announced.into_iter().partition(|a| a.gossip);
+            inner_gossip = gossip;
+            announced.extend(direct);
         }
     }
     let mut extra = outer_keys;
@@ -587,6 +626,16 @@ fn open_encrypted(
     // third parties' keys.
     if status.signed && status.problem.is_none() && status.signer.is_some() {
         announced.extend(inner_gossip);
+    }
+    // A payload lifted from someone else's mail, or one whose signature
+    // fails or names another signer, can't vouch for the keys it carries
+    // (protected Autocrypt headers, attached keys): only the outer ones stay.
+    if matches!(
+        status.problem,
+        Some(Problem::Redirected) | Some(Problem::SignerMismatch) | Some(Problem::InvalidSignature)
+    ) {
+        *announced = outer_announced;
+        attached.truncate(attached_before);
     }
     Opened {
         content: Content::Inner {
@@ -649,6 +698,8 @@ fn apply_signature(
     };
     let fpr = valid.signer.clone().unwrap_or_default();
     status.signer = Some(fpr.clone());
+    status.signing_key = valid.signing_key.clone();
+    status.signed_at = valid.created;
     // Does the signing key belong to the From address?
     let key = ring
         .verifiers_for(from)
@@ -746,6 +797,175 @@ mod tests {
     }
 
     const SECRET: &str = "The meeting moved to Thursday";
+
+    // The same for a signing subkey revoked on its own (the primary stays
+    // valid): the cached status names the subkey that signed, so its
+    // revocation is seen too.
+    #[test]
+    fn a_cached_signature_stops_vouching_once_its_signing_subkey_is_hard_revoked() {
+        use pgp::crypto::hash::HashAlgorithm;
+        use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        use pgp::types::KeyDetails as _;
+        let secret = crate::openpgp::crypt::tests::with_signing_subkey();
+        let public = secret.to_public_key();
+        let primary = keys::fingerprint_hex(&public.primary_key);
+        let sub = keys::fingerprint_hex(&public.public_subkeys[0].key);
+        let status: CryptoStatus = serde_json::from_value(serde_json::json!({
+            "signed": true,
+            "signer": primary,
+            "signing_key": sub,
+        }))
+        .unwrap();
+        let ring_with = |key: SignedPublicKey| {
+            let mut ring = alice_ring();
+            ring.peers.push(PeerKey {
+                addr: "sig@example.org".into(),
+                fingerprint: primary.clone(),
+                key,
+                source: Source::Autocrypt,
+                verified: true,
+                last_seen: 1,
+            });
+            ring
+        };
+        assert_eq!(
+            status.trust(&ring_with(public.clone()), "sig@example.org"),
+            keyring::Trust::Verified
+        );
+
+        // A subkey revocation with no reason: it voids past signatures too.
+        let mut config = SignatureConfig::v4(
+            SignatureType::SubkeyRevocation,
+            secret.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::now(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        let revocation = config
+            .sign_subkey_binding(
+                &secret.primary_key,
+                &public.primary_key,
+                &pgp::types::Password::empty(),
+                &public.public_subkeys[0].key,
+            )
+            .unwrap();
+        let mut revoked = public.clone();
+        revoked.public_subkeys[0].signatures.push(revocation);
+        assert_eq!(
+            status.trust(&ring_with(revoked), "sig@example.org"),
+            keyring::Trust::Unconfirmed
+        );
+    }
+
+    // A soft revocation (superseded, retired) learned after a message was
+    // cached voids only what the key signed after it: the cached status keeps
+    // the signing time to judge that.
+    #[test]
+    fn a_soft_revocation_learned_later_voids_only_later_signatures() {
+        use pgp::crypto::hash::HashAlgorithm;
+        use pgp::packet::{
+            RevocationCode, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+        };
+        use pgp::types::KeyDetails as _;
+        let secret = keys::generate(&["soft@example.org".into()]).unwrap();
+        let public = secret.to_public_key();
+        let fpr = keys::fingerprint_hex(&public.primary_key);
+        let revoked_at = keys::now() - 1000;
+        let mut config = SignatureConfig::v4(
+            SignatureType::KeyRevocation,
+            secret.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::from_secs(revoked_at),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::RevocationReason(
+                RevocationCode::KeySuperseded,
+                "replaced".into(),
+            ))
+            .unwrap(),
+        ];
+        let revocation = config
+            .sign_key(
+                &secret.primary_key,
+                &pgp::types::Password::empty(),
+                &public.primary_key,
+            )
+            .unwrap();
+        let mut revoked = public.clone();
+        revoked.details.revocation_signatures.push(revocation);
+        let mut ring = alice_ring();
+        ring.peers.push(PeerKey {
+            addr: "soft@example.org".into(),
+            fingerprint: fpr.clone(),
+            key: revoked,
+            source: Source::Autocrypt,
+            verified: true,
+            last_seen: 1,
+        });
+        let signed_at = |at: Option<u32>| -> Trust {
+            let status: CryptoStatus = serde_json::from_value(serde_json::json!({
+                "signed": true,
+                "signer": fpr,
+                "signed_at": at,
+            }))
+            .unwrap();
+            status.trust(&ring, "soft@example.org")
+        };
+        assert_eq!(
+            signed_at(Some(revoked_at - 10)),
+            Trust::Verified,
+            "before it"
+        );
+        assert_eq!(
+            signed_at(Some(revoked_at + 10)),
+            Trust::Unconfirmed,
+            "after it"
+        );
+        assert_eq!(
+            signed_at(None),
+            Trust::Verified,
+            "time unknown: only a hard one counts"
+        );
+    }
+
+    // A signature verified and cached before its key was revoked as
+    // compromised (or for no reason) no longer shows as verified: the
+    // revocation voids every signature that key made.
+    #[test]
+    fn a_cached_signature_stops_vouching_once_its_key_is_hard_revoked() {
+        let status = |file: &str| -> CryptoStatus {
+            serde_json::from_value(serde_json::json!({
+                "signed": true,
+                "signer": keys::fingerprint_hex(&public(file).primary_key),
+            }))
+            .unwrap()
+        };
+        let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", true);
+        assert_eq!(
+            status("carol-public.asc").trust(&ring, "carol@example.com"),
+            keyring::Trust::Verified
+        );
+        let ring = with_peer(alice_ring(), "rex@example.com", "revoked-public.asc", true);
+        assert_eq!(
+            status("revoked-public.asc").trust(&ring, "rex@example.com"),
+            keyring::Trust::Unconfirmed
+        );
+    }
 
     // A crafted detached signature panics rPGP's armor reader. The panic is
     // caught (the sidecar survives), but the message must not then be shown as a
@@ -909,6 +1129,108 @@ mod tests {
         );
     }
 
+    /// `plain` encrypted to `to` without a signature: the outer layer of a
+    /// sign-then-encrypt message in two MIME layers.
+    fn encrypt_unsigned(plain: &[u8], to: &SignedPublicKey) -> String {
+        use pgp::composed::MessageBuilder;
+        use pgp::crypto::sym::SymmetricKeyAlgorithm;
+        let mut rng = rand::thread_rng();
+        let sub = keys::encryption_subkey(to, keys::now()).unwrap();
+        let mut msg = MessageBuilder::from_bytes("", plain.to_vec())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+        msg.encrypt_to_key(&mut rng, sub).unwrap();
+        msg.to_armored_string(&mut rng, Default::default()).unwrap()
+    }
+
+    // Two layers (a multipart/signed encrypted as a whole): the protected From
+    // sits on the signed part, and must match the envelope there too.
+    #[test]
+    fn a_two_layer_message_whose_signed_part_names_another_sender_is_flagged() {
+        let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
+        let carol = secret_of("two-secret-keys.asc", "carol@example.com");
+        let alice = ring.own[0].public.clone();
+        let part =
+            "From: Eve <eve@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nbody";
+        let sig = crypt::sign_detached(part.as_bytes(), &carol).unwrap();
+        let inner = format!(
+            "Content-Type: multipart/signed; micalg=pgp-sha256; protocol=\"application/pgp-signature\"; boundary=\"sig\"\r\n\r\n\
+             --sig\r\n{part}\r\n--sig\r\nContent-Type: application/pgp-signature\r\n\r\n{sig}\r\n--sig--\r\n"
+        );
+        let armored = encrypt_unsigned(inner.as_bytes(), &alice);
+        let m = parse_message_with(
+            wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+            None,
+            &ring,
+        );
+        let c = crypto(&m);
+        assert!(c.encrypted && c.signed, "{c:?}");
+        assert_eq!(c.problem, Some(Problem::Redirected), "{c:?}");
+    }
+
+    // The multipart/signed wrapper around a two-layer message's signed part
+    // isn't signed: its From and Subject can't stand in for the signed ones.
+    #[test]
+    fn a_two_layer_wrapper_cannot_override_the_signed_headers() {
+        let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
+        let carol = secret_of("two-secret-keys.asc", "carol@example.com");
+        let alice = ring.own[0].public.clone();
+        let part = "From: Eve <eve@example.com>\r\nSubject: Signed subject\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nbody";
+        let sig = crypt::sign_detached(part.as_bytes(), &carol).unwrap();
+        let inner = format!(
+            "From: Carol <carol@example.com>\r\nSubject: Forged subject\r\n\
+             Content-Type: multipart/signed; micalg=pgp-sha256; protocol=\"application/pgp-signature\"; boundary=\"sig\"\r\n\r\n\
+             --sig\r\n{part}\r\n--sig\r\nContent-Type: application/pgp-signature\r\n\r\n{sig}\r\n--sig--\r\n"
+        );
+        let armored = encrypt_unsigned(inner.as_bytes(), &alice);
+        let m = parse_message_with(
+            wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+            None,
+            &ring,
+        );
+        assert_eq!(
+            crypto(&m).problem,
+            Some(Problem::Redirected),
+            "{:?}",
+            crypto(&m)
+        );
+        assert_eq!(m.subject, "Signed subject");
+    }
+
+    // A payload lifted from someone else's mail can't hand us keys: a key
+    // attached inside it is dropped, while the same payload sent by its own
+    // author keeps it.
+    #[test]
+    fn a_redirected_payload_carries_no_keys_in() {
+        let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
+        let carol = secret_of("two-secret-keys.asc", "carol@example.com");
+        let alice = ring.own[0].public.clone();
+        let key = String::from_utf8(fixture("carol-new-public.asc")).unwrap();
+        let payload = |from: &str| {
+            format!(
+                "From: {from}\r\nContent-Type: multipart/mixed; boundary=\"m\"\r\n\r\n\
+                 --m\r\nContent-Type: text/plain\r\n\r\nbody\r\n\
+                 --m\r\nContent-Type: application/pgp-keys\r\n\r\n{key}\r\n--m--\r\n"
+            )
+        };
+        let open = |from: &str| {
+            let armored = crypt::encrypt(payload(from).as_bytes(), &[&alice], &carol).unwrap();
+            parse_message_with(
+                wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+                None,
+                &ring,
+            )
+        };
+        let own = open("Carol <carol@example.com>");
+        assert_eq!(crypto(&own).problem, None);
+        assert!(
+            !own.found_keys.attached.is_empty(),
+            "the author's own key is taken"
+        );
+        let lifted = open("Eve <eve@example.com>");
+        assert_eq!(crypto(&lifted).problem, Some(Problem::Redirected));
+        assert!(lifted.found_keys.attached.is_empty());
+    }
+
     #[test]
     fn encrypted_and_signed_by_a_known_key_shows_body_and_inner_subject() {
         let ring = with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false);
@@ -918,6 +1240,7 @@ mod tests {
         let c = crypto(&m);
         assert!(c.encrypted && c.signed);
         assert_eq!(c.problem, None);
+        assert!(c.signing_key.is_some() && c.signed_at.is_some(), "{c:?}");
         assert_eq!(c.trust(&ring, &m.from_addr), Trust::Known);
         assert!(m.attachments.iter().all(|a| a.filename != "encrypted.asc"));
     }

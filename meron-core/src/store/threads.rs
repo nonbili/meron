@@ -1,6 +1,6 @@
 //! Thread grouping: thread cards, root subjects, and reference gaps.
 
-use super::ENCRYPTED_COLUMN_M;
+use super::{ENCRYPTED_COLUMN, ENCRYPTED_COLUMN_M};
 use anyhow::Result;
 use rusqlite::{Connection, params, params_from_iter};
 use std::collections::BTreeMap;
@@ -80,6 +80,7 @@ pub fn group_thread_cards_with_drafts(
                 uid: message.uid,
                 date: message.date,
                 subject: message.subject.clone(),
+                encrypted: message.encrypted,
             });
     }
     let roots: HashMap<String, RootSubject> = candidates
@@ -380,7 +381,8 @@ pub(super) fn collect_root_candidates(
             ""
         };
         let mut stmt = conn.prepare(&format!(
-            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject
+            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject,
+                    {ENCRYPTED_COLUMN}
              FROM messages
              WHERE account = ?1 AND {folder_clause}uid <> 0
                AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) IN ({placeholders})"
@@ -396,6 +398,7 @@ pub(super) fn collect_root_candidates(
                     uid: row.get(2)?,
                     date: row.get(3)?,
                     subject: row.get(4)?,
+                    encrypted: row.get::<_, Option<bool>>(5)?.unwrap_or(false),
                 },
             ))
         })?;
@@ -758,6 +761,8 @@ pub(super) struct RootCandidate {
     /// Send time as Unix epoch seconds, 0 when the row carries no usable Date.
     date: i64,
     subject: String,
+    /// End-to-end encrypted: only then is a `...` subject the placeholder.
+    encrypted: bool,
 }
 
 /// The title of a thread whose oldest message is `root`: its subject, unless
@@ -765,10 +770,13 @@ pub(super) struct RootCandidate {
 /// message that does know its subject (decrypted, or not encrypted) titles it.
 /// Only the title: grouping keeps keying on the oldest message.
 fn thread_title(root: &RootCandidate, candidates: &[RootCandidate], read_folder: &str) -> String {
-    if is_encrypted_placeholder_subject(&root.subject) {
+    let placeholder = |candidate: &RootCandidate| {
+        candidate.encrypted && is_encrypted_placeholder_subject(&candidate.subject)
+    };
+    if placeholder(root) {
         let known: Vec<RootCandidate> = candidates
             .iter()
-            .filter(|candidate| !is_encrypted_placeholder_subject(&candidate.subject))
+            .filter(|candidate| !placeholder(candidate))
             .cloned()
             .collect();
         if let Some(titled) = pick_root(known, read_folder) {

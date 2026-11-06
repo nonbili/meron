@@ -384,8 +384,11 @@ sequenceDiagram
 - **Prefetch** (`engine::prefetch`) adds rows still titled `...` / `[...]` without a cached body to its 14-day window,
   whatever their age (`store::undecrypted_placeholder_uids`, `aa83ffdd`), so old encrypted mail gets its real subject
   without being opened.
-- **Two-layer sign-then-encrypt** (older Enigmail, K-9): the protected Subject sits on the signed part, one level below
-  the decrypted top; `mime::decrypt_part` reads it there when `signed_inside` (`87488a47`, fixture `enc-two-layer.eml`).
+- **Two-layer sign-then-encrypt** (older Enigmail, K-9): the protected Subject, From and Autocrypt headers sit on the
+  signed part, one level below the decrypted top; `mime::open_encrypted` reads them only there when `signed_inside`,
+  never from the `multipart/signed` wrapper, which the signature doesn't cover (fixture `enc-two-layer.eml`).
+- **Keys a payload carries** (protected `Autocrypt:` headers, attached `application/pgp-keys`) are dropped when the
+  message is `Redirected`, `SignerMismatch` or `InvalidSignature`: a lifted or mis-signed payload can't hand in keys.
 - **Thread titles**: a card is titled by its thread's oldest message (`store::pick_root`). When that is an encrypted
   message not yet decrypted, `threads::thread_title` takes the oldest message that knows its subject instead; with none,
   the placeholder stays (chosen over an "Encrypted message" label). Display only; grouping is unchanged
@@ -474,7 +477,11 @@ flowchart TD
   is delivered, a refused later copy doesn't fail the send (a resend would deliver the rest twice and skip the Sent
   copy): `send` returns `undelivered` with those addresses, and the composer and quick reply name them in an error
   toast. Nothing delivered is an error as before.
-- **Drafts:** `save_draft` with `encrypt` wraps the draft encrypted and signed to the sender only before APPEND.
+- **Drafts:** `save_draft` with `encrypt` wraps the draft encrypted and signed to the sender only before APPEND. A save
+  that replaces a draft cached as encrypted (by its `draft_id`) stays encrypted unless the caller sent `plain: true`, so
+  an MCP `update_draft` (which sends neither flag) can't put an encrypted draft on the server in the clear.
+- **Recipients:** `outgoing::resolve` splits and reads addresses with `smtp::parse_addrs` / `smtp::bare_addr`, the same
+  as delivery, so every address that receives a copy is one whose key was checked and encrypted to.
 - **Plain sends** from an account with encryption on carry `Autocrypt:` (`smtp::send` `extra_headers`). Mobile
   (`protocol/mail.rs`) passes no extra headers and has no encryption.
 
@@ -484,7 +491,13 @@ flowchart TD
 - On by default when every recipient has a key and the preference `encrypt_when_possible` (default true) is on;
   on and sticky for replies/forwards of encrypted mail; a manual "off" holds for that message.
 - Off whenever a recipient has no usable key; clicking the lock then opens the key lookup, and encryption switches on
-  once all keys are present. Exception: forwards of encrypted mail stay on and Send stays blocked.
+  once all keys are present. Exceptions: mail carrying text from encrypted mail stays on and Send waits for the keys.
+  A forward, or a body with an unfolded decrypted quote (`decryptedInBody`, also "Edit as New" of encrypted mail), is
+  locked on. A reply to encrypted mail, or a reopened draft that was saved encrypted (`encryptedDraft`, full editor
+  and quick reply), can be switched off on purpose after a confirmation saying what it means.
+- From an account without encryption nothing can be encrypted: a reply switches off (and goes out without the
+  decrypted quote); a forward or `decryptedInBody` body stays blocked.
+- Switching encryption on re-saves an already autosaved draft, so the plain copy on the server is replaced.
 - **Changed keys:** with encryption on and a recipient in `changed`, the lock is amber with the reason in its tooltip
   (`crypto.toggle.keyChanged`; a missing key's message wins), the full editor shows a line above its footer per address
   with Verify… for the new key (`components/crypto/KeyChangeNote.tsx`), and Send asks once, "Send anyway" or Cancel
@@ -502,7 +515,8 @@ flowchart TD
   (`ComposeDraft.quoteWithheld`, set by `replyQuoteWithheld`), the quick reply adds it to the lock's tooltip. No note when
   quoting is off or the original has no body (a failed decryption).
 - MCP `create_draft` sends no `encrypt` flag: plain drafts, except replies to encrypted mail (encrypted to the user's
-  own key, see above).
+  own key, see above). `update_draft` of a draft saved encrypted stays encrypted (see Drafts). `read_attachment` reads
+  a decrypted message's attachments (`e2ee/<account>/…`) for that account only.
 - **Reply subject** (`states/composeReply.ts replySubject`, used by the full editor, reply-to-message, the quick reply
   and its draft matching): `Re: ` before the subject as before, except when that subject is still an encrypted
   message's placeholder (`[...]`, `...`, after reply prefixes): then the decrypted subject of the message being
@@ -546,7 +560,8 @@ third-party certifications are not imported.
   - VKS: `<base>/vks/v1/by-email/<address>`.
   - HKP: `<base>/pks/lookup?op=get&options=mr&search=<address>`, marked "doesn't check addresses".
 - Every request goes through the app-wide proxy (`proxy::agent`), 10 s timeout, response capped at 1 MiB,
-  404/410 = none.
+  404/410 = none. Redirects are not followed: the checked URL (https, no IP literal, no local name) is the only one
+  fetched, so a source can't point the request at an internal address.
 - Only usable keys whose user IDs include the address are offered, deduplicated by fingerprint, with `verified` = WKD
   or VKS. **Every** key found for the address, usable or not, is also merged at once into a stored copy with the same
   fingerprint (`LookupResult::all_keys`, merged in the `pgp.lookup` handler): a revocation or renewal found online

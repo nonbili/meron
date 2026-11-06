@@ -248,7 +248,16 @@ pub(crate) async fn dispatch(
             // only), or its text would sit on the server in the clear. So is a
             // draft replying to encrypted mail that didn't say "plain"; that
             // needs only our own key, even with encryption turned off.
-            let (encrypt, _) = reply_protection(engine, p, &account, &in_reply_to)?;
+            let (mut encrypt, _) = reply_protection(engine, p, &account, &in_reply_to)?;
+            // Replacing a draft that was saved encrypted keeps it encrypted
+            // unless the caller switched encryption off ("plain"): a caller
+            // that says nothing (an MCP update_draft) can't put its text, or
+            // the decrypted text it may hold, on the server in the clear.
+            let plain = p.get("plain").and_then(Value::as_bool).unwrap_or(false);
+            if !encrypt && !plain && !draft_id.trim().is_empty() {
+                let db = engine.db.lock().unwrap();
+                encrypt = meron_core::openpgp::store::answers_encrypted(&db, &account, &draft_id)?;
+            }
             let raw = if encrypt {
                 let ring = meron_core::openpgp::keyring::current();
                 let own = ring.default_key(&account).context(

@@ -9,7 +9,12 @@ import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 import { QuickReplyFrom } from './QuickReplyFrom'
 import { QuickReplyRecipients } from './QuickReplyRecipients'
-import { quickReplyEncrypts, quickReplyRecipients, quickReplyTarget } from '../../states/composeReply'
+import {
+  quickReplyEncrypts,
+  quickReplyHoldsEncryptedDraft,
+  quickReplyRecipients,
+  quickReplyTarget,
+} from '../../states/composeReply'
 import { EncryptToggle, encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
 
 export function QuickReplyComposer() {
@@ -34,6 +39,7 @@ export function QuickReplyComposer() {
   const { to, cc } = useValue(quickReplyRecipients)
   const encrypt = useValue(quickReplyEncrypts)
   const keys = useRecipientKeys(target?.account_id ?? '', recipientAddresses(to, cc))
+  const encryptedDraft = useValue(() => quickReplyHoldsEncryptedDraft(target?.thread_id))
   const sensitive = target?.crypto?.encrypted ? ('reply' as const) : undefined
   // Subscribed so the tooltip follows the setting; the helper peeks.
   useValue(settings$.quoteReplies)
@@ -102,8 +108,13 @@ export function QuickReplyComposer() {
               hasRecipients={!!(to || cc).trim()}
               on={encrypt}
               sensitive={sensitive}
+              // A draft saved encrypted may quote decrypted mail in its text:
+              // it is only switched to plain on purpose.
+              encryptedDraft={encryptedDraft}
               quoteWithheld={quoteWithheld}
-              onChange={(on) => compose$.quickReplyEncrypt.set({ threadId: target.thread_id, on })}
+              onChange={(on) =>
+                compose$.quickReplyEncrypt.set({ threadId: target.thread_id, on, draft: encryptedDraft || undefined })
+              }
             />
           )}
           <QuickReplyFrom />

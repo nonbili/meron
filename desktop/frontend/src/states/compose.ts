@@ -51,6 +51,8 @@ import {
   detectSenderFrom,
   pickReplyTarget,
   quickReplyEncrypts,
+  quickReplyHoldsEncryptedDraft,
+  quickReplyOffByUser,
   resolveQuickReplyFrom,
   replySubject,
 } from './composeReply'
@@ -309,6 +311,12 @@ compose$.tabs.onChange(({ value: tabs }) => {
       return [{ id, kind, messageId, threadId, accountId, folderId, subject, from, fromAddr, feedIcon, viewMode }]
     }
     if (!t.compose) return []
+    // Text of encrypted mail never goes to localStorage (plain files on disk):
+    // neither text from encrypted mail nor a message being written encrypted.
+    // Such a draft is autosaved encrypted to Drafts, so it comes back from
+    // there rather than with the tabs.
+    if (t.compose.sensitiveSource || t.compose.decryptedInBody || t.compose.encryptedDraft || t.compose.encrypt)
+      return []
     return [{ id: t.id, subject: t.subject, compose: { ...t.compose, attachments: [] } }]
   })
   try {
@@ -689,6 +697,9 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
     quote: quote ? { html: quote.html, text: quote.text } : undefined,
     encrypt: seed?.encrypt,
     sensitiveSource: seed?.sensitiveSource,
+    decryptedInBody: seed?.decryptedInBody || undefined,
+    encryptedDraft: seed?.encryptedDraft || undefined,
+    encryptOffByUser: seed?.encryptOffByUser || undefined,
     quoteWithheld: seed?.quoteWithheld || undefined,
     sourceDraft: seed?.sourceDraft,
     attachments: seed?.attachments ?? [],
@@ -761,9 +772,14 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     references,
     draftMessageId: existingDraftId,
     title: subject,
-    // The quick reply's encryption choice carries over.
-    encrypt: quickReplyEncrypts() || undefined,
+    // The quick reply's encryption choice carries over, and so does the lock
+    // of a draft that was saved encrypted. Switched off there on purpose, it
+    // stays off: `false`, not unset (which the core would read as "answers
+    // encrypted mail, so encrypt"), and the toggle doesn't turn it back on.
+    encrypt: quickReplyOffByUser(target) ? false : quickReplyEncrypts() || undefined,
+    encryptOffByUser: quickReplyOffByUser(target) || undefined,
     sensitiveSource: target.crypto?.encrypted ? 'reply' : undefined,
+    encryptedDraft: quickReplyHoldsEncryptedDraft(t.thread_id) || undefined,
     quoteWithheld: replyQuoteWithheld(target),
     threadId: t.thread_id,
     quote: quote && !bodyHasReplyQuote(carried.text, quote) ? quote : undefined,
@@ -829,6 +845,9 @@ export async function editAsNewMessage(message: Message) {
     text: rich ? '' : (message.body ?? ''),
     title: message.subject || 'New message',
     noSignature: true,
+    // A copy of encrypted mail carries its decrypted text: encrypted only.
+    encrypt: !!message.crypto?.encrypted || undefined,
+    decryptedInBody: !!message.crypto?.encrypted || undefined,
   })
   if (!id) return
 
@@ -885,6 +904,9 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     // an encrypted conversation, so it stays guarded the same way.
     encrypt: message.crypto?.encrypted || undefined,
     sensitiveSource: message.crypto?.encrypted && body.quote ? 'reply' : undefined,
+    // Its body may hold decrypted text (a quote unfolded and answered inline,
+    // a forward): it stays encrypted unless switched off on purpose.
+    encryptedDraft: message.crypto?.encrypted || undefined,
   }
 }
 
@@ -1092,6 +1114,7 @@ export async function forwardMessage(message: Message) {
     // it can only go out encrypted.
     encrypt: !!message.crypto?.encrypted || undefined,
     sensitiveSource: message.crypto?.encrypted ? 'forward' : undefined,
+    decryptedInBody: !!message.crypto?.encrypted || undefined,
   })
   if (!id) return
 

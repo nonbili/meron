@@ -158,6 +158,11 @@ export async function sendReply() {
   cancelQuickReplyDraftSave()
 
   const text = composerText
+  // Whether this reply is encrypted, decided now: the awaits below let the user
+  // open another thread, whose choice must not decide for this reply (its send,
+  // or the draft a failed send is rescued into). The thread load can only raise
+  // it, below.
+  let encrypt = quickReplyEncrypts()
   const prepared = prepareConversationAttachments(attachments)
   const sendAttachments = prepared.attachments
   const html = prepared.hasInlineImages ? conversationHtmlBody(text, sendAttachments) : ''
@@ -206,7 +211,7 @@ export async function sendReply() {
     has_attachments: sendAttachments.length > 0,
     send_status: 'sending',
     // An encrypted send shows its lock at once, as its Sent copy will.
-    crypto: quickReplyEncrypts() ? ownSentCrypto() : undefined,
+    crypto: encrypt ? ownSentCrypto() : undefined,
     // Inline the just-sent attachment bytes as a data: URL so the chat bubble
     // can display the image immediately — without waiting for IMAP sync to
     // pull the message back from Sent and assign it a media key. Treated as
@@ -287,7 +292,7 @@ export async function sendReply() {
           references: addressed.references,
           draftMessageId: rescueDraftId || claim.unconfirmedDraftId || newDraftMessageId(),
           attachments: box.attachments,
-          encrypt: quickReplyEncrypts(),
+          encrypt,
         })
         unconfirmedDraftIds.delete(normalizeMessageId(savedDraftId))
       }
@@ -387,7 +392,9 @@ export async function sendReply() {
   // The quote goes out with the mail but stays out of the box and the bubble:
   // the conversation already shows the message it answers.
   let outgoing = { body: text, html, attachments: sendAttachments }
-  const encrypt = quickReplyEncrypts()
+  // The load may have shown the reply target to be encrypted mail; still this
+  // thread's choice only.
+  if (getActiveThread()?.thread_id === activeT.thread_id) encrypt ||= quickReplyEncrypts()
   // A decrypted original is never quoted into an unencrypted reply ("Re:
   // What's up Johnny?"): its text would go out in the clear.
   const quote = mayQuoteInto(addressed.target, encrypt) ? replyQuote(addressed.target) : undefined

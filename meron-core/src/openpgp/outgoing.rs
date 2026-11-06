@@ -34,41 +34,19 @@ pub struct Missing {
     pub reason: NoKeyReason,
 }
 
-/// Bare lower-case address of a `Name <addr>` entry.
+/// Bare lower-case address of a `Name <addr>` entry: the one SMTP delivers to
+/// (`smtp::bare_addr`), so the key checked is the key of whoever receives it.
 pub fn bare_addr(entry: &str) -> String {
-    let e = entry.trim();
-    match (e.rfind('<'), e.rfind('>')) {
-        (Some(s), Some(t)) if t > s => e[s + 1..t].trim().to_ascii_lowercase(),
-        _ => e.trim_matches('"').to_ascii_lowercase(),
-    }
+    crate::smtp::bare_addr(entry)
+        .trim_matches('"')
+        .to_ascii_lowercase()
 }
 
-/// Splits a comma-separated recipient field like `smtp::parse_addrs`
-/// (commas inside quotes or angle brackets don't split).
+/// Splits a recipient field exactly as delivery does (`smtp::parse_addrs`:
+/// commas, semicolons, line breaks, escaped quotes), so every address that
+/// receives the mail is one whose key was checked and encrypted to.
 pub fn split_recipients(raw: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    let (mut quoted, mut bracket) = (false, false);
-    for ch in raw.chars() {
-        match ch {
-            '"' => quoted = !quoted,
-            '<' if !quoted => bracket = true,
-            '>' if !quoted => bracket = false,
-            ',' if !quoted && !bracket => {
-                if !cur.trim().is_empty() {
-                    out.push(cur.trim().to_string());
-                }
-                cur.clear();
-                continue;
-            }
-            _ => {}
-        }
-        cur.push(ch);
-    }
-    if !cur.trim().is_empty() {
-        out.push(cur.trim().to_string());
-    }
-    out
+    crate::smtp::parse_addrs(raw)
 }
 
 /// The key to encrypt to for one address: a correspondent's, or our own
@@ -308,6 +286,27 @@ mod tests {
     use super::*;
     use crate::openpgp::keyring::{self, PeerKey, Source, Trust};
     use crate::openpgp::keys;
+
+    // The addresses checked for keys are exactly the ones SMTP delivers to:
+    // semicolons and line breaks separate recipients there too, and the
+    // address is the first bracketed one.
+    #[test]
+    fn recipients_are_split_and_read_as_delivery_does() {
+        assert_eq!(
+            split_recipients("Alice <a@example.org>; Bob <b@example.org>\nc@example.org"),
+            vec![
+                "Alice <a@example.org>",
+                "Bob <b@example.org>",
+                "c@example.org"
+            ]
+        );
+        let entry = "Hidden <h1@example.org> <h2@example.org>";
+        assert_eq!(
+            bare_addr(entry),
+            crate::smtp::bare_addr(entry).to_ascii_lowercase()
+        );
+        assert_eq!(bare_addr("\"Bob\" <B@Example.org>"), "b@example.org");
+    }
 
     fn ring_with(me: &SignedSecretKey, peers: &[(&str, &SignedSecretKey)]) -> Keyring {
         Keyring {

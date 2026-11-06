@@ -259,6 +259,54 @@ describe('EncryptToggle', () => {
     }
   })
 
+  // A reopened encrypted draft: a recipient without a key doesn't switch it
+  // off; the lock looks the key up, then switching off asks, naming the risk.
+  test('an encrypted draft is switched off only on purpose', async () => {
+    let value = true
+    const missing = keys({ missing: [{ addr: 'bob@example.net', reason: 'none' }] })
+    const { getByRole, rerender } = render(
+      <EncryptToggle keys={missing} on encryptedDraft onChange={(on) => (value = on)} />,
+    )
+    expect(value).toBe(true)
+    act(() => fireEvent.click(getByRole('switch')))
+    expect(crypto$.lookup.get()).toEqual({ addrs: ['bob@example.net'] })
+    rerender(<EncryptToggle keys={missing} on encryptedDraft onChange={(on) => (value = on)} />)
+    act(() => fireEvent.click(getByRole('switch')))
+    await waitFor(() => expect(ui$.confirm.get()?.message).toContain('This draft was saved encrypted'))
+    act(() => settleConfirm(true))
+    await waitFor(() => expect(value).toBe(false))
+  })
+
+  // From an account without encryption nothing can be encrypted: a reply
+  // switches off (it goes out without the decrypted quote) rather than leaving
+  // Send blocked behind a lock that can't be clicked; a forward, which is
+  // decrypted text itself, stays blocked.
+  test('an account without encryption switches a reply off but not a forward', () => {
+    let value = true
+    const off = keys({ enabled: false })
+    render(<EncryptToggle keys={off} on sensitive="reply" onChange={(on) => (value = on)} />)
+    expect(value).toBe(false)
+    cleanup()
+    value = true
+    render(<EncryptToggle keys={off} on sensitive="forward" onChange={(on) => (value = on)} />)
+    expect(value).toBe(true)
+    cleanup()
+    value = true
+    render(<EncryptToggle keys={off} on onChange={(on) => (value = on)} />)
+    expect(value).toBe(false)
+  })
+
+  // Switched off by the user before (in the quick reply it came from): the
+  // preference doesn't turn it back on, though every recipient has a key.
+  test('a lock the user switched off stays off', () => {
+    let value = false
+    render(<EncryptToggle keys={keys()} on={false} offByUser onChange={(on) => (value = on)} />)
+    expect(value).toBe(false)
+    cleanup()
+    render(<EncryptToggle keys={keys()} on={false} onChange={(on) => (value = on)} />)
+    expect(value).toBe(true)
+  })
+
   test('with the preference off, a key appearing on its own leaves encryption off', () => {
     settings$.encryptWhenPossible.set(false)
     let value = false
@@ -350,6 +398,19 @@ describe('EncryptToggle', () => {
     act(() => fireEvent.click(sw))
     expect(value).toBe(true)
     expect(ui$.confirm.get()).toBeFalsy()
+  })
+
+  // Decrypted text in the body (an edited-as-new copy, a reopened draft)
+  // without a sensitive source: a recipient lacking a key must not switch it
+  // off; the lock offers the lookup instead.
+  test('a body holding decrypted text stays encrypted when a recipient lacks a key', () => {
+    let value = true
+    const missing = keys({ missing: [{ addr: 'bob@example.net', reason: 'none' }] })
+    const { getByRole } = render(<EncryptToggle keys={missing} on bodyIsDecrypted onChange={(on) => (value = on)} />)
+    expect(value).toBe(true)
+    act(() => fireEvent.click(getByRole('switch')))
+    expect(crypto$.lookup.get()).toEqual({ addrs: ['bob@example.net'] })
+    expect(value).toBe(true)
   })
 
   test('the lock says when the quick reply leaves the original unquoted', () => {

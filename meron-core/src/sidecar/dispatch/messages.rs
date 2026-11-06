@@ -286,10 +286,27 @@ pub(crate) async fn dispatch(
                 },
                 &ours,
             );
+            // The OpenPGP state as the thread read ships it (trust from the
+            // current keys): without it a decrypted message would look plain,
+            // and a reply to it wouldn't be guarded as one to encrypted mail.
+            let crypto = message
+                .crypto
+                .as_ref()
+                .filter(|c| !c.is_empty())
+                .map(|status| {
+                    meron_core::openpgp::mime::view_json(
+                        status,
+                        &meron_core::openpgp::keyring::current(),
+                        &account,
+                        &message.from_addr,
+                        outgoing,
+                    )
+                });
             Ok(json!({
                 "outgoing": outgoing,
                 "reply": reply,
                 "invite": invite,
+                "crypto": crypto,
                 "message": serde_json::to_value(message)?
             }))
         }

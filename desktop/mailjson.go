@@ -119,6 +119,7 @@ func threadsJSON(accountID, folder string, raw any) any {
 			RecipientOverflow: uint32(jsonNumber(card["recipient_overflow"])),
 			Senders:           threadSenders(card["senders"]),
 			SendersTruncated:  jsonBool(card["senders_truncated"]),
+			Encrypted:         jsonString(card["encrypted"]),
 		})
 	}
 	out := map[string]any{
@@ -191,6 +192,7 @@ func messageJSON(accountID, threadID, folder string, raw any) any {
 		Attachments:    attachmentList,
 		Reply:          object["reply"],
 		Invite:         object["invite"],
+		Crypto:         object["crypto"],
 	}}}
 }
 

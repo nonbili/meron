@@ -21,6 +21,7 @@ import {
   saveComposedDraft,
   sendComposed,
   editAsNewMessage,
+  forwardMessage,
 } from './compose'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import { ownSentCrypto } from '../lib/crypto'
@@ -221,6 +222,31 @@ describe('openThreadTabById', () => {
         },
       },
     })
+  })
+
+  // A draft saved encrypted may hold decrypted text (a quote unfolded and
+  // answered inline, a forward): it comes back encrypted and guarded, not
+  // locked, so a new message or a recipient without a key can still go out
+  // plain when the user says so.
+  it('reopens an encrypted draft encrypted and guarded', async () => {
+    const draft = message({
+      id: 'acc-notification#Drafts#42#99',
+      folder_id: 'Drafts',
+      thread_id: 'acc-notification#Drafts#42',
+      from_addr: 'me@example.com',
+      to: 'you@example.com',
+      message_id: 'draft-id@example.com',
+      subject: 'Re: Plans',
+      body: '> The plan\nSounds good',
+      crypto: { encrypted: true },
+    } as Partial<Message>)
+    ;(window as any).go.main.App.Invoke = async (command: string) =>
+      command === 'mail.threadRead' ? { messages: [draft] } : {}
+
+    await openDraftCompose(draft)
+
+    expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: true, encryptedDraft: true })
+    expect(compose$.tabs.get()[0].compose?.decryptedInBody).toBeUndefined()
   })
 
   it('reuses the open compose tab for repeated Drafts row clicks', async () => {
@@ -872,6 +898,30 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyDraftId.get()).toBe('draft-1@example.com')
     expect(compose$.quickReplyDraftSaved.get()).toBe(true)
     expect(compose$.quickReplyFrom.get()).toBe('me@example.com')
+  })
+
+  // A draft saved encrypted in a plain conversation must not come back as a
+  // plain reply (the conversation's default), nor be switched off by itself.
+  it('hydrates a draft saved encrypted as an encrypted, guarded quick reply', () => {
+    compose$.quickReplyEncrypt.set(null)
+    ui$.selectedThread.set('t-2')
+    const ancestor = message({ id: 'm1', thread_id: 't-2', folder_id: 'INBOX', date: 1000 })
+    const draft = message({
+      id: 'd1',
+      thread_id: 't-2',
+      folder_id: 'Drafts',
+      from_addr: 'me@example.com',
+      message_id: 'draft-1@example.com',
+      body: 'saved encrypted body',
+      date: 2000,
+      crypto: { encrypted: true },
+    } as Partial<Message>)
+
+    mail$.messages.set([ancestor, draft])
+
+    expect(compose$.composer.get()).toBe('saved encrypted body')
+    expect(compose$.quickReplyEncrypt.get()).toEqual({ threadId: 't-2', on: true, draft: true })
+    compose$.quickReplyEncrypt.set(null)
   })
 
   it.each([
@@ -2597,6 +2647,67 @@ describe('quick reply draft sharing', () => {
     expect(compose$.composer.get()).toBe('Next reply')
   })
 
+  // The rescue keeps the encryption the reply was sent with, not that of the
+  // thread the user opened meanwhile: a reply to encrypted mail is never
+  // saved plain because a plain thread is now open.
+  it('rescues an encrypted reply encrypted after the user opened a plain thread', async () => {
+    const encrypted = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+      crypto: { encrypted: true },
+    } as Partial<Message>)
+    const plain = message({
+      id: 'other',
+      account_id: 'acc-1',
+      thread_id: 't-2',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'other@example.com',
+      date: 2000,
+    })
+    mail$.threads.set([encrypted, plain])
+    mail$.messages.set([encrypted])
+    ui$.selectedThread.set('t-1')
+    compose$.quickReplyEncrypt.set(null)
+    compose$.composer.set('Secret reply')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+
+    let identityStarted!: () => void
+    const allocating = new Promise<void>((resolve) => (identityStarted = resolve))
+    let failIdentity!: () => void
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') {
+        if ((payload as { draft?: boolean }).draft) return { message_id: 'rescued@example.com' }
+        identityStarted()
+        await new Promise<void>((resolve) => (failIdentity = resolve))
+        throw new Error('offline')
+      }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+    const callsBeforeSend = calls.length
+
+    const send = sendReply()
+    await allocating
+    ui$.selectedThread.set('t-2')
+    mail$.messages.set([plain])
+    failIdentity()
+    await expect(send).rejects.toThrow('offline')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const rescues = calls.slice(callsBeforeSend).filter((call) => call.command === 'mail.saveDraft')
+    expect(rescues).toHaveLength(1)
+    expect(rescues[0].payload).toMatchObject({ body: 'Secret reply', encrypt: true, plain: false })
+  })
+
   it('retries the rescue from the failed bubble when the draft save fails too', async () => {
     const thread = message({
       id: 'root',
@@ -3600,6 +3711,54 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyDraftSaved.get()).toBe(false)
     expect(compose$.quickReplyDraftThreadId.get()).toBe('')
   })
+
+  // Switched off in the quick reply (after its confirmation), it stays off in
+  // the full editor: an explicit false the core honours, not unset (which it
+  // reads as "answers encrypted mail, so encrypt").
+  it('keeps encryption the user switched off when opening the full editor', () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      crypto: { encrypted: true },
+    } as Partial<Message>)
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('my answer')
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: false })
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: false, encryptOffByUser: true })
+    compose$.quickReplyEncrypt.set(null)
+  })
+
+  // A draft saved encrypted (hydrated into the box) stays guarded in the full
+  // editor: encrypted unless switched off on purpose, and not in localStorage.
+  it('carries the guard of a hydrated encrypted draft into the full editor', () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('> decrypted original\nmy answer')
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: true, draft: true })
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: true, encryptedDraft: true })
+    compose$.quickReplyEncrypt.set(null)
+  })
 })
 
 describe('quick reply send-as identity', () => {
@@ -3821,6 +3980,29 @@ describe('quick reply send-as identity', () => {
     await editAsNewMessage(setUpThread())
 
     expect(compose$.tabs.get()[0].compose?.fromEmail).toBe('')
+  })
+
+  // A forward of encrypted mail carries its decrypted text in the body: it is
+  // marked so, which the save and send paths enforce on their own.
+  it('marks a forward of encrypted mail as holding decrypted text', async () => {
+    await forwardMessage(setUpThread({ crypto: { encrypted: true } } as Partial<Message>))
+    expect(compose$.tabs.get()[0].compose).toMatchObject({
+      encrypt: true,
+      sensitiveSource: 'forward',
+      decryptedInBody: true,
+    })
+  })
+
+  // The copy carries the decrypted body: it can only go out encrypted, even
+  // with "encrypt when possible" off.
+  it('keeps a copy of encrypted mail edited as new encrypted', async () => {
+    await editAsNewMessage(setUpThread({ crypto: { encrypted: true } } as Partial<Message>))
+    expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: true, decryptedInBody: true })
+
+    compose$.tabs.set([])
+    await editAsNewMessage(setUpThread())
+    expect(compose$.tabs.get()[0].compose?.encrypt).toBeUndefined()
+    expect(compose$.tabs.get()[0].compose?.decryptedInBody).toBeUndefined()
   })
 })
 

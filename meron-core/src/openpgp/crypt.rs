@@ -50,6 +50,9 @@ pub struct SigCheck {
     pub issuer: Option<String>,
     /// Primary fingerprint of the known key that verified it.
     pub signer: Option<String>,
+    /// Fingerprint of the part of that key that made it: the primary, or a
+    /// signing subkey (whose own revocation can void it later).
+    pub signing_key: Option<String>,
     /// The signature verified against `signer`, passed the hash policy, and
     /// the key was valid (not revoked, not expired) when it was made.
     pub valid: bool,
@@ -176,15 +179,37 @@ fn read_bounded(msg: &mut Message<'_>) -> Result<Vec<u8>, DecryptError> {
 }
 
 /// Every key that may have made a data signature: the primary and any
-/// subkey with a valid binding that carries the sign flag.
+/// subkey with a valid binding that carries the sign flag and the subkey's own
+/// back-signature (RFC 9580 §5.2.3.34). Without that, anyone could bind
+/// someone else's signing key under their own primary and have that person's
+/// signatures count as theirs.
 fn signing_keys(key: &SignedPublicKey) -> Vec<(String, SigningPart<'_>)> {
-    let mut out = vec![(
-        fingerprint_hex(&key.primary_key),
-        SigningPart::Primary(&key.primary_key),
-    )];
+    // A primary flagged not to sign makes no valid data signatures.
+    let mut out = Vec::new();
+    if keys::primary_can_sign(key) {
+        out.push((
+            fingerprint_hex(&key.primary_key),
+            SigningPart::Primary(&key.primary_key),
+        ));
+    }
     for sub in &key.public_subkeys {
-        let bound = sub.signatures.iter().any(|s| {
-            s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok() && s.key_flags().sign()
+        // Judged by its newest binding (an older one with the sign flag
+        // doesn't count once a newer one dropped it), which must pass the
+        // hash policy, as must the back-signature.
+        let bindings = sub.signatures.iter().filter(|s| {
+            s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok()
+                && s.typ() != Some(pgp::packet::SignatureType::SubkeyRevocation)
+        });
+        let newest = bindings.max_by_key(|s| s.created().map(|t| t.as_secs()).unwrap_or(0));
+        let bound = newest.is_some_and(|s| {
+            s.key_flags().sign()
+                && keys::binding_hash_ok(s)
+                && s.embedded_signature().is_some_and(|back| {
+                    keys::binding_hash_ok(back)
+                        && back
+                            .verify_primary_key_binding(&sub.key, &key.primary_key)
+                            .is_ok()
+                })
         });
         if bound {
             out.push((fingerprint_hex(&sub.key), SigningPart::Sub(sub)));
@@ -282,6 +307,7 @@ fn check_message_signatures(
         let mut check = SigCheck {
             issuer: issuer.clone(),
             signer: None,
+            signing_key: None,
             valid: false,
             key_problem: None,
             weak_hash,
@@ -293,9 +319,10 @@ fn check_message_signatures(
             .iter()
             .filter(|k| issuer_matches(issuer.as_deref(), k))
         {
-            for (_, vk) in signing_keys(key) {
+            for (part, vk) in signing_keys(key) {
                 if msg.verify_nested_explicit(index, vk.as_dyn()).is_ok() {
                     check.signer = Some(fingerprint_hex(&key.primary_key));
+                    check.signing_key = Some(part);
                     check.key_problem = vk.valid_at(key, sig, resolve).err();
                     check.valid = !weak_hash && check.key_problem.is_none();
                     break 'keys;
@@ -332,6 +359,7 @@ pub fn verify_detached_with(
         vec![SigCheck {
             issuer: None,
             signer: None,
+            signing_key: None,
             valid: false,
             key_problem: None,
             weak_hash: false,
@@ -359,6 +387,7 @@ fn verify_detached_inner(
         return vec![SigCheck {
             issuer: None,
             signer: None,
+            signing_key: None,
             valid: false,
             key_problem: None,
             weak_hash: false,
@@ -376,6 +405,7 @@ fn verify_detached_inner(
             let mut check = SigCheck {
                 issuer: issuer.clone(),
                 signer: None,
+                signing_key: None,
                 valid: false,
                 key_problem: None,
                 weak_hash,
@@ -387,9 +417,10 @@ fn verify_detached_inner(
                 .iter()
                 .filter(|k| issuer_matches(issuer.as_deref(), k))
             {
-                for (_, vk) in signing_keys(key) {
+                for (part, vk) in signing_keys(key) {
                     if vk.verify_detached(sig, content) {
                         check.signer = Some(fingerprint_hex(&key.primary_key));
+                        check.signing_key = Some(part);
                         check.key_problem = vk.valid_at(key, sig, resolve).err();
                         check.valid = !weak_hash && check.key_problem.is_none();
                         break 'keys;
@@ -545,6 +576,107 @@ pub(crate) mod tests {
             Unlock::Ok(k) => k,
             other => panic!("{other:?}"),
         }
+    }
+
+    /// A key with a signing subkey, as rPGP builds it (binding plus the
+    /// subkey's back-signature).
+    pub(crate) fn with_signing_subkey() -> SignedSecretKey {
+        use pgp::composed::{KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
+        SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Ed25519Legacy)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("<sig@example.org>".into())
+            .passphrase(None)
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::Ed25519Legacy)
+                    .can_sign(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()
+            .generate(&mut rand::thread_rng())
+            .unwrap()
+    }
+
+    // A primary whose newest self-signature drops the sign flag (an
+    // offline-primary setup) makes no valid data signatures.
+    #[test]
+    fn a_primary_flagged_not_to_sign_is_no_verifier() {
+        use pgp::packet::{KeyFlags, SignatureType, SubpacketData};
+        let key = keys::generate(&["nosign@example.org".into()]).unwrap();
+        let mut public = key.to_public_key();
+        let primary = fingerprint_hex(&public.primary_key);
+        let fprs = |key: &SignedPublicKey| -> Vec<String> {
+            signing_keys(key).into_iter().map(|(fpr, _)| fpr).collect()
+        };
+        assert!(fprs(&public).contains(&primary));
+        let mut flags = KeyFlags::default();
+        flags.set_certify(true);
+        public.details.users[0]
+            .signatures
+            .push(keys::tests::self_sig(
+                &key,
+                SignatureType::CertPositive,
+                keys::now() + 10,
+                vec![SubpacketData::KeyFlags(flags)],
+            ));
+        assert!(!fprs(&public).contains(&primary));
+    }
+
+    // A signing subkey counts only with its back-signature: a binding made by
+    // the primary alone could claim anyone's signing key, and their signatures
+    // would then be credited to this key's owner.
+    #[test]
+    fn a_signing_subkey_counts_only_with_its_back_signature() {
+        use pgp::packet::{KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        let secret = with_signing_subkey();
+        let public = secret.to_public_key();
+        let sub_fpr = fingerprint_hex(&public.public_subkeys[0].key);
+        let fprs = |key: &SignedPublicKey| -> Vec<String> {
+            signing_keys(key).into_iter().map(|(fpr, _)| fpr).collect()
+        };
+        assert!(fprs(&public).contains(&sub_fpr), "a proper signing subkey");
+
+        // The same subkey bound by the primary alone, with no back-signature.
+        let mut flags = KeyFlags::default();
+        flags.set_sign(true);
+        let mut config = SignatureConfig::v4(
+            SignatureType::SubkeyBinding,
+            secret.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::now(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(flags)).unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        let binding = config
+            .sign_subkey_binding(
+                &secret.primary_key,
+                &public.primary_key,
+                &pgp::types::Password::empty(),
+                &public.public_subkeys[0].key,
+            )
+            .unwrap();
+        let mut forged = public.clone();
+        forged.public_subkeys[0].signatures = vec![binding];
+        assert!(
+            forged.public_subkeys[0].signatures[0]
+                .verify_subkey_binding(&forged.primary_key, &forged.public_subkeys[0].key)
+                .is_ok(),
+            "the one-way binding itself verifies"
+        );
+        assert!(!fprs(&forged).contains(&sub_fpr));
     }
 
     fn public(name: &str) -> SignedPublicKey {

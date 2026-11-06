@@ -75,6 +75,8 @@ export function EncryptToggle({
   onChange,
   sensitive,
   bodyIsDecrypted = false,
+  encryptedDraft = false,
+  offByUser = false,
   quoteWithheld = false,
   hasRecipients = true,
   size = 'sm',
@@ -88,6 +90,13 @@ export function EncryptToggle({
   sensitive?: 'reply' | 'forward'
   /** The body itself holds decrypted text (an unfolded quote): locked on. */
   bodyIsDecrypted?: boolean
+  /** A draft that was saved encrypted came back: it may hold text from
+   * encrypted mail, so it never switches off by itself, and switching it off
+   * asks first. */
+  encryptedDraft?: boolean
+  /** The user already switched it off (in the quick reply this came from):
+   * it isn't turned back on by default. */
+  offByUser?: boolean
   /** The quick reply leaves its original unquoted (`replyQuoteWithheld`); the
    * box shows no quote either way, so the lock's tooltip says why. */
   quoteWithheld?: boolean
@@ -105,14 +114,25 @@ export function EncryptToggle({
   // (and skip the core's rule that replies to encrypted mail stay encrypted),
   // so it stays on and Send waits for the keys.
   const someoneLacksKey = !!keys?.enabled && !keys.own_key_unusable && keys.missing.length > 0
+  const guarded = !!sensitive || bodyIsDecrypted || encryptedDraft
   useEffect(() => {
-    if (on && someoneLacksKey && !sensitive) onChange(false)
-  }, [on, someoneLacksKey, sensitive, onChange])
+    if (on && someoneLacksKey && !guarded) onChange(false)
+  }, [on, someoneLacksKey, guarded, onChange])
+  // The From account has no encryption (switched to, or turned off since):
+  // nothing can be encrypted, and an "on" nobody can see or change would block
+  // Send for good. A reply goes out plain without the decrypted quote (the
+  // lock says why); a body that is decrypted text (a forward, an unfolded
+  // quote) can't go out plain at all, so it stays blocked.
+  const accountOff = !!keys && !keys.enabled
+  const bodyDecrypted = sensitive === 'forward' || bodyIsDecrypted
+  useEffect(() => {
+    if (on && accountOff && !bodyDecrypted) onChange(false)
+  }, [on, accountOff, bodyDecrypted, onChange])
   // Encrypt by default when every recipient has a key (preference, on by
   // default), and after a lookup this lock opened. A user who switched it off
   // in this message keeps it off.
   const encryptWhenPossible = useValue(settings$.encryptWhenPossible)
-  const [userOff, setUserOff] = useState(false)
+  const [userOff, setUserOff] = useState(offByUser)
   const everyoneHasKey = !!keys?.enabled && !keys.own_key_unusable && keys.missing.length === 0 && hasRecipients
   useEffect(() => {
     if (on || !everyoneHasKey) return
@@ -141,7 +161,7 @@ export function EncryptToggle({
   // Missing keys can be looked up from here, on this click only. A sensitive
   // message that stays on offers the lookup first; once it found nothing, the
   // next click is the deliberate "turn off" (a reply) or nothing (locked).
-  const canLookUp = !keys.own_key_unusable && keys.missing.length > 0 && (!on || (!!sensitive && !lookingUp))
+  const canLookUp = !keys.own_key_unusable && keys.missing.length > 0 && (!on || (guarded && !lookingUp))
   const lookUp = () => {
     setLookingUp(true)
     crypto$.lookup.set({ addrs: keys.missing.map((m) => m.addr) })
@@ -176,10 +196,10 @@ export function EncryptToggle({
       }
       return
     }
-    if (sensitive === 'reply') {
+    if (encryptedDraft || sensitive === 'reply') {
       const ok = await confirmAction({
         title: t('crypto.toggle.offTitle'),
-        message: t('crypto.toggle.offMessage'),
+        message: encryptedDraft ? t('crypto.toggle.offDraftMessage') : t('crypto.toggle.offMessage'),
         confirmLabel: t('crypto.toggle.offConfirm'),
       })
       if (!ok) return

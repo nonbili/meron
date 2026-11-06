@@ -53,16 +53,6 @@ fn account_addrs(conn: &rusqlite::Connection, account: &str) -> Vec<String> {
     out
 }
 
-/// Forgets cached bodies that couldn't be decrypted, so the next read
-/// fetches and decrypts them with the keys just added.
-fn forget_undecryptable(conn: &rusqlite::Connection) -> anyhow::Result<usize> {
-    Ok(conn.execute(
-        "UPDATE messages SET body = NULL, json = json_remove(json, '$.crypto')
-         WHERE json_extract(json, '$.crypto.problem') = 'no_key'",
-        [],
-    )?)
-}
-
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
     req: &Request,
@@ -104,7 +94,7 @@ pub(crate) async fn dispatch(
                 let addrs = account_addrs(&conn, &account);
                 let result = pgp_store::import_own(&conn, &account, &addrs, &data, passphrase.as_deref().map(String::as_str), fingerprint)?;
                 if matches!(result, pgp_store::ImportOwn::Imported { .. }) {
-                    let refetch = forget_undecryptable(&conn)?;
+                    let refetch = pgp_store::forget_undecryptable(&conn)?;
                     return Ok(json!({ "result": result, "refetch": refetch }));
                 }
                 Ok(json!({ "result": result }))
@@ -233,4 +223,39 @@ pub(crate) async fn dispatch(
         }
     })
     .await?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Inline PGP mail has no `multipart/encrypted` type to remember it by: once
+    // its undecryptable status is dropped for a new attempt, a reply sent before
+    // that attempt must still be encrypted.
+    #[test]
+    fn undecryptable_mail_forgotten_for_a_new_key_still_answers_encrypted() {
+        let conn = meron_core::store::open_at(":memory:").unwrap();
+        let json = serde_json::json!({
+            "message_id": "inline@example.com",
+            "crypto": { "encrypted": true, "problem": "no_key" },
+        });
+        conn.execute(
+            "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, body, json)
+             VALUES ('a', 'INBOX', 1, 1, 's', 'n', 'x@example.com', 0, 'body', ?1)",
+            [json.to_string()],
+        )
+        .unwrap();
+        let answers = |conn: &rusqlite::Connection| {
+            pgp_store::answers_encrypted(conn, "a", "<inline@example.com>").unwrap()
+        };
+        assert!(answers(&conn));
+
+        assert_eq!(pgp_store::forget_undecryptable(&conn).unwrap(), 1);
+
+        let body_dropped: bool = conn
+            .query_row("SELECT body IS NULL FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert!(body_dropped, "fetched again with the new key");
+        assert!(answers(&conn));
+    }
 }

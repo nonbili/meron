@@ -66,6 +66,10 @@ export function ComposerFooter({
     sensitive?: 'reply' | 'forward'
     /** The body holds decrypted text (an unfolded quote): locked on. */
     bodyIsDecrypted?: boolean
+    /** A draft saved encrypted came back: guarded, switched off only on purpose. */
+    encryptedDraft?: boolean
+    /** Switched off by the user before (in the quick reply). */
+    offByUser?: boolean
     hasRecipients?: boolean
     onChange: (on: boolean) => void
   }
@@ -110,6 +114,8 @@ export function ComposerFooter({
             on={encryption.on}
             sensitive={encryption.sensitive}
             bodyIsDecrypted={encryption.bodyIsDecrypted}
+            encryptedDraft={encryption.encryptedDraft}
+            offByUser={encryption.offByUser}
             hasRecipients={encryption.hasRecipients}
             onChange={encryption.onChange}
           />

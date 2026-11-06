@@ -162,7 +162,11 @@ export function Composer({ tabId }: { tabId: string }) {
               className={`${textareaFillsBody ? 'min-h-0 flex-1 px-4 py-3' : 'min-h-[4.5em]'} block w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
             />
           )}
-          {draft.quote && <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />}
+          {/* A decrypted original's quote stays out while encryption is off: it
+              won't be sent, so it isn't offered for unfolding either. */}
+          {draft.quote && !(draft.sensitiveSource && !draft.encrypt) && (
+            <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />
+          )}
           {!draft.quote && draft.quoteWithheld && (
             <p className="mt-2 text-xs leading-snug text-secondary">{t('crypto.quoteWithheld')}</p>
           )}
@@ -198,6 +202,8 @@ export function Composer({ tabId }: { tabId: string }) {
                 on: !!draft.encrypt,
                 sensitive: draft.sensitiveSource,
                 bodyIsDecrypted: !!draft.decryptedInBody,
+                encryptedDraft: !!draft.encryptedDraft,
+                offByUser: !!draft.encryptOffByUser,
                 hasRecipients: !!(draft.to + draft.cc + draft.bcc).trim(),
                 onChange: (on: boolean) => update({ encrypt: on }),
               }

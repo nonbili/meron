@@ -123,6 +123,36 @@ impl Keyring {
         self.own.iter().any(|k| k.fingerprint == fingerprint)
     }
 
+    /// Whether `key` carries a revocation that voids every signature it ever
+    /// made, not only later ones (a superseded or retired key keeps its past).
+    fn hard_revoked(&self, key: &SignedPublicKey) -> bool {
+        keys::primary_valid_at_with(key, 0, &|fpr| self.key_by_fingerprint(fpr))
+            == Err(keys::SigningProblem::Revoked)
+    }
+
+    /// Whether the stored key `primary`, or its signing subkey `part`, is
+    /// revoked for a signature made at `when` (unix seconds; 0 when unknown,
+    /// which only a revocation voiding every signature matches). False for a
+    /// key not stored.
+    pub fn revoked_at(&self, primary: &str, part: Option<&str>, when: u32) -> bool {
+        let Some(key) = self.key_by_fingerprint(primary) else {
+            return false;
+        };
+        let resolve = |fpr: &str| self.key_by_fingerprint(fpr);
+        if keys::primary_valid_at_with(&key, when, &resolve) == Err(keys::SigningProblem::Revoked) {
+            return true;
+        }
+        part.and_then(|part| {
+            key.public_subkeys
+                .iter()
+                .find(|sub| fingerprint_hex(&sub.key) == part)
+        })
+        .is_some_and(|sub| {
+            keys::subkey_valid_at_with(&key, sub, when, &resolve)
+                == Err(keys::SigningProblem::Revoked)
+        })
+    }
+
     /// Every peer key stored for `addr`, newest first.
     pub fn peers_for(&self, addr: &str) -> Vec<&PeerKey> {
         let addr = addr.trim().to_ascii_lowercase();
@@ -193,6 +223,10 @@ impl Keyring {
             .into_iter()
             .find(|p| p.fingerprint == fingerprint)
         {
+            // Revoked since (compromised, or for no stated reason): none of its
+            // signatures counts any more, including one verified and cached
+            // before the revocation arrived (RFC 9580 §5.2.3.31).
+            Some(p) if self.hard_revoked(&p.key) => Trust::Unconfirmed,
             Some(p) if p.verified => Trust::Verified,
             Some(_) => Trust::Known,
             None => Trust::Unconfirmed,
@@ -206,18 +240,28 @@ impl Keyring {
             // Mail to ourselves (another of our accounts) uses our own key.
             return Err(NoKeyReason::None);
         }
-        // A verified key wins; a newer unverified key never replaces it.
-        if let Some(verified) = peers.iter().find(|p| p.verified) {
-            if keys::check(&verified.key, keys::now()).is_none() {
-                return Ok(verified);
-            }
+        // Revokers are looked up in this keyring, not the global snapshot (they
+        // differ until this one is swapped in).
+        let now = keys::now();
+        let usable =
+            |p: &&PeerKey| keys::check_with(&p.key, now, &|f| self.key_by_fingerprint(f)).is_none();
+        // A verified key wins (any usable one, newest first); a newer
+        // unverified key never replaces it.
+        if let Some(verified) = peers.iter().filter(|p| p.verified).find(|p| usable(p)) {
+            return Ok(verified);
         }
         if peers.iter().any(|p| p.verified) {
-            return Err(NoKeyReason::NewKeyUnverified);
+            // Every verified key is unusable: say a new key awaits
+            // verification only when there is one to verify.
+            return Err(if peers.iter().any(|p| !p.verified && usable(p)) {
+                NoKeyReason::NewKeyUnverified
+            } else {
+                NoKeyReason::Unusable
+            });
         }
         peers
             .into_iter()
-            .find(|p| keys::check(&p.key, keys::now()).is_none())
+            .find(|p| usable(&p))
             .ok_or(NoKeyReason::Unusable)
     }
 

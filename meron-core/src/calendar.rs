@@ -553,11 +553,16 @@ pub fn filed_event_id(conn: &rusqlite::Connection, account: &str, invite: &Invit
 /// what RFC 5546 3.2.3 asks of a reply — UID, SEQUENCE, the occurrence, the
 /// organizer, and the one attendee answering — plus the VTIMEZONEs its times
 /// are written in.
+///
+/// `private`: the invitation came end-to-end encrypted, and the answer goes out
+/// in the clear, so it leaves out the event's title and place. Its times stay:
+/// organizers' clients (this one included) read a reply only with them.
 pub fn reply_ics(
     invite: &Invite,
     attendee: &Person,
     response: Response,
     now: i64,
+    private: bool,
 ) -> Result<String> {
     let original = parse_ical(&invite.ics).ok_or_else(|| anyhow!("invitation is not iCalendar"))?;
     let index = primary_event(&original).ok_or_else(|| anyhow!("invitation has no event"))?;
@@ -573,11 +578,13 @@ pub fn reply_ics(
         ICalendarProperty::Location,
         ICalendarProperty::Organizer,
     ];
+    let details = [ICalendarProperty::Summary, ICalendarProperty::Location];
     let mut event = ICalendarComponent::new(ICalendarComponentType::VEvent);
     event.entries = original.components[index]
         .entries
         .iter()
         .filter(|entry| kept.contains(&entry.name))
+        .filter(|entry| !(private && details.contains(&entry.name)))
         .cloned()
         .collect();
     event.add_dtstamp(PartialDateTime::from_utc_timestamp(now));
@@ -621,11 +628,15 @@ pub struct ReplyMail {
     pub ics: String,
 }
 
+///
+/// `private`: the invitation came end-to-end encrypted; see [`reply_ics`]. The
+/// subject and text then leave out its title too.
 pub fn reply_mail(
     invite: &Invite,
     attendee: &Person,
     response: Response,
     now: i64,
+    private: bool,
 ) -> Result<ReplyMail> {
     let who = if attendee.name.trim().is_empty() {
         attendee.addr.trim()
@@ -650,14 +661,25 @@ pub fn reply_mail(
             invite.organizer.addr
         )
     };
+    let (subject, body) = if private {
+        (
+            response.subject_prefix().to_string(),
+            format!("{who} has {} this invitation.\r\n", response.verb()),
+        )
+    } else {
+        (
+            format!("{}: {summary}", response.subject_prefix()),
+            format!(
+                "{who} has {} this invitation: {summary}\r\n",
+                response.verb()
+            ),
+        )
+    };
     Ok(ReplyMail {
         to,
-        subject: format!("{}: {summary}", response.subject_prefix()),
-        body: format!(
-            "{who} has {} this invitation: {summary}\r\n",
-            response.verb()
-        ),
-        ics: reply_ics(invite, attendee, response, now)?,
+        subject,
+        body,
+        ics: reply_ics(invite, attendee, response, now, private)?,
     })
 }
 
@@ -727,7 +749,19 @@ pub async fn respond(
         },
         addr: from_addr.clone(),
     };
-    let mail = reply_mail(&invite, &attendee, response, crate::store::now_unix())?;
+    // An encrypted invitation's details stay out of the answer, which goes in
+    // the clear.
+    let private = message
+        .crypto
+        .as_ref()
+        .is_some_and(|status| status.encrypted);
+    let mail = reply_mail(
+        &invite,
+        &attendee,
+        response,
+        crate::store::now_unix(),
+        private,
+    )?;
     let raw = crate::smtp::send_invite_reply(
         &creds,
         &from_addr,

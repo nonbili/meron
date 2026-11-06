@@ -284,6 +284,20 @@ export function quickReplyTarget(): Message | null {
   return pickReplyTarget(thread)
 }
 
+/** Whether the quick reply in `threadId` holds a draft that was saved
+ * encrypted (see `quickReplyEncrypt.draft`). Reactive. */
+export function quickReplyHoldsEncryptedDraft(threadId: string | undefined): boolean {
+  const choice = compose$.quickReplyEncrypt.get()
+  return !!threadId && !!choice?.draft && choice.threadId === threadId
+}
+
+/** Whether the user switched encryption off in the quick reply answering
+ * `target` (rather than it being off by default). */
+export function quickReplyOffByUser(target: Message): boolean {
+  const choice = compose$.quickReplyEncrypt.peek()
+  return !!choice && choice.threadId === target.thread_id && !choice.on
+}
+
 /** Whether the quick reply is encrypted: the user's choice for this thread,
  * or by default on when the message answered was itself encrypted (sticky:
  * an encrypted conversation stays encrypted unless the user says otherwise). */

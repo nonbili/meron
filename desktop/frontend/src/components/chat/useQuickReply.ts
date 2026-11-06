@@ -199,6 +199,19 @@ export function useQuickReply() {
     }
   }, [composer])
 
+  // Encryption switched on after the reply was autosaved: save it again, so
+  // the plain copy on the server is replaced by an encrypted one. Not for a
+  // draft restored from an encrypted copy (`draft`), which is encrypted there.
+  const encryptChoice = useValue(compose$.quickReplyEncrypt)
+  const previousEncryptChoiceRef = useRef(encryptChoice)
+  useEffect(() => {
+    if (previousEncryptChoiceRef.current === encryptChoice) return
+    previousEncryptChoiceRef.current = encryptChoice
+    if (!encryptChoice?.on || encryptChoice.draft) return
+    if (!lastHydratedThreadRef.current || isQuickReplyBlank()) return
+    scheduleQuickReplyDraftSave()
+  }, [encryptChoice])
+
   // Attachments are a discrete action rather than a keystroke stream, so save
   // (or discard, if that was the last thing keeping the draft non-empty)
   // immediately instead of waiting out the debounce.

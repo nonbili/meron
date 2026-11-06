@@ -217,6 +217,10 @@ fn http_fetch(agent: &ureq::Agent, url: &str) -> Result<Option<Vec<u8>>> {
         .config()
         .http_status_as_error(false)
         .timeout_global(Some(TIMEOUT))
+        // No redirects: the URL was checked (https, no IP literal, no
+        // loopback or local name), and a redirect could point anywhere, an
+        // internal address included. WKD and keyservers serve keys directly.
+        .max_redirects(0)
         .build()
         .call()
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -316,6 +320,42 @@ pub fn lookup_with(addr: &str, sources: &[KeySource], fetch: &Fetch<'_>) -> Look
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A source that answers with a redirect isn't followed: it could point at
+    // an internal address the URL checks would have refused.
+    #[test]
+    fn a_redirect_is_not_followed() {
+        use std::io::{Read as _, Write as _};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let served = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = served.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(2) {
+                let Ok(mut stream) = stream else { return };
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let request = String::from_utf8_lossy(&buf);
+                let reply = if request.starts_with("GET /key ") {
+                    format!(
+                        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{port}/internal\r\nContent-Length: 0\r\n\r\n"
+                    )
+                } else {
+                    count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nsecret".to_string()
+                };
+                let _ = stream.write_all(reply.as_bytes());
+            }
+        });
+        let agent = ureq::Agent::new_with_defaults();
+        let result = http_fetch(&agent, &format!("http://127.0.0.1:{port}/key"));
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(
+            served.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the target was never asked"
+        );
+    }
 
     fn fixture(name: &str) -> Vec<u8> {
         std::fs::read(

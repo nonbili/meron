@@ -310,6 +310,13 @@ export type ComposeDraft = {
   /** The body itself holds decrypted text: a sensitive reply's quote was
    * unfolded into it. Such a draft is only ever sent or saved encrypted. */
   decryptedInBody?: boolean
+  /** A draft that was saved encrypted, reopened: it may hold text from
+   * encrypted mail (an unfolded quote answered inline, a forward), so it never
+   * switches off by itself and switching it off asks first. */
+  encryptedDraft?: boolean
+  /** The user switched encryption off (in the quick reply this came from):
+   * the toggle doesn't turn it back on by itself. */
+  encryptOffByUser?: boolean
   /** The reply has no quote because its original is decrypted mail its sender
    * isn't shown to have written (`replyQuoteWithheld`): the composer says why. */
   quoteWithheld?: boolean

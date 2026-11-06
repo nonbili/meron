@@ -5767,7 +5767,8 @@ fn card_title_skips_the_placeholder_of_an_encrypted_message_never_decrypted() {
         )
         .unwrap();
     };
-    insert(1, "...", "{}");
+    // Known encrypted from its Content-Type at fetch (`$.encrypted`).
+    insert(1, "...", r#"{"encrypted":true}"#);
     insert(2, "Re: Secret plans", r#"{"crypto":{"encrypted":true}}"#);
 
     let subjects =
@@ -5781,10 +5782,10 @@ fn card_title_skips_the_placeholder_of_an_encrypted_message_never_decrypted() {
     // With nothing decrypted there is no real subject to show: the
     // placeholder stays (chosen over an "Encrypted message" label).
     conn.execute(
-        "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
+        r#"INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
                               date, seen, thread_key, json)
          VALUES('acct', 'INBOX', '9', 9, '[...]', 'Aki', 'aki@example.com', 900, 1,
-                'other@example.com', '{}')",
+                'other@example.com', '{"encrypted":true}')"#,
         [],
     )
     .unwrap();
@@ -5793,6 +5794,21 @@ fn card_title_skips_the_placeholder_of_an_encrypted_message_never_decrypted() {
     assert_eq!(
         subjects.get("other@example.com").map(String::as_str),
         Some("[...]")
+    );
+
+    // A plain message really titled "..." keeps its title.
+    insert(3, "...", "{}");
+    insert(4, "Re: Something else", "{}");
+    conn.execute(
+        "UPDATE messages SET thread_key = 'plain@example.com' WHERE uid IN (3, 4)",
+        [],
+    )
+    .unwrap();
+    let subjects =
+        card_root_subjects(&conn, "acct", "INBOX", &["plain@example.com".to_string()]).unwrap();
+    assert_eq!(
+        subjects.get("plain@example.com").map(String::as_str),
+        Some("...")
     );
 }
 
@@ -5814,6 +5830,7 @@ fn grouped_card_title_skips_the_placeholder_of_an_encrypted_message_never_decryp
                 date: 100,
                 subject: "...".to_string(),
                 thread_key: "gmthrid:enc".to_string(),
+                encrypted: true,
                 ..Default::default()
             },
         ],
@@ -5821,6 +5838,29 @@ fn grouped_card_title_skips_the_placeholder_of_an_encrypted_message_never_decryp
     );
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].header.subject, "Re: Secret plans");
+
+    // Plain mail titled "..." is titled by its own subject.
+    let cards = group_thread_cards(
+        vec![
+            MessageHeader {
+                uid: 2,
+                date: 200,
+                subject: "Re: Something else".to_string(),
+                thread_key: "gmthrid:plain".to_string(),
+                ..Default::default()
+            },
+            MessageHeader {
+                uid: 1,
+                date: 100,
+                subject: "...".to_string(),
+                thread_key: "gmthrid:plain".to_string(),
+                ..Default::default()
+            },
+        ],
+        "INBOX",
+    );
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].header.subject, "...");
 }
 
 // A reply written by a client that had not decrypted the thread carries the

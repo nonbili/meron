@@ -76,22 +76,25 @@ export function EncryptionSettingsPage() {
           onChange={() => settings$.encryptWhenPossible.set(!encryptWhenPossible)}
         />
       </SettingsGroup>
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={t('crypto.peers.filter')}
-            aria-label={t('crypto.peers.filter')}
-            className="w-full rounded-xl border border-transparent bg-hover py-2 pl-8 pr-3 text-[0.75rem] text-primary placeholder-secondary focus:bg-chats focus:ring-1 focus:ring-accent"
-          />
+      <section className="flex flex-col gap-2">
+        <h3 className="px-1 text-[0.75rem] font-semibold text-secondary">{t('crypto.peers.listTitle')}</h3>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={t('crypto.peers.filter')}
+              aria-label={t('crypto.peers.filter')}
+              className="w-full rounded-xl border border-transparent bg-hover py-2 pl-8 pr-3 text-[0.75rem] text-primary placeholder-secondary focus:bg-chats focus:ring-1 focus:ring-accent"
+            />
+          </div>
+          <Button variant="secondary" onClick={() => void startImport()}>
+            <Upload size={13} />
+            <span>{t('crypto.peers.import')}</span>
+          </Button>
         </div>
-        <Button variant="secondary" onClick={() => void startImport()}>
-          <Upload size={13} />
-          <span>{t('crypto.peers.import')}</span>
-        </Button>
-      </div>
+      </section>
       {error && (
         <p role="alert" className="px-1 text-[0.6875rem] text-rose-500">
           {error}

@@ -621,6 +621,9 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
 
   compose$.composer.set(tail.body ?? '')
   compose$.composerAttachments.set([])
+  // A draft saved encrypted comes back encrypted, whatever the conversation's
+  // default: its text must not go out (or be saved again) in the clear.
+  if (tail.crypto?.encrypted) compose$.quickReplyEncrypt.set({ threadId: activeThreadId, on: true, draft: true })
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
   compose$.quickReplyAdded.set(holds.added)

@@ -1183,6 +1183,29 @@ describe('Composer', () => {
     )
   })
 
+  // Off, the decrypted quote won't be sent: unfolding it would put decrypted
+  // text in the body behind an open lock.
+  it('offers no decrypted quote to unfold while encryption is off', async () => {
+    accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
+    const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> The plan' }
+    const tabId = openComposeTab({
+      to: 'them@example.com',
+      subject: 'Re: x',
+      rich: false,
+      text: 'Sounds good',
+      quote,
+      sensitiveSource: 'reply',
+      encrypt: false,
+    })!
+    const view = render(<Composer tabId={tabId} />)
+    expect(view.queryByTitle('Show quoted text')).toBeNull()
+
+    await act(async () => {
+      updateComposeDraft(tabId, { encrypt: true })
+    })
+    expect(view.getByTitle('Show quoted text')).toBeTruthy()
+  })
+
   it('unfolds a folded quote into the body, or drops it', async () => {
     accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
     const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> Lunch?' }

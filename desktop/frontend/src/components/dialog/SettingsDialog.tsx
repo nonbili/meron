@@ -758,8 +758,14 @@ function BackupRow() {
         return
       }
       closePrompt()
-      const { accounts, skipped } = outcome.summary
-      if (accounts === 0 && skipped > 0) {
+      const { accounts, skipped, openpgpMissingSecret } = outcome.summary
+      if (openpgpMissingSecret.length > 0) {
+        // More pressing than the count: encrypted mail of these accounts
+        // stays unreadable until their key is brought in.
+        const all = accounts$.get()
+        const names = openpgpMissingSecret.map((id) => all.find((acc) => acc.id === id)?.email || id)
+        showToast(t('settings.backup.missingEncryptionKey', { accounts: names.join(', ') }), 'error')
+      } else if (accounts === 0 && skipped > 0) {
         showToast(t('settings.backup.restoredNothingNew'), 'success')
       } else {
         showToast(t('settings.backup.restored', { count: accounts }), 'success')

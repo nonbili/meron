@@ -342,7 +342,7 @@ pub fn email_of_user_id(uid: &str) -> Option<String> {
 
 /// Policy check for one self-signature: a SHA-1/MD5 binding is only accepted
 /// when it is old (see [`SHA1_BINDING_CUTOFF`]).
-fn binding_hash_ok(sig: &Signature) -> bool {
+pub(crate) fn binding_hash_ok(sig: &Signature) -> bool {
     match sig.hash_alg() {
         Some(HashAlgorithm::Md5) | Some(HashAlgorithm::Ripemd160) => false,
         Some(HashAlgorithm::Sha1) => sig
@@ -368,7 +368,20 @@ fn newest<'a>(sigs: impl Iterator<Item = &'a Signature>) -> Option<&'a Signature
     sigs.max_by_key(|s| s.created().map(|t| t.as_secs()).unwrap_or(0))
 }
 
-/// User IDs whose newest self-certification verifies and passes the hash policy.
+/// A revocation (of the key, a user ID or a subkey). rPGP's certification and
+/// key checks accept these too, so they have to be told apart from bindings.
+fn is_revocation(sig: &Signature) -> bool {
+    use pgp::packet::SignatureType;
+    matches!(
+        sig.typ(),
+        Some(SignatureType::KeyRevocation)
+            | Some(SignatureType::CertRevocation)
+            | Some(SignatureType::SubkeyRevocation)
+    )
+}
+
+/// User IDs whose newest self-certification verifies and passes the hash
+/// policy, and isn't a revocation of that user ID.
 fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
     key.details
         .users
@@ -382,7 +395,7 @@ fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
                         .is_ok()
                 })
                 .collect();
-            newest(valid.into_iter()).is_some_and(binding_hash_ok)
+            newest(valid.into_iter()).is_some_and(|s| !is_revocation(s) && binding_hash_ok(s))
         })
         .filter_map(|u| u.id.as_str().map(str::to_string))
         .collect()
@@ -405,7 +418,7 @@ fn self_signatures(key: &SignedPublicKey) -> impl Iterator<Item = &Signature> {
                 .is_ok()
         })
     });
-    direct.chain(certs)
+    direct.chain(certs).filter(|s| !is_revocation(s))
 }
 
 /// Whether the key's primary is flagged to make data signatures, read from the
@@ -434,10 +447,13 @@ fn has_key_flags(sig: &Signature) -> bool {
 }
 
 /// When the primary key expires, from its newest valid user-ID binding
-/// (or direct-key signature), as an absolute timestamp.
+/// (or direct-key signature), as an absolute timestamp. A later self-signature
+/// that only adds something else (a designated revoker, say: no key flags)
+/// doesn't speak to the expiry, as for [`primary_can_sign`].
 fn primary_expiry(key: &SignedPublicKey) -> Option<i64> {
     let created = i64::from(key.primary_key.created_at().as_secs());
-    let sig = newest(self_signatures(key))?;
+    let sig = newest(self_signatures(key).filter(|s| has_key_flags(s)))
+        .or_else(|| newest(self_signatures(key)))?;
     sig.key_expiration_time()
         .filter(|d| d.as_secs() != 0)
         .map(|d| created + i64::from(d.as_secs()))
@@ -795,10 +811,12 @@ pub fn encryption_subkey(key: &SignedPublicKey, now: u32) -> Option<&SignedPubli
                 .iter()
                 .filter(|s| s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok())
                 .collect();
-            let binding = newest(valid.iter().copied())?;
-            if binding.typ() == Some(pgp::packet::SignatureType::SubkeyRevocation) {
+            // Any revocation of the subkey, not just the newest signature:
+            // a later binding (or one made the same second) can't undo it.
+            if valid.iter().any(|s| is_revocation(s)) {
                 return None;
             }
+            let binding = newest(valid.iter().copied())?;
             if !binding_hash_ok(binding) {
                 return None;
             }
@@ -869,6 +887,40 @@ pub fn info(key: &SignedPublicKey, has_secret: bool, now: u32) -> KeyInfo {
         supports_seipd_v2: supports_seipd_v2(key),
         unusable: check(key, now),
     }
+}
+
+/// When the key last signed itself: its newest verified user-ID or direct-key
+/// self-signature or subkey binding (a renewal or a new subkey makes one).
+fn newest_self_signature_at(key: &SignedPublicKey) -> u32 {
+    let bindings = key.public_subkeys.iter().flat_map(move |sub| {
+        sub.signatures
+            .iter()
+            .filter(move |s| s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok())
+    });
+    self_signatures(key)
+        .chain(bindings)
+        .filter_map(|s| s.created().map(|t| t.as_secs()))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Whether `incoming`, an import of an own key already stored as `stored`
+/// (same primary), should replace it: it keeps every stored subkey (so mail
+/// encrypted to one stays readable) and is at least as recent (so a renewal or
+/// a new subkey is taken, and an older export never rolls one back).
+pub fn secret_supersedes(incoming: &SignedSecretKey, stored: &SignedSecretKey) -> bool {
+    let has = |key: &SignedSecretKey, fpr: &str| {
+        key.secret_subkeys
+            .iter()
+            .any(|sub| fingerprint_hex(&sub.key) == fpr)
+    };
+    let keeps_subkeys = stored
+        .secret_subkeys
+        .iter()
+        .all(|sub| has(incoming, &fingerprint_hex(&sub.key)));
+    keeps_subkeys
+        && newest_self_signature_at(&incoming.to_public_key())
+            >= newest_self_signature_at(&stored.to_public_key())
 }
 
 /// Describes a secret key (from its public half).
@@ -1133,6 +1185,171 @@ pub(crate) mod tests {
         let mut out = target.clone();
         out.details.revocation_signatures.push(sig);
         out
+    }
+
+    /// A signature of `typ` by `key`'s primary, made at `at` with `extra`
+    /// subpackets: over its first user ID (certifications), the key itself
+    /// (direct-key signatures and revocations), or its first subkey (subkey
+    /// revocations).
+    pub(crate) fn self_sig(
+        key: &SignedSecretKey,
+        typ: pgp::packet::SignatureType,
+        at: u32,
+        extra: Vec<pgp::packet::SubpacketData>,
+    ) -> Signature {
+        use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        let mut config =
+            SignatureConfig::v4(typ, key.primary_key.algorithm(), HashAlgorithm::Sha256);
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::from_secs(at),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                key.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        config
+            .hashed_subpackets
+            .extend(extra.into_iter().map(|d| Subpacket::regular(d).unwrap()));
+        let public = key.to_public_key();
+        let pw = Password::empty();
+        match typ {
+            SignatureType::CertPositive | SignatureType::CertRevocation => config
+                .sign_certification(
+                    &key.primary_key,
+                    &public.primary_key,
+                    &pw,
+                    pgp::types::Tag::UserId,
+                    &public.details.users[0].id,
+                )
+                .unwrap(),
+            SignatureType::SubkeyRevocation => config
+                .sign_subkey_binding(
+                    &key.primary_key,
+                    &public.primary_key,
+                    &pw,
+                    &public.public_subkeys[0].key,
+                )
+                .unwrap(),
+            _ => config
+                .sign_key(&key.primary_key, &pw, &public.primary_key)
+                .unwrap(),
+        }
+    }
+
+    // A user ID whose newest self-signature revokes it isn't one of the key's
+    // addresses any more (rPGP verifies the revocation as a certification).
+    #[test]
+    fn a_revoked_user_id_is_not_an_address_of_the_key() {
+        use pgp::packet::SignatureType;
+        let key = generate(&["gone@example.org".into()]).unwrap();
+        let mut public = key.to_public_key();
+        assert_eq!(info(&public, false, now()).emails, vec!["gone@example.org"]);
+        public.details.users[0].signatures.push(self_sig(
+            &key,
+            SignatureType::CertRevocation,
+            now() + 10,
+            vec![],
+        ));
+        assert!(info(&public, false, now() + 20).emails.is_empty());
+    }
+
+    // A subkey revocation counts even when a binding is newer (or made the
+    // same second): nothing is encrypted to that subkey again.
+    #[test]
+    fn a_revoked_encryption_subkey_stays_revoked_under_a_newer_binding() {
+        use pgp::packet::SignatureType;
+        let key = generate(&["sub@example.org".into()]).unwrap();
+        let mut public = key.to_public_key();
+        assert!(encryption_subkey(&public, now()).is_some());
+        let created = public.public_subkeys[0].key.created_at().as_secs();
+        public.public_subkeys[0].signatures.push(self_sig(
+            &key,
+            SignatureType::SubkeyRevocation,
+            created.saturating_sub(10),
+            vec![],
+        ));
+        assert!(encryption_subkey(&public, now()).is_none());
+    }
+
+    // A later self-signature that only adds something (a direct-key signature
+    // naming a revoker, no key flags) doesn't clear the key's expiry.
+    #[test]
+    fn a_self_signature_without_key_flags_keeps_the_expiry() {
+        use pgp::packet::{KeyFlags, SignatureType, SubpacketData};
+        let key = generate(&["exp@example.org".into()]).unwrap();
+        let created = key.primary_key.created_at().as_secs();
+        let mut flags = KeyFlags::default();
+        flags.set_certify(true);
+        flags.set_sign(true);
+        let mut public = key.to_public_key();
+        public.details.direct_signatures.push(self_sig(
+            &key,
+            SignatureType::Key,
+            now() + 10,
+            vec![
+                SubpacketData::KeyFlags(flags),
+                SubpacketData::KeyExpirationTime(pgp::types::Duration::from_secs(1000)),
+            ],
+        ));
+        public.details.direct_signatures.push(self_sig(
+            &key,
+            SignatureType::Key,
+            now() + 20,
+            vec![],
+        ));
+        assert_eq!(primary_expiry(&public), Some(i64::from(created) + 1000));
+    }
+
+    /// `key` with a new self-certification of its first user ID made at `at`:
+    /// what a renewal (`gpg --quick-set-expire`) adds.
+    pub(crate) fn self_certified_at(key: &SignedSecretKey, at: u32) -> SignedSecretKey {
+        use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+        let mut config = SignatureConfig::v4(
+            SignatureType::CertPositive,
+            key.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
+        config.hashed_subpackets = vec![
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::from_secs(at),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                key.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        let public = key.to_public_key();
+        let user = &public.details.users[0];
+        let sig = config
+            .sign_certification(
+                &key.primary_key,
+                &public.primary_key,
+                &Password::empty(),
+                pgp::types::Tag::UserId,
+                &user.id,
+            )
+            .unwrap();
+        let mut out = key.clone();
+        out.details.users[0].signatures.push(sig);
+        out
+    }
+
+    // Importing an own key again: a renewal (newer self-signature) replaces
+    // the stored copy; an older export, or one missing a stored subkey, doesn't.
+    #[test]
+    fn a_renewed_own_key_supersedes_the_stored_one_and_an_older_one_does_not() {
+        let key = generate(&["me@example.org".into()]).unwrap();
+        let renewed = self_certified_at(&key, now() + 100);
+        assert!(secret_supersedes(&renewed, &key));
+        assert!(secret_supersedes(&key, &key), "the same export again");
+        assert!(!secret_supersedes(&key, &renewed), "never rolled back");
+        let mut fewer = renewed.clone();
+        fewer.secret_subkeys.clear();
+        assert!(!secret_supersedes(&fewer, &key), "a stored subkey is kept");
     }
 
     /// A user-ID certification of `target`'s first user ID made by `signer` (so

@@ -89,13 +89,23 @@ fn reparse_key_attachments_once(conn: &Connection) -> Result<usize> {
         return Ok(0);
     }
     let n = conn.execute(
-        "UPDATE messages SET body = NULL, json = json_remove(json, '$.body_html', '$.attachments', '$.crypto')
-         WHERE files LIKE '%application/pgp-keys%'",
+        &format!(
+            "UPDATE messages SET body = NULL, json = {DROP_CACHED_BODY_JSON}
+         WHERE files LIKE '%application/pgp-keys%'"
+        ),
         [],
     )?;
     crate::store::setting_set(conn, REPARSE_MARK, &serde_json::json!(true))?;
     Ok(n)
 }
+
+/// A cached row's `json` with its parsed body dropped (so the next read fetches
+/// it again): the body HTML, attachments and OpenPGP status go, but an
+/// encrypted message stays known as encrypted (`$.encrypted`), so a reply sent
+/// before it is fetched again is still encrypted (`answers_encrypted`).
+pub const DROP_CACHED_BODY_JSON: &str = "CASE WHEN json_extract(json, '$.crypto.encrypted') = 1
+       THEN json_set(json_remove(json, '$.body_html', '$.attachments', '$.crypto'), '$.encrypted', json('true'))
+       ELSE json_remove(json, '$.body_html', '$.attachments', '$.crypto') END";
 
 const REFETCH_MARK: &str = "openpgp_refetch_encrypted_cached_without_openpgp";
 
@@ -115,13 +125,15 @@ fn refetch_encrypted_cached_without_openpgp_once(conn: &Connection) -> Result<us
         return Ok(0);
     }
     let n = conn.execute(
-        "UPDATE messages SET body = NULL, json = json_remove(json, '$.body_html', '$.attachments', '$.crypto')
+        &format!(
+            "UPDATE messages SET body = NULL, json = {DROP_CACHED_BODY_JSON}
          WHERE body IS NOT NULL
            AND json_extract(json, '$.crypto') IS NULL
            AND (files LIKE '%\"encrypted.asc\"%'
                 OR files LIKE '%application/pgp-encrypted%'
                 OR body LIKE '%-----BEGIN PGP MESSAGE-----%'
-                OR trim(subject) IN ('...', '[...]'))",
+                OR trim(subject) IN ('...', '[...]'))"
+        ),
         [],
     )?;
     crate::store::setting_set(conn, REFETCH_MARK, &serde_json::json!(true))?;
@@ -137,16 +149,23 @@ pub fn undecrypted_placeholder_uids(
     account: &str,
     folder: &str,
 ) -> Result<Vec<u32>> {
+    // Replies count too ("Re: [...]"): the placeholder test strips prefixes.
     let mut stmt = conn.prepare(
-        "SELECT uid FROM messages
+        "SELECT uid, subject FROM messages
          WHERE account = ?1 AND folder = ?2 AND uid <> 0 AND body IS NULL
-           AND trim(subject) IN ('...', '[...]')
+           AND subject LIKE '%...%'
          ORDER BY uid",
     )?;
-    let uids = stmt
-        .query_map(params![account, folder], |r| r.get::<_, u32>(0))?
-        .collect::<rusqlite::Result<Vec<u32>>>()?;
-    Ok(uids)
+    let rows = stmt
+        .query_map(params![account, folder], |r| {
+            Ok((r.get::<_, u32>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows
+        .into_iter()
+        .filter(|(_, subject)| crate::store::is_encrypted_placeholder_subject(subject))
+        .map(|(uid, _)| uid)
+        .collect())
 }
 
 /// Whether `conn` is the store keys belong to (true in tests and before the
@@ -295,6 +314,19 @@ fn store_default_key(
     let fingerprint = fingerprint_hex(&secret.primary_key);
     let blob = keys::binary_secret(secret)?;
     let tx = conn.unchecked_transaction()?;
+    // The same key imported again: a renewed or extended export replaces the
+    // stored copy, an older one doesn't (see `keys::secret_supersedes`).
+    let stored: Option<Vec<u8>> = tx
+        .query_row(
+            "SELECT secret_key FROM openpgp_own_keys WHERE fingerprint = ?1",
+            [&fingerprint],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let replace = stored
+        .map(zeroize::Zeroizing::new)
+        .and_then(|stored| keys::parse_secret(&stored).ok())
+        .is_none_or(|stored| keys::secret_supersedes(secret, &stored));
     tx.execute(
         "UPDATE openpgp_own_keys SET is_default = 0 WHERE account_id = ?1",
         [account_id],
@@ -302,8 +334,15 @@ fn store_default_key(
     tx.execute(
         "INSERT INTO openpgp_own_keys (fingerprint, account_id, secret_key, is_default, added_at)
          VALUES (?1, ?2, ?3, 1, ?4)
-         ON CONFLICT(fingerprint) DO UPDATE SET account_id = excluded.account_id, is_default = 1",
-        params![fingerprint, account_id, blob.as_slice(), now_secs()],
+         ON CONFLICT(fingerprint) DO UPDATE SET account_id = excluded.account_id, is_default = 1,
+             secret_key = CASE WHEN ?5 THEN excluded.secret_key ELSE secret_key END",
+        params![
+            fingerprint,
+            account_id,
+            blob.as_slice(),
+            now_secs(),
+            replace
+        ],
     )?;
     tx.execute(
         "INSERT INTO openpgp_accounts (account_id, enabled) VALUES (?1, 1)
@@ -404,6 +443,9 @@ pub fn import_own(
                 );
             }
             store_default_key(conn, account_id, &secret)?;
+            // Our own mail signed with it (sent from another device, say) was
+            // checked without it: read it again.
+            recheck_signed_by(conn, &secret.to_public_key());
             reload(conn)?;
             let lower: Vec<String> = account_addrs
                 .iter()
@@ -511,6 +553,9 @@ pub fn merge_into_stored(conn: &Connection, key: &pgp::composed::SignedPublicKey
         "UPDATE openpgp_peer_keys SET public_key = ?1 WHERE fingerprint = ?2",
         params![keys::binary_public(&merged)?, fingerprint],
     )?;
+    // A renewal (or a new signing subkey) can make a signature that failed
+    // against the old copy (expired then, say) verify now.
+    recheck_signed_by(conn, &merged);
     Ok(true)
 }
 
@@ -565,6 +610,11 @@ pub fn ingest(
         }
         let fingerprint = fingerprint_hex(&key.primary_key);
         let blob = keys::binary_public(&keys::minimize(key))?;
+        let known: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM openpgp_peer_keys WHERE fingerprint = ?1)",
+            [&fingerprint],
+            |r| r.get(0),
+        )?;
         let n = conn.execute(
             "INSERT INTO openpgp_peer_keys (addr, fingerprint, public_key, source, verified, first_seen, last_seen)
              VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)
@@ -574,6 +624,9 @@ pub fn ingest(
             params![addr, fingerprint, blob, source.as_str(), seen],
         )?;
         changed |= n > 0;
+        if n > 0 && !known {
+            recheck_signed_by(conn, key);
+        }
         Ok(())
     };
     for a in announced {
@@ -619,7 +672,8 @@ pub fn answers_encrypted(conn: &Connection, account: &str, in_reply_to: &str) ->
         "SELECT EXISTS(SELECT 1 FROM messages
            WHERE account = ?1
              AND lower(COALESCE(json_extract(json, '$.message_id'), '')) = lower(?2)
-             AND json_extract(json, '$.crypto.encrypted') = 1)",
+             AND (json_extract(json, '$.crypto.encrypted') = 1
+                  OR json_extract(json, '$.encrypted') = 1))",
         params![account, id],
         |r| r.get(0),
     )?)
@@ -859,6 +913,7 @@ pub fn import_peers(conn: &Connection, data: &[u8], fingerprints: &[String]) -> 
                 params![addr, info.fingerprint, blob, now],
             )?;
         }
+        recheck_signed_by(conn, &key);
         count += 1;
     }
     reload(conn)?;
@@ -896,8 +951,79 @@ pub fn add_looked_up(
          ON CONFLICT(addr, fingerprint) DO UPDATE SET last_seen = excluded.last_seen",
         params![addr, info.fingerprint, keys::binary_public(&keys::minimize(&key))?, source.as_str(), now],
     )?;
+    recheck_signed_by(conn, &key);
     reload(conn)?;
     Ok(info)
+}
+
+/// Forgets cached bodies that couldn't be decrypted, so the next read
+/// fetches and decrypts them with the keys just added. They stay known as
+/// encrypted meanwhile (inline PGP has no MIME type that says so), so a reply
+/// sent before that is still encrypted. Returns how many.
+pub fn forget_undecryptable(conn: &Connection) -> Result<usize> {
+    Ok(conn.execute(
+        &format!(
+            "UPDATE messages SET body = NULL, json = {DROP_CACHED_BODY_JSON}
+             WHERE json_extract(json, '$.crypto.problem') = 'no_key'"
+        ),
+        [],
+    )?)
+}
+
+/// Cached messages signed by `key` while it wasn't stored: their signature was
+/// checked without it (`signer` unknown, `issuer` one of its parts) and stays
+/// unverified however often they are opened. The signed bytes aren't kept, so
+/// the cached body is dropped, as for a reparse: the next read (or the
+/// prefetch) fetches the message again and verifies it with the key. Best
+/// effort: the key is stored either way, so a failure here is only logged.
+fn recheck_signed_by(conn: &Connection, key: &pgp::composed::SignedPublicKey) {
+    if let Err(err) = drop_unverified_signed_by(conn, key) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "openpgp",
+            "couldn't mark messages for a new signature check: {err:#}"
+        );
+    }
+}
+
+/// [`recheck_signed_by`]: returns how many cached bodies were dropped.
+fn drop_unverified_signed_by(
+    conn: &Connection,
+    key: &pgp::composed::SignedPublicKey,
+) -> Result<usize> {
+    let parts: Vec<String> = std::iter::once(fingerprint_hex(&key.primary_key))
+        .chain(
+            key.public_subkeys
+                .iter()
+                .map(|sub| fingerprint_hex(&sub.key)),
+        )
+        .collect();
+    let mut stmt = conn.prepare(
+        "SELECT id, json_extract(json, '$.crypto.issuer') FROM messages
+         WHERE body IS NOT NULL
+           AND json_extract(json, '$.crypto.signed') = 1
+           AND json_extract(json, '$.crypto.signer') IS NULL
+           AND json_extract(json, '$.crypto.issuer') IS NOT NULL",
+    )?;
+    // The issuer is a fingerprint, or only a 16-hex key ID (its tail).
+    let ids: Vec<i64> = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+        .filter_map(|row| row.ok())
+        .filter(|(_, issuer)| {
+            let issuer = issuer.to_ascii_uppercase();
+            !issuer.is_empty() && parts.iter().any(|part| part.ends_with(&issuer))
+        })
+        .map(|(id, _)| id)
+        .collect();
+    for id in &ids {
+        conn.execute(
+            &format!(
+                "UPDATE messages SET body = NULL, json = {DROP_CACHED_BODY_JSON} WHERE id = ?1"
+            ),
+            [id],
+        )?;
+    }
+    Ok(ids.len())
 }
 
 /// Marks a key verified (or not). `confirm_fingerprint` must equal the key's
@@ -1079,6 +1205,7 @@ fn backup_apply_with(
 ) -> Result<Vec<String>> {
     use base64::Engine as _;
     let mut missing = Vec::new();
+    let mut restored: Vec<pgp::composed::SignedPublicKey> = Vec::new();
     for entry in entries {
         // No secret in the backup, or this build doesn't restore secrets:
         // the account has no usable key and is reported as missing.
@@ -1100,6 +1227,7 @@ fn backup_apply_with(
             );
             let secret = keys::parse_secret(&blob)?;
             keys::self_test(&secret)?;
+            restored.push(secret.to_public_key());
             let make_default = !has_default && i + 1 == entry.secret.len();
             if make_default {
                 conn.execute(
@@ -1117,6 +1245,15 @@ fn backup_apply_with(
             set_enabled(conn, &entry.account_id, true)?;
         }
     }
+    // Mail already cached that these keys open or signed is read again.
+    if restored.is_empty() {
+        reload(conn)?;
+        return Ok(missing);
+    }
+    forget_undecryptable(conn)?;
+    for key in &restored {
+        recheck_signed_by(conn, key);
+    }
     reload(conn)?;
     Ok(missing)
 }
@@ -1126,10 +1263,10 @@ mod tests {
     use super::*;
     use crate::openpgp::keyring::NoKeyReason;
 
+    /// A store as the app opens it: the OpenPGP tables live beside the mail
+    /// cache, which adding a key also touches (`recheck_signed_by`).
     fn db() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(DDL).unwrap();
-        conn
+        crate::store::open_at(":memory:").unwrap()
     }
 
     fn fixture(name: &str) -> Vec<u8> {
@@ -1562,6 +1699,270 @@ mod tests {
         );
     }
 
+    /// A cached message row of `json` (with a body, so it reads as fetched).
+    fn cache_message(conn: &Connection, uid: u32, json: serde_json::Value) {
+        conn.execute(
+            "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, body, json)
+             VALUES ('a', 'INBOX', ?1, ?1, 's', 'n', 'x@example.com', 0, 'body', ?2)",
+            params![uid, json.to_string()],
+        )
+        .unwrap();
+    }
+
+    fn body_cached(conn: &Connection, uid: u32) -> bool {
+        conn.query_row(
+            "SELECT body IS NOT NULL FROM messages WHERE uid = ?1",
+            [uid],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    // Our own key imported (or restored from a backup) after mail it opens or
+    // signed was cached: that mail is read again, not left "no key" or with an
+    // unknown signer.
+    #[test]
+    fn importing_or_restoring_an_own_key_has_its_mail_read_again() {
+        let data = fixture("alice-secret.asc");
+        let alice = keys::parse_keys(&data)
+            .unwrap()
+            .secret
+            .remove(0)
+            .to_public_key();
+        let fpr = fingerprint_hex(&alice.primary_key);
+        let seed = |conn: &Connection| {
+            cache_message(
+                conn,
+                1,
+                serde_json::json!({ "crypto": { "encrypted": true, "problem": "no_key" } }),
+            );
+            cache_message(
+                conn,
+                2,
+                serde_json::json!({ "crypto": { "signed": true, "signer": null, "issuer": fpr } }),
+            );
+            cache_message(
+                conn,
+                3,
+                serde_json::json!({ "crypto": { "signed": true, "signer": null, "issuer": "0123456789ABCDEF" } }),
+            );
+        };
+
+        let conn = db();
+        seed(&conn);
+        let ImportOwn::Imported { .. } = import_own(
+            &conn,
+            "acct",
+            &["alice@example.com".into()],
+            &data,
+            None,
+            None,
+        )
+        .unwrap() else {
+            panic!("imported");
+        };
+        assert!(!body_cached(&conn, 2), "signed with the imported key");
+        assert!(body_cached(&conn, 3), "someone else's signature");
+
+        let backup = backup_collect(&conn, true).unwrap();
+        let fresh = db();
+        seed(&fresh);
+        backup_apply(&fresh, &backup).unwrap();
+        assert!(!body_cached(&fresh, 1), "undecryptable until the restore");
+        assert!(!body_cached(&fresh, 2), "signed with a restored key");
+        assert!(body_cached(&fresh, 3));
+    }
+
+    // A renewed copy of a stored key merged in (a lookup, an import, Autocrypt)
+    // can verify a signature the old copy couldn't: such messages are read again.
+    #[test]
+    fn a_stored_key_updated_by_a_merge_has_its_unverified_messages_read_again() {
+        let conn = db();
+        let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
+        let fpr = fingerprint_hex(&carol.primary_key);
+        import_peers(&conn, &fixture("carol-public.asc"), &[fpr.clone()]).unwrap();
+        cache_message(
+            &conn,
+            1,
+            serde_json::json!({
+                "crypto": { "signed": true, "signer": null, "issuer": fpr, "problem": "key_expired" }
+            }),
+        );
+        // Not picked: only merged into the stored copy (it carries something new).
+        import_peers(&conn, &fixture("carol-revoked-public.asc"), &[]).unwrap();
+        assert!(!body_cached(&conn, 1));
+    }
+
+    // A recipient's newest verified key expired while an older verified one is
+    // still good: encrypt to that one. And say why when none can be used.
+    #[test]
+    fn the_encryption_key_is_any_usable_verified_key_with_the_right_reason() {
+        use crate::openpgp::keyring::{Keyring, PeerKey};
+        let peer = |file: &str, verified: bool, last_seen: i64| {
+            let key = keys::parse_public(&fixture(file)).unwrap();
+            PeerKey {
+                addr: "bob@example.com".into(),
+                fingerprint: fingerprint_hex(&key.primary_key),
+                key,
+                source: Source::Imported,
+                verified,
+                last_seen,
+            }
+        };
+        let ring = |peers: Vec<PeerKey>| Keyring {
+            peers,
+            ..Default::default()
+        };
+        let both = ring(vec![
+            peer("expired-public.asc", true, 2),
+            peer("carol-public.asc", true, 1),
+        ]);
+        let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
+        assert_eq!(
+            both.encryption_key_for("bob@example.com")
+                .unwrap()
+                .fingerprint,
+            fingerprint_hex(&carol.primary_key)
+        );
+        let only_expired = ring(vec![peer("expired-public.asc", true, 1)]);
+        assert_eq!(
+            only_expired.encryption_key_for("bob@example.com").err(),
+            Some(NoKeyReason::Unusable)
+        );
+        let new_unverified = ring(vec![
+            peer("carol-public.asc", false, 2),
+            peer("expired-public.asc", true, 1),
+        ]);
+        assert_eq!(
+            new_unverified.encryption_key_for("bob@example.com").err(),
+            Some(NoKeyReason::NewKeyUnverified)
+        );
+    }
+
+    // A message signed by a key we didn't have stays unverified until it is
+    // checked again: importing that key drops the cached body (the signed bytes
+    // aren't kept) so the next read fetches and verifies it. Messages signed by
+    // someone else, or already verified, keep theirs.
+    #[test]
+    fn adding_a_signers_key_has_its_unverified_messages_checked_again() {
+        let conn = crate::store::open_at(":memory:").unwrap();
+        let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
+        let fpr = fingerprint_hex(&carol.primary_key);
+        let key_id = fpr[fpr.len() - 16..].to_string();
+        let insert = |uid: u32, crypto: serde_json::Value| {
+            conn.execute(
+                "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, body, json)
+                 VALUES ('a', 'INBOX', ?1, ?1, 's', 'n', 'carol@example.com', 0, 'body', ?2)",
+                params![uid, serde_json::json!({ "crypto": crypto }).to_string()],
+            )
+            .unwrap();
+        };
+        insert(
+            1,
+            serde_json::json!({ "signed": true, "signer": null, "issuer": key_id }),
+        );
+        insert(
+            2,
+            serde_json::json!({ "signed": true, "signer": null, "issuer": fpr }),
+        );
+        insert(
+            3,
+            serde_json::json!({ "signed": true, "signer": null, "issuer": "0123456789ABCDEF" }),
+        );
+        insert(4, serde_json::json!({ "signed": true, "signer": fpr }));
+        let cached = |uid: u32| -> bool {
+            conn.query_row(
+                "SELECT body IS NOT NULL AND json_extract(json, '$.crypto') IS NOT NULL
+                 FROM messages WHERE uid = ?1",
+                [uid],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+
+        import_peers(&conn, &fixture("carol-public.asc"), &[fpr.clone()]).unwrap();
+
+        assert!(!cached(1), "issuer named by key ID");
+        assert!(!cached(2), "issuer named by fingerprint");
+        assert!(cached(3), "someone else's signature");
+        assert!(cached(4), "already verified");
+    }
+
+    // A draft saved encrypted is found by its bare Message-ID (how draft ids
+    // travel), so replacing it keeps it encrypted.
+    #[test]
+    fn an_encrypted_draft_is_found_by_its_bare_id() {
+        let conn = crate::store::open_at(":memory:").unwrap();
+        cache_message(
+            &conn,
+            1,
+            serde_json::json!({ "message_id": "draft-1@example.com", "crypto": { "encrypted": true } }),
+        );
+        cache_message(
+            &conn,
+            2,
+            serde_json::json!({ "message_id": "draft-2@example.com" }),
+        );
+        assert!(answers_encrypted(&conn, "a", "draft-1@example.com").unwrap());
+        assert!(!answers_encrypted(&conn, "a", "draft-2@example.com").unwrap());
+    }
+
+    // Dropping an encrypted message's cached status for a new signature check
+    // must not make it look plain until it is fetched again: a reply sent in
+    // between (an MCP reply, say) would go out unencrypted.
+    #[test]
+    fn a_message_checked_again_still_answers_encrypted() {
+        let conn = crate::store::open_at(":memory:").unwrap();
+        let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
+        let fpr = fingerprint_hex(&carol.primary_key);
+        let json = serde_json::json!({
+            "message_id": "secret@example.com",
+            "crypto": { "encrypted": true, "signed": true, "signer": null, "issuer": fpr },
+        });
+        conn.execute(
+            "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, body, json)
+             VALUES ('a', 'INBOX', 1, 1, 's', 'n', 'carol@example.com', 0, 'body', ?1)",
+            [json.to_string()],
+        )
+        .unwrap();
+        let protection = |conn: &Connection| {
+            reply_protection(conn, "a", "<secret@example.com>", false, false).unwrap()
+        };
+        assert_eq!(protection(&conn), (true, true));
+
+        import_peers(&conn, &fixture("carol-public.asc"), &[fpr.clone()]).unwrap();
+
+        let body_dropped: bool = conn
+            .query_row("SELECT body IS NULL FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert!(body_dropped, "it is checked again");
+        assert_eq!(protection(&conn), (true, true));
+    }
+
+    // "Use my existing key" with a renewed export of the stored key takes the
+    // renewal; importing the older export afterwards doesn't undo it.
+    #[test]
+    fn reimporting_an_own_key_keeps_the_newest_copy() {
+        let conn = db();
+        let stored_blob = |conn: &Connection| -> Vec<u8> {
+            conn.query_row("SELECT secret_key FROM openpgp_own_keys", [], |r| r.get(0))
+                .unwrap()
+        };
+        let key = keys::generate(&["me@example.org".into()]).unwrap();
+        let renewed = keys::tests::self_certified_at(&key, keys::now() + 100);
+        store_default_key(&conn, "acct", &key).unwrap();
+        store_default_key(&conn, "acct", &renewed).unwrap();
+        assert_eq!(
+            stored_blob(&conn),
+            keys::binary_secret(&renewed).unwrap().as_slice()
+        );
+        store_default_key(&conn, "acct", &key).unwrap();
+        assert_eq!(
+            stored_blob(&conn),
+            keys::binary_secret(&renewed).unwrap().as_slice()
+        );
+    }
+
     #[test]
     fn importing_a_revoked_copy_updates_the_stored_key() {
         let conn = db();
@@ -1746,9 +2147,11 @@ mod tests {
         insert("INBOX", 2, "...", Some("decrypted already"));
         insert("INBOX", 4, "Lunch", None);
         insert("Archive", 5, "...", None);
+        insert("INBOX", 6, "Re: [...]", None);
+        insert("INBOX", 7, "Waiting...", None);
         assert_eq!(
             undecrypted_placeholder_uids(&conn, "a", "INBOX").unwrap(),
-            vec![1, 3]
+            vec![1, 3, 6]
         );
         assert!(
             undecrypted_placeholder_uids(&conn, "b", "INBOX")

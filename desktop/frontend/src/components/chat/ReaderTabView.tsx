@@ -17,6 +17,7 @@ import { HtmlMessageView } from './HtmlMessageView'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
+import { CryptoStrip } from '../crypto/CryptoStrip'
 import { FrostedBand } from './FrostedBand'
 import { MessageContextMenu } from './MessageContextMenu'
 import {
@@ -158,6 +159,17 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
                 </>
               }
             />
+            {/* Decryption errors, key changes and the encryption offer, as in
+                the conversation: a reader tab shows the same message. */}
+            <div className="mt-3 empty:hidden">
+              <CryptoStrip
+                crypto={tab.message?.crypto}
+                accountId={tab.accountId ?? ''}
+                accountAddress={account?.email ?? ''}
+                senderName={tab.message?.from_name ?? ''}
+                senderAddress={sender}
+              />
+            </div>
           </div>
         }
         // Room for the body's end to scroll clear of the floating actions.

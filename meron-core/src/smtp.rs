@@ -139,7 +139,7 @@ pub struct AttachmentInput {
 /// Split composer recipients, including spreadsheet rows/columns and Outlook lists.
 /// Commas inside a double-quoted display name (`"Doe, Jane" <j@x>`) or inside
 /// the `<...>` address brackets don't split, so quoted contact names survive.
-fn parse_addrs(raw: &str) -> Vec<String> {
+pub(crate) fn parse_addrs(raw: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
@@ -521,24 +521,46 @@ pub async fn send_encrypted(
     }
     let sent_copy = wrap(&build(true)?, &[&keys.own], &keys.signer, &keys.autocrypt)?;
 
-    // One session carries every copy. Once one has gone out, a later failure
-    // is reported per recipient rather than failing the send: a retry would
-    // deliver the others twice, and the Sent copy would be skipped.
+    // One session carries every copy. Until one has gone out, a failure fails
+    // the send: nothing was delivered, so a retry is clean (and a refused
+    // To/Cc copy, which goes first, never turns into a Bcc-only send). After
+    // that, a refused copy is reported per recipient rather than failing the
+    // send: a retry would deliver the others twice, and the Sent copy would be
+    // skipped.
+    let addrs = |to: &[String], cc: &[String], bcc: &[String]| -> Vec<String> {
+        to.iter()
+            .chain(cc)
+            .chain(bcc)
+            .map(|entry| bare_addr(entry))
+            .collect()
+    };
     let mut session: Option<Submission> = None;
     let mut undelivered = Vec::new();
     let mut delivered_any = false;
-    let mut first_error = None;
-    for (to, cc, bcc, raw) in &copies {
-        let result = async {
-            if session.is_none() {
-                session = Some(open_submission(creds).await?);
+    for (at, (to, cc, bcc, raw)) in copies.iter().enumerate() {
+        if session.is_none() {
+            match open_submission(creds).await {
+                Ok(transport) => session = Some(transport),
+                Err(err) if !delivered_any => return Err(err),
+                Err(err) => {
+                    // The server can't be reached or won't let us in: no later
+                    // copy would fare better, and each try would log in again.
+                    crate::mlog!(
+                        crate::log::Level::Warn,
+                        "mail.send",
+                        "encrypted copies not delivered, no SMTP session: {err:#}"
+                    );
+                    for (to, cc, bcc, _) in &copies[at..] {
+                        undelivered.extend(addrs(to, cc, bcc));
+                    }
+                    break;
+                }
             }
-            let transport = session.as_mut().expect("session opened above");
-            deliver(transport, from, to, cc, bcc, raw).await
         }
-        .await;
-        match result {
+        let transport = session.as_mut().expect("session opened above");
+        match deliver(transport, from, to, cc, bcc, raw).await {
             Ok(()) => delivered_any = true,
+            Err(err) if !delivered_any => return Err(err),
             Err(err) => {
                 // The session is mid-transaction or gone: start a new one for
                 // the next copy.
@@ -548,16 +570,12 @@ pub async fn send_encrypted(
                     "mail.send",
                     "encrypted copy not delivered: {err:#}"
                 );
-                undelivered.extend(to.iter().chain(cc).chain(bcc).map(|entry| bare_addr(entry)));
-                first_error.get_or_insert(err);
+                undelivered.extend(addrs(to, cc, bcc));
             }
         }
     }
     if let Some(transport) = session {
         close_submission(transport).await;
-    }
-    if let Some(err) = first_error.filter(|_| !delivered_any) {
-        return Err(err);
     }
     Ok(EncryptedSend {
         raw: sent_copy,
@@ -843,7 +861,7 @@ fn envelope_recipients(to: &[String], cc: &[String], bcc: &[String]) -> Vec<Stri
 /// Extract the bare email address from a "Name <addr>" header entry, or return
 /// the input when it's already a bare address. SMTP `RCPT TO` rejects the
 /// display-name form, so all envelope addresses pass through this first.
-fn bare_addr(entry: &str) -> String {
+pub(crate) fn bare_addr(entry: &str) -> String {
     let trimmed = entry.trim();
     if let Some(start) = trimmed.find('<')
         && let Some(end) = trimmed[start + 1..].find('>')
@@ -1361,6 +1379,19 @@ mod encrypted_send_tests {
                 vec!["c@example.org".to_string()],
             ]
         );
+    }
+
+    // The To/Cc copy goes first: when it is refused nothing has gone out, so
+    // the send fails (a retry is clean) instead of reaching only the Bcc.
+    #[tokio::test]
+    async fn a_refused_to_copy_fails_before_any_bcc_goes_out() {
+        let (port, seen) = fake_smtp("to@example.org").await;
+        assert!(
+            send(port, "to@example.org", &["b@example.org"])
+                .await
+                .is_err()
+        );
+        assert!(seen.lock().unwrap().delivered.is_empty());
     }
 
     #[tokio::test]

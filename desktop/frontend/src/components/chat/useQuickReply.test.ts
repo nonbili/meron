@@ -126,6 +126,20 @@ describe('useQuickReply draft ownership', () => {
     expect(textarea.style.height).toBe('40px')
   })
 
+  // Switching encryption on after the reply was saved plain saves it again, so
+  // the server's plain copy is replaced by an encrypted one.
+  it('saves the reply again when encryption is switched on', async () => {
+    renderHook(() => useQuickReply())
+    await act(async () => {
+      await Promise.resolve()
+      compose$.quickReplyEncrypt.set({ threadId: 't-1', on: true })
+      await new Promise((resolve) => setTimeout(resolve, 1_300))
+    })
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(saves.length).toBeGreaterThan(0)
+    compose$.quickReplyEncrypt.set(null)
+  })
+
   it('preserves a draft hydrated before mount and autosaves the next edit', async () => {
     renderHook(() => useQuickReply())
 

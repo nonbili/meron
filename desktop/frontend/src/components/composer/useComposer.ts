@@ -454,6 +454,9 @@ export function useComposer(tabId: string) {
     draft?.html,
     draft?.quote,
     draft?.attachments,
+    // Switched on after a plain autosave: the copy on the server is replaced
+    // by an encrypted one rather than left there in the clear.
+    draft?.encrypt,
     sending,
     editor,
     session,
@@ -486,7 +489,8 @@ export function useComposer(tabId: string) {
   // it like any other text; from then on it is part of the body.
   const expandQuote = () => {
     const quote = draft?.quote
-    if (!quote) return
+    // A decrypted original's quote is not offered while encryption is off.
+    if (!quote || (draft.sensitiveSource && !draft.encrypt)) return
     // A decrypted original's quote now sits in the body: from here on the
     // draft can only go out (and be saved) encrypted.
     const decrypted = draft.sensitiveSource ? { decryptedInBody: true } : {}
