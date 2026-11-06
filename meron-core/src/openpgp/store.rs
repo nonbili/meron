@@ -9,6 +9,7 @@
 use anyhow::{Context as _, Result, bail};
 use rusqlite::{Connection, OptionalExtension as _, params};
 use serde::Serialize;
+use std::collections::HashMap;
 
 use super::autocrypt::Announced;
 use super::keyring::{self, Keyring, PeerKey, Source};
@@ -938,34 +939,43 @@ pub fn normalize_fingerprint(s: &str) -> String {
         .to_ascii_uppercase()
 }
 
-/// Whether a cached message was encrypted (for the lock on its list card),
-/// with the trust its signature earns now. `None` when not encrypted.
-pub fn card_lock(
+/// The lock for each encrypted message among `uids` in one folder, with the
+/// trust its signature earns under `ring`: one query for a whole list page.
+/// Plain mail, and uids the cache lacks, have no entry. Trust is judged
+/// against the stored sender, not the card's: a Sent card names the recipient.
+pub fn card_locks(
     conn: &Connection,
+    ring: &Keyring,
     account: &str,
     folder: &str,
-    uid: u32,
-) -> Option<keyring::Trust> {
-    let json: String = conn
-        .query_row(
-            "SELECT json_extract(json, '$.crypto') FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
-            params![account, folder, uid],
-            |r| r.get::<_, Option<String>>(0),
-        )
-        .ok()
-        .flatten()?;
-    let status: super::mime::CryptoStatus = serde_json::from_str(&json).ok()?;
-    if !status.encrypted {
-        return None;
+    uids: &[u32],
+) -> Result<HashMap<u32, keyring::Trust>> {
+    let mut locks = HashMap::new();
+    if uids.is_empty() {
+        return Ok(locks);
     }
-    let from: String = conn
-        .query_row(
-            "SELECT from_addr FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
-            params![account, folder, uid],
-            |r| r.get(0),
-        )
-        .unwrap_or_default();
-    Some(status.trust(&keyring::current(), &from))
+    let mut stmt = conn.prepare_cached(
+        "SELECT uid, from_addr, json_extract(json, '$.crypto') FROM messages
+         WHERE account = ?1 AND folder = ?2 AND uid IN (SELECT value FROM json_each(?3))
+           AND json_extract(json, '$.crypto.encrypted') = 1",
+    )?;
+    let rows = stmt.query_map(
+        params![account, folder, serde_json::to_string(uids)?],
+        |r| {
+            Ok((
+                r.get::<_, u32>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        },
+    )?;
+    for row in rows {
+        let (uid, from, json) = row?;
+        if let Ok(status) = serde_json::from_str::<super::mime::CryptoStatus>(&json) {
+            locks.insert(uid, status.trust(ring, &from));
+        }
+    }
+    Ok(locks)
 }
 
 // Offer ---------------------------------------------------------------------
@@ -1603,6 +1613,33 @@ mod tests {
             .unwrap();
         assert_eq!(other.as_deref(), Some("other"));
         assert_eq!(reparse_key_attachments_once(&conn).unwrap(), 0, "only once");
+    }
+
+    // One query answers a whole page: plain mail, encrypted mail and uids the
+    // cache lacks, with trust judged against the stored sender (a Sent card's
+    // header names the recipient instead).
+    #[test]
+    fn card_locks_answers_a_page_in_one_pass() {
+        let conn = crate::store::open_at(":memory:").unwrap();
+        let insert = |uid: u32, folder: &str, json: &str| {
+            conn.execute(
+                "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, json)
+                 VALUES ('a', ?2, ?1, ?1, 's', 'n', 'x@y.z', 0, ?3)",
+                params![uid, folder, json],
+            )
+            .unwrap();
+        };
+        insert(1, "INBOX", r#"{"crypto":{"encrypted":true}}"#);
+        insert(2, "INBOX", "{}");
+        insert(3, "INBOX", r#"{"crypto":{"encrypted":false,"signed":true}}"#);
+        insert(4, "Sent", r#"{"crypto":{"encrypted":true}}"#);
+        let ring = keyring::Keyring::default();
+        let locks = card_locks(&conn, &ring, "a", "INBOX", &[1, 2, 3, 4, 9]).unwrap();
+        assert_eq!(
+            locks.into_iter().collect::<Vec<_>>(),
+            vec![(1, keyring::Trust::Unconfirmed)]
+        );
+        assert!(card_locks(&conn, &ring, "a", "INBOX", &[]).unwrap().is_empty());
     }
 
     #[test]

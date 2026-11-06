@@ -215,11 +215,16 @@ fn thread_cards_json_keyed(
     // whichever folder ran last answer for both.
     let mut counts: HashMap<(String, String), u32> = HashMap::new();
     let mut keys_by_folder: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    let mut uids_by_folder: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
     for card in &cards {
         keys_by_folder
             .entry(card.header.folder.as_str())
             .or_default()
             .push(card.thread_key.clone());
+        uids_by_folder
+            .entry(card.header.folder.as_str())
+            .or_default()
+            .push(card.header.uid);
     }
     // Same slice problem for the card's title: an unread view can hold a reply
     // while the seen message that opened the thread sits just outside the page,
@@ -233,6 +238,16 @@ fn thread_cards_json_keyed(
     let mut files: HashMap<(String, String), Vec<store::CardFile>> = HashMap::new();
     // Same for its tags, which any message of the thread may carry.
     let mut tags: HashMap<(String, String), Vec<String>> = HashMap::new();
+    // The lock on an encrypted card, coloured by its signature's trust.
+    let ring = crate::openpgp::keyring::current();
+    let mut locks: HashMap<(String, u32), crate::openpgp::keyring::Trust> = HashMap::new();
+    for (folder, uids) in uids_by_folder {
+        locks.extend(
+            crate::openpgp::store::card_locks(conn, &ring, account_id, folder, &uids)?
+                .into_iter()
+                .map(|(uid, trust)| ((folder.to_string(), uid), trust)),
+        );
+    }
     for (folder, keys) in keys_by_folder {
         tags.extend(
             store::card_tags(conn, account_id, folder, &keys)?
@@ -349,7 +364,7 @@ fn thread_cards_json_keyed(
                 "files": files,
                 // End-to-end encrypted newest message: the list's lock, coloured
                 // by the trust of its signature.
-                "encrypted": crate::openpgp::store::card_lock(conn, account_id, folder, card.header.uid),
+                "encrypted": locks.get(&(folder.to_string(), card.header.uid)),
                 "recipient_overflow": card.header.recipient_overflow,
                 "senders": senders,
                 "senders_truncated": senders_truncated,
@@ -716,6 +731,56 @@ mod tests {
 
         let both = starred_thread_cards(&conn, 2).unwrap();
         assert_eq!(both.len(), 2, "{both:?}");
+    }
+
+    // The list shows a lock on a card whose newest message was encrypted, and
+    // none on plain mail.
+    #[test]
+    fn an_encrypted_card_carries_its_lock() {
+        let conn = Connection::open_in_memory().unwrap();
+        store::run_migrations(&conn).unwrap();
+        store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+        let message = |uid: u32, key: &str| MessageHeader {
+            uid,
+            subject: format!("Note {uid}"),
+            date: 100 + uid as i64,
+            thread_key: key.to_string(),
+            message_id: format!("{uid}@example.com"),
+            ..Default::default()
+        };
+        store::upsert_messages(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            &[message(1, "mid:1@example.com"), message(2, "mid:2@example.com")],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE messages SET json = json_set(json, '$.crypto', json('{\"encrypted\":true}')) WHERE uid = 1",
+            [],
+        )
+        .unwrap();
+
+        let (page, _) = store::get_recent_page(
+            &conn,
+            "me@example.com",
+            "INBOX",
+            50,
+            None,
+            store::RecentFilter::default(),
+        )
+        .unwrap();
+        let cards =
+            thread_cards_json(&conn, "me@example.com", "INBOX", page, &HashSet::new()).unwrap();
+        let lock = |subject: &str| {
+            cards
+                .iter()
+                .find(|card| card["subject"] == subject)
+                .unwrap()["encrypted"]
+                .clone()
+        };
+        assert_eq!(lock("Note 1"), "unconfirmed", "{cards:?}");
+        assert_eq!(lock("Note 2"), Value::Null);
     }
 
     // A sender can deliver one message twice to the same folder (GitHub sends a
