@@ -1194,7 +1194,9 @@ mod encrypted_send_tests {
         let log = seen.clone();
         tokio::spawn(async move {
             loop {
-                let Ok((socket, _)) = listener.accept().await else { return };
+                let Ok((socket, _)) = listener.accept().await else {
+                    return;
+                };
                 log.lock().unwrap().connections += 1;
                 let log = log.clone();
                 tokio::spawn(async move {
@@ -1234,7 +1236,10 @@ mod encrypted_send_tests {
                                 }
                             }
                             in_mail = false;
-                            log.lock().unwrap().delivered.push(std::mem::take(&mut rcpts));
+                            log.lock()
+                                .unwrap()
+                                .delivered
+                                .push(std::mem::take(&mut rcpts));
                             b"250 queued\r\n"
                         } else if upper == "RSET" {
                             in_mail = false;
@@ -1284,16 +1289,15 @@ mod encrypted_send_tests {
 
     fn send_keys(bcc: &[&str]) -> SendKeys {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
-        let peer = |addr: &str| {
-            keys::generate(&[addr.to_string()])
-                .unwrap()
-                .to_public_key()
-        };
+        let peer = |addr: &str| keys::generate(&[addr.to_string()]).unwrap().to_public_key();
         SendKeys {
             own: me.to_public_key(),
             signer: me,
             to_cc: vec![peer("to@example.org")],
-            bcc: bcc.iter().map(|addr| (addr.to_string(), peer(addr))).collect(),
+            bcc: bcc
+                .iter()
+                .map(|addr| (addr.to_string(), peer(addr)))
+                .collect(),
             autocrypt: "addr=me@example.org; keydata=AA==".to_string(),
         }
     }

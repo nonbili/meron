@@ -752,7 +752,10 @@ mod tests {
             &conn,
             "me@example.com",
             "INBOX",
-            &[message(1, "mid:1@example.com"), message(2, "mid:2@example.com")],
+            &[
+                message(1, "mid:1@example.com"),
+                message(2, "mid:2@example.com"),
+            ],
         )
         .unwrap();
         conn.execute(

@@ -1631,7 +1631,11 @@ mod tests {
         };
         insert(1, "INBOX", r#"{"crypto":{"encrypted":true}}"#);
         insert(2, "INBOX", "{}");
-        insert(3, "INBOX", r#"{"crypto":{"encrypted":false,"signed":true}}"#);
+        insert(
+            3,
+            "INBOX",
+            r#"{"crypto":{"encrypted":false,"signed":true}}"#,
+        );
         insert(4, "Sent", r#"{"crypto":{"encrypted":true}}"#);
         let ring = keyring::Keyring::default();
         let locks = card_locks(&conn, &ring, "a", "INBOX", &[1, 2, 3, 4, 9]).unwrap();
@@ -1639,7 +1643,11 @@ mod tests {
             locks.into_iter().collect::<Vec<_>>(),
             vec![(1, keyring::Trust::Unconfirmed)]
         );
-        assert!(card_locks(&conn, &ring, "a", "INBOX", &[]).unwrap().is_empty());
+        assert!(
+            card_locks(&conn, &ring, "a", "INBOX", &[])
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
