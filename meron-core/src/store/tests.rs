@@ -5920,36 +5920,6 @@ fn saving_a_decrypted_body_repairs_placeholder_replies_in_its_thread() {
     assert_eq!(subject(2), "Re: Testing This");
 }
 
-// Rows cached before the repair existed are fixed at startup, in every account.
-#[test]
-fn placeholder_reply_subjects_are_repaired_in_every_account() {
-    let conn = test_conn();
-    for account in ["one", "two"] {
-        for (uid, subject) in [(1u32, "Topic"), (2, "Re: [...]")] {
-            conn.execute(
-                "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
-                                      date, seen, thread_key, body, json)
-                 VALUES(?1, 'INBOX', ?2, ?3, ?4, 'Aki', 'aki@example.com', ?5, 1, 'root@example.com', 'b',
-                        '{\"crypto\":{\"encrypted\":true}}')",
-                params![account, uid.to_string(), uid, subject, 100 * uid as i64],
-            )
-            .unwrap();
-        }
-    }
-    assert_eq!(
-        repair_placeholder_reply_subjects_everywhere(&conn).unwrap(),
-        2
-    );
-    let repaired: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM messages WHERE subject = 'Re: Topic'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(repaired, 2);
-}
-
 // After an encrypted send, the engine caches its own Sent copy's body at once;
 // it finds the row the tail refresh just stored by Message-ID.
 #[test]

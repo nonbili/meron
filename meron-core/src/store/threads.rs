@@ -897,22 +897,6 @@ pub fn repair_placeholder_reply_subjects(
     Ok(changed)
 }
 
-/// [`repair_placeholder_reply_subjects`] for every account.
-pub fn repair_placeholder_reply_subjects_everywhere(conn: &Connection) -> Result<usize> {
-    let accounts: Vec<String> = conn
-        .prepare(
-            "SELECT DISTINCT account FROM messages
-             WHERE json_extract(json, '$.crypto.encrypted') = 1",
-        )?
-        .query_map([], |r| r.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    let mut changed = 0;
-    for account in accounts {
-        changed += repair_placeholder_reply_subjects(conn, &account, None)?;
-    }
-    Ok(changed)
-}
-
 /// Whether `subject` is only an encrypted message's protected-headers
 /// placeholder (`[...]`, Thunderbird `...`), reply prefixes aside: a message
 /// not yet decrypted. An empty subject is not one.

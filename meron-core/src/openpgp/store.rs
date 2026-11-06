@@ -69,9 +69,9 @@ pub fn init_main(conn: &Connection) -> Result<()> {
     conn.execute_batch(DDL)?;
     reparse_key_attachments_once(conn)?;
     refetch_encrypted_cached_without_openpgp_once(conn)?;
-    // Cheap and idempotent, so every start: rows cached before it existed, and
-    // any a failed save left behind.
-    crate::store::repair_placeholder_reply_subjects_everywhere(conn)?;
+    // No sweep over the messages here: placeholder reply subjects are repaired
+    // per thread when a decrypted message is saved (`save_cached_message`), so
+    // opening the store reads no rows, encryption or not.
     reload(conn)
 }
 
