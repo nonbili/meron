@@ -371,6 +371,7 @@ export function useComposer(tabId: string) {
           draftMessageId,
           attachments,
           encrypt: current.encrypt,
+          decryptedInBody: current.decryptedInBody,
         })
         // A tab closed mid-save lands here too (no latest draft): nothing will
         // adopt the id, so a freshly allocated copy has to go now.
@@ -485,11 +486,14 @@ export function useComposer(tabId: string) {
   const expandQuote = () => {
     const quote = draft?.quote
     if (!quote) return
+    // A decrypted original's quote now sits in the body: from here on the
+    // draft can only go out (and be saved) encrypted.
+    const decrypted = draft.sensitiveSource ? { decryptedInBody: true } : {}
     if (draft.rich && editor) {
       editor.chain().insertContentAt(editor.state.doc.content.size, `<p></p>${quote.html}`).run()
-      update({ html: editor.getHTML(), quote: undefined })
+      update({ html: editor.getHTML(), quote: undefined, ...decrypted })
     } else {
-      update({ text: composedContent(draft), quote: undefined })
+      update({ text: composedContent(draft), quote: undefined, ...decrypted })
     }
   }
 
@@ -756,6 +760,7 @@ export function useComposer(tabId: string) {
         references: current.references,
         attachments,
         encrypt: current.encrypt,
+        decryptedInBody: current.decryptedInBody,
       })
       // When this tab is a reply to the open conversation, drop the sent message
       // into the thread immediately so it shows without waiting for the next sync.
@@ -772,7 +777,7 @@ export function useComposer(tabId: string) {
           content,
           references: current.references,
           attachments,
-          encrypt: current.encrypt,
+          encrypt: current.decryptedInBody || current.encrypt,
         })
       }
       // The message is out, so the tab closes now rather than after the draft

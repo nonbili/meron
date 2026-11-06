@@ -64,14 +64,17 @@ export function encryptionBlocksSend(on: boolean, keys: RecipientKeys | null): b
 /**
  * The composer's end-to-end encryption toggle, left of Send (a toggle,
  * sticky on replies). Shown only when the From account has encryption on.
- * Never downgrades silently: with a recipient who has no key it stays on and
- * Send is blocked until the user removes them or turns encryption off.
+ * Mail that carries text from an encrypted message (a reply, a forward, an
+ * unfolded quote) never downgrades silently: with a recipient who has no key it
+ * stays on and Send is blocked; the lock looks the key up first, and a reply
+ * can then be switched off on purpose (with a confirmation).
  */
 export function EncryptToggle({
   keys,
   on,
   onChange,
   sensitive,
+  bodyIsDecrypted = false,
   quoteWithheld = false,
   hasRecipients = true,
   size = 'sm',
@@ -83,6 +86,8 @@ export function EncryptToggle({
   hasRecipients?: boolean
   /** Carries text from an encrypted message (a reply's quote, a forward). */
   sensitive?: 'reply' | 'forward'
+  /** The body itself holds decrypted text (an unfolded quote): locked on. */
+  bodyIsDecrypted?: boolean
   /** The quick reply leaves its original unquoted (`replyQuoteWithheld`); the
    * box shows no quote either way, so the lock's tooltip says why. */
   quoteWithheld?: boolean
@@ -93,14 +98,15 @@ export function EncryptToggle({
   // A lookup opened from this lock: once every recipient has a key (the user
   // picked "Use this key"), encryption switches on by itself.
   const [lookingUp, setLookingUp] = useState(false)
-  // Encryption is only on when every recipient has a key: a recipient
-  // without one switches it off, so the lock shows open and the mail can go out
-  // unencrypted (a reply then loses its quote of the encrypted original). A
-  // forward of encrypted mail is the exception: its body is the decrypted text,
-  // so it stays encrypted and Send waits for the keys.
+  // A new message is only encrypted when every recipient has a key: a
+  // recipient without one switches it off, so the lock shows open and the mail
+  // can go out unencrypted. Mail that carries text from an encrypted message
+  // is the exception: switching that off by itself would send the reply plain
+  // (and skip the core's rule that replies to encrypted mail stay encrypted),
+  // so it stays on and Send waits for the keys.
   const someoneLacksKey = !!keys?.enabled && !keys.own_key_unusable && keys.missing.length > 0
   useEffect(() => {
-    if (on && someoneLacksKey && sensitive !== 'forward') onChange(false)
+    if (on && someoneLacksKey && !sensitive) onChange(false)
   }, [on, someoneLacksKey, sensitive, onChange])
   // Encrypt by default when every recipient has a key (preference, on by
   // default), and after a lookup this lock opened. A user who switched it off
@@ -132,29 +138,37 @@ export function EncryptToggle({
   }
 
   const unavailable = keys.own_key_unusable || keys.missing.length > 0
-  // Missing keys can be looked up from here, on this click only.
-  const canLookUp = !on && !keys.own_key_unusable && keys.missing.length > 0
+  // Missing keys can be looked up from here, on this click only. A sensitive
+  // message that stays on offers the lookup first; once it found nothing, the
+  // next click is the deliberate "turn off" (a reply) or nothing (locked).
+  const canLookUp = !keys.own_key_unusable && keys.missing.length > 0 && (!on || (!!sensitive && !lookingUp))
   const lookUp = () => {
     setLookingUp(true)
     crypto$.lookup.set({ addrs: keys.missing.map((m) => m.addr) })
   }
-  const locked = on && sensitive === 'forward'
+  const locked = on && (sensitive === 'forward' || bodyIsDecrypted)
   let title = on ? t('crypto.toggle.on') : t('crypto.toggle.off')
   if (keys.own_key_unusable) title = t('crypto.toggle.ownKeyUnusable')
-  else if (unavailable && on) title = t('crypto.toggle.blocked', { addresses: missing })
+  else if (unavailable && on)
+    title = canLookUp
+      ? t('crypto.toggle.blockedLookUp', { addresses: missing })
+      : locked
+        ? t('crypto.toggle.blockedLocked', { addresses: missing })
+        : t('crypto.toggle.blocked', { addresses: missing })
   else if (unavailable)
     title = `${t('crypto.toggle.noKey', { addresses: missing })} ${t('crypto.toggle.clickToLookUp')}`
-  else if (locked) title = t('crypto.toggle.forwardLocked')
+  else if (locked)
+    title = sensitive === 'forward' ? t('crypto.toggle.forwardLocked') : t('crypto.toggle.decryptedLocked')
   const changed = on && !unavailable ? (keys.changed ?? []) : []
   if (changed.length > 0) title = t('crypto.toggle.keyChanged', { addresses: changed.map((c) => c.addr).join(', ') })
   if (quoteWithheld) title = `${/[.!?]$/.test(title) ? title : `${title}.`} ${t('crypto.quoteWithheld')}`
 
   const click = async () => {
-    if (locked) return
     if (canLookUp) {
       lookUp()
       return
     }
+    if (locked) return
     if (!on) {
       if (!unavailable) {
         setUserOff(false)

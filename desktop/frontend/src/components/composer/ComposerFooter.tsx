@@ -64,6 +64,8 @@ export function ComposerFooter({
     keys: RecipientKeys | null
     on: boolean
     sensitive?: 'reply' | 'forward'
+    /** The body holds decrypted text (an unfolded quote): locked on. */
+    bodyIsDecrypted?: boolean
     hasRecipients?: boolean
     onChange: (on: boolean) => void
   }
@@ -107,6 +109,7 @@ export function ComposerFooter({
             keys={encryption.keys}
             on={encryption.on}
             sensitive={encryption.sensitive}
+            bodyIsDecrypted={encryption.bodyIsDecrypted}
             hasRecipients={encryption.hasRecipients}
             onChange={encryption.onChange}
           />

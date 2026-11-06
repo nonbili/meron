@@ -307,6 +307,9 @@ export type ComposeDraft = {
    * forward's body. A reply's quote is dropped when encryption is turned off;
    * a forward can't be sent unencrypted at all. */
   sensitiveSource?: 'reply' | 'forward'
+  /** The body itself holds decrypted text: a sensitive reply's quote was
+   * unfolded into it. Such a draft is only ever sent or saved encrypted. */
+  decryptedInBody?: boolean
   /** The reply has no quote because its original is decrypted mail its sender
    * isn't shown to have written (`replyQuoteWithheld`): the composer says why. */
   quoteWithheld?: boolean

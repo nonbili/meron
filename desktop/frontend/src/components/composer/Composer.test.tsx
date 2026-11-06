@@ -1131,6 +1131,35 @@ describe('Composer', () => {
     expect(body.selectionStart).toBe(0)
   })
 
+  it('unfolding the quote of decrypted mail locks encryption on', async () => {
+    accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
+    const base = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>
+      command === 'pgp.keys.forRecipients'
+        ? { enabled: true, own_key_unusable: false, missing: [] }
+        : base(command, payload)
+    const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> The plan' }
+    const tabId = openComposeTab({
+      to: 'them@example.com',
+      subject: 'Re: x',
+      rich: false,
+      text: 'Sounds good',
+      quote,
+      sensitiveSource: 'reply',
+      encrypt: true,
+    })!
+    const view = render(<Composer tabId={tabId} />)
+    await act(async () => {
+      view.getByTitle('Show quoted text').click()
+    })
+    expect(draftOf(tabId)?.decryptedInBody).toBe(true)
+    await waitFor(() =>
+      expect(view.getByRole('switch').getAttribute('title')).toBe(
+        'This message contains decrypted text, so it can only be sent encrypted.',
+      ),
+    )
+  })
+
   it('unfolds a folded quote into the body, or drops it', async () => {
     accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
     const quote = { rich: false, html: '<p>On Mon, Them wrote:</p>', text: 'On Mon, Them wrote:\n> Lunch?' }
@@ -1142,6 +1171,8 @@ describe('Composer', () => {
     })
     expect(draftOf(tabId)?.text).toBe('Sounds good\n\nOn Mon, Them wrote:\n> Lunch?')
     expect(draftOf(tabId)?.quote).toBeUndefined()
+    // A plain reply's quote is ordinary text once unfolded.
+    expect(draftOf(tabId)?.decryptedInBody).toBeUndefined()
     expect(view.queryByTitle('Show quoted text')).toBeNull()
 
     const other = openComposeTab({ to: 'them@example.com', rich: false, text: 'Sounds good', quote })!

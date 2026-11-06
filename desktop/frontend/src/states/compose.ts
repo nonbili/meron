@@ -1310,6 +1310,7 @@ export function closeComposeTabKeepingDraft(
         draftMessageId: current.draftMessageId,
         attachments,
         encrypt: current.encrypt,
+        decryptedInBody: current.decryptedInBody,
       })
       return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
     } catch (err) {
@@ -1442,15 +1443,18 @@ export async function sendComposed(args: {
   attachments: ComposerAttachment[]
   /** End-to-end encrypt (PGP/MIME); the core refuses rather than downgrade. */
   encrypt?: boolean
+  /** The body holds decrypted text (an unfolded quote): always encrypted. */
+  decryptedInBody?: boolean
 }) {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
+  const encrypt = args.decryptedInBody ? true : args.encrypt
   await invoke('mail.send', {
-    encrypt: !!args.encrypt,
+    encrypt: !!encrypt,
     // Plain only when encryption was switched off (`false`), never because the
     // flag is missing: the core encrypts a reply to encrypted mail that says
-    // neither.
-    plain: args.encrypt === false,
+    // neither. A body holding decrypted text is never sent plain.
+    plain: encrypt === false,
     account_id: args.accountId,
     from: args.from ?? '',
     to: args.to,
@@ -1551,6 +1555,8 @@ export async function saveComposedDraft(args: {
   /** Encrypt the saved draft to the user's own key (an encrypted message's
    * draft must not sit on the server in the clear). */
   encrypt?: boolean
+  /** The body holds decrypted text (an unfolded quote): always encrypted. */
+  decryptedInBody?: boolean
 }): Promise<string> {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
@@ -1558,12 +1564,13 @@ export async function saveComposedDraft(args: {
     !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
       ? await allocateMessageIdentity(args.accountId, true)
       : args.draftMessageId
+  const encrypt = args.decryptedInBody ? true : args.encrypt
   const request = invoke('mail.saveDraft', {
-    encrypt: !!args.encrypt,
+    encrypt: !!encrypt,
     // Plain only when encryption was switched off (`false`), never because the
     // flag is missing: the core encrypts a reply to encrypted mail that says
-    // neither.
-    plain: args.encrypt === false,
+    // neither. A body holding decrypted text is never saved plain.
+    plain: encrypt === false,
     account_id: args.accountId,
     from: args.from ?? '',
     to: args.to,

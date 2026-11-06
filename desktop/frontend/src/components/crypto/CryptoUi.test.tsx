@@ -29,6 +29,8 @@ const base: MessageCrypto = {
 let calls: { command: string; payload: any }[]
 beforeEach(() => {
   calls = []
+  // Another file can leave a confirm open; tests here read ui$.confirm.
+  settleConfirm(false)
   crypto$.verify.set(null)
   crypto$.enableFor.set(null)
   crypto$.lookup.set(null)
@@ -304,9 +306,11 @@ describe('EncryptToggle', () => {
     expect(value).toBe(false)
   })
 
-  test('a reply to encrypted mail switches off too (its quote is then dropped)', () => {
+  test('a reply to encrypted mail stays encrypted when a recipient lacks a key; the lock looks it up', () => {
+    // Switching it off by itself would send the reply plain (and skip the
+    // core's rule that replies to encrypted mail stay encrypted).
     let value = true
-    render(
+    const { getByRole } = render(
       <EncryptToggle
         keys={keys({ missing: [{ addr: 'bob@example.net', reason: 'none' }] })}
         on
@@ -314,7 +318,38 @@ describe('EncryptToggle', () => {
         onChange={(on) => (value = on)}
       />,
     )
-    expect(value).toBe(false)
+    expect(value).toBe(true)
+    const sw = getByRole('switch') as HTMLButtonElement
+    expect(sw.getAttribute('aria-checked')).toBe('true')
+    expect(sw.title).toContain('bob@example.net')
+    act(() => fireEvent.click(sw))
+    expect(value).toBe(true)
+    expect(crypto$.lookup.get()).toEqual({ addrs: ['bob@example.net'] })
+    expect(ui$.confirm.get()).toBeFalsy()
+  })
+
+  test('once the lookup found nothing, the next click asks to turn a reply off', async () => {
+    let value = true
+    const missing = keys({ missing: [{ addr: 'bob@example.net', reason: 'none' }] })
+    const { getByRole } = render(<EncryptToggle keys={missing} on sensitive="reply" onChange={(on) => (value = on)} />)
+    act(() => fireEvent.click(getByRole('switch'))) // the lookup
+    expect(crypto$.lookup.get()).toEqual({ addrs: ['bob@example.net'] })
+    expect(getByRole('switch').title).toBe("Can't encrypt to bob@example.net: remove them or turn off encryption.")
+    act(() => fireEvent.click(getByRole('switch'))) // now the deliberate "off"
+    await waitFor(() => expect(ui$.confirm.get()?.title).toBeTruthy())
+    expect(value).toBe(true) // not until confirmed
+  })
+
+  test("a body holding an unfolded decrypted quote can't be switched to plain", () => {
+    let value = true
+    const { getByRole } = render(
+      <EncryptToggle keys={keys()} on sensitive="reply" bodyIsDecrypted onChange={(on) => (value = on)} />,
+    )
+    const sw = getByRole('switch')
+    expect(sw.getAttribute('title')).toBe('This message contains decrypted text, so it can only be sent encrypted.')
+    act(() => fireEvent.click(sw))
+    expect(value).toBe(true)
+    expect(ui$.confirm.get()).toBeFalsy()
   })
 
   test('the lock says when the quick reply leaves the original unquoted', () => {

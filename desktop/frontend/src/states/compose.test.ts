@@ -1074,6 +1074,23 @@ describe('quick reply draft sharing', () => {
     }
   })
 
+  it('sends and saves a body holding decrypted text encrypted, even with encryption off', async () => {
+    // An unfolded quote of decrypted mail is in the body itself: no path may
+    // send or save it in the clear.
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'd@example.com' }
+      return {}
+    }
+    const base = { accountId: 'acc-1', to: 'x@example.com', subject: 's', rich: false, content: 'hi', attachments: [] }
+    const last = (command: string) =>
+      [...calls].reverse().find((c) => c.command === command)?.payload as { encrypt: boolean; plain: boolean }
+    await sendComposed({ ...base, encrypt: false, decryptedInBody: true })
+    expect(last('mail.send')).toMatchObject({ encrypt: true, plain: false })
+    await saveComposedDraft({ ...base, draftMessageId: 'd@example.com', encrypt: false, decryptedInBody: true })
+    expect(last('mail.saveDraft')).toMatchObject({ encrypt: true, plain: false })
+  })
+
   it('discards a matching loaded draft when its quick-reply ownership was lost', async () => {
     const thread = message({
       id: 'root',
