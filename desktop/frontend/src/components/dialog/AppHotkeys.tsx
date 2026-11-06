@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { invoke } from '../../lib/bridge'
 import { leaveNarrowContacts } from '../../states/contacts'
 import {
   clearBulkSelection,
@@ -9,6 +10,7 @@ import {
   focusGlobalSearch,
   focusQuickReply,
   modalOpen,
+  showToast,
 } from '../../states/ui'
 import { settings$, visibleSideNavAccounts } from '../../states/settings'
 import { accounts$ } from '../../states/accounts'
@@ -376,6 +378,10 @@ export function AppHotkeys() {
           event.preventDefault()
           if (ui$.paletteOpen.peek()) closeCommandPalette()
           else openCommandPalette()
+          break
+        case 'eml.open':
+          event.preventDefault()
+          void invoke('eml.open').catch((error) => showToast(String(error), 'error'))
           break
         case 'compose.new':
           event.preventDefault()

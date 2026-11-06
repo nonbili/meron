@@ -22,6 +22,7 @@ export type RailShortcutId = (typeof RAIL_SHORTCUT_IDS)[number]
 
 export type ShortcutId =
   | 'palette.open'
+  | 'eml.open'
   | 'compose.new'
   | 'settings.open'
   | 'mail.sync'
@@ -87,6 +88,7 @@ export type ShortcutOverrides = Partial<Record<ShortcutId, Chord>>
 
 export const DEFAULT_SHORTCUTS: Record<ShortcutId, Chord> = {
   'palette.open': { mod: true, key: 'k' },
+  'eml.open': { mod: true, key: 'o' },
   'compose.new': { mod: true, key: 'n' },
   'settings.open': { mod: true, key: ',' },
   'mail.sync': { mod: true, shift: true, key: 'r' },
@@ -216,6 +218,7 @@ export function sanitizeShortcutOverrides(raw: unknown): ShortcutOverrides | nul
 /** Human-readable name for each shortcut, shown in the help overlay. */
 export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   'palette.open': 'Command palette',
+  'eml.open': 'Open EML file…',
   'shortcuts.help': 'Keyboard shortcuts',
   'settings.open': 'Open settings',
   'compose.new': 'Compose new message',
@@ -256,7 +259,7 @@ export const SHORTCUT_GROUPS: { title: string; ids: ShortcutId[] }[] = [
   {
     title: 'General',
     // No quit row on macOS: the native ⌘Q owns that chord, so a rebind would do nothing.
-    ids: ['palette.open', 'shortcuts.help', 'settings.open', ...(isMac ? [] : (['app.quit'] as const))],
+    ids: ['palette.open', 'eml.open', 'shortcuts.help', 'settings.open', ...(isMac ? [] : (['app.quit'] as const))],
   },
   {
     title: 'Threads',

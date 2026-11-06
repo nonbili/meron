@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { isMac } from '../../lib/shortcuts'
+import { isMac, setShortcutOverrides } from '../../lib/shortcuts'
 import { calendar$ } from '../../states/calendar'
 import { mail$ } from '../../states/mailState'
 import { ui$ } from '../../states/ui'
@@ -38,6 +38,26 @@ afterEach(() => {
 })
 
 describe('AppHotkeys', () => {
+  it('opens EML files from the window and HTML frames, including a rebound shortcut', () => {
+    render(<AppHotkeys />)
+    fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+    expect(calls.filter((command) => command === 'eml.open')).toHaveLength(1)
+    try {
+      setShortcutOverrides({ 'eml.open': { mod: true, shift: true, key: 'o' } })
+      fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+      expect(calls.filter((command) => command === 'eml.open')).toHaveLength(1)
+      const event = new CustomEvent('meron.frameKeyDown', {
+        cancelable: true,
+        detail: { key: 'o', mod: true, shift: true },
+      })
+      window.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true)
+      expect(calls.filter((command) => command === 'eml.open')).toHaveLength(2)
+    } finally {
+      setShortcutOverrides({})
+    }
+  })
+
   it('keeps mail shortcuts off the mail the calendar hides', async () => {
     ui$.calendarOpen.set(true)
     render(<AppHotkeys />)

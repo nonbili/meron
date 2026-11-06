@@ -1,13 +1,25 @@
 import { useEffect, useState } from 'react'
-import { Download, FileText, FolderOpen } from 'lucide-react'
+import { Download, FolderOpen } from 'lucide-react'
 import { invoke } from './lib/bridge'
 import i18n, { resolveI18nLanguageFromWebLocale, useTranslation } from './lib/i18n'
 import { hydrateSettings, SETTINGS_DB_KEYS, settings$, watchSystemAppearance } from './states/settings'
 import { HtmlMessageView } from './components/chat/HtmlMessageView'
-import { formatFullTimestamp } from './components/chat/messageHelpers'
+import { ReaderCorrespondents } from './components/chat/ReaderCorrespondents'
+import { ReaderViewMode } from './components/chat/ReaderViewMode'
+import { BlockedRemoteButton } from './components/chat/BlockedRemoteButton'
+import { FrostedBand } from './components/chat/FrostedBand'
+import { htmlHasRemoteMedia } from './components/chat/messageHelpers'
 import { useValue } from '@legendapp/state/react'
 import type { Attachment } from './types'
-import { isMac } from './lib/shortcuts'
+import {
+  formatShortcut,
+  isBareKeystroke,
+  isMac,
+  isTyping,
+  matchShortcut,
+  shortcutForChord,
+  type Chord,
+} from './lib/shortcuts'
 
 type EmlMessage = {
   subject: string
@@ -50,7 +62,14 @@ export function EmlReader({ session }: { session: string }) {
       })
       .catch(console.error)
     const stopAppearance = watchSystemAppearance()
+    const open = () => void invoke('eml.open', { session }).catch((reason) => setError(String(reason)))
     const keydown = (event: KeyboardEvent) => {
+      if (matchShortcut(event) === 'eml.open') {
+        if (isBareKeystroke(event) && isTyping(event.target)) return
+        event.preventDefault()
+        open()
+        return
+      }
       if (
         (isMac ? event.metaKey : event.ctrlKey) &&
         !event.altKey &&
@@ -62,7 +81,13 @@ export function EmlReader({ session }: { session: string }) {
       }
     }
     const frameKeydown = (event: Event) => {
-      const chord = (event as CustomEvent<{ key: string; mod?: boolean; alt?: boolean; shift?: boolean }>).detail
+      const chord = (event as CustomEvent<Chord | undefined>).detail
+      if (!chord?.key) return
+      if (shortcutForChord(chord) === 'eml.open') {
+        event.preventDefault()
+        open()
+        return
+      }
       if (chord.mod && !chord.alt && !chord.shift && chord.key.toLowerCase() === 'w') {
         event.preventDefault()
         void invoke('eml.close', { session }).catch(console.error)
@@ -89,35 +114,22 @@ export function EmlReader({ session }: { session: string }) {
   const button = 'rounded-lg px-3 py-1.5 text-xs text-secondary hover:bg-hover hover:text-primary cursor-pointer'
 
   return (
-    <main className="flex h-full flex-col bg-chat text-primary">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
-        <FileText size={16} className="text-secondary" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{message?.subject || t('notify.noSubject')}</span>
+    <main className="relative flex h-full flex-col bg-chat text-primary">
+      <FrostedBand fade="bottom" className="left-0 right-3 top-0 h-16" />
+      <div className="absolute right-5 top-3 z-10 flex items-center gap-1 rounded-full border border-border/40 bg-chats p-1 shadow-float select-none">
+        {message?.body_html && <ReaderViewMode mode={mode} onChange={setMode} />}
         <button
-          className={button}
+          type="button"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-secondary cursor-pointer hover:bg-hover hover:text-primary"
           onClick={() => void invoke('eml.open', { session }).catch((reason) => setError(String(reason)))}
-          title={t('eml.open')}
+          title={`${t('eml.open')} (${formatShortcut('eml.open').join(isMac ? '' : '+')})`}
           aria-label={t('eml.open')}
         >
           <FolderOpen size={16} />
         </button>
-        {message?.body_html && (
-          <>
-            <button className={button} aria-pressed={mode === 'html'} onClick={() => setMode('html')}>
-              HTML
-            </button>
-            <button className={button} aria-pressed={mode === 'plain'} onClick={() => setMode('plain')}>
-              {t('settings.account.conversationPlain')}
-            </button>
-            <label className={`${button} flex items-center gap-2`}>
-              <input type="checkbox" checked={remote} onChange={(event) => setRemote(event.target.checked)} />
-              {t('settings.account.loadRemoteImages')}
-            </label>
-          </>
-        )}
       </div>
       {error && (
-        <div role="alert" className="shrink-0 px-5 py-3 text-sm text-red-500">
+        <div role="alert" className="shrink-0 px-5 pb-3 pt-16 text-sm text-red-500">
           {error}
         </div>
       )}
@@ -131,27 +143,32 @@ export function EmlReader({ session }: { session: string }) {
           viewMode={mode}
           allowRemote={remote}
           header={
-            <header className="max-w-[760px] space-y-3 px-5 pb-4 pt-6 select-text">
-              <h1 className="break-words text-xl font-semibold">{message.subject || t('notify.noSubject')}</h1>
-              <dl className="space-y-1 break-words text-sm text-secondary">
-                {[
-                  [t('composer.fields.from'), [message.from_name, message.from_addr].filter(Boolean).join(' — ')],
-                  [t('composer.fields.to'), message.to],
-                  [t('composer.fields.cc'), message.cc],
-                  [t('composer.fields.bcc'), message.bcc],
-                  [t('chat.replyTo'), message.reply_to],
-                ]
-                  .filter(([, value]) => value)
-                  .map(([label, value]) => (
-                    <div key={label} className="flex gap-2">
-                      <dt className="shrink-0 font-medium">{label}:</dt>
-                      <dd>{value}</dd>
-                    </div>
-                  ))}
-              </dl>
-              {message.date > 0 && (
-                <time className="block text-xs text-secondary">{formatFullTimestamp(message.date)}</time>
-              )}
+            <header className="max-w-[760px] space-y-3 px-5 pb-4 pt-16 select-text">
+              <h1 className="break-words text-xl font-semibold leading-snug text-primary">
+                {message.subject || t('notify.noSubject')}
+              </h1>
+              <ReaderCorrespondents
+                tab={{
+                  from: message.from_name || message.from_addr,
+                  fromAddr: message.from_addr,
+                  fromRaw: message.from_addr
+                    ? `${message.from_name ? `${JSON.stringify(message.from_name)} ` : ''}<${message.from_addr}>`
+                    : message.from_name,
+                  to: message.to,
+                  cc: message.cc,
+                  bcc: message.bcc,
+                  replyTo: message.reply_to,
+                  date: message.date,
+                }}
+                remote={
+                  <BlockedRemoteButton
+                    blocked={!remote && mode === 'html' && htmlHasRemoteMedia(message.body_html)}
+                    hiddenRemoteCount={0}
+                    senderAddress=""
+                    onReveal={() => setRemote(true)}
+                  />
+                }
+              />
               {message.attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {message.attachments.map((attachment, index) => (
