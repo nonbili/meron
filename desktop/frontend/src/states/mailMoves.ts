@@ -1,3 +1,4 @@
+import { forgetStandaloneRecoveryDraft } from '../lib/composeWindow'
 import type { Message } from '../types'
 import { rememberThreadTransfer } from './recentThreadTransfers'
 import { isLocalAccountId } from './accounts'
@@ -494,6 +495,7 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
   const rollbacks: Array<() => void> = []
   try {
     for (const item of targets) {
+      const recoveryIds = recoveryDraftIdsInThread(item.threadId)
       const removal = removeThreadLocally(item.threadId)
       rollbacks.push(removal.rollback)
       const res = await invoke('mail.delete', {
@@ -501,6 +503,7 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
         ...(item.folderId ? { folder: item.folderId } : {}),
       })
       assertDeleteAffected(res)
+      recoveryIds.forEach(({ id, account }) => forgetStandaloneRecoveryDraft(id, account))
       removal.complete()
       applyMutationFolderUnreads(res as MutationResult)
     }
@@ -551,6 +554,13 @@ export async function archiveThread(threadId: string) {
   }
 }
 
+function recoveryDraftIdsInThread(threadId: string) {
+  return [
+    findLocalThread(threadId),
+    ...mail$.messages.peek().filter((message) => message.thread_id === threadId),
+  ].flatMap((message) => (message?.message_id ? [{ id: message.message_id, account: message.account_id }] : []))
+}
+
 export async function deleteThread(threadId: string, options: { permanent?: boolean } = {}) {
   if (!threadId) return
   const sourceThread = findLocalThread(threadId)
@@ -579,6 +589,7 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
     }
   }
 
+  const recoveryIds = recoveryDraftIdsInThread(threadId)
   const { rollback, complete } = removeThreadLocally(threadId)
 
   try {
@@ -589,6 +600,7 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
       ...(sourceFolder ? { folder: sourceFolder } : {}),
     })
     assertDeleteAffected(res)
+    recoveryIds.forEach(({ id, account }) => forgetStandaloneRecoveryDraft(id, account))
     complete()
     applyMutationFolderUnreads(res)
     const trashedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.trash)
@@ -633,6 +645,7 @@ export async function discardSavedDraftCopy(
   options: { throwOnError?: boolean; failureMessage?: string } = {},
 ): Promise<boolean> {
   if (!draft.accountId && !draft.threadId) return true
+  forgetStandaloneRecoveryDraft(draft.draftMessageId, draft.accountId)
 
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
@@ -814,6 +827,7 @@ export async function deleteMessage(message: Message): Promise<boolean> {
       folder: message.folder_id,
     })
     if (!isDraft) assertDeleteAffected(res)
+    forgetStandaloneRecoveryDraft(message.message_id, message.account_id)
     applyMutationFolderUnreads(res as MutationResult)
     showToast(
       isDraft

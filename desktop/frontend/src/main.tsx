@@ -2,6 +2,8 @@ import { StrictMode, useEffect, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './lib/i18n'
 import App from './App'
+import { ComposeWindow } from './ComposeWindow'
+import { standaloneCompose } from './lib/composeWindow'
 import { EmlReader } from './EmlReader'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { windowChromeReady } from './lib/windowChrome'
@@ -41,11 +43,13 @@ function StartupWindow({ children }: { children: ReactNode }) {
 // Rendering before the title bar is known would draw the system-title-bar
 // layout first and then move everything when Meron's own title bar arrives.
 const emlSession = new URLSearchParams(window.location.search).get('eml')
-void (emlSession ? Promise.resolve() : windowChromeReady()).then(() => {
+void (emlSession || standaloneCompose ? Promise.resolve() : windowChromeReady()).then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>
-        {emlSession ? (
+        {standaloneCompose ? (
+          <ComposeWindow />
+        ) : emlSession ? (
           <EmlReader session={emlSession} />
         ) : (
           <StartupWindow>

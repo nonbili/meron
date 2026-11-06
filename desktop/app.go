@@ -16,6 +16,11 @@ import (
 )
 
 type App struct {
+	composeOpenMu     sync.Mutex
+	composeMu         sync.Mutex
+	composeWindow     *composeWindow
+	mainComposeDrafts map[string]bool
+
 	mcp           *mcpService
 	ctx           context.Context
 	sidecar       *Sidecar
@@ -241,6 +246,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.readDroppedFilesCommand(payload)
 	case "eml.open", "eml.get", "eml.close", "eml.saveAttachment":
 		return a.emlCommand(command, payload)
+	case "composer.isOpen", "composer.setMainDrafts", "composer.claimDraft", "composer.closeResponded", "composer.discardDraft", "composer.getDraft", "composer.setDraft", "composer.focusDraft", "composer.closeWindow":
+		return a.composeWindowCommand(command, payload)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
 	case "core.status":

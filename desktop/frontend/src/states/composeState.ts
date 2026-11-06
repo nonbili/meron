@@ -1,3 +1,4 @@
+import { standaloneCompose, STANDALONE_COMPOSE_KEY } from '../lib/composeWindow'
 import { observable } from '@legendapp/state'
 import { t } from '../lib/i18n'
 import type { ComposeDraft, ComposerAttachment, MessageTab } from '../types'
@@ -13,10 +14,10 @@ import type { SignatureMark } from '../lib/signature'
 // Persisted full-editor drafts. Attachments are intentionally NOT persisted —
 // their base64 payloads would quickly blow past localStorage's ~5MB budget.
 // Only text fields survive restarts; the user reattaches files if needed.
-export const COMPOSE_TABS_KEY = 'meron-compose-tabs'
+export const COMPOSE_TABS_KEY = standaloneCompose ? STANDALONE_COMPOSE_KEY : 'meron-compose-tabs'
 // Which tab was on screen and the conversation behind the tabs, so a restart
 // reopens where the user left off.
-export const TAB_VIEW_KEY = 'meron-tab-view'
+export const TAB_VIEW_KEY = standaloneCompose ? 'meron-standalone-compose-view' : 'meron-tab-view'
 
 // Local placeholder used until the first save asks meron-core for the stable
 // RFC Message-ID. It is never sent to IMAP/SMTP.
@@ -50,9 +51,9 @@ type PersistedTabView = { activeTab?: unknown; conversationThread?: unknown }
 export function hasExtraComposeHeaders(compose: Pick<ComposeDraft, 'cc' | 'bcc'>): boolean {
   return !!(compose.cc?.trim() || compose.bcc?.trim())
 }
-function loadPersistedTabs(): MessageTab[] {
+export function loadPersistedTabs(key = COMPOSE_TABS_KEY): MessageTab[] {
   try {
-    const raw = localStorage.getItem(COMPOSE_TABS_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return []
     const parsed = JSON.parse(raw) as (PersistedComposeTab | PersistedMailTab)[]
     if (!Array.isArray(parsed)) return []

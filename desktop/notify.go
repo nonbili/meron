@@ -17,17 +17,17 @@ var (
 )
 
 type nativeLabels struct {
-	language                                              string
-	calendar, tasks                                       string
-	trayShow, trayHide, trayHideTooltip, trayQuit         string
-	newMessage, newMessageCount, noSubject, unknownSender string
+	language                                                   string
+	calendar, tasks                                            string
+	trayCompose, trayShow, trayHide, trayHideTooltip, trayQuit string
+	newMessage, newMessageCount, noSubject, unknownSender      string
 }
 
 var (
 	nativeLabelsMu sync.RWMutex
 	currentLabels  = nativeLabels{
 		calendar: "Calendar", tasks: "Tasks",
-		trayShow: "Show Meron", trayHide: "Hide to Tray",
+		trayCompose: "New Message", trayShow: "Show Meron", trayHide: "Hide to Tray",
 		trayHideTooltip: "Hide Meron to the system tray", trayQuit: "Quit Meron",
 		newMessage:      "New message",
 		newMessageCount: "{count, plural, one {1 new message} other {{count} new messages}}",
@@ -49,6 +49,7 @@ func (a *App) setNativeLabels(payload map[string]any) (any, error) {
 		}
 	}
 	set(&currentLabels.language, "language")
+	set(&currentLabels.trayCompose, "trayCompose")
 	set(&currentLabels.trayShow, "trayShow")
 	set(&currentLabels.calendar, "calendar")
 	set(&currentLabels.tasks, "tasks")
@@ -65,6 +66,10 @@ func (a *App) setNativeLabels(payload map[string]any) (any, error) {
 	nativeLabelsMu.Unlock()
 	trayMenuMu.Lock()
 	defer trayMenuMu.Unlock()
+	if trayComposeItem != nil {
+		trayComposeItem.SetTitle(labels.trayCompose)
+		trayComposeItem.SetTooltip(labels.trayCompose)
+	}
 	if trayShowItem != nil {
 		trayShowItem.SetTitle(labels.trayShow)
 		trayShowItem.SetTooltip(labels.trayShow)
