@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { createElement } from 'react'
-import { invoke } from '../../lib/bridge'
+import { openEmlFile } from '../../lib/eml'
 import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
 import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply, showToast } from '../../states/ui'
@@ -101,7 +101,7 @@ export function useCommandList(): Command[] {
         icon: icon(FolderOpen),
         keywords: 'open eml file email message',
         shortcut: 'eml.open',
-        run: run(() => void invoke('eml.open').catch((error) => showToast(String(error), 'error'))),
+        run: run(() => void openEmlFile().catch((error) => showToast(String(error), 'error'))),
       },
       {
         id: 'compose.new',

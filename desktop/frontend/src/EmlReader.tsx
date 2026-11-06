@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, FolderOpen } from 'lucide-react'
 import { invoke } from './lib/bridge'
+import { openEmlFile } from './lib/eml'
 import i18n, { resolveI18nLanguageFromWebLocale, useTranslation } from './lib/i18n'
 import { hydrateSettings, SETTINGS_DB_KEYS, settings$, watchSystemAppearance } from './states/settings'
 import { HtmlMessageView } from './components/chat/HtmlMessageView'
@@ -42,6 +43,8 @@ export function EmlReader({ session }: { session: string }) {
   const [mode, setMode] = useState<'html' | 'plain'>('html')
   const [remote, setRemote] = useState(false)
   const language = useValue(settings$.language)
+  useValue(settings$.shortcutOverrides)
+  const openShortcut = formatShortcut('eml.open').join(isMac ? '' : '+')
 
   useEffect(() => {
     void i18n.changeLanguage(language || resolveI18nLanguageFromWebLocale(navigator.language) || 'en')
@@ -62,11 +65,12 @@ export function EmlReader({ session }: { session: string }) {
       })
       .catch(console.error)
     const stopAppearance = watchSystemAppearance()
-    const open = () => void invoke('eml.open', { session }).catch((reason) => setError(String(reason)))
+    const open = () => void openEmlFile(session).catch((reason) => setError(String(reason)))
     const keydown = (event: KeyboardEvent) => {
       if (matchShortcut(event) === 'eml.open') {
         if (isBareKeystroke(event) && isTyping(event.target)) return
         event.preventDefault()
+        if (event.repeat) return
         open()
         return
       }
@@ -81,10 +85,11 @@ export function EmlReader({ session }: { session: string }) {
       }
     }
     const frameKeydown = (event: Event) => {
-      const chord = (event as CustomEvent<Chord | undefined>).detail
+      const chord = (event as CustomEvent<(Chord & { repeat?: boolean }) | undefined>).detail
       if (!chord?.key) return
       if (shortcutForChord(chord) === 'eml.open') {
         event.preventDefault()
+        if (chord.repeat) return
         open()
         return
       }
@@ -121,8 +126,8 @@ export function EmlReader({ session }: { session: string }) {
         <button
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-full text-secondary cursor-pointer hover:bg-hover hover:text-primary"
-          onClick={() => void invoke('eml.open', { session }).catch((reason) => setError(String(reason)))}
-          title={`${t('eml.open')} (${formatShortcut('eml.open').join(isMac ? '' : '+')})`}
+          onClick={() => void openEmlFile(session).catch((reason) => setError(String(reason)))}
+          title={`${t('eml.open')}${openShortcut ? ` (${openShortcut})` : ''}`}
           aria-label={t('eml.open')}
         >
           <FolderOpen size={16} />
@@ -148,6 +153,7 @@ export function EmlReader({ session }: { session: string }) {
                 {message.subject || t('notify.noSubject')}
               </h1>
               <ReaderCorrespondents
+                showContactAction={false}
                 tab={{
                   from: message.from_name || message.from_addr,
                   fromAddr: message.from_addr,

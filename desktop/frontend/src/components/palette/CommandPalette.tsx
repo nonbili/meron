@@ -83,6 +83,7 @@ export function CommandPalette() {
         ) : (
           filtered.map((command, i) => {
             const selected = i === index
+            const shortcut = command.shortcut ? formatShortcut(command.shortcut) : []
             return (
               <button
                 key={command.id}
@@ -95,9 +96,9 @@ export function CommandPalette() {
                 <span className="shrink-0 text-secondary">{command.icon}</span>
                 <span className="flex-1 truncate">{command.label}</span>
                 {command.active && <Check size={14} className="shrink-0 text-accent" />}
-                {command.shortcut && (
+                {shortcut.length > 0 && (
                   <kbd className="shrink-0 rounded border border-border bg-app px-1.5 py-0.5 text-[0.625rem] font-medium text-secondary">
-                    {formatShortcut(command.shortcut).join(isMac ? '' : '+')}
+                    {shortcut.join(isMac ? '' : '+')}
                   </kbd>
                 )}
               </button>

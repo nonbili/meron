@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'bun:test'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { EmlReader } from './EmlReader'
 import { isMac, setShortcutOverrides } from './lib/shortcuts'
 import { SETTINGS_DB_KEYS } from './states/settings'
@@ -58,6 +58,7 @@ it('reads without an account, saves through its own session and closes from an H
   expect(view.getByTitle('Carol <carol@example.com>')).toBeTruthy()
   expect(view.getByTitle('Hidden <hidden@example.com>')).toBeTruthy()
   expect(view.getByTitle('Replies <replies@example.com>')).toBeTruthy()
+  expect(view.queryByRole('button', { name: 'Open contact' })).toBeNull()
   fireEvent.click(view.getByRole('button', { name: 'Hide details' }))
   expect(view.queryByTitle('Hidden <hidden@example.com>')).toBeNull()
   expect(view.queryByRole('checkbox')).toBeNull()
@@ -77,7 +78,11 @@ it('reads without an account, saves through its own session and closes from an H
       ),
     ).toBe(true),
   )
-  fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+  await act(async () => {
+    fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac, repeat: true })
+    expect(calls.filter(({ command }) => command === 'eml.open')).toHaveLength(0)
+    fireEvent.keyDown(document.body, { key: 'o', ctrlKey: !isMac, metaKey: isMac })
+  })
   expect(calls.filter(({ command }) => command === 'eml.open')).toEqual([
     { command: 'eml.open', payload: { session: 'reader-1' } },
   ])

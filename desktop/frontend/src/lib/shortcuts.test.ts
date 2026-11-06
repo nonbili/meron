@@ -13,6 +13,7 @@ import {
   setShortcutOverrides,
   shortcutChord,
   shortcutConflict,
+  shortcutBindingConflict,
   shortcutForChord,
   SHORTCUT_IDS,
   spaceActivatesTarget,
@@ -157,6 +158,17 @@ describe('formatShortcut', () => {
 })
 
 describe('custom bindings', () => {
+  it('hides a new default claimed by an existing override and identifies the conflict', () => {
+    setShortcutOverrides({ 'compose.new': { mod: true, key: 'o' } })
+    expect(shortcutForChord({ mod: true, key: 'o' })).toBe('compose.new')
+    expect(formatShortcut('eml.open')).toEqual([])
+    expect(shortcutBindingConflict('eml.open')).toBe('compose.new')
+    expect(formatShortcut('compose.new')).toEqual([modLabel, 'O'])
+    setShortcutOverrides({ 'compose.new': { mod: true, key: 'o' }, 'eml.open': { mod: true, shift: true, key: 'o' } })
+    expect(shortcutBindingConflict('eml.open')).toBeNull()
+    expect(formatShortcut('eml.open')).toEqual([modLabel, shiftLabel, 'O'])
+  })
+
   afterEach(() => setShortcutOverrides({}))
 
   it('resolves, matches and formats an override in place of the default', () => {

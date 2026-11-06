@@ -12,6 +12,7 @@ import {
   SHORTCUT_GROUPS,
   SHORTCUT_LABELS,
   shortcutConflict,
+  shortcutBindingConflict,
   type ShortcutId,
 } from '../../lib/shortcuts'
 import { resetAllShortcutBindings, resetShortcutBinding, setShortcutBinding, settings$ } from '../../states/settings'
@@ -125,7 +126,7 @@ export function ShortcutsDialog() {
                   id={id}
                   first={i === 0}
                   recording={recording === id}
-                  conflict={conflict?.id === id ? conflict.taken : null}
+                  conflict={conflict?.id === id ? conflict.taken : shortcutBindingConflict(id)}
                   customized={!!overrides[id]}
                   onEdit={() => startRecording(id)}
                   onReset={() => {
@@ -197,7 +198,7 @@ function ShortcutRow({
             }`}
             onClick={onEdit}
           >
-            {recording ? t('shortcuts.pressKeys') : formatShortcut(id).join(isMac ? '' : '+')}
+            {recording ? t('shortcuts.pressKeys') : formatShortcut(id).join(isMac ? '' : '+') || t('shortcuts.rebind')}
           </button>
         </div>
       </div>

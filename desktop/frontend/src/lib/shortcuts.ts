@@ -343,9 +343,15 @@ export function isArrowKey(key: string): boolean {
   return key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight'
 }
 
+/** The effective action occupying this binding, if a user override shadows it. */
+export function shortcutBindingConflict(id: ShortcutId): ShortcutId | null {
+  const winner = shortcutForChord(shortcutChord(id))
+  return winner && winner !== id ? winner : null
+}
+
 /** Render a shortcut as display parts, e.g. ["⌘", "K"] or ["Ctrl", "Shift", "R"]. */
 export function formatShortcut(id: ShortcutId): string[] {
-  return formatChord(shortcutChord(id))
+  return shortcutBindingConflict(id) ? [] : formatChord(shortcutChord(id))
 }
 
 /** A shortcut's fixed secondary chords, as display parts. Leaves out any a user

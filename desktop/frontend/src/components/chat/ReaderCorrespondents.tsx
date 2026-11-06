@@ -14,6 +14,7 @@ export function ReaderCorrespondents({
   tab,
   account,
   isRSS = false,
+  showContactAction = true,
   remote,
 }: {
   tab: Pick<
@@ -22,6 +23,8 @@ export function ReaderCorrespondents({
   >
   account?: Account
   isRSS?: boolean
+  /** Standalone windows have no contacts panel to open. */
+  showContactAction?: boolean
   /** The remote-content affordance, beside the date. */
   remote: ReactNode
 }) {
@@ -88,11 +91,21 @@ export function ReaderCorrespondents({
       </div>
       {open && (
         <div className="mt-2.5 space-y-1 border-t border-border/40 pt-2.5 text-secondary">
-          {tab.fromRaw && <AddressRow label={t('composer.fields.from')} rawList={tab.fromRaw} />}
-          {tab.to && <AddressRow label={t('composer.fields.to')} rawList={tab.to} />}
-          {tab.cc && <AddressRow label={t('composer.fields.cc')} rawList={tab.cc} />}
-          {tab.bcc && <AddressRow label={t('composer.fields.bcc')} rawList={tab.bcc} />}
-          {replyToDiffers && <AddressRow label={t('chat.replyTo')} rawList={tab.replyTo!} />}
+          {tab.fromRaw && (
+            <AddressRow showContactAction={showContactAction} label={t('composer.fields.from')} rawList={tab.fromRaw} />
+          )}
+          {tab.to && (
+            <AddressRow showContactAction={showContactAction} label={t('composer.fields.to')} rawList={tab.to} />
+          )}
+          {tab.cc && (
+            <AddressRow showContactAction={showContactAction} label={t('composer.fields.cc')} rawList={tab.cc} />
+          )}
+          {tab.bcc && (
+            <AddressRow showContactAction={showContactAction} label={t('composer.fields.bcc')} rawList={tab.bcc} />
+          )}
+          {replyToDiffers && (
+            <AddressRow showContactAction={showContactAction} label={t('chat.replyTo')} rawList={tab.replyTo!} />
+          )}
         </div>
       )}
     </div>
