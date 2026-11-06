@@ -14,6 +14,32 @@ import { compose$ } from './composeState'
  * notification or a bounce doesn't take the reply (the core decides which, see
  * `accepts_replies`). Falls back to the thread header when no loaded message
  * matches. */
+// An encrypted message's subject until it is decrypted (RFC 9788 protected
+// headers: `[...]`, Thunderbird `...`), reply prefixes aside.
+function isEncryptedPlaceholder(subject: string): boolean {
+  const core = subject.replace(/^\s*((re|aw|sv|wg|antw|fwd?)\s*:\s*)+/i, '').trim()
+  return core === '[...]' || core === '...'
+}
+
+/**
+ * A reply's subject: `Re: ` before `subject` unless it has one. When `subject`
+ * is still an encrypted message's placeholder, the decrypted subject of the
+ * message being answered (`target`, from `pickReplyTarget`) stands in, so an
+ * encrypted reply never carries `Re: [...]` inside its encryption: that subject
+ * groups as no subject at all and splits the thread for whoever reads it. Only
+ * that message: scanning loaded messages once took another thread's subject.
+ * With it undecrypted too, the reply has no subject rather than one made from
+ * the placeholder.
+ */
+export function replySubject(subject: string, target?: Message): string {
+  let base = subject
+  if (isEncryptedPlaceholder(subject)) {
+    if (!target || isEncryptedPlaceholder(target.subject)) return ''
+    base = target.subject
+  }
+  return base.startsWith('Re:') ? base : `Re: ${base}`
+}
+
 export function pickReplyTarget(activeT: Message, excludedId = ''): Message {
   const messages = mail$.messages.get()
   const ownAddrs = ownAddressSet(accounts$.get())
@@ -241,4 +267,26 @@ export function buildReplyThreading(target: Message): {
   // links to the entire ancestry, not just the immediate parent.
   const refs = parentRefs.includes(parentId) ? parentRefs : [...parentRefs, parentId]
   return { in_reply_to: parentId, references: refs.join(' ') }
+}
+
+/** The message the quick reply answers, or null (no thread, or an account
+ * that can't send). Reactive. */
+export function quickReplyTarget(): Message | null {
+  const thread = getActiveThread()
+  if (!thread) return null
+  const accounts = accounts$.get()
+  const acc = accounts.find((a) => a.id === (thread.account_id || ui$.selectedAccount.get())) ?? accounts[0] ?? null
+  if (!isSendableAccount(acc)) return null
+  return pickReplyTarget(thread)
+}
+
+/** Whether the quick reply is encrypted: the user's choice for this thread,
+ * or by default on when the message answered was itself encrypted (sticky:
+ * an encrypted conversation stays encrypted unless the user says otherwise). */
+export function quickReplyEncrypts(): boolean {
+  const target = quickReplyTarget()
+  if (!target) return false
+  const choice = compose$.quickReplyEncrypt.get()
+  if (choice && choice.threadId === target.thread_id) return choice.on
+  return !!target.crypto?.encrypted
 }

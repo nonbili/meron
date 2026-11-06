@@ -83,6 +83,19 @@ test('shows the complete send preview as text and approves once through Wails', 
   await waitFor(() => expect(view.queryByRole('alertdialog')).toBeNull())
 })
 
+test('says when a reply to encrypted mail will go out encrypted', async () => {
+  // Audit M1: the core encrypts it whatever the tool asked; the preview says so.
+  requests[0].preview.encrypted = true
+  const view = render(<McpApprovalDialog />)
+  await view.findByRole('alertdialog')
+  expect(view.getByText(/Replies to encrypted mail/)).toBeTruthy()
+  cleanup()
+  requests[0].preview.encrypted = false
+  const plain = render(<McpApprovalDialog />)
+  await plain.findByRole('alertdialog')
+  expect(plain.queryByText(/Replies to encrypted mail/)).toBeNull()
+})
+
 test('shows exact deletion selection and Escape rejects it', async () => {
   requests[0].preview = {
     kind: 'delete',

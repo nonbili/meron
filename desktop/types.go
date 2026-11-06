@@ -228,6 +228,12 @@ type SendMailRequest struct {
 	DraftID     string            `json:"draft_id"`
 	MessageID   string            `json:"message_id"`
 	Attachments []AttachmentInput `json:"attachments"`
+	// End-to-end encrypt (PGP/MIME). The core refuses rather than sending
+	// unencrypted when a recipient has no key.
+	Encrypt bool `json:"encrypt"`
+	// Plain: the composer chose no encryption. Without it, a reply to encrypted
+	// mail is encrypted by the core whatever Encrypt says.
+	Plain bool `json:"plain"`
 }
 
 type ExchangedProfile struct {

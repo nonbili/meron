@@ -259,7 +259,10 @@ pub const INLINE_BODY_BUDGET: std::time::Duration = std::time::Duration::from_se
 /// remote content or the user allowed this message's sender. Plain messages have
 /// no HTML source, so this is a no-op for them.
 pub fn attach_html(message: &mut parse::Message, policy: &store::RemoteImagePolicy) {
-    let allowed = policy.allows(&message.from_addr);
+    // Decrypted mail never loads remote content, whatever the account or
+    // sender setting (EFAIL; Thunderbird removed the option too).
+    let encrypted = message.crypto.as_ref().is_some_and(|c| c.encrypted);
+    let allowed = !encrypted && policy.allows(&message.from_addr);
     if let Some(html) = message.body_html.take() {
         message.body_html = Some(parse::prepare_message_html(
             &html,

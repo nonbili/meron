@@ -1,0 +1,25 @@
+From: Tess Target <tess@example.com>
+To: Alice Example <alice@example.org>
+Subject: From Tess
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <signed-tess@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="sig-boundary"
+
+--sig-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Signed by Tess.
+
+--sig-boundary
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEABYIAB0WIQRyynA3hYXcUyYO1fgKFgftF0OPNwUCaueN6AAKCRAKFgftF0OP
+N3gRAQCx273jsYGCAB8PxNN+N3/FVFWd5KqTEpGXZiA1JkQ29QD+KbHMATsWzVWY
+sOGe8jRW2tuCVmJCo7eA7K44KqqXWwA=
+=rfwB
+-----END PGP SIGNATURE-----
+
+--sig-boundary--

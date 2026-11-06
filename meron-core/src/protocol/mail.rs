@@ -239,6 +239,7 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
         &references,
         &reply_to,
         &message_id,
+        &[],
     ))?;
     let sent_bytes = raw.len();
     finish_mobile_sent(&engine, &account_id, &raw);

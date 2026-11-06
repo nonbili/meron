@@ -22,7 +22,20 @@ const mediaContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self' 
 // base64 through the JSON bridge. The AssetServer tries embedded frontend assets
 // first and only falls through here for unmatched paths.
 func mediaHandler() http.Handler {
-	return mediaHandlerAt(mediaDir())
+	plain := mediaHandlerAt(mediaDir())
+	// Decrypted (end-to-end encrypted) attachments live under an owner-only,
+	// ephemeral secureMediaDir, never the plain cache; they are
+	// keyed `/media/e2ee/<key>`. Route them through the same hardened handler
+	// (CSP, content-type clamp) rooted at that directory.
+	secure := mediaHandlerAt(secureMediaDir())
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/media/"+secureMediaPrefix); ok {
+			r.URL.Path = "/media/" + rest
+			secure.ServeHTTP(w, r)
+			return
+		}
+		plain.ServeHTTP(w, r)
+	})
 }
 
 func mediaHandlerAt(root string) http.Handler {

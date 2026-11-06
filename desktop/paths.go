@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func decode(payload map[string]any, out any) error {
@@ -74,6 +75,52 @@ func loadDotEnvLocal() {
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		_ = os.Setenv(strings.TrimSpace(key), value)
 	}
+}
+
+// secureMediaPrefix marks media keys of decrypted (end-to-end encrypted)
+// mail. The sidecar writes those files under secureMediaDir, never in the
+// plain attachment cache (meron-core parse::SECURE_MEDIA_PREFIX).
+const secureMediaPrefix = "e2ee/"
+
+// secureMediaDir holds attachments of decrypted mail. It must be both
+// ephemeral (gone on reboot, never persisted) and private to this
+// user (no other local user can read the plaintext or pre-plant the path).
+// Meron empties it at start and at quit (wipeSecureMedia), so
+// decrypted files exist only while it runs; a missing file makes the sidecar
+// fetch and decrypt the message again.
+//   - Linux desktop session: $XDG_RUNTIME_DIR (tmpfs, owner-only, per-user).
+//   - Otherwise (no logind session on Linux; macOS; Windows): an owner-only
+//     directory with an unguessable name created once under the temp dir. The
+//     former fixed $TMPDIR/meron/secure-media was a predictable path under the
+//     world-writable /tmp when $XDG_RUNTIME_DIR was unset, which another local
+//     user could read or pre-plant with a symlink (F1). A random name created
+//     atomically (os.MkdirTemp, O_EXCL, mode 0700) cannot be, and stays
+//     ephemeral under the temp dir.
+var secureMediaOnce = &sync.Once{}
+var secureMediaPath string
+
+func secureMediaDir() string {
+	if runtime := os.Getenv("XDG_RUNTIME_DIR"); runtime != "" {
+		return filepath.Join(runtime, appDirName(), "secure-media")
+	}
+	secureMediaOnce.Do(func() {
+		if base, err := os.MkdirTemp("", appDirName()+"-secure-"); err == nil {
+			secureMediaPath = filepath.Join(base, "secure-media")
+			return
+		}
+		// The temp dir is unusable: a per-user persistent dir is safer than a
+		// shared one (reboot no longer clears it, but no other user can read it).
+		secureMediaPath = filepath.Join(appCacheDir(), "secure-media")
+	})
+	return secureMediaPath
+}
+
+// wipeSecureMedia removes every decrypted attachment, and the copies opened
+// from them. Called before the sidecar starts and after it stops. Errors are
+// ignored (on Windows a file another app holds open can't go): the next start
+// tries again.
+func wipeSecureMedia() {
+	_ = os.RemoveAll(secureMediaDir())
 }
 
 // mediaDir is where the mail sidecar writes attachment files and the asset

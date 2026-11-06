@@ -195,6 +195,11 @@ pub struct BackupData {
     /// in files written before the calendar existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<store::CalendarEvent>,
+    /// OpenPGP keys of accounts with end-to-end encryption. Secret keys are
+    /// included only in backups with secrets (which are always
+    /// passphrase-encrypted); otherwise only the public keys.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openpgp_keys: Vec<crate::openpgp::store::BackupKeys>,
 }
 
 /// What [`import`] changed, for the "restored N accounts" confirmation.
@@ -208,6 +213,10 @@ pub struct ImportSummary {
     pub tasks: u32,
     #[serde(default)]
     pub events: u32,
+    /// Accounts whose encryption keys were in the backup without their secret
+    /// part (a backup made without secrets): encryption must be set up again.
+    #[serde(default)]
+    pub openpgp_missing_secret: Vec<String>,
 }
 
 impl ImportSummary {
@@ -220,6 +229,7 @@ impl ImportSummary {
             "secrets": self.secrets,
             "tasks": self.tasks,
             "events": self.events,
+            "openpgp_missing_secret": self.openpgp_missing_secret,
         })
     }
 }
@@ -297,6 +307,7 @@ pub fn collect(
         tags,
         task_lists: collect_task_lists(conn)?,
         events: store::all_events(conn)?,
+        openpgp_keys: crate::openpgp::store::backup_collect(conn, include_secrets)?,
     })
 }
 
@@ -681,6 +692,10 @@ pub fn apply(
         }
     }
 
+    if !data.openpgp_keys.is_empty() {
+        summary.openpgp_missing_secret = crate::openpgp::store::backup_apply(&tx, &data.openpgp_keys)?;
+    }
+
     // Keyed by Message-ID, so they rejoin their mail as it syncs back in.
     for entry in &data.tags {
         let known: bool = tx.query_row(
@@ -694,6 +709,9 @@ pub fn apply(
     }
 
     tx.commit()?;
+    if !data.openpgp_keys.is_empty() {
+        let _ = crate::openpgp::store::reload(conn);
+    }
     Ok(summary)
 }
 

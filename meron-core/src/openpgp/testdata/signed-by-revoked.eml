@@ -1,0 +1,25 @@
+From: Rex Revoked <rex@example.com>
+To: Alice Example <alice@example.org>
+Subject: Revoked signer
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <signed-revoked@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="sig-boundary"
+
+--sig-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Signed before my key was revoked.
+
+--sig-boundary
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEABYIAB0WIQRvQ1S1/TpTZ38JkTcGhN4V3lFKdAUCaueN5wAKCRAGhN4V3lFK
+dBf0AQCrd2C0B9mHc4uR+dUS0vaEgygj0LqV4x2lTs0fa2hXZgD+O24QiLu9fYbK
+kPhZms76fKaEEAzvujzj370VwHkdAgc=
+=n/na
+-----END PGP SIGNATURE-----
+
+--sig-boundary--

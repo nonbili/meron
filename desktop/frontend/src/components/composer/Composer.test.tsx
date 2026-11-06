@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import { draftOpenInComposeTab } from '../../states/quickReply'
 import { settings$ } from '../../states/settings'
@@ -12,7 +12,7 @@ import {
 } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { kanban$ } from '../../states/kanban'
-import { dismissToast, runToastUndo, ui$ } from '../../states/ui'
+import { dismissToast, runToastUndo, settleConfirm, ui$ } from '../../states/ui'
 import type { Account, ComposeDraft, Message } from '../../types'
 import { Composer } from './Composer'
 import { ConversationTabs } from '../chat/ConversationTabs'
@@ -119,6 +119,44 @@ describe('Composer', () => {
 
     const body = view.container.querySelector('textarea')
     expect(body?.className).toContain('var(--me-message-scale)')
+  })
+
+  it('explains why a reply to unconfirmed decrypted mail has no quote', () => {
+    const withheld = openComposeTab({ to: 'x@example.com', subject: 'Re: Hi', rich: false, quoteWithheld: true })!
+    const view = render(<Composer tabId={withheld} />)
+    expect(view.getByText(/isn't quoted/)).toBeTruthy()
+    cleanup()
+
+    const plain = openComposeTab({ to: 'x@example.com', subject: 'Re: Hi', rich: false })!
+    expect(render(<Composer tabId={plain} />).queryByText(/isn't quoted/)).toBeNull()
+  })
+
+  it('notes a changed recipient key and asks before sending to it', async () => {
+    const base = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>
+      command === 'pgp.keys.forRecipients'
+        ? (calls.push({ command, payload }),
+          {
+            enabled: true,
+            own_key_unusable: false,
+            missing: [],
+            changed: [{ addr: 'x@example.com', previous: 'A', current: 'B' }],
+          })
+        : base(command, payload)
+    const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hi', text: 'hi', rich: false, encrypt: true })!
+    const view = render(<Composer tabId={tabId} />)
+    expect(await view.findByText(/x@example.com's key changed since you last wrote/)).toBeTruthy()
+
+    await act(async () => {
+      ;[...view.container.querySelectorAll('button')].find((b) => b.textContent?.includes('Send'))!.click()
+    })
+    await waitFor(() => expect(ui$.confirm.get()?.title).toBe('Send to a changed key?'))
+    await act(async () => {
+      settleConfirm(false)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(calls.some((c) => c.command === 'mail.send')).toBe(false)
+    expect(draftOf(tabId)).toBeTruthy()
   })
 
   it('assigns scrolling and padding to the shrinkable plain-text body', () => {

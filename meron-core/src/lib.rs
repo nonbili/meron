@@ -17,6 +17,7 @@ pub mod log;
 pub mod mail_model;
 pub mod mcp_mail;
 pub mod oauth;
+pub mod openpgp;
 pub mod parse;
 pub mod protocol;
 pub mod proxy;

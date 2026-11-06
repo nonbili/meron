@@ -27,7 +27,16 @@ import {
   textToHtml,
 } from './compose'
 import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
-import { addressQuickReply, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
+import {
+  addressQuickReply,
+  buildReplyRecipients,
+  buildReplyThreading,
+  pickReplyTarget,
+  quickReplyEncrypts,
+  resolveQuickReplyFrom,
+  replySubject,
+} from './composeReply'
+import { mayQuoteInto, ownSentCrypto } from '../lib/crypto'
 import { allocateMessageIdentity, compose$, newDraftMessageId } from './composeState'
 import {
   cancelQuickReplyDraftSave,
@@ -151,7 +160,7 @@ export async function sendReply() {
   const prepared = prepareConversationAttachments(attachments)
   const sendAttachments = prepared.attachments
   const html = prepared.hasInlineImages ? conversationHtmlBody(text, sendAttachments) : ''
-  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  const subject = replySubject(activeT.subject, pickReplyTarget(activeT))
   const tempId = `${LOCAL_SEND_PREFIX}${Date.now()}`
   // Recipients and threading follow the reply target, which the thread load
   // below can change; the From indicator's pick, else the alias the original
@@ -195,6 +204,8 @@ export async function sendReply() {
     starred: false,
     has_attachments: sendAttachments.length > 0,
     send_status: 'sending',
+    // An encrypted send shows its lock at once, as its Sent copy will.
+    crypto: quickReplyEncrypts() ? ownSentCrypto() : undefined,
     // Inline the just-sent attachment bytes as a data: URL so the chat bubble
     // can display the image immediately — without waiting for IMAP sync to
     // pull the message back from Sent and assign it a media key. Treated as
@@ -275,6 +286,7 @@ export async function sendReply() {
           references: addressed.references,
           draftMessageId: rescueDraftId || claim.unconfirmedDraftId || newDraftMessageId(),
           attachments: box.attachments,
+          encrypt: quickReplyEncrypts(),
         })
         unconfirmedDraftIds.delete(normalizeMessageId(savedDraftId))
       }
@@ -374,7 +386,10 @@ export async function sendReply() {
   // The quote goes out with the mail but stays out of the box and the bubble:
   // the conversation already shows the message it answers.
   let outgoing = { body: text, html, attachments: sendAttachments }
-  const quote = replyQuote(addressed.target)
+  const encrypt = quickReplyEncrypts()
+  // A decrypted original is never quoted into an unencrypted reply ("Re:
+  // What's up Johnny?"): its text would go out in the clear.
+  const quote = mayQuoteInto(addressed.target, encrypt) ? replyQuote(addressed.target) : undefined
   // A saved quoted reply carried back into the box already holds its quote.
   if (quote && !bodyHasReplyQuote(text, quote)) {
     const body = text.trim() ? `${text.replace(/\n+$/, '')}\n\n${quote.text}` : quote.text
@@ -408,6 +423,9 @@ export async function sendReply() {
     references: addressed.references,
     from: addressed.from,
     message_id: messageId,
+    encrypt,
+    // The quick reply always decides, so it always says.
+    plain: !encrypt,
     attachments: outgoing.attachments.map((a) => ({
       filename: a.filename,
       mime: a.mime,

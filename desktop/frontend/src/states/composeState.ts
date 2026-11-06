@@ -121,6 +121,10 @@ export const compose$ = observable({
   conversationThread: initialConversationThread,
   composer: '',
   composerAttachments: [] as ComposerAttachment[],
+  // The quick reply's end-to-end encryption: null follows the default (on
+  // when answering an encrypted message), true/false is the user's choice for
+  // this thread (keyed by thread id so a thread switch drops it).
+  quickReplyEncrypt: null as null | { threadId: string; on: boolean },
   // Server-side draft backing the active thread's quick reply, shared with the
   // full composer's saveDraft/discardDraft mechanism (mail.saveDraft/
   // mail.discardDraft) rather than a separate persistence path. Reset on

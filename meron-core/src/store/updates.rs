@@ -42,7 +42,7 @@ pub fn starred_mutation_targets(
             header.uid != 0
                 && subject
                     .as_deref()
-                    .is_none_or(|subject| thread_grouping_subject(&header.subject) == subject)
+                    .is_none_or(|subject| subject_in_branch(&header.subject, subject))
         };
         if starred {
             // Star the source mailbox's messages and their physical duplicates,

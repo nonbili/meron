@@ -144,6 +144,9 @@ export type Settings = {
   spellCheck: boolean
   /** Whether replies carry the message they answer, quoted under the reply text. */
   quoteReplies: boolean
+  /** End-to-end encryption: encrypt by default when every recipient has a key
+   * (accounts with encryption on). The user can still turn it off per message. */
+  encryptWhenPossible: boolean
   /**
    * App-wide signature HTML, inserted into new messages and replies. Accounts
    * follow this unless they carry their own override (see Account.signature).
@@ -233,6 +236,7 @@ const DB_KEY = {
   chatFullMessages: 'chat_full_messages',
   spellCheck: 'spell_check',
   quoteReplies: 'quote_replies',
+  encryptWhenPossible: 'encrypt_when_possible',
   signature: 'signature',
   remoteImageSenders: 'remote_image_senders',
   kanbanBoards: 'kanban_boards',
@@ -449,6 +453,7 @@ export const settings$ = observable<Settings>({
   chatFullMessages: false,
   spellCheck: true,
   quoteReplies: false,
+  encryptWhenPossible: true,
   signature: '',
   remoteImageSenders: [],
   kanbanBoards: [],
@@ -968,6 +973,9 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.quoteReplies] === 'boolean') {
       settings$.quoteReplies.set(prefs[DB_KEY.quoteReplies] as boolean)
+    }
+    if (typeof prefs[DB_KEY.encryptWhenPossible] === 'boolean') {
+      settings$.encryptWhenPossible.set(prefs[DB_KEY.encryptWhenPossible] as boolean)
     }
 
     if (typeof prefs[DB_KEY.signature] === 'string') {

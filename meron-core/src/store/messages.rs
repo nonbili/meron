@@ -52,7 +52,13 @@ pub fn upsert_messages(
             extra.insert("attachment_metadata".to_string(), json!(true));
         }
         let extra_json = Value::Object(extra).to_string();
-        let thread_key = resolve_message_thread_key(&tx, account, &m.thread_key)?;
+        let mut thread_key = resolve_message_thread_key(&tx, account, &m.thread_key)?;
+        let parent_id = m.in_reply_to.trim().to_lowercase();
+        if thread_key.starts_with("gmthrid:")
+            && let Some(key) = encrypted_gmail_thread_of(&tx, account, &parent_id)?
+        {
+            thread_key = key;
+        }
         let message_id = m.message_id.trim().to_lowercase();
         if !message_id.is_empty() {
             upserted_ids.insert(message_id);
@@ -63,7 +69,11 @@ pub fn upsert_messages(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, starred, thread_key, json, recipients, files)
              VALUES(?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT(account, folder, msg_id) DO UPDATE SET
-               subject    = excluded.subject,
+               -- A decrypted body knows the real subject (RFC 9788 protected
+               -- headers); the envelope only has a placeholder such as [...].
+               subject    = CASE WHEN json_extract(messages.json, '$.crypto.encrypted') = 1
+                                  AND messages.body IS NOT NULL
+                             THEN messages.subject ELSE excluded.subject END,
                from_name  = excluded.from_name,
                from_addr  = excluded.from_addr,
                date       = excluded.date,
@@ -145,6 +155,39 @@ pub(super) fn cached_thread_key_of(
         .optional()?)
 }
 
+/// The thread key of the cached Gmail message with this (lowercased)
+/// Message-ID when that thread is keyed by headers rather than Gmail's thread
+/// id: encrypted mail, whose placeholder subject makes `imap::thread_key` skip
+/// `X-GM-THRID`. A plain reply in such a thread (encryption turned off) has a
+/// real subject, so Gmail files it in a conversation of its own; it joins the
+/// thread it answers instead. Rows without a Gmail id (cached from our own
+/// bytes) don't count: on Gmail they are keyed by Message-ID for any mail, and
+/// following them would pull plain replies out of their Gmail conversation.
+pub(super) fn encrypted_gmail_thread_of(
+    conn: &rusqlite::Transaction<'_>,
+    account: &str,
+    message_id: &str,
+) -> Result<Option<String>> {
+    if message_id.is_empty() {
+        return Ok(None);
+    }
+    Ok(conn
+        .query_row(
+            "SELECT thread_key FROM messages
+             WHERE account = ?1
+               AND lower(COALESCE(json_extract(json, '$.message_id'), '')) = ?2
+               AND json_extract(json, '$.gmail_msg_id') IS NOT NULL
+               AND COALESCE(thread_key, '') <> ''
+               AND thread_key NOT LIKE 'uid:%'
+               AND thread_key NOT LIKE 'gmthrid:%'
+             ORDER BY date ASC, uid ASC
+             LIMIT 1",
+            params![account, message_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?)
+}
+
 /// Hand the canonical thread key down to rows that named a message we only just
 /// cached.
 ///
@@ -167,6 +210,32 @@ pub(super) fn reconcile_thread_keys_from(
     while !pending.is_empty() {
         let mut next: Vec<String> = Vec::new();
         for parent_id in pending.drain(..) {
+            // Plain Gmail replies that synced before the encrypted message
+            // they answer (see `encrypted_gmail_thread_of`).
+            if let Some(encrypted) = encrypted_gmail_thread_of(conn, account, &parent_id)? {
+                let mut stmt = conn.prepare_cached(
+                    "SELECT id, lower(COALESCE(json_extract(json, '$.message_id'), ''))
+                       FROM messages
+                      WHERE account = ?1
+                        AND uid <> 0
+                        AND thread_key LIKE 'gmthrid:%'
+                        AND lower(COALESCE(json_extract(json, '$.in_reply_to'), '')) = ?2",
+                )?;
+                let replies = stmt
+                    .query_map(params![account, parent_id], |row| {
+                        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for (id, reply_message_id) in replies {
+                    conn.execute(
+                        "UPDATE messages SET thread_key = ?1 WHERE id = ?2",
+                        params![encrypted, id],
+                    )?;
+                    if !reply_message_id.is_empty() && seen.insert(reply_message_id.clone()) {
+                        next.push(reply_message_id);
+                    }
+                }
+            }
             let Some(canonical) = cached_thread_key_of(conn, account, &parent_id)? else {
                 continue;
             };
@@ -667,7 +736,7 @@ pub fn newest_thread_uids(
     let newest = get_thread_headers(conn, account, folder, thread_key)?
         .into_iter()
         .filter(|header| match subject_filter {
-            Some(filter) => thread_grouping_subject(&header.subject) == filter,
+            Some(filter) => subject_in_branch(&header.subject, filter),
             None => true,
         })
         .next_back();
@@ -712,7 +781,7 @@ pub fn thread_uids_by_folder(
     let mut by_folder = std::collections::BTreeMap::<String, Vec<u32>>::new();
     for row in rows {
         let (folder, uid, subject) = row?;
-        if subject_filter.is_some_and(|filter| thread_grouping_subject(&subject) != filter) {
+        if subject_filter.is_some_and(|filter| !subject_in_branch(&subject, filter)) {
             continue;
         }
         by_folder.entry(folder).or_default().push(uid);
@@ -766,7 +835,7 @@ pub fn resolve_message_uids(
     }
     let mut headers = get_thread_headers(conn, account, folder, thread_key)?;
     if let Some(filter) = subject_filter {
-        headers.retain(|header| thread_grouping_subject(&header.subject) == filter);
+        headers.retain(|header| subject_in_branch(&header.subject, filter));
     }
     Ok(headers.into_iter().map(|header| header.uid).collect())
 }
@@ -1086,6 +1155,11 @@ pub fn get_cached_message(
             .get("invite")
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok()),
+        crypto: extra
+            .get("crypto")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok()),
+        found_keys: Default::default(),
         preview: String::new(),
         attachments,
     }))
@@ -1148,6 +1222,29 @@ pub fn backfill_files_batch(conn: &Connection, batch: u32) -> Result<bool> {
     Ok(false)
 }
 
+/// The UID of a message in `folder` with Message-ID `message_id` and no cached
+/// body yet: the Sent copy a tail refresh stored as an envelope.
+pub fn sent_copy_uid_without_body(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    message_id: &str,
+) -> Result<Option<u32>> {
+    if message_id.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(conn
+        .query_row(
+            "SELECT uid FROM messages
+             WHERE account = ?1 AND folder = ?2 AND uid <> 0 AND body IS NULL
+               AND lower(json_extract(json, '$.message_id')) = lower(?3)
+             ORDER BY uid DESC LIMIT 1",
+            params![account, folder, message_id.trim()],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
 pub fn save_cached_message(
     conn: &Connection,
     account: &str,
@@ -1169,6 +1266,7 @@ pub fn save_cached_message(
         "body_is_rendered": message.body_is_rendered,
         "attachments": attachments_json,
         "invite": message.invite,
+        "crypto": message.crypto,
     })
     .to_string();
 
@@ -1202,6 +1300,38 @@ pub fn save_cached_message(
             files_json(message)
         ],
     )?;
+
+    // A decrypted message can be the reply titled with the placeholder or the
+    // thread start that knows the real subject: repair its thread either way.
+    if message.crypto.as_ref().is_some_and(|c| c.encrypted) {
+        let thread_key: Option<String> = conn
+            .query_row(
+                "SELECT thread_key FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                params![account, folder, uid],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+        if let Some(thread_key) = thread_key.filter(|k| !k.is_empty()) {
+            let _ = super::repair_placeholder_reply_subjects(conn, account, Some(&thread_key));
+        }
+    }
+
+    // Keys announced in (or attached to) the message: every body fetch lands
+    // here, so Autocrypt works whichever path read it. Recorded before the
+    // calendar step; a failure must not lose the message.
+    if !message.found_keys.is_empty() {
+        let changed = crate::openpgp::store::ingest(
+            conn,
+            &message.found_keys.announced,
+            &message.found_keys.attached,
+            message.date,
+        )
+        .unwrap_or(false);
+        if changed {
+            let _ = crate::openpgp::store::reload(conn);
+        }
+    }
 
     // Every body fetch lands here, so an organizer's update reaches the
     // calendar whichever path read it. A calendar failure must not lose the

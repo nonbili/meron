@@ -347,6 +347,9 @@ fn thread_cards_json_keyed(
                 "has_draft": card.has_draft,
                 "has_attachments": !files.is_empty(),
                 "files": files,
+                // End-to-end encrypted newest message: the list's lock, coloured
+                // by the trust of its signature.
+                "encrypted": crate::openpgp::store::card_lock(conn, account_id, folder, card.header.uid),
                 "recipient_overflow": card.header.recipient_overflow,
                 "senders": senders,
                 "senders_truncated": senders_truncated,

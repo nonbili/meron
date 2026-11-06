@@ -9,6 +9,7 @@ mod feeds;
 mod folders;
 pub(crate) mod messages;
 mod oauth;
+mod openpgp;
 mod tasks;
 mod watch;
 
@@ -80,6 +81,8 @@ pub(crate) async fn dispatch(
         }
 
         "backup.export" | "backup.import" => backup::dispatch(engine, req, out).await,
+
+        m if m.starts_with("pgp.") => openpgp::dispatch(engine, req, out).await,
 
         "account.list"
         | "account.connect"

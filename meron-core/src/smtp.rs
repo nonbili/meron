@@ -359,7 +359,15 @@ pub async fn send(
     references: &str,
     reply_to: &str,
     message_id: &str,
+    // Header fields added on top (the Autocrypt header of an account with
+    // end-to-end encryption on).
+    extra_headers: &[(&str, String)],
 ) -> Result<Vec<u8>> {
+    let with_extra = |raw: Vec<u8>| {
+        extra_headers
+            .iter()
+            .fold(raw, |raw, (name, value)| crate::openpgp::outgoing::add_header(&raw, name, value))
+    };
     // Caller passes the chosen send-as address (primary or a verified alias),
     // already validated against the account; fall back to the IMAP login.
     let from = if from_addr.trim().is_empty() {
@@ -391,7 +399,7 @@ pub async fn send(
         }
     };
 
-    let raw = build_message(
+    let raw = with_extra(build_message(
         sender_name,
         from,
         to,
@@ -406,7 +414,7 @@ pub async fn send(
         references,
         reply_to,
         &message_id,
-    )?;
+    )?);
 
     submit(creds, from, &to_list, &cc_list, &bcc_list, &raw).await?;
 
@@ -432,7 +440,58 @@ pub async fn send(
             reply_to,
             &message_id,
         )
+        .map(with_extra)
     }
+}
+
+/// Sends end-to-end encrypted (PGP/MIME, signed). One message goes to the To
+/// and Cc recipients, one to each Bcc recipient on its own (so nobody learns
+/// of a Bcc from the ciphertext's key IDs), and the returned Sent copy is
+/// encrypted to us only and keeps the `Bcc:` header.
+pub async fn send_encrypted(
+    creds: &Creds,
+    from_addr: &str,
+    sender_name: &str,
+    to: &str,
+    cc: &str,
+    bcc: &str,
+    subject: &str,
+    body: &str,
+    html: &str,
+    attachments: &[AttachmentInput],
+    in_reply_to: &str,
+    references: &str,
+    reply_to: &str,
+    message_id: &str,
+    keys: &crate::openpgp::outgoing::SendKeys,
+) -> Result<Vec<u8>> {
+    use crate::openpgp::outgoing::wrap;
+    let from = if from_addr.trim().is_empty() { creds.user.as_str() } else { from_addr.trim() };
+    let to_list = parse_addrs(to);
+    let cc_list = parse_addrs(cc);
+    // Several copies share one Message-ID so replies thread.
+    let message_id = match message_id.trim() {
+        "" => format!("{}@{}", uuid::Uuid::new_v4(), from.rsplit('@').next().unwrap_or("localhost")),
+        id => id.to_string(),
+    };
+    let build = |include_bcc: bool| {
+        build_message(
+            sender_name, from, to, cc, bcc, include_bcc, subject, body, html, attachments, in_reply_to,
+            references, reply_to, &message_id,
+        )
+    };
+    let transmitted = build(false)?;
+    if !to_list.is_empty() || !cc_list.is_empty() {
+        let mut audience: Vec<&pgp::composed::SignedPublicKey> = keys.to_cc.iter().collect();
+        audience.push(&keys.own);
+        let raw = wrap(&transmitted, &audience, &keys.signer, &keys.autocrypt)?;
+        submit(creds, from, &to_list, &cc_list, &[], &raw).await?;
+    }
+    for (entry, key) in &keys.bcc {
+        let raw = wrap(&transmitted, &[key, &keys.own], &keys.signer, &keys.autocrypt)?;
+        submit(creds, from, &[], &[], std::slice::from_ref(entry), &raw).await?;
+    }
+    wrap(&build(true)?, &[&keys.own], &keys.signer, &keys.autocrypt)
 }
 
 /// Hand one built message to the account's SMTP server: connect, upgrade,

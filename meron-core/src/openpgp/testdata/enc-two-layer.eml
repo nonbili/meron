@@ -1,0 +1,38 @@
+From: Mallory Example <mallory@example.com>
+To: Alice Example <alice@example.org>
+Subject: ...
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <enc-two-layer@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="enc-boundary"
+
+--enc-boundary
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--enc-boundary
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Disposition: inline; filename="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DHQNycYwvvjUSAQdA8YydsfOA63eQ+8A+24uluiTZdbdMP0Sv/VRNiK7cQUsw
+Bg7LeOZLtC0h0LV48Tjk/m7kLaOeo6dUlHKug+AndSmLL9GvrN315uI0+GJUZOPD
+0ukBB2GzfgvelKhJmMQ+vU0VsXBVnByd+fivnV3hhQ6fMci7vABVnToJkKj6n6Pc
+fvbKl1yYejWtUvoACihFA1/h/D/0p6a7TRhcmbLWLHFWB2GT/yinwiBibhMC+8Qs
+VWpef0vhGmrspztTfAReQ0TIAs6WgKMA/6ecxQwM0r4amFawaPrI01COwPEk4fwC
+Nz0078R9AXV8DUw3ALpWaVoMqDx8LX/6pXWfhKpAr87y7ogX3gPew7U0Y9wYXaPs
+bkae+fPIcDjhe+THlIVddnioQaD0nq6Pi4zO9igbA47auvBVfQBUZmdF62WDQzPh
+JVRXnm7Fd+vcZBUHLJg6yUaTcGU94nx9uvpJf7tMGHFG3hL8HWKxxkBacFE3yiQm
+t9Mq0K4GnU5eP+KfBJ0KY1fKCZ39qqdblwfrJ/lRLDePrsQIJYdSI/ol/MXcFBXv
+5ELHbTRQIKQnzRCZ/ipdI6T3ZOWqN/F23FV3GeX4Hn2ZXR3eij76wCPFWjccw/Al
+nZZMLAVaaP+91GFFef61IA1v4mUVhTWMfskLGfRfMQBTApM4bxJPQX0YZ2mslCbd
+goAGhkN2CnKFT19Tp0cYs/oLv3pHwxR9aaozAA8r7GpGg0LWAvFlKRHVsLVfTkct
+n5tTs1ceHXe9WB868bp/eGo03uOw2R5qDPVtTR3uDbCCgxiwrO9Pr5P+n2GnTOY3
+KGPPfj8OoP+BBfo=
+=26GU
+-----END PGP MESSAGE-----
+
+--enc-boundary--

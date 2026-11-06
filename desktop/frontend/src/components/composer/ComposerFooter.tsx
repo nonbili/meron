@@ -2,6 +2,8 @@ import { Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-rea
 import { useTranslation } from '../../lib/i18n'
 import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
+import type { RecipientKeys } from '../../lib/crypto'
+import { EncryptToggle } from '../crypto/EncryptToggle'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -45,6 +47,7 @@ export function ComposerFooter({
   saveStatus,
   saveError,
   canSend,
+  encryption,
   onPickFiles,
   onPickInlineImages,
   onToggleRich,
@@ -56,6 +59,14 @@ export function ComposerFooter({
   saveStatus: SaveStatus
   saveError?: string
   canSend: boolean
+  /** The end-to-end encryption toggle, when the account can encrypt. */
+  encryption?: {
+    keys: RecipientKeys | null
+    on: boolean
+    sensitive?: 'reply' | 'forward'
+    hasRecipients?: boolean
+    onChange: (on: boolean) => void
+  }
   onPickFiles: () => void
   onPickInlineImages: () => void
   onToggleRich: () => void
@@ -88,6 +99,16 @@ export function ComposerFooter({
             label={t('composer.actions.insertInlineImage')}
             radius="xl"
             onClick={onPickInlineImages}
+          />
+        )}
+        {encryption && (
+          <EncryptToggle
+            size="md"
+            keys={encryption.keys}
+            on={encryption.on}
+            sensitive={encryption.sensitive}
+            hasRecipients={encryption.hasRecipients}
+            onChange={encryption.onChange}
           />
         )}
         <button

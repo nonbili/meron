@@ -1,0 +1,36 @@
+From: Carol Example <carol@example.com>
+To: list@lists.example.com
+Subject: List post
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <list-footer@example.com>
+MIME-Version: 1.0
+List-Id: <test.lists.example.com>
+Content-Type: multipart/mixed; boundary="list-mix"
+
+--list-mix
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="inner-sig"
+
+--inner-sig
+Content-Type: text/plain; charset="utf-8"
+
+This message is signed, not encrypted.
+
+--inner-sig
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEABYIAB0WIQREezQxNz16ySakSx0avUZZ9DvbqQUCaueN5wAKCRAavUZZ9Dvb
+qQ0sAQCVnq0KcVdSVibsIlXdXSKRNBvAmlA8tRz/LPjYFpnQDAD5AfCqcbfPHn2W
+cEw8FQFlhcMuhydlr3IZNVcePdPD8wc=
+=QT0l
+-----END PGP SIGNATURE-----
+
+--inner-sig--
+
+--list-mix
+Content-Type: text/plain; charset="utf-8"
+
+_______________________________________________
+Test list footer
+--list-mix--

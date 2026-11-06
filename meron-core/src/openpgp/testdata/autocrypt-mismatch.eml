@@ -1,0 +1,18 @@
+From: Mallory Example <mallory@example.com>
+To: Alice Example <alice@example.org>
+Subject: Hi
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <autocrypt-mismatch@example.com>
+MIME-Version: 1.0
+Autocrypt: addr=carol@example.com; prefer-encrypt=mutual; keydata=
+ mDMEaueN5xYJKwYBBAHaRw8BAQdAA5nlbbK80n1ZH+lap22AvV9WP0KQHEfELY35+AvHCwC0JU1h
+ bGxvcnkgRXhhbXBsZSA8bWFsbG9yeUBleGFtcGxlLmNvbT6IkwQTFgoAOxYhBOXIjh7TB+tlNwBb
+ SNKpUyOhaBeEBQJq543nAhsDBQsJCAcCAiICBhUKCQgLAgQWAgMBAh4HAheAAAoJENKpUyOhaBeE
+ +gwA/04+BW5s4Rh+oG6r0qT9WyrBTOw2jytcx2qiM9yZiirWAPsFSkgtVqYYfmVbw1vFXnzCqlOn
+ pxixAKAHdTOCwoEyC7g4BGrnjecSCisGAQQBl1UBBQEBB0A0PamyPnbNGsly8XLYXTxebQzrgUm9
+ Lu21lJOsqp1cEwMBCAeIeAQYFgoAIBYhBOXIjh7TB+tlNwBbSNKpUyOhaBeEBQJq543nAhsMAAoJ
+ ENKpUyOhaBeEjeoA/i9jIybv4jFSHCjNkxonkuPQznsLvWOi7slaPMVhjszYAP9lUccIUxR+plfJ
+ go7uhGpciwR/SA4tc8DMVVe0ZMrIAA==
+Content-Type: text/plain; charset="utf-8"
+
+Not really Carol.

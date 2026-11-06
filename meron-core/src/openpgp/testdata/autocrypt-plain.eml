@@ -1,0 +1,18 @@
+From: Carol Example <carol@example.com>
+To: Alice Example <alice@example.org>
+Subject: Hello from Carol
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <autocrypt-plain@example.com>
+MIME-Version: 1.0
+Autocrypt: addr=carol@example.com; prefer-encrypt=mutual; keydata=
+ mDMEaueN5xYJKwYBBAHaRw8BAQdAEjV41VB1Nyjd9LZurVIE6DONOzhnwRmQvpHAnjdrbmC0IUNh
+ cm9sIEV4YW1wbGUgPGNhcm9sQGV4YW1wbGUuY29tPoiTBBMWCgA7FiEERHs0MTc9eskmpEsdGr1G
+ WfQ726kFAmrnjecCGwMFCwkIBwICIgIGFQoJCAsCBBYCAwECHgcCF4AACgkQGr1GWfQ726kx5QEA
+ sevA7mL6xUBpU/r1yGeSCYMM2VOjeHqnp8zD9CSLQXcA/0xDdUbUK2YlXqz1Xgk1RWj8IORkpT8t
+ 1fed/dinKvkOuDgEaueN5xIKKwYBBAGXVQEFAQEHQJmbtys8vACZEZhGtT4A5njq6N9Zey0iXlLg
+ SpCCy3hzAwEIB4h4BBgWCgAgFiEERHs0MTc9eskmpEsdGr1GWfQ726kFAmrnjecCGwwACgkQGr1G
+ WfQ726m98AEAw8JA1dH6d7HtrdGwI1tIk4uJsoNU+4fIwsVmyI/O5XQA/A0+TBCP9fXsmJlcmk4S
+ ZH15eLszeXWNvKlAA0ehUe8D
+Content-Type: text/plain; charset="utf-8"
+
+Hi Alice, my mail client supports encryption.

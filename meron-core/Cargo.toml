@@ -50,6 +50,12 @@ x509-parser = "0.18.1"
 calcard = { version = "0.3.14", default-features = false }
 iana-time-zone = "0.1.65"
 zstd = "0.13"
+# OpenPGP (nonbili/meron#46): rPGP pinned exactly, since only its latest release gets
+# security fixes and we follow it on purpose. No default features: drops bzip2, as Delta Chat does.
+pgp = { version = "=0.21.0", default-features = false }
+rand = "0.8"
+smallvec = "1"
+zeroize = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 oo7 = { version = "0.6.0", default-features = false, features = ["tokio", "native_crypto"] }

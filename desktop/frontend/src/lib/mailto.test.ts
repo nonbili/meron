@@ -41,4 +41,22 @@ describe('parseMailto', () => {
   it('accepts uppercase scheme', () => {
     expect(parseMailto('MAILTO:a@x.com')?.to).toBe('a@x.com')
   })
+
+  // A mailto: link comes from untrusted sources (a web page, another mail).
+  // RFC 6068 forbids attaching files, and a malicious `attach=`/`attachment=`
+  // must never reach the composer as an attachment or leak into any field
+  // parseMailto only ever yields to/cc/bcc/subject/body.
+  it('ignores attach/attachment and any unknown parameters', () => {
+    const fields = parseMailto('mailto:a@x.com?subject=Hi&attach=/etc/passwd&attachment=file:///secret&x-foo=bar')
+    expect(fields).toEqual({
+      to: 'a@x.com',
+      cc: '',
+      bcc: '',
+      subject: 'Hi',
+      body: '',
+    })
+    // No field carries the attacker-supplied path.
+    expect(JSON.stringify(fields)).not.toContain('passwd')
+    expect(JSON.stringify(fields)).not.toContain('secret')
+  })
 })

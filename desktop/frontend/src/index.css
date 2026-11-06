@@ -28,6 +28,9 @@
   --color-accent-badge: var(--me-accent-badge, var(--me-accent));
   --color-unread-bg: color-mix(in srgb, var(--me-accent) 18%, var(--me-bg-chats));
   --color-unread-text: color-mix(in srgb, var(--me-accent) 55%, var(--me-text-primary));
+  /* End-to-end encryption: a key the user verified. A calm green, less
+     saturated than emerald (it sits next to the timestamp on every verified message). */
+  --color-verified: var(--me-verified);
   /* Glyph/divider color on the sidenav; set per theme by accentLabelVars in lib/themes.ts. */
   --color-sidenav-ink: var(--me-sidenav-ink);
   --color-bubble-in: var(--me-bubble-in);
@@ -82,6 +85,7 @@
    applyActiveTheme in states/settings.ts). Keep values in sync with the MERON_LIGHT /
    MERON_DARK registries in lib/themes.ts. */
 :root {
+  --me-verified: #278049;
   --me-bg-app: #f0f2f1;
   --me-bg-chat: #f2f4f3;
   --me-bg-chat-overlay: rgba(242, 244, 243, 0.94);
@@ -126,6 +130,7 @@
 }
 
 .dark {
+  --me-verified: #5cc085;
   --me-bg-app: #0c100e;
   --me-bg-chat: #0d1210;
   --me-bg-chat-overlay: rgba(13, 18, 16, 0.95);

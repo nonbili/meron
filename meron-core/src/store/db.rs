@@ -637,7 +637,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 28;
+pub(super) const SCHEMA_VERSION: i64 = 29;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -755,6 +755,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 28 {
         migrate_v28(&tx)?;
+    }
+    if version < 29 {
+        migrate_v29(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1904,5 +1907,13 @@ fn migrate_v28(conn: &Connection) -> Result<()> {
          END;
          PRAGMA user_version = 28;"
     ))?;
+    Ok(())
+}
+
+/// OpenPGP keys (nonbili/meron#46): own and peer keys, per-account switch,
+/// dismissed encryption offers. See `openpgp::store`.
+fn migrate_v29(conn: &Connection) -> Result<()> {
+    conn.execute_batch(crate::openpgp::store::DDL)?;
+    conn.execute_batch("PRAGMA user_version = 29;")?;
     Ok(())
 }

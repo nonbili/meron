@@ -204,6 +204,35 @@ pub(super) fn candidate_recipients(candidate: &imap::MessageHeader) -> Vec<Strin
     )
 }
 
+/// Cache the body of our own encrypted Sent copy from the bytes we appended,
+/// which are exactly what the server stored. The tail refresh only stores the
+/// envelope (outer subject `[...]`, no crypto status), and the thread re-read
+/// right after a send would show the copy without its lock and under the
+/// placeholder until a later fetch decrypted it. Plain mail and copies that
+/// already have a body keep the normal path. `parse` is
+/// [`parse::parse_message`] outside tests. Returns whether a body was cached.
+pub(super) fn cache_encrypted_sent_copy(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    message_id: &str,
+    raw: &[u8],
+    parse: impl FnOnce(&[u8], &parse::MediaCtx) -> parse::Message,
+) -> bool {
+    let Ok(Some(uid)) = store::sent_copy_uid_without_body(conn, account, folder, message_id) else {
+        return false;
+    };
+    let media = parse::MediaCtx {
+        root: parse::media_root(),
+        account: account.to_string(),
+        folder: folder.to_string(),
+        uid,
+    };
+    let message = parse(raw, &media);
+    let decrypted = message.crypto.as_ref().is_some_and(|c| c.encrypted && c.problem.is_none());
+    decrypted && store::save_cached_message(conn, account, folder, uid, &message).is_ok()
+}
+
 pub async fn append_to_sent(
     engine: &Arc<Engine>,
     account: &str,
@@ -258,6 +287,13 @@ pub async fn append_to_sent(
     match refresh_sent_copy(engine, account, &copy).await {
         Ok(observed) => copy.observed = observed,
         Err(err) => eprintln!("meron-core: Sent refresh for {account}: {err:#}"),
+    }
+    // Only our own APPEND: a provider-filed copy is not these bytes.
+    if should_append && copy.observed {
+        let db = engine.db.lock().unwrap();
+        cache_encrypted_sent_copy(&db, account, &copy.folder, &copy.envelope.message_id, raw, |raw, media| {
+            parse::parse_message(raw, Some(media))
+        });
     }
 
     Ok(copy)
@@ -328,4 +364,80 @@ pub async fn append_to_drafts(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod sent_copy_body_tests {
+    use super::*;
+    use crate::openpgp::{keyring, keys};
+
+    fn fixture(name: &str) -> Vec<u8> {
+        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
+            .expect("fixture")
+    }
+
+    fn alice_ring() -> keyring::Keyring {
+        let key = keys::parse_keys(&fixture("alice-secret.asc")).unwrap().secret.remove(0);
+        let keys::Unlock::Ok(secret) = keys::unlock(key, None).unwrap() else { panic!() };
+        keyring::Keyring {
+            own: vec![keyring::own_key("alice", secret, true)],
+            peers: Vec::new(),
+            enabled_accounts: vec!["alice".into()],
+            dismissed: Vec::new(),
+        }
+    }
+
+    fn envelope_row(conn: &Connection, uid: u32, message_id: &str, body: Option<&str>) {
+        conn.execute(
+            "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, body, json)
+             VALUES('alice', 'Sent', ?1, ?2, '[...]', 'Alice', 'alice@example.org', 100, 1, ?3,
+                    json_object('message_id', ?4))",
+            rusqlite::params![uid.to_string(), uid, body, message_id],
+        )
+        .unwrap();
+    }
+
+    fn row(conn: &Connection, uid: u32) -> (String, Option<String>, Option<i64>) {
+        conn.query_row(
+            "SELECT subject, body, json_extract(json, '$.crypto.encrypted') FROM messages WHERE uid = ?1",
+            [uid],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap()
+    }
+
+    // Right after a send the thread re-reads its Sent copy; without a body it
+    // has no crypto status, so the lock vanished until a later fetch.
+    #[test]
+    fn our_encrypted_sent_copy_is_cached_with_its_lock_and_subject() {
+        let conn = store::open_at(":memory:").unwrap();
+        let ring = alice_ring();
+        let raw = fixture("enc-signed.eml");
+        let mid = parse::sent_envelope_of(&raw).message_id;
+        envelope_row(&conn, 7, &mid, None);
+        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
+        assert!(cache_encrypted_sent_copy(&conn, "alice", "Sent", &mid, &raw, parse));
+        let (subject, body, encrypted) = row(&conn, 7);
+        assert_eq!(subject, "Secret plans");
+        assert!(body.is_some_and(|b| b.contains("meeting moved to Thursday")));
+        assert_eq!(encrypted, Some(1));
+    }
+
+    #[test]
+    fn a_plain_sent_copy_or_one_already_cached_is_left_alone() {
+        let conn = store::open_at(":memory:").unwrap();
+        let ring = alice_ring();
+        let plain = b"Message-ID: <plain@example.org>\r\nFrom: alice@example.org\r\nSubject: Hi\r\n\r\nhello\r\n";
+        envelope_row(&conn, 8, "<plain@example.org>", None);
+        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
+        assert!(!cache_encrypted_sent_copy(&conn, "alice", "Sent", "<plain@example.org>", plain, parse));
+        assert_eq!(row(&conn, 8).1, None, "plain mail keeps the normal fetch");
+
+        let raw = fixture("enc-signed.eml");
+        let mid = parse::sent_envelope_of(&raw).message_id;
+        envelope_row(&conn, 9, &mid, Some("already here"));
+        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
+        assert!(!cache_encrypted_sent_copy(&conn, "alice", "Sent", &mid, &raw, parse));
+        assert_eq!(row(&conn, 9).1.as_deref(), Some("already here"));
+    }
 }

@@ -1,5 +1,6 @@
 import type { DragEvent, MouseEvent, Ref } from 'react'
-import { Check, Star } from 'lucide-react'
+import { Check, Lock, Star } from 'lucide-react'
+import { TONE_CLASS } from '../../lib/crypto'
 import type { Account, Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { AccountAvatar } from '../avatar/AccountAvatar'
@@ -167,6 +168,14 @@ export function ThreadListItem({
 
           <div className="flex items-center gap-1.5 min-w-0">
             {!bulkSelectable && thread.starred && <Star size={11} className="fill-amber-500 text-amber-500 shrink-0" />}
+            {thread.encrypted && (
+              <Lock
+                size={11}
+                strokeWidth={2.4}
+                className={`shrink-0 ${TONE_CLASS[thread.encrypted]}`}
+                aria-label={t('crypto.badge.encrypted')}
+              />
+            )}
             <p
               className={clsx('flex-1 truncate text-[0.75rem] leading-snug', unread ? 'font-semibold' : 'font-normal')}
             >

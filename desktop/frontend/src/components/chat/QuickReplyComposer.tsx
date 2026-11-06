@@ -1,7 +1,7 @@
 import { Loader2, Maximize2, Paperclip, Send } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { openReplyInFullEditor } from '../../states/compose'
+import { openReplyInFullEditor, replyQuoteWithheld } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { isQuickReplyBlank } from '../../states/quickReply'
 import { sendShortcutLabel, settings$ } from '../../states/settings'
@@ -9,6 +9,8 @@ import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 import { QuickReplyFrom } from './QuickReplyFrom'
 import { QuickReplyRecipients } from './QuickReplyRecipients'
+import { quickReplyEncrypts, quickReplyRecipients, quickReplyTarget } from '../../states/composeReply'
+import { EncryptToggle, encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
 
 export function QuickReplyComposer() {
   const { t } = useTranslation()
@@ -28,7 +30,16 @@ export function QuickReplyComposer() {
   // A box holding only its seeded signature counts as empty. The check peeks
   // rather than subscribing, but `composer` is rendered below, so every
   // keystroke re-renders this and re-evaluates it.
-  const canSend = !sendingReply && !isQuickReplyBlank()
+  const target = useValue(quickReplyTarget)
+  const { to, cc } = useValue(quickReplyRecipients)
+  const encrypt = useValue(quickReplyEncrypts)
+  const keys = useRecipientKeys(target?.account_id ?? '', recipientAddresses(to, cc))
+  const sensitive = target?.crypto?.encrypted ? ('reply' as const) : undefined
+  // Subscribed so the tooltip follows the setting; the helper peeks.
+  useValue(settings$.quoteReplies)
+  const quoteWithheld = replyQuoteWithheld(target)
+  const blocked = encryptionBlocksSend(encrypt, keys)
+  const canSend = !sendingReply && !isQuickReplyBlank() && !blocked
 
   return (
     // The footer floats over the message list (MessagePane) and paints nothing
@@ -84,6 +95,17 @@ export function QuickReplyComposer() {
           >
             <Maximize2 size={14} />
           </button>
+          {target && (
+            <EncryptToggle
+              key={target.thread_id}
+              keys={keys}
+              hasRecipients={!!(to || cc).trim()}
+              on={encrypt}
+              sensitive={sensitive}
+              quoteWithheld={quoteWithheld}
+              onChange={(on) => compose$.quickReplyEncrypt.set({ threadId: target.thread_id, on })}
+            />
+          )}
           <QuickReplyFrom />
           <div className="ml-auto flex min-w-0 shrink items-center">
             <QuickReplyRecipients />

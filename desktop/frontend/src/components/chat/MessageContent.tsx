@@ -10,6 +10,9 @@ import { RetryWhenRestored } from './RetryWhenRestored'
 import { VideoAttachment } from './VideoAttachment'
 import type { MessageView } from './useMessageView'
 import type { FrameSurface } from './frameTheme'
+import { useValue } from '@legendapp/state/react'
+import { accounts$ } from '../../states/accounts'
+import { CryptoStrip } from '../crypto/CryptoStrip'
 
 // Everything below a message's header: image attachments, videos, a calendar
 // invitation's card, the body and the file attachment list. Blocked remote
@@ -37,9 +40,17 @@ export function MessageContent({
   const { t } = useTranslation()
   const { attachmentImages, bubbleAttachmentImages, videos, files } = view
   const onOpenImage = (idx: number) => thread$.galleryIndex.set(idx)
+  const accountAddress = useValue(() => accounts$.get().find((a) => a.id === message.account_id)?.email ?? '')
 
   return (
     <>
+      <CryptoStrip
+        crypto={message.crypto}
+        accountId={message.account_id}
+        accountAddress={accountAddress}
+        senderName={message.from_name}
+        senderAddress={message.from_addr}
+      />
       {/* A feed thread is the whole feed, and every header above names the
           feed, so the item's own title only shows here. Mirrors mobile. */}
       {view.isRSS && message.subject && (

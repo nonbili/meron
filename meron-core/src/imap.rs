@@ -1056,6 +1056,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
         let ef = fetch.header().map(header_fields).unwrap_or_default();
         let thread_key = thread_key(
             fetch.gmail_thread_id().copied(),
+            &ef.subject,
             &ef.message_id,
             &ef.in_reply_to,
             &ef.references_root,
@@ -1342,6 +1343,7 @@ pub async fn fetch_by_message_ids(
             let ef = fetch.header().map(header_fields).unwrap_or_default();
             let thread_key = thread_key(
                 fetch.gmail_thread_id().copied(),
+                &ef.subject,
                 &ef.message_id,
                 &ef.in_reply_to,
                 &ef.references_root,
@@ -1429,6 +1431,7 @@ pub async fn fetch_headers_by_uid(
             let ef = fetch.header().map(header_fields).unwrap_or_default();
             let thread_key = thread_key(
                 fetch.gmail_thread_id().copied(),
+                &ef.subject,
                 &ef.message_id,
                 &ef.in_reply_to,
                 &ef.references_root,
@@ -1466,6 +1469,7 @@ pub fn header_from_raw(raw: &[u8], uid: u32, seen: bool, starred: bool) -> Messa
     let ef = header_fields(raw);
     let thread_key = thread_key(
         None,
+        &ef.subject,
         &ef.message_id,
         &ef.in_reply_to,
         &ef.references_root,
@@ -2828,6 +2832,7 @@ async fn supports_condstore(session: &mut Session) -> bool {
 
 fn thread_key(
     gmail_thrid: Option<u64>,
+    subject: &str,
     message_id: &str,
     in_reply_to: &str,
     references_root: &str,
@@ -2837,6 +2842,10 @@ fn thread_key(
     // similarity), matching what the user sees in the Gmail UI. Prefer it when
     // the server exposes X-GM-THRID; namespace it so it never collides with a
     // Message-ID-based key.
+    // Not for encrypted mail: Gmail only sees the placeholder subject, the same
+    // for every encrypted message, so it merges unrelated conversations between
+    // the same people (even a new message). Those thread by their own headers.
+    let gmail_thrid = gmail_thrid.filter(|_| !crate::store::is_encrypted_placeholder_subject(subject));
     if let Some(thrid) = gmail_thrid {
         return format!("gmthrid:{thrid}");
     }
@@ -3521,22 +3530,35 @@ mod tests {
         assert_eq!(civil_from_days(20614), (2026, 6, 10));
     }
 
+    // Gmail threads by subject similarity, but an encrypted message's subject
+    // is the protected-headers placeholder, the same for all of them: every
+    // encrypted mail between two people lands in one Gmail conversation, even
+    // a new message. Those messages thread by their own headers instead.
+    #[test]
+    fn an_encrypted_placeholder_subject_ignores_gmails_thread_id() {
+        for placeholder in ["[...]", "...", "Re: [...]"] {
+            assert_eq!(thread_key(Some(42), placeholder, "msgid", "", "", 7), "msgid", "{placeholder}");
+            assert_eq!(thread_key(Some(42), placeholder, "msgid", "inreply", "refsroot", 7), "refsroot");
+        }
+        assert_eq!(thread_key(Some(42), "Lunch", "msgid", "", "", 7), "gmthrid:42");
+    }
+
     #[test]
     fn gmail_thrid_takes_precedence() {
         // Even with full RFC headers present, a Gmail thrid wins and is namespaced.
-        let key = thread_key(Some(42), "msgid", "inreply", "refsroot", 7);
+        let key = thread_key(Some(42), "Plans", "msgid", "inreply", "refsroot", 7);
         assert_eq!(key, "gmthrid:42");
     }
 
     #[test]
     fn falls_back_to_rfc_headers_without_thrid() {
         assert_eq!(
-            thread_key(None, "msgid", "inreply", "refsroot", 7),
+            thread_key(None, "", "msgid", "inreply", "refsroot", 7),
             "refsroot"
         );
-        assert_eq!(thread_key(None, "msgid", "inreply", "", 7), "inreply");
-        assert_eq!(thread_key(None, "msgid", "", "", 7), "msgid");
-        assert_eq!(thread_key(None, "", "", "", 7), "uid:7");
+        assert_eq!(thread_key(None, "", "msgid", "inreply", "", 7), "inreply");
+        assert_eq!(thread_key(None, "", "msgid", "", "", 7), "msgid");
+        assert_eq!(thread_key(None, "", "", "", "", 7), "uid:7");
     }
 }
 
