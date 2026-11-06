@@ -23,6 +23,7 @@ export function Composer({ tabId }: { tabId: string }) {
     focusBody,
     textRef,
     sending,
+    closingWindow,
     error,
     saveStatus,
     saveError,
@@ -103,6 +104,7 @@ export function Composer({ tabId }: { tabId: string }) {
 
   return (
     <div
+      inert={closingWindow || undefined}
       className="relative flex flex-1 flex-col overflow-hidden bg-chat"
       onKeyDown={handleSendShortcut}
       {...dropHandlers}

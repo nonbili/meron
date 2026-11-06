@@ -23,10 +23,11 @@ var (
 )
 
 var (
-	trayMenuMu   sync.Mutex
-	trayShowItem *systray.MenuItem
-	trayHideItem *systray.MenuItem
-	trayQuitItem *systray.MenuItem
+	trayMenuMu      sync.Mutex
+	trayShowItem    *systray.MenuItem
+	trayComposeItem *systray.MenuItem
+	trayHideItem    *systray.MenuItem
+	trayQuitItem    *systray.MenuItem
 )
 
 func (a *App) startTrayPhysical() {
@@ -84,13 +85,17 @@ func (a *App) trayReady() {
 	// the English defaults installed here for the rest of the session.
 	trayMenuMu.Lock()
 	labels := a.currentNativeLabels()
+	compose := systray.AddMenuItem(labels.trayCompose, labels.trayCompose)
+	systray.AddSeparator()
 	show := systray.AddMenuItem(labels.trayShow, labels.trayShow)
 	hide := systray.AddMenuItem(labels.trayHide, labels.trayHideTooltip)
 	systray.AddSeparator()
 	quit := systray.AddMenuItem(labels.trayQuit, labels.trayQuit)
 	trayShowItem, trayHideItem, trayQuitItem = show, hide, quit
+	trayComposeItem = compose
 	trayMenuMu.Unlock()
 
+	go a.handleTrayClicks(compose.ClickedCh, a.openComposeWindow)
 	go a.handleTrayClicks(show.ClickedCh, a.showMainWindow)
 	go a.handleTrayClicks(hide.ClickedCh, a.hideMainWindow)
 	go a.handleTrayClicks(quit.ClickedCh, a.quitFromTray)

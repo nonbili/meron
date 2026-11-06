@@ -1,3 +1,5 @@
+import { discardSentDraft, discardClosedDraft } from './states/quickReply'
+import { externalComposeDraft$ } from './lib/composeWindow'
 import { compose$ } from './states/composeState'
 import { useEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
@@ -45,6 +47,43 @@ function badgeAccounts(accounts: Account[], showAccountBadges: boolean, boardBad
 // mailbox/thread loading, and the tray unread badge. Kept out of the component so
 // App stays a layout shell.
 export function useAppEffects() {
+  useEffect(() => {
+    let active = true
+    let changed = false
+    let publishedDrafts = ''
+    const publishDrafts = () => {
+      const draftIds = compose$.tabs
+        .peek()
+        .flatMap((tab) => (tab.compose?.draftMessageId ? [tab.compose.draftMessageId] : []))
+      const next = JSON.stringify(draftIds)
+      if (next === publishedDrafts) return
+      publishedDrafts = next
+      void invoke('composer.setMainDrafts', { draft_ids: draftIds }).catch(console.error)
+    }
+    publishDrafts()
+    const offTabs = compose$.tabs.onChange(publishDrafts)
+    const off = (window as any).runtime?.EventsOn?.('composer.draftChanged', (id: string) => {
+      changed = true
+      if (typeof id === 'string') externalComposeDraft$.set(id)
+    })
+    const offDiscard = (window as any).runtime?.EventsOn?.(
+      'composer.discardDraft',
+      (detail: { draft: Parameters<typeof discardSentDraft>[0]; closed?: boolean }) => {
+        void (detail.closed ? discardClosedDraft(detail.draft) : discardSentDraft(detail.draft))
+      },
+    )
+    void invoke<string>('composer.getDraft')
+      .then((id) => {
+        if (active && !changed && typeof id === 'string') externalComposeDraft$.set(id)
+      })
+      .catch(console.error)
+    return () => {
+      active = false
+      off?.()
+      offTabs()
+      offDiscard?.()
+    }
+  }, [])
   useEffect(() => watchSystemAppearance(), [])
   useEffect(() => {
     const eventsOn = (window as any).runtime?.EventsOn
@@ -95,6 +134,7 @@ export function useAppEffects() {
       trayHide: t('tray.hideToTray'),
       trayHideTooltip: t('tray.hideMeronTooltip'),
       trayQuit: t('tray.quitMeron'),
+      trayCompose: t('composer.actions.newMessage'),
       newMessage: t('notify.newMessage'),
       newMessageCount: translationTemplate('notify.newMessageCount'),
       calendar: t('calendar.title'),

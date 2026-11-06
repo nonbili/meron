@@ -1,3 +1,4 @@
+import { externalComposeDraft$ } from '../lib/composeWindow'
 import type { Message } from '../types'
 import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
@@ -743,6 +744,7 @@ async function retrySentDraftDiscard(id: string, draft: SentDraft, delays: numbe
 export function draftOpenInComposeTab(draftId: string): boolean {
   if (!draftId) return false
   const id = normalizeMessageId(draftId)
+  if (normalizeMessageId(externalComposeDraft$.peek()) === id) return true
   if (openingComposeTabDraftIds.has(id)) return true
   // Its tab has closed, but the Esc save is still writing what this copy is
   // about to become.

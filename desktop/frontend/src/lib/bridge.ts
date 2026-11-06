@@ -1,3 +1,5 @@
+import { standaloneCompose } from './composeWindow'
+
 // The Wails IPC bridge: every backend call goes through here. In the packaged
 // app (and `wails3 dev`) lib/wails installs the v3 command adapter; if it's absent
 // there's no backend to talk to, so we fail loudly rather than silently no-op.
@@ -6,7 +8,12 @@ export async function invoke<T>(command: string, payload: unknown = {}): Promise
   if (!wailsApp?.Invoke) {
     throw new Error(`Meron backend unavailable (no Wails bindings) for command "${command}"`)
   }
-  return wailsApp.Invoke(command, payload)
+  return wailsApp.Invoke(
+    command,
+    standaloneCompose && ['system.pickFiles', 'system.pickImageFiles', 'system.pickImageFile'].includes(command)
+      ? { ...(payload as object), compose_window: true }
+      : payload,
+  )
 }
 
 /** Whether `error` is the Go bridge giving up on a slow core (`sidecar.go`),

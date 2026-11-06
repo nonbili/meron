@@ -11,8 +11,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
 	wailsRuntime "meron/internal/desktopruntime"
 )
+
+type pickerWindowKey struct{}
 
 func (a *App) pickImageFile(payload map[string]any) (any, error) {
 	res, err := a.pickFiles(payload, true, false)
@@ -61,7 +64,17 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 
 	defaultDir = filePickerDefaultDir(defaultDir)
 
-	paths, usedPortal, err := openFilePicker(a.ctx, title, defaultDir, imagesOnly, multiple)
+	ctx := a.ctx
+	if standalone, _ := payload["compose_window"].(bool); standalone {
+		a.composeMu.Lock()
+		if a.composeWindow != nil {
+			if window, ok := a.composeWindow.window.(*application.WebviewWindow); ok {
+				ctx = context.WithValue(ctx, pickerWindowKey{}, window)
+			}
+		}
+		a.composeMu.Unlock()
+	}
+	paths, usedPortal, err := openFilePicker(ctx, title, defaultDir, imagesOnly, multiple)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +118,9 @@ func openWailsFilePicker(
 	imagesOnly bool,
 	multiple bool,
 ) ([]string, error) {
+	window, _ := ctx.Value(pickerWindowKey{}).(*application.WebviewWindow)
 	options := wailsRuntime.OpenDialogOptions{
+		Window:           window,
 		Title:            title,
 		DefaultDirectory: defaultDir,
 	}

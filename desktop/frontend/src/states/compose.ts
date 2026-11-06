@@ -1,3 +1,9 @@
+import {
+  standaloneCompose,
+  STANDALONE_COMPOSE_KEY,
+  externalComposeDraft$,
+  forgetStandaloneRecoveryDraft,
+} from '../lib/composeWindow'
 import { forgetThreadView } from './threadView'
 import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
@@ -58,6 +64,7 @@ import {
 } from './composeReply'
 import {
   allocateMessageIdentity,
+  loadPersistedTabs,
   compose$,
   COMPOSE_TABS_KEY,
   hasExtraComposeHeaders,
@@ -284,7 +291,16 @@ export function pruneComposerMedia() {
   // Per-account refs look like /media/<account>/… and are skipped by the regex
   // (and ignored by the backend, which only deletes regular files at the root).
   const re = /\/media\/([^/"'\s)>\\]+)/g
-  for (const tab of compose$.tabs.get()) {
+  let tabs = compose$.tabs.get()
+  if (!standaloneCompose) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STANDALONE_COMPOSE_KEY) || '[]')
+      if (Array.isArray(saved)) tabs = [...tabs, ...saved.filter((tab) => tab && typeof tab === 'object')]
+    } catch {
+      /* Invalid recovery buffer. */
+    }
+  }
+  for (const tab of tabs) {
     const html = tab.compose?.html
     if (!html) continue
     for (const m of html.matchAll(re)) keys.add(m[1])
@@ -950,8 +966,40 @@ export function draftShouldOpenConversation(messages: Message[], draft: Message)
   )
 }
 
+function focusStandaloneDraft(draft: Message): Promise<boolean> | null {
+  if (
+    standaloneCompose ||
+    !draft.message_id ||
+    normalizeMessageId(externalComposeDraft$.peek()) !== normalizeMessageId(draft.message_id)
+  )
+    return null
+  return invoke<boolean>('composer.focusDraft', { draft_id: draft.message_id }).then((focused) => focused === true)
+}
+
 async function openDraftMessageInCompose(draft: Message) {
   if (activateOpenDraftCompose(draft)) return true
+  const focus = focusStandaloneDraft(draft)
+  if (focus && (await focus)) return true
+  if (!standaloneCompose) {
+    const recovery = loadPersistedTabs(STANDALONE_COMPOSE_KEY).find(
+      (tab) => tab.compose?.accountId === draft.account_id && composeHoldsDraft(tab.compose, draft),
+    )?.compose
+    if (recovery && (await invoke<boolean>('composer.isOpen')) !== true) {
+      // The recovery buffer can contain edits newer than the server copy. Move
+      // those into the inbox editor before retiring the hidden tray snapshot.
+      const id = openComposeTab({
+        ...recovery,
+        noSignature: true,
+        quote: recovery.quote && { rich: recovery.rich, ...recovery.quote },
+        sourceDraft: { threadId: draft.thread_id, messageId: draft.id, folderId: draft.folder_id },
+      })
+      if (id) {
+        forgetStandaloneRecoveryDraft(recovery.draftMessageId, recovery.accountId)
+        await fetchComposeTabAttachments(id, draft.attachments ?? [], recovery.html)
+      }
+      return true
+    }
+  }
   const id = openComposeTab(composeFromDraftMessage(draft))
   if (!id) return true
 
@@ -973,6 +1021,8 @@ export async function openDraftCompose(thread: Message) {
 
   const release = reserveOpeningDraft(thread)
   try {
+    const focus = focusStandaloneDraft(thread)
+    if (focus && (await focus)) return true
     if (await reopenAfterDraftSaves(thread)) return true
     const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
       thread_id: thread.thread_id,
@@ -1286,7 +1336,8 @@ export function isUnwrittenNewMessage(draft: ComposeDraft): boolean {
  * Drafts server can take seconds. The last save then runs from a copy of the
  * draft, after any save already running (which, finding the tab gone, cleans
  * up any copy it allocated). If the save fails, the tab comes back with the
- * error, so nothing typed is lost.
+ * error, so nothing typed is lost. A standalone window keeps the editor
+ * mounted until saving succeeds, since closing its webview destroys its work.
  *
  * A new message with nothing written in it goes through `discard` instead of
  * filling Drafts with empty mail. Returns the save, which resolves to the
@@ -1306,8 +1357,14 @@ export function closeComposeTabKeepingDraft(
   // Stop autosaving and let whatever is already running finish first.
   session.savesStopped = true
   const drained = session.saveChain
-  finishClosingMessageTab(tabId)
+  if (!standaloneCompose) finishClosingMessageTab(tabId)
+  const snapshot = current
   const save = drained.then(async (): Promise<SavedDraft | null> => {
+    // A still-mounted standalone editor adopts an id allocated by the save we
+    // just drained. Its final save must replace that copy, not allocate another.
+    const current = standaloneCompose
+      ? (compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose ?? snapshot)
+      : snapshot
     // The attachments still on their way, which the closed tab can't take in.
     const fetched = (await Promise.all(fetches)).flat()
     const closing = { ...current, attachments: [...current.attachments, ...fetched] }
@@ -1336,13 +1393,17 @@ export function closeComposeTabKeepingDraft(
         encrypt: current.encrypt,
         decryptedInBody: current.decryptedInBody,
       })
+      if (standaloneCompose) finishClosingMessageTab(tabId)
       return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
     } catch (err) {
       console.error('Saving the draft on close failed:', err)
       // Reopened under the id the failed save was writing, so a copy that
       // landed anyway is replaced by the next save rather than duplicated.
       const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
-      restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
+      if (standaloneCompose) {
+        session.savesStopped = false
+        updateComposeDraft(tabId, { draftMessageId })
+      } else restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
       showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
       return null
     }

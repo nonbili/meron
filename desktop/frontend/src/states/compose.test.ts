@@ -1,3 +1,4 @@
+import { externalComposeDraft$, STANDALONE_COMPOSE_KEY } from '../lib/composeWindow'
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import type { Message, MessageTab } from '../types'
 import {
@@ -247,6 +248,59 @@ describe('openThreadTabById', () => {
 
     expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: true, encryptedDraft: true })
     expect(compose$.tabs.get()[0].compose?.decryptedInBody).toBeUndefined()
+  })
+
+  it('focuses a draft in the standalone composer instead of opening another editor', async () => {
+    const draft = message({ folder_id: 'Drafts', message_id: '<TRAY@example.com>' })
+    externalComposeDraft$.set('tray@example.com')
+    try {
+      ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+        calls.push({ command, payload })
+        return command === 'composer.focusDraft'
+      }
+      expect(await openDraftCompose(draft)).toBe(true)
+      expect(compose$.tabs.peek()).toHaveLength(0)
+      expect(calls).toEqual([{ command: 'composer.focusDraft', payload: { draft_id: '<TRAY@example.com>' } }])
+    } finally {
+      externalComposeDraft$.set('')
+    }
+  })
+
+  it('takes newer tray recovery edits into the inbox and retires the hidden buffer', async () => {
+    const draft = message({ folder_id: 'Drafts', message_id: 'recovery@example.com', body: 'older server text' })
+    openComposeTab({ accountId: draft.account_id, draftMessageId: draft.message_id, text: 'newer recovery text' })
+    localStorage.setItem(
+      STANDALONE_COMPOSE_KEY,
+      JSON.stringify(compose$.tabs.peek().map(({ id, subject, compose }) => ({ id, subject, compose }))),
+    )
+    compose$.tabs.set([])
+    try {
+      ;(window as any).go.main.App.Invoke = async (command: string) => {
+        if (command === 'mail.threadRead') return { messages: [draft] }
+        if (command === 'composer.isOpen') return false
+        return {}
+      }
+      await openDraftCompose(draft)
+      expect(compose$.tabs.peek()[0]?.compose?.text).toBe('newer recovery text')
+      expect(compose$.tabs.peek()[0]?.compose?.draftMessageId).toBe('recovery@example.com')
+      expect(JSON.parse(localStorage.getItem(STANDALONE_COMPOSE_KEY)!)).toEqual([])
+    } finally {
+      localStorage.removeItem(STANDALONE_COMPOSE_KEY)
+    }
+  })
+
+  it('retires a leftover tray buffer when the inbox discards the same draft', async () => {
+    const id = openComposeTab({ draftMessageId: 'discard-recovery@example.com', text: 'already handled' })!
+    localStorage.setItem(
+      STANDALONE_COMPOSE_KEY,
+      JSON.stringify(compose$.tabs.peek().map(({ id, subject, compose }) => ({ id, subject, compose }))),
+    )
+    try {
+      await closeMessageTab(id)
+      expect(JSON.parse(localStorage.getItem(STANDALONE_COMPOSE_KEY)!)).toEqual([])
+    } finally {
+      localStorage.removeItem(STANDALONE_COMPOSE_KEY)
+    }
   })
 
   it('reuses the open compose tab for repeated Drafts row clicks', async () => {
