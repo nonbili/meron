@@ -36,7 +36,9 @@ pub fn parse(value: &str) -> Option<(String, Vec<u8>, bool)> {
             "addr" => addr = Some(val.trim().to_ascii_lowercase()),
             "keydata" => {
                 let compact: String = val.chars().filter(|c| !c.is_whitespace()).collect();
-                keydata = base64::engine::general_purpose::STANDARD.decode(compact).ok();
+                keydata = base64::engine::general_purpose::STANDARD
+                    .decode(compact)
+                    .ok();
             }
             "prefer-encrypt" => mutual = val.trim() == "mutual",
             other if other.starts_with('_') => {}
@@ -59,9 +61,18 @@ pub fn announced(headers: &[mailparse::MailHeader<'_>], from: &str) -> Vec<Annou
         if !gossip && !name.eq_ignore_ascii_case("Autocrypt") {
             continue;
         }
-        let Some((addr, data, mutual)) = parse(&header.get_value()) else { continue };
-        let Ok(key) = keys::parse_public(&data) else { continue };
-        let found = Announced { addr: addr.clone(), key, prefer_mutual: mutual, gossip };
+        let Some((addr, data, mutual)) = parse(&header.get_value()) else {
+            continue;
+        };
+        let Ok(key) = keys::parse_public(&data) else {
+            continue;
+        };
+        let found = Announced {
+            addr: addr.clone(),
+            key,
+            prefer_mutual: mutual,
+            gossip,
+        };
         if gossip {
             out.push(found);
         } else if addr == from {
@@ -90,8 +101,12 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     #[test]
@@ -121,12 +136,17 @@ mod tests {
 
     #[test]
     fn emitted_header_parses_back_to_the_same_key() {
-        let key = keys::generate(&["me@example.org".into()]).unwrap().to_public_key();
+        let key = keys::generate(&["me@example.org".into()])
+            .unwrap()
+            .to_public_key();
         let value = header_value("me@example.org", &key).unwrap();
         assert!(value.lines().all(|l| l.len() <= 78));
         let (addr, data, mutual) = parse(&value.replace("\r\n", "")).unwrap();
         assert_eq!(addr, "me@example.org");
         assert!(mutual);
-        assert_eq!(keys::fingerprint_hex(&keys::parse_public(&data).unwrap().primary_key), keys::fingerprint_hex(&key.primary_key));
+        assert_eq!(
+            keys::fingerprint_hex(&keys::parse_public(&data).unwrap().primary_key),
+            keys::fingerprint_hex(&key.primary_key)
+        );
     }
 }

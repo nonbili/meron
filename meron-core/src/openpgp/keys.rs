@@ -116,7 +116,8 @@ pub fn generate(addrs: &[String]) -> Result<SignedSecretKey> {
     let params = params.build().context("key parameters")?;
     let mut rng = rand::thread_rng();
     let key = params.generate(&mut rng).context("generate key")?;
-    key.verify_bindings().context("generated key failed its own check")?;
+    key.verify_bindings()
+        .context("generated key failed its own check")?;
     Ok(key)
 }
 
@@ -143,7 +144,8 @@ pub fn parse_keys(data: &[u8]) -> Result<Parsed> {
     };
     for block in blocks {
         guarded(|| {
-            let (iter, _headers) = PublicOrSecret::from_reader_many(BufReader::new(Cursor::new(block)))?;
+            let (iter, _headers) =
+                PublicOrSecret::from_reader_many(BufReader::new(Cursor::new(block)))?;
             let mut found = Vec::new();
             for item in iter {
                 found.push(item);
@@ -171,7 +173,12 @@ fn split_armor_blocks(text: &str) -> Vec<&[u8]> {
         let tail = &rest[start..];
         let end = tail
             .find("-----END PGP")
-            .and_then(|e| tail[e..].find('\n').map(|nl| e + nl + 1).or(Some(tail.len())))
+            .and_then(|e| {
+                tail[e..]
+                    .find('\n')
+                    .map(|nl| e + nl + 1)
+                    .or(Some(tail.len()))
+            })
             .unwrap_or(tail.len());
         blocks.push(tail[..end].as_bytes());
         rest = &tail[end..];
@@ -182,7 +189,9 @@ fn split_armor_blocks(text: &str) -> Vec<&[u8]> {
 /// Runs a closure that calls into rPGP and turns a panic into an error: rPGP
 /// has panicked on crafted input before (CVE-2024-53856), and one bad mail
 /// or key file must not take down the sidecar.
-pub fn guarded<T>(f: impl FnOnce() -> pgp::errors::Result<T> + std::panic::UnwindSafe) -> Result<T> {
+pub fn guarded<T>(
+    f: impl FnOnce() -> pgp::errors::Result<T> + std::panic::UnwindSafe,
+) -> Result<T> {
     match std::panic::catch_unwind(f) {
         Ok(Ok(v)) => Ok(v),
         Ok(Err(e)) => Err(anyhow!("{e}")),
@@ -230,7 +239,9 @@ fn is_stub(key: &SignedSecretKey) -> bool {
     // GnuPG's gnu-dummy / divert-to-card uses a Private (100-110) S2K type.
     // Match the parsed S2K structurally rather than its debug string.
     let s2k = match enc.string_to_key_params() {
-        S2kParams::Cfb { s2k, .. } | S2kParams::MalleableCfb { s2k, .. } | S2kParams::Aead { s2k, .. } => s2k,
+        S2kParams::Cfb { s2k, .. }
+        | S2kParams::MalleableCfb { s2k, .. }
+        | S2kParams::Aead { s2k, .. } => s2k,
         S2kParams::Unprotected | S2kParams::LegacyCfb { .. } => return false,
     };
     matches!(s2k, StringToKey::Private { .. })
@@ -266,9 +277,13 @@ pub fn export_protected(key: &SignedSecretKey, passphrase: &str) -> Result<Strin
     let mut key = key.clone();
     let pw = Password::from(passphrase);
     let mut rng = rand::thread_rng();
-    key.primary_key.set_password(&mut rng, &pw).context("protect primary key")?;
+    key.primary_key
+        .set_password(&mut rng, &pw)
+        .context("protect primary key")?;
     for sub in &mut key.secret_subkeys {
-        sub.key.set_password(&mut rng, &pw).context("protect subkey")?;
+        sub.key
+            .set_password(&mut rng, &pw)
+            .context("protect subkey")?;
     }
     Ok(key.to_armored_string(Default::default())?)
 }
@@ -300,7 +315,11 @@ pub fn parse_public(data: &[u8]) -> Result<SignedPublicKey> {
 
 /// Parses one stored (unprotected) secret key.
 pub fn parse_secret(data: &[u8]) -> Result<SignedSecretKey> {
-    parse_keys(data)?.secret.into_iter().next().context("no secret key found")
+    parse_keys(data)?
+        .secret
+        .into_iter()
+        .next()
+        .context("no secret key found")
 }
 
 /// Serialises a secret key for storage (binary, unprotected: it lives inside
@@ -326,14 +345,23 @@ pub fn email_of_user_id(uid: &str) -> Option<String> {
 fn binding_hash_ok(sig: &Signature) -> bool {
     match sig.hash_alg() {
         Some(HashAlgorithm::Md5) | Some(HashAlgorithm::Ripemd160) => false,
-        Some(HashAlgorithm::Sha1) => sig.created().map(|t| t.as_secs() < SHA1_BINDING_CUTOFF).unwrap_or(false),
+        Some(HashAlgorithm::Sha1) => sig
+            .created()
+            .map(|t| t.as_secs() < SHA1_BINDING_CUTOFF)
+            .unwrap_or(false),
         _ => true,
     }
 }
 
 /// Whether a data signature's hash is acceptable today.
 pub fn data_hash_ok(alg: Option<HashAlgorithm>) -> bool {
-    !matches!(alg, Some(HashAlgorithm::Md5) | Some(HashAlgorithm::Sha1) | Some(HashAlgorithm::Ripemd160) | None)
+    !matches!(
+        alg,
+        Some(HashAlgorithm::Md5)
+            | Some(HashAlgorithm::Sha1)
+            | Some(HashAlgorithm::Ripemd160)
+            | None
+    )
 }
 
 fn newest<'a>(sigs: impl Iterator<Item = &'a Signature>) -> Option<&'a Signature> {
@@ -349,7 +377,10 @@ fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
             let valid: Vec<&Signature> = u
                 .signatures
                 .iter()
-                .filter(|s| s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id).is_ok())
+                .filter(|s| {
+                    s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id)
+                        .is_ok()
+                })
                 .collect();
             newest(valid.into_iter()).is_some_and(binding_hash_ok)
         })
@@ -363,11 +394,16 @@ fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
 ///: an unverified signature could otherwise move the expiry or turn
 /// on SEIPDv2 for a key that can't read it.
 fn self_signatures(key: &SignedPublicKey) -> impl Iterator<Item = &Signature> {
-    let direct = key.details.direct_signatures.iter().filter(move |s| s.verify_key(&key.primary_key).is_ok());
+    let direct = key
+        .details
+        .direct_signatures
+        .iter()
+        .filter(move |s| s.verify_key(&key.primary_key).is_ok());
     let certs = key.details.users.iter().flat_map(move |u| {
-        u.signatures
-            .iter()
-            .filter(move |s| s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id).is_ok())
+        u.signatures.iter().filter(move |s| {
+            s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id)
+                .is_ok()
+        })
     });
     direct.chain(certs)
 }
@@ -403,11 +439,16 @@ pub fn stored_key(fingerprint: &str) -> Option<SignedPublicKey> {
 /// only from its valid self-signatures (direct-key signatures and user-ID
 /// self-certifications), so nobody else can add a revoker.
 pub fn designated_revokers(key: &SignedPublicKey) -> Vec<String> {
-    let direct = key.details.direct_signatures.iter().filter(|s| s.verify_key(&key.primary_key).is_ok());
+    let direct = key
+        .details
+        .direct_signatures
+        .iter()
+        .filter(|s| s.verify_key(&key.primary_key).is_ok());
     let certs = key.details.users.iter().flat_map(|u| {
-        u.signatures
-            .iter()
-            .filter(move |s| s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id).is_ok())
+        u.signatures.iter().filter(move |s| {
+            s.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &u.id)
+                .is_ok()
+        })
     });
     let mut out: Vec<String> = direct
         .chain(certs)
@@ -430,7 +471,10 @@ fn revocation_valid(key: &SignedPublicKey, rev: &Signature, resolve: Resolver<'_
     }
     designated_revokers(key).iter().any(|fpr| {
         resolve(fpr).is_some_and(|revoker| {
-            keys_match(&revoker, fpr) && rev.verify_key_third_party(&key.primary_key, &revoker.primary_key).is_ok()
+            keys_match(&revoker, fpr)
+                && rev
+                    .verify_key_third_party(&key.primary_key, &revoker.primary_key)
+                    .is_ok()
         })
     })
 }
@@ -440,7 +484,10 @@ fn keys_match(key: &SignedPublicKey, fingerprint: &str) -> bool {
 }
 
 fn is_revoked_with(key: &SignedPublicKey, resolve: Resolver<'_>) -> bool {
-    key.details.revocation_signatures.iter().any(|s| revocation_valid(key, s, resolve))
+    key.details
+        .revocation_signatures
+        .iter()
+        .any(|s| revocation_valid(key, s, resolve))
 }
 
 /// Why a key could not make a valid signature at a given time.
@@ -472,7 +519,11 @@ pub fn primary_valid_at(key: &SignedPublicKey, when: u32) -> Result<(), SigningP
     primary_valid_at_with(key, when, &stored_key)
 }
 
-pub fn primary_valid_at_with(key: &SignedPublicKey, when: u32, resolve: Resolver<'_>) -> Result<(), SigningProblem> {
+pub fn primary_valid_at_with(
+    key: &SignedPublicKey,
+    when: u32,
+    resolve: Resolver<'_>,
+) -> Result<(), SigningProblem> {
     let revoked = key
         .details
         .revocation_signatures
@@ -490,7 +541,11 @@ pub fn primary_valid_at_with(key: &SignedPublicKey, when: u32, resolve: Resolver
 
 /// The same for a signing subkey: its primary must be valid at `when`, the
 /// subkey not revoked then, and its newest binding not expired then.
-pub fn subkey_valid_at(key: &SignedPublicKey, sub: &SignedPublicSubKey, when: u32) -> Result<(), SigningProblem> {
+pub fn subkey_valid_at(
+    key: &SignedPublicKey,
+    sub: &SignedPublicSubKey,
+    when: u32,
+) -> Result<(), SigningProblem> {
     subkey_valid_at_with(key, sub, when, &stored_key)
 }
 
@@ -513,7 +568,12 @@ pub fn subkey_valid_at_with(
     if revoked {
         return Err(SigningProblem::Revoked);
     }
-    let binding = newest(valid.iter().copied().filter(|s| s.typ() != Some(pgp::packet::SignatureType::SubkeyRevocation)));
+    let binding = newest(
+        valid
+            .iter()
+            .copied()
+            .filter(|s| s.typ() != Some(pgp::packet::SignatureType::SubkeyRevocation)),
+    );
     let expires = binding
         .and_then(|b| b.key_expiration_time())
         .filter(|d| d.as_secs() != 0)
@@ -528,7 +588,11 @@ pub fn subkey_valid_at_with(
 /// grow a stored one without bound.
 const MAX_SIGNATURES: usize = 64;
 
-fn add_signatures(into: &mut Vec<Signature>, from: &[Signature], valid: impl Fn(&Signature) -> bool) -> bool {
+fn add_signatures(
+    into: &mut Vec<Signature>,
+    from: &[Signature],
+    valid: impl Fn(&Signature) -> bool,
+) -> bool {
     let mut changed = false;
     for sig in from {
         if into.len() >= MAX_SIGNATURES {
@@ -575,24 +639,43 @@ pub fn merge(stored: &SignedPublicKey, incoming: &SignedPublicKey) -> Option<Sig
 }
 
 /// [`merge`] with an explicit resolver for designated revokers.
-pub fn merge_with(stored: &SignedPublicKey, incoming: &SignedPublicKey, resolve: Resolver<'_>) -> Option<SignedPublicKey> {
+pub fn merge_with(
+    stored: &SignedPublicKey,
+    incoming: &SignedPublicKey,
+    resolve: Resolver<'_>,
+) -> Option<SignedPublicKey> {
     if fingerprint_hex(&stored.primary_key) != fingerprint_hex(&incoming.primary_key) {
         return None;
     }
     let primary = &stored.primary_key;
     let mut out = stored.clone();
     let mut changed = false;
-    changed |= add_signatures(&mut out.details.direct_signatures, &incoming.details.direct_signatures, |s| {
-        s.verify_key(primary).is_ok()
-    });
+    changed |= add_signatures(
+        &mut out.details.direct_signatures,
+        &incoming.details.direct_signatures,
+        |s| s.verify_key(primary).is_ok(),
+    );
     for user in &incoming.details.users {
-        let certifies = |s: &Signature| s.verify_certification(primary, pgp::types::Tag::UserId, &user.id).is_ok();
+        let certifies = |s: &Signature| {
+            s.verify_certification(primary, pgp::types::Tag::UserId, &user.id)
+                .is_ok()
+        };
         match out.details.users.iter_mut().find(|u| u.id == user.id) {
-            Some(existing) => changed |= add_signatures(&mut existing.signatures, &user.signatures, certifies),
+            Some(existing) => {
+                changed |= add_signatures(&mut existing.signatures, &user.signatures, certifies)
+            }
             None => {
-                let sigs: Vec<Signature> = user.signatures.iter().filter(|s| certifies(s)).take(MAX_SIGNATURES).cloned().collect();
+                let sigs: Vec<Signature> = user
+                    .signatures
+                    .iter()
+                    .filter(|s| certifies(s))
+                    .take(MAX_SIGNATURES)
+                    .cloned()
+                    .collect();
                 if !sigs.is_empty() {
-                    out.details.users.push(pgp::types::SignedUser::new(user.id.clone(), sigs));
+                    out.details
+                        .users
+                        .push(pgp::types::SignedUser::new(user.id.clone(), sigs));
                     changed = true;
                 }
             }
@@ -601,12 +684,25 @@ pub fn merge_with(stored: &SignedPublicKey, incoming: &SignedPublicKey, resolve:
     for sub in &incoming.public_subkeys {
         let binds = |s: &Signature| s.verify_subkey_binding(primary, &sub.key).is_ok();
         let fpr = fingerprint_hex(&sub.key);
-        match out.public_subkeys.iter_mut().find(|s| fingerprint_hex(&s.key) == fpr) {
-            Some(existing) => changed |= add_signatures(&mut existing.signatures, &sub.signatures, binds),
+        match out
+            .public_subkeys
+            .iter_mut()
+            .find(|s| fingerprint_hex(&s.key) == fpr)
+        {
+            Some(existing) => {
+                changed |= add_signatures(&mut existing.signatures, &sub.signatures, binds)
+            }
             None => {
-                let sigs: Vec<Signature> = sub.signatures.iter().filter(|s| binds(s)).take(MAX_SIGNATURES).cloned().collect();
+                let sigs: Vec<Signature> = sub
+                    .signatures
+                    .iter()
+                    .filter(|s| binds(s))
+                    .take(MAX_SIGNATURES)
+                    .cloned()
+                    .collect();
                 if !sigs.is_empty() {
-                    out.public_subkeys.push(SignedPublicSubKey::new(sub.key.clone(), sigs));
+                    out.public_subkeys
+                        .push(SignedPublicSubKey::new(sub.key.clone(), sigs));
                     changed = true;
                 }
             }
@@ -670,7 +766,9 @@ pub fn encryption_subkey(key: &SignedPublicKey, now: u32) -> Option<&SignedPubli
 
 /// Whether the key's features advertise SEIPDv2 (RFC 9580 AEAD).
 pub fn supports_seipd_v2(key: &SignedPublicKey) -> bool {
-    self_signatures(key).filter_map(|s| s.features()).any(|f| f.seipd_v2())
+    self_signatures(key)
+        .filter_map(|s| s.features())
+        .any(|f| f.seipd_v2())
 }
 
 /// Checks a public key against Meron's policy at `now`.
@@ -698,7 +796,10 @@ pub fn check_with(key: &SignedPublicKey, now: u32, resolve: Resolver<'_>) -> Opt
 /// Describes a public key.
 pub fn info(key: &SignedPublicKey, has_secret: bool, now: u32) -> KeyInfo {
     let user_ids = valid_user_ids(key);
-    let mut emails: Vec<String> = user_ids.iter().filter_map(|u| email_of_user_id(u)).collect();
+    let mut emails: Vec<String> = user_ids
+        .iter()
+        .filter_map(|u| email_of_user_id(u))
+        .collect();
     emails.sort();
     emails.dedup();
     KeyInfo {
@@ -729,8 +830,12 @@ pub(crate) mod tests {
     use super::*;
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     #[test]
@@ -750,7 +855,8 @@ pub(crate) mod tests {
     fn gnupg_secret_key_without_passphrase_unlocks_and_self_tests() {
         let parsed = parse_keys(&fixture("alice-secret.asc")).unwrap();
         assert_eq!(parsed.secret.len(), 1);
-        let Unlock::Ok(key) = unlock(parsed.secret.into_iter().next().unwrap(), None).unwrap() else {
+        let Unlock::Ok(key) = unlock(parsed.secret.into_iter().next().unwrap(), None).unwrap()
+        else {
             panic!("expected an unlocked key");
         };
         assert_eq!(secret_info(&key, now()).emails, vec!["alice@example.org"]);
@@ -758,21 +864,42 @@ pub(crate) mod tests {
 
     #[test]
     fn protected_rsa_key_needs_the_right_passphrase() {
-        let key = parse_keys(&fixture("bob-secret-protected.asc")).unwrap().secret.remove(0);
-        assert!(matches!(unlock(key.clone(), None).unwrap(), Unlock::NeedsPassphrase));
-        assert!(matches!(unlock(key.clone(), Some("wrong")).unwrap(), Unlock::NeedsPassphrase));
-        assert!(matches!(unlock(key, Some("correct horse battery staple")).unwrap(), Unlock::Ok(_)));
+        let key = parse_keys(&fixture("bob-secret-protected.asc"))
+            .unwrap()
+            .secret
+            .remove(0);
+        assert!(matches!(
+            unlock(key.clone(), None).unwrap(),
+            Unlock::NeedsPassphrase
+        ));
+        assert!(matches!(
+            unlock(key.clone(), Some("wrong")).unwrap(),
+            Unlock::NeedsPassphrase
+        ));
+        assert!(matches!(
+            unlock(key, Some("correct horse battery staple")).unwrap(),
+            Unlock::Ok(_)
+        ));
     }
 
     #[test]
     fn subkeys_only_export_is_reported_as_on_card() {
-        let key = parse_keys(&fixture("alice-secret-subkeys-only.asc")).unwrap().secret.remove(0);
+        let key = parse_keys(&fixture("alice-secret-subkeys-only.asc"))
+            .unwrap()
+            .secret
+            .remove(0);
         assert!(matches!(unlock(key, None).unwrap(), Unlock::OnCard));
     }
 
     #[test]
     fn a_file_with_two_secret_keys_yields_both() {
-        assert_eq!(parse_keys(&fixture("two-secret-keys.asc")).unwrap().secret.len(), 2);
+        assert_eq!(
+            parse_keys(&fixture("two-secret-keys.asc"))
+                .unwrap()
+                .secret
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -783,7 +910,13 @@ pub(crate) mod tests {
             parsed
                 .public
                 .iter()
-                .find(|k| info(k, false, now()).emails.iter().any(|x| x == e) || k.details.users.iter().any(|u| u.id.as_str().is_some_and(|s| s.contains(e))))
+                .find(|k| {
+                    info(k, false, now()).emails.iter().any(|x| x == e)
+                        || k.details
+                            .users
+                            .iter()
+                            .any(|u| u.id.as_str().is_some_and(|s| s.contains(e)))
+                })
                 .map(|k| check(k, now()))
                 .expect(e)
         };
@@ -795,7 +928,13 @@ pub(crate) mod tests {
 
     #[test]
     fn binary_keyring_parses_like_the_armored_one() {
-        assert_eq!(parse_keys(&fixture("contacts-keyring.gpg")).unwrap().public.len(), 3);
+        assert_eq!(
+            parse_keys(&fixture("contacts-keyring.gpg"))
+                .unwrap()
+                .public
+                .len(),
+            3
+        );
     }
 
     #[test]
@@ -807,7 +946,10 @@ pub(crate) mod tests {
 
     #[test]
     fn garbage_is_reported_not_panicked_on() {
-        let parsed = parse_keys(b"-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nAAAA\n-----END PGP PUBLIC KEY BLOCK-----\n").unwrap();
+        let parsed = parse_keys(
+            b"-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nAAAA\n-----END PGP PUBLIC KEY BLOCK-----\n",
+        )
+        .unwrap();
         assert!(parsed.public.is_empty());
     }
 
@@ -816,8 +958,14 @@ pub(crate) mod tests {
         let key = generate(&["me@example.org".into()]).unwrap();
         let armored = export_protected(&key, "export pass").unwrap();
         let reparsed = parse_keys(armored.as_bytes()).unwrap().secret.remove(0);
-        assert!(matches!(unlock(reparsed.clone(), None).unwrap(), Unlock::NeedsPassphrase));
-        assert!(matches!(unlock(reparsed, Some("export pass")).unwrap(), Unlock::Ok(_)));
+        assert!(matches!(
+            unlock(reparsed.clone(), None).unwrap(),
+            Unlock::NeedsPassphrase
+        ));
+        assert!(matches!(
+            unlock(reparsed, Some("export pass")).unwrap(),
+            Unlock::Ok(_)
+        ));
         assert!(export_protected(&key, "").is_err());
     }
 
@@ -826,12 +974,18 @@ pub(crate) mod tests {
         let key = generate(&["me@example.org".into()]).unwrap();
         let bytes = binary_secret(&key).unwrap();
         let back = parse_secret(&bytes).unwrap();
-        assert_eq!(fingerprint_hex(&back.primary_key), fingerprint_hex(&key.primary_key));
+        assert_eq!(
+            fingerprint_hex(&back.primary_key),
+            fingerprint_hex(&key.primary_key)
+        );
     }
 
     #[test]
     fn email_of_user_id_handles_names_and_bare_addresses() {
-        assert_eq!(email_of_user_id("Carol Example <Carol@Example.com>").as_deref(), Some("carol@example.com"));
+        assert_eq!(
+            email_of_user_id("Carol Example <Carol@Example.com>").as_deref(),
+            Some("carol@example.com")
+        );
         assert_eq!(email_of_user_id("<a@b.org>").as_deref(), Some("a@b.org"));
         assert_eq!(email_of_user_id("a@b.org").as_deref(), Some("a@b.org"));
         assert_eq!(email_of_user_id("No Address"), None);
@@ -839,38 +993,88 @@ pub(crate) mod tests {
 
     #[test]
     fn validity_at_a_time_respects_expiry_and_revocation() {
-        let erin = parse_keys(&fixture("expired-public.asc")).unwrap().public.remove(0);
+        let erin = parse_keys(&fixture("expired-public.asc"))
+            .unwrap()
+            .public
+            .remove(0);
         // Created 2024-01-01, one-year expiry.
-        assert_eq!(primary_valid_at(&erin, 1_717_200_000), Ok(()), "June 2024: valid");
+        assert_eq!(
+            primary_valid_at(&erin, 1_717_200_000),
+            Ok(()),
+            "June 2024: valid"
+        );
         assert_eq!(primary_valid_at(&erin, now()), Err(SigningProblem::Expired));
-        let rex = parse_keys(&fixture("revoked-public.asc")).unwrap().public.remove(0);
+        let rex = parse_keys(&fixture("revoked-public.asc"))
+            .unwrap()
+            .public
+            .remove(0);
         // Revoked with no reason: every signature is void, even old ones.
-        assert_eq!(primary_valid_at(&rex, rex.primary_key.created_at().as_secs()), Err(SigningProblem::Revoked));
+        assert_eq!(
+            primary_valid_at(&rex, rex.primary_key.created_at().as_secs()),
+            Err(SigningProblem::Revoked)
+        );
     }
 
     #[test]
     fn merging_a_revoked_copy_revokes_the_stored_key() {
-        let carol = parse_keys(&fixture("carol-public.asc")).unwrap().public.remove(0);
-        let revoked = parse_keys(&fixture("carol-revoked-public.asc")).unwrap().public.remove(0);
+        let carol = parse_keys(&fixture("carol-public.asc"))
+            .unwrap()
+            .public
+            .remove(0);
+        let revoked = parse_keys(&fixture("carol-revoked-public.asc"))
+            .unwrap()
+            .public
+            .remove(0);
         assert_eq!(check(&carol, now()), None);
         let merged = merge(&carol, &revoked).expect("the revocation is new");
         assert_eq!(check(&merged, now()), Some(Unusable::Revoked));
-        assert!(merge(&merged, &revoked).is_none(), "nothing new the second time");
-        assert!(merge(&merged, &carol).is_none(), "an older copy adds nothing and can't undo it");
-        let mallory = parse_keys(&fixture("mallory-public.asc")).unwrap().public.remove(0);
-        assert!(merge(&carol, &mallory).is_none(), "a different key is never merged");
+        assert!(
+            merge(&merged, &revoked).is_none(),
+            "nothing new the second time"
+        );
+        assert!(
+            merge(&merged, &carol).is_none(),
+            "an older copy adds nothing and can't undo it"
+        );
+        let mallory = parse_keys(&fixture("mallory-public.asc"))
+            .unwrap()
+            .public
+            .remove(0);
+        assert!(
+            merge(&carol, &mallory).is_none(),
+            "a different key is never merged"
+        );
     }
 
     /// A key revocation of `target` signed by `revoker` (what GnuPG's
     /// `--desig-revoke` makes; it needs a terminal, so tests build it here).
-    pub(crate) fn revoke_by(revoker: &SignedSecretKey, target: &SignedPublicKey) -> SignedPublicKey {
+    pub(crate) fn revoke_by(
+        revoker: &SignedSecretKey,
+        target: &SignedPublicKey,
+    ) -> SignedPublicKey {
         use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-        let mut config = SignatureConfig::v4(SignatureType::KeyRevocation, revoker.primary_key.algorithm(), HashAlgorithm::Sha256);
+        let mut config = SignatureConfig::v4(
+            SignatureType::KeyRevocation,
+            revoker.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
         config.hashed_subpackets = vec![
-            Subpacket::critical(SubpacketData::SignatureCreationTime(pgp::types::Timestamp::now())).unwrap(),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(revoker.primary_key.fingerprint())).unwrap(),
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                pgp::types::Timestamp::now(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                revoker.primary_key.fingerprint(),
+            ))
+            .unwrap(),
         ];
-        let sig = config.sign_key(&revoker.primary_key, &Password::empty(), &target.primary_key).unwrap();
+        let sig = config
+            .sign_key(
+                &revoker.primary_key,
+                &Password::empty(),
+                &target.primary_key,
+            )
+            .unwrap();
         let mut out = target.clone();
         out.details.revocation_signatures.push(sig);
         out
@@ -881,21 +1085,42 @@ pub(crate) mod tests {
     /// key expiration and the SEIPDv2 feature flag, created now so it is the
     /// newest signature. Models a third party attaching a junk self-signature
     /// to someone's genuine key.
-    fn forge_user_sig_by(signer: &SignedSecretKey, target: &SignedPublicKey, exp_secs: u32, seipd_v2: bool) -> SignedPublicKey {
+    fn forge_user_sig_by(
+        signer: &SignedSecretKey,
+        target: &SignedPublicKey,
+        exp_secs: u32,
+        seipd_v2: bool,
+    ) -> SignedPublicKey {
         use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
         use pgp::types::{Duration, Timestamp};
         let mut features = pgp::packet::Features::new();
         features.set_seipd_v2(seipd_v2);
-        let mut config = SignatureConfig::v4(SignatureType::CertPositive, signer.primary_key.algorithm(), HashAlgorithm::Sha256);
+        let mut config = SignatureConfig::v4(
+            SignatureType::CertPositive,
+            signer.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
         config.hashed_subpackets = vec![
             Subpacket::critical(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(signer.primary_key.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::KeyExpirationTime(Duration::from_secs(exp_secs))).unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                signer.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyExpirationTime(Duration::from_secs(
+                exp_secs,
+            )))
+            .unwrap(),
             Subpacket::regular(SubpacketData::Features(features)).unwrap(),
         ];
         let user = &target.details.users[0];
         let sig = config
-            .sign_certification(&signer.primary_key, &target.primary_key, &Password::empty(), pgp::types::Tag::UserId, &user.id)
+            .sign_certification(
+                &signer.primary_key,
+                &target.primary_key,
+                &Password::empty(),
+                pgp::types::Tag::UserId,
+                &user.id,
+            )
             .unwrap();
         let mut out = target.clone();
         out.details.users[0].signatures.push(sig);
@@ -912,16 +1137,29 @@ pub(crate) mod tests {
 
         // SEIPDv2: alice's real self-sig advertises none; a forged one claims it.
         let alice = parse_public(&fixture("alice-public.asc")).unwrap();
-        assert!(!supports_seipd_v2(&alice), "baseline: alice does not advertise SEIPDv2");
+        assert!(
+            !supports_seipd_v2(&alice),
+            "baseline: alice does not advertise SEIPDv2"
+        );
         let alice_spiked = forge_user_sig_by(&mallory, &alice, 2_000_000_000, true);
-        assert!(!supports_seipd_v2(&alice_spiked), "a forged signature must not enable SEIPDv2");
+        assert!(
+            !supports_seipd_v2(&alice_spiked),
+            "a forged signature must not enable SEIPDv2"
+        );
 
         // Expiry: expired-public has a real expiry; a forged newer sig claims another.
         let expired = parse_public(&fixture("expired-public.asc")).unwrap();
         let real_expiry = primary_expiry(&expired);
-        assert!(real_expiry.is_some(), "baseline: expired-public has a real expiry");
+        assert!(
+            real_expiry.is_some(),
+            "baseline: expired-public has a real expiry"
+        );
         let spiked = forge_user_sig_by(&mallory, &expired, 2_000_000_000, false);
-        assert_eq!(primary_expiry(&spiked), real_expiry, "a forged signature must not change the expiry");
+        assert_eq!(
+            primary_expiry(&spiked),
+            real_expiry,
+            "a forged signature must not change the expiry"
+        );
     }
 
     /// A user-ID self-certification of `secret`'s own primary, signed by it,
@@ -938,14 +1176,27 @@ pub(crate) mod tests {
         flags.set_sign(sign);
         let pubkey = secret.to_public_key();
         let user = &pubkey.details.users[0];
-        let mut config = SignatureConfig::v4(SignatureType::CertPositive, secret.primary_key.algorithm(), HashAlgorithm::Sha256);
+        let mut config = SignatureConfig::v4(
+            SignatureType::CertPositive,
+            secret.primary_key.algorithm(),
+            HashAlgorithm::Sha256,
+        );
         config.hashed_subpackets = vec![
             Subpacket::critical(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(secret.primary_key.fingerprint())).unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(flags)).unwrap(),
         ];
         config
-            .sign_certification(&secret.primary_key, &pubkey.primary_key, &Password::empty(), pgp::types::Tag::UserId, &user.id)
+            .sign_certification(
+                &secret.primary_key,
+                &pubkey.primary_key,
+                &Password::empty(),
+                pgp::types::Tag::UserId,
+                &user.id,
+            )
             .unwrap()
     }
 
@@ -959,11 +1210,18 @@ pub(crate) mod tests {
         assert!(primary_can_sign(&secret.to_public_key()));
 
         let mut cannot = secret.to_public_key();
-        cannot.details.users[0].signatures.push(self_cert_with_sign_flag(&secret, false));
-        assert!(!primary_can_sign(&cannot), "a newer self-sig without the sign flag is respected");
+        cannot.details.users[0]
+            .signatures
+            .push(self_cert_with_sign_flag(&secret, false));
+        assert!(
+            !primary_can_sign(&cannot),
+            "a newer self-sig without the sign flag is respected"
+        );
 
         let mut still_can = secret.to_public_key();
-        still_can.details.users[0].signatures.push(self_cert_with_sign_flag(&secret, true));
+        still_can.details.users[0]
+            .signatures
+            .push(self_cert_with_sign_flag(&secret, true));
         assert!(primary_can_sign(&still_can));
     }
 
@@ -974,17 +1232,34 @@ pub(crate) mod tests {
         let mallory = secret("mallory-secret.asc");
         let alice = parse_public(&fixture("alice-public.asc")).unwrap();
         let spiked = forge_user_sig_by(&mallory, &alice, 2_000_000_000, true);
-        let before: usize = spiked.details.users.iter().map(|u| u.signatures.len()).sum();
+        let before: usize = spiked
+            .details
+            .users
+            .iter()
+            .map(|u| u.signatures.len())
+            .sum();
 
         let clean = minimize(&spiked);
         let after: usize = clean.details.users.iter().map(|u| u.signatures.len()).sum();
-        assert!(after < before, "the forged signature is stripped ({before} -> {after})");
+        assert!(
+            after < before,
+            "the forged signature is stripped ({before} -> {after})"
+        );
 
         // Alice's genuine key still works: her user ID binds and her encryption
         // subkey survives.
-        assert!(valid_user_ids(&clean).iter().any(|u| u.contains("alice")), "the real user ID survives");
-        assert!(encryption_subkey(&clean, now()).is_some(), "the encryption subkey survives");
-        assert!(!supports_seipd_v2(&clean), "the forged SEIPDv2 flag is gone");
+        assert!(
+            valid_user_ids(&clean).iter().any(|u| u.contains("alice")),
+            "the real user ID survives"
+        );
+        assert!(
+            encryption_subkey(&clean, now()).is_some(),
+            "the encryption subkey survives"
+        );
+        assert!(
+            !supports_seipd_v2(&clean),
+            "the forged SEIPDv2 flag is gone"
+        );
     }
 
     fn secret(name: &str) -> SignedSecretKey {
@@ -1006,8 +1281,14 @@ pub(crate) mod tests {
         let none = |_: &str| None;
 
         let revoked = revoke_by(&dan, &tess);
-        assert_eq!(check_with(&revoked, now(), &resolve_dan), Some(Unusable::Revoked));
-        assert_eq!(primary_valid_at_with(&revoked, now(), &resolve_dan), Err(SigningProblem::Revoked));
+        assert_eq!(
+            check_with(&revoked, now(), &resolve_dan),
+            Some(Unusable::Revoked)
+        );
+        assert_eq!(
+            primary_valid_at_with(&revoked, now(), &resolve_dan),
+            Err(SigningProblem::Revoked)
+        );
         // Without Dan's key the revocation can't be checked, so it doesn't count.
         assert_eq!(check_with(&revoked, now(), &none), None);
 
@@ -1016,13 +1297,22 @@ pub(crate) mod tests {
         let mallory_pub = mallory.to_public_key();
         let forged = revoke_by(&mallory, &tess);
         let resolve_both = |f: &str| {
-            if f == dan_fpr { Some(dan_pub.clone()) } else if f == fingerprint_hex(&mallory_pub.primary_key) { Some(mallory_pub.clone()) } else { None }
+            if f == dan_fpr {
+                Some(dan_pub.clone())
+            } else if f == fingerprint_hex(&mallory_pub.primary_key) {
+                Some(mallory_pub.clone())
+            } else {
+                None
+            }
         };
         assert_eq!(check_with(&forged, now(), &resolve_both), None);
 
         // Merging takes Dan's revocation and drops Mallory's.
         let merged = merge_with(&tess, &revoked, &resolve_dan).expect("Dan's revocation is new");
-        assert_eq!(check_with(&merged, now(), &resolve_dan), Some(Unusable::Revoked));
+        assert_eq!(
+            check_with(&merged, now(), &resolve_dan),
+            Some(Unusable::Revoked)
+        );
         assert!(merge_with(&tess, &forged, &resolve_both).is_none());
     }
 
@@ -1033,4 +1323,3 @@ pub(crate) mod tests {
         assert!(data_hash_ok(Some(HashAlgorithm::Sha256)));
     }
 }
-

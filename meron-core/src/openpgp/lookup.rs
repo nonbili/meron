@@ -55,7 +55,11 @@ impl KeySource {
     pub fn label(&self) -> String {
         match self.kind {
             SourceKind::Wkd => "WKD".to_string(),
-            _ => self.url.trim_start_matches("https://").trim_end_matches('/').to_string(),
+            _ => self
+                .url
+                .trim_start_matches("https://")
+                .trim_end_matches('/')
+                .to_string(),
         }
     }
 }
@@ -63,8 +67,16 @@ impl KeySource {
 /// WKD and keys.openpgp.org: the sources that check addresses.
 pub fn default_sources() -> Vec<KeySource> {
     vec![
-        KeySource { kind: SourceKind::Wkd, url: String::new(), enabled: true },
-        KeySource { kind: SourceKind::Vks, url: "https://keys.openpgp.org".into(), enabled: true },
+        KeySource {
+            kind: SourceKind::Wkd,
+            url: String::new(),
+            enabled: true,
+        },
+        KeySource {
+            kind: SourceKind::Vks,
+            url: "https://keys.openpgp.org".into(),
+            enabled: true,
+        },
     ]
 }
 
@@ -88,9 +100,16 @@ pub fn set_sources(conn: &Connection, list: &[KeySource]) -> Result<()> {
             if parsed.scheme() != "https" || parsed.host_str().is_none() {
                 bail!("keyservers must use https://");
             }
-            s.url = format!("https://{}{}", parsed.host_str().unwrap_or_default(), parsed.port().map(|p| format!(":{p}")).unwrap_or_default());
+            s.url = format!(
+                "https://{}{}",
+                parsed.host_str().unwrap_or_default(),
+                parsed.port().map(|p| format!(":{p}")).unwrap_or_default()
+            );
         }
-        if !clean.iter().any(|c: &KeySource| c.kind == s.kind && c.url == s.url) {
+        if !clean
+            .iter()
+            .any(|c: &KeySource| c.kind == s.kind && c.url == s.url)
+        {
             clean.push(s);
         }
     }
@@ -157,10 +176,18 @@ pub fn wkd_urls(addr: &str) -> Option<[String; 2]> {
     // WKD needs a real DNS name. Reject ports, IPv6 brackets, IP literals and
     // single-label names, so a click-triggered lookup can't reach a local or
     // private service like x@127.0.0.1:631.
-    if domain.contains(':') || domain.contains('[') || domain.contains(']') || !domain.contains('.') || domain.parse::<std::net::IpAddr>().is_ok() {
+    if domain.contains(':')
+        || domain.contains('[')
+        || domain.contains(']')
+        || !domain.contains('.')
+        || domain.parse::<std::net::IpAddr>().is_ok()
+    {
         return None;
     }
-    let digest = ring::digest::digest(&ring::digest::SHA1_FOR_LEGACY_USE_ONLY, local.to_lowercase().as_bytes());
+    let digest = ring::digest::digest(
+        &ring::digest::SHA1_FOR_LEGACY_USE_ONLY,
+        local.to_lowercase().as_bytes(),
+    );
     let hash = zbase32(digest.as_ref());
     let l = url::form_urlencoded::byte_serialize(local.as_bytes()).collect::<String>();
     Some([
@@ -174,7 +201,10 @@ fn source_urls(source: &KeySource, addr: &str) -> Vec<String> {
     match source.kind {
         SourceKind::Wkd => wkd_urls(addr).map(Vec::from).unwrap_or_default(),
         SourceKind::Vks => vec![format!("{}/vks/v1/by-email/{enc}", source.url)],
-        SourceKind::Hkp => vec![format!("{}/pks/lookup?op=get&options=mr&search={enc}", source.url)],
+        SourceKind::Hkp => vec![format!(
+            "{}/pks/lookup?op=get&options=mr&search={enc}",
+            source.url
+        )],
     }
 }
 
@@ -198,7 +228,11 @@ fn http_fetch(agent: &ureq::Agent, url: &str) -> Result<Option<Vec<u8>>> {
         bail!("HTTP {status}");
     }
     let mut data = Vec::new();
-    response.body_mut().as_reader().take(MAX_RESPONSE_BYTES + 1).read_to_end(&mut data)?;
+    response
+        .body_mut()
+        .as_reader()
+        .take(MAX_RESPONSE_BYTES + 1)
+        .read_to_end(&mut data)?;
     if data.len() as u64 > MAX_RESPONSE_BYTES {
         bail!("response too large");
     }
@@ -213,7 +247,13 @@ pub fn lookup(addr: &str, sources: &[KeySource]) -> Result<LookupResult> {
 
 pub fn lookup_with(addr: &str, sources: &[KeySource], fetch: &Fetch<'_>) -> LookupResult {
     let addr = addr.trim().to_ascii_lowercase();
-    let mut out = LookupResult { addr: addr.clone(), found: Vec::new(), searched: Vec::new(), failed: Vec::new(), all_keys: Vec::new() };
+    let mut out = LookupResult {
+        addr: addr.clone(),
+        found: Vec::new(),
+        searched: Vec::new(),
+        failed: Vec::new(),
+        all_keys: Vec::new(),
+    };
     for source in sources.iter().filter(|s| s.enabled) {
         out.searched.push(source.label());
         let mut last_error = None;
@@ -231,11 +271,16 @@ pub fn lookup_with(addr: &str, sources: &[KeySource], fetch: &Fetch<'_>) -> Look
         }
         let Some(body) = got else {
             if let Some(error) = last_error.filter(|_| source.kind != SourceKind::Wkd) {
-                out.failed.push(Failed { source: source.label(), error });
+                out.failed.push(Failed {
+                    source: source.label(),
+                    error,
+                });
             }
             continue;
         };
-        let Ok(parsed) = keys::parse_keys(&body) else { continue };
+        let Ok(parsed) = keys::parse_keys(&body) else {
+            continue;
+        };
         for key in parsed.public {
             let info = keys::info(&key, false, keys::now());
             // Only keys for this address; unusable ones are kept for merging
@@ -247,10 +292,16 @@ pub fn lookup_with(addr: &str, sources: &[KeySource], fetch: &Fetch<'_>) -> Look
             if info.unusable.is_some() {
                 continue;
             }
-            if out.found.iter().any(|f| f.info.fingerprint == info.fingerprint) {
+            if out
+                .found
+                .iter()
+                .any(|f| f.info.fingerprint == info.fingerprint)
+            {
                 continue;
             }
-            let Ok(bin) = keys::binary_public(&key) else { continue };
+            let Ok(bin) = keys::binary_public(&key) else {
+                continue;
+            };
             out.found.push(Found {
                 verified: source.verified(),
                 source: source.clone(),
@@ -267,7 +318,12 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name)).unwrap()
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -278,7 +334,10 @@ mod tests {
             advanced,
             "https://openpgpkey.example.org/.well-known/openpgpkey/example.org/hu/iy9q119eutrkn8s1mk4r39qejnbu3n5q?l=Joe.Doe"
         );
-        assert_eq!(direct, "https://example.org/.well-known/openpgpkey/hu/iy9q119eutrkn8s1mk4r39qejnbu3n5q?l=Joe.Doe");
+        assert_eq!(
+            direct,
+            "https://example.org/.well-known/openpgpkey/hu/iy9q119eutrkn8s1mk4r39qejnbu3n5q?l=Joe.Doe"
+        );
         assert!(wkd_urls("nope").is_none());
     }
 
@@ -310,30 +369,54 @@ mod tests {
         };
         let res = lookup_with("Carol@Example.com", &default_sources(), &fetch);
         assert_eq!(res.searched, vec!["WKD", "keys.openpgp.org"]);
-        assert_eq!(res.found.len(), 1, "the keyring holds five keys, one is Carol's");
+        assert_eq!(
+            res.found.len(),
+            1,
+            "the keyring holds five keys, one is Carol's"
+        );
         assert!(res.found[0].verified);
         assert_eq!(res.found[0].info.emails, vec!["carol@example.com"]);
-        assert!(res.failed.is_empty(), "a missing WKD host is normal, not a failure");
+        assert!(
+            res.failed.is_empty(),
+            "a missing WKD host is normal, not a failure"
+        );
     }
 
     #[test]
     fn hkp_results_are_marked_unverified_and_revoked_keys_dropped() {
         let keyring = fixture("contacts-keyring.asc");
-        let hkp = KeySource { kind: SourceKind::Hkp, url: "https://keyserver.ubuntu.com".into(), enabled: true };
+        let hkp = KeySource {
+            kind: SourceKind::Hkp,
+            url: "https://keyserver.ubuntu.com".into(),
+            enabled: true,
+        };
         let fetch = |url: &str| -> Result<Option<Vec<u8>>> {
-            assert!(url.starts_with("https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search="), "{url}");
+            assert!(
+                url.starts_with(
+                    "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search="
+                ),
+                "{url}"
+            );
             Ok(Some(keyring.clone()))
         };
         let res = lookup_with("carol@example.com", &[hkp.clone()], &fetch);
         assert!(!res.found[0].verified);
         let rex = lookup_with("rex@example.com", &[hkp], &fetch);
         assert!(rex.found.is_empty(), "a revoked key is never offered");
-        assert_eq!(rex.all_keys.len(), 1, "but it is kept, so the caller can merge the revocation");
+        assert_eq!(
+            rex.all_keys.len(),
+            1,
+            "but it is kept, so the caller can merge the revocation"
+        );
     }
 
     #[test]
     fn a_failing_keyserver_is_reported() {
-        let res = lookup_with("a@b.org", &default_sources()[1..], &|_: &str| -> Result<Option<Vec<u8>>> { bail!("timeout") });
+        let res = lookup_with("a@b.org", &default_sources()[1..], &|_: &str| -> Result<
+            Option<Vec<u8>>,
+        > {
+            bail!("timeout")
+        });
         assert_eq!(res.failed.len(), 1);
         assert_eq!(res.failed[0].source, "keys.openpgp.org");
     }
@@ -343,13 +426,25 @@ mod tests {
         let conn = crate::store::open_at(":memory:").unwrap();
         assert_eq!(sources(&conn), default_sources());
         let mut list = default_sources();
-        list.push(KeySource { kind: SourceKind::Hkp, url: "https://keyserver.ubuntu.com/".into(), enabled: true });
-        list.push(KeySource { kind: SourceKind::Hkp, url: "https://keyserver.ubuntu.com".into(), enabled: true });
+        list.push(KeySource {
+            kind: SourceKind::Hkp,
+            url: "https://keyserver.ubuntu.com/".into(),
+            enabled: true,
+        });
+        list.push(KeySource {
+            kind: SourceKind::Hkp,
+            url: "https://keyserver.ubuntu.com".into(),
+            enabled: true,
+        });
         set_sources(&conn, &list).unwrap();
         let stored = sources(&conn);
         assert_eq!(stored.len(), 3);
         assert_eq!(stored[2].url, "https://keyserver.ubuntu.com");
-        let bad = vec![KeySource { kind: SourceKind::Hkp, url: "http://pgp.example.com".into(), enabled: true }];
+        let bad = vec![KeySource {
+            kind: SourceKind::Hkp,
+            url: "http://pgp.example.com".into(),
+            enabled: true,
+        }];
         assert!(set_sources(&conn, &bad).is_err());
     }
 }

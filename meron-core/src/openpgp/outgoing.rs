@@ -73,7 +73,10 @@ pub fn split_recipients(raw: &str) -> Vec<String> {
 
 /// The key to encrypt to for one address: a correspondent's, or our own
 /// when writing to one of our accounts.
-fn key_for<'a>(ring: &'a Keyring, addr: &str) -> std::result::Result<&'a SignedPublicKey, NoKeyReason> {
+fn key_for<'a>(
+    ring: &'a Keyring,
+    addr: &str,
+) -> std::result::Result<&'a SignedPublicKey, NoKeyReason> {
     match ring.encryption_key_for(addr) {
         Ok(peer) => Ok(&peer.key),
         Err(reason) => ring.own_key_for_addr(addr).map(|k| &k.public).ok_or(reason),
@@ -92,7 +95,11 @@ pub enum Protection {
 /// the caller didn't explicitly ask for plain. A caller that says nothing
 /// (an MCP tool, a composer path that lost the flag) can't downgrade a thread.
 pub fn protection(encrypt: bool, plain: bool, answers_encrypted: bool) -> Protection {
-    if encrypt || (answers_encrypted && !plain) { Protection::Encrypt } else { Protection::Plain }
+    if encrypt || (answers_encrypted && !plain) {
+        Protection::Encrypt
+    } else {
+        Protection::Plain
+    }
 }
 
 /// The correspondent key each recipient would get (bare address, primary
@@ -103,7 +110,11 @@ pub fn chosen_peer_keys(ring: &Keyring, addrs: &[String]) -> Vec<(String, String
         .iter()
         .map(|a| bare_addr(a))
         .filter(|a| !a.is_empty())
-        .filter_map(|addr| ring.encryption_key_for(&addr).ok().map(|peer| (addr, peer.fingerprint.clone())))
+        .filter_map(|addr| {
+            ring.encryption_key_for(&addr)
+                .ok()
+                .map(|peer| (addr, peer.fingerprint.clone()))
+        })
         .collect()
 }
 
@@ -113,22 +124,38 @@ pub fn missing_keys(ring: &Keyring, addrs: &[String]) -> Vec<Missing> {
         .iter()
         .map(|a| bare_addr(a))
         .filter(|a| !a.is_empty())
-        .filter_map(|addr| key_for(ring, &addr).err().map(|reason| Missing { addr, reason }))
+        .filter_map(|addr| {
+            key_for(ring, &addr)
+                .err()
+                .map(|reason| Missing { addr, reason })
+        })
         .collect()
 }
 
 /// Gathers the keys for an encrypted send, or fails naming every recipient
 /// without one. Never falls back to sending unencrypted: the composer must
 /// have resolved that before (security notes R9).
-pub fn resolve(ring: &Keyring, account_id: &str, from_addr: &str, to: &str, cc: &str, bcc: &str) -> Result<SendKeys> {
+pub fn resolve(
+    ring: &Keyring,
+    account_id: &str,
+    from_addr: &str,
+    to: &str,
+    cc: &str,
+    bcc: &str,
+) -> Result<SendKeys> {
     let own = ring
         .default_key(account_id)
         .filter(|_| ring.is_enabled(account_id))
         .context("end-to-end encryption is not set up for this account")?;
     if super::keys::check(&own.public, super::keys::now()).is_some() {
-        bail!("your encryption key has expired or can't be used: replace it in the account settings");
+        bail!(
+            "your encryption key has expired or can't be used: replace it in the account settings"
+        );
     }
-    let to_cc: Vec<String> = split_recipients(to).into_iter().chain(split_recipients(cc)).collect();
+    let to_cc: Vec<String> = split_recipients(to)
+        .into_iter()
+        .chain(split_recipients(cc))
+        .collect();
     let bcc_list = split_recipients(bcc);
     let all: Vec<String> = to_cc.iter().chain(bcc_list.iter()).cloned().collect();
     let missing = missing_keys(ring, &all);
@@ -136,12 +163,19 @@ pub fn resolve(ring: &Keyring, account_id: &str, from_addr: &str, to: &str, cc: 
         let names: Vec<&str> = missing.iter().map(|m| m.addr.as_str()).collect();
         bail!("can't encrypt to {}: no usable key", names.join(", "));
     }
-    let key = |entry: &str| key_for(ring, &bare_addr(entry)).map(Clone::clone).map_err(|_| anyhow::anyhow!("no key"));
+    let key = |entry: &str| {
+        key_for(ring, &bare_addr(entry))
+            .map(Clone::clone)
+            .map_err(|_| anyhow::anyhow!("no key"))
+    };
     Ok(SendKeys {
         signer: own.secret.clone(),
         own: own.public.clone(),
         to_cc: to_cc.iter().map(|e| key(e)).collect::<Result<_>>()?,
-        bcc: bcc_list.iter().map(|e| Ok((e.clone(), key(e)?))).collect::<Result<_>>()?,
+        bcc: bcc_list
+            .iter()
+            .map(|e| Ok((e.clone(), key(e)?)))
+            .collect::<Result<_>>()?,
         autocrypt: autocrypt::header_value(&bare_addr(from_addr), &own.public)?,
     })
 }
@@ -180,7 +214,12 @@ fn fields(head: &[u8]) -> Vec<String> {
 }
 
 fn name_of(field: &str) -> String {
-    field.split(':').next().unwrap_or_default().trim().to_ascii_lowercase()
+    field
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
 }
 
 /// Adds a header field at the top of a built message.
@@ -212,11 +251,26 @@ pub fn inner_payload(built: &[u8], autocrypt: &str) -> Result<Vec<u8>> {
 }
 
 /// Headers kept outside: what delivery, threading and the mailbox list need.
-const OUTER: &[&str] = &["from", "to", "cc", "bcc", "reply-to", "date", "message-id", "in-reply-to", "references"];
+const OUTER: &[&str] = &[
+    "from",
+    "to",
+    "cc",
+    "bcc",
+    "reply-to",
+    "date",
+    "message-id",
+    "in-reply-to",
+    "references",
+];
 
 /// Encrypts `built` for `recipients` (callers include our own key) and wraps
 /// it as RFC 3156 `multipart/encrypted` with a `[...]` subject.
-pub fn wrap(built: &[u8], recipients: &[&SignedPublicKey], signer: &SignedSecretKey, autocrypt: &str) -> Result<Vec<u8>> {
+pub fn wrap(
+    built: &[u8],
+    recipients: &[&SignedPublicKey],
+    signer: &SignedSecretKey,
+    autocrypt: &str,
+) -> Result<Vec<u8>> {
     let payload = inner_payload(built, autocrypt)?;
     let armored = crypt::encrypt(&payload, recipients, signer)?;
     let (head, _) = split(built).context("built message has no header block")?;
@@ -262,7 +316,14 @@ mod tests {
                 .iter()
                 .map(|(addr, k)| {
                     let key = k.to_public_key();
-                    PeerKey { addr: addr.to_string(), fingerprint: keys::fingerprint_hex(&key.primary_key), key, source: Source::Autocrypt, verified: false, last_seen: 1 }
+                    PeerKey {
+                        addr: addr.to_string(),
+                        fingerprint: keys::fingerprint_hex(&key.primary_key),
+                        key,
+                        source: Source::Autocrypt,
+                        verified: false,
+                        last_seen: 1,
+                    }
                 })
                 .collect(),
             enabled_accounts: vec!["acc".into()],
@@ -295,8 +356,22 @@ mod tests {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let peer = keys::generate(&["peer@example.org".into()]).unwrap();
         let ring = ring_with(&me, &[("peer@example.org", &peer)]);
-        let keys = resolve(&ring, "acc", "me@example.org", "Peer <peer@example.org>", "", "").unwrap();
-        let raw = wrap(&built(false), &[&keys.to_cc[0], &keys.own], &keys.signer, &keys.autocrypt).unwrap();
+        let keys = resolve(
+            &ring,
+            "acc",
+            "me@example.org",
+            "Peer <peer@example.org>",
+            "",
+            "",
+        )
+        .unwrap();
+        let raw = wrap(
+            &built(false),
+            &[&keys.to_cc[0], &keys.own],
+            &keys.signer,
+            &keys.autocrypt,
+        )
+        .unwrap();
         let text = String::from_utf8_lossy(&raw);
         assert!(text.contains("Subject: [...]"));
         assert!(!text.contains("Real subject"));
@@ -313,7 +388,10 @@ mod tests {
         assert_eq!(c.trust(&peer_ring, &m.from_addr), Trust::Known);
         // And so do we (Sent copy), as verified.
         let m = crate::parse::parse_message_with(&raw, None, &ring);
-        assert_eq!(m.crypto.unwrap().trust(&ring, &m.from_addr), Trust::Verified);
+        assert_eq!(
+            m.crypto.unwrap().trust(&ring, &m.from_addr),
+            Trust::Verified
+        );
     }
 
     #[test]
@@ -323,9 +401,21 @@ mod tests {
         use Protection::{Encrypt, Plain};
         assert_eq!(protection(true, false, false), Encrypt);
         assert_eq!(protection(false, false, false), Plain);
-        assert_eq!(protection(false, false, true), Encrypt, "nothing said, answers encrypted mail");
-        assert_eq!(protection(false, true, true), Plain, "the user turned encryption off");
-        assert_eq!(protection(true, true, true), Encrypt, "encrypt wins over a stray plain");
+        assert_eq!(
+            protection(false, false, true),
+            Encrypt,
+            "nothing said, answers encrypted mail"
+        );
+        assert_eq!(
+            protection(false, true, true),
+            Plain,
+            "the user turned encryption off"
+        );
+        assert_eq!(
+            protection(true, true, true),
+            Encrypt,
+            "encrypt wins over a stray plain"
+        );
     }
 
     #[test]
@@ -333,18 +423,49 @@ mod tests {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let peer = keys::generate(&["peer@example.org".into()]).unwrap();
         let ring = ring_with(&me, &[("peer@example.org", &peer)]);
-        let chosen = chosen_peer_keys(&ring, &["Peer <Peer@example.org>".into(), "me@example.org".into(), "x@example.org".into()]);
-        assert_eq!(chosen, vec![("peer@example.org".to_string(), keys::fingerprint_hex(&peer.primary_key))]);
+        let chosen = chosen_peer_keys(
+            &ring,
+            &[
+                "Peer <Peer@example.org>".into(),
+                "me@example.org".into(),
+                "x@example.org".into(),
+            ],
+        );
+        assert_eq!(
+            chosen,
+            vec![(
+                "peer@example.org".to_string(),
+                keys::fingerprint_hex(&peer.primary_key)
+            )]
+        );
     }
 
     #[test]
     fn a_recipient_without_a_key_is_refused_not_downgraded() {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let ring = ring_with(&me, &[]);
-        let err = resolve(&ring, "acc", "me@example.org", "x@example.org, Y <y@example.org>", "", "").err().unwrap();
-        assert!(err.to_string().contains("x@example.org, y@example.org"), "{err}");
+        let err = resolve(
+            &ring,
+            "acc",
+            "me@example.org",
+            "x@example.org, Y <y@example.org>",
+            "",
+            "",
+        )
+        .err()
+        .unwrap();
+        assert!(
+            err.to_string().contains("x@example.org, y@example.org"),
+            "{err}"
+        );
         let missing = missing_keys(&ring, &["x@example.org".into(), "me@example.org".into()]);
-        assert_eq!(missing, vec![Missing { addr: "x@example.org".into(), reason: NoKeyReason::None }]);
+        assert_eq!(
+            missing,
+            vec![Missing {
+                addr: "x@example.org".into(),
+                reason: NoKeyReason::None
+            }]
+        );
     }
 
     #[test]
@@ -361,17 +482,47 @@ mod tests {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let peer = keys::generate(&["peer@example.org".into()]).unwrap();
         let hidden = keys::generate(&["hidden@example.org".into()]).unwrap();
-        let ring = ring_with(&me, &[("peer@example.org", &peer), ("hidden@example.org", &hidden)]);
-        let k = resolve(&ring, "acc", "me@example.org", "peer@example.org", "", "hidden@example.org").unwrap();
+        let ring = ring_with(
+            &me,
+            &[("peer@example.org", &peer), ("hidden@example.org", &hidden)],
+        );
+        let k = resolve(
+            &ring,
+            "acc",
+            "me@example.org",
+            "peer@example.org",
+            "",
+            "hidden@example.org",
+        )
+        .unwrap();
         assert_eq!(k.bcc.len(), 1);
         // The To copy: the hidden recipient can't open it.
-        let main = wrap(&built(false), &[&k.to_cc[0], &k.own], &k.signer, &k.autocrypt).unwrap();
+        let main = wrap(
+            &built(false),
+            &[&k.to_cc[0], &k.own],
+            &k.signer,
+            &k.autocrypt,
+        )
+        .unwrap();
         let hidden_ring = ring_with(&hidden, &[("me@example.org", &me)]);
         let m = crate::parse::parse_message_with(&main, None, &hidden_ring);
-        assert_eq!(m.crypto.unwrap().problem, Some(crate::openpgp::mime::Problem::NoKey));
+        assert_eq!(
+            m.crypto.unwrap().problem,
+            Some(crate::openpgp::mime::Problem::NoKey)
+        );
         // Its own copy it can.
-        let copy = wrap(&built(false), &[&k.bcc[0].1, &k.own], &k.signer, &k.autocrypt).unwrap();
-        assert!(crate::parse::parse_message_with(&copy, None, &hidden_ring).body.contains("Secret body text"));
+        let copy = wrap(
+            &built(false),
+            &[&k.bcc[0].1, &k.own],
+            &k.signer,
+            &k.autocrypt,
+        )
+        .unwrap();
+        assert!(
+            crate::parse::parse_message_with(&copy, None, &hidden_ring)
+                .body
+                .contains("Secret body text")
+        );
         assert!(!String::from_utf8_lossy(&main).contains("hidden@example.org"));
     }
 
@@ -382,16 +533,41 @@ mod tests {
             return;
         };
         let me = keys::generate(&["me@example.org".into()]).unwrap();
-        let carol_secret = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata/alice-secret.asc")).unwrap();
+        let carol_secret = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata/alice-secret.asc"),
+        )
+        .unwrap();
         let alice = keys::parse_keys(&carol_secret).unwrap().secret.remove(0);
         let gpg = crate::openpgp::crypt::tests::gpg;
         assert!(gpg(home.path(), &["--import"], &carol_secret).unwrap().0);
-        assert!(gpg(home.path(), &["--import"], keys::armored_public(&me.to_public_key()).unwrap().as_bytes()).unwrap().0);
-        let raw = wrap(&built(false), &[&alice.to_public_key(), &me.to_public_key()], &me, "addr=me@example.org; keydata=AA").unwrap();
+        assert!(
+            gpg(
+                home.path(),
+                &["--import"],
+                keys::armored_public(&me.to_public_key())
+                    .unwrap()
+                    .as_bytes()
+            )
+            .unwrap()
+            .0
+        );
+        let raw = wrap(
+            &built(false),
+            &[&alice.to_public_key(), &me.to_public_key()],
+            &me,
+            "addr=me@example.org; keydata=AA",
+        )
+        .unwrap();
         let text = String::from_utf8_lossy(&raw);
         let start = text.find("-----BEGIN PGP MESSAGE-----").unwrap();
         let end = text.find("-----END PGP MESSAGE-----").unwrap() + 25;
-        let (ok, plain, err) = gpg(home.path(), &["--status-fd", "2", "--decrypt"], text[start..end].as_bytes()).unwrap();
+        let (ok, plain, err) = gpg(
+            home.path(),
+            &["--status-fd", "2", "--decrypt"],
+            text[start..end].as_bytes(),
+        )
+        .unwrap();
         assert!(ok, "{err}");
         let plain = String::from_utf8_lossy(&plain);
         assert!(plain.contains("protected-headers=\"v1\""));

@@ -5770,13 +5770,8 @@ fn card_title_skips_the_placeholder_of_an_encrypted_message_never_decrypted() {
     insert(1, "...", "{}");
     insert(2, "Re: Secret plans", r#"{"crypto":{"encrypted":true}}"#);
 
-    let subjects = card_root_subjects(
-        &conn,
-        "acct",
-        "INBOX",
-        &["root@example.com".to_string()],
-    )
-    .unwrap();
+    let subjects =
+        card_root_subjects(&conn, "acct", "INBOX", &["root@example.com".to_string()]).unwrap();
     // The oldest message that knows its subject titles the card, verbatim.
     assert_eq!(
         subjects.get("root@example.com").map(String::as_str),
@@ -5793,13 +5788,8 @@ fn card_title_skips_the_placeholder_of_an_encrypted_message_never_decrypted() {
         [],
     )
     .unwrap();
-    let subjects = card_root_subjects(
-        &conn,
-        "acct",
-        "INBOX",
-        &["other@example.com".to_string()],
-    )
-    .unwrap();
+    let subjects =
+        card_root_subjects(&conn, "acct", "INBOX", &["other@example.com".to_string()]).unwrap();
     assert_eq!(
         subjects.get("other@example.com").map(String::as_str),
         Some("[...]")
@@ -5840,17 +5830,31 @@ fn grouped_card_title_skips_the_placeholder_of_an_encrypted_message_never_decryp
 fn an_encrypted_reply_titled_with_the_placeholder_takes_the_threads_subject() {
     let conn = test_conn();
     let insert = |uid: u32, subject: &str, encrypted: bool, thread: &str| {
-        let json = if encrypted { r#"{"crypto":{"encrypted":true}}"# } else { "{}" };
+        let json = if encrypted {
+            r#"{"crypto":{"encrypted":true}}"#
+        } else {
+            "{}"
+        };
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
                                   date, seen, thread_key, body, json)
              VALUES('acct', 'INBOX', ?1, ?2, ?3, 'Aki', 'aki@example.com', ?4, 1, ?5, 'b', ?6)",
-            params![uid.to_string(), uid, subject, 100 * uid as i64, thread, json],
+            params![
+                uid.to_string(),
+                uid,
+                subject,
+                100 * uid as i64,
+                thread,
+                json
+            ],
         )
         .unwrap();
     };
     let subject = |uid: u32| -> String {
-        conn.query_row("SELECT subject FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        conn.query_row("SELECT subject FROM messages WHERE uid = ?1", [uid], |r| {
+            r.get(0)
+        })
+        .unwrap()
     };
     insert(1, "Testing This", true, "root@example.com");
     insert(2, "Re: [...]", true, "root@example.com");
@@ -5860,12 +5864,19 @@ fn an_encrypted_reply_titled_with_the_placeholder_takes_the_threads_subject() {
     // No real subject anywhere in its thread: nothing to take.
     insert(5, "Re: [...]", true, "other@example.com");
 
-    assert_eq!(repair_placeholder_reply_subjects(&conn, "acct", None).unwrap(), 2);
+    assert_eq!(
+        repair_placeholder_reply_subjects(&conn, "acct", None).unwrap(),
+        2
+    );
     assert_eq!(subject(2), "Re: Testing This");
     assert_eq!(subject(3), "Re: Testing This");
     assert_eq!(subject(4), "Re: [...]");
     assert_eq!(subject(5), "Re: [...]");
-    assert_eq!(repair_placeholder_reply_subjects(&conn, "acct", None).unwrap(), 0, "idempotent");
+    assert_eq!(
+        repair_placeholder_reply_subjects(&conn, "acct", None).unwrap(),
+        0,
+        "idempotent"
+    );
 }
 
 // Saving a body repairs its thread either way round: the placeholder reply
@@ -5887,11 +5898,17 @@ fn saving_a_decrypted_body_repairs_placeholder_replies_in_its_thread() {
         from_name: "Aki".to_string(),
         from_addr: "aki@example.com".to_string(),
         body: "text".to_string(),
-        crypto: Some(crate::openpgp::mime::CryptoStatus { encrypted: true, ..Default::default() }),
+        crypto: Some(crate::openpgp::mime::CryptoStatus {
+            encrypted: true,
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let subject = |uid: u32| -> String {
-        conn.query_row("SELECT subject FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        conn.query_row("SELECT subject FROM messages WHERE uid = ?1", [uid], |r| {
+            r.get(0)
+        })
+        .unwrap()
     };
     header(1, "[...]");
     header(2, "[...]");
@@ -5919,9 +5936,16 @@ fn placeholder_reply_subjects_are_repaired_in_every_account() {
             .unwrap();
         }
     }
-    assert_eq!(repair_placeholder_reply_subjects_everywhere(&conn).unwrap(), 2);
+    assert_eq!(
+        repair_placeholder_reply_subjects_everywhere(&conn).unwrap(),
+        2
+    );
     let repaired: i64 = conn
-        .query_row("SELECT COUNT(*) FROM messages WHERE subject = 'Re: Topic'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE subject = 'Re: Topic'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(repaired, 2);
 }
@@ -5942,9 +5966,14 @@ fn a_sent_copy_without_a_body_is_found_by_message_id() {
     insert("Sent", 7, "<new@example.com>", None);
     insert("Sent", 6, "<old@example.com>", Some("cached"));
     insert("INBOX", 9, "<new@example.com>", None);
-    let find = |folder: &str, mid: &str| sent_copy_uid_without_body(&conn, "acct", folder, mid).unwrap();
+    let find =
+        |folder: &str, mid: &str| sent_copy_uid_without_body(&conn, "acct", folder, mid).unwrap();
     assert_eq!(find("Sent", "<NEW@example.com>"), Some(7));
-    assert_eq!(find("Sent", "<old@example.com>"), None, "already has a body");
+    assert_eq!(
+        find("Sent", "<old@example.com>"),
+        None,
+        "already has a body"
+    );
     assert_eq!(find("Sent", "<other@example.com>"), None);
     assert_eq!(find("Sent", ""), None);
 }
@@ -5964,12 +5993,35 @@ fn an_encrypted_gmail_reply_joins_the_gmail_thread_of_the_message_it_answers() {
         date: 100 * uid as i64,
         ..Default::default()
     };
-    upsert_messages(&conn, "acct", "INBOX", &[header(1, "Plans", "root@example.com", "gmthrid:42")]).unwrap();
-    upsert_messages(&conn, "acct", "INBOX", &[header(2, "[...]", "reply@example.com", "root@example.com")]).unwrap();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[header(1, "Plans", "root@example.com", "gmthrid:42")],
+    )
+    .unwrap();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[header(2, "[...]", "reply@example.com", "root@example.com")],
+    )
+    .unwrap();
     // A new encrypted message with no References starts its own thread.
-    upsert_messages(&conn, "acct", "INBOX", &[header(3, "[...]", "new@example.com", "new@example.com")]).unwrap();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[header(3, "[...]", "new@example.com", "new@example.com")],
+    )
+    .unwrap();
     let key = |uid: u32| -> String {
-        conn.query_row("SELECT thread_key FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        conn.query_row(
+            "SELECT thread_key FROM messages WHERE uid = ?1",
+            [uid],
+            |r| r.get(0),
+        )
+        .unwrap()
     };
     assert_eq!(key(2), "gmthrid:42");
     assert_eq!(key(3), "new@example.com");
@@ -6001,7 +6053,10 @@ fn an_undecrypted_message_stays_in_its_threads_branch() {
 
     let cards = group_thread_cards(vec![later, reply, sent], "INBOX");
     assert_eq!(cards.len(), 1, "one card, not a branch per subject");
-    assert_eq!(cards[0].original_thread_key, None, "no 'changed subject' banner");
+    assert_eq!(
+        cards[0].original_thread_key, None,
+        "no 'changed subject' banner"
+    );
     assert_eq!(cards[0].message_count, 3);
 }
 
@@ -6013,7 +6068,12 @@ fn an_undecrypted_message_stays_in_its_threads_branch() {
 #[test]
 fn a_plain_gmail_reply_joins_the_encrypted_thread_it_answers() {
     use crate::imap::MessageHeader;
-    let header = |uid: u32, subject: &str, message_id: &str, in_reply_to: &str, thread_key: &str, gmail: bool| {
+    let header = |uid: u32,
+                  subject: &str,
+                  message_id: &str,
+                  in_reply_to: &str,
+                  thread_key: &str,
+                  gmail: bool| {
         MessageHeader {
             uid,
             subject: subject.to_string(),
@@ -6026,12 +6086,38 @@ fn a_plain_gmail_reply_joins_the_encrypted_thread_it_answers() {
         }
     };
     let key = |conn: &rusqlite::Connection, uid: u32| -> String {
-        conn.query_row("SELECT thread_key FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        conn.query_row(
+            "SELECT thread_key FROM messages WHERE uid = ?1",
+            [uid],
+            |r| r.get(0),
+        )
+        .unwrap()
     };
     let root = header(1, "[...]", "root@example.com", "", "root@example.com", true);
-    let enc_reply = header(2, "[...]", "enc@example.com", "root@example.com", "root@example.com", true);
-    let plain = header(3, "Re: Plans", "plain@example.com", "enc@example.com", "gmthrid:99", true);
-    let plain_again = header(4, "Re: Plans", "plain2@example.com", "plain@example.com", "gmthrid:99", true);
+    let enc_reply = header(
+        2,
+        "[...]",
+        "enc@example.com",
+        "root@example.com",
+        "root@example.com",
+        true,
+    );
+    let plain = header(
+        3,
+        "Re: Plans",
+        "plain@example.com",
+        "enc@example.com",
+        "gmthrid:99",
+        true,
+    );
+    let plain_again = header(
+        4,
+        "Re: Plans",
+        "plain2@example.com",
+        "plain@example.com",
+        "gmthrid:99",
+        true,
+    );
 
     // In order: each reply finds the message it answers already cached.
     let conn = test_conn();
@@ -6043,7 +6129,13 @@ fn a_plain_gmail_reply_joins_the_encrypted_thread_it_answers() {
 
     // Out of order: the plain replies sync before the message they answer.
     let conn = test_conn();
-    upsert_messages(&conn, "acct", "INBOX", &[plain.clone(), plain_again.clone()]).unwrap();
+    upsert_messages(
+        &conn,
+        "acct",
+        "INBOX",
+        &[plain.clone(), plain_again.clone()],
+    )
+    .unwrap();
     upsert_messages(&conn, "acct", "INBOX", &[root, enc_reply]).unwrap();
     assert_eq!(key(&conn, 3), "root@example.com");
     assert_eq!(key(&conn, 4), "root@example.com");
@@ -6076,7 +6168,11 @@ fn a_plain_gmail_reply_to_a_locally_cached_message_keeps_gmails_thread() {
     };
     upsert_messages(&conn, "acct", "Sent", &[local]).unwrap();
     upsert_messages(&conn, "acct", "INBOX", &[reply]).unwrap();
-    let key: String = conn.query_row("SELECT thread_key FROM messages WHERE uid = 2", [], |r| r.get(0)).unwrap();
+    let key: String = conn
+        .query_row("SELECT thread_key FROM messages WHERE uid = 2", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
     assert_eq!(key, "gmthrid:99");
 }
 
@@ -6086,7 +6182,11 @@ fn a_plain_gmail_reply_to_a_locally_cached_message_keeps_gmails_thread() {
 fn a_reply_is_known_to_answer_encrypted_mail_by_its_in_reply_to() {
     let conn = test_conn();
     let insert = |uid: u32, message_id: &str, encrypted: bool, account: &str| {
-        let crypto = if encrypted { r#","crypto":{"encrypted":true}"# } else { "" };
+        let crypto = if encrypted {
+            r#","crypto":{"encrypted":true}"#
+        } else {
+            ""
+        };
         let json = format!(r#"{{"message_id":"{message_id}"{crypto}}}"#);
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, date, seen, json)
@@ -6099,10 +6199,16 @@ fn a_reply_is_known_to_answer_encrypted_mail_by_its_in_reply_to() {
     insert(2, "plain@example.com", false, "acct");
     insert(3, "elsewhere@example.com", true, "other");
     let answers = |id: &str| crate::openpgp::store::answers_encrypted(&conn, "acct", id).unwrap();
-    assert!(answers("<secret@example.com>"), "brackets and case don't matter");
+    assert!(
+        answers("<secret@example.com>"),
+        "brackets and case don't matter"
+    );
     assert!(answers("secret@example.com"));
     assert!(!answers("<plain@example.com>"));
-    assert!(!answers("<elsewhere@example.com>"), "another account's message doesn't count");
+    assert!(
+        !answers("<elsewhere@example.com>"),
+        "another account's message doesn't count"
+    );
     assert!(!answers(""));
     assert!(!answers("<unknown@example.com>"));
 }
@@ -6117,11 +6223,29 @@ fn a_reply_to_encrypted_mail_saying_nothing_is_encrypted_and_marked_implicit() {
         [],
     )
     .unwrap();
-    let decide = |irt: &str, encrypt: bool, plain: bool| crate::openpgp::store::reply_protection(&conn, "acct", irt, encrypt, plain).unwrap();
-    assert_eq!(decide("<secret@example.com>", false, false), (true, true), "nothing said: encrypted, implicitly");
-    assert_eq!(decide("<secret@example.com>", false, true), (false, false), "plain chosen");
-    assert_eq!(decide("<secret@example.com>", true, false), (true, false), "asked for");
-    assert_eq!(decide("<other@example.com>", false, false), (false, false), "answers plain mail");
+    let decide = |irt: &str, encrypt: bool, plain: bool| {
+        crate::openpgp::store::reply_protection(&conn, "acct", irt, encrypt, plain).unwrap()
+    };
+    assert_eq!(
+        decide("<secret@example.com>", false, false),
+        (true, true),
+        "nothing said: encrypted, implicitly"
+    );
+    assert_eq!(
+        decide("<secret@example.com>", false, true),
+        (false, false),
+        "plain chosen"
+    );
+    assert_eq!(
+        decide("<secret@example.com>", true, false),
+        (true, false),
+        "asked for"
+    );
+    assert_eq!(
+        decide("<other@example.com>", false, false),
+        (false, false),
+        "answers plain mail"
+    );
 }
 
 #[test]

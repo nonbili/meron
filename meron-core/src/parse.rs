@@ -563,9 +563,13 @@ pub(crate) fn parse_message_with(
     let content: Option<&ParsedMail> = match &opened.content {
         Content::Outer => Some(&mail),
         Content::SignedPart => mail.subparts.first(),
-        Content::Inner { signed_inside, .. } => inner_mail
-            .as_ref()
-            .map(|m| if *signed_inside { m.subparts.first().unwrap_or(m) } else { m }),
+        Content::Inner { signed_inside, .. } => inner_mail.as_ref().map(|m| {
+            if *signed_inside {
+                m.subparts.first().unwrap_or(m)
+            } else {
+                m
+            }
+        }),
         Content::Nothing => None,
     };
     let encrypted = opened.status.as_ref().is_some_and(|s| s.encrypted);
@@ -576,7 +580,11 @@ pub(crate) fn parse_message_with(
         folder: ctx.folder.clone(),
         uid: ctx.uid,
     });
-    let media = if encrypted { secure_ctx.as_ref() } else { media };
+    let media = if encrypted {
+        secure_ctx.as_ref()
+    } else {
+        media
+    };
     let to = collect_address_list(&headers.get_all_headers("To"));
     let reply_to = collect_address_list(&headers.get_all_headers("Reply-To"));
     let cc = collect_address_list(&headers.get_all_headers("Cc"));
@@ -590,7 +598,13 @@ pub(crate) fn parse_message_with(
         .any(|name| headers.get_first_value(name).is_some());
     let (sources, invite) = match content {
         Some(part) => (body_sources(part), calendar_invite(part)),
-        None => (BodySources { plain: None, html: None }, None),
+        None => (
+            BodySources {
+                plain: None,
+                html: None,
+            },
+            None,
+        ),
     };
 
     let mut attachments = Vec::new();
@@ -612,7 +626,11 @@ pub(crate) fn parse_message_with(
         }
     }
     // A verified signature's `signature.asc` is the signature itself, not a file.
-    if opened.status.as_ref().is_some_and(|s| s.signed && s.signer.is_some()) {
+    if opened
+        .status
+        .as_ref()
+        .is_some_and(|s| s.signed && s.signer.is_some())
+    {
         attachments.retain(|a| !a.mime.eq_ignore_ascii_case("application/pgp-signature"));
     }
     // The sender's own key, attached so we can record it (Thunderbird does this
@@ -620,7 +638,10 @@ pub(crate) fn parse_message_with(
     if let Some(part) = content {
         let own_keys = crate::openpgp::mime::sender_key_files(part, &from_addr);
         if !own_keys.is_empty() {
-            attachments.retain(|a| !(a.mime.eq_ignore_ascii_case("application/pgp-keys") && own_keys.contains(&a.filename)));
+            attachments.retain(|a| {
+                !(a.mime.eq_ignore_ascii_case("application/pgp-keys")
+                    && own_keys.contains(&a.filename))
+            });
         }
     }
     // Prefer the MIME text/plain alternative for the conversation and Plain
@@ -663,7 +684,10 @@ pub(crate) fn parse_message_with(
         attachments,
         invite,
         crypto: opened.status,
-        found_keys: FoundKeys { announced: opened.announced, attached: opened.attached },
+        found_keys: FoundKeys {
+            announced: opened.announced,
+            attached: opened.attached,
+        },
     }
 }
 
@@ -675,7 +699,10 @@ fn restrict_to_owner(root: &Path) {
         use std::os::unix::fs::PermissionsExt as _;
         let _ = std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700));
         if let Some(parent) = root.parent() {
-            if parent.file_name().is_some_and(|n| n.to_string_lossy().starts_with("meron")) {
+            if parent
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("meron"))
+            {
                 let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
             }
         }

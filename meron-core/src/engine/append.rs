@@ -229,7 +229,10 @@ pub(super) fn cache_encrypted_sent_copy(
         uid,
     };
     let message = parse(raw, &media);
-    let decrypted = message.crypto.as_ref().is_some_and(|c| c.encrypted && c.problem.is_none());
+    let decrypted = message
+        .crypto
+        .as_ref()
+        .is_some_and(|c| c.encrypted && c.problem.is_none());
     decrypted && store::save_cached_message(conn, account, folder, uid, &message).is_ok()
 }
 
@@ -291,9 +294,14 @@ pub async fn append_to_sent(
     // Only our own APPEND: a provider-filed copy is not these bytes.
     if should_append && copy.observed {
         let db = engine.db.lock().unwrap();
-        cache_encrypted_sent_copy(&db, account, &copy.folder, &copy.envelope.message_id, raw, |raw, media| {
-            parse::parse_message(raw, Some(media))
-        });
+        cache_encrypted_sent_copy(
+            &db,
+            account,
+            &copy.folder,
+            &copy.envelope.message_id,
+            raw,
+            |raw, media| parse::parse_message(raw, Some(media)),
+        );
     }
 
     Ok(copy)
@@ -372,13 +380,22 @@ mod sent_copy_body_tests {
     use crate::openpgp::{keyring, keys};
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     fn alice_ring() -> keyring::Keyring {
-        let key = keys::parse_keys(&fixture("alice-secret.asc")).unwrap().secret.remove(0);
-        let keys::Unlock::Ok(secret) = keys::unlock(key, None).unwrap() else { panic!() };
+        let key = keys::parse_keys(&fixture("alice-secret.asc"))
+            .unwrap()
+            .secret
+            .remove(0);
+        let keys::Unlock::Ok(secret) = keys::unlock(key, None).unwrap() else {
+            panic!()
+        };
         keyring::Keyring {
             own: vec![keyring::own_key("alice", secret, true)],
             peers: Vec::new(),
@@ -415,8 +432,12 @@ mod sent_copy_body_tests {
         let raw = fixture("enc-signed.eml");
         let mid = parse::sent_envelope_of(&raw).message_id;
         envelope_row(&conn, 7, &mid, None);
-        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
-        assert!(cache_encrypted_sent_copy(&conn, "alice", "Sent", &mid, &raw, parse));
+        let parse = |raw: &[u8], media: &parse::MediaCtx| {
+            parse::parse_message_with(raw, Some(media), &ring)
+        };
+        assert!(cache_encrypted_sent_copy(
+            &conn, "alice", "Sent", &mid, &raw, parse
+        ));
         let (subject, body, encrypted) = row(&conn, 7);
         assert_eq!(subject, "Secret plans");
         assert!(body.is_some_and(|b| b.contains("meeting moved to Thursday")));
@@ -429,15 +450,28 @@ mod sent_copy_body_tests {
         let ring = alice_ring();
         let plain = b"Message-ID: <plain@example.org>\r\nFrom: alice@example.org\r\nSubject: Hi\r\n\r\nhello\r\n";
         envelope_row(&conn, 8, "<plain@example.org>", None);
-        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
-        assert!(!cache_encrypted_sent_copy(&conn, "alice", "Sent", "<plain@example.org>", plain, parse));
+        let parse = |raw: &[u8], media: &parse::MediaCtx| {
+            parse::parse_message_with(raw, Some(media), &ring)
+        };
+        assert!(!cache_encrypted_sent_copy(
+            &conn,
+            "alice",
+            "Sent",
+            "<plain@example.org>",
+            plain,
+            parse
+        ));
         assert_eq!(row(&conn, 8).1, None, "plain mail keeps the normal fetch");
 
         let raw = fixture("enc-signed.eml");
         let mid = parse::sent_envelope_of(&raw).message_id;
         envelope_row(&conn, 9, &mid, Some("already here"));
-        let parse = |raw: &[u8], media: &parse::MediaCtx| parse::parse_message_with(raw, Some(media), &ring);
-        assert!(!cache_encrypted_sent_copy(&conn, "alice", "Sent", &mid, &raw, parse));
+        let parse = |raw: &[u8], media: &parse::MediaCtx| {
+            parse::parse_message_with(raw, Some(media), &ring)
+        };
+        assert!(!cache_encrypted_sent_copy(
+            &conn, "alice", "Sent", &mid, &raw, parse
+        ));
         assert_eq!(row(&conn, 9).1.as_deref(), Some("already here"));
     }
 }

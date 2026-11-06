@@ -131,7 +131,11 @@ fn refetch_encrypted_cached_without_openpgp_once(conn: &Connection) -> Result<us
 /// and without a cached body, whatever their age: encrypted mail never
 /// decrypted. The prefetcher adds them to its 14-day window so their real
 /// subject arrives without the user opening each one.
-pub fn undecrypted_placeholder_uids(conn: &Connection, account: &str, folder: &str) -> Result<Vec<u32>> {
+pub fn undecrypted_placeholder_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+) -> Result<Vec<u32>> {
     let mut stmt = conn.prepare(
         "SELECT uid FROM messages
          WHERE account = ?1 AND folder = ?2 AND uid <> 0 AND body IS NULL
@@ -166,18 +170,30 @@ pub fn reload(conn: &Connection) -> Result<()> {
 
 pub fn load(conn: &Connection) -> Result<Keyring> {
     let mut ring = Keyring::default();
-    let mut stmt = conn.prepare("SELECT account_id, secret_key, is_default FROM openpgp_own_keys")?;
-    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?, r.get::<_, bool>(2)?)))?;
+    let mut stmt =
+        conn.prepare("SELECT account_id, secret_key, is_default FROM openpgp_own_keys")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Vec<u8>>(1)?,
+            r.get::<_, bool>(2)?,
+        ))
+    })?;
     for row in rows {
         let (account, blob, is_default) = row?;
         let blob = zeroize::Zeroizing::new(blob);
-        let Ok(secret) = keys::parse_secret(&blob) else { continue };
+        let Ok(secret) = keys::parse_secret(&blob) else {
+            continue;
+        };
         if keys::self_test(&secret).is_err() {
             continue;
         }
-        ring.own.push(keyring::own_key(&account, secret, is_default));
+        ring.own
+            .push(keyring::own_key(&account, secret, is_default));
     }
-    let mut stmt = conn.prepare("SELECT addr, fingerprint, public_key, source, verified, last_seen FROM openpgp_peer_keys")?;
+    let mut stmt = conn.prepare(
+        "SELECT addr, fingerprint, public_key, source, verified, last_seen FROM openpgp_peer_keys",
+    )?;
     let rows = stmt.query_map([], |r| {
         Ok((
             r.get::<_, String>(0)?,
@@ -190,13 +206,26 @@ pub fn load(conn: &Connection) -> Result<Keyring> {
     })?;
     for row in rows {
         let (addr, fingerprint, blob, source, verified, last_seen) = row?;
-        let Ok(key) = keys::parse_public(&blob) else { continue };
-        ring.peers.push(PeerKey { addr, fingerprint, key, source: Source::parse(&source), verified, last_seen });
+        let Ok(key) = keys::parse_public(&blob) else {
+            continue;
+        };
+        ring.peers.push(PeerKey {
+            addr,
+            fingerprint,
+            key,
+            source: Source::parse(&source),
+            verified,
+            last_seen,
+        });
     }
     let mut stmt = conn.prepare("SELECT account_id FROM openpgp_accounts WHERE enabled = 1")?;
-    ring.enabled_accounts = stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    ring.enabled_accounts = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare("SELECT account_id, addr FROM openpgp_offer_dismissed")?;
-    ring.dismissed = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+    ring.dismissed = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
     Ok(ring)
 }
 
@@ -212,17 +241,25 @@ pub struct AccountState {
 
 pub fn account_state(conn: &Connection, account_id: &str) -> Result<AccountState> {
     let enabled = conn
-        .query_row("SELECT enabled FROM openpgp_accounts WHERE account_id = ?1", [account_id], |r| r.get(0))
+        .query_row(
+            "SELECT enabled FROM openpgp_accounts WHERE account_id = ?1",
+            [account_id],
+            |r| r.get(0),
+        )
         .optional()?
         .unwrap_or(false);
     let mut key = None;
     let mut previous = Vec::new();
     let mut stmt = conn.prepare("SELECT secret_key, is_default FROM openpgp_own_keys WHERE account_id = ?1 ORDER BY added_at DESC")?;
-    let rows = stmt.query_map([account_id], |r| Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, bool>(1)?)))?;
+    let rows = stmt.query_map([account_id], |r| {
+        Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, bool>(1)?))
+    })?;
     for row in rows {
         let (blob, is_default) = row?;
         let blob = zeroize::Zeroizing::new(blob);
-        let Ok(secret) = keys::parse_secret(&blob) else { continue };
+        let Ok(secret) = keys::parse_secret(&blob) else {
+            continue;
+        };
         let info = keys::secret_info(&secret, keys::now());
         if is_default && key.is_none() {
             key = Some(info);
@@ -230,7 +267,11 @@ pub fn account_state(conn: &Connection, account_id: &str) -> Result<AccountState
             previous.push(info);
         }
     }
-    Ok(AccountState { enabled, key, previous })
+    Ok(AccountState {
+        enabled,
+        key,
+        previous,
+    })
 }
 
 fn set_enabled(conn: &Connection, account_id: &str, enabled: bool) -> Result<()> {
@@ -244,12 +285,19 @@ fn set_enabled(conn: &Connection, account_id: &str, enabled: bool) -> Result<()>
 
 /// Stores `secret` as the account's default key (earlier keys stay for
 /// decrypting) and switches encryption on.
-fn store_default_key(conn: &Connection, account_id: &str, secret: &pgp::composed::SignedSecretKey) -> Result<()> {
+fn store_default_key(
+    conn: &Connection,
+    account_id: &str,
+    secret: &pgp::composed::SignedSecretKey,
+) -> Result<()> {
     keys::self_test(secret).context("the key failed its self-test")?;
     let fingerprint = fingerprint_hex(&secret.primary_key);
     let blob = keys::binary_secret(secret)?;
     let tx = conn.unchecked_transaction()?;
-    tx.execute("UPDATE openpgp_own_keys SET is_default = 0 WHERE account_id = ?1", [account_id])?;
+    tx.execute(
+        "UPDATE openpgp_own_keys SET is_default = 0 WHERE account_id = ?1",
+        [account_id],
+    )?;
     tx.execute(
         "INSERT INTO openpgp_own_keys (fingerprint, account_id, secret_key, is_default, added_at)
          VALUES (?1, ?2, ?3, 1, ?4)
@@ -296,10 +344,17 @@ pub fn disable(conn: &Connection, account_id: &str) -> Result<()> {
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum ImportOwn {
-    Imported { key: KeyInfo, address_matches: bool },
+    Imported {
+        key: KeyInfo,
+        address_matches: bool,
+    },
     /// The file holds several secret keys: the UI asks which.
-    Choose { keys: Vec<KeyInfo> },
-    NeedsPassphrase { key: KeyInfo },
+    Choose {
+        keys: Vec<KeyInfo>,
+    },
+    NeedsPassphrase {
+        key: KeyInfo,
+    },
     OnCard,
     NoSecretKey,
 }
@@ -320,9 +375,17 @@ pub fn import_own(
         return Ok(ImportOwn::NoSecretKey);
     }
     let chosen = match fingerprint {
-        Some(f) => secrets.into_iter().find(|k| fingerprint_hex(&k.primary_key) == f).context("that key isn't in the file")?,
+        Some(f) => secrets
+            .into_iter()
+            .find(|k| fingerprint_hex(&k.primary_key) == f)
+            .context("that key isn't in the file")?,
         None if secrets.len() > 1 => {
-            return Ok(ImportOwn::Choose { keys: secrets.iter().map(|k| keys::secret_info(k, keys::now())).collect() });
+            return Ok(ImportOwn::Choose {
+                keys: secrets
+                    .iter()
+                    .map(|k| keys::secret_info(k, keys::now()))
+                    .collect(),
+            });
         }
         None => secrets.remove(0),
     };
@@ -335,13 +398,21 @@ pub fn import_own(
             // (offline primary + signing subkey) would make signatures strict
             // verifiers reject, so refuse it rather than sign invalid mail (L1).
             if !keys::primary_can_sign(&secret.to_public_key()) {
-                bail!("this key's primary key cannot make signatures; Meron signs with the primary key, so this key can't be used");
+                bail!(
+                    "this key's primary key cannot make signatures; Meron signs with the primary key, so this key can't be used"
+                );
             }
             store_default_key(conn, account_id, &secret)?;
             reload(conn)?;
-            let lower: Vec<String> = account_addrs.iter().map(|a| a.to_ascii_lowercase()).collect();
+            let lower: Vec<String> = account_addrs
+                .iter()
+                .map(|a| a.to_ascii_lowercase())
+                .collect();
             let address_matches = info.emails.iter().any(|e| lower.contains(e));
-            Ok(ImportOwn::Imported { key: info, address_matches })
+            Ok(ImportOwn::Imported {
+                key: info,
+                address_matches,
+            })
         }
     }
 }
@@ -375,7 +446,11 @@ pub fn delete_own_key(conn: &Connection, account_id: &str, fingerprint: &str) ->
         "DELETE FROM openpgp_own_keys WHERE account_id = ?1 AND fingerprint = ?2",
         params![account_id, fingerprint],
     )?;
-    let remaining: i64 = conn.query_row("SELECT COUNT(*) FROM openpgp_own_keys WHERE account_id = ?1", [account_id], |r| r.get(0))?;
+    let remaining: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM openpgp_own_keys WHERE account_id = ?1",
+        [account_id],
+        |r| r.get(0),
+    )?;
     if remaining == 0 {
         set_enabled(conn, account_id, false)?;
     }
@@ -389,15 +464,25 @@ pub fn delete_own_key(conn: &Connection, account_id: &str, fingerprint: &str) ->
 /// snapshot).
 fn db_key(conn: &Connection, fingerprint: &str) -> Option<pgp::composed::SignedPublicKey> {
     let peer: Option<Vec<u8>> = conn
-        .query_row("SELECT public_key FROM openpgp_peer_keys WHERE fingerprint = ?1 LIMIT 1", [fingerprint], |r| r.get(0))
+        .query_row(
+            "SELECT public_key FROM openpgp_peer_keys WHERE fingerprint = ?1 LIMIT 1",
+            [fingerprint],
+            |r| r.get(0),
+        )
         .ok();
     if let Some(blob) = peer {
         return keys::parse_public(&blob).ok();
     }
     let own: Option<Vec<u8>> = conn
-        .query_row("SELECT secret_key FROM openpgp_own_keys WHERE fingerprint = ?1", [fingerprint], |r| r.get(0))
+        .query_row(
+            "SELECT secret_key FROM openpgp_own_keys WHERE fingerprint = ?1",
+            [fingerprint],
+            |r| r.get(0),
+        )
         .ok();
-    own.map(zeroize::Zeroizing::new).and_then(|b| keys::parse_secret(&b).ok()).map(|k| k.to_public_key())
+    own.map(zeroize::Zeroizing::new)
+        .and_then(|b| keys::parse_secret(&b).ok())
+        .map(|k| k.to_public_key())
 }
 
 /// G2: folds `key` into the stored copy with the same fingerprint (every
@@ -408,11 +493,19 @@ fn db_key(conn: &Connection, fingerprint: &str) -> Option<pgp::composed::SignedP
 pub fn merge_into_stored(conn: &Connection, key: &pgp::composed::SignedPublicKey) -> Result<bool> {
     let fingerprint = fingerprint_hex(&key.primary_key);
     let stored: Option<Vec<u8>> = conn
-        .query_row("SELECT public_key FROM openpgp_peer_keys WHERE fingerprint = ?1 LIMIT 1", [&fingerprint], |r| r.get(0))
+        .query_row(
+            "SELECT public_key FROM openpgp_peer_keys WHERE fingerprint = ?1 LIMIT 1",
+            [&fingerprint],
+            |r| r.get(0),
+        )
         .optional()?;
     let Some(blob) = stored else { return Ok(false) };
-    let Ok(stored) = keys::parse_public(&blob) else { return Ok(false) };
-    let Some(merged) = keys::merge_with(&stored, key, &|f| db_key(conn, f)) else { return Ok(false) };
+    let Ok(stored) = keys::parse_public(&blob) else {
+        return Ok(false);
+    };
+    let Some(merged) = keys::merge_with(&stored, key, &|f| db_key(conn, f)) else {
+        return Ok(false);
+    };
     conn.execute(
         "UPDATE openpgp_peer_keys SET public_key = ?1 WHERE fingerprint = ?2",
         params![keys::binary_public(&merged)?, fingerprint],
@@ -427,7 +520,12 @@ pub fn merge_into_stored(conn: &Connection, key: &pgp::composed::SignedPublicKey
 /// `last_seen` moved forward (never back: old mail fetched late must not win);
 /// gossip only fills in addresses with no key at all, so a group member can't
 /// swap someone else's key.
-pub fn ingest(conn: &Connection, announced: &[Announced], attached: &[(String, pgp::composed::SignedPublicKey)], message_date: i64) -> Result<bool> {
+pub fn ingest(
+    conn: &Connection,
+    announced: &[Announced],
+    attached: &[(String, pgp::composed::SignedPublicKey)],
+    message_date: i64,
+) -> Result<bool> {
     if !is_main(conn) {
         return Ok(false);
     }
@@ -436,16 +534,30 @@ pub fn ingest(conn: &Connection, announced: &[Announced], attached: &[(String, p
     // Level 1's "effective date"), or one forged mail dated years ahead would
     // stay the newest and choose this address's key for good.
     let now = now_secs();
-    let seen = if message_date > 0 { message_date.min(now) } else { now };
-    let mut put = |addr: &str, key: &pgp::composed::SignedPublicKey, source: Source, only_if_new_addr: bool| -> Result<()> {
+    let seen = if message_date > 0 {
+        message_date.min(now)
+    } else {
+        now
+    };
+    let mut put = |addr: &str,
+                   key: &pgp::composed::SignedPublicKey,
+                   source: Source,
+                   only_if_new_addr: bool|
+     -> Result<()> {
         // A copy of a key we already have (revoked, renewed) updates it first.
         changed |= merge_into_stored(conn, key)?;
-        if keys::check_with(key, keys::now(), &|f| db_key(conn, f)).is_some_and(|u| u != Unusable::Expired) {
+        if keys::check_with(key, keys::now(), &|f| db_key(conn, f))
+            .is_some_and(|u| u != Unusable::Expired)
+        {
             return Ok(());
         }
         let addr = addr.to_ascii_lowercase();
         if only_if_new_addr {
-            let exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM openpgp_peer_keys WHERE addr = ?1)", [&addr], |r| r.get(0))?;
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM openpgp_peer_keys WHERE addr = ?1)",
+                [&addr],
+                |r| r.get(0),
+            )?;
             if exists {
                 return Ok(());
             }
@@ -468,11 +580,24 @@ pub fn ingest(conn: &Connection, announced: &[Announced], attached: &[(String, p
         // so a group member can't gossip a key that isn't for that address.
         if a.gossip {
             let addr = a.addr.to_ascii_lowercase();
-            if !keys::info(&a.key, false, keys::now()).emails.iter().any(|e| *e == addr) {
+            if !keys::info(&a.key, false, keys::now())
+                .emails
+                .iter()
+                .any(|e| *e == addr)
+            {
                 continue;
             }
         }
-        put(&a.addr, &a.key, if a.gossip { Source::Gossip } else { Source::Autocrypt }, a.gossip)?;
+        put(
+            &a.addr,
+            &a.key,
+            if a.gossip {
+                Source::Gossip
+            } else {
+                Source::Autocrypt
+            },
+            a.gossip,
+        )?;
     }
     for (addr, key) in attached {
         put(addr, key, Source::Attachment, false)?;
@@ -502,7 +627,13 @@ pub fn answers_encrypted(conn: &Connection, account: &str, in_reply_to: &str) ->
 /// Whether a send or draft is encrypted, by `outgoing::protection` with the
 /// answered message looked up here; the second value is true when it is
 /// encrypted only because it answers encrypted mail (nothing was asked).
-pub fn reply_protection(conn: &Connection, account: &str, in_reply_to: &str, encrypt: bool, plain: bool) -> Result<(bool, bool)> {
+pub fn reply_protection(
+    conn: &Connection,
+    account: &str,
+    in_reply_to: &str,
+    encrypt: bool,
+    plain: bool,
+) -> Result<(bool, bool)> {
     use super::outgoing::{Protection, protection};
     let answers = answers_encrypted(conn, account, in_reply_to)?;
     let encrypted = protection(encrypt, plain, answers) == Protection::Encrypt;
@@ -541,10 +672,18 @@ pub fn key_changes(conn: &Connection, chosen: &[(String, String)]) -> Result<Vec
     for (addr, current) in chosen {
         let addr = addr.to_ascii_lowercase();
         let previous: Option<String> = conn
-            .query_row("SELECT fingerprint FROM openpgp_key_used WHERE addr = ?1", [&addr], |r| r.get(0))
+            .query_row(
+                "SELECT fingerprint FROM openpgp_key_used WHERE addr = ?1",
+                [&addr],
+                |r| r.get(0),
+            )
             .optional()?;
         if let Some(previous) = previous.filter(|p| p != current) {
-            out.push(KeyChange { addr, previous, current: current.clone() });
+            out.push(KeyChange {
+                addr,
+                previous,
+                current: current.clone(),
+            });
         }
     }
     Ok(out)
@@ -580,12 +719,29 @@ pub fn list_peers(conn: &Connection) -> Result<Vec<PeerRow>> {
     let mut out: Vec<PeerRow> = Vec::new();
     for row in rows {
         let (addr, blob, source, verified, first_seen, last_seen) = row?;
-        let Ok(key) = keys::parse_public(&blob) else { continue };
-        out.push(PeerRow { addr, source: Source::parse(&source), verified, first_seen, last_seen, info: keys::info(&key, false, keys::now()), conflicts_with_verified: false });
+        let Ok(key) = keys::parse_public(&blob) else {
+            continue;
+        };
+        out.push(PeerRow {
+            addr,
+            source: Source::parse(&source),
+            verified,
+            first_seen,
+            last_seen,
+            info: keys::info(&key, false, keys::now()),
+            conflicts_with_verified: false,
+        });
     }
-    let verified: Vec<(String, String)> = out.iter().filter(|r| r.verified).map(|r| (r.addr.clone(), r.info.fingerprint.clone())).collect();
+    let verified: Vec<(String, String)> = out
+        .iter()
+        .filter(|r| r.verified)
+        .map(|r| (r.addr.clone(), r.info.fingerprint.clone()))
+        .collect();
     for row in &mut out {
-        row.conflicts_with_verified = !row.verified && verified.iter().any(|(a, f)| *a == row.addr && *f != row.info.fingerprint);
+        row.conflicts_with_verified = !row.verified
+            && verified
+                .iter()
+                .any(|(a, f)| *a == row.addr && *f != row.info.fingerprint);
     }
     Ok(out)
 }
@@ -633,7 +789,10 @@ fn peer_keys_in(data: &[u8]) -> Result<(Vec<pgp::composed::SignedPublicKey>, usi
 pub fn import_preview(conn: &Connection, data: &[u8]) -> Result<ImportPreview> {
     let (all, unreadable) = peer_keys_in(data)?;
     let ring = load(conn)?;
-    let mut out = ImportPreview { unreadable, ..Default::default() };
+    let mut out = ImportPreview {
+        unreadable,
+        ..Default::default()
+    };
     for key in all {
         let info = keys::info(&key, false, keys::now());
         let fpr = info.fingerprint.clone();
@@ -708,7 +867,12 @@ pub fn import_peers(conn: &Connection, data: &[u8], fingerprints: &[String]) -> 
 /// Adds a key the user picked from a lookup ("Use this key"). Checked again
 /// here: it must carry `addr` and be usable. It counts as the newest key for
 /// the address (Known, not Verified).
-pub fn add_looked_up(conn: &Connection, addr: &str, data: &[u8], from_wkd: bool) -> Result<KeyInfo> {
+pub fn add_looked_up(
+    conn: &Connection,
+    addr: &str,
+    data: &[u8],
+    from_wkd: bool,
+) -> Result<KeyInfo> {
     let addr = addr.trim().to_ascii_lowercase();
     let key = keys::parse_public(data)?;
     let info = keys::info(&key, false, keys::now());
@@ -719,7 +883,11 @@ pub fn add_looked_up(conn: &Connection, addr: &str, data: &[u8], from_wkd: bool)
         bail!("this key can't be used");
     }
     merge_into_stored(conn, &key)?;
-    let source = if from_wkd { Source::Wkd } else { Source::Keyserver };
+    let source = if from_wkd {
+        Source::Wkd
+    } else {
+        Source::Keyserver
+    };
     let now = now_secs();
     conn.execute(
         "INSERT INTO openpgp_peer_keys (addr, fingerprint, public_key, source, verified, first_seen, last_seen)
@@ -734,7 +902,13 @@ pub fn add_looked_up(conn: &Connection, addr: &str, data: &[u8], from_wkd: bool)
 /// Marks a key verified (or not). `confirm_fingerprint` must equal the key's
 /// fingerprint: the UI passes what the user compared, so a stale dialog can't
 /// verify a different key.
-pub fn set_verified(conn: &Connection, addr: &str, fingerprint: &str, confirm_fingerprint: &str, verified: bool) -> Result<()> {
+pub fn set_verified(
+    conn: &Connection,
+    addr: &str,
+    fingerprint: &str,
+    confirm_fingerprint: &str,
+    verified: bool,
+) -> Result<()> {
     if verified && normalize_fingerprint(confirm_fingerprint) != fingerprint {
         bail!("the fingerprint doesn't match this key");
     }
@@ -758,12 +932,20 @@ pub fn remove_peer(conn: &Connection, addr: &str, fingerprint: &str) -> Result<(
 
 /// Upper-case hex without spaces, for comparing a pasted fingerprint.
 pub fn normalize_fingerprint(s: &str) -> String {
-    s.chars().filter(char::is_ascii_hexdigit).collect::<String>().to_ascii_uppercase()
+    s.chars()
+        .filter(char::is_ascii_hexdigit)
+        .collect::<String>()
+        .to_ascii_uppercase()
 }
 
 /// Whether a cached message was encrypted (for the lock on its list card),
 /// with the trust its signature earns now. `None` when not encrypted.
-pub fn card_lock(conn: &Connection, account: &str, folder: &str, uid: u32) -> Option<keyring::Trust> {
+pub fn card_lock(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+) -> Option<keyring::Trust> {
     let json: String = conn
         .query_row(
             "SELECT json_extract(json, '$.crypto') FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
@@ -827,21 +1009,38 @@ pub fn backup_collect(conn: &Connection, include_secrets: bool) -> Result<Vec<Ba
         "SELECT k.account_id, k.secret_key, COALESCE(a.enabled, 0) FROM openpgp_own_keys k
          LEFT JOIN openpgp_accounts a ON a.account_id = k.account_id ORDER BY k.account_id, k.is_default, k.added_at",
     )?;
-    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?, r.get::<_, bool>(2)?)))?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Vec<u8>>(1)?,
+            r.get::<_, bool>(2)?,
+        ))
+    })?;
     for row in rows {
         let (account_id, blob, enabled) = row?;
         let blob = zeroize::Zeroizing::new(blob);
-        let Ok(secret) = keys::parse_secret(&blob) else { continue };
+        let Ok(secret) = keys::parse_secret(&blob) else {
+            continue;
+        };
         let entry = match out.iter_mut().find(|e| e.account_id == account_id) {
             Some(e) => e,
             None => {
-                out.push(BackupKeys { account_id: account_id.clone(), enabled, public: Vec::new(), secret: Vec::new() });
+                out.push(BackupKeys {
+                    account_id: account_id.clone(),
+                    enabled,
+                    public: Vec::new(),
+                    secret: Vec::new(),
+                });
                 out.last_mut().expect("just pushed")
             }
         };
-        entry.public.push(keys::armored_public(&secret.to_public_key())?);
+        entry
+            .public
+            .push(keys::armored_public(&secret.to_public_key())?);
         if include_secrets {
-            entry.secret.push(base64::engine::general_purpose::STANDARD.encode(blob.as_slice()));
+            entry
+                .secret
+                .push(base64::engine::general_purpose::STANDARD.encode(blob.as_slice()));
         }
     }
     Ok(out)
@@ -863,7 +1062,11 @@ pub fn backup_apply(conn: &Connection, entries: &[BackupKeys]) -> Result<Vec<Str
     backup_apply_with(conn, entries, restore_secrets)
 }
 
-fn backup_apply_with(conn: &Connection, entries: &[BackupKeys], restore_secrets: bool) -> Result<Vec<String>> {
+fn backup_apply_with(
+    conn: &Connection,
+    entries: &[BackupKeys],
+    restore_secrets: bool,
+) -> Result<Vec<String>> {
     use base64::Engine as _;
     let mut missing = Vec::new();
     for entry in entries {
@@ -880,12 +1083,19 @@ fn backup_apply_with(conn: &Connection, entries: &[BackupKeys], restore_secrets:
         )?;
         // Backup order is oldest first with the default last.
         for (i, b64) in entry.secret.iter().enumerate() {
-            let blob = zeroize::Zeroizing::new(base64::engine::general_purpose::STANDARD.decode(b64).context("backup key")?);
+            let blob = zeroize::Zeroizing::new(
+                base64::engine::general_purpose::STANDARD
+                    .decode(b64)
+                    .context("backup key")?,
+            );
             let secret = keys::parse_secret(&blob)?;
             keys::self_test(&secret)?;
             let make_default = !has_default && i + 1 == entry.secret.len();
             if make_default {
-                conn.execute("UPDATE openpgp_own_keys SET is_default = 0 WHERE account_id = ?1", [&entry.account_id])?;
+                conn.execute(
+                    "UPDATE openpgp_own_keys SET is_default = 0 WHERE account_id = ?1",
+                    [&entry.account_id],
+                )?;
             }
             conn.execute(
                 "INSERT INTO openpgp_own_keys (fingerprint, account_id, secret_key, is_default, added_at)
@@ -913,8 +1123,12 @@ mod tests {
     }
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     #[test]
@@ -923,7 +1137,10 @@ mod tests {
         let info = create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
         let ring = load(&conn).unwrap();
         assert!(ring.is_enabled("acc"));
-        assert_eq!(ring.default_key("acc").unwrap().fingerprint, info.fingerprint);
+        assert_eq!(
+            ring.default_key("acc").unwrap().fingerprint,
+            info.fingerprint
+        );
         let state = account_state(&conn, "acc").unwrap();
         assert!(state.enabled);
         assert_eq!(state.key.unwrap().fingerprint, info.fingerprint);
@@ -936,18 +1153,39 @@ mod tests {
         let second = create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
         let ring = load(&conn).unwrap();
         assert_eq!(ring.own.len(), 2);
-        assert_eq!(ring.default_key("acc").unwrap().fingerprint, second.fingerprint);
-        assert_eq!(account_state(&conn, "acc").unwrap().previous[0].fingerprint, first.fingerprint);
+        assert_eq!(
+            ring.default_key("acc").unwrap().fingerprint,
+            second.fingerprint
+        );
+        assert_eq!(
+            account_state(&conn, "acc").unwrap().previous[0].fingerprint,
+            first.fingerprint
+        );
     }
 
     #[test]
     fn importing_needs_the_passphrase_then_stores_the_key() {
         let conn = db();
         let data = fixture("bob-secret-protected.asc");
-        assert!(matches!(import_own(&conn, "acc", &["bob@example.net".into()], &data, None, None).unwrap(), ImportOwn::NeedsPassphrase { .. }));
-        assert!(matches!(import_own(&conn, "acc", &[], &data, Some("nope"), None).unwrap(), ImportOwn::NeedsPassphrase { .. }));
-        let ImportOwn::Imported { address_matches, .. } =
-            import_own(&conn, "acc", &["Bob@Example.net".into()], &data, Some("correct horse battery staple"), None).unwrap()
+        assert!(matches!(
+            import_own(&conn, "acc", &["bob@example.net".into()], &data, None, None).unwrap(),
+            ImportOwn::NeedsPassphrase { .. }
+        ));
+        assert!(matches!(
+            import_own(&conn, "acc", &[], &data, Some("nope"), None).unwrap(),
+            ImportOwn::NeedsPassphrase { .. }
+        ));
+        let ImportOwn::Imported {
+            address_matches, ..
+        } = import_own(
+            &conn,
+            "acc",
+            &["Bob@Example.net".into()],
+            &data,
+            Some("correct horse battery staple"),
+            None,
+        )
+        .unwrap()
         else {
             panic!("expected import");
         };
@@ -959,30 +1197,56 @@ mod tests {
     fn a_file_with_two_keys_asks_which_one() {
         let conn = db();
         let data = fixture("two-secret-keys.asc");
-        let ImportOwn::Choose { keys } = import_own(&conn, "acc", &[], &data, None, None).unwrap() else { panic!() };
+        let ImportOwn::Choose { keys } = import_own(&conn, "acc", &[], &data, None, None).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(keys.len(), 2);
-        let pick = keys.iter().find(|k| k.emails.contains(&"alice@example.org".to_string())).unwrap();
-        assert!(matches!(import_own(&conn, "acc", &[], &data, None, Some(&pick.fingerprint)).unwrap(), ImportOwn::Imported { .. }));
+        let pick = keys
+            .iter()
+            .find(|k| k.emails.contains(&"alice@example.org".to_string()))
+            .unwrap();
+        assert!(matches!(
+            import_own(&conn, "acc", &[], &data, None, Some(&pick.fingerprint)).unwrap(),
+            ImportOwn::Imported { .. }
+        ));
     }
 
     #[test]
     fn subkeys_only_export_is_refused_as_on_card() {
         let conn = db();
-        assert!(matches!(import_own(&conn, "acc", &[], &fixture("alice-secret-subkeys-only.asc"), None, None).unwrap(), ImportOwn::OnCard));
+        assert!(matches!(
+            import_own(
+                &conn,
+                "acc",
+                &[],
+                &fixture("alice-secret-subkeys-only.asc"),
+                None,
+                None
+            )
+            .unwrap(),
+            ImportOwn::OnCard
+        ));
     }
 
     #[test]
     fn a_corrupted_stored_key_is_never_loaded() {
         let conn = db();
         create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
-        let mut blob: Vec<u8> = conn.query_row("SELECT secret_key FROM openpgp_own_keys", [], |r| r.get(0)).unwrap();
+        let mut blob: Vec<u8> = conn
+            .query_row("SELECT secret_key FROM openpgp_own_keys", [], |r| r.get(0))
+            .unwrap();
         // Flip bits throughout the secret scalar area near the end.
         let n = blob.len();
         for b in &mut blob[n - 40..n - 8] {
             *b ^= 0x5a;
         }
-        conn.execute("UPDATE openpgp_own_keys SET secret_key = ?1", [&blob]).unwrap();
-        assert!(load(&conn).unwrap().own.is_empty(), "a key failing to parse or self-test must not be used");
+        conn.execute("UPDATE openpgp_own_keys SET secret_key = ?1", [&blob])
+            .unwrap();
+        assert!(
+            load(&conn).unwrap().own.is_empty(),
+            "a key failing to parse or self-test must not be used"
+        );
     }
 
     #[test]
@@ -992,7 +1256,10 @@ mod tests {
         let mail = mailparse::parse_mail(&raw).unwrap();
         let ann = super::super::autocrypt::announced(&mail.headers, "carol@example.com");
         assert!(ingest(&conn, &ann, &[], 2_000).unwrap());
-        assert!(!ingest(&conn, &ann, &[], 1_000).unwrap(), "older mail must not count as a change");
+        assert!(
+            !ingest(&conn, &ann, &[], 1_000).unwrap(),
+            "older mail must not count as a change"
+        );
         let ring = load(&conn).unwrap();
         assert_eq!(ring.peers_for("carol@example.com")[0].last_seen, 2_000);
         assert!(ring.encryption_key_for("carol@example.com").is_ok());
@@ -1007,17 +1274,38 @@ mod tests {
         let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
         let mallory = keys::parse_public(&fixture("mallory-public.asc")).unwrap();
         let carol_fpr = fingerprint_hex(&carol.primary_key);
-        let ann = |key| [Announced { addr: "carol@example.com".into(), key, prefer_mutual: true, gossip: false }];
+        let ann = |key| {
+            [Announced {
+                addr: "carol@example.com".into(),
+                key,
+                prefer_mutual: true,
+                gossip: false,
+            }]
+        };
         ingest(&conn, &ann(carol.clone()), &[], 10).unwrap();
         ingest(&conn, &ann(mallory), &[], 4_102_444_800).unwrap(); // Date: 2100-01-01
         let ring = load(&conn).unwrap();
-        assert!(ring.peers_for("carol@example.com").iter().all(|p| p.last_seen <= now_secs()), "no stored time may lie ahead of now");
+        assert!(
+            ring.peers_for("carol@example.com")
+                .iter()
+                .all(|p| p.last_seen <= now_secs()),
+            "no stored time may lie ahead of now"
+        );
         // An hour passes (shift the stored times back), then Carol writes again:
         // her real mail is newer than the forged one and takes encryption back.
-        conn.execute("UPDATE openpgp_peer_keys SET last_seen = last_seen - 3600", []).unwrap();
+        conn.execute(
+            "UPDATE openpgp_peer_keys SET last_seen = last_seen - 3600",
+            [],
+        )
+        .unwrap();
         ingest(&conn, &ann(carol), &[], now_secs()).unwrap();
         let ring = load(&conn).unwrap();
-        assert_eq!(ring.encryption_key_for("carol@example.com").unwrap().fingerprint, carol_fpr);
+        assert_eq!(
+            ring.encryption_key_for("carol@example.com")
+                .unwrap()
+                .fingerprint,
+            carol_fpr
+        );
     }
 
     #[test]
@@ -1027,14 +1315,27 @@ mod tests {
         let conn = db();
         let carol = "carol@example.com".to_string();
         let chosen = |fpr: &str| vec![(carol.clone(), fpr.to_string())];
-        assert!(key_changes(&conn, &chosen("AAAA")).unwrap().is_empty(), "first contact: nothing to compare");
+        assert!(
+            key_changes(&conn, &chosen("AAAA")).unwrap().is_empty(),
+            "first contact: nothing to compare"
+        );
         record_used(&conn, &chosen("AAAA")).unwrap();
         assert!(key_changes(&conn, &chosen("AAAA")).unwrap().is_empty());
         let changes = key_changes(&conn, &chosen("BBBB")).unwrap();
         assert_eq!(changes.len(), 1);
-        assert_eq!((changes[0].addr.as_str(), changes[0].previous.as_str(), changes[0].current.as_str()), ("carol@example.com", "AAAA", "BBBB"));
+        assert_eq!(
+            (
+                changes[0].addr.as_str(),
+                changes[0].previous.as_str(),
+                changes[0].current.as_str()
+            ),
+            ("carol@example.com", "AAAA", "BBBB")
+        );
         record_used(&conn, &chosen("BBBB")).unwrap();
-        assert!(key_changes(&conn, &chosen("BBBB")).unwrap().is_empty(), "sending to the new key settles it");
+        assert!(
+            key_changes(&conn, &chosen("BBBB")).unwrap().is_empty(),
+            "sending to the new key settles it"
+        );
     }
 
     #[test]
@@ -1042,8 +1343,30 @@ mod tests {
         let conn = db();
         let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
         let mallory = keys::parse_public(&fixture("mallory-public.asc")).unwrap();
-        ingest(&conn, &[Announced { addr: "carol@example.com".into(), key: carol, prefer_mutual: true, gossip: false }], &[], 10).unwrap();
-        ingest(&conn, &[Announced { addr: "carol@example.com".into(), key: mallory, prefer_mutual: true, gossip: true }], &[], 20).unwrap();
+        ingest(
+            &conn,
+            &[Announced {
+                addr: "carol@example.com".into(),
+                key: carol,
+                prefer_mutual: true,
+                gossip: false,
+            }],
+            &[],
+            10,
+        )
+        .unwrap();
+        ingest(
+            &conn,
+            &[Announced {
+                addr: "carol@example.com".into(),
+                key: mallory,
+                prefer_mutual: true,
+                gossip: true,
+            }],
+            &[],
+            20,
+        )
+        .unwrap();
         assert_eq!(load(&conn).unwrap().peers_for("carol@example.com").len(), 1);
     }
 
@@ -1053,14 +1376,56 @@ mod tests {
         let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
         let carol_new = keys::parse_public(&fixture("carol-new-public.asc")).unwrap();
         let fpr = fingerprint_hex(&carol.primary_key);
-        ingest(&conn, &[Announced { addr: "carol@example.com".into(), key: carol, prefer_mutual: true, gossip: false }], &[], 10).unwrap();
-        assert!(set_verified(&conn, "carol@example.com", &fpr, "0000", true).is_err(), "wrong confirmation must be refused");
-        let spaced: String = fpr.chars().collect::<Vec<_>>().chunks(4).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>().join(" ").to_lowercase();
+        ingest(
+            &conn,
+            &[Announced {
+                addr: "carol@example.com".into(),
+                key: carol,
+                prefer_mutual: true,
+                gossip: false,
+            }],
+            &[],
+            10,
+        )
+        .unwrap();
+        assert!(
+            set_verified(&conn, "carol@example.com", &fpr, "0000", true).is_err(),
+            "wrong confirmation must be refused"
+        );
+        let spaced: String = fpr
+            .chars()
+            .collect::<Vec<_>>()
+            .chunks(4)
+            .map(|c| c.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
         set_verified(&conn, "carol@example.com", &fpr, &spaced, true).unwrap();
-        ingest(&conn, &[Announced { addr: "carol@example.com".into(), key: carol_new, prefer_mutual: true, gossip: false }], &[], 20).unwrap();
+        ingest(
+            &conn,
+            &[Announced {
+                addr: "carol@example.com".into(),
+                key: carol_new,
+                prefer_mutual: true,
+                gossip: false,
+            }],
+            &[],
+            20,
+        )
+        .unwrap();
         let ring = load(&conn).unwrap();
-        assert_eq!(ring.encryption_key_for("carol@example.com").unwrap().fingerprint, fpr);
-        assert!(list_peers(&conn).unwrap().iter().any(|r| r.conflicts_with_verified));
+        assert_eq!(
+            ring.encryption_key_for("carol@example.com")
+                .unwrap()
+                .fingerprint,
+            fpr
+        );
+        assert!(
+            list_peers(&conn)
+                .unwrap()
+                .iter()
+                .any(|r| r.conflicts_with_verified)
+        );
     }
 
     #[test]
@@ -1072,7 +1437,11 @@ mod tests {
         let mut reasons: Vec<SkipReason> = preview.skipped.iter().map(|s| s.reason).collect();
         reasons.sort_by_key(|r| *r as u8);
         assert_eq!(reasons, vec![SkipReason::Expired, SkipReason::Revoked]);
-        let fprs: Vec<String> = preview.ready.iter().map(|k| k.fingerprint.clone()).collect();
+        let fprs: Vec<String> = preview
+            .ready
+            .iter()
+            .map(|k| k.fingerprint.clone())
+            .collect();
         assert_eq!(import_peers(&conn, &data, &fprs).unwrap(), 3);
         let again = import_preview(&conn, &data).unwrap();
         assert_eq!(again.already_present.len(), 3);
@@ -1084,53 +1453,133 @@ mod tests {
         let conn = db();
         let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
         let revoked = keys::parse_public(&fixture("carol-revoked-public.asc")).unwrap();
-        let ann = |key: &pgp::composed::SignedPublicKey| Announced { addr: "carol@example.com".into(), key: key.clone(), prefer_mutual: true, gossip: false };
+        let ann = |key: &pgp::composed::SignedPublicKey| Announced {
+            addr: "carol@example.com".into(),
+            key: key.clone(),
+            prefer_mutual: true,
+            gossip: false,
+        };
         ingest(&conn, &[ann(&carol)], &[], 10).unwrap();
-        assert!(load(&conn).unwrap().encryption_key_for("carol@example.com").is_ok());
-        assert!(ingest(&conn, &[ann(&revoked)], &[], 20).unwrap(), "the revocation is a change");
+        assert!(
+            load(&conn)
+                .unwrap()
+                .encryption_key_for("carol@example.com")
+                .is_ok()
+        );
+        assert!(
+            ingest(&conn, &[ann(&revoked)], &[], 20).unwrap(),
+            "the revocation is a change"
+        );
         let ring = load(&conn).unwrap();
-        assert_eq!(ring.encryption_key_for("carol@example.com").err(), Some(NoKeyReason::Unusable));
-        assert_eq!(list_peers(&conn).unwrap()[0].info.unusable, Some(Unusable::Revoked));
+        assert_eq!(
+            ring.encryption_key_for("carol@example.com").err(),
+            Some(NoKeyReason::Unusable)
+        );
+        assert_eq!(
+            list_peers(&conn).unwrap()[0].info.unusable,
+            Some(Unusable::Revoked)
+        );
         // Old mail fetched late, carrying the unrevoked copy with a newer date.
         ingest(&conn, &[ann(&carol)], &[], 30).unwrap();
-        assert_eq!(load(&conn).unwrap().encryption_key_for("carol@example.com").err(), Some(NoKeyReason::Unusable));
+        assert_eq!(
+            load(&conn)
+                .unwrap()
+                .encryption_key_for("carol@example.com")
+                .err(),
+            Some(NoKeyReason::Unusable)
+        );
     }
 
     #[test]
     fn a_designated_revocation_arriving_by_mail_takes_effect_and_a_forged_one_does_not() {
         use crate::openpgp::keys::tests::revoke_by;
-        let unlock = |name: &str| match keys::unlock(keys::parse_keys(&fixture(name)).unwrap().secret.remove(0), None).unwrap() {
+        let unlock = |name: &str| match keys::unlock(
+            keys::parse_keys(&fixture(name)).unwrap().secret.remove(0),
+            None,
+        )
+        .unwrap()
+        {
             keys::Unlock::Ok(k) => k,
             other => panic!("{other:?}"),
         };
-        let ann = |addr: &str, key: &pgp::composed::SignedPublicKey| Announced { addr: addr.into(), key: key.clone(), prefer_mutual: true, gossip: false };
+        let ann = |addr: &str, key: &pgp::composed::SignedPublicKey| Announced {
+            addr: addr.into(),
+            key: key.clone(),
+            prefer_mutual: true,
+            gossip: false,
+        };
         let tess = keys::parse_public(&fixture("tess-public.asc")).unwrap();
         let dan = unlock("dan-secret.asc");
         let mallory = unlock("mallory-secret.asc");
 
         let conn = db();
-        ingest(&conn, &[ann("tess@example.com", &tess), ann("dan@example.com", &dan.to_public_key())], &[], 10).unwrap();
+        ingest(
+            &conn,
+            &[
+                ann("tess@example.com", &tess),
+                ann("dan@example.com", &dan.to_public_key()),
+            ],
+            &[],
+            10,
+        )
+        .unwrap();
         // A forged revocation (Mallory isn't Tess's revoker) changes nothing.
-        ingest(&conn, &[ann("tess@example.com", &revoke_by(&mallory, &tess))], &[], 20).unwrap();
+        ingest(
+            &conn,
+            &[ann("tess@example.com", &revoke_by(&mallory, &tess))],
+            &[],
+            20,
+        )
+        .unwrap();
         let ring = load(&conn).unwrap();
         assert!(ring.encryption_key_for("tess@example.com").is_ok());
         // Dan's revocation is taken.
-        assert!(ingest(&conn, &[ann("tess@example.com", &revoke_by(&dan, &tess))], &[], 30).unwrap());
-        let stored = load(&conn).unwrap().peers_for("tess@example.com")[0].key.clone();
-        assert_eq!(keys::check_with(&stored, keys::now(), &|f| db_key(&conn, f)), Some(Unusable::Revoked));
+        assert!(
+            ingest(
+                &conn,
+                &[ann("tess@example.com", &revoke_by(&dan, &tess))],
+                &[],
+                30
+            )
+            .unwrap()
+        );
+        let stored = load(&conn).unwrap().peers_for("tess@example.com")[0]
+            .key
+            .clone();
+        assert_eq!(
+            keys::check_with(&stored, keys::now(), &|f| db_key(&conn, f)),
+            Some(Unusable::Revoked)
+        );
     }
 
     #[test]
     fn importing_a_revoked_copy_updates_the_stored_key() {
         let conn = db();
         let carol = keys::parse_public(&fixture("carol-public.asc")).unwrap();
-        ingest(&conn, &[Announced { addr: "carol@example.com".into(), key: carol, prefer_mutual: true, gossip: false }], &[], 10).unwrap();
+        ingest(
+            &conn,
+            &[Announced {
+                addr: "carol@example.com".into(),
+                key: carol,
+                prefer_mutual: true,
+                gossip: false,
+            }],
+            &[],
+            10,
+        )
+        .unwrap();
         let data = fixture("carol-revoked-public.asc");
         let preview = import_preview(&conn, &data).unwrap();
         assert_eq!(preview.updates.len(), 1);
-        assert!(preview.ready.is_empty(), "revoked keys are never offered as new");
+        assert!(
+            preview.ready.is_empty(),
+            "revoked keys are never offered as new"
+        );
         import_peers(&conn, &data, &[]).unwrap();
-        assert_eq!(list_peers(&conn).unwrap()[0].info.unusable, Some(Unusable::Revoked));
+        assert_eq!(
+            list_peers(&conn).unwrap()[0].info.unusable,
+            Some(Unusable::Revoked)
+        );
     }
 
     #[test]
@@ -1145,9 +1594,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(reparse_key_attachments_once(&conn).unwrap(), 1);
-        let body: Option<String> = conn.query_row("SELECT body FROM messages WHERE uid = 1", [], |r| r.get(0)).unwrap();
+        let body: Option<String> = conn
+            .query_row("SELECT body FROM messages WHERE uid = 1", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(body, None);
-        let other: Option<String> = conn.query_row("SELECT body FROM messages WHERE uid = 2", [], |r| r.get(0)).unwrap();
+        let other: Option<String> = conn
+            .query_row("SELECT body FROM messages WHERE uid = 2", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(other.as_deref(), Some("other"));
         assert_eq!(reparse_key_attachments_once(&conn).unwrap(), 0, "only once");
     }
@@ -1155,7 +1608,11 @@ mod tests {
     #[test]
     fn encrypted_bodies_cached_without_openpgp_are_refetched_once() {
         let conn = crate::store::open_at(":memory:").unwrap();
-        let insert = |uid: u32, subject: &str, body: Option<&str>, json: &str, files: Option<&str>| {
+        let insert = |uid: u32,
+                      subject: &str,
+                      body: Option<&str>,
+                      json: &str,
+                      files: Option<&str>| {
             conn.execute(
                 "INSERT INTO messages (account, folder, msg_id, uid, subject, from_name, from_addr, date, body, json, files)
                  VALUES ('a', 'INBOX', ?1, ?1, ?2, 'n', 'x@y.z', 0, ?3, ?4, ?5)",
@@ -1165,18 +1622,47 @@ mod tests {
         };
         let asc = r#"[{"filename":"encrypted.asc","mime":"application/octet-stream"}]"#;
         // Cached by a build without OpenPGP: never decrypted.
-        insert(1, "...", Some(""), r#"{"attachments":[{"filename":"encrypted.asc"}]}"#, Some(asc));
-        insert(2, "Hi", Some("-----BEGIN PGP MESSAGE-----\nhQEM\n-----END PGP MESSAGE-----"), "{}", None);
+        insert(
+            1,
+            "...",
+            Some(""),
+            r#"{"attachments":[{"filename":"encrypted.asc"}]}"#,
+            Some(asc),
+        );
+        insert(
+            2,
+            "Hi",
+            Some("-----BEGIN PGP MESSAGE-----\nhQEM\n-----END PGP MESSAGE-----"),
+            "{}",
+            None,
+        );
         insert(3, "[...]", Some(""), "{}", None);
         // Left alone: decrypted, plain, not cached, a plain mail with a .pgp file.
-        insert(4, "Secret", Some("text"), r#"{"crypto":{"encrypted":true}}"#, None);
+        insert(
+            4,
+            "Secret",
+            Some("text"),
+            r#"{"crypto":{"encrypted":true}}"#,
+            None,
+        );
         insert(5, "Lunch", Some("hello"), "{}", None);
         insert(6, "...", None, "{}", None);
-        insert(7, "Report", Some("see file"), "{}", Some(r#"[{"filename":"report.pgp","mime":"application/octet-stream"}]"#));
+        insert(
+            7,
+            "Report",
+            Some("see file"),
+            "{}",
+            Some(r#"[{"filename":"report.pgp","mime":"application/octet-stream"}]"#),
+        );
 
-        assert_eq!(refetch_encrypted_cached_without_openpgp_once(&conn).unwrap(), 3);
+        assert_eq!(
+            refetch_encrypted_cached_without_openpgp_once(&conn).unwrap(),
+            3
+        );
         let bodies: Vec<(u32, Option<String>, Option<String>)> = conn
-            .prepare("SELECT uid, body, json_extract(json, '$.attachments') FROM messages ORDER BY uid")
+            .prepare(
+                "SELECT uid, body, json_extract(json, '$.attachments') FROM messages ORDER BY uid",
+            )
             .unwrap()
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .unwrap()
@@ -1186,10 +1672,17 @@ mod tests {
             let cleared = matches!(uid, 1..=3);
             assert_eq!(body.is_none(), cleared || uid == 6, "uid {uid} body");
             if cleared {
-                assert!(attachments.is_none(), "uid {uid} keeps no stale attachments");
+                assert!(
+                    attachments.is_none(),
+                    "uid {uid} keeps no stale attachments"
+                );
             }
         }
-        assert_eq!(refetch_encrypted_cached_without_openpgp_once(&conn).unwrap(), 0, "only once");
+        assert_eq!(
+            refetch_encrypted_cached_without_openpgp_once(&conn).unwrap(),
+            0,
+            "only once"
+        );
     }
 
     #[test]
@@ -1208,8 +1701,15 @@ mod tests {
         insert("INBOX", 2, "...", Some("decrypted already"));
         insert("INBOX", 4, "Lunch", None);
         insert("Archive", 5, "...", None);
-        assert_eq!(undecrypted_placeholder_uids(&conn, "a", "INBOX").unwrap(), vec![1, 3]);
-        assert!(undecrypted_placeholder_uids(&conn, "b", "INBOX").unwrap().is_empty());
+        assert_eq!(
+            undecrypted_placeholder_uids(&conn, "a", "INBOX").unwrap(),
+            vec![1, 3]
+        );
+        assert!(
+            undecrypted_placeholder_uids(&conn, "b", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1229,16 +1729,26 @@ mod tests {
         create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
         let without = backup_collect(&conn, false).unwrap();
         assert!(without[0].secret.is_empty());
-        assert!(serde_json::to_string(&without).unwrap().contains("BEGIN PGP PUBLIC KEY BLOCK"));
+        assert!(
+            serde_json::to_string(&without)
+                .unwrap()
+                .contains("BEGIN PGP PUBLIC KEY BLOCK")
+        );
         assert!(!serde_json::to_string(&without).unwrap().contains("PRIVATE"));
         let fresh = db();
-        assert_eq!(backup_apply(&fresh, &without).unwrap(), vec!["acc".to_string()]);
+        assert_eq!(
+            backup_apply(&fresh, &without).unwrap(),
+            vec!["acc".to_string()]
+        );
         let with = backup_collect(&conn, true).unwrap();
         let fresh = db();
         assert!(backup_apply(&fresh, &with).unwrap().is_empty());
         let ring = load(&fresh).unwrap();
         assert!(ring.is_enabled("acc"));
-        assert_eq!(ring.default_key("acc").unwrap().fingerprint, load(&conn).unwrap().default_key("acc").unwrap().fingerprint);
+        assert_eq!(
+            ring.default_key("acc").unwrap().fingerprint,
+            load(&conn).unwrap().default_key("acc").unwrap().fingerprint
+        );
     }
 
     // Audit M5: a build without an OpenPGP UI (mobile) restores no secret keys,
@@ -1249,18 +1759,37 @@ mod tests {
         let conn = db();
         create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
         let backup = backup_collect(&conn, true).unwrap();
-        assert!(!backup[0].secret.is_empty(), "the backup carries a secret key");
+        assert!(
+            !backup[0].secret.is_empty(),
+            "the backup carries a secret key"
+        );
 
         // restore_secrets = false: the mobile gate.
         let phone = db();
         let missing = super::backup_apply_with(&phone, &backup, false).unwrap();
-        assert!(missing.contains(&"acc".to_string()), "account reported missing its secret: {missing:?}");
-        assert!(load(&phone).unwrap().own.is_empty(), "no secret key restored on mobile");
-        assert!(!load(&phone).unwrap().is_enabled("acc"), "encryption not enabled on mobile");
+        assert!(
+            missing.contains(&"acc".to_string()),
+            "account reported missing its secret: {missing:?}"
+        );
+        assert!(
+            load(&phone).unwrap().own.is_empty(),
+            "no secret key restored on mobile"
+        );
+        assert!(
+            !load(&phone).unwrap().is_enabled("acc"),
+            "encryption not enabled on mobile"
+        );
 
         // restore_secrets = true: the desktop path still restores it.
         let desktop = db();
-        assert!(super::backup_apply_with(&desktop, &backup, true).unwrap().is_empty());
-        assert!(!load(&desktop).unwrap().own.is_empty(), "desktop restores the key");
+        assert!(
+            super::backup_apply_with(&desktop, &backup, true)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !load(&desktop).unwrap().own.is_empty(),
+            "desktop restores the key"
+        );
     }
 }

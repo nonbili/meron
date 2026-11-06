@@ -364,9 +364,9 @@ pub async fn send(
     extra_headers: &[(&str, String)],
 ) -> Result<Vec<u8>> {
     let with_extra = |raw: Vec<u8>| {
-        extra_headers
-            .iter()
-            .fold(raw, |raw, (name, value)| crate::openpgp::outgoing::add_header(&raw, name, value))
+        extra_headers.iter().fold(raw, |raw, (name, value)| {
+            crate::openpgp::outgoing::add_header(&raw, name, value)
+        })
     };
     // Caller passes the chosen send-as address (primary or a verified alias),
     // already validated against the account; fall back to the IMAP login.
@@ -466,18 +466,38 @@ pub async fn send_encrypted(
     keys: &crate::openpgp::outgoing::SendKeys,
 ) -> Result<Vec<u8>> {
     use crate::openpgp::outgoing::wrap;
-    let from = if from_addr.trim().is_empty() { creds.user.as_str() } else { from_addr.trim() };
+    let from = if from_addr.trim().is_empty() {
+        creds.user.as_str()
+    } else {
+        from_addr.trim()
+    };
     let to_list = parse_addrs(to);
     let cc_list = parse_addrs(cc);
     // Several copies share one Message-ID so replies thread.
     let message_id = match message_id.trim() {
-        "" => format!("{}@{}", uuid::Uuid::new_v4(), from.rsplit('@').next().unwrap_or("localhost")),
+        "" => format!(
+            "{}@{}",
+            uuid::Uuid::new_v4(),
+            from.rsplit('@').next().unwrap_or("localhost")
+        ),
         id => id.to_string(),
     };
     let build = |include_bcc: bool| {
         build_message(
-            sender_name, from, to, cc, bcc, include_bcc, subject, body, html, attachments, in_reply_to,
-            references, reply_to, &message_id,
+            sender_name,
+            from,
+            to,
+            cc,
+            bcc,
+            include_bcc,
+            subject,
+            body,
+            html,
+            attachments,
+            in_reply_to,
+            references,
+            reply_to,
+            &message_id,
         )
     };
     let transmitted = build(false)?;
@@ -488,7 +508,12 @@ pub async fn send_encrypted(
         submit(creds, from, &to_list, &cc_list, &[], &raw).await?;
     }
     for (entry, key) in &keys.bcc {
-        let raw = wrap(&transmitted, &[key, &keys.own], &keys.signer, &keys.autocrypt)?;
+        let raw = wrap(
+            &transmitted,
+            &[key, &keys.own],
+            &keys.signer,
+            &keys.autocrypt,
+        )?;
         submit(creds, from, &[], &[], std::slice::from_ref(entry), &raw).await?;
     }
     wrap(&build(true)?, &[&keys.own], &keys.signer, &keys.autocrypt)

@@ -10,7 +10,7 @@ use std::io::{BufReader, Cursor, Read as _};
 use std::panic::AssertUnwindSafe;
 
 use pgp::composed::{
-    DetachedSignature, Deserializable as _, Message, MessageBuilder, SignedPublicKey,
+    Deserializable as _, DetachedSignature, Message, MessageBuilder, SignedPublicKey,
     SignedSecretKey, SubpacketConfig, TheRing,
 };
 use pgp::crypto::aead::{AeadAlgorithm, ChunkSize};
@@ -147,7 +147,11 @@ fn decrypt_inner(
     let mut msg = msg.decompress().map_err(|_| DecryptError::Integrity)?;
     let plaintext = read_bounded(&mut msg)?;
     let signatures = check_message_signatures(&msg, verifiers, resolve);
-    Ok(Decrypted { plaintext, signatures, decrypted_with })
+    Ok(Decrypted {
+        plaintext,
+        signatures,
+        decrypted_with,
+    })
 }
 
 /// Reads the literal data with a hard cap. Signatures can only be verified
@@ -174,12 +178,14 @@ fn read_bounded(msg: &mut Message<'_>) -> Result<Vec<u8>, DecryptError> {
 /// Every key that may have made a data signature: the primary and any
 /// subkey with a valid binding that carries the sign flag.
 fn signing_keys(key: &SignedPublicKey) -> Vec<(String, SigningPart<'_>)> {
-    let mut out = vec![(fingerprint_hex(&key.primary_key), SigningPart::Primary(&key.primary_key))];
+    let mut out = vec![(
+        fingerprint_hex(&key.primary_key),
+        SigningPart::Primary(&key.primary_key),
+    )];
     for sub in &key.public_subkeys {
-        let bound = sub
-            .signatures
-            .iter()
-            .any(|s| s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok() && s.key_flags().sign());
+        let bound = sub.signatures.iter().any(|s| {
+            s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok() && s.key_flags().sign()
+        });
         if bound {
             out.push((fingerprint_hex(&sub.key), SigningPart::Sub(sub)));
         }
@@ -196,7 +202,12 @@ enum SigningPart<'a> {
 impl SigningPart<'_> {
     /// Whether this part's key was valid when `sig` was made (G1: signatures
     /// by revoked or expired keys don't count).
-    fn valid_at(&self, key: &SignedPublicKey, sig: &Signature, resolve: keys::Resolver<'_>) -> Result<(), keys::SigningProblem> {
+    fn valid_at(
+        &self,
+        key: &SignedPublicKey,
+        sig: &Signature,
+        resolve: keys::Resolver<'_>,
+    ) -> Result<(), keys::SigningProblem> {
         let when = sig.created().map(|t| t.as_secs()).unwrap_or_else(keys::now);
         match self {
             SigningPart::Primary(_) => keys::primary_valid_at_with(key, when, resolve),
@@ -247,19 +258,41 @@ fn intended_recipients(sig: &Signature) -> Vec<String> {
 /// Whether the signature's issuer could be one of `key`'s signing parts.
 fn issuer_matches(issuer: Option<&str>, key: &SignedPublicKey) -> bool {
     let Some(issuer) = issuer else { return true };
-    signing_keys(key).iter().any(|(fpr, _)| fpr == issuer || fpr.ends_with(issuer))
+    signing_keys(key)
+        .iter()
+        .any(|(fpr, _)| fpr == issuer || fpr.ends_with(issuer))
 }
 
-fn check_message_signatures(msg: &Message<'_>, verifiers: &[&SignedPublicKey], resolve: keys::Resolver<'_>) -> Vec<SigCheck> {
-    let Message::Signed { reader, .. } = msg else { return Vec::new() };
+fn check_message_signatures(
+    msg: &Message<'_>,
+    verifiers: &[&SignedPublicKey],
+    resolve: keys::Resolver<'_>,
+) -> Vec<SigCheck> {
+    let Message::Signed { reader, .. } = msg else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for index in 0..reader.num_signatures() {
-        let Some(sig) = reader.signature(index) else { continue };
+        let Some(sig) = reader.signature(index) else {
+            continue;
+        };
         let issuer = issuer_of(sig);
         let weak_hash = !data_hash_ok(sig.hash_alg());
         let created = sig.created().map(|t| i64::from(t.as_secs()));
-        let mut check = SigCheck { issuer: issuer.clone(), signer: None, valid: false, key_problem: None, weak_hash, created, intended_recipients: intended_recipients(sig), errored: false };
-        'keys: for key in verifiers.iter().filter(|k| issuer_matches(issuer.as_deref(), k)) {
+        let mut check = SigCheck {
+            issuer: issuer.clone(),
+            signer: None,
+            valid: false,
+            key_problem: None,
+            weak_hash,
+            created,
+            intended_recipients: intended_recipients(sig),
+            errored: false,
+        };
+        'keys: for key in verifiers
+            .iter()
+            .filter(|k| issuer_matches(issuer.as_deref(), k))
+        {
             for (_, vk) in signing_keys(key) {
                 if msg.verify_nested_explicit(index, vk.as_dyn()).is_ok() {
                     check.signer = Some(fingerprint_hex(&key.primary_key));
@@ -276,7 +309,11 @@ fn check_message_signatures(msg: &Message<'_>, verifiers: &[&SignedPublicKey], r
 
 /// Verifies a detached (PGP/MIME `multipart/signed`) signature over `content`,
 /// the exact bytes of the signed MIME part.
-pub fn verify_detached(content: &[u8], signature: &[u8], verifiers: &[&SignedPublicKey]) -> Vec<SigCheck> {
+pub fn verify_detached(
+    content: &[u8],
+    signature: &[u8],
+    verifiers: &[&SignedPublicKey],
+) -> Vec<SigCheck> {
     verify_detached_with(content, signature, verifiers, &keys::stored_key)
 }
 
@@ -319,7 +356,16 @@ fn verify_detached_inner(
             .map(|iter| iter.filter_map(Result::ok).collect::<Vec<_>>())
     };
     let Ok(sigs) = parsed else {
-        return vec![SigCheck { issuer: None, signer: None, valid: false, key_problem: None, weak_hash: false, created: None, intended_recipients: Vec::new(), errored: false }];
+        return vec![SigCheck {
+            issuer: None,
+            signer: None,
+            valid: false,
+            key_problem: None,
+            weak_hash: false,
+            created: None,
+            intended_recipients: Vec::new(),
+            errored: false,
+        }];
     };
     sigs.iter()
         .map(|detached| {
@@ -327,8 +373,20 @@ fn verify_detached_inner(
             let issuer = issuer_of(sig);
             let weak_hash = !data_hash_ok(sig.hash_alg());
             let created = sig.created().map(|t| i64::from(t.as_secs()));
-            let mut check = SigCheck { issuer: issuer.clone(), signer: None, valid: false, key_problem: None, weak_hash, created, intended_recipients: intended_recipients(sig), errored: false };
-            'keys: for key in verifiers.iter().filter(|k| issuer_matches(issuer.as_deref(), k)) {
+            let mut check = SigCheck {
+                issuer: issuer.clone(),
+                signer: None,
+                valid: false,
+                key_problem: None,
+                weak_hash,
+                created,
+                intended_recipients: intended_recipients(sig),
+                errored: false,
+            };
+            'keys: for key in verifiers
+                .iter()
+                .filter(|k| issuer_matches(issuer.as_deref(), k))
+            {
                 for (_, vk) in signing_keys(key) {
                     if vk.verify_detached(sig, content) {
                         check.signer = Some(fingerprint_hex(&key.primary_key));
@@ -373,7 +431,14 @@ pub(crate) fn encrypt_to(
     let now = keys::now();
     let subkeys: Vec<_> = recipients
         .iter()
-        .map(|k| keys::encryption_subkey(k, now).with_context(|| format!("no usable encryption key in {}", fingerprint_hex(&k.primary_key))))
+        .map(|k| {
+            keys::encryption_subkey(k, now).with_context(|| {
+                format!(
+                    "no usable encryption key in {}",
+                    fingerprint_hex(&k.primary_key)
+                )
+            })
+        })
         .collect::<anyhow::Result<_>>()?;
     if subkeys.is_empty() {
         anyhow::bail!("no recipients");
@@ -384,11 +449,21 @@ pub(crate) fn encrypt_to(
     let subpackets = signature_subpackets(ts, signer, intended)?;
     let builder = MessageBuilder::from_bytes("", plain.to_vec());
     let armored = if v2 {
-        let mut msg = builder.seipd_v2(&mut rng, SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb, ChunkSize::C8KiB);
+        let mut msg = builder.seipd_v2(
+            &mut rng,
+            SymmetricKeyAlgorithm::AES256,
+            AeadAlgorithm::Ocb,
+            ChunkSize::C8KiB,
+        );
         for sub in &subkeys {
             msg.encrypt_to_key(&mut rng, sub)?;
         }
-        msg.sign_with_subpackets(&signer.primary_key, Password::empty(), HashAlgorithm::Sha256, subpackets);
+        msg.sign_with_subpackets(
+            &signer.primary_key,
+            Password::empty(),
+            HashAlgorithm::Sha256,
+            subpackets,
+        );
         msg.compression(CompressionAlgorithm::ZLIB);
         msg.to_armored_string(&mut rng, Default::default())?
     } else {
@@ -396,7 +471,12 @@ pub(crate) fn encrypt_to(
         for sub in &subkeys {
             msg.encrypt_to_key(&mut rng, sub)?;
         }
-        msg.sign_with_subpackets(&signer.primary_key, Password::empty(), HashAlgorithm::Sha256, subpackets);
+        msg.sign_with_subpackets(
+            &signer.primary_key,
+            Password::empty(),
+            HashAlgorithm::Sha256,
+            subpackets,
+        );
         msg.compression(CompressionAlgorithm::ZLIB);
         msg.to_armored_string(&mut rng, Default::default())?
     };
@@ -411,12 +491,20 @@ fn signature_subpackets(
     signer: &SignedSecretKey,
     recipients: &[&SignedPublicKey],
 ) -> anyhow::Result<SubpacketConfig> {
-    let mut hashed = vec![Subpacket::critical(SubpacketData::SignatureCreationTime(now))?];
-    hashed.push(Subpacket::regular(SubpacketData::IssuerFingerprint(signer.primary_key.fingerprint()))?);
+    let mut hashed = vec![Subpacket::critical(SubpacketData::SignatureCreationTime(
+        now,
+    ))?];
+    hashed.push(Subpacket::regular(SubpacketData::IssuerFingerprint(
+        signer.primary_key.fingerprint(),
+    ))?);
     for key in recipients {
-        hashed.push(Subpacket::regular(SubpacketData::IntendedRecipientFingerprint(key.primary_key.fingerprint()))?);
+        hashed.push(Subpacket::regular(
+            SubpacketData::IntendedRecipientFingerprint(key.primary_key.fingerprint()),
+        )?);
     }
-    let unhashed = vec![Subpacket::regular(SubpacketData::IssuerKeyId(signer.primary_key.legacy_key_id()))?];
+    let unhashed = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
+        signer.primary_key.legacy_key_id(),
+    ))?];
     Ok(SubpacketConfig::UserDefined { hashed, unhashed })
 }
 
@@ -424,7 +512,13 @@ fn signature_subpackets(
 #[cfg(test)]
 pub fn sign_detached(content: &[u8], signer: &SignedSecretKey) -> anyhow::Result<String> {
     let mut rng = rand::thread_rng();
-    let sig = DetachedSignature::sign_binary_data(&mut rng, &signer.primary_key, &Password::empty(), HashAlgorithm::Sha256, content)?;
+    let sig = DetachedSignature::sign_binary_data(
+        &mut rng,
+        &signer.primary_key,
+        &Password::empty(),
+        HashAlgorithm::Sha256,
+        content,
+    )?;
     Ok(sig.to_armored_string(Default::default())?)
 }
 
@@ -434,12 +528,19 @@ pub(crate) mod tests {
     use crate::openpgp::keys::{Unlock, parse_keys, unlock};
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     fn alice() -> SignedSecretKey {
-        let key = parse_keys(&fixture("alice-secret.asc")).unwrap().secret.remove(0);
+        let key = parse_keys(&fixture("alice-secret.asc"))
+            .unwrap()
+            .secret
+            .remove(0);
         match unlock(key, None).unwrap() {
             Unlock::Ok(k) => k,
             other => panic!("{other:?}"),
@@ -454,7 +555,8 @@ pub(crate) mod tests {
     fn armored_block(eml: &[u8]) -> Vec<u8> {
         let text = String::from_utf8_lossy(eml);
         let start = text.find("-----BEGIN PGP MESSAGE-----").unwrap();
-        let end = text.find("-----END PGP MESSAGE-----").unwrap() + "-----END PGP MESSAGE-----".len();
+        let end =
+            text.find("-----END PGP MESSAGE-----").unwrap() + "-----END PGP MESSAGE-----".len();
         text[start..end].replace("\r\n", "\n").into_bytes()
     }
 
@@ -462,14 +564,25 @@ pub(crate) mod tests {
     fn decrypts_and_verifies_gnupg_signed_and_encrypted_mail() {
         let alice = alice();
         let carol = public("carol-public.asc");
-        let out = decrypt(&armored_block(&fixture("enc-signed.eml")), &[&alice], &[&carol]).unwrap();
+        let out = decrypt(
+            &armored_block(&fixture("enc-signed.eml")),
+            &[&alice],
+            &[&carol],
+        )
+        .unwrap();
         let text = String::from_utf8(out.plaintext).unwrap();
         assert!(text.contains("The meeting moved to Thursday"));
         assert!(text.contains("protected-headers=\"v1\""));
-        assert_eq!(out.decrypted_with.as_deref(), Some(fingerprint_hex(&alice.primary_key).as_str()));
+        assert_eq!(
+            out.decrypted_with.as_deref(),
+            Some(fingerprint_hex(&alice.primary_key).as_str())
+        );
         assert_eq!(out.signatures.len(), 1);
         assert!(out.signatures[0].valid);
-        assert_eq!(out.signatures[0].signer.as_deref(), Some(fingerprint_hex(&carol.primary_key).as_str()));
+        assert_eq!(
+            out.signatures[0].signer.as_deref(),
+            Some(fingerprint_hex(&carol.primary_key).as_str())
+        );
     }
 
     #[test]
@@ -484,29 +597,61 @@ pub(crate) mod tests {
     #[test]
     fn signature_by_another_key_does_not_verify_as_carol() {
         let carol = public("carol-public.asc");
-        let out = decrypt(&armored_block(&fixture("enc-signer-mismatch.eml")), &[&alice()], &[&carol]).unwrap();
+        let out = decrypt(
+            &armored_block(&fixture("enc-signer-mismatch.eml")),
+            &[&alice()],
+            &[&carol],
+        )
+        .unwrap();
         assert!(!out.signatures[0].valid);
         let mallory = public("mallory-public.asc");
-        let out = decrypt(&armored_block(&fixture("enc-signer-mismatch.eml")), &[&alice()], &[&carol, &mallory]).unwrap();
-        assert_eq!(out.signatures[0].signer.as_deref(), Some(fingerprint_hex(&mallory.primary_key).as_str()));
+        let out = decrypt(
+            &armored_block(&fixture("enc-signer-mismatch.eml")),
+            &[&alice()],
+            &[&carol, &mallory],
+        )
+        .unwrap();
+        assert_eq!(
+            out.signatures[0].signer.as_deref(),
+            Some(fingerprint_hex(&mallory.primary_key).as_str())
+        );
     }
 
     #[test]
     fn unsigned_encrypted_mail_has_no_signatures() {
-        let out = decrypt(&armored_block(&fixture("enc-unsigned.eml")), &[&alice()], &[]).unwrap();
+        let out = decrypt(
+            &armored_block(&fixture("enc-unsigned.eml")),
+            &[&alice()],
+            &[],
+        )
+        .unwrap();
         assert!(out.signatures.is_empty());
-        assert!(String::from_utf8(out.plaintext).unwrap().contains("Unsigned secret"));
+        assert!(
+            String::from_utf8(out.plaintext)
+                .unwrap()
+                .contains("Unsigned secret")
+        );
     }
 
     #[test]
     fn tampered_ciphertext_fails_closed() {
-        let err = decrypt(&armored_block(&fixture("enc-tampered.eml")), &[&alice()], &[]).unwrap_err();
+        let err = decrypt(
+            &armored_block(&fixture("enc-tampered.eml")),
+            &[&alice()],
+            &[],
+        )
+        .unwrap_err();
         assert_eq!(err, DecryptError::Integrity);
     }
 
     #[test]
     fn mail_for_someone_else_reports_no_key() {
-        let err = decrypt(&armored_block(&fixture("enc-wrong-recipient.eml")), &[&alice()], &[]).unwrap_err();
+        let err = decrypt(
+            &armored_block(&fixture("enc-wrong-recipient.eml")),
+            &[&alice()],
+            &[],
+        )
+        .unwrap_err();
         assert_eq!(err, DecryptError::NoKey);
     }
 
@@ -518,15 +663,31 @@ pub(crate) mod tests {
 
     #[test]
     fn garbage_is_unreadable_not_a_panic() {
-        assert_eq!(decrypt(b"-----BEGIN PGP MESSAGE-----\n\nAAAA\n-----END PGP MESSAGE-----\n", &[&alice()], &[]).unwrap_err(), DecryptError::Unreadable);
-        assert_eq!(decrypt(&[0xff; 64], &[&alice()], &[]).unwrap_err(), DecryptError::Unreadable);
+        assert_eq!(
+            decrypt(
+                b"-----BEGIN PGP MESSAGE-----\n\nAAAA\n-----END PGP MESSAGE-----\n",
+                &[&alice()],
+                &[]
+            )
+            .unwrap_err(),
+            DecryptError::Unreadable
+        );
+        assert_eq!(
+            decrypt(&[0xff; 64], &[&alice()], &[]).unwrap_err(),
+            DecryptError::Unreadable
+        );
     }
 
     #[test]
     fn our_encryption_round_trips_and_verifies() {
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let peer = keys::generate(&["peer@example.org".into()]).unwrap();
-        let armored = encrypt(b"hello peer", &[&peer.to_public_key(), &me.to_public_key()], &me).unwrap();
+        let armored = encrypt(
+            b"hello peer",
+            &[&peer.to_public_key(), &me.to_public_key()],
+            &me,
+        )
+        .unwrap();
         for reader in [&peer, &me] {
             let out = decrypt(armored.as_bytes(), &[reader], &[&me.to_public_key()]).unwrap();
             assert_eq!(out.plaintext, b"hello peer");
@@ -568,7 +729,11 @@ pub(crate) mod tests {
         let b = "--sig-boundary\r\n";
         let start = text.find(b).unwrap() + b.len();
         let end = text[start..].find("\r\n--sig-boundary").unwrap() + start;
-        let checks = verify_detached(&text.as_bytes()[start..end], armored_block_sig(&text).as_bytes(), &[&public("carol-public.asc")]);
+        let checks = verify_detached(
+            &text.as_bytes()[start..end],
+            armored_block_sig(&text).as_bytes(),
+            &[&public("carol-public.asc")],
+        );
         assert!(checks[0].weak_hash);
         assert!(!checks[0].valid);
     }
@@ -576,12 +741,26 @@ pub(crate) mod tests {
     /// Runs gpg in a throwaway home. None when gpg isn't installed (the
     /// interop tests then say so and pass, rather than fail on CI images
     /// without GnuPG).
-    pub(crate) fn gpg(home: &std::path::Path, args: &[&str], stdin: &[u8]) -> Option<(bool, Vec<u8>, String)> {
+    pub(crate) fn gpg(
+        home: &std::path::Path,
+        args: &[&str],
+        stdin: &[u8],
+    ) -> Option<(bool, Vec<u8>, String)> {
         use std::io::Write as _;
         let mut child = std::process::Command::new("gpg")
             .arg("--homedir")
             .arg(home)
-            .args(["--batch", "--yes", "--no-tty", "--pinentry-mode", "loopback", "--passphrase", "", "--trust-model", "always"])
+            .args([
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode",
+                "loopback",
+                "--passphrase",
+                "",
+                "--trust-model",
+                "always",
+            ])
             .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -590,7 +769,11 @@ pub(crate) mod tests {
             .ok()?;
         child.stdin.take()?.write_all(stdin).ok()?;
         let out = child.wait_with_output().ok()?;
-        Some((out.status.success(), out.stdout, String::from_utf8_lossy(&out.stderr).into_owned()))
+        Some((
+            out.status.success(),
+            out.stdout,
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        ))
     }
 
     /// A throwaway GNUPGHOME, removed (and its agent stopped) on drop.
@@ -604,7 +787,11 @@ pub(crate) mod tests {
 
     impl Drop for GpgHome {
         fn drop(&mut self) {
-            let _ = std::process::Command::new("gpgconf").arg("--homedir").arg(&self.0).args(["--kill", "all"]).output();
+            let _ = std::process::Command::new("gpgconf")
+                .arg("--homedir")
+                .arg(&self.0)
+                .args(["--kill", "all"])
+                .output();
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
@@ -625,12 +812,34 @@ pub(crate) mod tests {
         };
         let me = keys::generate(&["me@example.org".into()]).unwrap();
         let peer = keys::generate(&["peer@example.org".into()]).unwrap();
-        let (ok, _, err) = gpg(home.path(), &["--import"], keys::binary_secret(&peer).unwrap().as_slice()).unwrap();
+        let (ok, _, err) = gpg(
+            home.path(),
+            &["--import"],
+            keys::binary_secret(&peer).unwrap().as_slice(),
+        )
+        .unwrap();
         assert!(ok, "{err}");
-        let (ok, _, err) = gpg(home.path(), &["--import"], keys::armored_public(&me.to_public_key()).unwrap().as_bytes()).unwrap();
+        let (ok, _, err) = gpg(
+            home.path(),
+            &["--import"],
+            keys::armored_public(&me.to_public_key())
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
         assert!(ok, "{err}");
-        let armored = encrypt(b"interop check", &[&peer.to_public_key(), &me.to_public_key()], &me).unwrap();
-        let (ok, plain, err) = gpg(home.path(), &["--status-fd", "2", "--decrypt"], armored.as_bytes()).unwrap();
+        let armored = encrypt(
+            b"interop check",
+            &[&peer.to_public_key(), &me.to_public_key()],
+            &me,
+        )
+        .unwrap();
+        let (ok, plain, err) = gpg(
+            home.path(),
+            &["--status-fd", "2", "--decrypt"],
+            armored.as_bytes(),
+        )
+        .unwrap();
         assert!(ok, "{err}");
         assert_eq!(plain, b"interop check");
         assert!(err.contains("[GNUPG:] GOODSIG"), "{err}");
@@ -639,7 +848,8 @@ pub(crate) mod tests {
 
     fn armored_block_sig(text: &str) -> String {
         let start = text.find("-----BEGIN PGP SIGNATURE-----").unwrap();
-        let end = text.find("-----END PGP SIGNATURE-----").unwrap() + "-----END PGP SIGNATURE-----".len();
+        let end =
+            text.find("-----END PGP SIGNATURE-----").unwrap() + "-----END PGP SIGNATURE-----".len();
         text[start..end].replace("\r\n", "\n")
     }
 }

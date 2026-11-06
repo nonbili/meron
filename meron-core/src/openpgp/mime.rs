@@ -107,7 +107,13 @@ impl CryptoStatus {
 
 /// The status as the frontend gets it: stored facts plus what depends on
 /// the current keys (trust colour, a verified key being bypassed, the offer).
-pub fn view_json(status: &CryptoStatus, ring: &Keyring, account_id: &str, from_addr: &str, outgoing: bool) -> serde_json::Value {
+pub fn view_json(
+    status: &CryptoStatus,
+    ring: &Keyring,
+    account_id: &str,
+    from_addr: &str,
+    outgoing: bool,
+) -> serde_json::Value {
     let trust = status.trust(ring, from_addr);
     let from = from_addr.trim().to_ascii_lowercase();
     // A new key while a verified one exists: the rose key-change variant.
@@ -118,7 +124,10 @@ pub fn view_json(status: &CryptoStatus, ring: &Keyring, account_id: &str, from_a
         && !ring.is_enabled(account_id)
         && !ring.offer_dismissed(account_id, &from);
     let signer_key = status.signer.as_ref().and_then(|fpr| {
-        ring.peers_for(&from).into_iter().find(|p| &p.fingerprint == fpr).map(|p| p.fingerprint.clone())
+        ring.peers_for(&from)
+            .into_iter()
+            .find(|p| &p.fingerprint == fpr)
+            .map(|p| p.fingerprint.clone())
     });
     serde_json::json!({
         "encrypted": status.encrypted,
@@ -178,7 +187,12 @@ fn encrypted_data<'a, 'b>(mail: &'a ParsedMail<'b>) -> Option<&'a ParsedMail<'b>
             return None;
         }
         match &m.subparts[..] {
-            [version, data] if mime(version) == "application/pgp-encrypted" && mime(data) == "application/octet-stream" => Some(data),
+            [version, data]
+                if mime(version) == "application/pgp-encrypted"
+                    && mime(data) == "application/octet-stream" =>
+            {
+                Some(data)
+            }
             _ => None,
         }
     };
@@ -199,7 +213,11 @@ fn encrypted_data<'a, 'b>(mail: &'a ParsedMail<'b>) -> Option<&'a ParsedMail<'b>
             Some(data)
         }
         // Google Workspace: multipart/mixed [text, multipart/encrypted].
-        [text, enc] if mime(text) == "text/plain" && text.get_body().is_ok_and(|b| b.trim().is_empty()) => rfc3156(enc),
+        [text, enc]
+            if mime(text) == "text/plain" && text.get_body().is_ok_and(|b| b.trim().is_empty()) =>
+        {
+            rfc3156(enc)
+        }
         _ => None,
     }
 }
@@ -224,10 +242,18 @@ fn attached_keys(part: &ParsedMail<'_>, from: &str, out: &mut Vec<(String, Signe
     if mime(part) != "application/pgp-keys" {
         return;
     }
-    let Ok(body) = part.get_body_raw() else { return };
-    let Ok(parsed) = keys::parse_keys(&body) else { return };
+    let Ok(body) = part.get_body_raw() else {
+        return;
+    };
+    let Ok(parsed) = keys::parse_keys(&body) else {
+        return;
+    };
     for key in parsed.public {
-        if keys::info(&key, false, keys::now()).emails.iter().any(|e| e == from) {
+        if keys::info(&key, false, keys::now())
+            .emails
+            .iter()
+            .any(|e| e == from)
+        {
             out.push((from.to_string(), key));
         }
     }
@@ -255,16 +281,29 @@ fn collect_sender_key_files(part: &ParsedMail<'_>, from: &str, out: &mut Vec<Str
     if mime(part) != "application/pgp-keys" {
         return;
     }
-    let Ok(body) = part.get_body_raw() else { return };
-    let Ok(parsed) = keys::parse_keys(&body) else { return };
+    let Ok(body) = part.get_body_raw() else {
+        return;
+    };
+    let Ok(parsed) = keys::parse_keys(&body) else {
+        return;
+    };
     let all_senders = !parsed.public.is_empty()
         && parsed.secret.is_empty()
-        && parsed.public.iter().all(|k| keys::info(k, false, keys::now()).emails.iter().any(|e| e == from));
+        && parsed.public.iter().all(|k| {
+            keys::info(k, false, keys::now())
+                .emails
+                .iter()
+                .any(|e| e == from)
+        });
     if !all_senders {
         return;
     }
     let disposition = part.get_content_disposition();
-    if let Some(name) = disposition.params.get("filename").or_else(|| part.ctype.params.get("name")) {
+    if let Some(name) = disposition
+        .params
+        .get("filename")
+        .or_else(|| part.ctype.params.get("name"))
+    {
         out.push(name.clone());
     }
 }
@@ -279,7 +318,10 @@ pub fn open(mail: &ParsedMail<'_>, from_addr: &str, ring: &Keyring) -> Opened {
     // mail must never plant a key for the gossiped address.
     announced.retain(|a| !a.gossip);
     let mut attached = Vec::new();
-    let mut status = CryptoStatus { on_list, ..Default::default() };
+    let mut status = CryptoStatus {
+        on_list,
+        ..Default::default()
+    };
 
     // Encrypted (PGP/MIME, or inline as the only text part).
     let inline_text = (mime(mail) == "text/plain" && mail.subparts.is_empty())
@@ -293,20 +335,44 @@ pub fn open(mail: &ParsedMail<'_>, from_addr: &str, ring: &Keyring) -> Opened {
     };
     if let Some(data) = data {
         status.encrypted = true;
-        let opened = open_encrypted(&data, inline_text.is_some(), &from, ring, &mut announced, &mut attached, &mut status);
+        let opened = open_encrypted(
+            &data,
+            inline_text.is_some(),
+            &from,
+            ring,
+            &mut announced,
+            &mut attached,
+            &mut status,
+        );
         status.autocrypt = announced.iter().any(|a| !a.gossip && a.addr == from);
-        return Opened { status: Some(status), announced, attached, ..opened };
+        return Opened {
+            status: Some(status),
+            announced,
+            attached,
+            ..opened
+        };
     }
 
     // An encrypted part somewhere deeper: never decrypted (EFAIL).
     if contains_encrypted(mail) {
         status.problem = Some(Problem::PartlyEncrypted);
         status.autocrypt = announced.iter().any(|a| !a.gossip && a.addr == from);
-        return Opened { content: Content::Outer, status: Some(status), announced, attached, inner_subject: None };
+        return Opened {
+            content: Content::Outer,
+            status: Some(status),
+            announced,
+            attached,
+            inner_subject: None,
+        };
     }
 
     attached_keys(mail, &from, &mut attached);
-    let extra: Vec<SignedPublicKey> = announced.iter().filter(|a| !a.gossip).map(|a| a.key.clone()).chain(attached.iter().map(|(_, k)| k.clone())).collect();
+    let extra: Vec<SignedPublicKey> = announced
+        .iter()
+        .filter(|a| !a.gossip)
+        .map(|a| a.key.clone())
+        .chain(attached.iter().map(|(_, k)| k.clone()))
+        .collect();
 
     // Signed: the whole body, or (mailing lists) the first part of a mixed one.
     let mut content = Content::Outer;
@@ -327,27 +393,47 @@ pub fn open(mail: &ParsedMail<'_>, from_addr: &str, ring: &Keyring) -> Opened {
     }
     status.autocrypt = announced.iter().any(|a| !a.gossip && a.addr == from);
     let status = (!status.is_empty()).then_some(status);
-    Opened { content, status, announced, attached, inner_subject: None }
+    Opened {
+        content,
+        status,
+        announced,
+        attached,
+        inner_subject: None,
+    }
 }
 
 fn inline_in_html(mail: &ParsedMail<'_>) -> bool {
     mail.subparts.is_empty()
         && mime(mail) == "text/html"
-        && mail.get_body().is_ok_and(|b| b.contains("-----BEGIN PGP MESSAGE-----"))
+        && mail
+            .get_body()
+            .is_ok_and(|b| b.contains("-----BEGIN PGP MESSAGE-----"))
 }
 
-fn verify_signed(part: &ParsedMail<'_>, from: &str, ring: &Keyring, extra: &[SignedPublicKey]) -> Option<Vec<SigCheck>> {
+fn verify_signed(
+    part: &ParsedMail<'_>,
+    from: &str,
+    ring: &Keyring,
+    extra: &[SignedPublicKey],
+) -> Option<Vec<SigCheck>> {
     if mime(part) != "multipart/signed" {
         return None;
     }
-    let [content, signature] = &part.subparts[..] else { return None };
+    let [content, signature] = &part.subparts[..] else {
+        return None;
+    };
     if mime(signature) != "application/pgp-signature" {
         return None;
     }
     let sig = signature.get_body_raw().ok()?;
     let mut verifiers: Vec<&SignedPublicKey> = ring.verifiers_for(from);
     verifiers.extend(extra.iter());
-    Some(crypt::verify_detached_with(content.raw_bytes, &sig, &verifiers, &|f| ring.key_by_fingerprint(f)))
+    Some(crypt::verify_detached_with(
+        content.raw_bytes,
+        &sig,
+        &verifiers,
+        &|f| ring.key_by_fingerprint(f),
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -363,21 +449,32 @@ fn open_encrypted(
     let secrets = ring.secret_keys();
     // Verify against stored keys plus the key announced in this message's
     // outer headers (Delta Chat signs with the key it announces).
-    let outer_keys: Vec<SignedPublicKey> = announced.iter().filter(|a| !a.gossip).map(|a| a.key.clone()).collect();
+    let outer_keys: Vec<SignedPublicKey> = announced
+        .iter()
+        .filter(|a| !a.gossip)
+        .map(|a| a.key.clone())
+        .collect();
     let mut verifiers: Vec<&SignedPublicKey> = ring.verifiers_for(from);
     verifiers.extend(outer_keys.iter());
-    let decrypted = match crypt::decrypt_with(data, &secrets, &verifiers, &|f| ring.key_by_fingerprint(f)) {
-        Ok(d) => d,
-        Err(e) => {
-            status.problem = Some(match e {
-                DecryptError::NoKey => Problem::NoKey,
-                DecryptError::Integrity => Problem::Integrity,
-                DecryptError::TooLarge => Problem::TooLarge,
-                DecryptError::Unreadable => Problem::Unreadable,
-            });
-            return Opened { content: Content::Nothing, status: None, announced: Vec::new(), attached: Vec::new(), inner_subject: None };
-        }
-    };
+    let decrypted =
+        match crypt::decrypt_with(data, &secrets, &verifiers, &|f| ring.key_by_fingerprint(f)) {
+            Ok(d) => d,
+            Err(e) => {
+                status.problem = Some(match e {
+                    DecryptError::NoKey => Problem::NoKey,
+                    DecryptError::Integrity => Problem::Integrity,
+                    DecryptError::TooLarge => Problem::TooLarge,
+                    DecryptError::Unreadable => Problem::Unreadable,
+                });
+                return Opened {
+                    content: Content::Nothing,
+                    status: None,
+                    announced: Vec::new(),
+                    attached: Vec::new(),
+                    inner_subject: None,
+                };
+            }
+        };
     status.decrypted_with = decrypted.decrypted_with.clone();
     let mut checks = decrypted.signatures.clone();
 
@@ -401,15 +498,27 @@ fn open_encrypted(
     if let Ok(inner) = mailparse::parse_mail(&bytes) {
         // Protected headers (RFC 9788): Subject and Autocrypt inside.
         if !inline {
-            inner_subject = inner.headers.get_first_value("Subject").filter(|s| !s.trim().is_empty());
-            inner_from = inner.headers.get_first_value("From").filter(|s| !s.trim().is_empty());
+            inner_subject = inner
+                .headers
+                .get_first_value("Subject")
+                .filter(|s| !s.trim().is_empty());
+            inner_from = inner
+                .headers
+                .get_first_value("From")
+                .filter(|s| !s.trim().is_empty());
             let inner_announced = autocrypt::announced(&inner.headers, from);
-            inner_keys.extend(inner_announced.iter().filter(|a| !a.gossip).map(|a| a.key.clone()));
+            inner_keys.extend(
+                inner_announced
+                    .iter()
+                    .filter(|a| !a.gossip)
+                    .map(|a| a.key.clone()),
+            );
             // Protected headers win over the outer ones (Delta Chat's rule).
             if inner_announced.iter().any(|a| !a.gossip) {
                 announced.retain(|a| a.gossip);
             }
-            let (gossip, direct): (Vec<_>, Vec<_>) = inner_announced.into_iter().partition(|a| a.gossip);
+            let (gossip, direct): (Vec<_>, Vec<_>) =
+                inner_announced.into_iter().partition(|a| a.gossip);
             inner_gossip = gossip;
             announced.extend(direct);
         }
@@ -419,7 +528,9 @@ fn open_encrypted(
         if !inner_keys.is_empty() && !checks.iter().any(|c| c.valid) && !checks.is_empty() {
             let mut all = verifiers.clone();
             all.extend(inner_keys.iter());
-            if let Ok(again) = crypt::decrypt_with(data, &secrets, &all, &|f| ring.key_by_fingerprint(f)) {
+            if let Ok(again) =
+                crypt::decrypt_with(data, &secrets, &all, &|f| ring.key_by_fingerprint(f))
+            {
                 checks = again.signatures;
             }
         }
@@ -452,7 +563,10 @@ fn open_encrypted(
     if status.problem.is_none()
         && let Some(valid) = checks.iter().find(|c| c.valid)
         && !valid.intended_recipients.is_empty()
-        && !valid.intended_recipients.iter().any(|fp| status.decrypted_with.as_deref() == Some(fp.as_str()) || ring.is_own(fp))
+        && !valid
+            .intended_recipients
+            .iter()
+            .any(|fp| status.decrypted_with.as_deref() == Some(fp.as_str()) || ring.is_own(fp))
     {
         status.problem = Some(Problem::Redirected);
     }
@@ -474,12 +588,27 @@ fn open_encrypted(
     if status.signed && status.problem.is_none() && status.signer.is_some() {
         announced.extend(inner_gossip);
     }
-    Opened { content: Content::Inner { bytes, signed_inside }, status: None, announced: Vec::new(), attached: Vec::new(), inner_subject }
+    Opened {
+        content: Content::Inner {
+            bytes,
+            signed_inside,
+        },
+        status: None,
+        announced: Vec::new(),
+        attached: Vec::new(),
+        inner_subject,
+    }
 }
 
 /// Folds signature checks into the status: which key signed, whether it
 /// matches the From address, whether it is new for that address.
-fn apply_signature(status: &mut CryptoStatus, checks: &[SigCheck], from: &str, ring: &Keyring, extra: &[SignedPublicKey]) {
+fn apply_signature(
+    status: &mut CryptoStatus,
+    checks: &[SigCheck],
+    from: &str,
+    ring: &Keyring,
+    extra: &[SignedPublicKey],
+) {
     status.weak_hash = checks.iter().any(|c| c.weak_hash);
     // L5: verification broke the verifier (a caught rPGP panic). We could not
     // validate the signature at all, so flag it invalid rather than leave it
@@ -502,7 +631,12 @@ fn apply_signature(status: &mut CryptoStatus, checks: &[SigCheck], from: &str, r
     let Some(valid) = checks.iter().find(|c| c.valid) else {
         status.issuer = checks.iter().find_map(|c| c.issuer.clone());
         // We hold the key the signature names, yet it didn't verify: altered.
-        let have_issuer_key = checks.iter().any(|c| c.signer.is_some() || c.issuer.as_deref().is_some_and(|i| key_known(ring, extra, from, i)));
+        let have_issuer_key = checks.iter().any(|c| {
+            c.signer.is_some()
+                || c.issuer
+                    .as_deref()
+                    .is_some_and(|i| key_known(ring, extra, from, i))
+        });
         if have_issuer_key && !status.weak_hash {
             // Lists change messages: expected, so not alarming there.
             if !status.on_list {
@@ -525,13 +659,18 @@ fn apply_signature(status: &mut CryptoStatus, checks: &[SigCheck], from: &str, r
     // ID carries it, or our own key only when From is one of our own addresses.
     // Our key vouching for a stranger's From is the replay oracle,
     // so there is no blanket own-key exemption.
-    let matches_from = key.is_some_and(|k| keys::info(k, false, keys::now()).emails.iter().any(|e| e == from))
-        || (ring.is_own(&fpr) && ring.is_own_address(from));
+    let matches_from = key.is_some_and(|k| {
+        keys::info(k, false, keys::now())
+            .emails
+            .iter()
+            .any(|e| e == from)
+    }) || (ring.is_own(&fpr) && ring.is_own_address(from));
     if !matches_from {
         status.problem = Some(Problem::SignerMismatch);
     }
     let known: Vec<_> = ring.peers_for(from);
-    status.key_changed = !ring.is_own(&fpr) && !known.is_empty() && !known.iter().any(|p| p.fingerprint == fpr);
+    status.key_changed =
+        !ring.is_own(&fpr) && !known.is_empty() && !known.iter().any(|p| p.fingerprint == fpr);
 }
 
 fn key_known(ring: &Keyring, extra: &[SignedPublicKey], from: &str, issuer: &str) -> bool {
@@ -540,10 +679,12 @@ fn key_known(ring: &Keyring, extra: &[SignedPublicKey], from: &str, issuer: &str
         .chain(extra.iter())
         .any(|k| {
             let fpr = keys::fingerprint_hex(&k.primary_key);
-            fpr == issuer || fpr.ends_with(issuer) || k.public_subkeys.iter().any(|s| {
-                let f = keys::fingerprint_hex(&s.key);
-                f == issuer || f.ends_with(issuer)
-            })
+            fpr == issuer
+                || fpr.ends_with(issuer)
+                || k.public_subkeys.iter().any(|s| {
+                    let f = keys::fingerprint_hex(&s.key);
+                    f == issuer || f.ends_with(issuer)
+                })
         })
 }
 
@@ -555,8 +696,12 @@ mod tests {
     use crate::parse::{Message, parse_message_with};
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/openpgp/testdata").join(name))
-            .expect("fixture")
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/openpgp/testdata")
+                .join(name),
+        )
+        .expect("fixture")
     }
 
     fn public(name: &str) -> SignedPublicKey {
@@ -564,14 +709,31 @@ mod tests {
     }
 
     fn alice_ring() -> Keyring {
-        let key = parse_keys(&fixture("alice-secret.asc")).unwrap().secret.remove(0);
-        let Unlock::Ok(secret) = unlock(key, None).unwrap() else { panic!() };
-        Keyring { own: vec![keyring::own_key("alice", secret, true)], peers: Vec::new(), enabled_accounts: vec!["alice".into()], dismissed: Vec::new() }
+        let key = parse_keys(&fixture("alice-secret.asc"))
+            .unwrap()
+            .secret
+            .remove(0);
+        let Unlock::Ok(secret) = unlock(key, None).unwrap() else {
+            panic!()
+        };
+        Keyring {
+            own: vec![keyring::own_key("alice", secret, true)],
+            peers: Vec::new(),
+            enabled_accounts: vec!["alice".into()],
+            dismissed: Vec::new(),
+        }
     }
 
     fn with_peer(mut ring: Keyring, addr: &str, file: &str, verified: bool) -> Keyring {
         let key = public(file);
-        ring.peers.push(PeerKey { addr: addr.into(), fingerprint: keys::fingerprint_hex(&key.primary_key), key, source: Source::Autocrypt, verified, last_seen: 1 });
+        ring.peers.push(PeerKey {
+            addr: addr.into(),
+            fingerprint: keys::fingerprint_hex(&key.primary_key),
+            key,
+            source: Source::Autocrypt,
+            verified,
+            last_seen: 1,
+        });
         ring
     }
 
@@ -602,21 +764,38 @@ mod tests {
     // for Mallory's From: no "verified", and a reply must not quote it.
     #[test]
     fn own_signed_ciphertext_replayed_by_a_stranger_is_not_trusted() {
-        let ring = with_peer(alice_ring(), "mallory@example.com", "mallory-public.asc", false);
+        let ring = with_peer(
+            alice_ring(),
+            "mallory@example.com",
+            "mallory-public.asc",
+            false,
+        );
         let own = &ring.own[0];
         let bob = public("bob-public.asc");
         let inner = b"Content-Type: text/plain; charset=utf-8\r\n\r\nAlice's private note\r\n";
         let armored = crypt::encrypt(inner, &[&own.public, &bob], &own.secret).unwrap();
-        let eml = format!("From: Mallory <mallory@example.com>\r\nTo: alice@example.org\r\nSubject: hi\r\nMessage-ID: <x@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: application/pgp-encrypted\r\n\r\nVersion: 1\r\n--b\r\nContent-Type: application/octet-stream\r\n\r\n{armored}\r\n--b--\r\n");
+        let eml = format!(
+            "From: Mallory <mallory@example.com>\r\nTo: alice@example.org\r\nSubject: hi\r\nMessage-ID: <x@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: application/pgp-encrypted\r\n\r\nVersion: 1\r\n--b\r\nContent-Type: application/octet-stream\r\n\r\n{armored}\r\n--b--\r\n"
+        );
         let m = parse_message_with(eml.as_bytes(), None, &ring);
         let c = crypto(&m);
-        assert_eq!(c.problem, Some(Problem::SignerMismatch), "own key must not vouch for a stranger's From");
+        assert_eq!(
+            c.problem,
+            Some(Problem::SignerMismatch),
+            "own key must not vouch for a stranger's From"
+        );
         assert_ne!(c.trust(&ring, &m.from_addr), Trust::Verified);
         // trust_of directly (the path card_lock takes on stored status): our
         // key verifies our own mail, never a stranger's From.
         let own_fpr = ring.own[0].fingerprint.clone();
-        assert_eq!(ring.trust_of(&own_fpr, "alice@example.org"), Trust::Verified);
-        assert_ne!(ring.trust_of(&own_fpr, "mallory@example.com"), Trust::Verified);
+        assert_eq!(
+            ring.trust_of(&own_fpr, "alice@example.org"),
+            Trust::Verified
+        );
+        assert_ne!(
+            ring.trust_of(&own_fpr, "mallory@example.com"),
+            Trust::Verified
+        );
     }
 
     // H4: a cleartext Autocrypt-Gossip header on an ordinary (unencrypted) mail
@@ -626,10 +805,16 @@ mod tests {
         use base64::Engine as _;
         let ring = alice_ring();
         let mallory = public("mallory-public.asc");
-        let kd = base64::engine::general_purpose::STANDARD.encode(keys::binary_public(&mallory).unwrap());
-        let eml = format!("From: Mallory <mallory@example.com>\r\nTo: alice@example.org\r\nSubject: hi\r\nAutocrypt-Gossip: addr=boss@example.com; keydata={kd}\r\nContent-Type: text/plain\r\n\r\nhello\r\n");
+        let kd = base64::engine::general_purpose::STANDARD
+            .encode(keys::binary_public(&mallory).unwrap());
+        let eml = format!(
+            "From: Mallory <mallory@example.com>\r\nTo: alice@example.org\r\nSubject: hi\r\nAutocrypt-Gossip: addr=boss@example.com; keydata={kd}\r\nContent-Type: text/plain\r\n\r\nhello\r\n"
+        );
         let m = parse_message_with(eml.as_bytes(), None, &ring);
-        assert!(m.found_keys.announced.iter().all(|a| !a.gossip), "outer gossip must be dropped");
+        assert!(
+            m.found_keys.announced.iter().all(|a| !a.gossip),
+            "outer gossip must be dropped"
+        );
     }
 
     // A secret key for `email` from a fixture holding several (unprotected).
@@ -638,7 +823,12 @@ mod tests {
         let key = parsed
             .secret
             .into_iter()
-            .find(|k| keys::secret_info(k, keys::now()).emails.iter().any(|e| e == email))
+            .find(|k| {
+                keys::secret_info(k, keys::now())
+                    .emails
+                    .iter()
+                    .any(|e| e == email)
+            })
             .expect("secret key for email");
         match unlock(key, None).unwrap() {
             Unlock::Ok(k) => k,
@@ -664,8 +854,16 @@ mod tests {
         let inner = b"Content-Type: text/plain; charset=utf-8\r\n\r\nredirected body\r\n";
         // Encrypted to Alice, but Carol's signature names only Bob as intended.
         let armored = crypt::encrypt_to(inner, &[&alice, &bob], &[&bob], &carol).unwrap();
-        let m = parse_message_with(wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(), None, &ring);
-        assert_eq!(crypto(&m).problem, Some(Problem::Redirected), "G3: intended recipients exclude us");
+        let m = parse_message_with(
+            wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+            None,
+            &ring,
+        );
+        assert_eq!(
+            crypto(&m).problem,
+            Some(Problem::Redirected),
+            "G3: intended recipients exclude us"
+        );
         assert_ne!(crypto(&m).trust(&ring, &m.from_addr), Trust::Verified);
     }
 
@@ -678,8 +876,16 @@ mod tests {
         let alice = ring.own[0].public.clone();
         let inner = b"Content-Type: text/plain; charset=utf-8\r\n\r\nhello\r\n";
         let armored = crypt::encrypt(inner, &[&alice], &carol).unwrap();
-        let m = parse_message_with(wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(), None, &ring);
-        assert_eq!(crypto(&m).problem, None, "a message intended for us is fine");
+        let m = parse_message_with(
+            wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+            None,
+            &ring,
+        );
+        assert_eq!(
+            crypto(&m).problem,
+            None,
+            "a message intended for us is fine"
+        );
     }
 
     // G4: the decrypted inner From differs from the envelope From — the payload
@@ -691,8 +897,16 @@ mod tests {
         let alice = ring.own[0].public.clone();
         let inner = b"From: Eve <eve@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nbody\r\n";
         let armored = crypt::encrypt(inner, &[&alice], &carol).unwrap();
-        let m = parse_message_with(wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(), None, &ring);
-        assert_eq!(crypto(&m).problem, Some(Problem::Redirected), "G4: inner From != outer From");
+        let m = parse_message_with(
+            wrap_encrypted("Carol <carol@example.com>", &armored).as_bytes(),
+            None,
+            &ring,
+        );
+        assert_eq!(
+            crypto(&m).problem,
+            Some(Problem::Redirected),
+            "G4: inner From != outer From"
+        );
     }
 
     #[test]
@@ -712,7 +926,12 @@ mod tests {
     fn sign_then_encrypt_in_two_layers_keeps_the_inner_subject() {
         // Older Enigmail and K-9: a multipart/signed encrypted as a whole, so the
         // protected Subject sits on the signed part, not on the decrypted top.
-        let ring = with_peer(alice_ring(), "mallory@example.com", "mallory-public.asc", false);
+        let ring = with_peer(
+            alice_ring(),
+            "mallory@example.com",
+            "mallory-public.asc",
+            false,
+        );
         let m = parse("enc-two-layer.eml", &ring);
         assert!(m.body.contains(SECRET), "{}", m.body);
         assert_eq!(m.subject, "Layered secret");
@@ -747,7 +966,11 @@ mod tests {
     #[test]
     fn tampered_and_foreign_mail_show_nothing() {
         let ring = alice_ring();
-        for (file, problem) in [("enc-tampered.eml", Problem::Integrity), ("enc-wrong-recipient.eml", Problem::NoKey), ("bomb.eml", Problem::TooLarge)] {
+        for (file, problem) in [
+            ("enc-tampered.eml", Problem::Integrity),
+            ("enc-wrong-recipient.eml", Problem::NoKey),
+            ("bomb.eml", Problem::TooLarge),
+        ] {
             let m = parse(file, &ring);
             assert_eq!(crypto(&m).problem, Some(problem), "{file}");
             assert!(m.body.is_empty(), "{file}: no plaintext on failure");
@@ -766,7 +989,12 @@ mod tests {
 
     #[test]
     fn signed_by_someone_other_than_from_is_flagged() {
-        let ring = with_peer(with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false), "mallory@example.com", "mallory-public.asc", false);
+        let ring = with_peer(
+            with_peer(alice_ring(), "carol@example.com", "carol-public.asc", false),
+            "mallory@example.com",
+            "mallory-public.asc",
+            false,
+        );
         let m = parse("enc-signer-mismatch.eml", &ring);
         assert_eq!(crypto(&m).problem, Some(Problem::SignerMismatch));
         assert_eq!(crypto(&m).trust(&ring, &m.from_addr), Trust::Unconfirmed);
@@ -782,7 +1010,11 @@ mod tests {
         assert!(c.signed && !c.encrypted);
         assert_eq!(c.trust(&ring, &m.from_addr), Trust::Known);
         assert!(m.body.contains("signed, not encrypted"));
-        assert!(m.attachments.iter().all(|a| a.mime != "application/pgp-signature"));
+        assert!(
+            m.attachments
+                .iter()
+                .all(|a| a.mime != "application/pgp-signature")
+        );
     }
 
     #[test]
@@ -821,7 +1053,11 @@ mod tests {
         assert!(m.body.contains(SECRET), "{}", m.body);
         let m = parse("inline.eml", &ring);
         assert!(crypto(&m).encrypted);
-        assert!(m.body.contains("Inline secret: the code is 4711"), "{}", m.body);
+        assert!(
+            m.body.contains("Inline secret: the code is 4711"),
+            "{}",
+            m.body
+        );
     }
 
     #[test]
@@ -840,7 +1076,10 @@ mod tests {
         assert_eq!(m.found_keys.announced.len(), 1);
         let m = parse("autocrypt-mismatch.eml", &ring);
         assert!(m.found_keys.announced.is_empty());
-        assert!(m.crypto.is_none(), "plain mail without a valid header stays plain");
+        assert!(
+            m.crypto.is_none(),
+            "plain mail without a valid header stays plain"
+        );
         let m = parse("autocrypt-list.eml", &ring);
         assert!(crypto(&m).on_list);
     }
@@ -851,7 +1090,10 @@ mod tests {
         let m = parse("key-change.eml", &ring);
         let c = crypto(&m);
         assert!(m.body.contains("new laptop"));
-        assert!(c.signer.is_some(), "verified with the key from the Autocrypt header");
+        assert!(
+            c.signer.is_some(),
+            "verified with the key from the Autocrypt header"
+        );
         assert!(c.key_changed);
         assert_eq!(c.problem, None);
     }
@@ -868,7 +1110,15 @@ mod tests {
 
     #[test]
     fn a_key_revoked_by_its_designated_revoker_no_longer_signs() {
-        let dan = match unlock(parse_keys(&fixture("dan-secret.asc")).unwrap().secret.remove(0), None).unwrap() {
+        let dan = match unlock(
+            parse_keys(&fixture("dan-secret.asc"))
+                .unwrap()
+                .secret
+                .remove(0),
+            None,
+        )
+        .unwrap()
+        {
             Unlock::Ok(k) => k,
             other => panic!("{other:?}"),
         };
@@ -878,16 +1128,35 @@ mod tests {
         assert_eq!(crypto(&m).problem, None, "valid before the revocation");
         ring.peers.retain(|p| p.addr != "tess@example.com");
         let revoked = crate::openpgp::keys::tests::revoke_by(&dan, &tess);
-        ring.peers.push(PeerKey { addr: "tess@example.com".into(), fingerprint: keys::fingerprint_hex(&revoked.primary_key), key: revoked, source: Source::Autocrypt, verified: false, last_seen: 2 });
+        ring.peers.push(PeerKey {
+            addr: "tess@example.com".into(),
+            fingerprint: keys::fingerprint_hex(&revoked.primary_key),
+            key: revoked,
+            source: Source::Autocrypt,
+            verified: false,
+            last_seen: 2,
+        });
         let dan_pub = dan.to_public_key();
-        ring.peers.push(PeerKey { addr: "dan@example.com".into(), fingerprint: keys::fingerprint_hex(&dan_pub.primary_key), key: dan_pub, source: Source::Autocrypt, verified: false, last_seen: 2 });
+        ring.peers.push(PeerKey {
+            addr: "dan@example.com".into(),
+            fingerprint: keys::fingerprint_hex(&dan_pub.primary_key),
+            key: dan_pub,
+            source: Source::Autocrypt,
+            verified: false,
+            last_seen: 2,
+        });
         let m = parse("signed-by-tess.eml", &ring);
         assert_eq!(crypto(&m).problem, Some(Problem::KeyRevoked));
     }
 
     #[test]
     fn a_signature_made_while_the_key_was_valid_stays_valid_after_expiry() {
-        let ring = with_peer(alice_ring(), "erin@example.com", "expired-public.asc", false);
+        let ring = with_peer(
+            alice_ring(),
+            "erin@example.com",
+            "expired-public.asc",
+            false,
+        );
         let m = parse("signed-by-expired-while-valid.eml", &ring);
         let c = crypto(&m);
         assert_eq!(c.problem, None);
@@ -897,7 +1166,9 @@ mod tests {
 
     /// A message shaped like Thunderbird's: text plus the sender's key attached.
     fn with_key_attachment(key_file: &str) -> Vec<u8> {
-        let key = String::from_utf8(fixture(key_file)).unwrap().replace('\n', "\r\n");
+        let key = String::from_utf8(fixture(key_file))
+            .unwrap()
+            .replace('\n', "\r\n");
         format!(
             "From: Carol Example <carol@example.com>\r\nTo: alice@example.org\r\nSubject: Testing this\r\nMIME-Version: 1.0\r\n\
              Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello\r\n\
@@ -909,23 +1180,45 @@ mod tests {
 
     #[test]
     fn the_senders_attached_key_is_recorded_and_not_shown_as_a_file() {
-        let m = parse_message_with(&with_key_attachment("carol-public.asc"), None, &alice_ring());
-        assert!(m.attachments.is_empty(), "{:?}", m.attachments.iter().map(|a| &a.filename).collect::<Vec<_>>());
+        let m = parse_message_with(
+            &with_key_attachment("carol-public.asc"),
+            None,
+            &alice_ring(),
+        );
+        assert!(
+            m.attachments.is_empty(),
+            "{:?}",
+            m.attachments
+                .iter()
+                .map(|a| &a.filename)
+                .collect::<Vec<_>>()
+        );
         assert_eq!(m.found_keys.attached.len(), 1);
         assert!(m.body.contains("Hello"));
     }
 
     #[test]
     fn someone_elses_key_stays_a_visible_attachment() {
-        let m = parse_message_with(&with_key_attachment("mallory-public.asc"), None, &alice_ring());
+        let m = parse_message_with(
+            &with_key_attachment("mallory-public.asc"),
+            None,
+            &alice_ring(),
+        );
         assert_eq!(m.attachments.len(), 1);
-        assert!(m.found_keys.attached.is_empty(), "never recorded for an address other than the sender's");
+        assert!(
+            m.found_keys.attached.is_empty(),
+            "never recorded for an address other than the sender's"
+        );
     }
 
     #[test]
     fn plain_mail_has_no_crypto_status() {
         let raw = b"From: a@example.com\r\nTo: b@example.com\r\nSubject: hi\r\n\r\nhello\r\n";
-        assert!(parse_message_with(raw, None, &alice_ring()).crypto.is_none());
+        assert!(
+            parse_message_with(raw, None, &alice_ring())
+                .crypto
+                .is_none()
+        );
     }
 
     #[test]

@@ -2845,7 +2845,8 @@ fn thread_key(
     // Not for encrypted mail: Gmail only sees the placeholder subject, the same
     // for every encrypted message, so it merges unrelated conversations between
     // the same people (even a new message). Those thread by their own headers.
-    let gmail_thrid = gmail_thrid.filter(|_| !crate::store::is_encrypted_placeholder_subject(subject));
+    let gmail_thrid =
+        gmail_thrid.filter(|_| !crate::store::is_encrypted_placeholder_subject(subject));
     if let Some(thrid) = gmail_thrid {
         return format!("gmthrid:{thrid}");
     }
@@ -3537,10 +3538,20 @@ mod tests {
     #[test]
     fn an_encrypted_placeholder_subject_ignores_gmails_thread_id() {
         for placeholder in ["[...]", "...", "Re: [...]"] {
-            assert_eq!(thread_key(Some(42), placeholder, "msgid", "", "", 7), "msgid", "{placeholder}");
-            assert_eq!(thread_key(Some(42), placeholder, "msgid", "inreply", "refsroot", 7), "refsroot");
+            assert_eq!(
+                thread_key(Some(42), placeholder, "msgid", "", "", 7),
+                "msgid",
+                "{placeholder}"
+            );
+            assert_eq!(
+                thread_key(Some(42), placeholder, "msgid", "inreply", "refsroot", 7),
+                "refsroot"
+            );
         }
-        assert_eq!(thread_key(Some(42), "Lunch", "msgid", "", "", 7), "gmthrid:42");
+        assert_eq!(
+            thread_key(Some(42), "Lunch", "msgid", "", "", 7),
+            "gmthrid:42"
+        );
     }
 
     #[test]

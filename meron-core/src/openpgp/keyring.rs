@@ -103,7 +103,9 @@ impl Keyring {
     }
 
     pub fn default_key(&self, account_id: &str) -> Option<&OwnKey> {
-        self.own.iter().find(|k| k.account_id == account_id && k.is_default)
+        self.own
+            .iter()
+            .find(|k| k.account_id == account_id && k.is_default)
     }
 
     pub fn is_enabled(&self, account_id: &str) -> bool {
@@ -112,7 +114,9 @@ impl Keyring {
 
     pub fn offer_dismissed(&self, account_id: &str, addr: &str) -> bool {
         let addr = addr.trim().to_ascii_lowercase();
-        self.dismissed.iter().any(|(a, d)| a == account_id && (d == "*" || *d == addr))
+        self.dismissed
+            .iter()
+            .any(|(a, d)| a == account_id && (d == "*" || *d == addr))
     }
 
     pub fn is_own(&self, fingerprint: &str) -> bool {
@@ -133,7 +137,8 @@ impl Keyring {
     /// someone other than the sender") instead of looking merely unknown.
     /// Signature checks filter by issuer first, so the long tail is cheap.
     pub fn verifiers_for(&self, addr: &str) -> Vec<&SignedPublicKey> {
-        let mut out: Vec<&SignedPublicKey> = self.peers_for(addr).into_iter().map(|p| &p.key).collect();
+        let mut out: Vec<&SignedPublicKey> =
+            self.peers_for(addr).into_iter().map(|p| &p.key).collect();
         out.extend(self.own.iter().map(|k| &k.public));
         let addr = addr.trim().to_ascii_lowercase();
         let mut seen: Vec<&str> = Vec::new();
@@ -152,7 +157,12 @@ impl Keyring {
             .iter()
             .find(|p| p.fingerprint == fingerprint)
             .map(|p| p.key.clone())
-            .or_else(|| self.own.iter().find(|k| k.fingerprint == fingerprint).map(|k| k.public.clone()))
+            .or_else(|| {
+                self.own
+                    .iter()
+                    .find(|k| k.fingerprint == fingerprint)
+                    .map(|k| k.public.clone())
+            })
     }
 
     /// Whether `addr` is an address of one of our own keys. Only then does a
@@ -161,16 +171,28 @@ impl Keyring {
     /// address must not be trusted as that sender.
     pub fn is_own_address(&self, addr: &str) -> bool {
         let addr = addr.trim().to_ascii_lowercase();
-        self.own.iter().any(|k| keys::info(&k.public, true, keys::now()).emails.contains(&addr))
+        self.own.iter().any(|k| {
+            keys::info(&k.public, true, keys::now())
+                .emails
+                .contains(&addr)
+        })
     }
 
     /// The trust a signature by `fingerprint` earns for a message from `addr`.
     pub fn trust_of(&self, fingerprint: &str, addr: &str) -> Trust {
         if self.is_own(fingerprint) {
             // Our own key vouches for the sender only on our own mail.
-            return if self.is_own_address(addr) { Trust::Verified } else { Trust::Unconfirmed };
+            return if self.is_own_address(addr) {
+                Trust::Verified
+            } else {
+                Trust::Unconfirmed
+            };
         }
-        match self.peers_for(addr).into_iter().find(|p| p.fingerprint == fingerprint) {
+        match self
+            .peers_for(addr)
+            .into_iter()
+            .find(|p| p.fingerprint == fingerprint)
+        {
             Some(p) if p.verified => Trust::Verified,
             Some(_) => Trust::Known,
             None => Trust::Unconfirmed,
@@ -202,10 +224,11 @@ impl Keyring {
     /// Own public key for `addr` when it belongs to one of our accounts.
     pub fn own_key_for_addr(&self, addr: &str) -> Option<&OwnKey> {
         let addr = addr.trim().to_ascii_lowercase();
-        self.own
-            .iter()
-            .filter(|k| k.is_default)
-            .find(|k| keys::info(&k.public, true, keys::now()).emails.contains(&addr))
+        self.own.iter().filter(|k| k.is_default).find(|k| {
+            keys::info(&k.public, true, keys::now())
+                .emails
+                .contains(&addr)
+        })
     }
 }
 
@@ -224,7 +247,11 @@ static CURRENT: RwLock<Option<Arc<Keyring>>> = RwLock::new(None);
 
 /// The keys in effect now (empty until the store has loaded them).
 pub fn current() -> Arc<Keyring> {
-    CURRENT.read().ok().and_then(|g| g.clone()).unwrap_or_default()
+    CURRENT
+        .read()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_default()
 }
 
 /// Swaps in a new snapshot.

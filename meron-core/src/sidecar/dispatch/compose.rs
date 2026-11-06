@@ -34,10 +34,21 @@ fn opt_uids(params: &Value) -> Vec<u32> {
 /// offer to send it again.
 /// Whether a send or draft is encrypted (`openpgp::outgoing::protection`),
 /// and whether only because it answers encrypted mail (nothing was asked).
-fn reply_protection(engine: &Arc<Engine>, p: &Value, account: &str, in_reply_to: &str) -> anyhow::Result<(bool, bool)> {
+fn reply_protection(
+    engine: &Arc<Engine>,
+    p: &Value,
+    account: &str,
+    in_reply_to: &str,
+) -> anyhow::Result<(bool, bool)> {
     let encrypt = p.get("encrypt").and_then(Value::as_bool).unwrap_or(false);
     let plain = p.get("plain").and_then(Value::as_bool).unwrap_or(false);
-    meron_core::openpgp::store::reply_protection(&engine.db.lock().unwrap(), account, in_reply_to, encrypt, plain)
+    meron_core::openpgp::store::reply_protection(
+        &engine.db.lock().unwrap(),
+        account,
+        in_reply_to,
+        encrypt,
+        plain,
+    )
 }
 
 fn finish_sent(engine: &Arc<Engine>, out: &Writer, account: String, raw: Vec<u8>) {
@@ -137,14 +148,17 @@ pub(crate) async fn dispatch(
                     .flat_map(|field| meron_core::openpgp::outgoing::split_recipients(field))
                     .collect();
                 let used = meron_core::openpgp::outgoing::chosen_peer_keys(&ring, &recipients);
-                if let Err(err) = meron_core::openpgp::store::record_used(&engine.db.lock().unwrap(), &used) {
+                if let Err(err) =
+                    meron_core::openpgp::store::record_used(&engine.db.lock().unwrap(), &used)
+                {
                     eprintln!("openpgp: couldn't record the keys used: {err:#}");
                 }
                 raw
             } else {
-                let extra: Vec<(&str, String)> = meron_core::openpgp::outgoing::autocrypt_for(&ring, &account, &from_addr)
-                    .map(|v| vec![("Autocrypt", v)])
-                    .unwrap_or_default();
+                let extra: Vec<(&str, String)> =
+                    meron_core::openpgp::outgoing::autocrypt_for(&ring, &account, &from_addr)
+                        .map(|v| vec![("Autocrypt", v)])
+                        .unwrap_or_default();
                 smtp::send(
                     &creds,
                     &from_addr,
@@ -233,9 +247,9 @@ pub(crate) async fn dispatch(
             let (encrypt, _) = reply_protection(engine, p, &account, &in_reply_to)?;
             let raw = if encrypt {
                 let ring = meron_core::openpgp::keyring::current();
-                let own = ring
-                    .default_key(&account)
-                    .context("can't save this draft encrypted: this account has no encryption key")?;
+                let own = ring.default_key(&account).context(
+                    "can't save this draft encrypted: this account has no encryption key",
+                )?;
                 let autocrypt = meron_core::openpgp::autocrypt::header_value(
                     &meron_core::openpgp::outgoing::bare_addr(&from_addr),
                     &own.public,

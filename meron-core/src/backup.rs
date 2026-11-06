@@ -693,7 +693,8 @@ pub fn apply(
     }
 
     if !data.openpgp_keys.is_empty() {
-        summary.openpgp_missing_secret = crate::openpgp::store::backup_apply(&tx, &data.openpgp_keys)?;
+        summary.openpgp_missing_secret =
+            crate::openpgp::store::backup_apply(&tx, &data.openpgp_keys)?;
     }
 
     // Keyed by Message-ID, so they rejoin their mail as it syncs back in.

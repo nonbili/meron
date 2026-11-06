@@ -112,7 +112,11 @@ pub fn group_thread_cards_with_drafts(
         // A message not yet decrypted joins its thread's titled branch rather
         // than forming a card under the placeholder.
         let titled_group = (branch && is_encrypted_placeholder_subject(&message.subject))
-            .then(|| roots.get(&group_key(&message, &base_key)).map(|root| root.group.clone()))
+            .then(|| {
+                roots
+                    .get(&group_key(&message, &base_key))
+                    .map(|root| root.group.clone())
+            })
             .flatten();
         let group_subject = if let Some(group) = &titled_group {
             group.clone()
@@ -855,12 +859,17 @@ pub fn repair_placeholder_reply_subjects(
            AND json_extract(json, '$.crypto.encrypted') = 1",
     )?;
     let rows: Vec<(String, String, String, String)> = stmt
-        .query_map(params![account, thread_key], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+        .query_map(params![account, thread_key], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
-    let mut real: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
+    let mut real: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::new();
     let mut changed = 0;
     for (folder, msg_id, key, subject) in rows {
-        if !should_branch_thread_by_subject(&key) || !is_placeholder_group(&thread_grouping_subject(&subject)) {
+        if !should_branch_thread_by_subject(&key)
+            || !is_placeholder_group(&thread_grouping_subject(&subject))
+        {
             continue;
         }
         if !real.contains_key(&key) {

@@ -32,12 +32,18 @@ fn file_data(p: &Value) -> anyhow::Result<Vec<u8>> {
 /// The account's primary address first, then its aliases.
 fn account_addrs(conn: &rusqlite::Connection, account: &str) -> Vec<String> {
     let primary: Option<String> = conn
-        .query_row("SELECT email FROM accounts WHERE id = ?1", [account], |r| r.get(0))
+        .query_row("SELECT email FROM accounts WHERE id = ?1", [account], |r| {
+            r.get(0)
+        })
         .optional()
         .ok()
         .flatten()
         .flatten();
-    let mut out: Vec<String> = primary.map(|e| e.trim().to_ascii_lowercase()).into_iter().filter(|e| !e.is_empty()).collect();
+    let mut out: Vec<String> = primary
+        .map(|e| e.trim().to_ascii_lowercase())
+        .into_iter()
+        .filter(|e| !e.is_empty())
+        .collect();
     for alias in store::account_aliases(conn, account).unwrap_or_default() {
         let e = alias.email.trim().to_ascii_lowercase();
         if !e.is_empty() && !out.contains(&e) {
@@ -57,7 +63,11 @@ fn forget_undecryptable(conn: &rusqlite::Connection) -> anyhow::Result<usize> {
     )?)
 }
 
-pub(crate) async fn dispatch(engine: &Arc<Engine>, req: &Request, _out: &Writer) -> anyhow::Result<Value> {
+pub(crate) async fn dispatch(
+    engine: &Arc<Engine>,
+    req: &Request,
+    _out: &Writer,
+) -> anyhow::Result<Value> {
     let p = &req.params;
     let engine = engine.clone();
     let method = req.method.clone();
