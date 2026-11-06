@@ -1091,6 +1091,40 @@ describe('quick reply draft sharing', () => {
     expect(last('mail.saveDraft')).toMatchObject({ encrypt: true, plain: false })
   })
 
+  it('says who an encrypted send did not reach, as an error rather than "sent"', async () => {
+    // Encrypted mail goes out as one copy per Bcc; the core reports a refused
+    // copy instead of failing a send others already received.
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Reply')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      if (command === 'mail.send') return { ok: true, undelivered: ['blind@example.com'] }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+    const base = { accountId: 'acc-1', to: 'x@example.com', subject: 's', rich: false, content: 'hi', attachments: [] }
+    expect(await sendComposed(base)).toEqual(['blind@example.com'])
+
+    await sendReply()
+    expect(ui$.toastTone.get()).toBe('error')
+    expect(ui$.toast.get()).toContain('blind@example.com')
+  })
+
   it('discards a matching loaded draft when its quick-reply ownership was lost', async () => {
     const thread = message({
       id: 'root',

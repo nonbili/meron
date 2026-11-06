@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Adicione uma conta de e-mail antes de escrever",
   "compose.toast.couldNotOpenDraft": "Não foi possível abrir o rascunho",
   "compose.toast.couldNotOpenNotificationThread": "Não foi possível abrir o tópico de notificação",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Falha no envio",
   "composer.actions.attachFiles": "Anexar ficheiros",
   "composer.actions.ccBcc": "Cc/Bcc",

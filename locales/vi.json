@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Thêm tài khoản thư trước khi soạn",
   "compose.toast.couldNotOpenDraft": "Không thể mở bản nháp",
   "compose.toast.couldNotOpenNotificationThread": "Không thể mở chuỗi thông báo",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Gửi không thành công",
   "composer.actions.attachFiles": "Đính kèm tệp",
   "composer.actions.ccBcc": "Cc/Bcc",

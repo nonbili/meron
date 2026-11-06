@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Ajouter un compte de messagerie avant de composer",
   "compose.toast.couldNotOpenDraft": "Impossible d'ouvrir le brouillon",
   "compose.toast.couldNotOpenNotificationThread": "Impossible d'ouvrir le fil de notification",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Échec de l'envoi",
   "composer.actions.attachFiles": "Joindre des fichiers",
   "composer.actions.ccBcc": "Cc/Cci",

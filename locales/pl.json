@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Dodaj konto pocztowe przed rozpoczęciem tworzenia",
   "compose.toast.couldNotOpenDraft": "Nie udało się otworzyć wersji roboczej",
   "compose.toast.couldNotOpenNotificationThread": "Nie udało się otworzyć wątku powiadomień",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Wysyłanie nie powiodło się",
   "composer.actions.attachFiles": "Załącz pliki",
   "composer.actions.ccBcc": "DW/UDW",

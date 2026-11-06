@@ -464,7 +464,7 @@ pub async fn send_encrypted(
     reply_to: &str,
     message_id: &str,
     keys: &crate::openpgp::outgoing::SendKeys,
-) -> Result<Vec<u8>> {
+) -> Result<EncryptedSend> {
     use crate::openpgp::outgoing::wrap;
     let from = if from_addr.trim().is_empty() {
         creds.user.as_str()
@@ -500,12 +500,15 @@ pub async fn send_encrypted(
             &message_id,
         )
     };
+    // Everything is encrypted before anything goes out, so a crypto error
+    // can't leave the mail half sent.
     let transmitted = build(false)?;
+    let mut copies: Vec<(Vec<String>, Vec<String>, Vec<String>, Vec<u8>)> = Vec::new();
     if !to_list.is_empty() || !cc_list.is_empty() {
         let mut audience: Vec<&pgp::composed::SignedPublicKey> = keys.to_cc.iter().collect();
         audience.push(&keys.own);
         let raw = wrap(&transmitted, &audience, &keys.signer, &keys.autocrypt)?;
-        submit(creds, from, &to_list, &cc_list, &[], &raw).await?;
+        copies.push((to_list, cc_list, Vec::new(), raw));
     }
     for (entry, key) in &keys.bcc {
         let raw = wrap(
@@ -514,9 +517,60 @@ pub async fn send_encrypted(
             &keys.signer,
             &keys.autocrypt,
         )?;
-        submit(creds, from, &[], &[], std::slice::from_ref(entry), &raw).await?;
+        copies.push((Vec::new(), Vec::new(), vec![entry.clone()], raw));
     }
-    wrap(&build(true)?, &[&keys.own], &keys.signer, &keys.autocrypt)
+    let sent_copy = wrap(&build(true)?, &[&keys.own], &keys.signer, &keys.autocrypt)?;
+
+    // One session carries every copy. Once one has gone out, a later failure
+    // is reported per recipient rather than failing the send: a retry would
+    // deliver the others twice, and the Sent copy would be skipped.
+    let mut session: Option<Submission> = None;
+    let mut undelivered = Vec::new();
+    let mut delivered_any = false;
+    let mut first_error = None;
+    for (to, cc, bcc, raw) in &copies {
+        let result = async {
+            if session.is_none() {
+                session = Some(open_submission(creds).await?);
+            }
+            let transport = session.as_mut().expect("session opened above");
+            deliver(transport, from, to, cc, bcc, raw).await
+        }
+        .await;
+        match result {
+            Ok(()) => delivered_any = true,
+            Err(err) => {
+                // The session is mid-transaction or gone: start a new one for
+                // the next copy.
+                session = None;
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.send",
+                    "encrypted copy not delivered: {err:#}"
+                );
+                undelivered.extend(to.iter().chain(cc).chain(bcc).map(|entry| bare_addr(entry)));
+                first_error.get_or_insert(err);
+            }
+        }
+    }
+    if let Some(transport) = session {
+        close_submission(transport).await;
+    }
+    if let Some(err) = first_error.filter(|_| !delivered_any) {
+        return Err(err);
+    }
+    Ok(EncryptedSend {
+        raw: sent_copy,
+        undelivered,
+    })
+}
+
+/// An encrypted send that reached at least one recipient.
+pub struct EncryptedSend {
+    /// The Sent copy (encrypted to us, with the `Bcc:` header).
+    pub raw: Vec<u8>,
+    /// Bare addresses whose copy the server refused or never took.
+    pub undelivered: Vec<String>,
 }
 
 /// Hand one built message to the account's SMTP server: connect, upgrade,
@@ -529,6 +583,17 @@ async fn submit(
     bcc_list: &[String],
     raw: &[u8],
 ) -> Result<()> {
+    let mut transport = open_submission(creds).await?;
+    deliver(&mut transport, from, to_list, cc_list, bcc_list, raw).await?;
+    close_submission(transport).await;
+    Ok(())
+}
+
+type Submission = SmtpTransport<BufReader<crate::imap::Stream>>;
+
+/// Connect to the account's SMTP server, upgrade and authenticate: a session
+/// that can carry several messages.
+async fn open_submission(creds: &Creds) -> Result<Submission> {
     // Fall back to the IMAP host if SMTP settings were not provided.
     let host = if creds.smtp_host.is_empty() {
         creds.host.as_str()
@@ -652,6 +717,18 @@ async fn submit(
         }
     }
 
+    Ok(transport)
+}
+
+/// Deliver one message over an open session.
+async fn deliver(
+    transport: &mut Submission,
+    from: &str,
+    to_list: &[String],
+    cc_list: &[String],
+    bcc_list: &[String],
+    raw: &[u8],
+) -> Result<()> {
     // SMTP envelope addresses must be bare ("addr@host"); MIME header entries
     // may carry a display name, which the built message already has; here we
     // strip down to the address for RCPT TO.
@@ -671,8 +748,11 @@ async fn submit(
     )
     .await?
     .context("smtp send")?;
-    let _ = with_timeout(Duration::from_secs(10), "smtp quit", transport.quit()).await;
     Ok(())
+}
+
+async fn close_submission(mut transport: Submission) {
+    let _ = with_timeout(Duration::from_secs(10), "smtp quit", transport.quit()).await;
 }
 
 /// Build the answer to a calendar invitation (RFC 6047 2.4): a readable line
@@ -1086,5 +1166,202 @@ mod tests {
         assert!(html_out.contains("/media/acct/Sent/1/0.png"), "{html_out}");
         assert!(html_out.contains("/media/acct/Sent/1/1.png"), "{html_out}");
         assert_eq!(msg.attachments.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod encrypted_send_tests {
+    use super::send_encrypted;
+    use crate::openpgp::keys;
+    use crate::openpgp::outgoing::SendKeys;
+    use std::sync::{Arc, Mutex};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::TcpListener;
+
+    /// What the fake submission server saw: connections opened and, per
+    /// accepted message, the RCPT TO addresses it went to.
+    #[derive(Default)]
+    struct Seen {
+        connections: usize,
+        delivered: Vec<Vec<String>>,
+    }
+
+    /// A plaintext SMTP server without AUTH that refuses RCPT for `refuse`.
+    async fn fake_smtp(refuse: &'static str) -> (u16, Arc<Mutex<Seen>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = Arc::new(Mutex::new(Seen::default()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((socket, _)) = listener.accept().await else { return };
+                log.lock().unwrap().connections += 1;
+                let log = log.clone();
+                tokio::spawn(async move {
+                    let (read, mut write) = socket.into_split();
+                    let mut lines = BufReader::new(read).lines();
+                    write.write_all(b"220 fake\r\n").await.unwrap();
+                    let mut rcpts = Vec::new();
+                    // MAIL inside an open transaction is refused (RFC 5321 4.1.4).
+                    let mut in_mail = false;
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let upper = line.to_ascii_uppercase();
+                        let reply: &[u8] = if upper.starts_with("EHLO") {
+                            b"250-fake\r\n250 8BITMIME\r\n"
+                        } else if upper.starts_with("MAIL") && in_mail {
+                            b"503 nested MAIL command\r\n"
+                        } else if upper.starts_with("MAIL") {
+                            in_mail = true;
+                            rcpts.clear();
+                            b"250 ok\r\n"
+                        } else if upper.starts_with("RCPT") {
+                            let addr = line
+                                .split(['<', '>'])
+                                .nth(1)
+                                .unwrap_or_default()
+                                .to_string();
+                            if addr == refuse {
+                                b"550 no such user\r\n"
+                            } else {
+                                rcpts.push(addr);
+                                b"250 ok\r\n"
+                            }
+                        } else if upper == "DATA" {
+                            write.write_all(b"354 go\r\n").await.unwrap();
+                            while let Ok(Some(body)) = lines.next_line().await {
+                                if body == "." {
+                                    break;
+                                }
+                            }
+                            in_mail = false;
+                            log.lock().unwrap().delivered.push(std::mem::take(&mut rcpts));
+                            b"250 queued\r\n"
+                        } else if upper == "RSET" {
+                            in_mail = false;
+                            b"250 ok\r\n"
+                        } else if upper == "QUIT" {
+                            let _ = write.write_all(b"221 bye\r\n").await;
+                            return;
+                        } else {
+                            b"250 ok\r\n"
+                        };
+                        if write.write_all(reply).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        (port, seen)
+    }
+
+    fn creds(port: u16) -> crate::imap::Creds {
+        crate::imap::Creds {
+            host: "127.0.0.1".to_string(),
+            port: 993,
+            user: "me@example.org".to_string(),
+            password: String::new(),
+            tls: false,
+            starttls: false,
+            smtp_host: "127.0.0.1".to_string(),
+            smtp_port: port,
+            smtp_tls: false,
+            smtp_starttls: false,
+            auth_type: "password".to_string(),
+            access_token: None,
+            refresh_token: None,
+            token_expires_at: 0,
+            oauth_client_id: String::new(),
+            oauth_client_secret: String::new(),
+            oauth_token_url: String::new(),
+            oauth_scope: String::new(),
+            proxy: crate::proxy::ProxyChoice::Direct,
+            cert_pin: None,
+            smtp_cert_pin: None,
+            rejected_grant: None,
+        }
+    }
+
+    fn send_keys(bcc: &[&str]) -> SendKeys {
+        let me = keys::generate(&["me@example.org".into()]).unwrap();
+        let peer = |addr: &str| {
+            keys::generate(&[addr.to_string()])
+                .unwrap()
+                .to_public_key()
+        };
+        SendKeys {
+            own: me.to_public_key(),
+            signer: me,
+            to_cc: vec![peer("to@example.org")],
+            bcc: bcc.iter().map(|addr| (addr.to_string(), peer(addr))).collect(),
+            autocrypt: "addr=me@example.org; keydata=AA==".to_string(),
+        }
+    }
+
+    async fn send(port: u16, to: &str, bcc: &[&str]) -> anyhow::Result<super::EncryptedSend> {
+        send_encrypted(
+            &creds(port),
+            "me@example.org",
+            "Me",
+            to,
+            "",
+            &bcc.join(", "),
+            "Hello",
+            "body",
+            "",
+            &[],
+            "",
+            "",
+            "",
+            "",
+            &send_keys(bcc),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn every_copy_goes_out_over_one_connection() {
+        let (port, seen) = fake_smtp("nobody@example.org").await;
+        let sent = send(port, "to@example.org", &["b@example.org", "c@example.org"])
+            .await
+            .unwrap();
+        assert!(sent.undelivered.is_empty());
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.connections, 1);
+        assert_eq!(
+            seen.delivered,
+            vec![
+                vec!["to@example.org".to_string()],
+                vec!["b@example.org".to_string()],
+                vec!["c@example.org".to_string()],
+            ]
+        );
+    }
+
+    // To/Cc already have the mail: a refused Bcc must not fail the send (a
+    // retry would deliver it twice and skip the Sent copy), and later Bcc
+    // recipients still get theirs.
+    #[tokio::test]
+    async fn a_refused_bcc_is_reported_and_the_rest_still_go_out() {
+        let (port, seen) = fake_smtp("b@example.org").await;
+        let sent = send(port, "to@example.org", &["b@example.org", "c@example.org"])
+            .await
+            .unwrap();
+        assert_eq!(sent.undelivered, vec!["b@example.org".to_string()]);
+        assert!(!sent.raw.is_empty());
+        let seen = seen.lock().unwrap();
+        assert_eq!(
+            seen.delivered,
+            vec![
+                vec!["to@example.org".to_string()],
+                vec!["c@example.org".to_string()],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn nothing_delivered_is_an_error() {
+        let (port, _seen) = fake_smtp("to@example.org").await;
+        assert!(send(port, "to@example.org", &[]).await.is_err());
     }
 }

@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Enne koostamist lisage meilikonto",
   "compose.toast.couldNotOpenDraft": "Mustandit ei saanud avada",
   "compose.toast.couldNotOpenNotificationThread": "Teavituste lõime ei saanud avada",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Saatmine ebaõnnestus",
   "composer.actions.attachFiles": "Lisa manuseid",
   "composer.actions.ccBcc": "Koopia/Pimekoopia",

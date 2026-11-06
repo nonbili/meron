@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "أضف حساب بريد قبل الإنشاء",
   "compose.toast.couldNotOpenDraft": "تعذر فتح المسودة",
   "compose.toast.couldNotOpenNotificationThread": "تعذر فتح سلسلة رسائل الإعلام",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "فشل الإرسال",
   "composer.actions.attachFiles": "إرفاق ملفات",
   "composer.actions.ccBcc": "نسخة/نسخة مخفية",

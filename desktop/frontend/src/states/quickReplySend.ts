@@ -18,6 +18,7 @@ import {
   discardUnsentRescue,
 } from './pendingSends'
 import { offerCertificateTrust } from './certificateTrust'
+import { undeliveredOf, warnUndelivered } from './undelivered'
 import {
   bodyHasReplyQuote,
   draftIdOfFailedSave,
@@ -491,9 +492,10 @@ async function dispatchSend(tempId: string) {
   }
   setSendStatus(tempId, 'sending')
   try {
-    await invoke('mail.send', payload)
+    const result = await invoke('mail.send', payload)
     discardPendingSend(tempId)
     setSendStatus(tempId, 'sent')
+    warnUndelivered(undeliveredOf(result))
     void finishQuickReplySendLifecycle(tempId)
   } catch (error) {
     settleFailedQuickReplySendGuard(tempId)

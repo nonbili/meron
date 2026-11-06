@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Добавьте почтовый аккаунт, чтобы писать письма",
   "compose.toast.couldNotOpenDraft": "Не удалось открыть черновик",
   "compose.toast.couldNotOpenNotificationThread": "Не удалось открыть переписку из уведомления",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Не удалось отправить",
   "composer.actions.attachFiles": "Прикрепить файлы",
   "composer.actions.ccBcc": "Копия / Скрытая копия",

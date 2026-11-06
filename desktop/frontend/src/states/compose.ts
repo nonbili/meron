@@ -30,6 +30,7 @@ import {
   type SignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
+import { undeliveredOf } from './undelivered'
 import { closeCurrentConversation, kanban$ } from './kanban'
 import { resolveConversationMode, revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
@@ -1427,7 +1428,8 @@ export function toggleConversationMode(accountId: string | undefined): boolean {
 
 // Send a composed message via the same mail.send path used by replies. When
 // `rich`, the HTML is sent with a derived plaintext fallback. Throws on failure
-// so the caller can surface the error inline.
+// so the caller can surface the error inline. Returns the addresses it didn't
+// reach (see `undeliveredOf`).
 export async function sendComposed(args: {
   accountId: string
   from?: string
@@ -1449,7 +1451,7 @@ export async function sendComposed(args: {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
   const encrypt = args.decryptedInBody ? true : args.encrypt
-  await invoke('mail.send', {
+  const result = await invoke('mail.send', {
     encrypt: !!encrypt,
     // Plain only when encryption was switched off (`false`), never because the
     // flag is missing: the core encrypts a reply to encrypted mail that says
@@ -1473,6 +1475,7 @@ export async function sendComposed(args: {
       inline_id: a.inlineId ?? '',
     })),
   })
+  return undeliveredOf(result)
 }
 
 // Surface a just-sent compose-tab message in the open conversation so the user

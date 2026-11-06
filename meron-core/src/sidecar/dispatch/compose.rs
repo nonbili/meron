@@ -113,6 +113,7 @@ pub(crate) async fn dispatch(
             let (from_addr, sender_name) =
                 resolve_send_from(engine, &account, &creds, &requested_from)?;
             let ring = meron_core::openpgp::keyring::current();
+            let mut undelivered = Vec::new();
             let raw = if encrypt {
                 let keys = meron_core::openpgp::outgoing::resolve(&ring, &account, &from_addr, &to, &cc, &bcc)
                     .map_err(|err| {
@@ -122,7 +123,7 @@ pub(crate) async fn dispatch(
                             err
                         }
                     })?;
-                let raw = smtp::send_encrypted(
+                let sent = smtp::send_encrypted(
                     &creds,
                     &from_addr,
                     &sender_name,
@@ -153,7 +154,8 @@ pub(crate) async fn dispatch(
                 {
                     eprintln!("openpgp: couldn't record the keys used: {err:#}");
                 }
-                raw
+                undelivered = sent.undelivered;
+                sent.raw
             } else {
                 let extra: Vec<(&str, String)> =
                     meron_core::openpgp::outgoing::autocrypt_for(&ring, &account, &from_addr)
@@ -179,7 +181,9 @@ pub(crate) async fn dispatch(
                 .await?
             };
             finish_sent(engine, out, account, raw);
-            Ok(json!({ "ok": true }))
+            // Delivered to someone, so not an error (a resend would duplicate
+            // it), but the composer says who didn't get it.
+            Ok(json!({ "ok": true, "undelivered": undelivered }))
         }
 
         "invite.respond" => {

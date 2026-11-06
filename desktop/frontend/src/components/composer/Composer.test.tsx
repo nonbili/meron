@@ -131,6 +131,29 @@ describe('Composer', () => {
     expect(render(<Composer tabId={plain} />).queryByText(/isn't quoted/)).toBeNull()
   })
 
+  it('says who a send did not reach instead of "Message sent"', async () => {
+    const base = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>
+      command === 'mail.send'
+        ? (calls.push({ command, payload }), { ok: true, undelivered: ['blind@example.com'] })
+        : base(command, payload)
+    const tabId = openComposeTab({
+      to: 'x@example.com',
+      bcc: 'blind@example.com',
+      subject: 'Hi',
+      text: 'hi',
+      rich: false,
+    })!
+    const view = render(<Composer tabId={tabId} />)
+    await act(async () => {
+      ;[...view.container.querySelectorAll('button')].find((b) => b.textContent?.includes('Send'))!.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(calls.some((c) => c.command === 'mail.send')).toBe(true)
+    expect(ui$.toastTone.get()).toBe('error')
+    expect(ui$.toast.get()).toContain('blind@example.com')
+  })
+
   it('notes a changed recipient key and asks before sending to it', async () => {
     const base = (window as any).go.main.App.Invoke
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>

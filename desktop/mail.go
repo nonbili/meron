@@ -1095,7 +1095,7 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	if _, err := a.sidecar.Call("send", map[string]any{
+	res, err := a.sidecar.Call("send", map[string]any{
 		"account":     req.AccountID,
 		"to":          req.To,
 		"cc":          req.Cc,
@@ -1111,10 +1111,26 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 		"attachments": req.Attachments,
 		"encrypt":     req.Encrypt,
 		"plain":       req.Plain,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true, "queued": false}, nil
+	out := map[string]any{"ok": true, "queued": false}
+	// Encrypted mail goes out as one copy per Bcc: some can be refused after
+	// the rest went out. That is not a failure (a retry would duplicate it),
+	// but the caller should say who didn't get it.
+	if m, ok := res.(map[string]any); ok {
+		if list, ok := m["undelivered"].([]any); ok && len(list) > 0 {
+			undelivered := make([]string, 0, len(list))
+			for _, addr := range list {
+				if s, ok := addr.(string); ok {
+					undelivered = append(undelivered, s)
+				}
+			}
+			out["undelivered"] = undelivered
+		}
+	}
+	return out, nil
 }
 
 func (a *App) mailSaveDraft(payload map[string]any) (any, error) {

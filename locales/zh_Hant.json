@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "撰寫前新增郵件帳戶",
   "compose.toast.couldNotOpenDraft": "無法開啟草稿",
   "compose.toast.couldNotOpenNotificationThread": "無法開啟通知線程",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "發送失敗",
   "composer.actions.attachFiles": "附加檔案",
   "composer.actions.ccBcc": "副本/密件副本",

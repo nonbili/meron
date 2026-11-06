@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Προσθέστε έναν λογαριασμό αλληλογραφίας πριν τη σύνθεση",
   "compose.toast.couldNotOpenDraft": "Δεν ήταν δυνατό το άνοιγμα του προχείρου",
   "compose.toast.couldNotOpenNotificationThread": "Δεν ήταν δυνατό το άνοιγμα του νήματος ειδοποιήσεων",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Η αποστολή απέτυχε",
   "composer.actions.attachFiles": "Επισύναψη αρχείων",
   "composer.actions.ccBcc": "Κοιν./Κρυφή κοιν.",

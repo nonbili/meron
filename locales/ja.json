@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "作成前にメールアカウントを追加してください",
   "compose.toast.couldNotOpenDraft": "下書きを開けませんでした",
   "compose.toast.couldNotOpenNotificationThread": "通知スレッドを開けませんでした",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "送信に失敗しました",
   "composer.actions.attachFiles": "ファイルを添付",
   "composer.actions.ccBcc": "Cc/Bcc",

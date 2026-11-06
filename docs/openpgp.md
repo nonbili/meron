@@ -470,6 +470,10 @@ flowchart TD
 - **Audiences** (`smtp::send_encrypted`): one message to To + Cc; a separate message per Bcc recipient (encrypted to
   that recipient and the sender), so no recipient sees Bcc key IDs or intended-recipient fingerprints; the Sent copy is
   rebuilt with the `Bcc:` header and encrypted to the sender only. All copies share one Message-ID.
+- **Delivery**: every copy is encrypted before the first goes out, then all go over one SMTP session. Once one copy
+  is delivered, a refused later copy doesn't fail the send (a resend would deliver the rest twice and skip the Sent
+  copy): `send` returns `undelivered` with those addresses, and the composer and quick reply name them in an error
+  toast. Nothing delivered is an error as before.
 - **Drafts:** `save_draft` with `encrypt` wraps the draft encrypted and signed to the sender only before APPEND.
 - **Plain sends** from an account with encryption on carry `Autocrypt:` (`smtp::send` `extra_headers`). Mobile
   (`protocol/mail.rs`) passes no extra headers and has no encryption.

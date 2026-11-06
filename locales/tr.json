@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Oluşturmadan önce bir posta hesabı ekleyin",
   "compose.toast.couldNotOpenDraft": "Taslak açılamadı",
   "compose.toast.couldNotOpenNotificationThread": "Bildirim başlığı açılamadı",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Gönderim başarısız oldu",
   "composer.actions.attachFiles": "Dosya ekle",
   "composer.actions.ccBcc": "Bilgi/Gizli",

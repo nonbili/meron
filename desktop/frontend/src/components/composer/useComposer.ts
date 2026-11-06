@@ -20,6 +20,7 @@ import {
   closeComposeTabKeepingDraft,
   announceSavedDrafts,
 } from '../../states/compose'
+import { warnUndelivered } from '../../states/undelivered'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
 import { invoke } from '../../lib/bridge'
@@ -746,7 +747,7 @@ export function useComposer(tabId: string) {
         content = inlineRichStyles(prepared.html)
         attachments = prepared.attachments
       }
-      await sendComposed({
+      const undelivered = await sendComposed({
         accountId: current.accountId,
         from: current.fromEmail,
         to: current.to.trim(),
@@ -786,7 +787,7 @@ export function useComposer(tabId: string) {
       // of it, keeping it hidden — and out of the quick reply — until it's gone.
       const remote = remoteDraftOf(current)
       if (remote) void discardSentDraft(remote)
-      showToast(t('chat.messageSent'))
+      if (!warnUndelivered(undelivered)) showToast(t('chat.messageSent'))
       finishClosingMessageTab(tabId)
     } catch (err) {
       // The composer stays open on failure, so autosaving resumes with it.

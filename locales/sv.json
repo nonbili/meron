@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Lägg till ett e-postkonto innan du skriver",
   "compose.toast.couldNotOpenDraft": "Det gick inte att öppna utkastet",
   "compose.toast.couldNotOpenNotificationThread": "Det gick inte att öppna meddelandetråden",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Skicka misslyckades",
   "composer.actions.attachFiles": "Bifoga filer",
   "composer.actions.ccBcc": "Kopia/Dold kopia",

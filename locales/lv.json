@@ -327,6 +327,7 @@
   "compose.toast.addMailAccountBeforeComposing": "Pirms rakstīšanas pievienojiet pasta kontu",
   "compose.toast.couldNotOpenDraft": "Nevarēja atvērt melnrakstu",
   "compose.toast.couldNotOpenNotificationThread": "Nevarēja atvērt paziņojumu pavedienu",
+  "compose.toast.notDeliveredTo": "Sent, but not delivered to {addresses}",
   "compose.toast.sendFailed": "Sūtīšana neizdevās",
   "composer.actions.attachFiles": "Pievienot failus",
   "composer.actions.ccBcc": "Kopija/Slēptā kopija",
