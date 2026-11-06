@@ -1,4 +1,5 @@
 {
+  "eml.open": "打开 EML 文件…",
   "contacts.notes": "备注",
   "contacts.notesPlaceholder": "添加备注…",
   "contacts.markdownHint": "支持 Markdown。备注保存在此设备上。",

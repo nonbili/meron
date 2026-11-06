@@ -22,12 +22,14 @@ const Maximised = application.WindowStateMaximised
 type RGBA struct{ R, G, B, A uint8 }
 
 type OpenDialogOptions struct {
+	Window           *application.WebviewWindow
 	Title            string
 	DefaultDirectory string
 	Filters          []FileFilter
 }
 
 type SaveDialogOptions struct {
+	Window               *application.WebviewWindow
 	CanCreateDirectories bool
 	Title                string
 	DefaultDirectory     string
@@ -74,21 +76,33 @@ func OnFileDrop(_ context.Context, callback func(int, int, []string)) {
 }
 
 func OpenFileDialog(_ context.Context, options OpenDialogOptions) (string, error) {
+	window := options.Window
+	if window == nil {
+		window = Window
+	}
 	return App.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
-		Title: options.Title, Directory: options.DefaultDirectory, Filters: options.Filters, Window: Window,
+		Title: options.Title, Directory: options.DefaultDirectory, Filters: options.Filters, Window: window,
 	}).PromptForSingleSelection()
 }
 
 func OpenMultipleFilesDialog(_ context.Context, options OpenDialogOptions) ([]string, error) {
+	window := options.Window
+	if window == nil {
+		window = Window
+	}
 	return App.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
-		Title: options.Title, Directory: options.DefaultDirectory, Filters: options.Filters, Window: Window,
+		Title: options.Title, Directory: options.DefaultDirectory, Filters: options.Filters, Window: window,
 		AllowsMultipleSelection: true,
 	}).PromptForMultipleSelection()
 }
 
 func SaveFileDialog(_ context.Context, options SaveDialogOptions) (string, error) {
+	window := options.Window
+	if window == nil {
+		window = Window
+	}
 	return App.Dialog.SaveFileWithOptions(&application.SaveFileDialogOptions{
 		Title: options.Title, Directory: options.DefaultDirectory, Filename: options.DefaultFilename,
-		Filters: options.Filters, Window: Window, CanCreateDirectories: options.CanCreateDirectories,
+		Filters: options.Filters, Window: window, CanCreateDirectories: options.CanCreateDirectories,
 	}).PromptForSingleSelection()
 }

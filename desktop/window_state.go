@@ -161,6 +161,20 @@ func (a *App) flushWindowState() {
 	a.windowSaved = a.window
 }
 
+// Main-window closing controls application lifetime explicitly, independent
+// of how many document windows remain or whether a window is visible on macOS.
+func (a *App) mainWindowCloseRequested() {
+	if !a.quitting.Load() && a.closeToTray.Load() {
+		a.hideMainWindow()
+		return
+	}
+	if !a.beforeClose(a.ctx) {
+		// Native destruction dispatches to the UI thread; let this synchronous
+		// window hook finish before initiating application shutdown.
+		go a.quit()
+	}
+}
+
 // beforeClose runs for the close button and for every quit. With
 // close-to-tray on, the close button only hides the window; the tray's Quit
 // and the updater mark the quit as intended first, so they still go through.

@@ -9,6 +9,7 @@ pub mod avatar;
 pub mod backup;
 pub mod calendar;
 pub mod changelog;
+pub mod eml;
 pub mod engine;
 pub mod ffi;
 pub mod imap;

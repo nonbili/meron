@@ -1,6 +1,8 @@
-import { Columns3, Info, Plus, RefreshCw, Settings, SquareChevronRight } from 'lucide-react'
+import { Columns3, FolderOpen, Info, Plus, RefreshCw, Settings, SquareChevronRight } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
+import { invoke } from '../../lib/bridge'
+import { showToast } from '../../states/ui'
 import { syncMail } from '../../states/mail'
 import { openCommandPalette, ui$ } from '../../states/ui'
 import { formatShortcut, isMac, type ShortcutId } from '../../lib/shortcuts'
@@ -53,6 +55,14 @@ export function QuickSettingsMenu({
         onClick={() => {
           onClose()
           openCommandPalette()
+        }}
+      />
+      <MenuItem
+        icon={<FolderOpen size={13} className="text-secondary" />}
+        label={t('eml.open')}
+        onClick={() => {
+          onClose()
+          void invoke('eml.open').catch((error) => showToast(String(error), 'error'))
         }}
       />
       <MenuItem

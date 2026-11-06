@@ -23,25 +23,16 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
-        {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>
-          {{range .Info.FileAssociations}}
           <dict>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-              <string>{{.Ext}}</string>
-            </array>
-            <key>CFBundleTypeName</key>
-            <string>{{.Name}}</string>
-            <key>CFBundleTypeRole</key>
-            <string>{{.Role}}</string>
-            <key>CFBundleTypeIconFile</key>
-            <string>{{.IconName}}</string>
+            <key>CFBundleTypeName</key><string>Email message</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key><array><string>com.apple.mail.email</string></array>
+            <key>CFBundleTypeExtensions</key><array><string>eml</string></array>
           </dict>
-          {{end}}
         </array>
-        {{end}}
         {{if .Info.Protocols}}
         <key>CFBundleURLTypes</key>
         <array>

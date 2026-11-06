@@ -100,6 +100,7 @@ func TestSidecarCallTimeouts(t *testing.T) {
 		"backup.export":               30 * time.Second,
 		"backup.import":               30 * time.Second,
 		"unknown.sidecarCall":         5 * time.Second,
+		"eml.read":                    2 * time.Minute,
 	}
 	for method, want := range tests {
 		if got := sidecarCallTimeout(method); got != want {

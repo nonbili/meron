@@ -2,8 +2,9 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap uap3 rescap">
 
   <!--
     Publisher MUST match the subject of the certificate used to sign the .appx.
@@ -50,6 +51,12 @@
             <uap:DisplayName>Email link</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
+        <uap3:Extension Category="windows.fileTypeAssociation">
+          <uap3:FileTypeAssociation Name="eml" Parameters="&quot;%1&quot;">
+            <uap:DisplayName>Email message</uap:DisplayName>
+            <uap:SupportedFileTypes><uap:FileType>.eml</uap:FileType></uap:SupportedFileTypes>
+          </uap3:FileTypeAssociation>
+        </uap3:Extension>
       </Extensions>
     </Application>
   </Applications>

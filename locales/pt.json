@@ -1,4 +1,5 @@
 {
+  "eml.open": "Abrir ficheiro EML…",
   "contacts.notes": "Notas",
   "contacts.notesPlaceholder": "Adicionar uma nota…",
   "contacts.markdownHint": "Suporta Markdown. As notas são guardadas neste dispositivo.",

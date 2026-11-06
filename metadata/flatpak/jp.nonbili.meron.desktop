@@ -1,8 +1,8 @@
 [Desktop Entry]
 Name=Meron
 Comment=Modern mail and feed client
-Exec=/app/bin/meron %u
+Exec=/app/bin/meron %U
 Type=Application
 Categories=Network;Email;Feed;
 Icon=jp.nonbili.meron
-MimeType=x-scheme-handler/mailto;
+MimeType=x-scheme-handler/mailto;message/rfc822;

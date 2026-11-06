@@ -36,6 +36,19 @@ pub(crate) async fn dispatch(
         "mcp.delete" => meron_core::mcp_mail::delete(engine, p.clone()).await,
         "mcp.organize" => meron_core::mcp_mail::organize(engine, p.clone()).await,
         "ping" => Ok(ping_response()),
+        "eml.read" => {
+            let path = crate::sidecar::params::req_str(p, "path")?;
+            let session = crate::sidecar::params::req_str(p, "session")?;
+            let message = tokio::task::spawn_blocking(move || {
+                meron_core::eml::read(
+                    std::path::Path::new(&path),
+                    &session,
+                    &meron_core::parse::media_root(),
+                )
+            })
+            .await??;
+            Ok(serde_json::to_value(message)?)
+        }
         "reminders.list" | "reminders.claim" | "reminders.skipPast" | "reminders.acknowledge" => {
             meron_core::reminders::dispatch(&engine.db.lock().unwrap(), &req.method, p)
         }

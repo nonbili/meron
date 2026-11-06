@@ -41,8 +41,16 @@ type App struct {
 	windowSaveTimer *time.Timer
 	windowStatePath string
 
-	// At most one bulk .eml export runs at a time; emlExportCancel is non-nil
-	// for as long as it does.
+	// Document windows have their own lifecycle and never use the main window's
+	// close-to-tray or persisted geometry.
+	emlStartOnce sync.Once
+	emlOpenMu    sync.Mutex
+	emlMu        sync.Mutex
+	emlReaders   map[string]*emlReader
+	emlReady     bool
+	pendingEml   []string
+
+	// At most one bulk .eml export runs at a time.
 	emlExportMu     sync.Mutex
 	emlExportCancel context.CancelFunc
 
@@ -135,6 +143,7 @@ func (a *App) Startup(ctx context.Context) {
 	} else {
 		a.logf("core started")
 	}
+	_ = os.RemoveAll(filepath.Join(mediaDir(), "_eml"))
 	a.startMCP()
 	a.setupNotificationListener()
 	go a.runReminders()
@@ -160,8 +169,9 @@ func (a *App) onSystemResumed() {
 // launched again, so a window closed to the tray is found again from the app
 // launcher instead of the launch appearing to do nothing.
 func (a *App) HandleSecondInstanceLaunch(args []string) {
+	eml := a.openEmlArguments(args)
 	urls := mailtoURLs(args)
-	if len(urls) == 0 {
+	if len(urls) == 0 && !eml {
 		a.showMainWindow()
 		return
 	}
@@ -179,6 +189,7 @@ func (a *App) Shutdown(ctx context.Context) {
 	if a.sidecar != nil {
 		a.sidecar.Close()
 	}
+	_ = os.RemoveAll(filepath.Join(mediaDir(), "_eml"))
 	a.closeNotificationListener()
 	a.closeResumeListener()
 	a.closeAppearanceListener()
@@ -228,6 +239,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.pickFiles(payload, true, true)
 	case "system.readDroppedFiles":
 		return a.readDroppedFilesCommand(payload)
+	case "eml.open", "eml.get", "eml.close", "eml.saveAttachment":
+		return a.emlCommand(command, payload)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
 	case "core.status":

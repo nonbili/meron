@@ -50,12 +50,12 @@ func installDesktopEntry() {
 Type=Application
 Name=Meron
 Comment=Messages that spark joy
-Exec=%s %%u
+Exec=%s %%U
 Icon=meron
 Terminal=false
 Categories=Office;Network;Email;
 StartupWMClass=meron
-MimeType=x-scheme-handler/mailto;
+MimeType=x-scheme-handler/mailto;message/rfc822;
 `, desktopExecArg(exe))
 	writeIfChanged(desktopPath, []byte(desktop))
 

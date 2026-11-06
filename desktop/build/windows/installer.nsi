@@ -27,6 +27,9 @@ Section
   WriteRegStr HKLM "Software\Classes\mailto" "" "URL:MailTo Protocol"
   WriteRegStr HKLM "Software\Classes\mailto" "URL Protocol" ""
   WriteRegStr HKLM "Software\Classes\mailto\shell\open\command" "" '$\"$INSTDIR\meron.exe$\" $\"%1$\"'
+  WriteRegStr HKLM "Software\Classes\Meron.EML" "" "Email message"
+  WriteRegStr HKLM "Software\Classes\Meron.EML\shell\open\command" "" '$\"$INSTDIR\meron.exe$\" $\"%1$\"'
+  WriteRegStr HKLM "Software\Classes\.eml\OpenWithProgids" "Meron.EML" ""
   WriteUninstaller "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\meronMeron" "DisplayName" "Meron"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\meronMeron" "DisplayVersion" "${VERSION}"
@@ -39,6 +42,8 @@ Section "Uninstall"
   StrCmp $0 '$\"$INSTDIR\meron.exe$\" $\"%1$\"' 0 protocol_cleanup_done
   DeleteRegKey HKLM "Software\Classes\mailto"
 protocol_cleanup_done:
+  DeleteRegValue HKLM "Software\Classes\.eml\OpenWithProgids" "Meron.EML"
+  DeleteRegKey HKLM "Software\Classes\Meron.EML"
   Delete "$SMPROGRAMS\Meron.lnk"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\meronMeron"
   Delete "$INSTDIR\meron.exe"

@@ -112,15 +112,26 @@ func (a *App) storageUsage() (any, error) {
 	}, nil
 }
 
-// storageClearCache deletes the attachment cache and recreates the empty dir so
-// the sidecar can keep writing. It never touches the DB.
+// storageClearCache removes refetchable attachment media while preserving open
+// document sessions and the database.
 func (a *App) storageClearCache() (any, error) {
 	dir := mediaDir()
-	if err := os.RemoveAll(dir); err != nil {
-		return nil, err
-	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		// External reader media is the window's working copy, not a refetchable
+		// mailbox cache. Its owner removes it when the reader closes.
+		if entry.Name() == "_eml" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return nil, err
+		}
 	}
 	return a.storageUsage()
 }

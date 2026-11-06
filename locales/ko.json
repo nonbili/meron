@@ -1,4 +1,5 @@
 {
+  "eml.open": "EML 파일 열기…",
   "contacts.notes": "메모",
   "contacts.notesPlaceholder": "메모 추가…",
   "contacts.markdownHint": "Markdown 지원. 메모는 이 기기에 저장됩니다.",

@@ -116,7 +116,6 @@ if (os === 'darwin') {
   )
   // Preserve the independent MAS build number from the checked-in template.
   let plist = await readFile(resolve(desktop, 'build/darwin/Info.plist'), 'utf8')
-  plist = plist.replace(/{{if \.Info\.FileAssociations}}[\s\S]*?{{end}}\s*<\/array>\s*{{end}}/, '')
   plist = plist
     .replace(/{{if \.Info\.Protocols}}/g, '')
     .replace(/{{range \.Info\.Protocols}}/g, '')

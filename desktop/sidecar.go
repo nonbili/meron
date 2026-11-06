@@ -438,7 +438,7 @@ func sidecarCallTimeout(method string) time.Duration {
 	// one to the target.
 	// Moving into or out of local folders downloads or uploads every message
 	// in full; so does a move between accounts.
-	case "messages.saveRawBatch", "messages.copy", "messages.move":
+	case "eml.read", "messages.saveRawBatch", "messages.copy", "messages.move":
 		return 2 * time.Minute
 	// A snapshot or a restore copies every archived message.
 	case "account.localBackup", "account.localRestore":

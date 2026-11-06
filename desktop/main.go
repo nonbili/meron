@@ -52,7 +52,7 @@ func main() {
 		Name:                        appTitle(),
 		Icon:                        appIconPNG,
 		Windows:                     application.WindowsOptions{WndClass: "wailsWindow"},
-		Mac:                         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		Mac:                         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},
 		Services:                    []application.Service{application.NewService(&desktopService{app: app})},
 		DisableDefaultSignalHandler: true,
 		ShouldQuit:                  app.shouldQuit,
@@ -63,7 +63,7 @@ func main() {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: appUniqueID(),
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				app.HandleSecondInstanceLaunch(data.Args)
+				go app.HandleSecondInstanceLaunch(emlArgumentsAt(data.Args, data.WorkingDir))
 			},
 		},
 		OnShutdown: func() { app.Shutdown(app.ctx) },
@@ -71,6 +71,10 @@ func main() {
 	desktopruntime.App = native
 	native.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) {
 		app.openMailtoURL(event.Context().URL())
+	})
+	native.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
+		path := event.Context().Filename()
+		go app.openEmlArguments([]string{path})
 	})
 	options := application.WebviewWindowOptions{
 		Title: appTitle(), Width: app.window.Width, Height: app.window.Height,
@@ -85,14 +89,13 @@ func main() {
 	desktopruntime.Window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
 		alignNativeTitlebar()
 		maximiseOnDomReady(app.ctx, startMaximised)
+		app.emlStartOnce.Do(app.startEmlReaders)
 	})
 	desktopruntime.Window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		if hideOnCloseNatively && !app.quitting.Load() && app.closeToTray.Load() {
-			app.hideMainWindow()
-			event.Cancel()
-		} else if app.beforeClose(app.ctx) {
-			event.Cancel()
-		}
+		// Keep the main window alive until the whole application exits. A
+		// document window must never leave a destroyed main window behind.
+		event.Cancel()
+		app.mainWindowCloseRequested()
 	})
 	if err := native.Run(); err != nil {
 		log.Fatal(err)

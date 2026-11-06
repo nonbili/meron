@@ -1269,7 +1269,7 @@ pub fn prune_media_cache(root: &Path) {
     let cap = media_cache_cap();
     let mut files = Vec::new();
     let mut total = 0u64;
-    collect_media_files(root, &mut files, &mut total);
+    collect_media_files(root, &mut files, &mut total, true);
     if total <= cap {
         return;
     }
@@ -1290,15 +1290,21 @@ fn collect_media_files(
     dir: &Path,
     out: &mut Vec<(PathBuf, u64, std::time::SystemTime)>,
     total: &mut u64,
+    skip_document_sessions: bool,
 ) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
+        // Reader sessions have no refetchable mailbox source and are reclaimed
+        // on close/startup. Ordinary cache eviction must leave them intact.
+        if skip_document_sessions && entry.file_name() == "_eml" {
+            continue;
+        }
         let path = entry.path();
         let Ok(meta) = entry.metadata() else { continue };
         if meta.is_dir() {
-            collect_media_files(&path, out, total);
+            collect_media_files(&path, out, total, false);
         } else if meta.is_file() {
             *total += meta.len();
             out.push((
@@ -2330,8 +2336,7 @@ Content-ID: <logo@x>\r\n\
 \r\n\
 <svg xmlns=\"http://www.w3.org/2000/svg\"/>\r\n\
 --sep--\r\n";
-        let root =
-            std::env::temp_dir().join(format!("meron-svg-key-test-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("meron-svg-key-test-{}", std::process::id()));
         let ctx = MediaCtx {
             root: root.clone(),
             account: "acct".to_string(),
@@ -2341,7 +2346,10 @@ Content-ID: <logo@x>\r\n\
         let msg = parse_message(raw, Some(&ctx));
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(msg.attachments.len(), 1);
-        assert_eq!(msg.attachments[0].key.as_deref(), Some("acct/INBOX/7/0.svg"));
+        assert_eq!(
+            msg.attachments[0].key.as_deref(),
+            Some("acct/INBOX/7/0.svg")
+        );
     }
 
     #[test]
@@ -2880,5 +2888,31 @@ Content-Type: text/html; charset=utf-8\r\n\
             sent_envelope_of(b"\x00not a message"),
             SentEnvelope::default()
         );
+    }
+}
+
+#[cfg(test)]
+mod document_media_cache_tests {
+    use super::*;
+
+    #[test]
+    fn pruning_preserves_open_document_media() {
+        let root =
+            std::env::temp_dir().join(format!("meron-reader-prune-{}", uuid::Uuid::new_v4()));
+        let document = root.join("_eml/reader/1/attachment.png");
+        let cached = root.join("account/INBOX/1/attachment.png");
+        for path in [&document, &cached] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        }
+        std::fs::write(&document, b"reader attachment").unwrap();
+        // A sparse file exceeds the cache cap without allocating a GiB of data.
+        std::fs::File::create(&cached)
+            .unwrap()
+            .set_len(media_cache_cap() + 1)
+            .unwrap();
+        prune_media_cache(&root);
+        assert_eq!(std::fs::read(&document).unwrap(), b"reader attachment");
+        assert!(!cached.exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
