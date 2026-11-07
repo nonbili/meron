@@ -239,3 +239,21 @@ it('refreshes a cached conversation on activation without rereading hidden tabs'
   expect(reads.filter((id) => id === 'b').length).toBe(bReads)
   expect(threadData$.a.messages[0].body.peek()).toBe('After activation')
 })
+
+it('reserves room for the composer when it mounts together with the conversation', async () => {
+  accounts$[0].id.set('acc')
+  mail$.threads.set([
+    { ...a, account_id: 'acc' },
+    { ...b, account_id: 'acc' },
+  ])
+  ;(window as any).go.main.App.Invoke = async (command: string, payload: any) =>
+    command === 'mail.threadRead' ? { messages: [{ ...message(payload.thread_id), account_id: 'acc' }] } : { ok: true }
+  ui$.selectedThread.set('')
+  const view = render(<MessagePane />)
+  act(() => ui$.selectedThread.set('a'))
+  await waitFor(() => expect(view.container.querySelectorAll('[data-message-id]').length).toBe(1))
+  const host = view.container
+    .querySelector<HTMLElement>('[data-message-scroller]')!
+    .closest<HTMLElement>('[style*="--me-composer-overlap"]')
+  expect(host !== null).toBe(true)
+})
