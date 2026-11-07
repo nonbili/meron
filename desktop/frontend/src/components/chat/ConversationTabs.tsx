@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../../lib/windowSession'
 import { useEffect, useRef, useState } from 'react'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
@@ -158,21 +159,23 @@ export function ConversationTabs() {
               <MessageSquare size={13} className="shrink-0" />
               <span className={labelClass(activeTab === '')}>{t('chat.current')}</span>
             </button>
-            <button
-              onClick={(event) => {
-                event.stopPropagation()
-                closeCurrentConversation()
-              }}
-              className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
-                activeTab === ''
-                  ? ''
-                  : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
-              }`}
-              title={t('chat.closeTab')}
-              aria-label={t('chat.closeTab')}
-            >
-              <X size={11} />
-            </button>
+            {!threadWindowSession && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation()
+                  closeCurrentConversation()
+                }}
+                className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
+                  activeTab === ''
+                    ? ''
+                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+                }`}
+                title={t('chat.closeTab')}
+                aria-label={t('chat.closeTab')}
+              >
+                <X size={11} />
+              </button>
+            )}
           </div>
         )}
         <DndContext
@@ -296,7 +299,7 @@ function TabContextMenu({
     onClose()
     // Tabs first: closing Current hands the pane to a tab still open.
     closeMessageTabsKeepingDrafts(ids.filter((id) => id !== ''))
-    if (ids.includes('')) closeCurrentConversation()
+    if (ids.includes('') && !threadWindowSession) closeCurrentConversation()
   }
   const bulk = [
     { label: t('chat.closeOtherTabs'), ids: entries.filter((id) => id !== tabId) },
@@ -318,15 +321,17 @@ function TabContextMenu({
         event.stopPropagation()
       }}
     >
-      <MenuItem
-        label={t('chat.closeTab')}
-        onClick={() => {
-          if (tabId !== '') {
-            onClose()
-            void closeMessageTab(tabId)
-          } else close([''])
-        }}
-      />
+      {(tabId !== '' || !threadWindowSession) && (
+        <MenuItem
+          label={t('chat.closeTab')}
+          onClick={() => {
+            if (tabId !== '') {
+              onClose()
+              void closeMessageTab(tabId)
+            } else close([''])
+          }}
+        />
+      )}
       {bulk.map((item) => (
         <MenuItem
           key={item.label}

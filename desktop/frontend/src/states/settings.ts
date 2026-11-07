@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 import { ui$ } from './ui'
@@ -537,9 +538,22 @@ const writeSeq = new Map<string, number>()
 export const WRITE_SESSION = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 
 function persistSetting(key: string, value: unknown) {
+  if (threadWindowSession) {
+    void invoke('threadWindow.setSetting', { key, value }).catch(console.error)
+    return
+  }
   const seq = (writeSeq.get(key) ?? 0) + 1
   writeSeq.set(key, seq)
-  void invoke('app.prefsSet', { key, value, seq, session: WRITE_SESSION }).catch(() => {})
+  void invoke('app.prefsSet', { key, value, seq, session: WRITE_SESSION, notify_windows: true }).catch(() => {})
+}
+
+// Apply through hydration to validate/normalise the incoming value, then write
+// once under the main window's session, even when its local value was unchanged.
+export function applyThreadWindowSetting(key: string, value: unknown) {
+  const entry = Object.entries(DB_KEY).find(([, dbKey]) => dbKey === key)
+  if (!entry || threadWindowSession) return
+  hydrateSettings({ [key]: value })
+  persistSetting(key, settings$[entry[0] as keyof typeof DB_KEY].peek())
 }
 
 // The single persistence path: when a field changes, write just that field to
@@ -842,7 +856,18 @@ export function setRemoteImageSender(addr: string, allowed: boolean) {
   const address = normalizeSenderAddr(addr)
   if (!address) return
   const senders = settings$.remoteImageSenders.peek().filter((sender) => sender !== address)
-  settings$.remoteImageSenders.set(allowed ? [...senders, address] : senders)
+  const next = allowed ? [...senders, address] : senders
+  if (threadWindowSession) {
+    // Relay an operation, not the window's possibly stale whole allowlist.
+    const wasHydrating = hydrating
+    hydrating = true
+    try {
+      settings$.remoteImageSenders.set(next)
+    } finally {
+      hydrating = wasHydrating
+    }
+    void invoke('threadWindow.setRemoteSender', { address, allowed }).catch(console.error)
+  } else settings$.remoteImageSenders.set(next)
 }
 
 export function isAccountHiddenFromSideNav(accountId: string): boolean {

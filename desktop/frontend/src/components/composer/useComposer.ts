@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../../lib/windowSession'
 import { standaloneCompose } from '../../lib/composeWindow'
 import { useEffect, useRef, useState } from 'react'
 import { encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
@@ -87,7 +88,7 @@ export function useComposer(tabId: string) {
   const session = sessionRef.current
 
   const [sending, setSending] = useState(false)
-  const [closingWindow, setClosingWindow] = useState(false)
+  const [closingWindow, setClosingWindow] = useState(!!session.savingToClose)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
@@ -130,7 +131,11 @@ export function useComposer(tabId: string) {
   const discardRemoteDraft = async (target: ComposeDraft) => {
     const remote = remoteDraftOf(target)
     if (remote) {
-      if (standaloneCompose) await invoke('composer.discardDraft', { draft: remote, closed: true })
+      if (standaloneCompose || threadWindowSession)
+        await invoke(threadWindowSession ? 'threadWindow.discardDraft' : 'composer.discardDraft', {
+          draft: remote,
+          closed: true,
+        })
       else await discardClosedDraft(remote)
     }
   }
@@ -147,14 +152,14 @@ export function useComposer(tabId: string) {
     setError('')
     const drained = stopSaving()
     const current = latestDraft()
-    if (!standaloneCompose) finishClosingMessageTab(tabId)
+    if (!standaloneCompose && !threadWindowSession) finishClosingMessageTab(tabId)
     try {
       await drained
-      const target = standaloneCompose ? latestDraft() : current
+      const target = standaloneCompose || threadWindowSession ? latestDraft() : current
       if (target) await discardRemoteDraft(target)
-      if (standaloneCompose) finishClosingMessageTab(tabId)
+      if (standaloneCompose || threadWindowSession) finishClosingMessageTab(tabId)
     } catch (err) {
-      if (standaloneCompose) session.savesStopped = false
+      if (standaloneCompose || threadWindowSession) session.savesStopped = false
       const message = contextualErrorMessage(err, t('composer.status.couldNotDiscardDraft'))
       showToast(message, 'error')
     }
@@ -173,10 +178,11 @@ export function useComposer(tabId: string) {
       return
     }
     const save = closeComposeTabKeepingDraft(tabId, discardAndClose)
-    if (standaloneCompose && save) {
+    if ((standaloneCompose || threadWindowSession) && save) {
       setClosingWindow(true)
       try {
-        await save
+        const saved = await save
+        if (threadWindowSession && saved) announceSavedDrafts([saved])
       } finally {
         setClosingWindow(false)
       }
@@ -257,11 +263,12 @@ export function useComposer(tabId: string) {
 
   useEffect(() => {
     if (!draft) return
-    registerComposeSession(tabId, discardAndClose, closeKeepingDraft)
+    registerComposeSession(tabId, discardAndClose, closeKeepingDraft, setClosingWindow)
     // Esc needs this composer's last save, so it goes with the composer; the
     // × still discards a tab whose composer is gone.
     return () => {
       if (session.closeKeepingDraft === closeKeepingDraft) session.closeKeepingDraft = undefined
+      if (session.setClosingState === setClosingWindow) session.setClosingState = undefined
     }
   }, [draft, session, tabId])
 
@@ -812,7 +819,8 @@ export function useComposer(tabId: string) {
       // of it, keeping it hidden — and out of the quick reply — until it's gone.
       const remote = remoteDraftOf(current)
       if (remote) {
-        if (standaloneCompose) await invoke('composer.discardDraft', { draft: remote })
+        if (standaloneCompose || threadWindowSession)
+          await invoke(threadWindowSession ? 'threadWindow.discardDraft' : 'composer.discardDraft', { draft: remote })
         else void discardSentDraft(remote)
       }
       if (!warnUndelivered(undelivered)) showToast(t('chat.messageSent'))

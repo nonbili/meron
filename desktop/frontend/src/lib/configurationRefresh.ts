@@ -1,6 +1,6 @@
 import { invoke } from './bridge'
 import { accounts$ } from '../states/accounts'
-import { hydrateSettings } from '../states/settings'
+import { hydrateSettings, WRITE_SESSION } from '../states/settings'
 import type { Account } from '../types'
 
 // Track each key separately: a later account-only event must not discard an
@@ -14,7 +14,10 @@ export function configurationRefresh() {
     dispose() {
       active = false
     },
-    async refresh(detail?: { keys?: string[] }) {
+    async refresh(detail?: { keys?: string[]; session?: string }) {
+      // Our own setting is already current in memory. Reading it back can
+      // overwrite a newer local edit whose write is still in flight.
+      if (detail?.session === WRITE_SESSION) return
       const current = ++revision
       const keys = detail?.keys || []
       if (!keys.length) {

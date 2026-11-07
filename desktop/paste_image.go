@@ -375,6 +375,11 @@ func (a *App) writeChatWallpaperFile(payload map[string]any) (any, error) {
 // attachment subdirectories (written by the sidecar) are never touched — only
 // regular files at the root, which are exclusively writeMediaFile's output.
 func (a *App) pruneComposerMedia(payload map[string]any) (any, error) {
+	a.composeOpenMu.Lock()
+	defer a.composeOpenMu.Unlock()
+	if a.hasThreadWindows() {
+		return map[string]any{"removed": 0}, nil
+	}
 	keep := map[string]bool{}
 	if raw, ok := payload["keys"].([]any); ok {
 		for _, k := range raw {

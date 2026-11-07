@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { configurationRefresh } from './configurationRefresh'
-import { settings$ } from '../states/settings'
+import { settings$, WRITE_SESSION } from '../states/settings'
 import { accounts$ } from '../states/accounts'
 import type { Account } from '../types'
 
@@ -83,5 +83,28 @@ test('an engine restart cannot empty existing accounts and settings refresh inde
   await refresh.refresh({ keys: ['spell_check'] })
   expect(settings$.spellCheck.get()).toBe(false)
   expect(accounts$.get()).toEqual([account])
+  refresh.dispose()
+})
+
+test('does not read back its own setting writes over newer local edits', async () => {
+  let reads = 0
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (command: string) => {
+          if (command === 'app.prefsGet') reads++
+          return { prefs: { signature: 'older text' } }
+        },
+      },
+    },
+  }
+  const refresh = configurationRefresh()
+  settings$.signature.set('newer local text')
+  await refresh.refresh({ keys: ['signature'], session: WRITE_SESSION })
+  expect(reads).toBe(0)
+  expect(settings$.signature.peek()).toBe('newer local text')
+  await refresh.refresh({ keys: ['signature'], session: 'another-window' })
+  expect(reads).toBe(1)
+  expect(settings$.signature.peek()).toBe('older text')
   refresh.dispose()
 })

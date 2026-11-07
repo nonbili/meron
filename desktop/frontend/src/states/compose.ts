@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import {
   standaloneCompose,
   STANDALONE_COMPOSE_KEY,
@@ -278,6 +279,53 @@ function popToPreviousTab(closedId: string, remaining: MessageTab[]): string {
     tabHistory.pop()
   }
   return ''
+}
+
+// Recover auxiliary editor buffers into the main session after a restart.
+export async function restoreThreadWindowDrafts() {
+  if (threadWindowSession || standaloneCompose) return
+  const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter(
+    (key): key is string => !!key && /^meron-thread-.+-(tabs|view)$/.test(key),
+  )
+  let sessions: string[]
+  try {
+    sessions = await invoke<string[]>('threadWindow.sessions')
+  } catch {
+    return
+  }
+  if (!Array.isArray(sessions)) return
+  for (const key of keys) {
+    const [, session, kind] = key.match(/^meron-thread-(.+)-(tabs|view)$/)!
+    if (sessions.includes(session)) continue
+    if (kind === 'view') {
+      if (localStorage.getItem(key.replace(/-view$/, '-tabs')) === null) localStorage.removeItem(key)
+      continue
+    }
+    const recovered = loadPersistedTabs(key).filter((tab) => tab.compose)
+    const current = compose$.tabs.peek()
+    const held = new Set(
+      current.flatMap((tab) => (tab.compose ? [normalizeMessageId(tab.compose.draftMessageId)] : [])),
+    )
+    const extra = recovered.filter((tab) => !held.has(normalizeMessageId(tab.compose!.draftMessageId)))
+    if (extra.length) compose$.tabs.set([...current, ...extra])
+    try {
+      const persisted = loadPersistedTabs(COMPOSE_TABS_KEY)
+      if (
+        recovered.every((tab) =>
+          persisted.some(
+            (saved) =>
+              saved.compose &&
+              normalizeMessageId(saved.compose.draftMessageId) === normalizeMessageId(tab.compose!.draftMessageId),
+          ),
+        )
+      ) {
+        localStorage.removeItem(key)
+        localStorage.removeItem(key.replace(/-tabs$/, '-view'))
+      }
+    } catch {
+      /* Leave the recovery buffer intact if storage is unavailable. */
+    }
+  }
 }
 
 // Delete orphaned inline-image files from earlier sessions. writeMediaFile
@@ -954,6 +1002,9 @@ function activateOpenDraftCompose(draft: Message): boolean {
  */
 async function reopenAfterDraftSaves(draft: Message): Promise<boolean> {
   const [saved] = await draftSavesSettled((compose) => composeHoldsDraft(compose, draft))
+  // An auxiliary editor released its ownership when that save closed the tab.
+  // Route its later reopen through the main window's ownership checks.
+  if (threadWindowSession) return activateOpenDraftCompose(draft)
   saved?.reopen()
   return !!saved || activateOpenDraftCompose(draft)
 }
@@ -978,6 +1029,16 @@ function focusStandaloneDraft(draft: Message): Promise<boolean> | null {
 
 async function openDraftMessageInCompose(draft: Message) {
   if (activateOpenDraftCompose(draft)) return true
+  if (
+    (await invoke<boolean>('threadWindow.focusDraft', { draft_id: draft.message_id || draft.id }).catch(
+      () => false,
+    )) === true
+  )
+    return true
+  if (threadWindowSession) {
+    await invoke('threadWindow.openDraft', { draft })
+    return true
+  }
   const focus = focusStandaloneDraft(draft)
   if (focus && (await focus)) return true
   if (!standaloneCompose) {
@@ -1048,6 +1109,26 @@ export async function openDraftCompose(thread: Message) {
   return true
 }
 
+// A draft clicked in another webview can already belong to the main window's
+// quick reply, including newer unsaved text. Focus that owner without hydrating
+// a second editor from its older server copy.
+export async function openDraftFromThreadWindow(draft: Message) {
+  const draftId = normalizeMessageId(draft.message_id || draft.id)
+  const heldId = normalizeMessageId(compose$.quickReplyDraftId.peek())
+  const owner = compose$.quickReplyDraftThreadId.peek()
+  if (draftId && heldId === draftId && owner) {
+    ui$.calendarOpen.set(false)
+    ui$.contactsOpen.set(false)
+    compose$.conversationThread.set(owner)
+    compose$.activeTab.set('')
+    ui$.selectedThread.set(owner)
+    ui$.mobilePane.set('conversation')
+    ui$.replyFocus.set(ui$.replyFocus.peek() + 1)
+    return true
+  }
+  return openDraftCompose(draft)
+}
+
 export async function openDraftConversationOrCompose(thread: Message) {
   if (!isDraftFolder(thread.folder_id, thread.account_id)) return false
 
@@ -1061,6 +1142,15 @@ export async function openDraftConversationOrCompose(thread: Message) {
     const messages = result.messages ?? []
     const draft =
       newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread
+
+    // A saved reply already open in another window belongs to its editor,
+    // even when this Drafts row would normally open the inline conversation.
+    if (
+      (await invoke<boolean>('threadWindow.focusDraft', { draft_id: draft.message_id || draft.id }).catch(
+        () => false,
+      )) === true
+    )
+      return true
 
     if (draftShouldOpenConversation(messages, draft)) {
       // This one opens a conversation, not an editor: hand the draft to the
@@ -1355,66 +1445,94 @@ export function closeComposeTabKeepingDraft(
   const fetches = [...session.attachmentFetches]
   if (fetches.length === 0 && isUnwrittenNewMessage(current)) return discard().then(() => null)
   // Stop autosaving and let whatever is already running finish first.
+  if (standaloneCompose || threadWindowSession) {
+    session.savingToClose = true
+    session.setClosingState?.(true)
+  }
   session.savesStopped = true
   const drained = session.saveChain
-  if (!standaloneCompose) finishClosingMessageTab(tabId)
+  if (!standaloneCompose && !threadWindowSession) finishClosingMessageTab(tabId)
   const snapshot = current
-  const save = drained.then(async (): Promise<SavedDraft | null> => {
-    // A still-mounted standalone editor adopts an id allocated by the save we
-    // just drained. Its final save must replace that copy, not allocate another.
-    const current = standaloneCompose
-      ? (compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose ?? snapshot)
-      : snapshot
-    // The attachments still on their way, which the closed tab can't take in.
-    const fetched = (await Promise.all(fetches)).flat()
-    const closing = { ...current, attachments: [...current.attachments, ...fetched] }
-    try {
-      let content = composedContent(current)
-      let attachments = closing.attachments
-      if (current.rich) {
-        const prepared = await prepareInlineImages(content, attachments)
-        content = inlineRichStyles(prepared.html)
-        attachments = prepared.attachments
+  const save = drained
+    .then(async (): Promise<SavedDraft | null> => {
+      // A still-mounted standalone editor adopts an id allocated by the save we
+      // just drained. Its final save must replace that copy, not allocate another.
+      const current =
+        standaloneCompose || threadWindowSession
+          ? (compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose ?? snapshot)
+          : snapshot
+      // The attachments still on their way, which the closed tab can't take in.
+      const fetched = (await Promise.all(fetches)).flat()
+      const closing = { ...current, attachments: [...current.attachments, ...fetched] }
+      try {
+        let content = composedContent(current)
+        let attachments = closing.attachments
+        if (current.rich) {
+          const prepared = await prepareInlineImages(content, attachments)
+          content = inlineRichStyles(prepared.html)
+          attachments = prepared.attachments
+        }
+        const draftMessageId = await saveComposedDraft({
+          accountId: current.accountId,
+          from: current.fromEmail,
+          to: current.to.trim(),
+          cc: current.cc.trim(),
+          bcc: current.bcc.trim(),
+          replyTo: current.replyTo.trim(),
+          subject: current.subject.trim(),
+          rich: current.rich,
+          content,
+          inReplyTo: current.inReplyTo,
+          references: current.references,
+          draftMessageId: current.draftMessageId,
+          attachments,
+          encrypt: current.encrypt,
+          decryptedInBody: current.decryptedInBody,
+        })
+        if (standaloneCompose || threadWindowSession) finishClosingMessageTab(tabId)
+        return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
+      } catch (err) {
+        console.error('Saving the draft on close failed:', err)
+        // Reopened under the id the failed save was writing, so a copy that
+        // landed anyway is replaced by the next save rather than duplicated.
+        const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
+        if (standaloneCompose || threadWindowSession) {
+          session.savesStopped = false
+          updateComposeDraft(tabId, { draftMessageId })
+        } else restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
+        showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
+        return null
       }
-      const draftMessageId = await saveComposedDraft({
-        accountId: current.accountId,
-        from: current.fromEmail,
-        to: current.to.trim(),
-        cc: current.cc.trim(),
-        bcc: current.bcc.trim(),
-        replyTo: current.replyTo.trim(),
-        subject: current.subject.trim(),
-        rich: current.rich,
-        content,
-        inReplyTo: current.inReplyTo,
-        references: current.references,
-        draftMessageId: current.draftMessageId,
-        attachments,
-        encrypt: current.encrypt,
-        decryptedInBody: current.decryptedInBody,
-      })
-      if (standaloneCompose) finishClosingMessageTab(tabId)
-      return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
-    } catch (err) {
-      console.error('Saving the draft on close failed:', err)
-      // Reopened under the id the failed save was writing, so a copy that
-      // landed anyway is replaced by the next save rather than duplicated.
-      const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
-      if (standaloneCompose) {
-        session.savesStopped = false
-        updateComposeDraft(tabId, { draftMessageId })
-      } else restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
-      showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
-      return null
-    }
-  })
+    })
+    .finally(() => {
+      if (standaloneCompose || threadWindowSession) {
+        session.savingToClose = false
+        session.setClosingState?.(false)
+      }
+    })
   trackDraftSave(save, current)
+  if ((standaloneCompose || threadWindowSession) && !session.closing) {
+    // Grouped closes call this helper directly. Keep every other exit (tab ×,
+    // window close) behind the same final save instead of racing a discard.
+    const closing = save
+      .then(() => {})
+      .finally(() => {
+        if (session.closing === closing) session.closing = undefined
+      })
+    session.closing = closing
+  }
   return save
 }
 
 /** Says where closed drafts went, with a way to bring them all back. */
 export function announceSavedDrafts(saved: SavedDraft[]) {
   if (saved.length === 0) return
+  if (threadWindowSession) {
+    // Saved drafts resume through their bubble and the main window. A local
+    // snapshot action could reopen a draft its quick reply has since claimed.
+    showToast(t('composer.status.savedToDrafts'))
+    return
+  }
   showUndoToast(
     t('composer.status.savedToDrafts'),
     () => {
@@ -1651,6 +1769,12 @@ export async function saveComposedDraft(args: {
     !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
       ? await allocateMessageIdentity(args.accountId, true)
       : args.draftMessageId
+  if (threadWindowSession)
+    await invoke('threadWindow.reserveDraft', {
+      session: threadWindowSession,
+      previous_id: args.draftMessageId,
+      draft_id: draftMessageId,
+    })
   const encrypt = args.decryptedInBody ? true : args.encrypt
   const request = invoke('mail.saveDraft', {
     encrypt: !!encrypt,

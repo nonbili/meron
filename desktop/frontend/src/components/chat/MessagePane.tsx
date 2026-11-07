@@ -1,8 +1,10 @@
+import { threadWindowSession } from '../../lib/windowSession'
+import { openThreadWindow } from '../../lib/threadWindow'
 import { retainThreadView } from '../../states/threadView'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { openComposeTab } from '../../states/compose'
+import { openComposeTab, openReplyInFullEditor } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { withoutHydratedQuickReplyDraft } from '../../states/quickReply'
 import { ui$ } from '../../states/ui'
@@ -43,7 +45,8 @@ import { openCorrespondentMail } from '../../states/kanban'
 import { isRssAccount } from '../../lib/threadActions'
 import type { Message } from '../../types'
 
-export function MessagePane() {
+export function MessagePane({ standalone = false }: { standalone?: boolean }) {
+  const { t } = useTranslation()
   const tabs = useValue(compose$.tabs)
   const activeTab = useValue(compose$.activeTab)
   const currentThread = useValue(compose$.conversationThread)
@@ -75,7 +78,7 @@ export function MessagePane() {
     mayBeLink,
     dropHandlers,
   } = useFileDrop(addQuickReplyAttachments, {
-    enabled: showComposer && !documentTab,
+    enabled: showComposer && !documentTab && !standalone,
     scope: selectedThread,
   })
 
@@ -91,7 +94,7 @@ export function MessagePane() {
 
   return (
     <div
-      className={`relative flex flex-1 flex-col overflow-hidden ${mobilePane === 'conversation' ? 'max-[768px]:flex' : 'max-[768px]:hidden'}`}
+      className={`relative flex flex-1 flex-col overflow-hidden ${standalone || mobilePane === 'conversation' ? 'max-[768px]:flex' : 'max-[768px]:hidden'}`}
     >
       <ConversationTabs />
       <div
@@ -127,7 +130,16 @@ export function MessagePane() {
             <FrostedBand fade="top" className="bottom-0 left-0 right-3 top-5" />
             <div className="relative">
               <ConversationViewContext value={{ state: thread$, active: !documentTab, scope: selectedThread }}>
-                <QuickReplyComposer />
+                {standalone ? (
+                  <button
+                    className="pointer-events-auto m-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white cursor-pointer"
+                    onClick={() => openReplyInFullEditor()}
+                  >
+                    {t('chat.actions.reply')}
+                  </button>
+                ) : (
+                  <QuickReplyComposer />
+                )}
               </ConversationViewContext>
             </div>
           </div>
@@ -385,7 +397,10 @@ function ConversationPane({
         <div className="flex shrink-0 items-center justify-between bg-accent/10 dark:bg-accent/15 px-4 py-2.5 text-xs border-b border-border select-none transition-colors">
           <span className="text-secondary/90 font-medium">{t('chat.branchNotice')}</span>
           <button
-            onClick={() => ui$.selectedThread.set(activeThread.original_thread_id!)}
+            onClick={() => {
+              if (threadWindowSession) void openThreadWindow(activeThread.original_thread_id!)
+              else ui$.selectedThread.set(activeThread.original_thread_id!)
+            }}
             className="flex items-center gap-1 font-semibold text-accent hover:underline cursor-pointer"
           >
             <span>{t('chat.viewOriginalTopic')}</span>
@@ -421,7 +436,10 @@ function ConversationPane({
       style={conversationWallpaper.style}
       className={`flex-1 flex items-center justify-center p-6 ${conversationWallpaper.className}`}
     >
-      <EmptyState title={t('empty.noConversationSelected')} text={t('empty.noConversationSelectedText')} />
+      <EmptyState
+        title={t(threadWindowSession ? 'chat.threadUnavailable' : 'empty.noConversationSelected')}
+        text={threadWindowSession ? '' : t('empty.noConversationSelectedText')}
+      />
     </div>
   )
 

@@ -1,3 +1,4 @@
+import { threadWindowSession } from './windowSession'
 import { standaloneCompose } from './composeWindow'
 
 // The Wails IPC bridge: every backend call goes through here. In the packaged
@@ -10,8 +11,9 @@ export async function invoke<T>(command: string, payload: unknown = {}): Promise
   }
   return wailsApp.Invoke(
     command,
-    standaloneCompose && ['system.pickFiles', 'system.pickImageFiles', 'system.pickImageFile'].includes(command)
-      ? { ...(payload as object), compose_window: true }
+    (standaloneCompose || threadWindowSession) &&
+      ['system.pickFiles', 'system.pickImageFiles', 'system.pickImageFile'].includes(command)
+      ? { ...(payload as object), compose_window: standaloneCompose, thread_window: threadWindowSession }
       : payload,
   )
 }

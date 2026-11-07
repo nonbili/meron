@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
   Archive,
+  ExternalLink,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
@@ -24,6 +25,8 @@ import {
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { printThread } from '../../lib/printMail'
+import { openThreadWindow } from '../../lib/threadWindow'
+import { threadWindowSession } from '../../lib/windowSession'
 import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
 import { showToast, ui$ } from '../../states/ui'
@@ -61,7 +64,7 @@ export function ConversationHeader({
   activeThread: Message
   desktopSearchInputRef: RefObject<HTMLInputElement | null>
 }) {
-  const { state: thread$, active: viewActive } = useConversationView()
+  const { state: thread$, active: viewActive, scope } = useConversationView()
   const { t } = useTranslation()
   const account = useValue(accounts$).find((acc) => acc.id === activeThread.account_id)
   const isRSS = isRssAccount(account, activeThread.account_id)
@@ -127,6 +130,17 @@ export function ConversationHeader({
   // right-click on the blank part of the conversation, at the pointer.
   const actionItems = (
     <>
+      {!threadWindowSession && (
+        <MenuItem
+          icon={<ExternalLink size={15} />}
+          label={t('threads.actions.openInNewWindow')}
+          onClick={() => {
+            void openThreadWindow(activeThread.thread_id, activeThread, scope)
+            closeActionMenus()
+          }}
+        />
+      )}
+
       <button
         onClick={() => {
           if (account) thread$.conversationModeOverrides[account.id].set('html')
@@ -284,13 +298,15 @@ export function ConversationHeader({
             aria-label={t('chat.actions.printThread')}
           />
         )}
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-hover text-secondary min-[769px]:hidden cursor-pointer"
-          onClick={() => ui$.mobilePane.set('threads')}
-          title={t('chat.backToChats')}
-        >
-          <ChevronLeft size={20} />
-        </button>
+        {!threadWindowSession && (
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-hover text-secondary min-[769px]:hidden cursor-pointer"
+            onClick={() => ui$.mobilePane.set('threads')}
+            title={t('chat.backToChats')}
+          >
+            <ChevronLeft size={20} />
+          </button>
+        )}
 
         {showCloseConversation && (
           <button

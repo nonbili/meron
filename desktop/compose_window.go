@@ -18,6 +18,7 @@ type composeWindow struct {
 	window            emlReaderWindow
 	closing           atomic.Bool
 	draftID           string
+	session           string
 	closeRequestedAt  time.Time
 	closeRequest      uint64
 	closeAcknowledged bool
@@ -114,6 +115,11 @@ func (a *App) composeWindowCommand(command string, payload map[string]any) (any,
 	case "composer.claimDraft":
 		id, _ := payload["draft_id"].(string)
 		claimed := id != "" && !a.mainComposeDrafts[normalizeComposeDraftID(id)]
+		for _, reader := range a.threadWindows {
+			if reader.ownsDraft(id) {
+				claimed = false
+			}
+		}
 		if claimed {
 			composer.draftID = id
 		}
@@ -179,6 +185,10 @@ func (a *App) composeWindowCloseRequested(composer *composeWindow) bool {
 	}
 	request := composer.closeRequest
 	a.composeMu.Unlock()
-	desktopruntime.EventsEmit(a.ctx, "composer.closeRequested", map[string]any{"request": request})
+	event := "composer.closeRequested"
+	if composer.session != "" {
+		event = "threadWindow.closeRequested"
+	}
+	desktopruntime.EventsEmit(a.ctx, event, map[string]any{"request": request, "session": composer.session})
 	return true
 }

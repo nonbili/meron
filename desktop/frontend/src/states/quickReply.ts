@@ -1,3 +1,5 @@
+import { threadWindowSession } from '../lib/windowSession'
+import { externalThreadDrafts$ } from '../lib/windowSession'
 import { externalComposeDraft$ } from '../lib/composeWindow'
 import type { Message } from '../types'
 import { contextualErrorMessage } from '../lib/errors'
@@ -568,6 +570,7 @@ function quickReplyCanHoldDraft(draft: Message): { added: string[] } | null {
 // being forced into the full editor. No-op when the tail message isn't a
 // draft, or is already the one loaded.
 function hydrateQuickReplyFromTailDraft(messages: Message[]) {
+  if (threadWindowSession) return
   const activeThreadId = ui$.selectedThread.peek()
   if (!activeThreadId) return
   const inThread = messages.filter((message) => message.thread_id === activeThreadId)
@@ -744,7 +747,7 @@ async function retrySentDraftDiscard(id: string, draft: SentDraft, delays: numbe
 export function draftOpenInComposeTab(draftId: string): boolean {
   if (!draftId) return false
   const id = normalizeMessageId(draftId)
-  if (normalizeMessageId(externalComposeDraft$.peek()) === id) return true
+  if (normalizeMessageId(externalComposeDraft$.peek()) === id || externalThreadDrafts$.peek().includes(id)) return true
   if (openingComposeTabDraftIds.has(id)) return true
   // Its tab has closed, but the Esc save is still writing what this copy is
   // about to become.

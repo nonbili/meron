@@ -1,4 +1,6 @@
 import { discardSentDraft, discardClosedDraft } from './states/quickReply'
+import { openContact } from './states/contacts'
+import { externalThreadDrafts$ } from './lib/windowSession'
 import { externalComposeDraft$ } from './lib/composeWindow'
 import { compose$ } from './states/composeState'
 import { useEffect, useRef } from 'react'
@@ -8,14 +10,20 @@ import { invoke } from './lib/bridge'
 import { watchCoreMigration } from './states/connectivity'
 import { installWindowChrome, syncWindowFrame } from './lib/windowChrome'
 import { ui$, showToast } from './states/ui'
-import { mail$, loadThreads, loadThread, findLocalThread } from './states/mail'
+import { mail$, loadThreads, loadThread, findLocalThread, reloadThreadCards } from './states/mail'
 import { loadFolders, refreshAccountFoldersCache, inboxUnread } from './states/mailFolders'
-import { openMailtoCompose, openThreadTabById } from './states/compose'
+import { openMailtoCompose, openThreadTabById, openDraftFromThreadWindow } from './states/compose'
 import { accounts$, unifiedAccounts } from './states/accounts'
 import type { Account } from './types'
-import { kanban$ } from './states/kanban'
+import { kanban$, openCorrespondentMail } from './states/kanban'
 import { setSyncError, clearSyncErrorFor } from './states/connectivity'
-import { settings$, applyDocumentLanguage, watchSystemAppearance } from './states/settings'
+import {
+  settings$,
+  applyDocumentLanguage,
+  watchSystemAppearance,
+  applyThreadWindowSetting,
+  setRemoteImageSender,
+} from './states/settings'
 import { configurationRefresh } from './lib/configurationRefresh'
 import { applyUpdateStatus, loadUpdateStatus, runUpdateCheck } from './states/update'
 import type { UpdateStatus } from './lib/update'
@@ -47,6 +55,62 @@ function badgeAccounts(accounts: Account[], showAccountBadges: boolean, boardBad
 // mailbox/thread loading, and the tray unread badge. Kept out of the component so
 // App stays a layout shell.
 export function useAppEffects() {
+  useEffect(() => {
+    let active = true
+    let changed = false
+    const eventsOn = (window as any).runtime?.EventsOn
+    const offDrafts = eventsOn?.('threadWindow.draftsChanged', (ids: string[]) => {
+      changed = true
+      const released = externalThreadDrafts$.peek().some((id) => !ids.includes(id))
+      externalThreadDrafts$.set(ids)
+      const threadId = ui$.selectedThread.peek()
+      if (released && threadId) void loadThread(threadId).catch(console.error)
+    })
+    void invoke<string[]>('threadWindow.drafts')
+      .then((ids) => {
+        if (active && !changed) externalThreadDrafts$.set(ids)
+      })
+      .catch(console.error)
+    const offContact = eventsOn?.('threadWindow.openContact', (detail: { contact?: import('./types').Contact }) =>
+      openContact(detail.contact),
+    )
+    const offCorrespondent = eventsOn?.(
+      'threadWindow.openCorrespondent',
+      (detail: { account_id: string; folder_id: string; email: string }) => {
+        openCorrespondentMail(detail.account_id, detail.folder_id, detail.email)
+      },
+    )
+    const offSetting = eventsOn?.('threadWindow.setSetting', (detail: { key: string; value: unknown }) => {
+      applyThreadWindowSetting(detail.key, detail.value)
+    })
+    const offSender = eventsOn?.('threadWindow.setRemoteSender', (detail: { address: string; allowed: boolean }) => {
+      setRemoteImageSender(detail.address, detail.allowed)
+    })
+    const offOpen = eventsOn?.('threadWindow.openDraft', (draft: import('./types').Message) => {
+      void openDraftFromThreadWindow(draft)
+    })
+    let timer: ReturnType<typeof setTimeout>
+    const offChanged = eventsOn?.('mail.windowChanged', () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const id = ui$.selectedThread.peek()
+        if (id) void loadThread(id).catch(console.error)
+        void reloadThreadCards(Object.keys(kanban$.threads.peek())).catch(console.error)
+        for (const account of accounts$.peek()) void refreshAccountFoldersCache(account.id, false)
+      }, 100)
+    })
+    return () => {
+      active = false
+      clearTimeout(timer)
+      offDrafts?.()
+      offOpen?.()
+      offSetting?.()
+      offCorrespondent?.()
+      offContact?.()
+      offSender?.()
+      offChanged?.()
+    }
+  }, [])
   useEffect(() => {
     let active = true
     let changed = false

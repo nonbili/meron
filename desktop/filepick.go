@@ -74,6 +74,18 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 		}
 		a.composeMu.Unlock()
 	}
+	if session, _ := payload["thread_window"].(string); session != "" {
+		a.composeMu.Lock()
+		for _, reader := range a.threadWindows {
+			if reader.session == session {
+				if window, ok := reader.window.(*application.WebviewWindow); ok {
+					ctx = context.WithValue(ctx, pickerWindowKey{}, window)
+				}
+				break
+			}
+		}
+		a.composeMu.Unlock()
+	}
 	paths, usedPortal, err := openFilePicker(ctx, title, defaultDir, imagesOnly, multiple)
 	if err != nil {
 		return nil, err

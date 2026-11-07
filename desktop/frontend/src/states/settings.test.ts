@@ -439,3 +439,31 @@ describe('native monochrome tray icon setting', () => {
     }
   })
 })
+
+it('persists a delegated window setting using the main preference session', async () => {
+  const { applyThreadWindowSetting } = await import('./settings')
+  const original = (window as any).go
+  const calls: { command: string; payload: any }[] = []
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (command: string, payload: any) => {
+          calls.push({ command, payload })
+          return { ok: true }
+        },
+      },
+    },
+  }
+  try {
+    applyThreadWindowSetting('dark_message_bodies', true)
+    expect(settings$.darkMessageBodies.peek()).toBe(true)
+    const write = calls.find((call) => call.command === 'app.prefsSet')!
+    expect(write.payload.session).toBe(WRITE_SESSION)
+    expect(write.payload.key).toBe('dark_message_bodies')
+    expect(write.payload.notify_windows).toBe(true)
+    applyThreadWindowSetting('session_account', 'wrong-account')
+    expect(calls.filter((call) => call.command === 'app.prefsSet')).toHaveLength(1)
+  } finally {
+    ;(window as any).go = original
+  }
+})

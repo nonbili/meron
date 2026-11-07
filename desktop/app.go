@@ -21,6 +21,7 @@ type App struct {
 	composeMu         sync.Mutex
 	composeWindow     *composeWindow
 	mainComposeDrafts map[string]bool
+	threadWindows     map[string]*threadWindow
 
 	mcp           *mcpService
 	ctx           context.Context
@@ -219,6 +220,14 @@ func (a *App) Invoke(command string, payload map[string]any) (result any, err er
 	start := time.Now()
 	defer a.recoverInvoke(command, &err)
 	result, err = a.invoke(command, payload)
+	if err == nil && windowMailMutations[command] && a.hasThreadWindows() {
+		wailsRuntime.EventsEmit(a.ctx, "mail.windowChanged", windowMailChangeDetail(payload))
+	}
+	if notify, _ := payload["notify_windows"].(bool); err == nil && command == "app.prefsSet" && notify && a.hasThreadWindows() {
+		if key, ok := payload["key"].(string); ok {
+			wailsRuntime.EventsEmit(a.ctx, "configuration.changed", map[string]any{"keys": []string{key}, "session": payload["session"]})
+		}
+	}
 	if err == nil && notifyReconcileCommands[command] {
 		a.requestNotificationReconcile()
 	}
@@ -256,6 +265,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.emlCommand(command, payload)
 	case "composer.isOpen", "composer.setMainDrafts", "composer.claimDraft", "composer.closeResponded", "composer.discardDraft", "composer.getDraft", "composer.setDraft", "composer.focusDraft", "composer.closeWindow":
 		return a.composeWindowCommand(command, payload)
+	case "threadWindow.open", "threadWindow.get", "threadWindow.sessions", "threadWindow.setSetting", "threadWindow.setRemoteSender", "threadWindow.close", "threadWindow.closeResponded", "threadWindow.setDrafts", "threadWindow.reserveDraft", "threadWindow.drafts", "threadWindow.focusDraft", "threadWindow.openDraft", "threadWindow.openCorrespondent", "threadWindow.openContact", "threadWindow.beginClose", "threadWindow.cancelClose", "threadWindow.discardDraft":
+		return a.threadWindowCommand(command, payload)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
 	case "core.status":

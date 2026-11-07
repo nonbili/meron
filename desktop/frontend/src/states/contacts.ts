@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { observable } from '@legendapp/state'
 import type { Contact } from '../types'
 import { persistedField } from '../lib/sessionPref'
@@ -99,6 +100,10 @@ export function toggleContactPin(contact: Contact) {
 }
 
 export function openContact(contact?: Contact) {
+  if (threadWindowSession) {
+    void invoke('threadWindow.openContact', { contact }).catch(console.error)
+    return
+  }
   contacts$.selected.set(contact ? { ...contact, addr: contactKey(contact.addr) } : null)
   ui$.tasksPanelOpen.set(false)
   ui$.calendarPanelOpen.set(false)

@@ -1,3 +1,4 @@
+import { threadWindowSession } from './windowSession'
 import type { ObservableParam } from '@legendapp/state'
 import { invoke } from './bridge'
 
@@ -20,7 +21,7 @@ export function persistedField<T>(
   let restoring = false
   let seq = 0
   obs$.onChange(({ value }) => {
-    if (restoring) return
+    if (restoring || threadWindowSession) return
     void invoke('app.prefsSet', { key, value, ...(options ? { session: options.session, seq: ++seq } : {}) }).catch(
       () => {},
     )

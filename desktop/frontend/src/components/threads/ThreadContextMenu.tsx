@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'r
 import { useValue } from '@legendapp/state/react'
 import {
   Archive,
+  ExternalLink,
   SquareDashedMousePointer,
   ChevronRight,
   Download,
@@ -13,6 +14,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
+import { openThreadWindow } from '../../lib/threadWindow'
 import { useTranslation } from '../../lib/i18n'
 import { moveFeed, openFeedEdit } from '../../states/feeds'
 import { settings$ } from '../../states/settings'
@@ -238,6 +240,16 @@ export function ThreadContextMenu({
           }}
         />
         <MenuItem
+          icon={<ExternalLink size={13} className="text-secondary" />}
+          label={t('threads.actions.openInNewWindow')}
+          onClick={() => {
+            const threadId = menu.threadId
+            const reference = menu.message
+            close()
+            void openThreadWindow(threadId, reference)
+          }}
+        />
+        <MenuItem
           icon={
             menu.unread ? (
               <MailOpen size={13} className="text-secondary" />
@@ -351,6 +363,15 @@ export function ThreadContextMenu({
           close()
           onOpenThread(threadId)
           void after('open-tab', threadId)
+        }}
+      />
+      <MenuItem
+        icon={<ExternalLink size={13} className="text-secondary" />}
+        label={t('threads.actions.openInNewWindow')}
+        onClick={() => {
+          const threadId = menu.threadId
+          close()
+          void openThreadWindow(threadId)
         }}
       />
       {onSelectThread && (

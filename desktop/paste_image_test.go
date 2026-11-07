@@ -244,3 +244,28 @@ func TestPruneComposerMediaMissingDirectoryIsNoop(t *testing.T) {
 		t.Fatalf("removed = %#v, want %d", got, want)
 	}
 }
+
+func TestPruneComposerMediaPreservesLiveThreadEditorFiles(t *testing.T) {
+	setupMediaTestEnv(t)
+	root := mediaDir()
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "live-inline.png")
+	if err := os.WriteFile(path, []byte("live image"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{threadWindows: map[string]*threadWindow{"t": {}}}
+	result, err := app.pruneComposerMedia(map[string]any{})
+	if err != nil || result.(map[string]any)["removed"] != 0 {
+		t.Fatalf("pruning live images: %v, %v", result, err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("live editor image was removed:", err)
+	}
+	delete(app.threadWindows, "t")
+	result, err = app.pruneComposerMedia(map[string]any{})
+	if err != nil || result.(map[string]any)["removed"] != 1 {
+		t.Fatal("orphan was not reclaimed after reader closed")
+	}
+}

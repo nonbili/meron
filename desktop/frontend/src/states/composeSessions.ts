@@ -12,6 +12,8 @@ export type ComposeSession = {
   /** Closes the tab but keeps the message in Drafts (Esc). */
   closeKeepingDraft?: CloseComposeSession
   closing?: Promise<void>
+  savingToClose?: boolean
+  setClosingState?: (closing: boolean) => void
   /** A message's attachments on their way into the tab. */
   attachmentFetches: Set<Promise<ComposerAttachment[]>>
 }
@@ -60,10 +62,13 @@ export function registerComposeSession(
   tabId: string,
   close: CloseComposeSession,
   closeKeepingDraft?: CloseComposeSession,
+  setClosingState?: (closing: boolean) => void,
 ) {
   const session = getComposeSession(tabId)
   session.close = close
   session.closeKeepingDraft = closeKeepingDraft
+  session.setClosingState = setClosingState
+  setClosingState?.(!!session.savingToClose)
 }
 
 function runClose(session: ComposeSession, close: CloseComposeSession): Promise<void> {

@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { ensureThreadData, threadData$, threadRequests } from './threadData'
 import { attachmentSaveFilename } from '../lib/attachmentFilename'
 import type { Folder, Message, MessageTab } from '../types'
@@ -77,6 +78,11 @@ export function kanbanKeysWithThread(threadId: string): string[] {
 // afterwards would find nothing to reload — yet the server may still hold older
 // messages of the thread, which only a re-read of those columns brings back.
 export async function reloadThreadCards(columnKeys: string[]) {
+  if (threadWindowSession) {
+    const id = ui$.selectedThread.peek()
+    if (id) await loadThread(id)
+    return
+  }
   const boardId = kanban$.activeBoardId.peek()
   if (!boardId) {
     await loadThreads(false)
@@ -364,6 +370,7 @@ let deferredRefreshKey = ''
 // leaving the list (delete, move, discard draft) and want the next load to open
 // whatever takes its place. One-shot: consumed by the next `loadThreads`.
 export function requestThreadReselect() {
+  if (threadWindowSession) return
   reselectAfterThreadLoad = true
 }
 
@@ -494,6 +501,7 @@ function starredConversationIdentity(thread: Message): string {
 }
 
 export async function loadThreads(refresh = true, searchStage: ThreadSearchStage = 'auto') {
+  if (threadWindowSession) return
   const read = beginThreadListRead()
   try {
     await loadThreadsWithRead(refresh, searchStage, read)
@@ -1038,6 +1046,10 @@ export async function loadThread(threadId: string) {
       mail$.messagesLoadingMore.set(data.loadingMore.peek())
     }
     reconcileThreadUnreadFromLoadedMessages(threadId, result.messages, result.next_cursor)
+    if (threadWindowSession && !result.messages.length && ui$.selectedThread.peek() === threadId) {
+      mail$.threads.set(mail$.threads.peek().filter((thread) => thread.thread_id !== threadId))
+      ui$.selectedThread.set('')
+    }
   } catch (err) {
     if (threadRequests.get(threadId) !== request) return
     console.error('threadRead failed', err)

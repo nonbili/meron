@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { observable } from '@legendapp/state'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { ChatWallpaper, Folder, Message } from '../types'
@@ -223,6 +224,12 @@ export function openMailAccount(accountId: string, folderId = 'inbox', resumeCur
 export function openCorrespondentMail(accountId: string, folderId: string, email: string) {
   const query = email.trim()
   if (!query) return
+  if (threadWindowSession) {
+    void invoke('threadWindow.openCorrespondent', { account_id: accountId, folder_id: folderId, email: query }).catch(
+      console.error,
+    )
+    return
+  }
   // This action targets the card/conversation folder, so it is a navigation,
   // not a view resume. Let openMailAccount discard the stash before closing the
   // board and persist the destination through its single-write path.

@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { observable } from '@legendapp/state'
 import type { Account, SystemCheck } from '../types'
 import { invoke } from '../lib/bridge'
@@ -319,7 +320,7 @@ const attachmentsSession = persistedField(ui$.attachmentsOnly, 'session_attachme
 
 let restoringNav = false
 function persistNav(key: string, value: string) {
-  if (restoringNav) return
+  if (restoringNav || threadWindowSession) return
   void invoke('app.prefsSet', { key, value }).catch(() => {})
 }
 

@@ -1,3 +1,4 @@
+import { threadWindowSession } from '../lib/windowSession'
 import { forgetStandaloneRecoveryDraft } from '../lib/composeWindow'
 import type { Message } from '../types'
 import { rememberThreadTransfer } from './recentThreadTransfers'
@@ -155,7 +156,9 @@ function removeThreadLocally(threadId: string) {
   // Computed before mutating mail$.threads, since getFilteredThreads reads it.
   let nextSelected = previousSelected
   if (previousSelected === threadId) {
-    if (kanban$.activeBoardId.get()) {
+    if (threadWindowSession) {
+      nextSelected = ''
+    } else if (kanban$.activeBoardId.get()) {
       nextSelected = kanbanNeighbourThreadId(threadId)
     } else {
       const visible = getFilteredThreads()
@@ -257,8 +260,10 @@ async function drainBackgroundListRefresh() {
 }
 
 async function refreshThreadLocation(accountId?: string, refresh = false) {
-  if (refresh) await loadThreads(true)
-  else await coalescedBackgroundListRefresh()
+  if (!threadWindowSession) {
+    if (refresh) await loadThreads(true)
+    else await coalescedBackgroundListRefresh()
+  }
   const selectedAcc = ui$.selectedAccount.get()
   if (selectedAcc) {
     void loadFolders(selectedAcc, false)
