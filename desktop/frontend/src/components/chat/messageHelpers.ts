@@ -203,6 +203,9 @@ export function remoteContentAllowed(
   account: Account | undefined,
   allowedSenders: string[],
 ): boolean {
+  // Decrypted mail never loads remote content (EFAIL; the core's CSP blocks
+  // it too, whatever this says).
+  if (message.crypto?.encrypted) return false
   if (account?.load_remote_images ?? false) return true
   const sender = normalizeSenderAddr(message.from_addr)
   return !!sender && allowedSenders.includes(sender)
@@ -248,7 +251,8 @@ export function getVisibleMedia(
   const localVideos = attachments.filter((a) => isInlineMedia(a) && isVideo(a))
   const remoteVideos = attachments.filter((a) => !isInlineMedia(a) && a.url && isVideo(a))
   const files = attachments.filter((a) => !isImage(a) && !isVideo(a))
-  const remoteVisible = remoteContentAllowed(message, account, allowedSenders) || revealed
+  const remoteVisible =
+    remoteContentAllowed(message, account, allowedSenders) || (revealed && !message.crypto?.encrypted)
   const attachmentImages = remoteVisible ? [...localImages, ...remoteImages] : localImages
   const videos = remoteVisible ? [...localVideos, ...remoteVideos] : localVideos
   const hiddenRemoteCount = remoteVisible ? 0 : remoteImages.length + remoteVideos.length

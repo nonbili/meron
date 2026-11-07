@@ -7,6 +7,36 @@ async function boot(name: string) {
   return compose$
 }
 
+// Text from encrypted mail must not land in localStorage (plain files on disk).
+describe('compose tab persistence', () => {
+  afterEach(() => localStorage.removeItem(COMPOSE_TABS_KEY))
+
+  it('keeps compose tabs holding decrypted or encrypted text out of localStorage', async () => {
+    const { compose$ } = await import('./composeState')
+    await import('./compose')
+    const tab = (id: string, extra: object) => ({
+      id,
+      kind: 'compose' as const,
+      messageId: '',
+      threadId: '',
+      subject: id,
+      from: '',
+      compose: { to: '', text: `${id} body`, attachments: [], ...extra },
+    })
+    compose$.tabs.set([
+      tab('plain', {}),
+      tab('reply', { sensitiveSource: 'reply' }),
+      tab('forward', { sensitiveSource: 'forward' }),
+      tab('unfolded', { decryptedInBody: true }),
+      tab('new-encrypted', { encrypt: true }),
+      tab('switched-off', { encrypt: false }),
+    ] as never)
+    const stored = JSON.parse(localStorage.getItem(COMPOSE_TABS_KEY) ?? '[]')
+    expect(stored.map((t: { id: string }) => t.id)).toEqual(['plain', 'switched-off'])
+    compose$.tabs.set([])
+  })
+})
+
 describe('compose$ startup', () => {
   afterEach(() => {
     localStorage.removeItem(COMPOSE_TABS_KEY)

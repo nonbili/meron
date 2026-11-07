@@ -151,7 +151,7 @@ fn the_reply_carries_the_one_answering_attendee_and_the_zone() {
         name: "Sam Lee".into(),
         addr: "sam@example.org".into(),
     };
-    let ics = reply_ics(&invite, &me, Response::Accepted, 1_792_000_000).unwrap();
+    let ics = reply_ics(&invite, &me, Response::Accepted, 1_792_000_000, false).unwrap();
     assert!(ics.contains("METHOD:REPLY"), "{ics}");
     assert!(ics.contains("UID:040000008200E00074C5B7101A82E008"));
     assert!(ics.contains("SEQUENCE:2"));
@@ -174,11 +174,38 @@ fn the_reply_carries_the_one_answering_attendee_and_the_zone() {
     assert_eq!(back.attendees[0].partstat, "accepted");
     assert_eq!(back.organizer.addr, "maya@example.com");
 
-    let mail = reply_mail(&invite, &me, Response::Declined, 1_792_000_000).unwrap();
+    let mail = reply_mail(&invite, &me, Response::Declined, 1_792_000_000, false).unwrap();
     assert_eq!(mail.to, "\"Maya Chen\" <maya@example.com>");
     assert_eq!(mail.subject, "Declined: Launch review");
     assert!(mail.body.contains("Sam Lee has declined"));
     assert!(mail.ics.contains("PARTSTAT=DECLINED"));
+}
+
+// An encrypted invitation is answered in the clear: the answer leaves out its
+// title and place, keeping what an organizer's client needs to match it.
+#[test]
+fn the_reply_to_an_encrypted_invitation_leaves_its_details_out() {
+    let invite = parse_invite(OUTLOOK).unwrap();
+    let me = Person {
+        name: "Sam Lee".into(),
+        addr: "sam@example.org".into(),
+    };
+    let mail = reply_mail(&invite, &me, Response::Accepted, 1_792_000_000, true).unwrap();
+    assert_eq!(mail.subject, "Accepted");
+    assert_eq!(mail.body, "Sam Lee has accepted this invitation.\r\n");
+    let ics = &mail.ics;
+    assert!(!ics.contains("Launch review"), "{ics}");
+    assert!(!ics.contains("Room 4"), "{ics}");
+    for property in ["SUMMARY", "LOCATION"] {
+        assert!(!ics.contains(property), "{property} in {ics}");
+    }
+    assert!(ics.contains("UID:040000008200E00074C5B7101A82E008"));
+    assert!(ics.contains("SEQUENCE:2"));
+    assert!(ics.contains("PARTSTAT=ACCEPTED"));
+    let back = parse_invite(ics).unwrap();
+    assert_eq!(back.start, invite.start);
+    assert_eq!(back.organizer.addr, "maya@example.com");
+    assert_eq!(back.attendees[0].partstat, "accepted");
 }
 
 #[test]
@@ -188,7 +215,7 @@ fn the_reply_message_is_an_imip_alternative_threaded_on_the_invite() {
         name: "Sam Lee".into(),
         addr: "sam@example.org".into(),
     };
-    let mail = reply_mail(&invite, &me, Response::Tentative, 1_792_000_000).unwrap();
+    let mail = reply_mail(&invite, &me, Response::Tentative, 1_792_000_000, false).unwrap();
     let raw =
         crate::smtp::build_invite_reply("Sam Lee", "sam@example.org", &mail, "<inv@x>", "root@x")
             .unwrap();

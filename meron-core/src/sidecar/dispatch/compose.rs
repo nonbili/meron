@@ -26,6 +26,25 @@ fn opt_uids(params: &Value) -> Vec<u32> {
         .unwrap_or_default()
 }
 
+/// Whether a send or draft is encrypted (`openpgp::outgoing::protection`),
+/// and whether only because it answers encrypted mail (nothing was asked).
+fn reply_protection(
+    engine: &Arc<Engine>,
+    p: &Value,
+    account: &str,
+    in_reply_to: &str,
+) -> anyhow::Result<(bool, bool)> {
+    let encrypt = p.get("encrypt").and_then(Value::as_bool).unwrap_or(false);
+    let plain = p.get("plain").and_then(Value::as_bool).unwrap_or(false);
+    meron_core::openpgp::store::reply_protection(
+        &engine.db.lock().unwrap(),
+        account,
+        in_reply_to,
+        encrypt,
+        plain,
+    )
+}
+
 /// Finalize the Sent view after a send. For Gmail/Outlook defaults this only
 /// refreshes the provider-created copy; other accounts get Meron's best-effort
 /// APPEND plus refresh. The mail already left via SMTP, so none of this may
@@ -85,28 +104,86 @@ pub(crate) async fn dispatch(
             let message_id = req_str(p, "message_id").unwrap_or_default();
             let attachments = opt_attachments(p)?;
             let requested_from = req_str(p, "from").unwrap_or_default();
+            // End-to-end encryption is decided in the composer; here it is
+            // enforced: an encrypted send never goes out unencrypted, and a reply
+            // to encrypted mail is encrypted unless the caller explicitly asked
+            // for plain (MCP, or a composer path that lost the flag).
+            let (encrypt, implicit) = reply_protection(engine, p, &account, &in_reply_to)?;
             let creds = engine.ensure_valid_creds(&account).await?;
             let (from_addr, sender_name) =
                 resolve_send_from(engine, &account, &creds, &requested_from)?;
-            let raw = smtp::send(
-                &creds,
-                &from_addr,
-                &sender_name,
-                &to,
-                &cc,
-                &bcc,
-                &subject,
-                &body,
-                &html,
-                &attachments,
-                &in_reply_to,
-                &references,
-                &reply_to,
-                &message_id,
-            )
-            .await?;
+            let ring = meron_core::openpgp::keyring::current();
+            let mut undelivered = Vec::new();
+            let raw = if encrypt {
+                let keys = meron_core::openpgp::outgoing::resolve(&ring, &account, &from_addr, &to, &cc, &bcc)
+                    .map_err(|err| {
+                        if implicit {
+                            anyhow::anyhow!("this replies to encrypted mail, so it can only be sent encrypted: {err:#}")
+                        } else {
+                            err
+                        }
+                    })?;
+                let sent = smtp::send_encrypted(
+                    &creds,
+                    &from_addr,
+                    &sender_name,
+                    &to,
+                    &cc,
+                    &bcc,
+                    &subject,
+                    &body,
+                    &html,
+                    &attachments,
+                    &in_reply_to,
+                    &references,
+                    &reply_to,
+                    &message_id,
+                    &keys,
+                )
+                .await?;
+                // The keys it went to are now the ones the composer compares
+                // against. The mail is out: a failure here only
+                // means the next send asks again.
+                let recipients: Vec<String> = [&to, &cc, &bcc]
+                    .iter()
+                    .flat_map(|field| meron_core::openpgp::outgoing::split_recipients(field))
+                    .collect();
+                let used = meron_core::openpgp::outgoing::chosen_peer_keys(&ring, &recipients);
+                if let Err(err) =
+                    meron_core::openpgp::store::record_used(&engine.db.lock().unwrap(), &used)
+                {
+                    eprintln!("openpgp: couldn't record the keys used: {err:#}");
+                }
+                undelivered = sent.undelivered;
+                sent.raw
+            } else {
+                let extra: Vec<(&str, String)> =
+                    meron_core::openpgp::outgoing::autocrypt_for(&ring, &account, &from_addr)
+                        .map(|v| vec![("Autocrypt", v)])
+                        .unwrap_or_default();
+                smtp::send(
+                    &creds,
+                    &from_addr,
+                    &sender_name,
+                    &to,
+                    &cc,
+                    &bcc,
+                    &subject,
+                    &body,
+                    &html,
+                    &attachments,
+                    &in_reply_to,
+                    &references,
+                    &reply_to,
+                    &message_id,
+                    &extra,
+                )
+                .await?
+            };
             finish_sent(engine, out, account, raw);
-            Ok(json!({ "ok": true }))
+            // Delivered to someone, so not an error (a resend would duplicate
+            // it), but the composer says who didn't get it.
+            Ok(json!({ "ok": true, "undelivered": undelivered }))
         }
 
         "invite.respond" => {
@@ -167,6 +244,33 @@ pub(crate) async fn dispatch(
                 &reply_to,
                 &draft_id,
             )?;
+            // A draft of an encrypted message is itself encrypted (to us
+            // only), or its text would sit on the server in the clear. So is a
+            // draft replying to encrypted mail that didn't say "plain"; that
+            // needs only our own key, even with encryption turned off.
+            let (mut encrypt, _) = reply_protection(engine, p, &account, &in_reply_to)?;
+            // Replacing a draft that was saved encrypted keeps it encrypted
+            // unless the caller switched encryption off ("plain"): a caller
+            // that says nothing (an MCP update_draft) can't put its text, or
+            // the decrypted text it may hold, on the server in the clear.
+            let plain = p.get("plain").and_then(Value::as_bool).unwrap_or(false);
+            if !encrypt && !plain && !draft_id.trim().is_empty() {
+                let db = engine.db.lock().unwrap();
+                encrypt = meron_core::openpgp::store::answers_encrypted(&db, &account, &draft_id)?;
+            }
+            let raw = if encrypt {
+                let ring = meron_core::openpgp::keyring::current();
+                let own = ring.default_key(&account).context(
+                    "can't save this draft encrypted: this account has no encryption key",
+                )?;
+                let autocrypt = meron_core::openpgp::autocrypt::header_value(
+                    &meron_core::openpgp::outgoing::bare_addr(&from_addr),
+                    &own.public,
+                )?;
+                meron_core::openpgp::outgoing::wrap(&raw, &[&own.public], &own.secret, &autocrypt)?
+            } else {
+                raw
+            };
             append_to_drafts(engine, &account, &raw, &draft_id).await?;
             Ok(json!({ "ok": true }))
         }

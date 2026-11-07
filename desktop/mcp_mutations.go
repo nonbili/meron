@@ -65,6 +65,23 @@ func validateMCPSelection(account, folder string, uids []uint32, empty bool) err
 	}
 	return nil
 }
+
+// replyEncrypted says whether a send answers encrypted mail, which the core
+// then sends encrypted whatever the tool asked. Shown in the
+// approval preview only; the core enforces it, so a failed lookup shows nothing.
+func (s *mcpService) replyEncrypted(account, inReplyTo string) bool {
+	if strings.TrimSpace(inReplyTo) == "" {
+		return false
+	}
+	res, err := s.coreCall("pgp.reply.encrypted", map[string]any{"account": account, "in_reply_to": inReplyTo})
+	if err != nil {
+		return false
+	}
+	m, _ := res.(map[string]any)
+	encrypted, _ := m["encrypted"].(bool)
+	return encrypted
+}
+
 func (s *mcpService) coreCall(method string, args any) (any, error) {
 	if s.app.sidecar == nil || !s.app.sidecar.Started() {
 		return nil, s.app.engineUnavailable()
@@ -156,7 +173,7 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 				return previous.response(), nil
 			}
 			messageID := fmt.Sprintf("<%s@meron.local>", uuid.NewString())
-			preview := map[string]any{"kind": "send", "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References}
+			preview := map[string]any{"kind": "send", "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References, "encrypted": s.replyEncrypted(a.AccountID, a.InReplyTo)}
 			return s.newOperation(grant, "send_message", a.AccountID, a.RequestID, fingerprint, mcpSend, !grant.SendWithoutConfirmation, preview, func() (any, error) {
 				return s.app.mailSend(map[string]any{"account_id": a.AccountID, "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References, "message_id": messageID})
 			}), nil

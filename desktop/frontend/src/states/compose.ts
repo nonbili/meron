@@ -15,6 +15,7 @@ import { getActiveThread, normalizeMessageId } from './mail'
 import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
 import { LOCAL_SEND_PREFIX } from './pendingSends'
+import { mayQuoteOriginal, ownSentCrypto } from '../lib/crypto'
 import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
 import {
@@ -29,6 +30,7 @@ import {
   type SignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
+import { undeliveredOf } from './undelivered'
 import { closeCurrentConversation, kanban$ } from './kanban'
 import { resolveConversationMode, revealRemote, thread$ } from './thread'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
@@ -48,7 +50,11 @@ import {
   detectAliasFrom,
   detectSenderFrom,
   pickReplyTarget,
+  quickReplyEncrypts,
+  quickReplyHoldsEncryptedDraft,
+  quickReplyOffByUser,
   resolveQuickReplyFrom,
+  replySubject,
 } from './composeReply'
 import {
   allocateMessageIdentity,
@@ -138,10 +144,21 @@ function forwardedHtmlBody(message: Message): string {
  * `> `-prefixed in plain text and in a `<blockquote type="cite">` in HTML —
  * the Apple Mail and Thunderbird shape, which the conversation view folds in
  * our own sent replies as it does in theirs. `rich` says whether the original
- * was HTML. Undefined when quoting is off or the original has no body loaded.
+ * was HTML. Undefined when quoting is off, the original has no body loaded, or
+ * it is decrypted mail its sender isn't shown to have written (`mayQuoteOriginal`).
  */
+/** Whether a reply to `message` would quote it but doesn't, because it is
+ * decrypted mail its sender isn't shown to have written (`mayQuoteOriginal`).
+ * The composer then says why the quote is missing. */
+export function replyQuoteWithheld(message: Message | null | undefined): boolean {
+  if (!message || !settings$.quoteReplies.peek()) return false
+  if (!message.body_html && !(message.body ?? '').trim()) return false
+  return !mayQuoteOriginal(message.crypto)
+}
+
 export function replyQuote(message: Message): ComposeBody | undefined {
   if (!settings$.quoteReplies.peek()) return undefined
+  if (!mayQuoteOriginal(message.crypto)) return undefined
   const body = message.body ?? ''
   if (!message.body_html && !body.trim()) return undefined
   const attribution = `On ${formatFullTimestamp(message.date)}, ${formatMessageFrom(message)} wrote:`
@@ -165,9 +182,13 @@ export function bodyHasReplyQuote(body: string, quote: ComposeBody): boolean {
 }
 
 /** What a draft sends and saves: its body, with a folded quote under it. */
-export function composedContent(draft: Pick<ComposeDraft, 'rich' | 'html' | 'text' | 'quote'>): string {
+export function composedContent(
+  draft: Pick<ComposeDraft, 'rich' | 'html' | 'text' | 'quote' | 'encrypt' | 'sensitiveSource'>,
+): string {
   const own = draft.rich ? draft.html : draft.text
   if (!draft.quote) return own
+  // A decrypted original's quote never goes into an unencrypted message.
+  if (draft.sensitiveSource && !draft.encrypt) return own
   if (draft.rich) return `${own}${draft.quote.html}`
   return own.trim() ? `${own.replace(/\s+$/, '')}\n\n${draft.quote.text}` : draft.quote.text
 }
@@ -290,6 +311,12 @@ compose$.tabs.onChange(({ value: tabs }) => {
       return [{ id, kind, messageId, threadId, accountId, folderId, subject, from, fromAddr, feedIcon, viewMode }]
     }
     if (!t.compose) return []
+    // Text of encrypted mail never goes to localStorage (plain files on disk):
+    // neither text from encrypted mail nor a message being written encrypted.
+    // Such a draft is autosaved encrypted to Drafts, so it comes back from
+    // there rather than with the tabs.
+    if (t.compose.sensitiveSource || t.compose.decryptedInBody || t.compose.encryptedDraft || t.compose.encrypt)
+      return []
     return [{ id: t.id, subject: t.subject, compose: { ...t.compose, attachments: [] } }]
   })
   try {
@@ -668,6 +695,12 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
     draftMessageId: seed?.draftMessageId ?? newDraftMessageId(),
     signature: tracking,
     quote: quote ? { html: quote.html, text: quote.text } : undefined,
+    encrypt: seed?.encrypt,
+    sensitiveSource: seed?.sensitiveSource,
+    decryptedInBody: seed?.decryptedInBody || undefined,
+    encryptedDraft: seed?.encryptedDraft || undefined,
+    encryptOffByUser: seed?.encryptOffByUser || undefined,
+    quoteWithheld: seed?.quoteWithheld || undefined,
     sourceDraft: seed?.sourceDraft,
     attachments: seed?.attachments ?? [],
   }
@@ -696,8 +729,8 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
 export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const t = getActiveThread()
   if (!t) return
-  const subject = t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`
   const target = pickReplyTarget(t)
+  const subject = replySubject(t.subject, target)
   const accounts = accounts$.get()
   // Everyone the quick reply was already going to, when it was.
   const { to, cc } = options?.replyAll ? buildReplyRecipients(target, true) : quickReplyAddressing(target)
@@ -739,6 +772,15 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     references,
     draftMessageId: existingDraftId,
     title: subject,
+    // The quick reply's encryption choice carries over, and so does the lock
+    // of a draft that was saved encrypted. Switched off there on purpose, it
+    // stays off: `false`, not unset (which the core would read as "answers
+    // encrypted mail, so encrypt"), and the toggle doesn't turn it back on.
+    encrypt: quickReplyOffByUser(target) ? false : quickReplyEncrypts() || undefined,
+    encryptOffByUser: quickReplyOffByUser(target) || undefined,
+    sensitiveSource: target.crypto?.encrypted ? 'reply' : undefined,
+    encryptedDraft: quickReplyHoldsEncryptedDraft(t.thread_id) || undefined,
+    quoteWithheld: replyQuoteWithheld(target),
     threadId: t.thread_id,
     quote: quote && !bodyHasReplyQuote(carried.text, quote) ? quote : undefined,
   })
@@ -803,6 +845,9 @@ export async function editAsNewMessage(message: Message) {
     text: rich ? '' : (message.body ?? ''),
     title: message.subject || 'New message',
     noSignature: true,
+    // A copy of encrypted mail carries its decrypted text: encrypted only.
+    encrypt: !!message.crypto?.encrypted || undefined,
+    decryptedInBody: !!message.crypto?.encrypted || undefined,
   })
   if (!id) return
 
@@ -855,6 +900,13 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     },
     title: message.subject || 'New message',
     noSignature: true,
+    // An encrypted draft reopens encrypted, and its quote (if any) came from
+    // an encrypted conversation, so it stays guarded the same way.
+    encrypt: message.crypto?.encrypted || undefined,
+    sensitiveSource: message.crypto?.encrypted && body.quote ? 'reply' : undefined,
+    // Its body may hold decrypted text (a quote unfolded and answered inline,
+    // a forward): it stays encrypted unless switched off on purpose.
+    encryptedDraft: message.crypto?.encrypted || undefined,
   }
 }
 
@@ -1018,7 +1070,7 @@ export function replyToMessage(message: Message, replyAll = false) {
   const { to, cc } = buildReplyRecipients(message, replyAll)
   const { in_reply_to, references } = buildReplyThreading(message)
   const acc = accounts.find((a) => a.id === message.account_id)
-  const subject = message.subject.startsWith('Re:') ? message.subject : `Re: ${message.subject}`
+  const subject = replySubject(message.subject, message)
   openComposeTab({
     threadId: message.thread_id,
     accountId: message.account_id || undefined,
@@ -1031,6 +1083,11 @@ export function replyToMessage(message: Message, replyAll = false) {
     inReplyTo: in_reply_to,
     references,
     quote: replyQuote(message),
+    // An encrypted conversation stays encrypted (the user can turn it off,
+    // which drops the quote).
+    encrypt: !!message.crypto?.encrypted || undefined,
+    sensitiveSource: message.crypto?.encrypted ? 'reply' : undefined,
+    quoteWithheld: replyQuoteWithheld(message),
   })
 }
 
@@ -1053,6 +1110,11 @@ export async function forwardMessage(message: Message) {
     text: rich ? '' : forwardedPlainBody(message),
     title: forwardedSubject(message.subject),
     signaturePlacement: 'aboveQuote',
+    // A forward of encrypted mail carries its decrypted text in the body:
+    // it can only go out encrypted.
+    encrypt: !!message.crypto?.encrypted || undefined,
+    sensitiveSource: message.crypto?.encrypted ? 'forward' : undefined,
+    decryptedInBody: !!message.crypto?.encrypted || undefined,
   })
   if (!id) return
 
@@ -1271,6 +1333,8 @@ export function closeComposeTabKeepingDraft(
         references: current.references,
         draftMessageId: current.draftMessageId,
         attachments,
+        encrypt: current.encrypt,
+        decryptedInBody: current.decryptedInBody,
       })
       return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
     } catch (err) {
@@ -1387,7 +1451,8 @@ export function toggleConversationMode(accountId: string | undefined): boolean {
 
 // Send a composed message via the same mail.send path used by replies. When
 // `rich`, the HTML is sent with a derived plaintext fallback. Throws on failure
-// so the caller can surface the error inline.
+// so the caller can surface the error inline. Returns the addresses it didn't
+// reach (see `undeliveredOf`).
 export async function sendComposed(args: {
   accountId: string
   from?: string
@@ -1401,10 +1466,20 @@ export async function sendComposed(args: {
   inReplyTo?: string
   references?: string
   attachments: ComposerAttachment[]
+  /** End-to-end encrypt (PGP/MIME); the core refuses rather than downgrade. */
+  encrypt?: boolean
+  /** The body holds decrypted text (an unfolded quote): always encrypted. */
+  decryptedInBody?: boolean
 }) {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
-  await invoke('mail.send', {
+  const encrypt = args.decryptedInBody ? true : args.encrypt
+  const result = await invoke('mail.send', {
+    encrypt: !!encrypt,
+    // Plain only when encryption was switched off (`false`), never because the
+    // flag is missing: the core encrypts a reply to encrypted mail that says
+    // neither. A body holding decrypted text is never sent plain.
+    plain: encrypt === false,
     account_id: args.accountId,
     from: args.from ?? '',
     to: args.to,
@@ -1423,6 +1498,7 @@ export async function sendComposed(args: {
       inline_id: a.inlineId ?? '',
     })),
   })
+  return undeliveredOf(result)
 }
 
 // Surface a just-sent compose-tab message in the open conversation so the user
@@ -1442,6 +1518,8 @@ export function appendSentMessage(args: {
   content: string // HTML when rich, plaintext otherwise
   references?: string
   attachments: ComposerAttachment[]
+  /** Sent encrypted: the bubble shows the lock its Sent copy will have. */
+  encrypt?: boolean
 }) {
   if (!args.threadId || ui$.selectedThread.get() !== args.threadId) return
   const activeT = getActiveThread()
@@ -1472,6 +1550,7 @@ export function appendSentMessage(args: {
     starred: false,
     has_attachments: args.attachments.length > 0,
     send_status: 'sent',
+    crypto: args.encrypt ? ownSentCrypto() : undefined,
     attachments: args.attachments.map((a) => ({
       filename: a.filename,
       mime: a.mime,
@@ -1499,6 +1578,11 @@ export async function saveComposedDraft(args: {
   references?: string
   draftMessageId: string
   attachments: ComposerAttachment[]
+  /** Encrypt the saved draft to the user's own key (an encrypted message's
+   * draft must not sit on the server in the clear). */
+  encrypt?: boolean
+  /** The body holds decrypted text (an unfolded quote): always encrypted. */
+  decryptedInBody?: boolean
 }): Promise<string> {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
@@ -1506,7 +1590,13 @@ export async function saveComposedDraft(args: {
     !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
       ? await allocateMessageIdentity(args.accountId, true)
       : args.draftMessageId
+  const encrypt = args.decryptedInBody ? true : args.encrypt
   const request = invoke('mail.saveDraft', {
+    encrypt: !!encrypt,
+    // Plain only when encryption was switched off (`false`), never because the
+    // flag is missing: the core encrypts a reply to encrypted mail that says
+    // neither. A body holding decrypted text is never saved plain.
+    plain: encrypt === false,
     account_id: args.accountId,
     from: args.from ?? '',
     to: args.to,

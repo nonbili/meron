@@ -11,6 +11,7 @@ import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { Avatar } from '../avatar/Avatar'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { CryptoBadge } from '../crypto/CryptoBadge'
 import { FrostedBand } from './FrostedBand'
 import { MessageContent } from './MessageContent'
 import { formatFullTimestamp, formatMessageStamp, normalizeBodyText } from './messageHelpers'
@@ -206,6 +207,12 @@ export function MessageRow({
           {draftBadge}
           {message.has_attachments && <Paperclip size={12} />}
           {message.starred && <Star size={12} className="fill-amber-500 text-amber-500" />}
+          <CryptoBadge
+            crypto={message.crypto}
+            accountId={message.account_id}
+            senderName={message.from_name}
+            senderAddress={message.from_addr}
+          />
           <BlockedRemoteButton
             messageId={message.id}
             blocked={view.blockedRemote}
@@ -312,6 +319,12 @@ export function MessageRow({
             {draftBadge}
             {message.has_attachments && <Paperclip size={12} />}
             {message.starred && <Star size={12} className="fill-amber-500 text-amber-500" />}
+            <CryptoBadge
+              crypto={message.crypto}
+              accountId={message.account_id}
+              senderName={message.from_name}
+              senderAddress={message.from_addr}
+            />
             <BlockedRemoteButton
               messageId={message.id}
               blocked={view.blockedRemote}

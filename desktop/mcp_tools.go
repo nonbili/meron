@@ -262,7 +262,10 @@ func (s *mcpService) readAttachment(account, key string) (any, error) {
 	// key to the media root, but "allowed/../other" stays inside that root and
 	// would otherwise read another account's cache behind an approved prefix.
 	key = strings.TrimPrefix(gopath.Clean("/"+key), "/")
-	segments := strings.Split(key, "/")
+	// A decrypted message's attachments sit under the secure prefix, laid out
+	// the same way below it (mediaFilePath resolves the prefix).
+	scoped := strings.TrimPrefix(key, secureMediaPrefix)
+	segments := strings.Split(scoped, "/")
 	if len(segments) < 2 || segments[0] != mcpMediaSegment(account) {
 		return nil, errors.New("The attachment key does not belong to this account")
 	}

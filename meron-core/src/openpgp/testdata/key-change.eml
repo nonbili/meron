@@ -1,0 +1,44 @@
+From: Carol Example <carol@example.com>
+To: Alice Example <alice@example.org>
+Subject: [...]
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <key-change@example.com>
+MIME-Version: 1.0
+Autocrypt: addr=carol@example.com; prefer-encrypt=mutual; keydata=
+ mDMEaueN5xYJKwYBBAHaRw8BAQdANBTnw0bRXYwwBkO8APfYYXlYqc8dOZFKmWOSFMDUiGq0IUNh
+ cm9sIEV4YW1wbGUgPGNhcm9sQGV4YW1wbGUuY29tPoiTBBMWCgA7FiEEhWRnY3A3hlJivTuCEJZW
+ KS8FL50FAmrnjecCGwMFCwkIBwICIgIGFQoJCAsCBBYCAwECHgcCF4AACgkQEJZWKS8FL53RXQD/
+ TVTH5CUPtM2bnkQ2Akpuo1tP9WxPk9fzl4BaMa3U3W0BAPgEus6qpf+XMzLPLspt0itufHhxhV57
+ eDOr1KdAq+QKuDgEaueN5xIKKwYBBAGXVQEFAQEHQPLNAm1MoNZ5br606yu3aVfuNv/QpsToZGjI
+ bVfggcIuAwEIB4h4BBgWCgAgFiEEhWRnY3A3hlJivTuCEJZWKS8FL50FAmrnjecCGwwACgkQEJZW
+ KS8FL506tgEAgQxQqyHrf8ynTkGoZSiH+2ujj9hTX/fK3o/mTAvxTAoA/jCno45LGgQRFYpHN2yQ
+ mlqUPgTXQXvbMpZ8YClv0LUO
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="enc-boundary"
+
+--enc-boundary
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--enc-boundary
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Disposition: inline; filename="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DHQNycYwvvjUSAQdAUzaAyyOdn96jBXTvRouoTeQV5E7EprjrK9u3Z55DwFww
+gxsZr5qI6lKUSeI3uclcfdkJcEOZz3iRU/JmOxAlBYKS0Zr0voOiqG9F+WDuzfsd
+0sDGAXe8pZRAPzPVY65PT/hnxslutSQ/Y6MmPFsIIHk6hJJMKIUVCvPsRAiUE9ZO
+occN1jY3oUXi1gRVfaatZJ7918vd01P/lrSgIp6B+/0rU799qL9SiLqLk6/SS0yB
+oONbYpmjq+FUtc5FamhDEhUaW7Xz2T7J+ayD+D5yrrMxmhsgoQ2HaSyPfpY2HOXc
+XLWzM9VItlpjs2qe1oxWAtWz8IgS2iQbBLPZELCq47g4oSNxmIrYK7VRQe4yXLPG
+1upYpoaUXCw9SfAeI9qt2e0JiCh/tmTriPk7U29D78gAkLDaFGSNOQUAwiDcgId2
+5O8sUS7InS4SBdS1auLdmSnsm39VmbGGai/+t6GSotxYJ0PySKZUFkaAV8d+8Nnm
+awJ1AuGcxk1n1qPkvD85gWbU3iNZmp0BREpJog1msB2F/4AqHg/WMizk5oUcTlJH
+ObH1/IlB2wQLVOmXyeTBYVX483+BnHK+kAF+CTHV6VRPZP1EtQcoRFBEBkrWJxzL
+Qy1D2rj1hAlQ
+=qIpy
+-----END PGP MESSAGE-----
+
+--enc-boundary--

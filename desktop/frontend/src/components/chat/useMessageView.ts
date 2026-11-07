@@ -63,7 +63,8 @@ export function useMessageView(message: Message) {
     revealed,
     allowedSenders,
   )
-  const remoteVisible = remoteContentAllowed(message, account, allowedSenders) || revealed
+  const encrypted = !!message.crypto?.encrypted
+  const remoteVisible = remoteContentAllowed(message, account, allowedSenders) || (revealed && !encrypted)
   const normalizedSearchQuery = search.trim()
   // A search must not change how a message reads: HTML bodies stay HTML and
   // highlight their matches inside the frame (BubbleHtmlFrame), rather than
@@ -72,8 +73,9 @@ export function useMessageView(message: Message) {
   // A newsletter's remote images live in the HTML body, not in the attachment
   // list, so the reveal affordance has to look at the body too — otherwise the
   // most common blocked message offers no way to show its content.
+  // Decrypted mail can't reveal remote content, so it offers no reveal.
   const blockedRemote =
-    !remoteVisible && (hiddenRemoteCount > 0 || (useHtmlBody && htmlHasRemoteMedia(message.body_html)))
+    !encrypted && !remoteVisible && (hiddenRemoteCount > 0 || (useHtmlBody && htmlHasRemoteMedia(message.body_html)))
   const bubbleAttachmentImages = standaloneAttachmentImages(attachmentImages, useHtmlBody, message.body_html)
 
   const replyToRaw = message.reply_to?.trim()

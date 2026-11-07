@@ -104,7 +104,8 @@ pub fn thread_page_headers(
         store::get_thread_headers_all_folders(db, account, thread_key)?
     };
     if let Some(filter) = subject_filter {
-        headers.retain(|header| store::thread_grouping_subject(&header.subject) == filter);
+        headers
+            .retain(|header| store::subject_in_branch(&header.subject, header.encrypted, filter));
     }
     let headers = store::collapse_thread_draft_headers(db, account, folder, headers)?;
 
@@ -934,6 +935,16 @@ pub fn thread_message_json(
             .map(|message| serde_json::to_value(&message.attachments).unwrap_or_else(|_| json!([])))
             .unwrap_or_else(|| json!([])),
         "reply": reply,
+        "crypto": cached.and_then(|message| message.crypto.as_ref()).map(|status| {
+            let outgoing = store::account_message_is_outgoing(
+                account_id,
+                mine,
+                folder,
+                from_addr,
+                cached.is_some_and(|message| message.delivered),
+            );
+            crate::openpgp::mime::view_json(status, &crate::openpgp::keyring::current(), account_id, from_addr, outgoing)
+        }),
     })
 }
 

@@ -20,6 +20,8 @@ export type BackupSummary = {
   feeds: number
   settings: number
   secrets: number
+  /** Accounts with encryption whose secret key the backup didn't hold. */
+  openpgpMissingSecret: string[]
 }
 
 type ExportResult = { saved: boolean; path?: string; encrypted?: boolean }
@@ -68,6 +70,7 @@ export async function importBackup(path?: string, passphrase = ''): Promise<Impo
     feeds: res?.feeds ?? 0,
     settings: res?.settings ?? 0,
     secrets: res?.secrets ?? 0,
+    openpgpMissingSecret: res?.openpgpMissingSecret ?? [],
   }
   // Restored rows land straight in the DB, so every cached view is stale:
   // re-bootstrap for accounts + settings, then refresh the open mail panes.

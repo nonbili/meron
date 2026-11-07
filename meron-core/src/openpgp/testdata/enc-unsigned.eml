@@ -1,0 +1,32 @@
+From: Carol Example <carol@example.com>
+To: Alice Example <alice@example.org>
+Subject: ...
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <enc-unsigned@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="enc-boundary"
+
+--enc-boundary
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--enc-boundary
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Disposition: inline; filename="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DHQNycYwvvjUSAQdA/LJPuXyXcxVdGjKomkXE0gc4/UB7Of0xuYoXQMgYq18w
+En+2RWcji+ZzJIARVPvt2P4v7lJzT82OFMp5JqDl8zX2rC4deaT6QPIHRJd4vZ27
+0sBDAYTUiO47dZqcGphlUI8SOhhYaibkQJFNtlzfdeEiwGUlXw9zo7QDqpSEKj4o
+HhtYXz2iY3pC3qDVkvbkuR7zKCOCovI/cUerNewwRA92FmRUDxIbU6JaGiZaVOuW
+mRz2yOiV5vuv0eB0A+xDV9kG0wtS3VH/H3WsLBIZj53ZwzIT7ELViZS48F7fmdSc
+MFhwH8oKLcpr4qj/bhsA2NwhIPcyiMArv6YPC4YVY68V37hIuqiIb8ncnfxd78PC
+lCTeehX4x42IkAokpIP4C4YqkmX1bFl0l7C3YttALZ/mB/e65+eZiQ0fMGa50HeT
+oquEHEMgpZ/+wp9qyID07qIfWVKijw==
+=nCqE
+-----END PGP MESSAGE-----
+
+--enc-boundary--

@@ -74,10 +74,27 @@ pub use tasks::*;
 pub use threads::*;
 pub use updates::*;
 
+/// SQL for a cached row's `encrypted` column: end-to-end encrypted by its
+/// headers at fetch (`$.encrypted`) or by its decrypted body
+/// (`$.crypto.encrypted`). Read only for a subject that could be the
+/// protected-headers placeholder (`...`, `[...]`), so no other row pays for the
+/// JSON reads. A `...` subject is a placeholder only when this is set.
+pub(super) const ENCRYPTED_COLUMN: &str = "(subject LIKE '%...%' AND (json_extract(json, '$.encrypted') = 1 \
+     OR json_extract(json, '$.crypto.encrypted') = 1)) AS encrypted";
+/// [`ENCRYPTED_COLUMN`] for queries that name the table `m`.
+pub(super) const ENCRYPTED_COLUMN_M: &str = "(m.subject LIKE '%...%' AND (json_extract(m.json, '$.encrypted') = 1 \
+     OR json_extract(m.json, '$.crypto.encrypted') = 1)) AS encrypted";
+
 fn message_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageHeader> {
     let uid = row.get(0)?;
     Ok(MessageHeader {
         uid,
+        // Selected by name: a query without the column reads as not encrypted.
+        encrypted: row
+            .get::<_, Option<bool>>("encrypted")
+            .ok()
+            .flatten()
+            .unwrap_or(false),
         subject: row.get(1)?,
         from_name: row.get(2)?,
         from_addr: row.get(3)?,

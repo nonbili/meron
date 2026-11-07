@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -132,6 +133,11 @@ func (a *App) Startup(ctx context.Context) {
 	// way it is re-downloadable, so start clean.
 	sweepReplacedExecutable()
 	cleanupUpdateCache()
+	// Decrypted attachments a crash or kill left behind; the dir comes back
+	// owner-only.
+	if err := prepareSecureMedia(); err != nil {
+		a.logf("startup: secure media dir: %v", err)
+	}
 	a.startTray()
 	a.logf("startup: core path=%s", coreBinaryPath())
 	a.sidecar = NewSidecar(coreBinaryPath(), a.logWriter())
@@ -189,6 +195,8 @@ func (a *App) Shutdown(ctx context.Context) {
 	if a.sidecar != nil {
 		a.sidecar.Close()
 	}
+	// Decrypted attachments exist only while Meron runs.
+	wipeSecureMedia()
 	_ = os.RemoveAll(filepath.Join(mediaDir(), "_eml"))
 	a.closeNotificationListener()
 	a.closeResumeListener()
@@ -504,8 +512,66 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 	case "mail.delete":
 		return a.mailDelete(payload)
 	default:
+		// End-to-end encryption settings and keys go straight to the core;
+		// payloads (passphrases, key files) are never logged (Invoke logs
+		// only the command name).
+		if strings.HasPrefix(command, "pgp.") {
+			return a.pgpInvoke(command, payload)
+		}
 		return nil, fmt.Errorf("unknown command: %s", command)
 	}
+}
+
+func (a *App) pgpInvoke(command string, payload map[string]any) (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, a.engineUnavailable()
+	}
+	switch command {
+	case "pgp.account.exportPublic", "pgp.account.exportSecret":
+		return a.pgpExport(command, payload)
+	}
+	return a.sidecar.Call(command, payload)
+}
+
+// pgpExport writes an exported key straight to a file the user picks, owner
+// readable only, so even a passphrase-protected secret key never passes
+// through the webview.
+func (a *App) pgpExport(command string, payload map[string]any) (any, error) {
+	res, err := a.sidecar.Call(command, payload)
+	if err != nil {
+		return nil, err
+	}
+	resMap, _ := res.(map[string]any)
+	armored, _ := resMap["armored"].(string)
+	if armored == "" {
+		return nil, errors.New("nothing to export")
+	}
+	secret := command == "pgp.account.exportSecret"
+	name, _ := payload["filename"].(string)
+	if name == "" {
+		name = "public-key.asc"
+		if secret {
+			name = "secret-key.asc"
+		}
+	}
+	dest, err := saveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		Title:                "Export key",
+		DefaultFilename:      filepath.Base(name),
+		CanCreateDirectories: true,
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "OpenPGP key (*.asc)", Pattern: "*.asc"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if dest == "" {
+		return map[string]any{"saved": false}, nil
+	}
+	if err := writePrivateFile(dest, []byte(armored)); err != nil {
+		return nil, fmt.Errorf("write key: %w", err)
+	}
+	return map[string]any{"saved": true}, nil
 }
 
 func (a *App) appPrefsGet(payload map[string]any) (any, error) {

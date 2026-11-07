@@ -128,6 +128,9 @@ func (a *App) importBackup(payload map[string]any) (any, error) {
 		"feeds":    jsonInt(resMap["feeds"]),
 		"settings": jsonInt(resMap["settings"]),
 		"secrets":  jsonInt(resMap["secrets"]),
+		// Accounts with encryption whose secret key the backup didn't hold:
+		// their encrypted mail can't be read here until the key is imported.
+		"openpgpMissingSecret": jsonStrings(resMap["openpgp_missing_secret"]),
 	}
 	a.logf("backup.import: restored %d accounts (%d skipped), %d feeds, %d settings from %s",
 		summary["accounts"], summary["skipped"], summary["feeds"], summary["settings"], src)

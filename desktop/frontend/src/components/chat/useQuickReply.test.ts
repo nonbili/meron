@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import { compose$ } from '../../states/composeState'
 import { cancelQuickReplyDraftSave } from '../../states/quickReply'
 import { mail$ } from '../../states/mail'
 import { settings$ } from '../../states/settings'
-import { ui$ } from '../../states/ui'
+import { settleConfirm, ui$ } from '../../states/ui'
 import type { Message } from '../../types'
 import { useQuickReply } from './useQuickReply'
 
@@ -81,6 +81,35 @@ describe('useQuickReply draft ownership', () => {
     else (window as any).go = previousGo
   })
 
+  it('asks before an encrypted send to a changed key, and cancelling sends nothing', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'pgp.keys.forRecipients')
+        return {
+          enabled: true,
+          own_key_unusable: false,
+          missing: [],
+          changed: [{ addr: 'them@example.com', previous: 'A', current: 'B' }],
+        }
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      return {}
+    }
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: true })
+    const { result } = renderHook(() => useQuickReply())
+    let sending: Promise<void> = Promise.resolve()
+    act(() => {
+      sending = result.current.handleSendReply()
+    })
+    await waitFor(() => expect(ui$.confirm.get()?.title).toBe('Send to a changed key?'))
+    await act(async () => {
+      settleConfirm(false)
+      await sending
+    })
+    expect(calls.some((c) => c.command === 'mail.send')).toBe(false)
+    expect(compose$.composer.get()).toBe('Hydrated reply')
+    compose$.quickReplyEncrypt.set(null)
+  })
+
   it('re-measures the box when the message text size changes', () => {
     const { result } = renderHook(() => useQuickReply())
     const textarea = document.createElement('textarea')
@@ -95,6 +124,20 @@ describe('useQuickReply draft ownership', () => {
     contentHeight = 40
     act(() => settings$.messageFontScale.set(100))
     expect(textarea.style.height).toBe('40px')
+  })
+
+  // Switching encryption on after the reply was saved plain saves it again, so
+  // the server's plain copy is replaced by an encrypted one.
+  it('saves the reply again when encryption is switched on', async () => {
+    renderHook(() => useQuickReply())
+    await act(async () => {
+      await Promise.resolve()
+      compose$.quickReplyEncrypt.set({ threadId: 't-1', on: true })
+      await new Promise((resolve) => setTimeout(resolve, 1_300))
+    })
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(saves.length).toBeGreaterThan(0)
+    compose$.quickReplyEncrypt.set(null)
   })
 
   it('preserves a draft hydrated before mount and autosaves the next edit', async () => {

@@ -389,6 +389,10 @@ impl Engine {
         if let Err(err) = crate::proxy::load_global(&conn) {
             eprintln!("meron-core: could not load the proxy setting: {err:#}");
         }
+        // OpenPGP keys for the parser and sender (never logs key material).
+        if let Err(err) = crate::openpgp::store::init_main(&conn) {
+            eprintln!("meron-core: could not load OpenPGP keys: {err:#}");
+        }
         let mut accounts: HashMap<String, imap::Creds> = HashMap::new();
         for (id, mut creds) in store::load_accounts(&conn)? {
             host.apply_secret(&conn, &id, &mut creds);

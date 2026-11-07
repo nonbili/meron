@@ -23,9 +23,11 @@ import {
   buildReplyRecipients,
   buildReplyThreading,
   pickReplyTarget,
+  quickReplyEncrypts,
+  resolveQuickReplyFrom,
+  replySubject,
   addressQuickReply,
   quickReplyAddressing,
-  resolveQuickReplyFrom,
 } from './composeReply'
 import { compose$, newDraftMessageId } from './composeState'
 import { draftSaveRunning } from './composeSessions'
@@ -176,7 +178,7 @@ async function performQuickReplyDraftSave() {
   const { to, cc } = quickReplyAddressing(target)
   const { in_reply_to, references } = buildReplyThreading(target)
   const fromEmail = resolveQuickReplyFrom(target, activeAcc)
-  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  const subject = replySubject(activeT.subject, target)
   // Whatever is in the box now is a different reply from the one a send took, so
   // it needs a draft of its own: reusing the claimed id would write this text
   // over the copy that send is about to discard, taking the box's safety copy
@@ -203,6 +205,7 @@ async function performQuickReplyDraftSave() {
       references,
       draftMessageId: draftId,
       attachments,
+      encrypt: quickReplyEncrypts(),
     })
     // Only when the box still points at the placeholder this save started from:
     // a send (or a thread switch) that cleared it in the meantime has moved on,
@@ -618,6 +621,9 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
 
   compose$.composer.set(tail.body ?? '')
   compose$.composerAttachments.set([])
+  // A draft saved encrypted comes back encrypted, whatever the conversation's
+  // default: its text must not go out (or be saved again) in the clear.
+  if (tail.crypto?.encrypted) compose$.quickReplyEncrypt.set({ threadId: activeThreadId, on: true, draft: true })
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
   compose$.quickReplyAdded.set(holds.added)

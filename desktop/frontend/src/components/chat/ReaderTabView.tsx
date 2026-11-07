@@ -16,6 +16,8 @@ import { Composer } from '../composer/Composer'
 import { HtmlMessageView } from './HtmlMessageView'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { CryptoBadge } from '../crypto/CryptoBadge'
+import { CryptoStrip } from '../crypto/CryptoStrip'
 import { FrostedBand } from './FrostedBand'
 import { MessageContextMenu } from './MessageContextMenu'
 import {
@@ -57,13 +59,17 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
   const account = accounts.find((acc) => acc.id === tab.accountId)
   const isRSS = account?.provider === 'rss' || account?.auth_type === 'rss'
   const sender = normalizeSenderAddr(tab.fromRaw ?? '')
+  const encrypted = !!tab.message?.crypto?.encrypted
   const allowRemote =
-    (account?.load_remote_images ?? false) ||
-    (!!sender && allowedSenders.includes(sender)) ||
-    // `revealMessageRemote` copies a reveal onto the tab as it happens; the
-    // session map still counts for a tab opened before the reveal.
-    !!revealedRemote[tab.messageId] ||
-    !!tab.revealRemote
+    // Decrypted mail never loads remote content (audit: no network from
+    // decrypted bodies), so the whole allowance is gated on !encrypted.
+    !encrypted &&
+    ((account?.load_remote_images ?? false) ||
+      (!!sender && allowedSenders.includes(sender)) ||
+      // `revealMessageRemote` copies a reveal onto the tab as it happens; the
+      // session map still counts for a tab opened before the reveal.
+      !!revealedRemote[tab.messageId] ||
+      !!tab.revealRemote)
   // The same affordance the conversation offers, on the tab's own header: a tab
   // outlives the thread it was opened from, so it has to be able to reveal the
   // content itself.
@@ -72,7 +78,9 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
   )
   const hiddenRemoteCount = allowRemote ? 0 : remoteAttachments.length
   const blockedRemote =
-    !allowRemote && (hiddenRemoteCount > 0 || (tab.viewMode === 'html' && htmlHasRemoteMedia(tab.bodyHtml)))
+    !encrypted &&
+    !allowRemote &&
+    (hiddenRemoteCount > 0 || (tab.viewMode === 'html' && htmlHasRemoteMedia(tab.bodyHtml)))
   const actionBar = bottomActions && !isRSS && !!tab.message
 
   return (
@@ -133,16 +141,35 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
               isRSS={isRSS}
               replyToDiffers={replyToDiffers}
               remote={
-                <BlockedRemoteButton
-                  messageId={tab.messageId}
-                  blocked={blockedRemote}
-                  hiddenRemoteCount={hiddenRemoteCount}
-                  // Trusting the sender of the user's own mail would be a no-op that
-                  // still grew the allowlist, so it only offers a reveal.
-                  senderAddress={tab.outgoing ? '' : sender}
-                />
+                <>
+                  <CryptoBadge
+                    crypto={tab.message?.crypto}
+                    accountId={tab.accountId ?? ''}
+                    senderName={tab.message?.from_name ?? ''}
+                    senderAddress={sender}
+                  />
+                  <BlockedRemoteButton
+                    messageId={tab.messageId}
+                    blocked={blockedRemote}
+                    hiddenRemoteCount={hiddenRemoteCount}
+                    // Trusting the sender of the user's own mail would be a no-op that
+                    // still grew the allowlist, so it only offers a reveal.
+                    senderAddress={tab.outgoing ? '' : sender}
+                  />
+                </>
               }
             />
+            {/* Decryption errors, key changes and the encryption offer, as in
+                the conversation: a reader tab shows the same message. */}
+            <div className="mt-3 empty:hidden">
+              <CryptoStrip
+                crypto={tab.message?.crypto}
+                accountId={tab.accountId ?? ''}
+                accountAddress={account?.email ?? ''}
+                senderName={tab.message?.from_name ?? ''}
+                senderAddress={sender}
+              />
+            </div>
           </div>
         }
         // Room for the body's end to scroll clear of the floating actions.

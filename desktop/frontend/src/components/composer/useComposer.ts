@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
+import { confirmKeyChanges } from '../../states/crypto'
 import { Extension, useEditor } from '@tiptap/react'
 import { TextSelection } from '@tiptap/pm/state'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -18,6 +20,7 @@ import {
   closeComposeTabKeepingDraft,
   announceSavedDrafts,
 } from '../../states/compose'
+import { warnUndelivered } from '../../states/undelivered'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
 import { invoke } from '../../lib/bridge'
@@ -368,6 +371,8 @@ export function useComposer(tabId: string) {
           references: current.references,
           draftMessageId,
           attachments,
+          encrypt: current.encrypt,
+          decryptedInBody: current.decryptedInBody,
         })
         // A tab closed mid-save lands here too (no latest draft): nothing will
         // adopt the id, so a freshly allocated copy has to go now.
@@ -449,6 +454,9 @@ export function useComposer(tabId: string) {
     draft?.html,
     draft?.quote,
     draft?.attachments,
+    // Switched on after a plain autosave: the copy on the server is replaced
+    // by an encrypted one rather than left there in the clear.
+    draft?.encrypt,
     sending,
     editor,
     session,
@@ -481,12 +489,16 @@ export function useComposer(tabId: string) {
   // it like any other text; from then on it is part of the body.
   const expandQuote = () => {
     const quote = draft?.quote
-    if (!quote) return
+    // A decrypted original's quote is not offered while encryption is off.
+    if (!quote || (draft.sensitiveSource && !draft.encrypt)) return
+    // A decrypted original's quote now sits in the body: from here on the
+    // draft can only go out (and be saved) encrypted.
+    const decrypted = draft.sensitiveSource ? { decryptedInBody: true } : {}
     if (draft.rich && editor) {
       editor.chain().insertContentAt(editor.state.doc.content.size, `<p></p>${quote.html}`).run()
-      update({ html: editor.getHTML(), quote: undefined })
+      update({ html: editor.getHTML(), quote: undefined, ...decrypted })
     } else {
-      update({ text: composedContent(draft), quote: undefined })
+      update({ text: composedContent(draft), quote: undefined, ...decrypted })
     }
   }
 
@@ -661,12 +673,27 @@ export function useComposer(tabId: string) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
 
-  const canSend = !sending && !!draft?.accountId && !!draft?.to.trim()
+  // End-to-end encryption: the key check for the recipients as typed. An
+  // encrypted message never goes out while a recipient has no key.
+  const encryptionKeys = useRecipientKeys(
+    draft?.accountId ?? '',
+    recipientAddresses(draft?.to ?? '', draft?.cc ?? '', draft?.bcc ?? ''),
+  )
+  const encryptionBlocked = encryptionBlocksSend(!!draft?.encrypt, encryptionKeys)
+  const canSend = !sending && !!draft?.accountId && !!draft?.to.trim() && !encryptionBlocked
 
   const submit = async () => {
     if (!canSend || !draft) return
     setSending(true)
     setError('')
+    // A recipient's key changed since the last encrypted mail: ask first.
+    if (
+      draft.encrypt &&
+      !(await confirmKeyChanges(draft.accountId, recipientAddresses(draft.to, draft.cc, draft.bcc)))
+    ) {
+      setSending(false)
+      return
+    }
     await stopSaving()
     // Re-read after the wait: the fields stay editable while a save drains, and
     // sending this render's copy would silently drop whatever was typed (or the
@@ -724,7 +751,7 @@ export function useComposer(tabId: string) {
         content = inlineRichStyles(prepared.html)
         attachments = prepared.attachments
       }
-      await sendComposed({
+      const undelivered = await sendComposed({
         accountId: current.accountId,
         from: current.fromEmail,
         to: current.to.trim(),
@@ -737,6 +764,8 @@ export function useComposer(tabId: string) {
         inReplyTo: current.inReplyTo,
         references: current.references,
         attachments,
+        encrypt: current.encrypt,
+        decryptedInBody: current.decryptedInBody,
       })
       // When this tab is a reply to the open conversation, drop the sent message
       // into the thread immediately so it shows without waiting for the next sync.
@@ -753,6 +782,7 @@ export function useComposer(tabId: string) {
           content,
           references: current.references,
           attachments,
+          encrypt: current.decryptedInBody || current.encrypt,
         })
       }
       // The message is out, so the tab closes now rather than after the draft
@@ -761,7 +791,7 @@ export function useComposer(tabId: string) {
       // of it, keeping it hidden — and out of the quick reply — until it's gone.
       const remote = remoteDraftOf(current)
       if (remote) void discardSentDraft(remote)
-      showToast(t('chat.messageSent'))
+      if (!warnUndelivered(undelivered)) showToast(t('chat.messageSent'))
       finishClosingMessageTab(tabId)
     } catch (err) {
       // The composer stays open on failure, so autosaving resumes with it.
@@ -783,6 +813,7 @@ export function useComposer(tabId: string) {
     saveStatus,
     saveError,
     canSend,
+    encryptionKeys,
     update,
     toggleRich,
     expandQuote,

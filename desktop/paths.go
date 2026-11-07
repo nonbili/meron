@@ -76,6 +76,46 @@ func loadDotEnvLocal() {
 	}
 }
 
+// secureMediaPrefix marks media keys of decrypted (end-to-end encrypted)
+// mail. The sidecar writes those files under secureMediaDir, never in the
+// plain attachment cache (meron-core parse::SECURE_MEDIA_PREFIX).
+const secureMediaPrefix = "e2ee/"
+
+// secureMediaDir holds attachments of decrypted mail. It is private to this
+// user and the same path in every run, so the wipe before the sidecar starts
+// (prepareSecureMedia) also clears what a crash or kill left behind. Meron
+// empties it at start and at quit, so decrypted files exist only while it runs
+// (after a crash, until the next start); a missing file makes the sidecar fetch
+// and decrypt the message again.
+//   - Linux desktop session: $XDG_RUNTIME_DIR (tmpfs, owner-only, per-user).
+//   - Otherwise (no logind session on Linux; macOS; Windows): the per-user
+//     cache dir, which no other local user can write. Not the shared temp dir:
+//     a fixed name there could be read or pre-planted by another local user,
+//     and a random one (as before) can't be found again after a crash.
+func secureMediaDir() string {
+	if runtime := os.Getenv("XDG_RUNTIME_DIR"); runtime != "" {
+		return filepath.Join(runtime, appDirName(), "secure-media")
+	}
+	return filepath.Join(appCacheDir(), "secure-media")
+}
+
+// prepareSecureMedia empties the secure dir (what an earlier run left) and
+// recreates it owner-only (0700). The wipe removes whatever stood there, a
+// planted symlink included (never what it points to), so the dir is always
+// created fresh. Called before the sidecar starts.
+func prepareSecureMedia() error {
+	wipeSecureMedia()
+	return os.MkdirAll(secureMediaDir(), 0o700)
+}
+
+// wipeSecureMedia removes every decrypted attachment, and the copies opened
+// from them. Called before the sidecar starts and after it stops. Errors are
+// ignored (on Windows a file another app holds open can't go): the next start
+// tries again.
+func wipeSecureMedia() {
+	_ = os.RemoveAll(secureMediaDir())
+}
+
 // mediaDir is where the mail sidecar writes attachment files and the asset
 // handler serves them from at `/media/<key>`. Both sides must agree, so the
 // bridge sets MERON_MEDIA_DIR on the sidecar to this exact path.

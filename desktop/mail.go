@@ -765,6 +765,10 @@ func mediaFilePath(key string) (string, error) {
 		return "", errors.New("missing attachment key")
 	}
 	root := mediaDir()
+	// Decrypted mail's attachments live in the secure (tmpfs) dir.
+	if rest, ok := strings.CutPrefix(key, secureMediaPrefix); ok {
+		root, key = secureMediaDir(), rest
+	}
 	// Cleaning a rooted "/"+key strips any "..", then Join confines it to root.
 	src := filepath.Join(root, filepath.Clean("/"+key))
 	if rel, err := filepath.Rel(root, src); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
@@ -862,7 +866,7 @@ func (a *App) openAttachment(payload map[string]any) (any, error) {
 		return map[string]any{"opened": false}, nil
 	}
 
-	root := filepath.Join(appCacheDir(), attachmentOpenDirName)
+	root := attachmentOpenRoot(key)
 	pruneAttachmentOpenDir(root)
 	dir := filepath.Join(root, randomBase64URL(8))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -876,6 +880,16 @@ func (a *App) openAttachment(payload map[string]any) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"opened": true, "path": dest}, nil
+}
+
+// attachmentOpenRoot is where the copy handed to another app goes: for a
+// decrypted attachment inside the secure dir, which Meron wipes, never the
+// persistent cache.
+func attachmentOpenRoot(key string) string {
+	if strings.HasPrefix(key, secureMediaPrefix) {
+		return filepath.Join(secureMediaDir(), attachmentOpenDirName)
+	}
+	return filepath.Join(appCacheDir(), attachmentOpenDirName)
 }
 
 // pruneAttachmentOpenDir removes copies older than attachmentOpenTTL.
@@ -1081,7 +1095,7 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	if _, err := a.sidecar.Call("send", map[string]any{
+	res, err := a.sidecar.Call("send", map[string]any{
 		"account":     req.AccountID,
 		"to":          req.To,
 		"cc":          req.Cc,
@@ -1095,10 +1109,28 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 		"from":        req.From,
 		"message_id":  req.MessageID,
 		"attachments": req.Attachments,
-	}); err != nil {
+		"encrypt":     req.Encrypt,
+		"plain":       req.Plain,
+	})
+	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true, "queued": false}, nil
+	out := map[string]any{"ok": true, "queued": false}
+	// Encrypted mail goes out as one copy per Bcc: some can be refused after
+	// the rest went out. That is not a failure (a retry would duplicate it),
+	// but the caller should say who didn't get it.
+	if m, ok := res.(map[string]any); ok {
+		if list, ok := m["undelivered"].([]any); ok && len(list) > 0 {
+			undelivered := make([]string, 0, len(list))
+			for _, addr := range list {
+				if s, ok := addr.(string); ok {
+					undelivered = append(undelivered, s)
+				}
+			}
+			out["undelivered"] = undelivered
+		}
+	}
+	return out, nil
 }
 
 func (a *App) mailSaveDraft(payload map[string]any) (any, error) {
@@ -1123,6 +1155,8 @@ func (a *App) mailSaveDraft(payload map[string]any) (any, error) {
 		"from":        req.From,
 		"draft_id":    req.DraftID,
 		"attachments": req.Attachments,
+		"encrypt":     req.Encrypt,
+		"plain":       req.Plain,
 	}); err != nil {
 		return nil, err
 	}

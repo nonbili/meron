@@ -85,6 +85,15 @@ pub async fn prefetch_bodies_with_options(
         .await?;
     let wanted: Vec<u32> = {
         let db = engine.db.lock().unwrap();
+        // Encrypted mail never decrypted keeps a placeholder subject until its
+        // body is fetched, so it joins the window whatever its age.
+        let mut uids = uids;
+        uids.extend(
+            crate::openpgp::store::undecrypted_placeholder_uids(&db, account, folder)
+                .unwrap_or_default(),
+        );
+        uids.sort_unstable();
+        uids.dedup();
         uids.into_iter()
             .filter(|uid| {
                 store::has_message(&db, account, folder, *uid).unwrap_or(false)

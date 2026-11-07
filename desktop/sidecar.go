@@ -170,6 +170,7 @@ func sidecarEnv() []string {
 	env := append(os.Environ(),
 		"MERON_CORE_DB="+filepath.Join(appConfigDir(), "meron.db"),
 		"MERON_MEDIA_DIR="+mediaDir(),
+		"MERON_SECURE_MEDIA_DIR="+secureMediaDir(),
 	)
 	// Pass the baked OAuth credentials down so the sidecar's refresh path can
 	// read them from the environment without its own deobfuscation.
@@ -433,6 +434,12 @@ func sidecarCallTimeout(method string) time.Duration {
 	// writing every account, feed and setting.
 	case "backup.export", "backup.import":
 		return 30 * time.Second
+	// Key generation, keyring imports (every key checked) and S2K.
+	case "pgp.account.create", "pgp.account.importKey", "pgp.account.exportSecret", "pgp.peers.importPreview", "pgp.peers.import":
+		return 30 * time.Second
+	// A key lookup asks each source in turn, up to 10s each (WKD tries two hosts).
+	case "pgp.lookup":
+		return 60 * time.Second
 	// A batch is a handful of full messages, attachments included.
 	// A copy downloads every message in the thread in full, then APPENDs each
 	// one to the target.

@@ -89,6 +89,8 @@ import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
+import { AccountEncryptionCard } from '../crypto/AccountEncryptionCard'
+import { EncryptionSettingsPage } from '../crypto/EncryptionSettingsPage'
 import { RulesPanel } from './RulesPanel'
 import { setIntegratedTitlebar, windowChrome$ } from '../../lib/windowChrome'
 
@@ -102,7 +104,7 @@ const SECTIONS: { id: SectionId; labelKey: string; icon: LucideIcon }[] = [
   { id: 'composer', labelKey: 'settings.sections.composer', icon: SquarePen },
   { id: 'rules', labelKey: 'rules.title', icon: ListFilter },
 ]
-const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp'])
+const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp', 'encryption'])
 
 const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
   { value: 'enter', label: sendShortcutLabel('enter') },
@@ -216,6 +218,10 @@ export function SettingsDialog() {
             <Server size={15} className="shrink-0" />
             <span>{t('mcp.title')}</span>
           </NavItem>
+          <NavItem active={activeKey === 'encryption'} onClick={() => selectAccount('encryption')}>
+            <Lock size={15} className="shrink-0" />
+            <span>{t('crypto.peers.nav')}</span>
+          </NavItem>
           <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
           <AccountGroup
             label={t('settings.sections.mailAccounts')}
@@ -252,6 +258,8 @@ export function SettingsDialog() {
             <BoardPanel board={selectedBoard} />
           ) : selected === 'mcp' ? (
             <McpSettingsPanel />
+          ) : selected === 'encryption' ? (
+            <EncryptionSettingsPage />
           ) : selected === 'messages' ? (
             <MessagesSection />
           ) : selected === 'composer' ? (
@@ -750,8 +758,14 @@ function BackupRow() {
         return
       }
       closePrompt()
-      const { accounts, skipped } = outcome.summary
-      if (accounts === 0 && skipped > 0) {
+      const { accounts, skipped, openpgpMissingSecret } = outcome.summary
+      if (openpgpMissingSecret.length > 0) {
+        // More pressing than the count: encrypted mail of these accounts
+        // stays unreadable until their key is brought in.
+        const all = accounts$.get()
+        const names = openpgpMissingSecret.map((id) => all.find((acc) => acc.id === id)?.email || id)
+        showToast(t('settings.backup.missingEncryptionKey', { accounts: names.join(', ') }), 'error')
+      } else if (accounts === 0 && skipped > 0) {
         showToast(t('settings.backup.restoredNothingNew'), 'success')
       } else {
         showToast(t('settings.backup.restored', { count: accounts }), 'success')
@@ -1238,6 +1252,7 @@ export function AccountPanel({ account }: { account: Account }) {
         <AccountWallpaperCard account={account} />
       </SettingsGroup>
       <AccountTogglesSection account={account} isRSS={isRSS} isLocal={isLocal} />
+      {!isRSS && !isLocal && <AccountEncryptionCard account={account} />}
       {!isRSS && !isLocal && <AccountProxyCard account={account} />}
       {!isRSS && !isLocal && <AccountAliasesCard account={account} />}
       {!isRSS && !isLocal && <AccountSignatureCard account={account} />}

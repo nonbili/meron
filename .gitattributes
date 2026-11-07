@@ -2,3 +2,8 @@
 *.bat whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 # Unified diff context lines legitimately start with a space.
 *.patch -whitespace
+# OpenPGP fixtures: signatures cover exact CRLF bytes, so git must not touch them.
+meron-core/src/openpgp/testdata/*.eml binary
+meron-core/src/openpgp/testdata/*.asc binary
+meron-core/src/openpgp/testdata/*.gpg binary
+meron-core/src/openpgp/testdata/*.bin binary

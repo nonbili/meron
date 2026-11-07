@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
+import { Lock } from 'lucide-react'
 import { accounts$ } from '../../states/accounts'
 import { invoke } from '../../lib/bridge'
 import { useTranslation } from '../../lib/i18n'
@@ -20,6 +21,8 @@ type Approval = {
     body?: string
     in_reply_to?: string
     references?: string
+    /** Answers encrypted mail: the core sends it encrypted. */
+    encrypted?: boolean
     selection?: { folder: string; messages: { uid: number; subject: string; from: string; date: number }[] }
   }
 }
@@ -178,6 +181,12 @@ export function McpApprovalDialog() {
             <p className="break-all">To: {current.preview.to}</p>
             {current.preview.cc && <p className="break-all">Cc: {current.preview.cc}</p>}
             {current.preview.bcc && <p className="break-all">Bcc: {current.preview.bcc}</p>}
+            {current.preview.encrypted && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-secondary">
+                <Lock size={13} className="shrink-0" />
+                {t('mcp.sendsEncrypted')}
+              </p>
+            )}
             <p className="my-3 break-words font-semibold">{current.preview.subject || t('threads.noSubject')}</p>
             <pre className="whitespace-pre-wrap break-words font-sans">{current.preview.body}</pre>
             {current.preview.in_reply_to && (

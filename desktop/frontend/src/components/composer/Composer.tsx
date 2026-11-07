@@ -11,6 +11,7 @@ import { ComposerFooter } from './ComposerFooter'
 import { ComposerQuote } from './ComposerQuote'
 import { closeMessageTab } from '../../states/compose'
 import { DropOverlay } from '../chat/DropOverlay'
+import { KeyChangeNote } from '../crypto/KeyChangeNote'
 import { routeComposerDrop, useFileDrop } from '../../lib/useFileDrop'
 
 export function Composer({ tabId }: { tabId: string }) {
@@ -26,6 +27,7 @@ export function Composer({ tabId }: { tabId: string }) {
     saveStatus,
     saveError,
     canSend,
+    encryptionKeys,
     update,
     toggleRich,
     expandQuote,
@@ -160,7 +162,14 @@ export function Composer({ tabId }: { tabId: string }) {
               className={`${textareaFillsBody ? 'min-h-0 flex-1 px-4 py-3' : 'min-h-[4.5em]'} block w-full resize-none bg-transparent text-[calc(0.875rem*var(--me-message-scale))] leading-relaxed text-primary placeholder-secondary outline-none`}
             />
           )}
-          {draft.quote && <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />}
+          {/* A decrypted original's quote stays out while encryption is off: it
+              won't be sent, so it isn't offered for unfolding either. */}
+          {draft.quote && !(draft.sensitiveSource && !draft.encrypt) && (
+            <ComposerQuote onExpand={expandQuote} onRemove={removeQuote} />
+          )}
+          {!draft.quote && draft.quoteWithheld && (
+            <p className="mt-2 text-xs leading-snug text-secondary">{t('crypto.quoteWithheld')}</p>
+          )}
         </div>
         {showInlineDrop && <DropOverlay kind="inline" className="inset-2" passThrough />}
       </div>
@@ -178,12 +187,28 @@ export function Composer({ tabId }: { tabId: string }) {
 
       {error && <p className="shrink-0 px-4 pb-1 text-[0.6875rem] font-medium text-rose-500">{error}</p>}
 
+      {draft.encrypt && <KeyChangeNote accountId={draft.accountId} changed={encryptionKeys?.changed ?? []} />}
+
       <ComposerFooter
         rich={draft.rich}
         sending={sending}
         saveStatus={error ? 'idle' : saveStatus}
         saveError={saveError}
         canSend={canSend}
+        encryption={
+          draft.encrypt !== undefined || encryptionKeys?.enabled
+            ? {
+                keys: encryptionKeys,
+                on: !!draft.encrypt,
+                sensitive: draft.sensitiveSource,
+                bodyIsDecrypted: !!draft.decryptedInBody,
+                encryptedDraft: !!draft.encryptedDraft,
+                offByUser: !!draft.encryptOffByUser,
+                hasRecipients: !!(draft.to + draft.cc + draft.bcc).trim(),
+                onChange: (on: boolean) => update({ encrypt: on }),
+              }
+            : undefined
+        }
         onPickFiles={() => void pickAttachmentFiles()}
         onPickInlineImages={() => void pickInlineImages()}
         onToggleRich={toggleRich}

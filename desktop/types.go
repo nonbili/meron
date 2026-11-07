@@ -111,6 +111,13 @@ type Message struct {
 	// Files lists a thread card's attachments in thread order, for the chips
 	// under the row; only messages whose body is cached are known.
 	Files []ThreadFile `json:"files,omitempty"`
+	// Encrypted is a thread card's lock: the trust of its newest message's
+	// signature ("verified", "known", "unconfirmed") when that message was
+	// end-to-end encrypted, empty otherwise.
+	Encrypted string `json:"encrypted,omitempty"`
+	// Crypto is a message's OpenPGP state as the core shapes it for display
+	// (meron-core openpgp::mime::view_json).
+	Crypto any `json:"crypto,omitempty"`
 }
 
 // ThreadFile is one attachment named on a thread card.
@@ -228,6 +235,12 @@ type SendMailRequest struct {
 	DraftID     string            `json:"draft_id"`
 	MessageID   string            `json:"message_id"`
 	Attachments []AttachmentInput `json:"attachments"`
+	// End-to-end encrypt (PGP/MIME). The core refuses rather than sending
+	// unencrypted when a recipient has no key.
+	Encrypt bool `json:"encrypt"`
+	// Plain: the composer chose no encryption. Without it, a reply to encrypted
+	// mail is encrypted by the core whatever Encrypt says.
+	Plain bool `json:"plain"`
 }
 
 type ExchangedProfile struct {

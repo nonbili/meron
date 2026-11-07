@@ -483,6 +483,42 @@ func TestMCPAttachmentStaysInsideApprovedAccount(t *testing.T) {
 	}
 }
 
+// A decrypted message's attachments sit under the secure prefix, in the same
+// per-account layout: readable for that account, and only that account.
+func TestMCPAttachmentReadsDecryptedAttachmentsOfTheAccount(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	for _, key := range []string{"allowed/INBOX/7/0.png", "excluded/INBOX/7/0.png"} {
+		path := filepath.Join(secureMediaDir(), filepath.FromSlash(key))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("aaa"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	accounts := sidecarResponsePlan{Result: map[string]any{"accounts": []any{
+		map[string]any{"id": "allowed", "email": "allowed@example.com"},
+		map[string]any{"id": "excluded", "email": "excluded@example.com"},
+	}}}
+	app, _ := newMailHandlerTestApp(t, accounts, accounts)
+	session := connectTestMCP(t, testMCPService(t, app, false))
+
+	result := callMCP(t, session, "read_attachment", map[string]any{"account_id": "allowed", "key": secureMediaPrefix + "allowed/INBOX/7/0.png"})
+	encoded, _ := json.Marshal(result)
+	if result.IsError || !strings.Contains(string(encoded), base64.StdEncoding.EncodeToString([]byte("aaa"))) {
+		t.Fatalf("result=%s", encoded)
+	}
+	for _, key := range []string{
+		secureMediaPrefix + "excluded/INBOX/7/0.png",
+		secureMediaPrefix + "allowed/../excluded/INBOX/7/0.png",
+	} {
+		if !callMCP(t, session, "read_attachment", map[string]any{"account_id": "allowed", "key": key}).IsError {
+			t.Fatalf("allowed %s", key)
+		}
+	}
+}
+
 // Two account IDs can fold to one media segment ("a+b@" and "a_b@" both become
 // "a_b_example.com"), so the key prefix stops proving ownership and the read is
 // refused rather than serving the other account's cache.

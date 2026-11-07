@@ -15,6 +15,9 @@ import {
   seedQuickReplySignature,
 } from '../../states/quickReply'
 import { sendReply } from '../../states/quickReplySend'
+import { confirmKeyChanges } from '../../states/crypto'
+import { quickReplyEncrypts, quickReplyRecipients, quickReplyTarget } from '../../states/composeReply'
+import { recipientAddresses } from '../crypto/EncryptToggle'
 import { showToast, ui$ } from '../../states/ui'
 import { kanban$ } from '../../states/kanban'
 import { closeConversationToCard } from '../kanban/closeConversationToCard'
@@ -115,6 +118,13 @@ export function useQuickReply() {
     if (sendingReply) return
     setSendingReply(true)
     try {
+      // A recipient's key changed since the last encrypted mail: ask first,
+      // before the send claims the box's draft.
+      const target = quickReplyTarget()
+      if (target && quickReplyEncrypts()) {
+        const { to, cc } = quickReplyRecipients()
+        if (!(await confirmKeyChanges(target.account_id, recipientAddresses(to, cc)))) return
+      }
       await sendReply()
     } finally {
       setSendingReply(false)
@@ -188,6 +198,19 @@ export function useQuickReply() {
       scheduleQuickReplyDraftSave()
     }
   }, [composer])
+
+  // Encryption switched on after the reply was autosaved: save it again, so
+  // the plain copy on the server is replaced by an encrypted one. Not for a
+  // draft restored from an encrypted copy (`draft`), which is encrypted there.
+  const encryptChoice = useValue(compose$.quickReplyEncrypt)
+  const previousEncryptChoiceRef = useRef(encryptChoice)
+  useEffect(() => {
+    if (previousEncryptChoiceRef.current === encryptChoice) return
+    previousEncryptChoiceRef.current = encryptChoice
+    if (!encryptChoice?.on || encryptChoice.draft) return
+    if (!lastHydratedThreadRef.current || isQuickReplyBlank()) return
+    scheduleQuickReplyDraftSave()
+  }, [encryptChoice])
 
   // Attachments are a discrete action rather than a keystroke stream, so save
   // (or discard, if that was the last thing keeping the draft non-empty)

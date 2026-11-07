@@ -13,6 +13,7 @@ import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
 import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { CryptoBadge } from '../crypto/CryptoBadge'
 import { MessageContent } from './MessageContent'
 import { useMessageView } from './useMessageView'
 
@@ -174,6 +175,13 @@ export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
               </span>
             )}
             {message.starred && <Star size={11} className="fill-amber-500 text-amber-500" />}
+            <CryptoBadge
+              crypto={message.crypto}
+              accountId={message.account_id}
+              senderName={message.from_name}
+              senderAddress={message.from_addr}
+              size={14}
+            />
             <BlockedRemoteButton
               messageId={message.id}
               blocked={view.blockedRemote}

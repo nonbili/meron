@@ -1,0 +1,19 @@
+From: Carol Example <carol@example.com>
+To: Alice Example <alice@example.org>
+Subject: Inline
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <inline@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DHQNycYwvvjUSAQdAapSBWao9f9HLsq4lfMeEodV9XZUzyG1/XRtg9GOBO3gw
+udY7RGP8L56SZCjAikph+U1Ik1QGIYc6nin1p9fNpO+2e0J2kceefbKzxzH9Cu8p
+0sAZAUomwJiWYwPbith/Ca9/LWzmKyGOzS6x8zEs7UdOYZOFCpmlBE2fM06IoMOn
+yIDShgbovD/FnCPDTt0zVKP+vFRD5/5LzfM24bmvtMyOhagnzuqdIFqSaU5PI7wb
+jxTBLUyINIz6KZDMLOghLuHL5ifZWF1sD6O59hRL0A+vh5t7A911XH6l+oYoHxKv
+f8EKDYR9vtQem5bslkJIoqTmK1V/gXlP6erMstaRKQzyzHx8GZCVJex/I1DJt7hu
+lZCCSjHPPJWbRAUKBNrnjAzvVE1+T/EAl5XeDQ==
+=/pjC
+-----END PGP MESSAGE-----

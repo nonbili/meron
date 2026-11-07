@@ -1,0 +1,25 @@
+From: Erin Expired <erin@example.com>
+To: Alice Example <alice@example.org>
+Subject: Old signature
+Date: Sun, 01 Nov 2026 10:00:00 +0100
+Message-ID: <signed-expired-valid@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="sig-boundary"
+
+--sig-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Signed while my key was valid.
+
+--sig-boundary
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEABYIAB0WIQS/Ijd8teEMJ45Xe+MX2qyboueJygUCZlpkgAAKCRAX2qyboueJ
+ytiqAQC4eI+504JMdkFEXubaNvfCw3rtX70D/vSYRIxKL2OSeQEAqoC6heI7NW2H
+iyQ1YWNwQX0lkUMgfDlQTIkbo/JCawI=
+=HlvE
+-----END PGP SIGNATURE-----
+
+--sig-boundary--

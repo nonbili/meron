@@ -40,6 +40,34 @@ pub fn media_root() -> PathBuf {
     PathBuf::from(base).join("meron/attachments")
 }
 
+/// Key prefix for attachments of decrypted mail. They are written under
+/// [`secure_media_root`] (tmpfs on Linux) instead of the plain cache, the
+/// only place decrypted bytes would otherwise sit on disk outside SQLCipher.
+/// After a reboot they are gone and the message is fetched and decrypted
+/// again, like any pruned attachment.
+pub const SECURE_MEDIA_PREFIX: &str = "e2ee/";
+
+/// Where decrypted attachments go. The bridge sets `MERON_SECURE_MEDIA_DIR`
+/// (on Linux `$XDG_RUNTIME_DIR/meron…`); the fallback keeps the sidecar
+/// usable when run alone.
+pub fn secure_media_root() -> PathBuf {
+    if let Ok(path) = std::env::var("MERON_SECURE_MEDIA_DIR") {
+        return PathBuf::from(path);
+    }
+    if let Ok(runtime) = std::env::var("XDG_RUNTIME_DIR") {
+        return PathBuf::from(runtime).join("meron/secure-media");
+    }
+    media_root().with_file_name("secure-media")
+}
+
+/// The file behind a media key, wherever its root is.
+pub fn media_file(root: &Path, key: &str) -> PathBuf {
+    match key.strip_prefix(SECURE_MEDIA_PREFIX) {
+        Some(rest) => secure_media_root().join(rest),
+        None => root.join(key),
+    }
+}
+
 /// Parse an email `Date` header to Unix epoch seconds, returning 0 when it is
 /// empty or unparseable. Mail dates are RFC 2822 (the IMAP envelope and the
 /// `Date:` header both use it); RFC 3339/ISO is accepted as a fallback for the
@@ -193,6 +221,26 @@ pub struct Message {
     /// an invitation (or an update, cancellation or reply to one).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invite: Option<crate::calendar::Invite>,
+    /// OpenPGP facts (encrypted, signed, problems), when there are any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crypto: Option<crate::openpgp::mime::CryptoStatus>,
+    /// Keys this message announced or carried, for the store to record.
+    /// Never persisted: the store keeps them in its own tables.
+    #[serde(skip)]
+    pub found_keys: FoundKeys,
+}
+
+/// Keys found while parsing (Autocrypt headers, attached keys).
+#[derive(Debug, Default, Clone)]
+pub struct FoundKeys {
+    pub announced: Vec<crate::openpgp::autocrypt::Announced>,
+    pub attached: Vec<(String, pgp::composed::SignedPublicKey)>,
+}
+
+impl FoundKeys {
+    pub fn is_empty(&self) -> bool {
+        self.announced.is_empty() && self.attached.is_empty()
+    }
 }
 
 impl Message {
@@ -489,6 +537,16 @@ pub fn parse_message(raw: &[u8], media: Option<&MediaCtx>) -> Message {
 
 /// Batch fetches prune once off the async runtime after parsing their messages.
 pub(crate) fn parse_message_unpruned(raw: &[u8], media: Option<&MediaCtx>) -> Message {
+    parse_message_with(raw, media, &crate::openpgp::keyring::current())
+}
+
+/// [`parse_message_unpruned`] with explicit OpenPGP keys (tests pass their own).
+pub(crate) fn parse_message_with(
+    raw: &[u8],
+    media: Option<&MediaCtx>,
+    ring: &crate::openpgp::keyring::Keyring,
+) -> Message {
+    use crate::openpgp::mime::Content;
     let mail = match parse_mail(raw) {
         Ok(mail) => mail,
         Err(_) => return Message::default(),
@@ -496,6 +554,37 @@ pub(crate) fn parse_message_unpruned(raw: &[u8], media: Option<&MediaCtx>) -> Me
     let headers = &mail.headers;
     let subject = headers.get_first_value("Subject").unwrap_or_default();
     let (from_name, from_addr) = from_of(headers);
+    // OpenPGP first: it decides which MIME tree may be shown at all.
+    let opened = crate::openpgp::mime::open(&mail, &from_addr, ring);
+    let inner_mail = match &opened.content {
+        Content::Inner { bytes, .. } => parse_mail(bytes).ok(),
+        _ => None,
+    };
+    let content: Option<&ParsedMail> = match &opened.content {
+        Content::Outer => Some(&mail),
+        Content::SignedPart => mail.subparts.first(),
+        Content::Inner { signed_inside, .. } => inner_mail.as_ref().map(|m| {
+            if *signed_inside {
+                m.subparts.first().unwrap_or(m)
+            } else {
+                m
+            }
+        }),
+        Content::Nothing => None,
+    };
+    let encrypted = opened.status.as_ref().is_some_and(|s| s.encrypted);
+    let subject = opened.inner_subject.clone().unwrap_or(subject);
+    let secure_ctx = media.filter(|_| encrypted).map(|ctx| MediaCtx {
+        root: secure_media_root(),
+        account: ctx.account.clone(),
+        folder: ctx.folder.clone(),
+        uid: ctx.uid,
+    });
+    let media = if encrypted {
+        secure_ctx.as_ref()
+    } else {
+        media
+    };
     let to = collect_address_list(&headers.get_all_headers("To"));
     let reply_to = collect_address_list(&headers.get_all_headers("Reply-To"));
     let cc = collect_address_list(&headers.get_all_headers("Cc"));
@@ -507,12 +596,54 @@ pub(crate) fn parse_message_unpruned(raw: &[u8], media: Option<&MediaCtx>) -> Me
     let delivered = ["Return-Path", "Delivered-To", "X-Original-To"]
         .iter()
         .any(|name| headers.get_first_value(name).is_some());
-    let sources = body_sources(&mail);
-    let invite = calendar_invite(&mail);
+    let (sources, invite) = match content {
+        Some(part) => (body_sources(part), calendar_invite(part)),
+        None => (
+            BodySources {
+                plain: None,
+                html: None,
+            },
+            None,
+        ),
+    };
 
     let mut attachments = Vec::new();
     let mut cid_keys: Vec<(String, String)> = Vec::new();
-    collect_attachments(&mail, &mut attachments, &mut cid_keys, media);
+    if let Some(part) = content {
+        collect_attachments(part, &mut attachments, &mut cid_keys, media);
+    }
+    if encrypted {
+        if let Some(root) = media.map(|ctx| ctx.root.clone()) {
+            restrict_to_owner(&root);
+        }
+        for att in &mut attachments {
+            if let Some(key) = &mut att.key {
+                *key = format!("{SECURE_MEDIA_PREFIX}{key}");
+            }
+        }
+        for (_, key) in &mut cid_keys {
+            *key = format!("{SECURE_MEDIA_PREFIX}{key}");
+        }
+    }
+    // A verified signature's `signature.asc` is the signature itself, not a file.
+    if opened
+        .status
+        .as_ref()
+        .is_some_and(|s| s.signed && s.signer.is_some())
+    {
+        attachments.retain(|a| !a.mime.eq_ignore_ascii_case("application/pgp-signature"));
+    }
+    // The sender's own key, attached so we can record it (Thunderbird does this
+    // on every signed message): recorded, so not shown as a file.
+    if let Some(part) = content {
+        let own_keys = crate::openpgp::mime::sender_key_files(part, &from_addr);
+        if !own_keys.is_empty() {
+            attachments.retain(|a| {
+                !(a.mime.eq_ignore_ascii_case("application/pgp-keys")
+                    && own_keys.contains(&a.filename))
+            });
+        }
+    }
     // Prefer the MIME text/plain alternative for the conversation and Plain
     // reader view. Keep HTML separately for the HTML reader; when a message is
     // HTML-only, fall back to converting HTML so there is still readable text.
@@ -552,6 +683,29 @@ pub(crate) fn parse_message_unpruned(raw: &[u8], media: Option<&MediaCtx>) -> Me
         preview,
         attachments,
         invite,
+        crypto: opened.status,
+        found_keys: FoundKeys {
+            announced: opened.announced,
+            attached: opened.attached,
+        },
+    }
+}
+
+/// Decrypted attachments are readable by the user only.
+fn restrict_to_owner(root: &Path) {
+    let _ = std::fs::create_dir_all(root);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700));
+        if let Some(parent) = root.parent() {
+            if parent
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("meron"))
+            {
+                let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+            }
+        }
     }
 }
 
@@ -1272,7 +1426,7 @@ pub fn missing_media_count(root: &Path, message: &Message) -> usize {
         .attachments
         .iter()
         .filter(|att| match att.key.as_deref() {
-            Some(key) => !root.join(key).is_file(),
+            Some(key) => !media_file(root, key).is_file(),
             None => !att.oversized,
         })
         .count()

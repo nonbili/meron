@@ -1,6 +1,7 @@
 // Shared data-model types, mirroring the sidecar's bridge shapes. Imported by
 // both the state modules and the UI; no runtime code lives here.
 
+import type { MessageCrypto, Trust } from './lib/crypto'
 import type { SignatureMark } from './lib/signature'
 
 export type AuthType = 'password' | 'gmail_oauth' | 'outlook_oauth' | 'rss' | 'local'
@@ -256,6 +257,12 @@ export type Message = {
   /** Local send lifecycle for an optimistically-rendered outgoing message.
    * Absent on messages loaded from the engine (treated as already sent). */
   send_status?: 'sending' | 'sent' | 'failed'
+  /** End-to-end encryption status (OpenPGP), decided by the core
+   * (meron-core/src/openpgp/mime.rs `view_json`). Absent on ordinary mail. */
+  crypto?: MessageCrypto | null
+  /** On a thread card: its newest message is encrypted, with the trust of
+   * its signature (null when not encrypted). */
+  encrypted?: Trust | null
 }
 
 // Editable state for a compose/reply draft living inside a compose tab.
@@ -294,6 +301,25 @@ export type ComposeDraft = {
    * removes it. Absent for every other draft.
    */
   quote?: { html: string; text: string }
+  /** End-to-end encrypt this message (PGP/MIME, signed). */
+  encrypt?: boolean
+  /** What this draft carries from an encrypted message: a reply's quote, or a
+   * forward's body. A reply's quote is dropped when encryption is turned off;
+   * a forward can't be sent unencrypted at all. */
+  sensitiveSource?: 'reply' | 'forward'
+  /** The body itself holds decrypted text: a sensitive reply's quote was
+   * unfolded into it. Such a draft is only ever sent or saved encrypted. */
+  decryptedInBody?: boolean
+  /** A draft that was saved encrypted, reopened: it may hold text from
+   * encrypted mail (an unfolded quote answered inline, a forward), so it never
+   * switches off by itself and switching it off asks first. */
+  encryptedDraft?: boolean
+  /** The user switched encryption off (in the quick reply this came from):
+   * the toggle doesn't turn it back on by itself. */
+  encryptOffByUser?: boolean
+  /** The reply has no quote because its original is decrypted mail its sender
+   * isn't shown to have written (`replyQuoteWithheld`): the composer says why. */
+  quoteWithheld?: boolean
   /** Server-side draft row this compose tab was restored from, if any. */
   sourceDraft?: {
     threadId: string

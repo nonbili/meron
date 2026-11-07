@@ -1,5 +1,6 @@
 //! Thread grouping: thread cards, root subjects, and reference gaps.
 
+use super::{ENCRYPTED_COLUMN, ENCRYPTED_COLUMN_M};
 use anyhow::Result;
 use rusqlite::{Connection, params, params_from_iter};
 use std::collections::BTreeMap;
@@ -79,19 +80,18 @@ pub fn group_thread_cards_with_drafts(
                 uid: message.uid,
                 date: message.date,
                 subject: message.subject.clone(),
+                encrypted: message.encrypted,
             });
     }
     let roots: HashMap<String, RootSubject> = candidates
         .into_iter()
         .filter_map(|(key, candidates)| {
-            let root = pick_root(candidates, default_folder)?;
-            Some((
-                key,
-                RootSubject {
-                    display: root.subject.trim().to_string(),
-                    group: thread_grouping_subject(&root.subject),
-                },
-            ))
+            let root = pick_root(candidates.clone(), default_folder)?;
+            let display = thread_title(&root, &candidates, default_folder);
+            // The title's branch, not the oldest message's: a thread start not
+            // yet decrypted would otherwise make every reply a "changed subject".
+            let group = thread_grouping_subject(&display);
+            Some((key, RootSubject { display, group }))
         })
         .collect();
 
@@ -111,12 +111,28 @@ pub fn group_thread_cards_with_drafts(
         }
         let base_key = effective_thread_key(&message);
         let branch = should_branch_thread_by_subject(&base_key);
-        let group_subject = if branch {
+        // A message not yet decrypted joins its thread's titled branch rather
+        // than forming a card under the placeholder. A plain message titled
+        // `...` is not one: that is its real subject.
+        let titled_group =
+            (branch && message.encrypted && is_encrypted_placeholder_subject(&message.subject))
+                .then(|| {
+                    roots
+                        .get(&group_key(&message, &base_key))
+                        .map(|root| root.group.clone())
+                })
+                .flatten();
+        let group_subject = if let Some(group) = &titled_group {
+            group.clone()
+        } else if branch {
             thread_grouping_subject(&message.subject)
         } else {
             String::new()
         };
-        let compound_key = card_thread_key(&message);
+        let compound_key = match &titled_group {
+            Some(group) => branch_compound_key(&base_key, group),
+            None => card_thread_key(&message),
+        };
         let slot = group_key(&message, &compound_key);
         let fold_key =
             (!message.message_id.is_empty()).then(|| (slot.clone(), message.message_id.clone()));
@@ -335,7 +351,8 @@ pub fn card_root_subjects(
     Ok(candidates
         .into_iter()
         .filter_map(|(root, candidates)| {
-            let subject = pick_root(candidates, folder)?.subject.trim().to_string();
+            let oldest = pick_root(candidates.clone(), folder)?;
+            let subject = thread_title(&oldest, &candidates, folder);
             Some((root, subject))
         })
         .collect())
@@ -364,7 +381,8 @@ pub(super) fn collect_root_candidates(
             ""
         };
         let mut stmt = conn.prepare(&format!(
-            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject
+            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject,
+                    {ENCRYPTED_COLUMN}
              FROM messages
              WHERE account = ?1 AND {folder_clause}uid <> 0
                AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) IN ({placeholders})"
@@ -380,6 +398,7 @@ pub(super) fn collect_root_candidates(
                     uid: row.get(2)?,
                     date: row.get(3)?,
                     subject: row.get(4)?,
+                    encrypted: row.get::<_, Option<bool>>(5)?.unwrap_or(false),
                 },
             ))
         })?;
@@ -735,12 +754,36 @@ fn for_each_card_row(
 }
 
 /// A candidate for a thread's opening message: what [`pick_root`] compares.
+#[derive(Clone)]
 pub(super) struct RootCandidate {
     folder: String,
     uid: u32,
     /// Send time as Unix epoch seconds, 0 when the row carries no usable Date.
     date: i64,
     subject: String,
+    /// End-to-end encrypted: only then is a `...` subject the placeholder.
+    encrypted: bool,
+}
+
+/// The title of a thread whose oldest message is `root`: its subject, unless
+/// that is still an encrypted message's placeholder, in which case the oldest
+/// message that does know its subject (decrypted, or not encrypted) titles it.
+/// Only the title: grouping keeps keying on the oldest message.
+fn thread_title(root: &RootCandidate, candidates: &[RootCandidate], read_folder: &str) -> String {
+    let placeholder = |candidate: &RootCandidate| {
+        candidate.encrypted && is_encrypted_placeholder_subject(&candidate.subject)
+    };
+    if placeholder(root) {
+        let known: Vec<RootCandidate> = candidates
+            .iter()
+            .filter(|candidate| !placeholder(candidate))
+            .cloned()
+            .collect();
+        if let Some(titled) = pick_root(known, read_folder) {
+            return titled.subject.trim().to_string();
+        }
+    }
+    root.subject.trim().to_string()
 }
 
 /// Choose the oldest message of one thread from `candidates`. `read_folder` is
@@ -794,6 +837,84 @@ pub(super) fn effective_thread_key(message: &MessageHeader) -> String {
     } else {
         message.thread_key.clone()
     }
+}
+
+/// Whether a grouping subject is nothing but an encrypted message's
+/// placeholder: `[...]` strips to nothing (a bracket tag), `...` stays.
+fn is_placeholder_group(group: &str) -> bool {
+    group.is_empty() || group == "..."
+}
+
+/// Encrypted replies whose protected subject is only the placeholder (written
+/// by a client that had not decrypted the thread: `Re: [...]`) take the
+/// thread's real subject as `Re: <subject>`, from the oldest message that has
+/// one. Left as they were, they group under an empty subject and form a
+/// branch of their own, out of the thread. Only encrypted rows are touched: a
+/// plain mail really titled `[...]` keeps it. `thread_key` limits the repair to
+/// one thread. Returns how many rows changed.
+pub fn repair_placeholder_reply_subjects(
+    conn: &Connection,
+    account: &str,
+    thread_key: Option<&str>,
+) -> Result<usize> {
+    let mut stmt = conn.prepare(
+        "SELECT folder, msg_id, thread_key, subject FROM messages
+         WHERE account = ?1 AND (?2 IS NULL OR thread_key = ?2)
+           AND thread_key IS NOT NULL AND thread_key <> ''
+           AND json_extract(json, '$.crypto.encrypted') = 1",
+    )?;
+    let rows: Vec<(String, String, String, String)> = stmt
+        .query_map(params![account, thread_key], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut real: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::new();
+    let mut changed = 0;
+    for (folder, msg_id, key, subject) in rows {
+        if !should_branch_thread_by_subject(&key)
+            || !is_placeholder_group(&thread_grouping_subject(&subject))
+        {
+            continue;
+        }
+        if !real.contains_key(&key) {
+            let mut oldest = conn.prepare(
+                "SELECT subject FROM messages WHERE account = ?1 AND thread_key = ?2
+                 ORDER BY date = 0, date, uid",
+            )?;
+            let found = oldest
+                .query_map(params![account, key], |r| r.get::<_, String>(0))?
+                .filter_map(|s| s.ok())
+                .map(|s| thread_grouping_subject(&s))
+                .find(|group| !is_placeholder_group(group));
+            real.insert(key.clone(), found);
+        }
+        if let Some(Some(group)) = real.get(&key) {
+            changed += conn.execute(
+                "UPDATE messages SET subject = ?4 WHERE account = ?1 AND folder = ?2 AND msg_id = ?3",
+                params![account, folder, msg_id, format!("Re: {group}")],
+            )?;
+        }
+    }
+    Ok(changed)
+}
+
+/// Whether `subject` is only an encrypted message's protected-headers
+/// placeholder (`[...]`, Thunderbird `...`), reply prefixes aside: a message
+/// not yet decrypted. An empty subject is not one.
+pub fn is_encrypted_placeholder_subject(subject: &str) -> bool {
+    let group = thread_grouping_subject(subject);
+    group == "..." || (group.is_empty() && subject.contains("[...]"))
+}
+
+/// Whether a message with `subject` belongs to the subject branch `filter`. An
+/// encrypted message not yet decrypted hasn't shown its subject, so it belongs
+/// to every branch of its thread: on Gmail our own Sent copies stay like that
+/// until fetched, and a branch filter dropped them all from the conversation.
+/// A plain message titled `...` belongs only to its own branch.
+pub fn subject_in_branch(subject: &str, encrypted: bool, filter: &str) -> bool {
+    (encrypted && is_encrypted_placeholder_subject(subject))
+        || thread_grouping_subject(subject) == filter
 }
 
 /// The branch-aware thread key a list card for `message` carries: the root
@@ -1002,9 +1123,9 @@ pub fn get_thread_headers_all_folders(
     account: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key,
-                json_extract(m.json, '$.in_reply_to')
+                json_extract(m.json, '$.in_reply_to'), {ENCRYPTED_COLUMN_M}
          FROM messages m
          WHERE m.account = ?1 AND m.uid <> 0
            AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
@@ -1016,12 +1137,13 @@ pub fn get_thread_headers_all_folders(
                AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
                AND (dup.seen < m.seen OR (dup.seen = m.seen AND dup.id < m.id))
            )
-         ORDER BY m.date ASC, m.uid ASC",
+         ORDER BY m.date ASC, m.uid ASC"),
     )?;
     let rows = stmt.query_map(params![account, thread_key], |row| {
         let uid: u32 = row.get(0)?;
         Ok(MessageHeader {
             uid,
+            encrypted: row.get::<_, Option<bool>>("encrypted")?.unwrap_or(false),
             folder: row.get(1)?,
             subject: row.get(2)?,
             from_name: row.get(3)?,

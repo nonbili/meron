@@ -59,3 +59,30 @@ describe('reader tab scroll isolation', () => {
     })
   }
 })
+
+// A reader tab shows the same message as the conversation, so it says so too
+// when that message couldn't be decrypted.
+describe('reader tab encryption', () => {
+  it('shows why an encrypted message could not be opened', () => {
+    const tab: MessageTab = {
+      id: 'reader-crypto',
+      kind: 'reader',
+      messageId: 'reader-crypto',
+      threadId: 'reader-crypto',
+      subject: '...',
+      from: 'Sender',
+      body: '',
+      bodyHtml: '',
+      viewMode: 'plain',
+      message: {
+        id: 'reader-crypto',
+        account_id: 'a',
+        from_name: 'Sender',
+        from_addr: 'sender@example.com',
+        crypto: { encrypted: true, signed: false, problem: 'no_key' },
+      } as unknown as MessageTab['message'],
+    }
+    const view = render(<ReaderTabView tab={tab} />)
+    expect(view.getByRole('alert')).toBeTruthy()
+  })
+})

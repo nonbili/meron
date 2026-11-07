@@ -2,6 +2,16 @@
 # Every ignored advisory names why it can't be fixed yet and what would fix it.
 [advisories]
 ignore = [
+  # rsa 0.9.10, via rPGP: Marvin timing attack, no fixed release exists. Meron
+  # generates Ed25519/Cv25519 keys; only imported RSA keys use this code, and an
+  # attacker would need fine timing of local decryptions (docs/openpgp.md §13).
+  # Look again when rsa 0.10 (implicit rejection) reaches rPGP.
+  "RUSTSEC-2023-0071",
+  # crypto-bigint 0.5.5, via rPGP's elliptic-curve stack (NIST P-256/384/521,
+  # secp256k1, X448): secret-dependent timing, fixed only in 0.7.6, which rPGP
+  # 0.21 doesn't use. Meron's own keys use curve25519-dalek; only imported keys
+  # on those curves are affected. Look again on every rPGP upgrade.
+  "RUSTSEC-2026-0387",
   # quick-xml 0.37.5, used directly (account autoconfig XML, OPML import) and by
   # feed-rs 2.3 (RSS/Atom): a hostile feed or autoconfig server can make the
   # parser slow (quadratic duplicate-attribute check) or allocate without bound

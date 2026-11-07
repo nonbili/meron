@@ -536,3 +536,18 @@ func TestMailMoveAcrossAccountsPassesDestinationAndExactSource(t *testing.T) {
 		})
 	}
 }
+
+// An encrypted send that reached To/Cc but not every Bcc succeeds (a retry
+// would deliver it twice) and names who didn't get it.
+func TestMailSendReportsUndeliveredCopies(t *testing.T) {
+	app, _ := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{"ok": true, "undelivered": []any{"blind@example.com"}}})
+
+	out, err := app.mailSend(map[string]any{"account_id": "acc", "to": "bob@example.com", "bcc": "blind@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := out.(map[string]any)["undelivered"].([]string)
+	if len(got) != 1 || got[0] != "blind@example.com" {
+		t.Fatalf("send result = %#v, want blind@example.com undelivered", out)
+	}
+}
