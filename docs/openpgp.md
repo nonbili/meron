@@ -651,6 +651,14 @@ message iframe.
 - **Interop:** `crypt::tests::gnupg_decrypts_and_verifies_what_we_encrypt` and
   `outgoing::tests::gnupg_reads_our_pgp_mime_payload` run the system `gpg` (skipped if absent): GnuPG decrypts, verifies
   (`GOODSIG`, `DECRYPTION_OKAY`) and reads the protected Subject; the reverse direction is the fixture suite.
+- **Mail-server integration:** `desktop/openpgp_integration_test.go` runs Alice and Bob in separate sidecar
+  profiles against the Docker Postfix/Dovecot harness. It creates and exchanges public keys, sends encrypted mail
+  through SMTP, and checks Bob's IMAP-fetched subject, body and Alice signature. It also checks Alice's encrypted
+  Sent copy, automatic encryption of Bob's reply without an explicit encryption flag, and missing-recipient-key
+  refusal with an empty server inbox over a bounded observation period. Direct IMAP `BODY.PEEK[]` fetches check
+  that delivered mail and the Sent copy hold PGP/MIME ciphertext without the private subject or body. A temporary
+  plaintext-send mutation was confirmed to fail the crypto assertions. Runs with the existing `integration` Go
+  build tag and CI integration job.
 - **Go** (`-tags gtk3`): `secure_media_test.go` covers e2ee media resolving inside the secure dir, traversal clamping,
   the env passed to the sidecar, the per-user fallback (fixed, private), the crash cleanup at the next start, a planted
   symlink, and the wipe (mutation-checked; `Startup` itself, which starts the tray, sidecar and window, isn't run in
