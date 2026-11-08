@@ -130,7 +130,7 @@ export function MessageContextMenu({
         </>
       ) : (
         <>
-          {!state.hideOpenInNewTab && (
+          {(isDraft || !state.hideOpenInNewTab) && (
             <MenuItem
               icon={
                 isDraft ? (

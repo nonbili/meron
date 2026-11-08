@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Lista com marcas",
   "composer.toolbar.heading": "Cabeçalho",
   "composer.toolbar.italic": "Itálico",
+  "composer.link.url": "URL da ligação",
+  "composer.link.remove": "Remover ligação",
   "composer.toolbar.link": "Ligação",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Escreva estes caracteres e o texto será formatado à medida que escreve",

@@ -38,7 +38,6 @@ export function Composer({ tabId }: { tabId: string }) {
     addFiles,
     handlePaste,
     handleKeyDown,
-    setLink,
     submit,
     closeKeepingDraft,
   } = useComposer(tabId)
@@ -104,6 +103,7 @@ export function Composer({ tabId }: { tabId: string }) {
 
   return (
     <div
+      data-composer=""
       inert={closingWindow || undefined}
       className="relative flex flex-1 flex-col overflow-hidden bg-chat"
       onKeyDown={handleSendShortcut}
@@ -125,7 +125,7 @@ export function Composer({ tabId }: { tabId: string }) {
         }}
       />
 
-      {draft.rich && editor && <ComposerToolbar editor={editor} onSetLink={setLink} />}
+      {draft.rich && editor && <ComposerToolbar editor={editor} />}
 
       {/* Body */}
       <div ref={bodyRef} className="relative flex min-h-0 flex-1 flex-col">

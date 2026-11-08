@@ -118,7 +118,7 @@ export function MessageRow({
   const openActionsMenu = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     const rect = event.currentTarget.getBoundingClientRect()
-    thread$.messageContextMenu.set({ x: rect.right, y: rect.bottom + 4, message, hideOpenInNewTab: true })
+    thread$.messageContextMenu.set({ x: rect.right, y: rect.bottom + 4, message })
   }
   const openMessageOrDraftTab = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()

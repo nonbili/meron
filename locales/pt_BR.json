@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Lista com marcadores",
   "composer.toolbar.heading": "Título",
   "composer.toolbar.italic": "Itálico",
+  "composer.link.url": "URL do link",
+  "composer.link.remove": "Remover link",
   "composer.toolbar.link": "Link",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Digite estes caracteres e eles serão formatados ao escrever",

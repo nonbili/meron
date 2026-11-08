@@ -15,6 +15,7 @@ import { useTranslation } from '../../lib/i18n'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MarkdownIcon } from '../icons/Icons'
+import { LinkDialog } from './LinkDialog'
 
 // Shortcuts the editor turns into formatting as you type (StarterKit's input
 // rules). Syntax, not words, so it needs no translation.
@@ -84,83 +85,93 @@ export function ToolbarButton({
 }
 
 // Rich-text formatting toolbar shown above the body in rich mode.
-export function ComposerToolbar({
-  editor,
-  onSetLink,
-  trailing,
-}: {
-  editor: Editor
-  onSetLink: () => void
-  trailing?: React.ReactNode
-}) {
+export function ComposerToolbar({ editor, trailing }: { editor: Editor; trailing?: React.ReactNode }) {
   const { t } = useTranslation()
+  const [editingLink, setEditingLink] = useState(false)
+  const toolbarRef = useRef<HTMLDivElement>(null)
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border/60 bg-chat px-3 py-1.5 select-none">
-      <ToolbarButton
-        active={editor.isActive('bold')}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        title={t('composer.toolbar.bold')}
+    <>
+      {editingLink && (
+        <LinkDialog
+          editor={editor}
+          onClose={() => setEditingLink(false)}
+          portalContainer={toolbarRef.current?.closest<HTMLElement>('[data-composer]') ?? undefined}
+        />
+      )}
+      <div
+        ref={toolbarRef}
+        className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border/60 bg-chat px-3 py-1.5 select-none"
       >
-        <Bold size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('italic')}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        title={t('composer.toolbar.italic')}
-      >
-        <Italic size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('underline')}
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-        title={t('composer.toolbar.underline')}
-      >
-        <UnderlineIcon size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('strike')}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        title={t('composer.toolbar.strikethrough')}
-      >
-        <Strikethrough size={15} />
-      </ToolbarButton>
-      <span className="mx-1 h-4 w-px bg-border" />
-      <ToolbarButton
-        active={editor.isActive('heading', { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        title={t('composer.toolbar.heading')}
-      >
-        <Heading2 size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('bulletList')}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        title={t('composer.toolbar.bulletList')}
-      >
-        <List size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('orderedList')}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        title={t('composer.toolbar.numberedList')}
-      >
-        <ListOrdered size={15} />
-      </ToolbarButton>
-      <ToolbarButton
-        active={editor.isActive('blockquote')}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        title={t('composer.toolbar.quote')}
-      >
-        <Quote size={15} />
-      </ToolbarButton>
-      <ToolbarButton active={editor.isActive('link')} onClick={onSetLink} title={t('composer.toolbar.link')}>
-        <Link2 size={15} />
-      </ToolbarButton>
-      <div className="ml-auto flex items-center">
-        <MarkdownHelp />
-        {trailing}
+        <ToolbarButton
+          active={editor.isActive('bold')}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          title={t('composer.toolbar.bold')}
+        >
+          <Bold size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('italic')}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          title={t('composer.toolbar.italic')}
+        >
+          <Italic size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('underline')}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          title={t('composer.toolbar.underline')}
+        >
+          <UnderlineIcon size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('strike')}
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          title={t('composer.toolbar.strikethrough')}
+        >
+          <Strikethrough size={15} />
+        </ToolbarButton>
+        <span className="mx-1 h-4 w-px bg-border" />
+        <ToolbarButton
+          active={editor.isActive('heading', { level: 2 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          title={t('composer.toolbar.heading')}
+        >
+          <Heading2 size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('bulletList')}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          title={t('composer.toolbar.bulletList')}
+        >
+          <List size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('orderedList')}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          title={t('composer.toolbar.numberedList')}
+        >
+          <ListOrdered size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('blockquote')}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          title={t('composer.toolbar.quote')}
+        >
+          <Quote size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive('link')}
+          onClick={() => setEditingLink(true)}
+          title={t('composer.toolbar.link')}
+        >
+          <Link2 size={15} />
+        </ToolbarButton>
+        <div className="ml-auto flex items-center">
+          <MarkdownHelp />
+          {trailing}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

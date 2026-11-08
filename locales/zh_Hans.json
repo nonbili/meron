@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "无序列表",
   "composer.toolbar.heading": "标题",
   "composer.toolbar.italic": "斜体",
+  "composer.link.url": "链接地址",
+  "composer.link.remove": "移除链接",
   "composer.toolbar.link": "链接",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "在输入时键入这些即可自动格式化",

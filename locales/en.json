@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Bullet list",
   "composer.toolbar.heading": "Heading",
   "composer.toolbar.italic": "Italic",
+  "composer.link.url": "Link URL",
+  "composer.link.remove": "Remove link",
   "composer.toolbar.link": "Link",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Type these and they format as you write",

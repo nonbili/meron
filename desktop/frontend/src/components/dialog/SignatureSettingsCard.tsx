@@ -127,18 +127,6 @@ function SignatureEditor({
     editor?.view.dom.setAttribute('spellcheck', String(spellCheck))
   }, [editor, spellCheck])
 
-  const setLink = () => {
-    if (!editor) return
-    const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL', prev ?? 'https://')
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }
-
   // The HTML being edited as source, or null while editing rich text. What the
   // textarea holds is the user's own text, left as typed; the editor is kept in
   // step behind it and is what gets saved, so a signature goes out exactly as a
@@ -185,7 +173,7 @@ function SignatureEditor({
   return (
     <div className="first:[&>:first-child]:rounded-t-2xl">
       {source === null ? (
-        <ComposerToolbar editor={editor} onSetLink={setLink} trailing={sourceToggle} />
+        <ComposerToolbar editor={editor} trailing={sourceToggle} />
       ) : (
         <div className="flex shrink-0 items-center justify-end border-b border-border bg-header px-3 py-1.5 select-none">
           {sourceToggle}

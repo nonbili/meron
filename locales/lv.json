@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Saraksts ar aizzīmēm",
   "composer.toolbar.heading": "Virsraksts",
   "composer.toolbar.italic": "Slīpraksts",
+  "composer.link.url": "Saites URL",
+  "composer.link.remove": "Noņemt saiti",
   "composer.toolbar.link": "Saite",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Ierakstiet tos, un tie tiks formatēti rakstīšanas laikā",

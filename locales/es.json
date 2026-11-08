@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Lista con viñetas",
   "composer.toolbar.heading": "Encabezado",
   "composer.toolbar.italic": "Cursiva",
+  "composer.link.url": "URL del enlace",
+  "composer.link.remove": "Quitar enlace",
   "composer.toolbar.link": "Enlace",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Escriba estos caracteres y se formatearán a medida que escribe",

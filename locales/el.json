@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Λίστα με κουκκίδες",
   "composer.toolbar.heading": "Επικεφαλίδα",
   "composer.toolbar.italic": "Πλάγια",
+  "composer.link.url": "URL συνδέσμου",
+  "composer.link.remove": "Κατάργηση συνδέσμου",
   "composer.toolbar.link": "Σύνδεσμος",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Πληκτρολογήστε αυτά και θα μορφοποιηθούν καθώς γράφετε",

@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "글머리 기호 목록",
   "composer.toolbar.heading": "제목",
   "composer.toolbar.italic": "기울임꼴",
+  "composer.link.url": "링크 URL",
+  "composer.link.remove": "링크 제거",
   "composer.toolbar.link": "링크",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "입력하면 입력하는 즉시 서식이 지정됩니다",

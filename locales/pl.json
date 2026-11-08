@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Lista punktowana",
   "composer.toolbar.heading": "Nagłówek",
   "composer.toolbar.italic": "Kursywa",
+  "composer.link.url": "Adres URL linku",
+  "composer.link.remove": "Usuń link",
   "composer.toolbar.link": "Połączyć",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Wpisz je, a zostaną sformatowane podczas pisania",

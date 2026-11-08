@@ -42,6 +42,8 @@ type DialogProps = Omit<ComponentProps<'div'>, 'onClose' | 'children'> & {
   onEscape?: () => void
   backdropClassName?: string
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** Keep the backdrop and centering within a positioned owner, such as a composer. */
+  portalContainer?: HTMLElement
   role?: 'dialog' | 'alertdialog'
 }
 
@@ -55,6 +57,7 @@ export function Dialog({
   backdropClassName,
   className,
   initialFocusRef,
+  portalContainer,
   role = 'dialog',
   ...props
 }: DialogProps) {
@@ -116,6 +119,7 @@ export function Dialog({
     <div
       data-dialog-backdrop=""
       className={clsx('dialog-backdrop', backdropClassName)}
+      style={portalContainer ? { position: 'absolute' } : undefined}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && closeOnBackdrop && dismissible) onClose()
       }}
@@ -132,6 +136,6 @@ export function Dialog({
         {children}
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   )
 }

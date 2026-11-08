@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Punktlista",
   "composer.toolbar.heading": "Rubrik",
   "composer.toolbar.italic": "Kursiv",
+  "composer.link.url": "Länkadress",
+  "composer.link.remove": "Ta bort länk",
   "composer.toolbar.link": "Länk",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Skriv dessa så formateras de medan du skriver",

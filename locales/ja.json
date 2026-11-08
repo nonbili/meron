@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "箇条書きリスト",
   "composer.toolbar.heading": "見出し",
   "composer.toolbar.italic": "斜体",
+  "composer.link.url": "リンクURL",
+  "composer.link.remove": "リンクを解除",
   "composer.toolbar.link": "リンク",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "これらを入力すると、入力中にフォーマットされます",

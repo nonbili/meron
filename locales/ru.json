@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Маркированный список",
   "composer.toolbar.heading": "Заголовок",
   "composer.toolbar.italic": "Курсив",
+  "composer.link.url": "URL ссылки",
+  "composer.link.remove": "Удалить ссылку",
   "composer.toolbar.link": "Ссылка",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Вводите эти символы для автоматического форматирования",

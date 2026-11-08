@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Aufzählungsliste",
   "composer.toolbar.heading": "Überschrift",
   "composer.toolbar.italic": "Kursiv",
+  "composer.link.url": "Link-URL",
+  "composer.link.remove": "Link entfernen",
   "composer.toolbar.link": "Link",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Wird beim Tippen automatisch formatiert",

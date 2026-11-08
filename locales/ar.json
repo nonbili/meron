@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "قائمة نقطية",
   "composer.toolbar.heading": "عنوان رئيسي",
   "composer.toolbar.italic": "مائل",
+  "composer.link.url": "عنوان الرابط",
+  "composer.link.remove": "إزالة الرابط",
   "composer.toolbar.link": "رابط",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "اكتب هذه التنسيقات وسيتم تطبيقها أثناء الكتابة",

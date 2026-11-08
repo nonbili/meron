@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Liste à puces",
   "composer.toolbar.heading": "Titre",
   "composer.toolbar.italic": "Italique",
+  "composer.link.url": "URL du lien",
+  "composer.link.remove": "Supprimer le lien",
   "composer.toolbar.link": "Lien",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Saisissez-les et ils se formateront au fur et à mesure que vous écrivez",

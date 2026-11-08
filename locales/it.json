@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Elenco puntato",
   "composer.toolbar.heading": "Intestazione",
   "composer.toolbar.italic": "Corsivo",
+  "composer.link.url": "URL del collegamento",
+  "composer.link.remove": "Rimuovi collegamento",
   "composer.toolbar.link": "Collegamento",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Digitali e verranno formattati durante la scrittura",

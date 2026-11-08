@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Maddeli liste",
   "composer.toolbar.heading": "Başlık",
   "composer.toolbar.italic": "İtalik",
+  "composer.link.url": "Bağlantı URL’si",
+  "composer.link.remove": "Bağlantıyı kaldır",
   "composer.toolbar.link": "Bağlantı",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Bunları yazdıkça otomatik olarak biçimlendirilirler",

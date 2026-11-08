@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "Punktloend",
   "composer.toolbar.heading": "Pealkiri",
   "composer.toolbar.italic": "Kursiiv",
+  "composer.link.url": "Lingi URL",
+  "composer.link.remove": "Eemalda link",
   "composer.toolbar.link": "Link",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "Kirjuta need sümbolid ja tekst vormindatakse kirjutamise ajal",

@@ -376,6 +376,8 @@
   "composer.toolbar.bulletList": "項目符號清單",
   "composer.toolbar.heading": "標題",
   "composer.toolbar.italic": "斜體",
+  "composer.link.url": "連結網址",
+  "composer.link.remove": "移除連結",
   "composer.toolbar.link": "連結",
   "composer.toolbar.markdown": "Markdown",
   "composer.toolbar.markdownHint": "輸入這些格式，將在您輸入時自動套用格式",

@@ -694,18 +694,6 @@ export function useComposer(tabId: string) {
       })
   }
 
-  const setLink = () => {
-    if (!editor) return
-    const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL', prev ?? 'https://')
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }
-
   // End-to-end encryption: the key check for the recipients as typed. An
   // encrypted message never goes out while a recipient has no key.
   const encryptionKeys = useRecipientKeys(
@@ -861,7 +849,6 @@ export function useComposer(tabId: string) {
     pickInlineImages,
     handlePaste,
     handleKeyDown,
-    setLink,
     submit,
     closeKeepingDraft,
   }
