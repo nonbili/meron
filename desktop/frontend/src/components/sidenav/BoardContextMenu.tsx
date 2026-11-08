@@ -1,10 +1,12 @@
-import { Settings, Trash2 } from 'lucide-react'
+import { useValue } from '@legendapp/state/react'
+import { MailCheck, Settings, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
-import { removeKanbanBoard } from '../../states/kanban'
+import { markBoardAllRead, removeKanbanBoard } from '../../states/kanban'
+import { settings$ } from '../../states/settings'
 import { confirmAction, ui$ } from '../../states/ui'
 import { RailContextMenu, RailMenuItem } from './RailContextMenu'
 
-// Right-click menu for a kanban board in the rail: settings or delete.
+// Right-click menu for a kanban board in the rail: settings, mark all read, or delete.
 export function BoardContextMenu({
   board,
   x,
@@ -17,6 +19,7 @@ export function BoardContextMenu({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const boards = useValue(settings$.kanbanBoards)
   return (
     <RailContextMenu x={x} y={y} onClose={onClose}>
       <RailMenuItem
@@ -28,6 +31,16 @@ export function BoardContextMenu({
           onClose()
         }}
       />
+      <RailMenuItem
+        icon={<MailCheck size={13} className="text-secondary" />}
+        label={t('kanban.actions.markAllColumnsRead')}
+        disabled={!boards.find((item) => item.id === board.id)?.columns.length}
+        onClick={() => {
+          onClose()
+          void markBoardAllRead(board.id)
+        }}
+      />
+      <div className="my-1 border-t border-border" />
       <RailMenuItem
         icon={<Trash2 size={13} />}
         label={t('kanban.board.delete')}

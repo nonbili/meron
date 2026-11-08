@@ -354,7 +354,17 @@ export function ThreadContextMenu({
           void starThread(threadId, starred).then(() => after(action, threadId))
         }}
       />
+      {tasksEnabled && (
+        <AddMailToTasksMenu
+          key={menu.threadId}
+          title={menu.subject}
+          account={menu.accountId}
+          threadId={menu.threadId}
+          onAdded={close}
+        />
+      )}
       <ThreadTagItem key={menu.threadId} threadId={menu.threadId} close={close} />
+      <div className="my-1 border-t border-border" />
       <MenuItem
         icon={<MessageSquare size={13} className="text-secondary" />}
         label={t('threads.actions.openInNewTab')}
@@ -383,15 +393,6 @@ export function ThreadContextMenu({
             close()
             onSelectThread(threadId)
           }}
-        />
-      )}
-      {tasksEnabled && (
-        <AddMailToTasksMenu
-          key={menu.threadId}
-          title={menu.subject}
-          account={menu.accountId}
-          threadId={menu.threadId}
-          onAdded={close}
         />
       )}
       <div className="my-1 border-t border-border" />
