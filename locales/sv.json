@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Stäng konversation (Esc)",
   "chat.closeEsc": "Stäng (Esc)",
   "chat.closeOtherTabs": "Stäng andra flikar",
+  "chat.moveTabToNewWindow": "Flytta flik till nytt fönster",
   "chat.closeTab": "Stäng flik",
   "chat.closeTabsToLeft": "Stäng flikar till vänster",
   "chat.closeTabsToRight": "Stäng flikar till höger",

@@ -265,7 +265,7 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.emlCommand(command, payload)
 	case "composer.isOpen", "composer.setMainDrafts", "composer.claimDraft", "composer.closeResponded", "composer.discardDraft", "composer.getDraft", "composer.setDraft", "composer.focusDraft", "composer.closeWindow":
 		return a.composeWindowCommand(command, payload)
-	case "threadWindow.open", "threadWindow.get", "threadWindow.sessions", "threadWindow.setSetting", "threadWindow.setRemoteSender", "threadWindow.close", "threadWindow.closeResponded", "threadWindow.setDrafts", "threadWindow.reserveDraft", "threadWindow.drafts", "threadWindow.focusDraft", "threadWindow.openDraft", "threadWindow.openCorrespondent", "threadWindow.openContact", "threadWindow.beginClose", "threadWindow.cancelClose", "threadWindow.discardDraft":
+	case "threadWindow.setReady", "threadWindow.isReady", "threadWindow.open", "threadWindow.get", "threadWindow.sessions", "threadWindow.setSetting", "threadWindow.setRemoteSender", "threadWindow.close", "threadWindow.closeResponded", "threadWindow.setDrafts", "threadWindow.reserveDraft", "threadWindow.drafts", "threadWindow.focusDraft", "threadWindow.openDraft", "threadWindow.openCorrespondent", "threadWindow.openContact", "threadWindow.beginClose", "threadWindow.cancelClose", "threadWindow.discardDraft":
 		return a.threadWindowCommand(command, payload)
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil

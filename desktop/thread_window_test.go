@@ -180,3 +180,58 @@ func TestFailedCloseRetainsTheRequestedWindowWithoutReopening(t *testing.T) {
 		t.Fatal("failed close did not retain the existing reader")
 	}
 }
+
+func TestThreadWindowReadiness(t *testing.T) {
+	reader := &threadWindow{composeWindow: composeWindow{session: "s"}}
+	app := &App{threadWindows: map[string]*threadWindow{"t": reader}}
+	check := func(want bool, wantError bool) {
+		t.Helper()
+		result, err := app.Invoke("threadWindow.isReady", map[string]any{"session": "s"})
+		if (err != nil) != wantError || (!wantError && result != want) {
+			t.Fatalf("readiness = %v, %v; want %v, error %v", result, err, want, wantError)
+		}
+	}
+	check(false, false)
+	_, err := app.Invoke("threadWindow.setReady", map[string]any{"session": "s", "error": "loading failed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(false, true)
+	_, err = app.Invoke("threadWindow.setReady", map[string]any{"session": "s", "ready": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(true, false)
+	reader.closeInProgress = true
+	check(false, true)
+	reader.closeInProgress = false
+	delete(app.threadWindows, "t")
+	check(false, true)
+}
+
+func TestMovingTabIntoExistingWindowRestoresViewWithoutQueuingReopen(t *testing.T) {
+	window := &fakeEmlWindow{}
+	reader := &threadWindow{composeWindow: composeWindow{session: "s", window: window}}
+	app := &App{threadWindows: map[string]*threadWindow{"t": reader}}
+	payload := map[string]any{"thread_id": "t", "move_tab": true, "view": "source view"}
+	// A busy reader must leave the source in place without scheduling a later open.
+	for _, closing := range []bool{false, true} {
+		reader.closeInProgress = closing
+		if _, err := app.Invoke("threadWindow.open", payload); err == nil {
+			t.Fatal("move accepted a busy window")
+		}
+		if reader.reopen != nil {
+			t.Fatal("failed move queued an unwanted reopen")
+		}
+	}
+	reader.closeInProgress = false
+	reader.ready = true
+	result, err := app.Invoke("threadWindow.open", payload)
+	if err != nil || result != "s" || window.focused != 1 || reader.view != "source view" || reader.ready {
+		t.Fatalf("existing reader did not start restoring the moved view: %v, %v, %+v", result, err, reader)
+	}
+	ready, err := app.Invoke("threadWindow.isReady", map[string]any{"session": "s"})
+	if err != nil || ready != false {
+		t.Fatalf("source can close before restore: %v, %v", ready, err)
+	}
+}

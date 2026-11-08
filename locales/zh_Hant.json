@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "關閉對話 (Esc)",
   "chat.closeEsc": "關閉 (Esc)",
   "chat.closeOtherTabs": "關閉其他分頁",
+  "chat.moveTabToNewWindow": "將分頁移至新視窗",
   "chat.closeTab": "關閉分頁",
   "chat.closeTabsToLeft": "關閉左側分頁",
   "chat.closeTabsToRight": "關閉右側分頁",

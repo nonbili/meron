@@ -19,6 +19,8 @@ var windowMailMutations = map[string]bool{
 }
 
 type threadWindow struct {
+	ready        bool
+	startupError string
 	composeWindow
 	threadID        string
 	reference       any
@@ -43,11 +45,25 @@ func (a *App) openThreadWindow(payload map[string]any) (any, error) {
 	defer a.composeOpenMu.Unlock()
 	a.composeMu.Lock()
 	existing := a.threadWindows[id]
-	if existing != nil && (existing.closeInProgress || existing.closing.Load()) {
+	moveTab, _ := payload["move_tab"].(bool)
+	if existing != nil && moveTab {
+		// A move must not queue a reopen after reporting failure, or discard
+		// the source view by merely focusing a reader with a different view.
+		if existing.closeInProgress || existing.closing.Load() || !existing.ready {
+			a.composeMu.Unlock()
+			return nil, fmt.Errorf("thread window is busy; try again when it has finished loading or closing")
+		}
+		existing.ready = false
+		existing.startupError = ""
+		existing.view = payload["view"]
+	} else if existing != nil && (existing.closeInProgress || existing.closing.Load()) {
 		existing.reopen = payload
 	}
 	a.composeMu.Unlock()
 	if existing != nil {
+		if moveTab {
+			desktopruntime.EventsEmit(a.ctx, "threadWindow.restoreView", map[string]any{"session": existing.session})
+		}
 		existing.window.Show()
 		existing.window.Focus()
 		return existing.session, nil
@@ -177,6 +193,21 @@ func (a *App) threadWindowCommand(command string, payload map[string]any) (any, 
 		return nil, fmt.Errorf("thread window is closed")
 	}
 	switch command {
+	case "threadWindow.setReady":
+		reader.ready, _ = payload["ready"].(bool)
+		reader.startupError, _ = payload["error"].(string)
+		a.composeMu.Unlock()
+	case "threadWindow.isReady":
+		ready, startupError := reader.ready, reader.startupError
+		closing := reader.closeInProgress || reader.closing.Load()
+		a.composeMu.Unlock()
+		if closing {
+			return nil, fmt.Errorf("thread window is closing")
+		}
+		if startupError != "" {
+			return nil, fmt.Errorf("%s", startupError)
+		}
+		return ready, nil
 	case "threadWindow.beginClose":
 		reader.closeInProgress = true
 		a.composeMu.Unlock()

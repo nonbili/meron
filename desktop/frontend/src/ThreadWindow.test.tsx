@@ -46,6 +46,7 @@ let handlers: Map<string, (detail?: any) => void>
 let save: () => Promise<void>
 let prefs: Record<string, unknown>
 let discard: () => Promise<void>
+let cancelClose: () => Promise<void>
 let reads: number
 let scroll: { messageId: string; offset: number; atBottom: boolean } | null
 let readThread: (payload: any) => Promise<{ messages: (typeof message)[]; next_cursor?: string }>
@@ -56,6 +57,7 @@ beforeEach(() => {
   reads = 0
   prefs = {}
   discard = async () => {}
+  cancelClose = async () => {}
   scroll = null
   readThread = async () => ({ messages: [message] })
   compose$.tabs.set([])
@@ -98,6 +100,9 @@ beforeEach(() => {
             case 'mail.threadRead':
               reads++
               return readThread(payload)
+            case 'threadWindow.cancelClose':
+              await cancelClose()
+              return true
             case 'mail.allocateIdentity':
               return { message_id: 'draft@example.com' }
             case 'mail.saveDraft':
@@ -129,6 +134,7 @@ async function mount() {
 it('boots once in StrictMode, restores view state and isolates main navigation/storage', async () => {
   const view = await mount()
   expect(calls.filter((call) => call.command === 'account.list')).toHaveLength(1)
+  expect(calls.some((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toBe(true)
   expect(threadView('t1').overrides).toEqual({ m1: true })
   expect(COMPOSE_TABS_KEY).toBe('meron-thread-session-tabs')
   expect(localStorage.getItem('meron-compose-tabs')).toBe('[{"id":"main-buffer"}]')
@@ -404,4 +410,68 @@ it('saves grouped editor tabs without offering an unsafe local draft snapshot re
   await waitFor(() => expect(compose$.tabs.peek().some((item) => item.id === tab.id)).toBe(false))
   expect(view.getByText('Saved to Drafts')).toBeTruthy()
   expect(view.queryByRole('button', { name: 'Open draft' })).toBeNull()
+})
+
+it('reports startup failure so a moving source can stay open', async () => {
+  readThread = async () => {
+    throw new Error('Cannot load conversation')
+  }
+  const view = render(<ThreadWindow session="session" />)
+  await waitFor(() => expect(view.getByRole('alert').textContent).toContain('Cannot load conversation'))
+  await waitFor(() =>
+    expect(
+      calls.some(
+        (call) =>
+          call.command === 'threadWindow.setReady' &&
+          !call.payload.ready &&
+          call.payload.error.includes('Cannot load conversation'),
+      ),
+    ).toBe(true),
+  )
+  expect(calls.some((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toBe(false)
+})
+
+it('restores a moved tab into an existing window while keeping its editor draft', async () => {
+  const view = await mount()
+  act(() => openReplyInFullEditor())
+  const tab = compose$.tabs.peek().find((tab) => tab.compose)!
+  act(() => updateComposeDraft(tab.id, { text: 'Keep this editor' }))
+  threadView('t1').overrides = { m1: false }
+  const oldReads = reads
+  act(() => handlers.get('threadWindow.restoreView')?.({ session: 'other' }))
+  expect(reads).toBe(oldReads)
+  act(() => handlers.get('threadWindow.restoreView')?.({ session: 'session' }))
+  await waitFor(() => expect(reads).toBeGreaterThan(oldReads))
+  await waitFor(() => expect(threadView('t1').overrides).toEqual({ m1: true }))
+  await waitFor(() => expect(view.getByRole('button', { name: 'Copy subject' })).toBeTruthy())
+  expect(compose$.activeTab.peek()).toBe('')
+  expect(compose$.tabs.peek().find((item) => item.id === tab.id)?.compose?.text).toBe('Keep this editor')
+  expect(calls.filter((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toHaveLength(2)
+})
+
+it('applies a moved view queued while a failed close is still being cancelled', async () => {
+  const view = await mount()
+  act(() => openReplyInFullEditor())
+  const tab = compose$.tabs.peek().find((tab) => tab.compose)!
+  act(() => updateComposeDraft(tab.id, { text: 'Keep the failed save editable' }))
+  save = async () => {
+    throw new Error('offline')
+  }
+  let finishCancel!: () => void
+  cancelClose = () =>
+    new Promise((resolve) => {
+      finishCancel = resolve
+    })
+  act(() => handlers.get('threadWindow.closeRequested')?.({ session: 'session', request: 1 }))
+  await waitFor(() => expect(calls.some((call) => call.command === 'threadWindow.cancelClose')).toBe(true))
+  const oldReads = reads
+  threadView('t1').overrides = { m1: false }
+  act(() => handlers.get('threadWindow.restoreView')?.({ session: 'session' }))
+  expect(reads).toBe(oldReads)
+  await act(async () => finishCancel())
+  await waitFor(() => expect(reads).toBeGreaterThan(oldReads))
+  await waitFor(() => expect(threadView('t1').overrides).toEqual({ m1: true }))
+  await waitFor(() => expect(view.getByRole('button', { name: 'Copy subject' })).toBeTruthy())
+  expect(compose$.tabs.peek().find((item) => item.id === tab.id)?.compose?.text).toBe('Keep the failed save editable')
+  expect(calls.filter((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toHaveLength(2)
 })

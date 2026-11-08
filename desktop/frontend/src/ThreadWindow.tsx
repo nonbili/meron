@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { MessagePane } from './components/chat/MessagePane'
 import { AppConfirm } from './components/dialog/AppConfirm'
@@ -39,6 +39,16 @@ export function ThreadWindow({ session }: { session: string }) {
   const [attempt, setAttempt] = useState(0)
   const startup = useRef<Promise<void> | null>(null)
   const closing = useRef(false)
+  const pendingRestore = useRef(false)
+  const restoreMovedView = useCallback(() => {
+    // Unmount the old reader before restoring its replacement snapshot so
+    // scroll cleanup cannot overwrite it. Editor tabs remain in compose state.
+    startup.current = null
+    compose$.activeTab.set('')
+    setReady(false)
+    setError('')
+    setAttempt((value) => value + 1)
+  }, [])
   const language = useValue(settings$.language)
   const tagThreadId = useValue(ui$.tagThreadId)
   const subject = useValue(
@@ -48,6 +58,10 @@ export function ThreadWindow({ session }: { session: string }) {
   useEffect(() => {
     void i18n.changeLanguage(language || resolveI18nLanguageFromWebLocale(navigator.language) || 'en')
   }, [language])
+  useEffect(() => {
+    void invoke('threadWindow.setReady', { session, ready, error: ready ? '' : error }).catch(console.error)
+  }, [session, ready, error])
+
   useEffect(() => {
     document.title = `${subject || 'Meron'}${subject ? ' — Meron' : ''}`
   }, [subject])
@@ -139,6 +153,11 @@ export function ThreadWindow({ session }: { session: string }) {
       timer = setTimeout(refreshMail, 100)
     }
     const eventsOn = (window as any).runtime?.EventsOn
+    const stopRestoreView = eventsOn?.('threadWindow.restoreView', (detail?: { session?: string }) => {
+      if (detail?.session !== session) return
+      if (closing.current) pendingRestore.current = true
+      else restoreMovedView()
+    })
     const stops = ['mail.newMessages', 'mail.synced', 'mail.sentCopyCached'].map((name) =>
       eventsOn?.(name, scheduleRefresh),
     )
@@ -172,11 +191,12 @@ export function ThreadWindow({ session }: { session: string }) {
       clearTimeout(timer)
       stopAppearance()
       stopSelection()
+      stopRestoreView?.()
       refreshConfiguration.dispose()
       stops.forEach((stop) => stop?.())
       window.removeEventListener('focus', scheduleRefresh)
     }
-  }, [session, attempt])
+  }, [session, attempt, restoreMovedView])
 
   useEffect(() => {
     // Publish synchronously on changes, rather than waiting for a React render.
@@ -243,6 +263,10 @@ export function ThreadWindow({ session }: { session: string }) {
         if (!closed) await invoke('threadWindow.cancelClose', { session }).catch(console.error)
         closing.current = false
         setIsClosing(false)
+        if (!closed && pendingRestore.current) {
+          pendingRestore.current = false
+          restoreMovedView()
+        }
       }
     }
     const stop = (window as any).runtime?.EventsOn?.(
@@ -287,7 +311,7 @@ export function ThreadWindow({ session }: { session: string }) {
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('meron.frameKeyDown', frameKeydown)
     }
-  }, [session])
+  }, [session, restoreMovedView])
 
   return (
     <main aria-busy={isClosing} className="relative flex h-full flex-col bg-chat text-primary">

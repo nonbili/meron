@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Закрыть переписку (Esc)",
   "chat.closeEsc": "Закрыть (Esc)",
   "chat.closeOtherTabs": "Закрыть остальные вкладки",
+  "chat.moveTabToNewWindow": "Переместить вкладку в новое окно",
   "chat.closeTab": "Закрыть вкладку",
   "chat.closeTabsToLeft": "Закрыть вкладки слева",
   "chat.closeTabsToRight": "Закрыть вкладки справа",

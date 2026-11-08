@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Fermer la conversation (Esc)",
   "chat.closeEsc": "Fermer (Esc)",
   "chat.closeOtherTabs": "Fermer les autres onglets",
+  "chat.moveTabToNewWindow": "Déplacer l’onglet vers une nouvelle fenêtre",
   "chat.closeTab": "Fermer l'onglet",
   "chat.closeTabsToLeft": "Fermer les onglets à gauche",
   "chat.closeTabsToRight": "Fermer les onglets à droite",

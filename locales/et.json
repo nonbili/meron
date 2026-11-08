@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Sulge vestlus (Esc)",
   "chat.closeEsc": "Sulge (Esc)",
   "chat.closeOtherTabs": "Sulge teised vahekaardid",
+  "chat.moveTabToNewWindow": "Teisalda vahekaart uude aknasse",
   "chat.closeTab": "Sulge vahekaart",
   "chat.closeTabsToLeft": "Sulge vasakpoolsed vahekaardid",
   "chat.closeTabsToRight": "Sulge parempoolsed vahekaardid",

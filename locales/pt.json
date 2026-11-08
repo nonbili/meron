@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Fechar conversa (Esc)",
   "chat.closeEsc": "Fechar (Esc)",
   "chat.closeOtherTabs": "Fechar outros separadores",
+  "chat.moveTabToNewWindow": "Mover separador para uma nova janela",
   "chat.closeTab": "Fechar separador",
   "chat.closeTabsToLeft": "Fechar separadores à esquerda",
   "chat.closeTabsToRight": "Fechar separadores à direita",

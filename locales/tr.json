@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Konuşmayı kapat (Esc)",
   "chat.closeEsc": "Kapat (Esc)",
   "chat.closeOtherTabs": "Diğer sekmeleri kapat",
+  "chat.moveTabToNewWindow": "Sekmeyi yeni pencereye taşı",
   "chat.closeTab": "Sekmeyi kapat",
   "chat.closeTabsToLeft": "Soldaki sekmeleri kapat",
   "chat.closeTabsToRight": "Sağdaki sekmeleri kapat",

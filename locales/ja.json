@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "会話を閉じる (Esc)",
   "chat.closeEsc": "閉じる (Esc)",
   "chat.closeOtherTabs": "他のタブを閉じる",
+  "chat.moveTabToNewWindow": "タブを新しいウィンドウに移動",
   "chat.closeTab": "タブを閉じる",
   "chat.closeTabsToLeft": "左側のタブを閉じる",
   "chat.closeTabsToRight": "右側のタブを閉じる",

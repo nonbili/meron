@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Κλείσιμο συνομιλίας (Esc)",
   "chat.closeEsc": "Κλείσιμο (Esc)",
   "chat.closeOtherTabs": "Κλείσιμο άλλων καρτελών",
+  "chat.moveTabToNewWindow": "Μετακίνηση καρτέλας σε νέο παράθυρο",
   "chat.closeTab": "Κλείσιμο καρτέλας",
   "chat.closeTabsToLeft": "Κλείσιμο καρτελών στα αριστερά",
   "chat.closeTabsToRight": "Κλείσιμο καρτελών στα δεξιά",

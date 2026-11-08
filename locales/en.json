@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Close conversation (Esc)",
   "chat.closeEsc": "Close (Esc)",
   "chat.closeOtherTabs": "Close other tabs",
+  "chat.moveTabToNewWindow": "Move tab to new window",
   "chat.closeTab": "Close tab",
   "chat.closeTabsToLeft": "Close tabs to the left",
   "chat.closeTabsToRight": "Close tabs to the right",

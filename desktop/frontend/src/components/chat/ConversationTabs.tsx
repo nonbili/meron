@@ -1,3 +1,4 @@
+import { moveThreadTabToWindow } from '../../lib/threadWindow'
 import { threadWindowSession } from '../../lib/windowSession'
 import { useEffect, useRef, useState } from 'react'
 import { DndContext, closestCenter } from '@dnd-kit/core'
@@ -292,6 +293,7 @@ function TabContextMenu({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const tab = tabs.find((tab) => tab.id === tabId)
   const entries = [...(hasCurrent ? [''] : []), ...tabs.map((tab) => tab.id)]
   const index = entries.indexOf(tabId)
   if (index === -1) return null
@@ -321,6 +323,15 @@ function TabContextMenu({
         event.stopPropagation()
       }}
     >
+      {!threadWindowSession && tab?.kind === 'thread' && (
+        <MenuItem
+          label={t('chat.moveTabToNewWindow')}
+          onClick={() => {
+            onClose()
+            void moveThreadTabToWindow(tabId)
+          }}
+        />
+      )}
       {(tabId !== '' || !threadWindowSession) && (
         <MenuItem
           label={t('chat.closeTab')}

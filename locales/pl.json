@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "Zamknij konwersację (Esc)",
   "chat.closeEsc": "Zamknij (Esc)",
   "chat.closeOtherTabs": "Zamknij pozostałe karty",
+  "chat.moveTabToNewWindow": "Przenieś kartę do nowego okna",
   "chat.closeTab": "Zamknij kartę",
   "chat.closeTabsToLeft": "Zamknij karty po lewej",
   "chat.closeTabsToRight": "Zamknij karty po prawej",

@@ -116,6 +116,33 @@ describe('ConversationTabs', () => {
     expect(ui$.selectedThread.get()).toBe('t-current')
   })
 
+  it('moves the conversation chosen from its context menu without changing the active tab', async () => {
+    openThreadTab(message({ thread_id: 't-a', subject: 'First' }))
+    openThreadTab(message({ thread_id: 't-b', subject: 'Second' }))
+    const calls: { command: string; payload: any }[] = []
+    const previousBridge = (window as any).go
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string, payload: any) => {
+            calls.push({ command, payload })
+            return command === 'threadWindow.open' ? 'destination' : true
+          },
+        },
+      },
+    }
+    try {
+      const view = render(<ConversationTabs />)
+      fireEvent.contextMenu(view.getByTitle('First'))
+      fireEvent.click(view.getByText('Move tab to new window'))
+      await waitFor(() => expect(compose$.tabs.peek().map((tab) => tab.threadId)).toEqual(['t-b']))
+      expect(compose$.activeTab.peek()).toBe('thread-t-b')
+      expect(calls.find((call) => call.command === 'threadWindow.open')?.payload.thread_id).toBe('t-a')
+    } finally {
+      ;(window as any).go = previousBridge
+    }
+  })
+
   it('reorders tabs by dragging, leaving the active tab and Current alone', async () => {
     ui$.selectedThread.set('t-current')
     openThreadTab(message({ thread_id: 't-a', subject: 'First' }))

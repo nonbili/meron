@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { openThreadWindow } from './threadWindow'
+import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
+import { openThreadWindow, moveThreadTabToWindow } from './threadWindow'
 import {
   restoreThreadWindowDrafts,
   openComposeTab,
@@ -19,8 +19,10 @@ let calls: { command: string; payload: any }[]
 let liveSessions: string[]
 let focusedDraft: boolean
 let threadMessages: Message[]
+let destinationReady: () => Promise<boolean>
 beforeEach(() => {
   calls = []
+  destinationReady = async () => true
   liveSessions = []
   focusedDraft = false
   threadMessages = []
@@ -40,6 +42,8 @@ beforeEach(() => {
       App: {
         Invoke: async (command: string, payload: any) => {
           calls.push({ command, payload })
+          if (command === 'threadWindow.open') return 'destination'
+          if (command === 'threadWindow.isReady') return destinationReady()
           if (command === 'threadWindow.sessions') return liveSessions
           if (command === 'threadWindow.focusDraft') return focusedDraft
           if (command === 'mail.threadRead') return { messages: threadMessages }
@@ -210,4 +214,76 @@ it('opens an unowned rich reply draft in its editor without disturbing another q
   expect(ui$.selectedThread.peek()).toBe('other-thread')
   expect(compose$.composer.peek()).toBe('New unsaved text in the other conversation')
   expect(compose$.quickReplyDraftId.peek()).toBe('other-draft@example.com')
+})
+
+it('moves an inactive conversation only after its destination is ready, using its own view', async () => {
+  const tab = { id: 'thread-move', kind: 'thread', threadId: 'move', subject: 'Move' } as any
+  compose$.tabs.set([tab, { id: 'thread-stay', kind: 'thread', threadId: 'stay' } as any])
+  compose$.activeTab.set('thread-stay')
+  threadView('thread-move:move').scroll = { messageId: 'anchor', offset: 42, atBottom: false }
+  threadView('thread-move:move').overrides = { anchor: true }
+  let finish!: (ready: boolean) => void
+  destinationReady = () =>
+    new Promise((resolve) => {
+      finish = resolve
+    })
+  const moving = moveThreadTabToWindow(tab.id)
+  // Let the open call resolve and enter the readiness check.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(compose$.tabs.peek()).toHaveLength(2)
+  await moveThreadTabToWindow(tab.id)
+  expect(calls.filter((call) => call.command === 'threadWindow.open')).toHaveLength(1)
+  finish(true)
+  await moving
+  expect(compose$.tabs.peek().map((tab) => tab.id)).toEqual(['thread-stay'])
+  expect(compose$.activeTab.peek()).toBe('thread-stay')
+  const opened = calls.find((call) => call.command === 'threadWindow.open')!
+  expect(opened.payload.thread_id).toBe('move')
+  expect(opened.payload.view.scroll.offset).toBe(42)
+  expect(opened.payload.view.overrides).toEqual({ anchor: true })
+})
+
+it('keeps the tab and its view if the destination fails to load', async () => {
+  compose$.tabs.set([{ id: 'thread-failed', kind: 'thread', threadId: 'failed' } as any])
+  compose$.activeTab.set('thread-failed')
+  threadView('thread-failed:failed').overrides = { m: true }
+  destinationReady = async () => {
+    throw new Error('Reader failed to load')
+  }
+  await moveThreadTabToWindow('thread-failed')
+  expect(compose$.tabs.peek()).toHaveLength(1)
+  expect(compose$.activeTab.peek()).toBe('thread-failed')
+  expect(threadView('thread-failed:failed').overrides).toEqual({ m: true })
+})
+
+it('leaves a reopened source with the same id alone', async () => {
+  compose$.tabs.set([{ id: 'thread-reopened', kind: 'thread', threadId: 'reopened' } as any])
+  destinationReady = async () => {
+    compose$.tabs.set([{ id: 'thread-reopened', kind: 'thread', threadId: 'reopened' } as any])
+    return true
+  }
+  await moveThreadTabToWindow('thread-reopened')
+  expect(compose$.tabs.peek()).toHaveLength(1)
+})
+
+it('keeps waiting for a slow startup instead of reporting a failure after 30 seconds', async () => {
+  compose$.tabs.set([{ id: 'thread-slow', kind: 'thread', threadId: 'slow' } as any])
+  let now = Date.now()
+  const clock = spyOn(Date, 'now').mockImplementation(() => now)
+  let checks = 0
+  destinationReady = async () => {
+    if (++checks === 1) {
+      now += 60_000
+      expect(compose$.tabs.peek()).toHaveLength(1)
+      return false
+    }
+    return true
+  }
+  try {
+    await moveThreadTabToWindow('thread-slow')
+    expect(checks).toBe(2)
+    expect(compose$.tabs.peek()).toHaveLength(0)
+  } finally {
+    clock.mockRestore()
+  }
 })

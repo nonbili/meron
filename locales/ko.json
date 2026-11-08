@@ -217,6 +217,7 @@
   "chat.closeConversationEsc": "대화 닫기 (Esc)",
   "chat.closeEsc": "닫기 (Esc)",
   "chat.closeOtherTabs": "다른 탭 닫기",
+  "chat.moveTabToNewWindow": "탭을 새 창으로 이동",
   "chat.closeTab": "탭 닫기",
   "chat.closeTabsToLeft": "왼쪽 탭 닫기",
   "chat.closeTabsToRight": "오른쪽 탭 닫기",
