@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import { draftOpenInComposeTab } from '../../states/quickReply'
@@ -10,6 +10,7 @@ import {
   openDraftCompose,
   updateComposeDraft,
 } from '../../states/compose'
+import { getComposeSession } from '../../states/composeSessions'
 import { compose$ } from '../../states/composeState'
 import { kanban$ } from '../../states/kanban'
 import { dismissToast, runToastUndo, settleConfirm, ui$ } from '../../states/ui'
@@ -112,6 +113,48 @@ describe('Composer', () => {
   const draftOf = (tabId: string) => compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose
   const bodyHtml = () => document.querySelector('.tiptap-body')?.innerHTML ?? ''
   const savedDraftIds = () => calls.filter((c) => c.command === 'mail.saveDraft').map((c) => c.payload.draft_id)
+
+  it('rearms the pending autosave after a cancelled window move without requiring another edit', async () => {
+    const originalTimeout = globalThis.setTimeout
+    let autosave: (() => void) | undefined
+    const timeout = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: (...args: any[]) => void,
+      delay?: number,
+      ...args: any[]
+    ) => {
+      if (delay === 3000) autosave = () => callback(...args)
+      return originalTimeout(callback, delay, ...args)
+    }) as typeof setTimeout)
+    try {
+      const id = openComposeTab({ to: 'friend@example.com', text: 'Last unsaved edit' })!
+      render(<Composer tabId={id} />)
+      const session = getComposeSession(id)
+      const before = autosave!
+      act(() => {
+        session.savesStopped = true
+        session.savingToClose = true
+        session.setClosingState?.(true)
+      })
+      await act(async () => {
+        before()
+        await session.saveChain
+      })
+      expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(false)
+      act(() => {
+        session.savesStopped = false
+        session.savingToClose = false
+        session.setClosingState?.(false)
+      })
+      expect(autosave).not.toBe(before)
+      await act(async () => {
+        autosave!()
+        await session.saveChain
+      })
+      expect(calls.find((call) => call.command === 'mail.saveDraft')?.payload.body).toContain('Last unsaved edit')
+    } finally {
+      timeout.mockRestore()
+    }
+  })
 
   it('scales the plain-text body with the message text size', () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi', rich: false })!

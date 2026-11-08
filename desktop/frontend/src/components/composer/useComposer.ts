@@ -273,7 +273,7 @@ export function useComposer(tabId: string) {
   }, [draft, session, tabId])
 
   useEffect(() => {
-    editor?.view.dom.setAttribute('spellcheck', String(spellCheck))
+    if (editor && !editor.isDestroyed) editor.view.dom.setAttribute('spellcheck', String(spellCheck))
   }, [editor, spellCheck])
 
   // The plaintext body has the same problem, and an autofocused <textarea>
@@ -353,7 +353,7 @@ export function useComposer(tabId: string) {
   useEffect(() => {
     const sendAsChanged = previousFromEmailRef.current !== draft?.fromEmail
     previousFromEmailRef.current = draft?.fromEmail
-    if (!draft || !draft.accountId || sending) return
+    if (!draft || !draft.accountId || sending || closingWindow) return
 
     setSaveStatus('idle')
     setSaveError('')
@@ -486,6 +486,7 @@ export function useComposer(tabId: string) {
     // by an encrypted one rather than left there in the clear.
     draft?.encrypt,
     sending,
+    closingWindow,
     editor,
     session,
   ])
@@ -593,6 +594,8 @@ export function useComposer(tabId: string) {
           reportUnattachedFiles()
         })
     }
+    session.pendingEdits.add(placing)
+    void placing.finally(() => session.pendingEdits.delete(placing))
   }
 
   const addNativeClipboardImage = (image: NativeClipboardImage, options: { inline?: boolean } = {}) => {
@@ -609,7 +612,7 @@ export function useComposer(tabId: string) {
       attachments: [...(compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []), next],
     })
     if (shouldInline) {
-      invoke<string>('composer.writeMediaFile', { data: image.data, filename: image.filename })
+      const placing = invoke<string>('composer.writeMediaFile', { data: image.data, filename: image.filename })
         .then((url) => {
           editor!.chain().focus().setImage({ src: url, alt: image.filename }).run()
         })
@@ -621,6 +624,8 @@ export function useComposer(tabId: string) {
             .setImage({ src: `data:${image.mime || 'image/png'};base64,${image.data}`, alt: image.filename })
             .run()
         })
+      session.pendingEdits.add(placing)
+      void placing.finally(() => session.pendingEdits.delete(placing))
     }
   }
 

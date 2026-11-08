@@ -235,3 +235,129 @@ func TestMovingTabIntoExistingWindowRestoresViewWithoutQueuingReopen(t *testing.
 		t.Fatalf("source can close before restore: %v, %v", ready, err)
 	}
 }
+
+func TestMovedComposersStageIndependentlyAndPublishOwnershipOnActivation(t *testing.T) {
+	oldFactory := newComposeWindow
+	defer func() { newComposeWindow = oldFactory }()
+	var windows []*fakeEmlWindow
+	newComposeWindow = func(options application.WebviewWindowOptions, _ func() bool, closed func(), _ func([]string)) emlReaderWindow {
+		if !options.Hidden {
+			t.Fatal("moved editor was not staged hidden")
+		}
+		window := &fakeEmlWindow{onClose: closed}
+		windows = append(windows, window)
+		return window
+	}
+	app := &App{}
+	payload := map[string]any{"compose_tab": map[string]any{
+		"id": "compose-1", "kind": "compose", "compose": map[string]any{
+			"draftMessageId": "draft@example.com", "text": "Unsaved text",
+			"attachments": []any{map[string]any{"data": "aGVsbG8="}},
+		},
+	}}
+	first, err := app.Invoke("threadWindow.open", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := app.Invoke("threadWindow.open", payload)
+	if err != nil || first == second || len(windows) != 2 {
+		t.Fatalf("editors reused a window: %v, %v", second, err)
+	}
+	if windows[0].shown != 0 || windows[1].shown != 0 || len(app.threadDrafts()) != 0 {
+		t.Fatal("staged editor became visible or claimed its source prematurely")
+	}
+	snapshot, err := app.Invoke("threadWindow.get", map[string]any{"session": first})
+	if err != nil || snapshot.(map[string]any)["compose_tab"] == nil {
+		t.Fatal("full draft snapshot was lost")
+	}
+	if _, err := app.Invoke("threadWindow.activateComposer", map[string]any{"session": first}); err == nil {
+		t.Fatal("activated an unready destination")
+	}
+	_, _ = app.Invoke("threadWindow.setReady", map[string]any{"session": first, "ready": true})
+	if _, err := app.Invoke("threadWindow.activateComposer", map[string]any{"session": first}); err != nil {
+		t.Fatal(err)
+	}
+	if windows[0].shown != 1 || windows[0].focused != 1 || len(app.threadDrafts()) != 1 {
+		t.Fatal("activation did not show the editor and reserve its draft")
+	}
+	aborted, err := app.Invoke("threadWindow.abortComposer", map[string]any{"session": first})
+	if err != nil || aborted != false || windows[0].closed != 0 {
+		t.Fatal("abort destroyed a committed editor")
+	}
+	// Activated editors survive the native deadline; abandoned staged ones do not.
+	for _, reader := range app.threadWindows {
+		app.expireStagedComposer(reader)
+	}
+	if windows[0].closed != 0 || windows[1].closed != 1 {
+		t.Fatal("native expiry did not distinguish staged and activated editors")
+	}
+	aborted, err = app.Invoke("threadWindow.abortComposer", map[string]any{"session": second})
+	if err != nil || aborted != true || windows[1].closed != 1 || len(app.threadWindows) != 1 {
+		t.Fatal("staged abort did not retire only its own window")
+	}
+}
+
+func TestMovedComposerSnapshotsKeepLatestSensitiveContentAndAttachmentBytes(t *testing.T) {
+	tab := func(text, id string, attachments []any) map[string]any {
+		return map[string]any{"id": "editor", "kind": "compose", "compose": map[string]any{
+			"accountId": "a", "draftMessageId": id, "text": text, "encrypt": true, "attachments": attachments,
+		}}
+	}
+	file := func(id string) map[string]any { return map[string]any{"id": id, "filename": id + ".txt"} }
+	a := file("a")
+	a["data"] = "YQ=="
+	b := file("b")
+	b["data"] = "Yg=="
+	reader := &threadWindow{composeWindow: composeWindow{session: "s"}, composeActivated: true,
+		composeTab: tab("Original", "local-draft-1", []any{a, b}), drafts: map[string]bool{}, identities: map[string]string{}}
+	app := &App{threadWindows: map[string]*threadWindow{"editor": reader}}
+	update := func(revision float64, next map[string]any, data map[string]any) error {
+		_, err := app.Invoke("threadWindow.updateComposer", map[string]any{"session": "s", "revision": revision, "tab": next, "attachment_data": data})
+		return err
+	}
+	// Remove a, retain b without retransmitting its bytes, and add c.
+	if err := update(1, tab("Latest", "local-draft-1", []any{file("b"), file("c")}), map[string]any{"c": "Yw=="}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := app.Invoke("threadWindow.get", map[string]any{"session": "s"})
+	_, _ = app.Invoke("threadWindow.reserveDraft", map[string]any{"session": "s", "previous_id": "local-draft-1", "draft_id": "stable@example.com"})
+	if before.(map[string]any)["compose_tab"].(map[string]any)["compose"].(map[string]any)["draftMessageId"] != "local-draft-1" {
+		t.Fatal("identity allocation mutated a snapshot already returned to the bridge")
+	}
+	// An edit sent before the allocation completed must not undo that identity.
+	if err := update(2, tab("Newest", "local-draft-1", []any{file("b"), file("c")}), nil); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := app.Invoke("threadWindow.get", map[string]any{"session": "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := snapshot.(map[string]any)["compose_tab"].(map[string]any)["compose"].(map[string]any)
+	files := draft["attachments"].([]any)
+	if draft["text"] != "Newest" || draft["draftMessageId"] != "stable@example.com" || draft["encrypt"] != true || len(files) != 2 || files[0].(map[string]any)["data"] != "Yg==" || files[1].(map[string]any)["data"] != "Yw==" {
+		t.Fatalf("recovery lost current content, identity or bytes: %+v", draft)
+	}
+	result, err := app.Invoke("threadWindow.updateComposer", map[string]any{"session": "s", "revision": float64(1), "tab": tab("Stale", "local-draft-1", nil)})
+	if err != nil || result.(map[string]any)["applied"] != false || result.(map[string]any)["revision"] != float64(2) {
+		t.Fatalf("stale write did not report the revision needed for resync: %v, %v", result, err)
+	}
+	// Late updates from the old page cannot replace a newer snapshot.
+	if err := update(1, tab("Stale", "local-draft-1", nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	if reader.composeRevision != 2 || reader.composeTab["compose"].(map[string]any)["text"] != "Newest" {
+		t.Fatal("stale recovery write was accepted")
+	}
+	if err := update(3, tab("No files", "stable@example.com", []any{}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := update(4, tab("Reattach", "stable@example.com", []any{file("b")}), nil); err == nil {
+		t.Fatal("removed attachment bytes were resurrected")
+	}
+	if err := update(5, tab("New identity", "local-draft-new", []any{}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if reader.composeTab["compose"].(map[string]any)["draftMessageId"] != "local-draft-new" {
+		t.Fatal("a new same-account identity was replaced by an old allocation")
+	}
+}

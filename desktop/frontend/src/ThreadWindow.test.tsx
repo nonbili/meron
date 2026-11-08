@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import type { MessageTab } from './types'
 import { StrictMode } from 'react'
 
 window.history.replaceState({}, '', '/?threadWindow=session')
@@ -45,6 +46,12 @@ let calls: { command: string; payload: any }[]
 let handlers: Map<string, (detail?: any) => void>
 let save: () => Promise<void>
 let prefs: Record<string, unknown>
+let transferred: MessageTab | undefined
+let transferredActivated: boolean
+let startupGate: Promise<void> | undefined
+let transferRevision: number
+let rejectSnapshotOnce: boolean
+let failSnapshotOnce: boolean
 let discard: () => Promise<void>
 let cancelClose: () => Promise<void>
 let reads: number
@@ -56,6 +63,12 @@ beforeEach(() => {
   save = async () => {}
   reads = 0
   prefs = {}
+  transferred = undefined
+  transferredActivated = false
+  startupGate = undefined
+  transferRevision = 0
+  rejectSnapshotOnce = false
+  failSnapshotOnce = false
   discard = async () => {}
   cancelClose = async () => {}
   scroll = null
@@ -82,6 +95,13 @@ beforeEach(() => {
           calls.push({ command, payload })
           switch (command) {
             case 'threadWindow.get':
+              if (transferred)
+                return {
+                  thread_id: '',
+                  compose_tab: transferred,
+                  compose_activated: transferredActivated,
+                  compose_revision: transferRevision,
+                }
               return {
                 thread_id: 't1',
                 thread: message,
@@ -93,7 +113,27 @@ beforeEach(() => {
                   revealedRemote: [],
                 },
               }
+            case 'threadWindow.updateComposer': {
+              if (rejectSnapshotOnce) {
+                rejectSnapshotOnce = false
+                transferRevision = payload.revision + 5
+                return { applied: false, revision: transferRevision }
+              }
+              if (failSnapshotOnce) {
+                failSnapshotOnce = false
+                throw new Error('temporary snapshot failure')
+              }
+              const old = transferred?.compose?.attachments ?? []
+              transferred = JSON.parse(JSON.stringify(payload.tab))
+              transferred!.compose!.attachments = transferred!.compose!.attachments.map((file) => ({
+                ...file,
+                data: payload.attachment_data[file.id] ?? old.find((item) => item.id === file.id)?.data,
+              }))
+              transferRevision = payload.revision
+              return { applied: true, revision: transferRevision }
+            }
             case 'account.list':
+              await startupGate
               return { accounts: [{ id: 'a', email: 'me@example.com', provider: 'custom', conversation_html: false }] }
             case 'app.prefsGet':
               return { prefs }
@@ -474,4 +514,112 @@ it('applies a moved view queued while a failed close is still being cancelled', 
   await waitFor(() => expect(view.getByRole('button', { name: 'Copy subject' })).toBeTruthy())
   expect(compose$.tabs.peek().find((item) => item.id === tab.id)?.compose?.text).toBe('Keep the failed save editable')
   expect(calls.filter((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toHaveLength(2)
+})
+
+it('stages a moved editor without autosaving and activates its full in-memory draft on handoff', async () => {
+  const id = openComposeTab({ to: 'friend@example.com', text: 'Unsaved moved text', subject: 'Moved subject' })!
+  updateComposeDraft(id, {
+    attachments: [{ id: 'a1', filename: 'note.txt', mime: 'text/plain', size: 5, data: 'aGVsbG8=' }],
+  })
+  transferred = JSON.parse(JSON.stringify(compose$.tabs.peek()[0]))
+  compose$.tabs.set([])
+  const view = render(
+    <StrictMode>
+      <ThreadWindow session="session" />
+    </StrictMode>,
+  )
+  await waitFor(() =>
+    expect(calls.some((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toBe(true),
+  )
+  expect(reads).toBe(0)
+  expect(compose$.tabs.peek()).toHaveLength(0)
+  expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(false)
+  act(() => handlers.get('threadWindow.activateComposer')?.({ session: 'other' }))
+  expect(compose$.tabs.peek()).toHaveLength(0)
+  act(() => handlers.get('threadWindow.activateComposer')?.({ session: 'session' }))
+  await waitFor(() => expect(view.getByDisplayValue('Unsaved moved text')).toBeTruthy())
+  expect(compose$.tabs.peek()[0]?.compose?.attachments[0]?.data).toBe('aGVsbG8=')
+  expect(document.title).toBe('Moved subject — Meron')
+  act(() => handlers.get('threadWindow.activateComposer')?.({ session: 'session' }))
+  expect(compose$.tabs.peek()).toHaveLength(1)
+})
+
+for (const encrypt of [false, true]) {
+  it(`reloads a moved ${encrypt ? 'sensitive' : 'ordinary'} draft with its latest text, identity and attachments`, async () => {
+    const a = { id: 'a', filename: 'a.txt', mime: 'text/plain', size: 1, data: 'YQ==' }
+    const b = { ...a, id: 'b', filename: 'b.txt', data: 'Yg==' }
+    const c = { ...a, id: 'c', filename: 'c.txt', data: 'Yw==' }
+    const id = openComposeTab({ text: 'Original text', to: 'friend@example.com' })!
+    updateComposeDraft(id, { attachments: [a, b], encrypt })
+    transferred = JSON.parse(JSON.stringify(compose$.tabs.peek()[0]))
+    compose$.tabs.set([])
+    const view = render(<ThreadWindow session="session" />)
+    await waitFor(() =>
+      expect(calls.some((call) => call.command === 'threadWindow.setReady' && call.payload.ready)).toBe(true),
+    )
+    transferredActivated = true
+    act(() => handlers.get('threadWindow.activateComposer')?.({ session: 'session' }))
+    await waitFor(() => expect(view.getByDisplayValue('Original text')).toBeTruthy())
+    await waitFor(() => expect(transferRevision).toBeGreaterThan(0))
+    act(() =>
+      updateComposeDraft(id, { text: 'Latest text', draftMessageId: 'latest@example.com', attachments: [b, c] }),
+    )
+    await waitFor(() => expect(transferred?.compose?.text).toBe('Latest text'))
+    const update = calls.filter((call) => call.command === 'threadWindow.updateComposer').at(-1)!
+    expect(update.payload.attachment_data).toEqual({ c: 'Yw==' })
+    expect(update.payload.tab.compose.attachments.every((file: any) => file.data === undefined)).toBe(true)
+    const revisionBeforeReload = transferRevision
+    view.unmount()
+    compose$.tabs.set([])
+    const reloaded = render(<ThreadWindow session="session" />)
+    await waitFor(() => expect(reloaded.getByDisplayValue('Latest text')).toBeTruthy())
+    expect(compose$.tabs.peek()[0]?.compose?.draftMessageId).toBe('latest@example.com')
+    expect(compose$.tabs.peek()[0]?.compose?.attachments).toEqual([b, c])
+    await waitFor(() => expect(transferRevision).toBeGreaterThan(revisionBeforeReload))
+  })
+}
+
+it('resyncs snapshot revisions and retries failed writes with full attachment data', async () => {
+  const attachment = { id: 'a', filename: 'a.txt', mime: 'text/plain', size: 1, data: 'YQ==' }
+  const id = openComposeTab({ text: 'Original', to: 'friend@example.com' })!
+  updateComposeDraft(id, { attachments: [attachment] })
+  transferred = JSON.parse(JSON.stringify(compose$.tabs.peek()[0]))
+  transferredActivated = true
+  compose$.tabs.set([])
+  render(<ThreadWindow session="session" />)
+  await waitFor(() => expect(transferRevision).toBeGreaterThan(0))
+  rejectSnapshotOnce = true
+  act(() => updateComposeDraft(id, { text: 'Resynced' }))
+  await waitFor(() => expect(transferred?.compose?.text).toBe('Resynced'))
+  let latest = calls.filter((call) => call.command === 'threadWindow.updateComposer').at(-1)!
+  expect(latest.payload.attachment_data).toEqual({ a: 'YQ==' })
+  expect(latest.payload.revision).toBe(transferRevision)
+  failSnapshotOnce = true
+  act(() => updateComposeDraft(id, { text: 'Retried without another edit' }))
+  await waitFor(() => expect(transferred?.compose?.text).toBe('Retried without another edit'), { timeout: 2500 })
+  latest = calls.filter((call) => call.command === 'threadWindow.updateComposer').at(-1)!
+  expect(latest.payload.attachment_data).toEqual({ a: 'YQ==' })
+})
+
+it('retains activation received while a reloaded destination is still starting', async () => {
+  const id = openComposeTab({ text: 'Unsaved text through reload', to: 'friend@example.com' })!
+  const attachment = { id: 'a', filename: 'a.txt', mime: 'text/plain', size: 1, data: 'YQ==' }
+  updateComposeDraft(id, { attachments: [attachment] })
+  transferred = JSON.parse(JSON.stringify(compose$.tabs.peek()[0]))
+  compose$.tabs.set([])
+  let finishStartup!: () => void
+  startupGate = new Promise<void>((resolve) => {
+    finishStartup = resolve
+  })
+  const view = render(<ThreadWindow session="session" />)
+  await waitFor(() => expect(calls.some((call) => call.command === 'account.list')).toBe(true))
+  // get already returned compose_activated=false; activation arrives before
+  // accounts/settings resolve and before transferredTab has been initialized.
+  transferredActivated = true
+  act(() => handlers.get('threadWindow.activateComposer')?.({ session: 'session' }))
+  expect(compose$.tabs.peek()).toHaveLength(0)
+  await act(async () => finishStartup())
+  await waitFor(() => expect(view.getByDisplayValue('Unsaved text through reload')).toBeTruthy())
+  expect(compose$.tabs.peek()[0]?.compose?.attachments).toEqual([attachment])
+  expect(calls.some((call) => call.command === 'threadWindow.close')).toBe(false)
 })

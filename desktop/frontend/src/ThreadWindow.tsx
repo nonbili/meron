@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
+import { Composer } from './components/composer/Composer'
 import { MessagePane } from './components/chat/MessagePane'
 import { AppConfirm } from './components/dialog/AppConfirm'
 import { AppToast } from './components/toast/AppToast'
@@ -25,15 +26,27 @@ import { hydrateSettings, SETTINGS_DB_KEYS, settings$, watchSystemAppearance } f
 import { openThreadSearch } from './states/thread'
 import { restoreThreadView, type ThreadViewSnapshot } from './states/threadView'
 import { modalOpen, ui$ } from './states/ui'
-import type { Account, Message } from './types'
+import type { Account, Message, MessageTab } from './types'
 
-type ThreadSession = { thread_id: string; thread?: Message; view?: ThreadViewSnapshot }
+type ThreadSession = {
+  thread_id: string
+  thread?: Message
+  view?: ThreadViewSnapshot
+  compose_tab?: MessageTab
+  compose_activated?: boolean
+  compose_revision?: number
+}
 
 // A reader boots only its account/settings and conversation. Main-window boot
 // owns navigation persistence, background sync, notifications and media pruning.
 export function ThreadWindow({ session }: { session: string }) {
   const { t } = useTranslation()
   const [ready, setReady] = useState(false)
+  const [composerOnly, setComposerOnly] = useState(false)
+  const [editorTabId, setEditorTabId] = useState('')
+  const transferredTab = useRef<MessageTab | null>(null)
+  const activationRequested = useRef(false)
+  const composerRevision = useRef(0)
   const [isClosing, setIsClosing] = useState(false)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -49,11 +62,25 @@ export function ThreadWindow({ session }: { session: string }) {
     setError('')
     setAttempt((value) => value + 1)
   }, [])
+  const editorExists = useValue(() => !!editorTabId && compose$.tabs.get().some((tab) => tab.id === editorTabId))
   const language = useValue(settings$.language)
   const tagThreadId = useValue(ui$.tagThreadId)
-  const subject = useValue(
-    () => mail$.threads.get().find((thread) => thread.thread_id === ui$.selectedThread.get())?.subject,
+  const subject = useValue(() =>
+    editorTabId
+      ? compose$.tabs.get().find((tab) => tab.id === editorTabId)?.compose?.subject
+      : mail$.threads.get().find((thread) => thread.thread_id === ui$.selectedThread.get())?.subject,
   )
+
+  useEffect(() => {
+    if (editorTabId && !editorExists) {
+      void invoke('threadWindow.close', { session })
+        .then(() => {
+          localStorage.removeItem(COMPOSE_TABS_KEY)
+          localStorage.removeItem(TAB_VIEW_KEY)
+        })
+        .catch(console.error)
+    }
+  }, [session, editorTabId, editorExists])
 
   useEffect(() => {
     void i18n.changeLanguage(language || resolveI18nLanguageFromWebLocale(navigator.language) || 'en')
@@ -69,19 +96,41 @@ export function ThreadWindow({ session }: { session: string }) {
   useEffect(() => {
     let disposed = false
     const refreshConfiguration = configurationRefresh()
+    const activateComposer = () => {
+      // An old renderer may have reported ready before this renderer reloads.
+      // Remember activation even while its account/settings startup is pending.
+      activationRequested.current = true
+      const tab = transferredTab.current
+      if (!tab) return
+      transferredTab.current = null
+      compose$.tabs.set([tab])
+      compose$.activeTab.set(tab.id)
+      setEditorTabId(tab.id)
+    }
     startup.current ??= (async () => {
       const data = await invoke<ThreadSession>('threadWindow.get', { session })
       // Do not cancel the shared StrictMode startup on its first cleanup.
       const [accounts, { prefs }, result] = await Promise.all([
         invokeRetryingTimeout<{ accounts: Account[] }>('account.list'),
         invokeRetryingTimeout<{ prefs: Record<string, unknown> }>('app.prefsGet', { keys: SETTINGS_DB_KEYS }),
-        invokeRetryingTimeout<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
-          thread_id: data.thread_id,
-          limit: CONVERSATION_PAGE_SIZE,
-        }),
+        data.compose_tab
+          ? Promise.resolve<{ messages: Message[]; next_cursor?: string }>({ messages: [] })
+          : invokeRetryingTimeout<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
+              thread_id: data.thread_id,
+              limit: CONVERSATION_PAGE_SIZE,
+            }),
       ])
       hydrateSettings(prefs)
       accounts$.set(accounts.accounts)
+      if (data.compose_tab) {
+        // The native snapshot is kept current in memory, including sensitive
+        // drafts and attachment bytes that cannot go in localStorage.
+        transferredTab.current = data.compose_tab
+        composerRevision.current = data.compose_revision ?? 0
+        setComposerOnly(true)
+        if (data.compose_activated || activationRequested.current) activateComposer()
+        return
+      }
       const thread = result.messages.length ? (data.thread ?? result.messages[0]) : undefined
       if (!thread) throw new Error(t('compose.toast.couldNotOpenNotificationThread'))
       let messages = result.messages
@@ -153,6 +202,9 @@ export function ThreadWindow({ session }: { session: string }) {
       timer = setTimeout(refreshMail, 100)
     }
     const eventsOn = (window as any).runtime?.EventsOn
+    const stopActivate = eventsOn?.('threadWindow.activateComposer', (detail?: { session?: string }) => {
+      if (detail?.session === session) activateComposer()
+    })
     const stopRestoreView = eventsOn?.('threadWindow.restoreView', (detail?: { session?: string }) => {
       if (detail?.session !== session) return
       if (closing.current) pendingRestore.current = true
@@ -192,11 +244,84 @@ export function ThreadWindow({ session }: { session: string }) {
       stopAppearance()
       stopSelection()
       stopRestoreView?.()
+      stopActivate?.()
       refreshConfiguration.dispose()
       stops.forEach((stop) => stop?.())
       window.removeEventListener('focus', scheduleRefresh)
     }
   }, [session, attempt, restoreMovedView])
+
+  useEffect(() => {
+    if (!editorTabId) return
+    let lastFiles = new Map<string, string>()
+    let pending: MessageTab | undefined
+    let publishing = false
+    let stopped = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    // Coalesce edits while a write is in flight. Attachment bytes only cross
+    // the bridge when added or changed, never on every keystroke.
+    const drain = async () => {
+      if (publishing || stopped) return
+      clearTimeout(retry)
+      retry = undefined
+      publishing = true
+      try {
+        while (pending && !stopped) {
+          const tab = pending
+          pending = undefined
+          const draft = tab.compose!
+          const files = new Map(draft.attachments.map((file) => [file.id, file.data]))
+          const data = Object.fromEntries(
+            draft.attachments
+              .filter((file) => lastFiles.get(file.id) !== file.data)
+              .map((file) => [file.id, file.data]),
+          )
+          const result = await invoke<{ applied: boolean; revision: number }>('threadWindow.updateComposer', {
+            session,
+            revision: ++composerRevision.current,
+            tab: {
+              ...tab,
+              compose: { ...draft, attachments: draft.attachments.map(({ data: _data, ...file }) => file) },
+            },
+            attachment_data: data,
+          })
+          composerRevision.current = Math.max(composerRevision.current, result.revision)
+          if (result.applied) lastFiles = files
+          else {
+            // A write from the previous webview won this revision. Resend the
+            // complete current snapshot with a fresh revision and all bytes.
+            lastFiles.clear()
+            pending ??= tab
+          }
+        }
+      } catch (error) {
+        console.error(error)
+        lastFiles.clear()
+        pending ??= compose$.tabs.peek().find((tab) => tab.id === editorTabId)
+        if (!stopped && pending)
+          retry = setTimeout(() => {
+            retry = undefined
+            void drain()
+          }, 1000)
+      } finally {
+        publishing = false
+        if (pending && !stopped && !retry) void drain()
+      }
+    }
+    const publish = () => {
+      const tab = compose$.tabs.peek().find((tab) => tab.id === editorTabId)
+      if (!tab?.compose) return
+      pending = tab
+      void drain()
+    }
+    publish()
+    const stop = compose$.tabs.onChange(publish)
+    return () => {
+      stopped = true
+      clearTimeout(retry)
+      stop()
+    }
+  }, [session, editorTabId])
 
   useEffect(() => {
     // Publish synchronously on changes, rather than waiting for a React render.
@@ -337,7 +462,7 @@ export function ThreadWindow({ session }: { session: string }) {
       )}
       {ready && (
         <div inert={isClosing} className="relative flex min-h-0 flex-1 flex-col">
-          <MessagePane standalone />
+          {composerOnly ? editorTabId && <Composer tabId={editorTabId} /> : <MessagePane standalone />}
         </div>
       )}
       <AppConfirm />

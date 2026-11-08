@@ -4,6 +4,7 @@ type CloseComposeSession = () => Promise<void>
 
 export type ComposeSession = {
   saveChain: Promise<void>
+  pendingEdits: Set<Promise<unknown>>
   saveGeneration: number
   savesStopped: boolean
   savedAccountId?: string
@@ -50,6 +51,7 @@ export function getComposeSession(tabId: string): ComposeSession {
   if (existing) return existing
   const session: ComposeSession = {
     saveChain: Promise.resolve(),
+    pendingEdits: new Set(),
     saveGeneration: 0,
     savesStopped: false,
     attachmentFetches: new Set(),
@@ -96,6 +98,11 @@ export function closeComposeSessionKeepingDraft(tabId: string): boolean {
   if (!session?.closeKeepingDraft) return false
   void runClose(session, session.closeKeepingDraft)
   return true
+}
+
+/** A handoff shares the close lock, so discard, send and window close cannot overtake it. */
+export function transferComposeSession(tabId: string, transfer: CloseComposeSession): Promise<void> {
+  return runClose(getComposeSession(tabId), transfer)
 }
 
 export function forgetComposeSession(tabId: string) {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
-import { openThreadWindow, moveThreadTabToWindow } from './threadWindow'
+import { openThreadWindow, moveThreadTabToWindow, moveTabToWindow } from './threadWindow'
 import {
   restoreThreadWindowDrafts,
   openComposeTab,
@@ -7,6 +7,8 @@ import {
   openDraftConversationOrCompose,
   openDraftFromThreadWindow,
 } from '../states/compose'
+import { getComposeSession } from '../states/composeSessions'
+import { kanban$ } from '../states/kanban'
 import { compose$, COMPOSE_TABS_KEY } from '../states/composeState'
 import { accounts$ } from '../states/accounts'
 import { mail$ } from '../states/mail'
@@ -29,6 +31,9 @@ beforeEach(() => {
   localStorage.clear()
   compose$.tabs.set([])
   compose$.activeTab.set('')
+  compose$.conversationThread.set('')
+  kanban$.activeBoardId.set('')
+  kanban$.paneThreadId.set('')
   ui$.selectedThread.set('')
   compose$.composer.set('')
   compose$.quickReplyDraftId.set('')
@@ -42,6 +47,7 @@ beforeEach(() => {
       App: {
         Invoke: async (command: string, payload: any) => {
           calls.push({ command, payload })
+          if (command === 'threadWindow.abortComposer') return true
           if (command === 'threadWindow.open') return 'destination'
           if (command === 'threadWindow.isReady') return destinationReady()
           if (command === 'threadWindow.sessions') return liveSessions
@@ -283,6 +289,166 @@ it('keeps waiting for a slow startup instead of reporting a failure after 30 sec
     await moveThreadTabToWindow('thread-slow')
     expect(checks).toBe(2)
     expect(compose$.tabs.peek()).toHaveLength(0)
+  } finally {
+    clock.mockRestore()
+  }
+})
+
+it('moves Current with its own view while leaving an active editor alone', async () => {
+  compose$.conversationThread.set('current')
+  const editor = openComposeTab({ to: 'friend@example.com', text: 'Leave this here' })!
+  threadView('current').scroll = { messageId: 'm', offset: 17, atBottom: false }
+  await moveTabToWindow('')
+  expect(calls.find((call) => call.command === 'threadWindow.open')?.payload.view.scroll.offset).toBe(17)
+  expect(compose$.conversationThread.peek()).toBe('')
+  expect(compose$.activeTab.peek()).toBe(editor)
+  expect(compose$.tabs.peek()[0]?.compose?.text).toBe('Leave this here')
+})
+
+it('keeps Current open when its destination fails', async () => {
+  compose$.conversationThread.set('current')
+  ui$.selectedThread.set('current')
+  destinationReady = async () => {
+    throw new Error('offline')
+  }
+  await moveTabToWindow('')
+  expect(compose$.conversationThread.peek()).toBe('current')
+  expect(ui$.selectedThread.peek()).toBe('current')
+})
+
+it('moves the kanban Current conversation without closing the active tab', async () => {
+  kanban$.activeBoardId.set('board')
+  kanban$.paneThreadId.set('card')
+  const editor = openComposeTab({ text: 'Keep this editor' })!
+  await moveTabToWindow('')
+  expect(calls.find((call) => call.command === 'threadWindow.open')?.payload.thread_id).toBe('card')
+  expect(kanban$.paneThreadId.peek()).toBe('')
+  expect(compose$.activeTab.peek()).toBe(editor)
+})
+
+it('transfers a complete composer only after its pending save and attachment read finish', async () => {
+  const id = openComposeTab({ to: 'friend@example.com', subject: 'Unsaved', text: 'Latest text' })!
+  updateComposeDraft(id, { rich: true, html: '<p>Latest <b>rich</b> text</p>', bcc: 'hidden@example.com' })
+  const session = getComposeSession(id)
+  let saved!: () => void
+  session.saveChain = new Promise<void>((resolve) => {
+    saved = resolve
+  }).then(() => {
+    updateComposeDraft(id, { draftMessageId: 'saved@example.com' })
+  })
+  const attachment = { id: 'a1', filename: 'file.txt', mime: 'text/plain', size: 5, data: 'aGVsbG8=' }
+  let attach!: () => void
+  session.pendingEdits.add(
+    new Promise<void>((resolve) => {
+      attach = resolve
+    }).then(() => {
+      updateComposeDraft(id, { attachments: [attachment] })
+    }),
+  )
+  const moving = moveTabToWindow(id)
+  expect(session.savesStopped).toBe(true)
+  expect(session.savingToClose).toBe(true)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(calls.some((call) => call.command === 'threadWindow.open')).toBe(false)
+  saved()
+  attach()
+  await moving
+  const transferred = calls.find((call) => call.command === 'threadWindow.open')!.payload.compose_tab
+  expect(transferred.compose.draftMessageId).toBe('saved@example.com')
+  expect(transferred.compose.html).toBe('<p>Latest <b>rich</b> text</p>')
+  expect(transferred.compose.bcc).toBe('hidden@example.com')
+  expect(transferred.compose.attachments).toEqual([attachment])
+  expect(calls.some((call) => call.command === 'threadWindow.activateComposer')).toBe(true)
+  expect(calls.some((call) => call.command === 'mail.discardDraft')).toBe(false)
+  expect(compose$.tabs.peek()).toHaveLength(0)
+})
+
+it('restores an editable source composer if the destination cannot initialize', async () => {
+  const id = openComposeTab({ text: 'Keep the unsaved draft' })!
+  destinationReady = async () => {
+    throw new Error('cannot initialize')
+  }
+  await moveTabToWindow(id)
+  const session = getComposeSession(id)
+  expect(calls.some((call) => call.command === 'threadWindow.abortComposer')).toBe(true)
+  expect(compose$.tabs.peek()[0]?.compose?.text).toBe('Keep the unsaved draft')
+  expect(session.savesStopped).toBe(false)
+  expect(session.savingToClose).toBe(false)
+})
+
+it('preserves a Current quick reply as an editor before moving the conversation', async () => {
+  const thread = {
+    thread_id: 'reply-current',
+    id: 'm',
+    subject: 'Reply subject',
+    account_id: 'a',
+    folder_id: 'INBOX',
+    from_addr: 'friend@example.com',
+    to: 'me@example.com',
+    date: 1,
+  } as Message
+  mail$.threads.set([thread])
+  mail$.messages.set([thread])
+  ensureThreadData(thread.thread_id).messages.set([thread])
+  compose$.conversationThread.set(thread.thread_id)
+  ui$.selectedThread.set(thread.thread_id)
+  compose$.composer.set('Do not lose this quick reply')
+  const attachment = { id: 'a1', filename: 'file.txt', mime: 'text/plain', size: 5, data: 'aGVsbG8=' }
+  compose$.composerAttachments.set([attachment])
+  await moveTabToWindow('')
+  expect(compose$.conversationThread.peek()).toBe('')
+  expect(compose$.tabs.peek()[0]?.compose?.text).toContain('Do not lose this quick reply')
+  expect(compose$.tabs.peek()[0]?.compose?.attachments).toEqual([attachment])
+})
+
+it('preserves a hidden quick reply when moving Current behind an active composer', async () => {
+  const thread = {
+    thread_id: 'hidden-reply',
+    id: 'm',
+    subject: 'Reply subject',
+    account_id: 'a',
+    folder_id: 'INBOX',
+    from_addr: 'friend@example.com',
+    to: 'me@example.com',
+    date: 1,
+  } as Message
+  mail$.threads.set([thread])
+  mail$.messages.set([thread])
+  ensureThreadData(thread.thread_id).messages.set([thread])
+  ui$.selectedThread.set(thread.thread_id)
+  compose$.conversationThread.set(thread.thread_id)
+  const active = openComposeTab({ text: 'Already editing another draft' })!
+  compose$.composer.set('The hidden quick reply')
+  await moveTabToWindow('')
+  expect(compose$.activeTab.peek()).toBe(active)
+  expect(compose$.tabs.peek().some((tab) => tab.compose?.text.includes('The hidden quick reply'))).toBe(true)
+  expect(compose$.conversationThread.peek()).toBe('')
+})
+
+it('includes attachments still arriving from a reopened draft in the handoff snapshot', async () => {
+  const id = openComposeTab({ text: 'Draft with a downloaded attachment' })!
+  const attachment = { id: 'downloaded', filename: 'mail.txt', mime: 'text/plain', size: 5, data: 'aGVsbG8=' }
+  getComposeSession(id).attachmentFetches.add(Promise.resolve([attachment]))
+  await moveTabToWindow(id)
+  const transferred = calls.find((call) => call.command === 'threadWindow.open')!.payload.compose_tab
+  expect(transferred.compose.attachments).toEqual([attachment])
+})
+
+it('aborts a hidden composer that never becomes ready and unlocks the original editor', async () => {
+  const id = openComposeTab({ text: 'Keep this editable' })!
+  let now = Date.now()
+  const clock = spyOn(Date, 'now').mockImplementation(() => now)
+  destinationReady = async () => {
+    now += 61_000
+    return false
+  }
+  try {
+    await moveTabToWindow(id)
+    expect(calls.some((call) => call.command === 'threadWindow.abortComposer')).toBe(true)
+    expect(calls.some((call) => call.command === 'threadWindow.activateComposer')).toBe(false)
+    expect(compose$.tabs.peek()[0]?.compose?.text).toBe('Keep this editable')
+    expect(getComposeSession(id).savesStopped).toBe(false)
+    expect(getComposeSession(id).savingToClose).toBe(false)
   } finally {
     clock.mockRestore()
   }

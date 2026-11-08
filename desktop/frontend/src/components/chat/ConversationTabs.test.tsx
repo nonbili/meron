@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { ConversationTabs } from './ConversationTabs'
-import { openThreadTab } from '../../states/compose'
+import { openThreadTab, openComposeTab } from '../../states/compose'
+import { accounts$ } from '../../states/accounts'
 import { compose$ } from '../../states/composeState'
 import { kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
-import type { Message } from '../../types'
+import type { Account, Message } from '../../types'
 
 const message = (over: Partial<Message> = {}): Message =>
   ({
@@ -141,6 +142,18 @@ describe('ConversationTabs', () => {
     } finally {
       ;(window as any).go = previousBridge
     }
+  })
+
+  it('offers moving Current and composer tabs from their menus', () => {
+    accounts$.set([{ id: 'acct', email: 'me@example.com', provider: 'custom' } as Account])
+    ui$.selectedThread.set('t-current')
+    openComposeTab({ text: 'Unsaved editor' })
+    const view = render(<ConversationTabs />)
+    fireEvent.contextMenu(view.getByTitle('Current conversation'))
+    expect(view.getByText('Move tab to new window')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.contextMenu(view.getByTitle('New message'))
+    expect(view.getByText('Move tab to new window')).toBeTruthy()
   })
 
   it('reorders tabs by dragging, leaving the active tab and Current alone', async () => {
