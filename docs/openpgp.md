@@ -240,7 +240,11 @@ Peer keys and verification marks are not in backups.
    dropped.
 2. **Invalid bindings:** no user ID whose newest verifying self-certification passes the binding hash policy
    (`binding_hash_ok`: MD5/RIPEMD-160 never; SHA-1 only if the signature is older than `SHA1_BINDING_CUTOFF`
-   = 2023-02-01, Sequoia's standard-policy cutoff).
+   = 2023-02-01, Sequoia's standard-policy cutoff). A message whose signature verifies but whose
+   matching sender identity has a rejected weak-hash self-certification is shown as `weak_key_binding`,
+   with an explanation that the sender's identity cannot be confirmed; `signer_mismatch` is reserved
+   for a key whose identity does not match the sender. Cached sender mismatches are fetched and
+   parsed again once on upgrade so the corrected reason is shown.
 3. **Expired:** the newest self-signature's key-expiration time has passed.
 4. **No encryption key:** `encryption_subkey` finds none.
 

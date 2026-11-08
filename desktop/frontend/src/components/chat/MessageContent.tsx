@@ -45,6 +45,7 @@ export function MessageContent({
   return (
     <>
       <CryptoStrip
+        messageId={message.id}
         crypto={message.crypto}
         accountId={message.account_id}
         accountAddress={accountAddress}

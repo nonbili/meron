@@ -26,6 +26,8 @@ export type KeyFile = { name: string; data_b64: string }
 export type VerifyTarget = { addr: string; name: string; fingerprint: string; accountId: string }
 
 export const crypto$ = observable({
+  /** Message-scoped notices hidden in this webview session; never a sender trust decision. */
+  dismissedNotices: {} as Record<string, true>,
   /** Account whose "turn on encryption" dialog is open. */
   enableFor: null as null | { accountId: string; address: string },
   verify: null as null | VerifyTarget,

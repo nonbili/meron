@@ -69,6 +69,7 @@ pub fn init_main(conn: &Connection) -> Result<()> {
     // OpenPGP migration (`openpgp_key_used`) without a migration of their own.
     conn.execute_batch(DDL)?;
     reparse_key_attachments_once(conn)?;
+    reparse_signer_mismatches_once(conn)?;
     refetch_encrypted_cached_without_openpgp_once(conn)?;
     // No sweep over the messages here: placeholder reply subjects are repaired
     // per thread when a decrypted message is saved (`save_cached_message`), so
@@ -96,6 +97,27 @@ fn reparse_key_attachments_once(conn: &Connection) -> Result<usize> {
         [],
     )?;
     crate::store::setting_set(conn, REPARSE_MARK, &serde_json::json!(true))?;
+    Ok(n)
+}
+
+/// Older builds also called weak identity bindings a sender mismatch.
+/// Fetch those messages again once so the corrected reason reaches the UI.
+fn reparse_signer_mismatches_once(conn: &Connection) -> Result<usize> {
+    const MARK: &str = "openpgp_reparse_signer_mismatches";
+    if crate::store::settings_get(conn, &[MARK.to_string()])?
+        .get(MARK)
+        .is_some_and(|v| !v.is_null())
+    {
+        return Ok(0);
+    }
+    let n = conn.execute(
+        &format!(
+            "UPDATE messages SET body = NULL, json = {DROP_CACHED_BODY_JSON}
+             WHERE body IS NOT NULL AND json_extract(json, '$.crypto.problem') = 'signer_mismatch'"
+        ),
+        [],
+    )?;
+    crate::store::setting_set(conn, MARK, &serde_json::json!(true))?;
     Ok(n)
 }
 
@@ -1991,6 +2013,46 @@ mod tests {
             list_peers(&conn).unwrap()[0].info.unusable,
             Some(Unusable::Revoked)
         );
+    }
+
+    #[test]
+    fn cached_sender_mismatches_are_reparsed_once_and_keep_encryption() {
+        let conn = db();
+        cache_message(
+            &conn,
+            1,
+            serde_json::json!({ "crypto": { "signed": true, "problem": "signer_mismatch" } }),
+        );
+        cache_message(
+            &conn,
+            2,
+            serde_json::json!({ "crypto": { "encrypted": true, "signed": true, "problem": "signer_mismatch" } }),
+        );
+        cache_message(
+            &conn,
+            3,
+            serde_json::json!({ "crypto": { "signed": true, "problem": "invalid_signature" } }),
+        );
+        assert_eq!(reparse_signer_mismatches_once(&conn).unwrap(), 2);
+        assert!(!body_cached(&conn, 1));
+        assert!(!body_cached(&conn, 2));
+        assert!(body_cached(&conn, 3));
+        let json: String = conn
+            .query_row("SELECT json FROM messages WHERE uid = 2", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(json["encrypted"], true);
+        assert!(json.get("crypto").is_none());
+        // Even a subsequently cached mismatch is left alone on later starts.
+        cache_message(
+            &conn,
+            4,
+            serde_json::json!({ "crypto": { "signed": true, "problem": "signer_mismatch" } }),
+        );
+        assert_eq!(reparse_signer_mismatches_once(&conn).unwrap(), 0);
+        assert!(body_cached(&conn, 4));
     }
 
     #[test]

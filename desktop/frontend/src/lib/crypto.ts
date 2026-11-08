@@ -11,6 +11,7 @@ export type CryptoProblem =
   | 'unreadable'
   | 'invalid_signature'
   | 'signer_mismatch'
+  | 'weak_key_binding'
   | 'partly_encrypted'
   | 'inline_in_html'
   | 'key_revoked'
@@ -91,6 +92,7 @@ export function indicatorFor(crypto?: MessageCrypto | null): Indicator | null {
   const kind: IndicatorKind = crypto.encrypted ? 'lock' : 'signature'
   if (crypto.problem && DANGER.includes(crypto.problem)) return { kind, tone: 'danger' }
   if (crypto.verified_conflict) return { kind, tone: 'danger' }
+  if (crypto.problem === 'weak_key_binding') return { kind, tone: 'unconfirmed' }
   return { kind, tone: crypto.trust }
 }
 
@@ -113,8 +115,12 @@ export type StripKind =
  * most important first. */
 export function stripFor(crypto?: MessageCrypto | null): StripKind | null {
   if (!crypto) return null
+  // A weak binding must not hide a changed sender key or a verified-key conflict.
+  if (crypto.problem === 'weak_key_binding' && (crypto.key_changed || crypto.verified_conflict)) {
+    return { kind: 'key_changed', danger: crypto.verified_conflict }
+  }
   if (crypto.problem) {
-    const neutral = crypto.problem === 'inline_in_html'
+    const neutral = crypto.problem === 'inline_in_html' || crypto.problem === 'weak_key_binding'
     return { kind: 'problem', problem: crypto.problem, danger: !neutral }
   }
   if (crypto.key_changed) return { kind: 'key_changed', danger: crypto.verified_conflict }

@@ -46,6 +46,15 @@ describe('indicatorFor', () => {
     expect(indicatorFor({ ...base, signed: true })).toEqual({ kind: 'signature', tone: 'unconfirmed' })
   })
 
+  test('a weak identity binding stays amber even for a stored or verified key', () => {
+    expect(indicatorFor({ ...base, signed: true, trust: 'verified', problem: 'weak_key_binding' })?.tone).toBe(
+      'unconfirmed',
+    )
+    expect(indicatorFor({ ...base, signed: true, problem: 'weak_key_binding', verified_conflict: true })?.tone).toBe(
+      'danger',
+    )
+  })
+
   test('problems and a bypassed verified key are danger', () => {
     expect(indicatorFor({ ...base, signed: true, problem: 'invalid_signature' })?.tone).toBe('danger')
     expect(indicatorFor({ ...base, encrypted: true, problem: 'integrity' })?.tone).toBe('danger')
@@ -69,6 +78,22 @@ describe('stripFor', () => {
     })
     expect(stripFor({ ...base, offer: true })).toEqual({ kind: 'offer' })
     expect(stripFor(base)).toBeNull()
+  })
+
+  test('weak key bindings are notices, while a verified-key conflict remains an alert', () => {
+    expect(stripFor({ ...base, problem: 'weak_key_binding' })).toEqual({
+      kind: 'problem',
+      problem: 'weak_key_binding',
+      danger: false,
+    })
+    expect(stripFor({ ...base, problem: 'weak_key_binding', key_changed: true })).toEqual({
+      kind: 'key_changed',
+      danger: false,
+    })
+    expect(stripFor({ ...base, problem: 'weak_key_binding', verified_conflict: true })).toEqual({
+      kind: 'key_changed',
+      danger: true,
+    })
   })
 
   test('inline encryption in HTML is a neutral note, not an alarm', () => {

@@ -16,6 +16,7 @@ export function trustSentence(crypto: MessageCrypto, sender: string, t: T): stri
   if (crypto.problem === 'invalid_signature') return t('crypto.trust.invalid')
   if (crypto.problem === 'key_revoked') return t('crypto.trust.keyRevoked', { sender })
   if (crypto.problem === 'key_expired') return t('crypto.trust.keyExpired', { sender })
+  if (crypto.problem === 'weak_key_binding' && !crypto.verified_conflict) return t('crypto.trust.weakKeyBinding')
   if (crypto.problem === 'signer_mismatch') return t('crypto.trust.signerMismatch', { sender })
   if (crypto.problem === 'redirected') return t('crypto.trust.redirected')
   if (crypto.verified_conflict) return t('crypto.trust.verifiedConflict', { sender })

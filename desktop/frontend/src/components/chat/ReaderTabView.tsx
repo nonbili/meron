@@ -145,6 +145,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
                 the conversation: a reader tab shows the same message. */}
             <div className="mt-3 empty:hidden">
               <CryptoStrip
+                messageId={tab.message?.id ?? tab.messageId}
                 crypto={tab.message?.crypto}
                 accountId={tab.accountId ?? ''}
                 accountAddress={account?.email ?? ''}

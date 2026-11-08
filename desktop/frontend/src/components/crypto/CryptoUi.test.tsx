@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import type { MessageCrypto, RecipientKeys } from '../../lib/crypto'
 import { confirmKeyChanges, crypto$ } from '../../states/crypto'
 import { settleConfirm, ui$ } from '../../states/ui'
@@ -34,6 +34,7 @@ beforeEach(() => {
   crypto$.verify.set(null)
   crypto$.enableFor.set(null)
   crypto$.lookup.set(null)
+  crypto$.dismissedNotices.set({})
   settings$.encryptWhenPossible.set(true)
   ui$.selectedThread.set('')
   ;(window as any).go = {
@@ -95,6 +96,38 @@ describe('CryptoBadge', () => {
     })
   })
 
+  test('a weak identity binding is amber and explains the policy rejection', () => {
+    const { getByRole, getByText, queryByText } = badge({
+      ...base,
+      signed: true,
+      signer: FPR,
+      problem: 'weak_key_binding',
+    })
+    const button = getByRole('button')
+    expect(button.getAttribute('data-tone')).toBe('unconfirmed')
+    expect(button.getAttribute('aria-label')).toContain('weak hash to bind its identity')
+    fireEvent.click(button)
+    expect(getByText(/The sender’s identity can’t be confirmed/)).toBeTruthy()
+    expect(queryByText(/isn't Carol's/)).toBeNull()
+  })
+
+  test('a verified-key conflict takes precedence over a weak binding in the details', () => {
+    const { getByRole, getByText, queryByText } = badge({
+      ...base,
+      signed: true,
+      signer: FPR,
+      problem: 'weak_key_binding',
+      key_changed: true,
+      verified_conflict: true,
+    })
+    const button = getByRole('button')
+    expect(button.getAttribute('data-tone')).toBe('danger')
+    expect(button.getAttribute('aria-label')).toContain('different key than the one you verified for Carol')
+    fireEvent.click(button)
+    expect(getByText(/different key than the one you verified for Carol/)).toBeTruthy()
+    expect(queryByText(/weak hash to bind its identity/)).toBeNull()
+  })
+
   test('a bad signature is rose', () => {
     expect(
       badge({ ...base, signed: true, problem: 'invalid_signature' })
@@ -105,9 +138,10 @@ describe('CryptoBadge', () => {
 })
 
 describe('CryptoStrip', () => {
-  const strip = (crypto: MessageCrypto) =>
+  const strip = (crypto: MessageCrypto, messageId = 'message') =>
     render(
       <CryptoStrip
+        messageId={messageId}
         crypto={crypto}
         accountId="acc"
         accountAddress="me@example.org"
@@ -115,6 +149,94 @@ describe('CryptoStrip', () => {
         senderAddress="carol@example.com"
       />,
     )
+
+  test('a weak identity binding shows a calm amber notice', () => {
+    const { getByRole } = strip({ ...base, signed: true, problem: 'weak_key_binding' })
+    expect(getByRole('status').textContent).toContain('Sender identity couldn’t be verified')
+    expect(getByRole('status').className).toContain('bg-amber-500/10')
+    expect(getByRole('status').getAttribute('data-danger')).toBeNull()
+    expect(getByRole('button', { name: 'Close' })).toBeTruthy()
+  })
+
+  test('dismissal follows only that message across remounts, without changing sender trust', () => {
+    const crypto = { ...base, signed: true, signer: FPR, problem: 'weak_key_binding' as const }
+    const first = strip(crypto, 'first')
+    const second = strip(crypto, 'second')
+    const before = calls.length
+    fireEvent.click(within(first.container).getByRole('button', { name: 'Close' }))
+    expect(first.container.innerHTML).toBe('')
+    expect(within(second.container).getByRole('status')).toBeTruthy()
+    expect(calls).toHaveLength(before)
+    first.unmount()
+    expect(strip(crypto, 'first').container.innerHTML).toBe('')
+    expect(crypto.problem).toBe('weak_key_binding')
+    expect(crypto.trust).toBe('unconfirmed')
+  })
+
+  test('the signature indicator still opens the technical details after dismissal', () => {
+    const crypto = { ...base, signed: true, signer: FPR, problem: 'weak_key_binding' as const }
+    const notice = strip(crypto)
+    const indicator = badge(crypto)
+    fireEvent.click(within(notice.container).getByRole('button', { name: 'Close' }))
+    const button = within(indicator.container).getByRole('button')
+    expect(button.getAttribute('data-tone')).toBe('unconfirmed')
+    fireEvent.click(button)
+    expect(indicator.getByText(/weak hash to bind its identity/)).toBeTruthy()
+  })
+
+  test('dismissal cannot suppress a new signing key or a stronger verification problem', () => {
+    const crypto = { ...base, signed: true, signer: FPR, problem: 'weak_key_binding' as const }
+    const props = {
+      messageId: 'message',
+      accountId: 'acc',
+      accountAddress: 'me@example.org',
+      senderName: 'Carol',
+      senderAddress: 'carol@example.com',
+    }
+    const view = render(<CryptoStrip {...props} crypto={crypto} />)
+    fireEvent.click(view.getByRole('button', { name: 'Close' }))
+    view.rerender(<CryptoStrip {...props} crypto={{ ...crypto, signer: 'NEW-SIGNING-KEY' }} />)
+    expect(view.getByRole('status')).toBeTruthy()
+    view.rerender(<CryptoStrip {...props} crypto={{ ...crypto, problem: 'invalid_signature' }} />)
+    expect(view.getByRole('alert')).toBeTruthy()
+    expect(view.queryByRole('button', { name: 'Close' })).toBeNull()
+    view.rerender(<CryptoStrip {...props} crypto={{ ...crypto, verified_conflict: true }} />)
+    expect(view.getByRole('alert').textContent).toContain('different key than the one you verified for Carol')
+    expect(view.queryByRole('button', { name: 'Close' })).toBeNull()
+    expect(view.queryByRole('button', { name: 'Verify the new key…' })).toBeNull()
+  })
+
+  test('an unverified key change stays visible and cannot be dismissed even with a weak binding', () => {
+    const { getByRole, queryByRole } = strip({
+      ...base,
+      signed: true,
+      signer: FPR,
+      problem: 'weak_key_binding',
+      key_changed: true,
+    })
+    expect(getByRole('status').textContent).toContain("Carol's key changed")
+    expect(queryByRole('button', { name: 'Close' })).toBeNull()
+    expect(queryByRole('button', { name: 'Verify…' })).toBeNull()
+    expect(crypto$.verify.peek()).toBeNull()
+  })
+
+  test('a stored changed key still offers a usable verification action', () => {
+    const { getByRole } = strip({
+      ...base,
+      signed: true,
+      signer: FPR,
+      signer_stored: true,
+      key_changed: true,
+      verified_conflict: true,
+    })
+    fireEvent.click(getByRole('button', { name: 'Verify the new key…' }))
+    expect(crypto$.verify.peek()).toEqual({
+      addr: 'carol@example.com',
+      name: 'Carol',
+      fingerprint: FPR,
+      accountId: 'acc',
+    })
+  })
 
   test('a failed decryption is an alert with a way to bring the key', () => {
     const { getByRole, getByText } = strip({ ...base, encrypted: true, problem: 'no_key' })

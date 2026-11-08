@@ -401,6 +401,21 @@ fn valid_user_ids(key: &SignedPublicKey) -> Vec<String> {
         .collect()
 }
 
+/// The sender's user ID is self-certified, but its newest certification
+/// fails the binding hash policy. This is distinct from a different sender.
+pub(crate) fn weak_identity_binding(key: &SignedPublicKey, addr: &str) -> bool {
+    key.details.users.iter().any(|user| {
+        if user.id.as_str().and_then(email_of_user_id).as_deref() != Some(addr) {
+            return false;
+        }
+        newest(user.signatures.iter().filter(|sig| {
+            sig.verify_certification(&key.primary_key, pgp::types::Tag::UserId, &user.id)
+                .is_ok()
+        }))
+        .is_some_and(|sig| !is_revocation(sig) && !binding_hash_ok(sig))
+    })
+}
+
 /// The key's verified self-signatures: direct-key signatures and user-ID
 /// self-certifications the primary key actually made. Expiry and feature flags
 /// must be read only from these, never from a signature a third party attached:
@@ -1306,11 +1321,19 @@ pub(crate) mod tests {
     /// `key` with a new self-certification of its first user ID made at `at`:
     /// what a renewal (`gpg --quick-set-expire`) adds.
     pub(crate) fn self_certified_at(key: &SignedSecretKey, at: u32) -> SignedSecretKey {
+        self_certified_with_hash(key, at, HashAlgorithm::Sha256)
+    }
+
+    pub(crate) fn self_certified_with_hash(
+        key: &SignedSecretKey,
+        at: u32,
+        hash: HashAlgorithm,
+    ) -> SignedSecretKey {
         use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
         let mut config = SignatureConfig::v4(
             SignatureType::CertPositive,
             key.primary_key.algorithm(),
-            HashAlgorithm::Sha256,
+            hash,
         );
         config.hashed_subpackets = vec![
             Subpacket::critical(SubpacketData::SignatureCreationTime(
