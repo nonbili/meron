@@ -1021,7 +1021,7 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 /* The conversation details panel (MessagePane). On a narrow window it
    overlays the conversation and slides in by itself, so its frame steps aside
    and the panel just goes when closed. On a wide window it sits beside the
-   conversation: the frame grows and narrows like the board's conversation pane
+   conversation: the frame slides in and out like the board's conversation pane
    (animate-pane-open/-close), without the panel's own fading slide-in. */
 .details-slide {
   display: contents;
@@ -1047,21 +1047,36 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 }
 
 /* The kanban conversation pane, the Tasks panel and (on a wide window) the
-   details panel grow from / collapse to zero width; their content keeps the
-   final width meanwhile (KanbanConversationPane, SidePanelSlide, .details-slide).
-   Each keyframe names one end only, so the other end is the pane's own width.
-   Closing only narrows: a fade would show the window's background through the
-   panel while it goes. Duration matches PANE_ANIMATION_MS. */
+   details panel slide in from and out to the right edge of their row
+   (KanbanConversationPane, SidePanelSlide, .details-slide). While it slides, a
+   pane is lifted out of the row and over its neighbour, which takes its new
+   width once, at the end of opening and at the start of closing. Animating the
+   pane's width instead re-wraps the neighbour's whole content (a conversation,
+   the board) on every frame, which drops a slower machine to a few frames per
+   slide. The pane keeps its own width and background, so nothing shows through.
+   Each keyframe names one end only, so the other end is the pane in place.
+   The row is the containing block (position: relative). Duration matches
+   PANE_ANIMATION_MS. */
 @keyframes paneOpen {
   from {
-    width: 0;
+    transform: translateX(100%);
   }
 }
 
 @keyframes paneClose {
   to {
-    width: 0;
+    transform: translateX(100%);
   }
+}
+
+.animate-pane-open,
+.animate-pane-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Above the neighbour's floating controls (frosted bands, headers: z-30). */
+  z-index: 40;
 }
 
 .animate-pane-open {
@@ -1075,6 +1090,7 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 @media (prefers-reduced-motion: reduce) {
   .animate-pane-open,
   .animate-pane-close {
+    position: static;
     animation: none;
   }
 }

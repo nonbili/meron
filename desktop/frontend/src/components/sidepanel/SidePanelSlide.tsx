@@ -10,10 +10,10 @@ import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 export const SIDE_PANEL_WIDTH = 340
 
 // The right-hand slot (Tasks or the calendar panel) slides in and out like the
-// board's conversation pane (KanbanConversationPane): the frame grows from and
-// narrows to zero width while the panel inside keeps its full width, so it is
-// revealed rather than reflowed every frame. The panel stays on screen while
-// it slides out.
+// board's conversation pane (KanbanConversationPane): the panel slides over
+// whatever is beside it at its full width, and the neighbour takes its new
+// width once (index.css, animate-pane-open/-close). The panel stays on screen
+// while it slides out.
 // With `animate` false, a change shows or hides the slot at once.
 export function SidePanelSlide({
   open,

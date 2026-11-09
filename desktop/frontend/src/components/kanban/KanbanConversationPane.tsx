@@ -4,14 +4,15 @@ import { usePresence } from '../../lib/usePresence'
 /** Matches the pane-open/pane-close keyframes in index.css. */
 export const PANE_ANIMATION_MS = 200
 
-// The board's conversation pane. It slides open by growing from zero width
-// while its content keeps the final width. The preferred width is in `vw`,
+// The board's conversation pane. It slides in from the right edge over the
+// board, which narrows once when it is in place (index.css, animate-pane-open):
+// the board is not reflowed on every frame. The preferred width is in `vw`,
 // capped at the board row's measured width so Tasks and narrow windows cannot
 // push the conversation outside the board. Measuring avoids a CSS size container,
 // which would trap fixed-position menus and dialogs. The conversation — HTML
-// frames included — is laid out once and revealed instead of reflowed every frame.
+// frames included — is laid out once at its final width and slides in whole.
 // Closing clears the conversation from state before the pane goes, so the
-// pane collapses as an empty panel instead of sliding out an empty-state view.
+// pane slides out as an empty panel instead of an empty-state view.
 export function KanbanConversationPane({
   open,
   widthPercent,

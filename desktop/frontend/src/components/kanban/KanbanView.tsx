@@ -267,7 +267,8 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
           onCreateFolder={createDialogFolder}
         />
       )}
-      <div className="flex min-h-0 flex-1">
+      {/* relative: the conversation pane slides over the board from this row's right edge. */}
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <DndContext
             sensors={sensors}

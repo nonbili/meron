@@ -76,13 +76,14 @@ export function KanbanThreadCard({
     ? activeTab === thread.id || keyboardSelected
     : thread.thread_id === paneThreadId || keyboardSelected
 
-  // Follow the card for as long as the pane slides open: the pane narrows the
-  // board after the card is selected, so a card that fits now can end up under it.
+  // Follow the card until the pane is in place: the board narrows when the
+  // pane has slid open (a moment after PANE_ANIMATION_MS, when its phase
+  // settles), so a card that fits now can end up under it.
   useEffect(() => {
     if (!active) return
     const keepInView = () => selectedItemRef.current?.scrollIntoView({ block: 'nearest' })
     keepInView()
-    const until = performance.now() + PANE_ANIMATION_MS
+    const until = performance.now() + PANE_ANIMATION_MS + 100
     let frame = requestAnimationFrame(function follow(now) {
       keepInView()
       if (now < until) frame = requestAnimationFrame(follow)
