@@ -23,6 +23,20 @@ fn test_conn() -> Connection {
 }
 
 #[test]
+fn bundled_sqlcipher_uses_patched_sqlite() {
+    let conn = Connection::open_in_memory().unwrap();
+    let cipher_version: String = conn
+        .query_row("PRAGMA cipher_version", [], |row| row.get(0))
+        .expect("Meron must link SQLCipher");
+    assert!(!cipher_version.is_empty());
+    assert!(
+        rusqlite::version_number() >= 3_054_000,
+        "SQLCipher {cipher_version} uses SQLite {}, affected by RUSTSEC-2026-0459",
+        rusqlite::version()
+    );
+}
+
+#[test]
 fn migration_records_cached_identities_and_retires_pending_queue() {
     let conn = Connection::open_in_memory().unwrap();
     db::migrate_to_v8(&conn).unwrap();

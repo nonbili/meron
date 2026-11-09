@@ -12,6 +12,7 @@ on:
       - meron-core/Cargo.toml
       - meron-core/Cargo.lock
       - meron-core/.cargo/audit.toml
+      - scripts/check-sqlcipher.py
       - .github/workflows/audit.yml
   schedule:
     - cron: '17 6 * * 1'
@@ -25,9 +26,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # RustSec marks libsqlite3-sys >=0.39 as patched, but its SQLCipher
+      # source can still contain affected SQLite. Check that source separately.
+      - name: Check bundled SQLCipher source
+        run: python3 scripts/check-sqlcipher.py
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit@0.22.2
       - run: cargo audit
         working-directory: meron-core
+      - name: Audit patched SQLite binding against released baseline
+        run: python3 scripts/check-sqlcipher.py --audit-patched-binding

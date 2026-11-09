@@ -27,7 +27,7 @@ futures = "0.3.32"
 mailparse = "0.16.1"
 html-to-markdown-rs = { version = "3.4.1", default-features = false }
 anyhow = "1.0.102"
-rusqlite = { version = "0.39.0", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.41.1", features = ["bundled-sqlcipher-vendored-openssl"] }
 async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio"] }
 mail-builder = "1.0.0"
 base64 = "0.22.1"
@@ -66,6 +66,10 @@ ndk-context = "0.1.1"
 # Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
 [patch.crates-io]
 async-imap = { git = "https://github.com/nonbili/async-imap.git", rev = "d04be74" }
+# RUSTSEC-2026-0459: released libsqlite3-sys 0.39.1 still pins SQLCipher's
+# affected SQLite 3.53.4. Use the SQLCipher 4.20 / SQLite 3.54.1 update from
+# https://github.com/rusqlite/rusqlite/pull/1932 until a fixed release ships.
+libsqlite3-sys = { git = "https://github.com/rusqlite/rusqlite.git", rev = "0f1ab7393ae5d62d44a94a5a5107c00b23d4ed58" }
 
 # Xcode 27's strip corrupts macOS proc-macro dylibs, and release strips
 # debuginfo by default, so rustc then fails with "can't find crate for
