@@ -1,25 +1,41 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -36,7 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -159,9 +175,39 @@ private fun MeronMobileState.RuleTargetRow(
         opened = null
     }
     val folderAccount = opened ?: accounts.singleOrNull()
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.weight(1f))
-        TextButton(onClick = { open = true }) { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { open = true }
+                    .padding(vertical = 6.dp, horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         DropdownMenu(expanded = open, onDismissRequest = ::close) {
             if (opened != null) {
                 DropdownMenuItem(text = { Text(tr("buttons.back")) }, onClick = { opened = null })
@@ -408,17 +454,71 @@ internal fun MeronMobileState.RulesPage(
     val scroll = rememberScrollState()
     // The editor and the list are different pages: neither opens partway down.
     LaunchedEffect(formOpen) { scroll.scrollTo(0) }
+    val openEdit: (Rule) -> Unit = { rule ->
+        opening?.cancel()
+        opening =
+            coroutines.launch {
+                val parsed = parseSearchQuery(rule.query)
+                // Its failure handling also swallows being cancelled.
+                ensureActive()
+                fields = parsed ?: SearchFields(words = rule.query)
+                draft = rule
+                val (ruleAmount, ruleUnit) = splitDelay(rule.delaySeconds)
+                timing = if (rule.trigger == "arrival" && rule.delaySeconds == 0L) "now" else rule.trigger
+                amount = if (timing == "now") "" else ruleAmount
+                unit = ruleUnit
+                tags = rule.tags.joinToString(", ")
+                scoped = rule.accounts.isNotEmpty()
+                adding = false
+                invalid = false
+            }
+    }
+
     Column(
         modifier.verticalScroll(scroll).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (!formOpen) {
             if (rules?.isEmpty() == true) {
-                Text(tr("rules.empty"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.FilterList,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        )
+                        Text(
+                            tr("rules.empty"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
             val notice = runStarted?.let { tr("rules.runStarted", mapOf("count" to it.toString())) } ?: runNotice
             if (notice.isNotEmpty()) {
-                Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
             }
             val known = { id: String -> coreAccounts.any { it.id == id } }
             // The labels are read here: accessibility actions run outside composition.
@@ -429,7 +529,7 @@ internal fun MeronMobileState.RulesPage(
                 list = rules.orEmpty(),
                 onSettle = ::move,
                 onMove = { haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) { at, rule, dragging ->
                 key(rule.id) {
                     val left = status.running[rule.id]
@@ -439,67 +539,23 @@ internal fun MeronMobileState.RulesPage(
                     val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
                     ReorderableItem {
                         Surface(
-                            color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-                            shadowElevation = if (dragging) 6.dp else 0.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
+                            tonalElevation = if (dragging) 6.dp else 1.dp,
+                            shadowElevation = if (dragging) 4.dp else 0.dp,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            rule.accounts.forEach { id ->
-                                                val account = coreAccounts.firstOrNull { it.id == id }
-                                                AccountBadgeAvatar(
-                                                    label = account?.let(::accountLabel) ?: id,
-                                                    avatarUrl = account?.avatarUrl.orEmpty(),
-                                                    size = 16.dp,
-                                                )
-                                            }
-                                            Text(
-                                                conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
-                                                fontSize = 13.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                        Text(
-                                            ruleSummary(mailAccounts, rule),
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        if (left != null) {
-                                            Text(tr("rules.runLeft", mapOf("count" to left.toString())), fontSize = 12.sp)
-                                        }
-                                        if (lost) {
-                                            Text(tr("rules.accountGone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                                        }
-                                        if (failure != null) {
-                                            Text(
-                                                "${tr("rules.lastFailed")}: ${failure.detail}",
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.error,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                    }
-                                    Switch(
-                                        checked = !rule.disabled,
-                                        enabled = !saving && !(rule.disabled && lost),
-                                        onCheckedChange = { on ->
-                                            save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
-                                        },
-                                    )
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Icon(
                                         Icons.Filled.DragHandle,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         modifier =
                                             Modifier
                                                 .draggableHandle(
@@ -521,8 +577,86 @@ internal fun MeronMobileState.RulesPage(
                                                                 true
                                                             }.takeIf { at < rules.orEmpty().lastIndex },
                                                         )
-                                                }.padding(12.dp),
+                                                }.padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                                     )
+                                    Column(
+                                        modifier =
+                                            Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable(enabled = !saving) { openEdit(rule) }
+                                                .padding(vertical = 2.dp),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            rule.accounts.forEach { id ->
+                                                val account = coreAccounts.firstOrNull { it.id == id }
+                                                AccountBadgeAvatar(
+                                                    label = account?.let(::accountLabel) ?: id,
+                                                    avatarUrl = account?.avatarUrl.orEmpty(),
+                                                    size = 18.dp,
+                                                )
+                                            }
+                                            Text(
+                                                conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
+                                                style = MaterialTheme.typography.titleSmall,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        Text(
+                                            ruleSummary(mailAccounts, rule),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        if (left != null) {
+                                            Text(
+                                                tr("rules.runLeft", mapOf("count" to left.toString())),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        if (lost) {
+                                            Text(
+                                                tr("rules.accountGone"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                        if (failure != null) {
+                                            Text(
+                                                "${tr("rules.lastFailed")}: ${failure.detail}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    Switch(
+                                        checked = !rule.disabled,
+                                        enabled = !saving && !(rule.disabled && lost),
+                                        onCheckedChange = { on ->
+                                            save({ rules.orEmpty().map { if (it.id == rule.id) it.copy(disabled = !on) else it } }) {}
+                                        },
+                                        colors = settingsSwitchColors(),
+                                        modifier = Modifier.padding(start = 8.dp),
+                                    )
+                                }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
+                                ) {
                                     if (left != null) {
                                         TextButton(
                                             onClick = {
@@ -531,7 +665,11 @@ internal fun MeronMobileState.RulesPage(
                                                     loadRuleStatus()?.let { status = it }
                                                 }
                                             },
-                                        ) { Text(tr("rules.stop")) }
+                                        ) {
+                                            Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(tr("rules.stop"))
+                                        }
                                     } else {
                                         TextButton(
                                             enabled = !saving && !rule.disabled,
@@ -546,34 +684,33 @@ internal fun MeronMobileState.RulesPage(
                                                     }
                                                 }
                                             },
-                                        ) { Text(tr("rules.runAction")) }
+                                        ) {
+                                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(tr("rules.runAction"))
+                                        }
                                     }
                                     TextButton(
                                         enabled = !saving,
-                                        onClick = {
-                                            opening?.cancel()
-                                            opening =
-                                                coroutines.launch {
-                                                    val parsed = parseSearchQuery(rule.query)
-                                                    // Its failure handling also swallows being cancelled.
-                                                    ensureActive()
-                                                    fields = parsed ?: SearchFields(words = rule.query)
-                                                    draft = rule
-                                                    val (ruleAmount, ruleUnit) = splitDelay(rule.delaySeconds)
-                                                    timing = if (rule.trigger == "arrival" && rule.delaySeconds == 0L) "now" else rule.trigger
-                                                    amount = if (timing == "now") "" else ruleAmount
-                                                    unit = ruleUnit
-                                                    tags = rule.tags.joinToString(", ")
-                                                    scoped = rule.accounts.isNotEmpty()
-                                                    adding = false
-                                                    invalid = false
-                                                }
-                                        },
-                                    ) { Text(tr("buttons.edit")) }
+                                        onClick = { openEdit(rule) },
+                                    ) {
+                                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(tr("buttons.edit"))
+                                    }
                                     TextButton(
                                         enabled = !saving,
                                         onClick = { confirmDelete = rule },
-                                    ) { Text(tr("buttons.delete")) }
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(tr("buttons.delete"), color = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
@@ -581,93 +718,56 @@ internal fun MeronMobileState.RulesPage(
                 }
             }
 
-            TextButton(enabled = rules != null, onClick = {
-                opening?.cancel()
-                adding = true
-            }) { Text(tr("rules.add")) }
+            OutlinedButton(
+                enabled = rules != null,
+                onClick = {
+                    opening?.cancel()
+                    adding = true
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(tr("rules.add"))
+            }
         } else {
-            Text(tr("rules.when"), style = MaterialTheme.typography.titleSmall)
+            SettingsSectionLabel(tr("rules.when"), hint = tr("rules.queryHint"))
             if (mailAccounts.size > 1 || scoped) {
-                SettingsToggleRow(
-                    icon = Icons.Filled.Person,
-                    title = tr("kanban.allAccounts"),
-                    checked = !scoped,
-                    onToggle = {
-                        scoped = !scoped
-                        change(draft.copy(accounts = emptyList()))
-                    },
-                )
-                if (scoped) {
-                    mailAccounts.forEach { account ->
-                        val picked = account.id in draft.accounts
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                ) {
+                    Column {
                         SettingsToggleRow(
                             icon = Icons.Filled.Person,
-                            title = accountLabel(account),
-                            checked = picked,
+                            title = tr("kanban.allAccounts"),
+                            checked = !scoped,
                             onToggle = {
-                                change(draft.copy(accounts = if (picked) draft.accounts - account.id else draft.accounts + account.id))
-                            },
-                            leading = {
-                                AccountBadgeAvatar(
-                                    label = accountLabel(account),
-                                    avatarUrl = account.avatarUrl,
-                                    size = 24.dp,
-                                    fallbackIcon = accountAvatarFallbackIcon(account),
-                                )
+                                scoped = !scoped
+                                change(draft.copy(accounts = emptyList()))
                             },
                         )
-                    }
-                }
-            }
-            SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.from"), fields.from, {}) {
-                changeFields(fields.copy(from = it))
-            }
-            SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.to"), fields.to, {}) {
-                changeFields(fields.copy(to = it))
-            }
-            SearchOptionsTextField(tr("composer.fields.subject"), fields.subject, {}) {
-                changeFields(fields.copy(subject = it))
-            }
-            SearchOptionsTextField(tr("search.hasWords"), fields.words, {}) { changeFields(fields.copy(words = it)) }
-            SettingsToggleRow(
-                icon = Icons.Filled.AttachFile,
-                title = tr("filters.hasAttachment"),
-                checked = fields.hasAttachment,
-                onToggle = { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) },
-            )
-            Text(tr("rules.queryHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(tr("rules.timing"), style = MaterialTheme.typography.titleSmall)
-            RuleTargetRow(
-                title = tr("rules.runWhen"),
-                value = tr("rules.timing.$timing"),
-                accounts = emptyList(),
-                options = TIMINGS.map { option -> tr("rules.timing.$option") to { pickTiming(option) } },
-                onPick = { _, _ -> },
-            )
-            if (timing != "now") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = {
-                            amount = it
-                            invalid = false
-                        },
-                        isError = delay == null,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        label = { Text(tr(if (timing == "age") "rules.age" else "rules.wait")) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    var unitMenu by remember { mutableStateOf(false) }
-                    Box {
-                        TextButton(onClick = { unitMenu = true }) { Text(tr("rules.unit.$unit")) }
-                        DropdownMenu(expanded = unitMenu, onDismissRequest = { unitMenu = false }) {
-                            UNITS.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(tr("rules.unit.$option")) },
-                                    onClick = {
-                                        unit = option
-                                        unitMenu = false
+                        if (scoped) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            mailAccounts.forEach { account ->
+                                val picked = account.id in draft.accounts
+                                SettingsToggleRow(
+                                    icon = Icons.Filled.Person,
+                                    title = accountLabel(account),
+                                    checked = picked,
+                                    onToggle = {
+                                        change(draft.copy(accounts = if (picked) draft.accounts - account.id else draft.accounts + account.id))
+                                    },
+                                    leading = {
+                                        AccountBadgeAvatar(
+                                            label = accountLabel(account),
+                                            avatarUrl = account.avatarUrl,
+                                            size = 24.dp,
+                                            fallbackIcon = accountAvatarFallbackIcon(account),
+                                        )
                                     },
                                 )
                             }
@@ -675,64 +775,248 @@ internal fun MeronMobileState.RulesPage(
                     }
                 }
             }
-            Text(tr("rules.timingHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(tr("rules.then"), style = MaterialTheme.typography.titleSmall)
-            OutlinedTextField(
-                value = tags,
-                onValueChange = {
-                    tags = it
-                    invalid = false
-                },
-                singleLine = true,
-                label = { Text(tr("rules.tags")) },
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
-            )
-            SettingsToggleRow(
-                icon = Icons.Filled.DoneAll,
-                title = tr("notification.actionMarkRead"),
-                checked = draft.markRead,
-                onToggle = { change(draft.copy(markRead = !draft.markRead)) },
-            )
-            SettingsToggleRow(
-                icon = Icons.Filled.Star,
-                title = tr("chat.star"),
-                checked = draft.star,
-                onToggle = { change(draft.copy(star = !draft.star)) },
-            )
-            RuleTargetRow(
-                title = tr("rules.copyTo"),
-                value = if (draft.copyFolder.isEmpty()) tr("rules.copyNone") else targetLabel(mailAccounts, draft.copyAccount, draft.copyFolder),
-                accounts = mailAccounts,
-                options = listOf(tr("rules.copyNone") to { change(draft.copy(copyAccount = "", copyFolder = "")) }),
-            ) { accountId, folder -> change(draft.copy(copyAccount = accountId, copyFolder = folder)) }
-            RuleTargetRow(
-                title = tr("rules.moveTo"),
-                value = moveLabel(mailAccounts, draft),
-                accounts = mailAccounts,
-                options =
-                    listOf("", "archive", "trash").map { option ->
-                        moveLabel(mailAccounts, Rule(query = "", moveTo = option)) to {
-                            change(draft.copy(moveTo = option, folder = "", folderAccount = ""))
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.from"), fields.from, {}) {
+                        changeFields(fields.copy(from = it))
+                    }
+                    SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.to"), fields.to, {}) {
+                        changeFields(fields.copy(to = it))
+                    }
+                    SearchOptionsTextField(tr("composer.fields.subject"), fields.subject, {}) {
+                        changeFields(fields.copy(subject = it))
+                    }
+                    SearchOptionsTextField(tr("search.hasWords"), fields.words, {}) { changeFields(fields.copy(words = it)) }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) }
+                                .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            tr("filters.hasAttachment"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = fields.hasAttachment,
+                            onCheckedChange = { changeFields(fields.copy(hasAttachment = it)) },
+                            colors = settingsSwitchColors(),
+                        )
+                    }
+                }
+            }
+
+            SettingsSectionLabel(tr("rules.timing"), hint = tr("rules.timingHint"))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    RuleTargetRow(
+                        title = tr("rules.runWhen"),
+                        value = tr("rules.timing.$timing"),
+                        accounts = emptyList(),
+                        options = TIMINGS.map { option -> tr("rules.timing.$option") to { pickTiming(option) } },
+                        onPick = { _, _ -> },
+                    )
+                    if (timing != "now") {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = amount,
+                                onValueChange = {
+                                    amount = it
+                                    invalid = false
+                                },
+                                isError = delay == null,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                label = { Text(tr(if (timing == "age") "rules.age" else "rules.wait")) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            var unitMenu by remember { mutableStateOf(false) }
+                            Box {
+                                OutlinedButton(
+                                    onClick = { unitMenu = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(56.dp),
+                                ) {
+                                    Text(tr("rules.unit.$unit"))
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                                }
+                                DropdownMenu(expanded = unitMenu, onDismissRequest = { unitMenu = false }) {
+                                    UNITS.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(tr("rules.unit.$option")) },
+                                            onClick = {
+                                                unit = option
+                                                unitMenu = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    },
-            ) { accountId, folder -> change(draft.copy(moveTo = "folder", folder = folder, folderAccount = accountId)) }
+                    }
+                }
+            }
+
+            SettingsSectionLabel(tr("rules.then"))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = tags,
+                        onValueChange = {
+                            tags = it
+                            invalid = false
+                        },
+                        singleLine = true,
+                        label = { Text(tr("tags.title")) },
+                        placeholder = { Text(tr("rules.tags")) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { change(draft.copy(markRead = !draft.markRead)) }
+                                .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.DoneAll,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            tr("notification.actionMarkRead"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = draft.markRead,
+                            onCheckedChange = { change(draft.copy(markRead = it)) },
+                            colors = settingsSwitchColors(),
+                        )
+                    }
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { change(draft.copy(star = !draft.star)) }
+                                .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            tr("chat.star"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = draft.star,
+                            onCheckedChange = { change(draft.copy(star = it)) },
+                            colors = settingsSwitchColors(),
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    RuleTargetRow(
+                        title = tr("rules.copyTo"),
+                        value =
+                            if (draft.copyFolder.isEmpty()) {
+                                tr("rules.copyNone")
+                            } else {
+                                targetLabel(mailAccounts, draft.copyAccount, draft.copyFolder)
+                            },
+                        accounts = mailAccounts,
+                        options = listOf(tr("rules.copyNone") to { change(draft.copy(copyAccount = "", copyFolder = "")) }),
+                    ) { accountId, folder -> change(draft.copy(copyAccount = accountId, copyFolder = folder)) }
+                    RuleTargetRow(
+                        title = tr("rules.moveTo"),
+                        value = moveLabel(mailAccounts, draft),
+                        accounts = mailAccounts,
+                        options =
+                            listOf("", "archive", "trash").map { option ->
+                                moveLabel(mailAccounts, Rule(query = "", moveTo = option)) to {
+                                    change(draft.copy(moveTo = option, folder = "", folderAccount = ""))
+                                }
+                            },
+                    ) { accountId, folder -> change(draft.copy(moveTo = "folder", folder = folder, folderAccount = accountId)) }
+                }
+            }
+
             if (draft.moveTo == "trash") {
-                Text(tr(if (fields == SearchFields()) "rules.trashAllHint" else "rules.trashHint"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                Text(
+                    tr(if (fields == SearchFields()) "rules.trashAllHint" else "rules.trashHint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
             if (invalid) {
-                Text(tr("rules.invalid"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                Text(
+                    tr("rules.invalid"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = ::reset) { Text(tr("buttons.cancel")) }
-                TextButton(
-                    enabled =
-                        !saving && rules != null && !(scoped && chosenAccounts.isEmpty()) && delay != null,
+            Spacer(Modifier.height(4.dp))
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = ::reset,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(tr("buttons.cancel"))
+                }
+                Button(
+                    enabled = !saving && rules != null && !(scoped && chosenAccounts.isEmpty()) && delay != null,
                     onClick = {
                         // As it stands now: Cancel stays available during the save.
                         val submitted =
                             draft.copy(
                                 trigger = if (timing == "now") "arrival" else timing,
-                                delaySeconds = delay ?: return@TextButton,
+                                delaySeconds = delay ?: return@Button,
                             )
                         val submittedFields = fields
                         val accounts = chosenAccounts
@@ -748,27 +1032,51 @@ internal fun MeronMobileState.RulesPage(
                             }
                         }, onSaved = ::reset)
                     },
-                ) { Text(if (editing) tr("buttons.save") else tr("rules.add")) }
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(if (editing) tr("buttons.save") else tr("rules.add"))
+                }
             }
         }
 
         if (!formOpen && status.log.isNotEmpty()) {
-            Text(tr("rules.activity"), style = MaterialTheme.typography.titleSmall)
-            status.log.take(ACTIVITY_SHOWN).forEach { entry ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        entry.subject.ifEmpty { tr("rules.activityRun", mapOf("count" to entry.count.toString())) },
-                        Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        color = if (entry.failed) MaterialTheme.colorScheme.error else Color.Unspecified,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        formatRelativeTime(entry.at),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            Spacer(Modifier.height(8.dp))
+            SettingsSectionLabel(tr("rules.activity"))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    status.log.take(ACTIVITY_SHOWN).forEachIndexed { index, entry ->
+                        if (index > 0) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                entry.subject.ifEmpty { tr("rules.activityRun", mapOf("count" to entry.count.toString())) },
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (entry.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                formatRelativeTime(entry.at),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }

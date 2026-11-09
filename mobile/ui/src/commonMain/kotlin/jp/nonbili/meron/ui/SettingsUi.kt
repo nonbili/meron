@@ -1322,13 +1322,39 @@ private fun AlertDefaultRow(
 }
 
 @Composable
-internal fun SettingsSectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+internal fun SettingsSectionLabel(
+    text: String,
+    hint: String? = null,
+) {
+    var showHint by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 2.dp),
-    )
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (hint != null) {
+            IconButton(onClick = { showHint = true }, modifier = Modifier.size(28.dp).padding(start = 4.dp)) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = hint,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+    if (showHint && hint != null) {
+        AlertDialog(
+            onDismissRequest = { showHint = false },
+            title = { Text(text) },
+            text = { Text(hint) },
+            confirmButton = { TextButton(onClick = { showHint = false }) { Text(tr("common.close")) } },
+        )
+    }
 }
 
 @Composable
@@ -1505,7 +1531,7 @@ private fun SettingsHeadline(
 }
 
 @Composable
-private fun settingsSwitchColors() =
+internal fun settingsSwitchColors() =
     with(MaterialTheme.colorScheme) {
         val isDark = background.luminance() < 0.5f
         val uncheckedTrack = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
