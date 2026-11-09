@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
-import { KanbanConversationPane, PANE_ANIMATION_MS } from './KanbanConversationPane'
+import { KANBAN_PANE_ANIMATION_MS, KanbanConversationPane } from './KanbanConversationPane'
 
 const pane = (open: boolean) => (
   <KanbanConversationPane open={open} widthPercent={40} resizeTitle="Resize" onResizeStart={() => {}}>
@@ -39,7 +39,7 @@ describe('KanbanConversationPane', () => {
     expect(view.queryByText('conversation')).not.toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(KANBAN_PANE_ANIMATION_MS)
     })
     expect(root(view)?.dataset.panePhase).toBe('open')
     expect(root(view)?.className).not.toContain('animate-pane')
@@ -67,7 +67,7 @@ describe('KanbanConversationPane', () => {
     expect(view.queryByText('conversation')).toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(KANBAN_PANE_ANIMATION_MS)
     })
     expect(root(view)).toBeNull()
   })

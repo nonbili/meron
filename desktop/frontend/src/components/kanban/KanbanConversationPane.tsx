@@ -11,6 +11,9 @@ import { usePresence } from '../../lib/usePresence'
 
 /** Matches the pane-open/pane-close keyframes in index.css. */
 export const PANE_ANIMATION_MS = 150
+// The board's conversation pane is opened and closed card after card, so it
+// slides faster than the side panels.
+export const KANBAN_PANE_ANIMATION_MS = 100
 
 // The board's conversation pane. It slides in from the right edge over the
 // board, which narrows once when it is in place (index.css, animate-pane-open):
@@ -34,9 +37,9 @@ export function KanbanConversationPane({
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void
   children: ReactNode
 }) {
-  const phase = usePresence(open, PANE_ANIMATION_MS)
+  const phase = usePresence(open, KANBAN_PANE_ANIMATION_MS)
   const paneRef = useRef<HTMLDivElement>(null)
-  const lifted = usePaneSlideIn(paneRef, phase, PANE_ANIMATION_MS)
+  const lifted = usePaneSlideIn(paneRef, phase, KANBAN_PANE_ANIMATION_MS)
   const [boardWidth, setBoardWidth] = useState<number | null>(null)
   const mounted = phase !== 'closed'
   useLayoutEffect(() => {
@@ -61,7 +64,15 @@ export function KanbanConversationPane({
       className={`relative flex shrink-0 overflow-hidden border-l border-border/60 bg-chat shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] ${animation}`}
       // While lifted over the board its surface is drawn by the animation
       // classes (index.css), over the frame's.
-      style={{ width, maxWidth: '100%', '--pane-bg': 'var(--me-bg-chat)' } as CSSProperties}
+      // The close keyframes default to the side panels' duration.
+      style={
+        {
+          width,
+          maxWidth: '100%',
+          '--pane-bg': 'var(--me-bg-chat)',
+          animationDuration: `${KANBAN_PANE_ANIMATION_MS}ms`,
+        } as CSSProperties
+      }
     >
       {phase !== 'exiting' && (
         <>
