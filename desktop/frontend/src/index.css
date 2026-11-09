@@ -1046,9 +1046,9 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* The kanban conversation pane, the Tasks panel and (on a wide window) the
-   details panel slide in from and out to the right edge of their row
-   (KanbanConversationPane, SidePanelSlide, .details-slide). While it slides, a
+/* The kanban conversation pane and (on a wide window) the details panel slide
+   in from and out to the right edge of their row (KanbanConversationPane,
+   .details-slide). While it slides, a
    pane is lifted out of the row and over its neighbour, which takes its new
    width once, at the end of opening and at the start of closing. Animating the
    pane's width instead re-wraps the neighbour's whole content (a conversation,
@@ -1085,14 +1085,29 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   transform: translateX(calc(100% - 1px));
 }
 
-/* The side-panel slot opens in its own place: its neighbour (the conversation)
-   takes the narrower width at once, in the frames the panel is built and
-   painted anyway, and the panel slides into the space. Waiting to narrow the
-   conversation until the slide ends read as a late push. */
-.animate-pane-open.animate-pane-in-place {
-  position: relative;
-  z-index: auto;
-  background: none;
+/* The side-panel slot (SidePanelSlide: Tasks, contacts, the calendar panel)
+   keeps growing from and narrowing to zero width, its content at full width,
+   so the conversation beside it makes room gradually. It opens rarely, so the
+   neighbour's reflow on each frame matters less than for the board's pane.
+   Duration matches SIDE_PANEL_ANIMATION_MS. */
+@keyframes slotOpen {
+  from {
+    width: 0;
+  }
+}
+
+@keyframes slotClose {
+  to {
+    width: 0;
+  }
+}
+
+.animate-slot-open {
+  animation: slotOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slot-close {
+  animation: slotClose 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-pane-close {
@@ -1100,6 +1115,8 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .animate-slot-open,
+  .animate-slot-close,
   .animate-pane-open,
   .animate-pane-close {
     position: static;

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
-import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
-import { SidePanelSlide } from './SidePanelSlide'
+import { SIDE_PANEL_ANIMATION_MS, SidePanelSlide } from './SidePanelSlide'
 
 const slide = (open: boolean) => (
   <SidePanelSlide open={open}>
@@ -38,16 +37,14 @@ describe('SidePanelSlide', () => {
 
     view.rerender(slide(true))
     expect(root(view)?.dataset.panePhase).toBe('entering')
-    expect(root(view)?.className).toContain('animate-pane-open')
-    // In its own place: the neighbour makes room at once instead of after the slide.
-    expect(root(view)?.className).toContain('animate-pane-in-place')
+    expect(root(view)?.className).toContain('animate-slot-open')
     expect(view.queryByText('tasks')).not.toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(SIDE_PANEL_ANIMATION_MS)
     })
     expect(root(view)?.dataset.panePhase).toBe('open')
-    expect(root(view)?.className).not.toContain('animate-pane')
+    expect(root(view)?.className).not.toContain('animate-slot')
   })
 
   it('keeps the list on screen while it slides out, then unmounts', () => {
@@ -56,11 +53,11 @@ describe('SidePanelSlide', () => {
 
     view.rerender(slide(false))
     expect(root(view)?.dataset.panePhase).toBe('exiting')
-    expect(root(view)?.className).toContain('animate-pane-close')
+    expect(root(view)?.className).toContain('animate-slot-close')
     expect(view.queryByText('tasks')).not.toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(SIDE_PANEL_ANIMATION_MS)
     })
     expect(root(view)).toBeNull()
   })
@@ -73,7 +70,7 @@ describe('SidePanelSlide', () => {
     expect(view.queryByText('tasks')).not.toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(SIDE_PANEL_ANIMATION_MS)
     })
     expect(root(view)).toBeNull()
   })

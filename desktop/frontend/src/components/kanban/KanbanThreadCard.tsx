@@ -14,7 +14,7 @@ import { isRssAccount } from '../../lib/threadActions'
 import type { Message } from '../../types'
 import { ThreadListItem } from '../threads/ThreadListItem'
 import type { ThreadContextMenuController } from '../threads/ThreadContextMenu'
-import { PANE_ANIMATION_MS } from './KanbanConversationPane'
+import { KANBAN_PANE_ANIMATION_MS } from './KanbanConversationPane'
 
 export function KanbanThreadCard({
   boardId,
@@ -83,7 +83,7 @@ export function KanbanThreadCard({
     if (!active) return
     const keepInView = () => selectedItemRef.current?.scrollIntoView({ block: 'nearest' })
     keepInView()
-    const until = performance.now() + PANE_ANIMATION_MS + 300
+    const until = performance.now() + KANBAN_PANE_ANIMATION_MS + 300
     let frame = requestAnimationFrame(function follow(now) {
       keepInView()
       if (now < until) frame = requestAnimationFrame(follow)

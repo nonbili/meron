@@ -1,7 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
-import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 
 /**
  * Fixed, like the panels it is modelled on. The thread list and conversation
@@ -10,11 +8,15 @@ import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
  */
 export const SIDE_PANEL_WIDTH = 340
 
-// The right-hand slot (Tasks, contacts or the calendar panel) slides in and out
-// at its full width (index.css, animate-pane-open/-close). Opening, the
-// neighbour narrows at once and the panel slides into its own place
-// (animate-pane-in-place); closing, the neighbour widens at once and the panel
-// slides out over it, as the board's conversation pane does.
+// The slot keeps the original width animation (index.css, animate-slot-*): it
+// opens and closes rarely, and its neighbour making room gradually reads better
+// here than the board pane's slide over the content.
+export const SIDE_PANEL_ANIMATION_MS = 200
+
+// The right-hand slot (Tasks, contacts or the calendar panel) slides in and
+// out: the frame grows from and narrows to zero width while the panel inside keeps its full width, so it is
+// revealed rather than reflowed every frame. The panel stays on screen while
+// it slides out.
 // With `animate` false, a change shows or hides the slot at once.
 export function SidePanelSlide({
   open,
@@ -25,24 +27,17 @@ export function SidePanelSlide({
   animate?: boolean
   children: ReactNode
 }) {
-  const phase = usePresence(open, PANE_ANIMATION_MS, animate)
-  const frameRef = useRef<HTMLDivElement>(null)
-  const lifted = usePaneSlideIn(frameRef, phase, PANE_ANIMATION_MS)
+  const phase = usePresence(open, SIDE_PANEL_ANIMATION_MS, animate)
   // Closing the slot (or deleting the last task list) takes its content away
   // in the same render; the last panel shown slides out instead of an empty frame.
   const lastChildren = useRef(children)
   if (children != null) lastChildren.current = children
   if (phase === 'closed') return null
 
-  const animation = lifted
-    ? ' animate-pane-open animate-pane-in-place'
-    : phase === 'exiting'
-      ? ' animate-pane-close'
-      : ''
+  const animation = phase === 'entering' ? ' animate-slot-open' : phase === 'exiting' ? ' animate-slot-close' : ''
 
   return (
     <div
-      ref={frameRef}
       data-pane-phase={phase}
       // Hidden on a narrow window, like the panels themselves.
       className={`flex min-h-0 shrink-0 overflow-hidden max-[900px]:hidden${animation}`}
