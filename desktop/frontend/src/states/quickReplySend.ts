@@ -87,7 +87,12 @@ function conversationHtmlBody(text: string, attachments: ComposerAttachment[]): 
   return `${body}${imageHtml}`
 }
 
-export async function sendReply() {
+/**
+ * Sends the quick reply. `onBoxCleared` runs once the box has been emptied for
+ * the next reply, before the send itself goes out (which can take seconds); a
+ * box with nothing to send, or a send that stops before that, never calls it.
+ */
+export async function sendReply({ onBoxCleared }: { onBoxCleared?: () => void } = {}) {
   const composerText = quickReplyOutgoingText()
   const attachments = compose$.composerAttachments.get()
   const activeT = getActiveThread()
@@ -248,6 +253,7 @@ export async function sendReply() {
   // this thread gets a signature just like the one just sent did.
   seedQuickReplySignature()
   const clearedGeneration = quickReplyBoxGeneration
+  onBoxCleared?.()
 
   const dropUnsentBubble = () => {
     const index = mail$.messages.peek().findIndex((message) => message.id === tempId)

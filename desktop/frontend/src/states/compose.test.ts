@@ -1229,6 +1229,53 @@ describe('quick reply draft sharing', () => {
     expect(ui$.toast.get()).toContain('blind@example.com')
   })
 
+  it('tells the caller once the box is cleared, before the send has gone out', async () => {
+    // The quick reply lets go of the keyboard then, so a shortcut like archive
+    // works right after sending instead of waiting for the server.
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Reply')
+    compose$.quickReplySignature.set(null)
+    settings$.signature.set('')
+    let deliver = () => {}
+    const delivered = new Promise<void>((resolve) => (deliver = resolve))
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      if (command === 'mail.send') {
+        await delivered
+        return { ok: true }
+      }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+    let cleared = 0
+    const sending = sendReply({ onBoxCleared: () => (cleared += 1) })
+    for (let i = 0; i < 20 && !calls.some((c) => c.command === 'mail.send'); i++) await Promise.resolve()
+    expect(calls.some((c) => c.command === 'mail.send')).toBe(true)
+    expect(cleared).toBe(1)
+    expect(compose$.composer.get()).toBe('')
+    deliver()
+    await sending
+    expect(cleared).toBe(1)
+
+    // A box with nothing to send is left alone.
+    compose$.composer.set('')
+    await sendReply({ onBoxCleared: () => (cleared += 1) })
+    expect(cleared).toBe(1)
+  })
+
   it('discards a matching loaded draft when its quick-reply ownership was lost', async () => {
     const thread = message({
       id: 'root',

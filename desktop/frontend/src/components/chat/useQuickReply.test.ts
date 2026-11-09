@@ -110,6 +110,23 @@ describe('useQuickReply draft ownership', () => {
     compose$.quickReplyEncrypt.set(null)
   })
 
+  it("lets go of the keyboard after sending, so the view's shortcuts work at once", async () => {
+    const { result } = renderHook(() => useQuickReply())
+    const textarea = document.createElement('textarea')
+    document.body.appendChild(textarea)
+    result.current.textareaRef.current = textarea
+    try {
+      // (A box with nothing to send never lets go: compose.test.ts, sendReply.)
+      compose$.composer.set('Thanks!')
+      textarea.focus()
+      await act(() => result.current.handleSendReply())
+      expect(calls.some((c) => c.command === 'mail.send')).toBe(true)
+      expect(document.activeElement).not.toBe(textarea)
+    } finally {
+      textarea.remove()
+    }
+  })
+
   it('re-measures the box when the message text size changes', () => {
     const { result } = renderHook(() => useQuickReply())
     const textarea = document.createElement('textarea')

@@ -125,7 +125,10 @@ export function useQuickReply() {
         const { to, cc } = quickReplyRecipients()
         if (!(await confirmKeyChanges(target.account_id, recipientAddresses(to, cc)))) return
       }
-      await sendReply()
+      // Let go of the keyboard once the box is cleared: another reply right away
+      // is rare, and the view's shortcuts (archive, next thread) should work
+      // without Esc or a click first. "r" focuses the box again.
+      await sendReply({ onBoxCleared: () => textareaRef.current?.blur() })
     } finally {
       setSendingReply(false)
     }
