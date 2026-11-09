@@ -3,11 +3,8 @@ package jp.nonbili.meron.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -76,7 +73,7 @@ internal fun SettingsKanbanBoardDetailPage(
         )
     }
     val listState = rememberLazyListState()
-    LazyColumn(modifier.appScrollbar(listState), state = listState) {
+    SettingsList(modifier.appScrollbar(listState), state = listState) {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -105,7 +102,7 @@ internal fun SettingsKanbanBoardDetailPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.account.profile")) }
+        section(tr("settings.account.profile"))
         item {
             SettingsTextRow(
                 value = name,
@@ -117,7 +114,7 @@ internal fun SettingsKanbanBoardDetailPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.account.chatBackground")) }
+        section(tr("settings.account.chatBackground"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Image,
@@ -138,7 +135,7 @@ internal fun SettingsKanbanBoardDetailPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.dangerZone")) }
+        section(tr("settings.dangerZone"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Delete,
@@ -148,6 +145,5 @@ internal fun SettingsKanbanBoardDetailPage(
                 destructive = true,
             )
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }

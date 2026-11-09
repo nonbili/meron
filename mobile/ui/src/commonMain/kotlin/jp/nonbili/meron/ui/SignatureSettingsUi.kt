@@ -65,7 +65,7 @@ internal fun SettingsSignatureRow(
         title = tr("settings.signature.label"),
         subtitle = preview.ifBlank { tr("settings.signature.hint") },
         onClick = { editing = true },
-        trailing = { if (preview.isBlank()) Text(tr("settings.signature.modeNone"), color = MaterialTheme.colorScheme.primary) },
+        trailing = { if (preview.isBlank()) Text(tr("settings.signature.modeNone"), color = MaterialTheme.colorScheme.onSurfaceVariant) },
     )
     if (editing) {
         SignatureEditorDialog(
@@ -96,7 +96,7 @@ internal fun SettingsAccountSignatureRow(
         title = tr("settings.signature.label"),
         subtitle = if (spec.mode == "custom") signaturePreview(spec.html).ifBlank { hint } else hint,
         onClick = { editing = true },
-        trailing = { Text(signatureModeLabel(spec.mode), color = MaterialTheme.colorScheme.primary) },
+        trailing = { Text(signatureModeLabel(spec.mode), color = MaterialTheme.colorScheme.onSurfaceVariant) },
     )
     if (editing) {
         AccountSignatureDialog(

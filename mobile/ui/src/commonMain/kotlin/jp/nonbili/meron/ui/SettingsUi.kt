@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -70,6 +71,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -83,7 +85,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -306,8 +307,13 @@ internal fun SettingsScreen(
     }
     BackHandler(onBack = handleBack)
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
                 title = {
                     Text(
                         when (page) {
@@ -613,7 +619,7 @@ internal fun SettingsScreen(
                 val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
                 val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
                 val rootListState = rememberLazyListState()
-                LazyColumn(Modifier.fillMaxSize().appScrollbar(rootListState), state = rootListState) {
+                SettingsList(Modifier.fillMaxSize().appScrollbar(rootListState), state = rootListState) {
                     item {
                         SettingsRow(
                             icon = Icons.Filled.Settings,
@@ -646,7 +652,7 @@ internal fun SettingsScreen(
                             onClick = { settingsNavController.navigate(SettingsRoutes.Rules) },
                         )
                     }
-                    item { SettingsSectionLabel(tr("settings.sections.kanbanBoards")) }
+                    section(tr("settings.sections.kanbanBoards"))
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
                             icon = Icons.Filled.ViewKanban,
@@ -670,7 +676,7 @@ internal fun SettingsScreen(
                             },
                         )
                     }
-                    item { SettingsSectionLabel(tr("settings.sections.mailAccounts")) }
+                    section(tr("settings.sections.mailAccounts"))
                     if (mailAccounts.isEmpty()) {
                         item { SettingsEmptyLabel(tr("settings.sections.noMailAccounts")) }
                     } else {
@@ -693,7 +699,7 @@ internal fun SettingsScreen(
                             onClick = onAddMailAccount,
                         )
                     }
-                    item { SettingsSectionLabel(tr("settings.sections.feedAccounts")) }
+                    section(tr("settings.sections.feedAccounts"))
                     if (feedAccounts.isEmpty()) {
                         item { SettingsEmptyLabel(tr("settings.sections.noFeedAccounts")) }
                     } else {
@@ -719,7 +725,6 @@ internal fun SettingsScreen(
                             onClick = onAddFeedAccount,
                         )
                     }
-                    item { Spacer(Modifier.height(24.dp)) }
                 }
             }
         }
@@ -876,8 +881,8 @@ internal fun SettingsGeneralPage(
     // (2) come before it on every platform.
     val proxyIndex = if (calendarEnabled) 12 else 10
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) proxyIndex else 0)
-    LazyColumn(modifier.appScrollbar(listState), state = listState) {
-        item { SettingsSectionLabel(tr("settings.pages.appearance")) }
+    SettingsList(modifier.appScrollbar(listState), state = listState) {
+        section(tr("settings.pages.appearance"))
         item {
             // The preview is what is painted now; while following the system
             // the label names both picks.
@@ -892,7 +897,7 @@ internal fun SettingsGeneralPage(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             themeLabel,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 180.dp),
@@ -921,7 +926,7 @@ internal fun SettingsGeneralPage(
                         } else {
                             appLanguageDisplayName(appLanguageTag)
                         },
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
             )
@@ -936,7 +941,7 @@ internal fun SettingsGeneralPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.sideNav")) }
+        section(tr("settings.sections.sideNav"))
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Inbox,
@@ -993,17 +998,17 @@ internal fun SettingsGeneralPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.kanban")) }
+        section(tr("settings.sections.kanban"))
         item {
             SettingsRow(
                 icon = Icons.Filled.ViewKanban,
                 title = tr("settings.kanban.columnWidth"),
                 onClick = onCycleKanbanColumnWidth,
-                trailing = { Text(trf("settings.kanban.columnWidthValue", kanbanColumnWidth), color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(trf("settings.kanban.columnWidthValue", kanbanColumnWidth), color = MaterialTheme.colorScheme.onSurfaceVariant) },
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.network")) }
+        section(tr("settings.sections.network"))
         item {
             SettingsProxyRow(
                 spec = appProxy,
@@ -1012,7 +1017,7 @@ internal fun SettingsGeneralPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.syncNotifications")) }
+        section(tr("settings.syncNotifications"))
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Refresh,
@@ -1056,7 +1061,7 @@ internal fun SettingsGeneralPage(
                             } else {
                                 tr("settings.pollIntervalValue", mapOf("minutes" to pollIntervalMinutes))
                             },
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
@@ -1080,7 +1085,7 @@ internal fun SettingsGeneralPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.data")) }
+        section(tr("settings.sections.data"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Save,
@@ -1121,8 +1126,6 @@ internal fun SettingsGeneralPage(
                 trailing = storageUsage?.cacheBytes?.takeIf { it > 0 }?.let { { Text(formatBytes(it)) } },
             )
         }
-
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -1147,15 +1150,15 @@ internal fun SettingsMessagesPage(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    LazyColumn(modifier.appScrollbar(listState), state = listState) {
-        item { SettingsSectionLabel(tr("settings.pages.appearance")) }
+    SettingsList(modifier.appScrollbar(listState), state = listState) {
+        section(tr("settings.pages.appearance"))
         item {
             SettingsRow(
                 icon = Icons.AutoMirrored.Filled.Chat,
                 title = tr("settings.appearance.conversationLayout"),
                 hint = tr("settings.appearance.conversationLayoutHint"),
                 onClick = onToggleConversationLayout,
-                trailing = { Text(conversationLayout.label(), color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(conversationLayout.label(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
             )
         }
         if (conversationLayout == ConversationLayout.Chat) {
@@ -1177,7 +1180,7 @@ internal fun SettingsMessagesPage(
                 trailing = {
                     Text(
                         trf("settings.appearance.textSizeValue", messageFontScale),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
             )
@@ -1212,7 +1215,7 @@ internal fun SettingsMessagesPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("tags.title")) }
+        section(tr("tags.title"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Sell,
@@ -1222,7 +1225,7 @@ internal fun SettingsMessagesPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.privacy")) }
+        section(tr("settings.sections.privacy"))
         item {
             SettingsRow(
                 icon = Icons.Filled.HideImage,
@@ -1236,13 +1239,11 @@ internal fun SettingsMessagesPage(
                         } else {
                             tr("settings.privacy.remoteSendersCount", mapOf("count" to remoteImageSenderCount))
                         },
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
             )
         }
-
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -1257,14 +1258,14 @@ internal fun SettingsComposerPage(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    LazyColumn(modifier.appScrollbar(listState), state = listState) {
-        item { SettingsSectionLabel(tr("settings.sections.general")) }
+    SettingsList(modifier.appScrollbar(listState), state = listState) {
+        section(tr("settings.sections.general"))
         item {
             SettingsRow(
                 icon = Icons.AutoMirrored.Filled.Send,
                 title = tr("settings.composer.sendMessageWith"),
                 onClick = onToggleSendShortcut,
-                trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(sendShortcutMode.label(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
             )
         }
         item {
@@ -1277,15 +1278,13 @@ internal fun SettingsComposerPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.sections.signature")) }
+        section(tr("settings.sections.signature"))
         item {
             SettingsSignatureRow(
                 html = appSignatureHtml,
                 onSave = onSaveAppSignature,
             )
         }
-
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -1305,7 +1304,7 @@ private fun AlertDefaultRow(
             title = title,
             hint = hint,
             onClick = { menu = true },
-            trailing = { Text(alertLabel(lead, allDay), color = MaterialTheme.colorScheme.primary) },
+            trailing = { Text(alertLabel(lead, allDay), color = MaterialTheme.colorScheme.onSurfaceVariant) },
         )
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             (listOf(NO_ALERT) + alertOptions(allDay)).forEach { option ->
@@ -1325,24 +1324,29 @@ private fun AlertDefaultRow(
 internal fun SettingsSectionLabel(
     text: String,
     hint: String? = null,
+    first: Boolean = false,
 ) {
     var showHint by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 2.dp),
+        modifier =
+            Modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = if (first) 8.dp else 24.dp, bottom = 8.dp)
+                .heightIn(min = 32.dp),
     ) {
         Text(
             text,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (hint != null) {
-            IconButton(onClick = { showHint = true }, modifier = Modifier.size(28.dp).padding(start = 4.dp)) {
+            IconButton(onClick = { showHint = true }, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Filled.Info,
                     contentDescription = hint,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
@@ -1430,7 +1434,7 @@ internal fun SettingsRow(
                 )
             },
         trailingContent = trailing,
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.heightIn(min = 56.dp).clickable(onClick = onClick),
     )
 }
 
@@ -1480,7 +1484,10 @@ internal fun SettingsToggleRow(
     ListItem(
         headlineContent = { SettingsHeadline(title = title, hint = hint) },
         supportingContent = subtitle?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
-        leadingContent = leading ?: { Icon(icon, contentDescription = null) },
+        leadingContent =
+            leading ?: {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
         trailingContent = {
             Switch(
                 checked = checked,
@@ -1488,7 +1495,7 @@ internal fun SettingsToggleRow(
                 colors = settingsSwitchColors(),
             )
         },
-        modifier = Modifier.clickable(onClick = onToggle),
+        modifier = Modifier.heightIn(min = 56.dp).clickable(onClick = onToggle),
     )
 }
 
@@ -1503,7 +1510,7 @@ private fun SettingsHeadline(
         Text(
             title,
             color = color,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
@@ -1531,23 +1538,4 @@ private fun SettingsHeadline(
 }
 
 @Composable
-internal fun settingsSwitchColors() =
-    with(MaterialTheme.colorScheme) {
-        val isDark = background.luminance() < 0.5f
-        val uncheckedTrack = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
-        val uncheckedThumb = if (isDark) Color(0xFFE2E8F0) else Color.White
-        // White is unreadable on a light primary, as in a dynamic dark scheme.
-        val checkedThumb = if (primary.luminance() > 0.4f) onPrimary else Color.White
-        SwitchDefaults.colors(
-            checkedThumbColor = checkedThumb,
-            checkedTrackColor = primary,
-            uncheckedThumbColor = uncheckedThumb,
-            uncheckedTrackColor = uncheckedTrack,
-            uncheckedBorderColor = outline,
-            disabledCheckedThumbColor = checkedThumb.copy(alpha = 0.38f),
-            disabledCheckedTrackColor = primary.copy(alpha = 0.38f),
-            disabledUncheckedThumbColor = uncheckedThumb.copy(alpha = 0.55f),
-            disabledUncheckedTrackColor = uncheckedTrack.copy(alpha = 0.38f),
-            disabledUncheckedBorderColor = outline.copy(alpha = 0.38f),
-        )
-    }
+internal fun settingsSwitchColors() = SwitchDefaults.colors()

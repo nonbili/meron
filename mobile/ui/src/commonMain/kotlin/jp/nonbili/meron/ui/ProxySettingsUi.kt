@@ -72,7 +72,7 @@ internal fun SettingsProxyRow(
         title = tr("settings.network.proxy"),
         subtitle = proxySummary(spec),
         onClick = { editing = true },
-        trailing = { Text(proxyModeLabel(spec.mode), color = MaterialTheme.colorScheme.primary) },
+        trailing = { Text(proxyModeLabel(spec.mode), color = MaterialTheme.colorScheme.onSurfaceVariant) },
     )
     if (editing) {
         ProxyEditorDialog(

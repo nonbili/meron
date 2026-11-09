@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -186,7 +185,7 @@ internal fun SettingsAccountDetailPage(
         )
     }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy && !isRss) 9 else 0)
-    LazyColumn(modifier.appScrollbar(listState), state = listState) {
+    SettingsList(modifier.appScrollbar(listState), state = listState) {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -220,7 +219,7 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.account.profile")) }
+        section(tr("settings.account.profile"))
         item {
             SettingsTextRow(
                 value = displayName,
@@ -243,7 +242,7 @@ internal fun SettingsAccountDetailPage(
                 )
             }
         }
-        item { SettingsSectionLabel(tr("settings.account.chatBackground")) }
+        section(tr("settings.account.chatBackground"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Image,
@@ -264,7 +263,7 @@ internal fun SettingsAccountDetailPage(
             )
         }
 
-        item { SettingsSectionLabel(tr("settings.account.visibility")) }
+        section(tr("settings.account.visibility"))
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Inbox,
@@ -289,7 +288,7 @@ internal fun SettingsAccountDetailPage(
         }
 
         if (!isRss) {
-            item { SettingsSectionLabel(tr("settings.sections.signature")) }
+            section(tr("settings.sections.signature"))
             item {
                 SettingsAccountSignatureRow(
                     spec = account.signature,
@@ -297,7 +296,7 @@ internal fun SettingsAccountDetailPage(
                 )
             }
 
-            item { SettingsSectionLabel(tr("settings.sections.network")) }
+            section(tr("settings.sections.network"))
             // Only password accounts have user-editable endpoints: OAuth
             // providers hand us theirs, and RSS has none.
             if (account.authType == "password") {
@@ -317,7 +316,7 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.account.notificationsSync")) }
+        section(tr("settings.account.notificationsSync"))
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.NotificationsOff,
@@ -361,7 +360,7 @@ internal fun SettingsAccountDetailPage(
         // are a pick away. The same switch as the mailbox menu's.
         if (!isRss) {
             val notifiable = folders.filter { it.isNotifiable() }
-            item { SettingsSectionLabel(tr("settings.account.folderNotifications")) }
+            section(tr("settings.account.folderNotifications"))
             item {
                 SettingsRow(
                     icon = Icons.Filled.Inbox,
@@ -397,7 +396,7 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.account.content")) }
+        section(tr("settings.account.content"))
         item {
             SettingsToggleRow(
                 icon = Icons.Filled.Image,
@@ -422,7 +421,7 @@ internal fun SettingsAccountDetailPage(
         }
 
         if (!isRss) {
-            item { SettingsSectionLabel(tr("settings.account.aliases")) }
+            section(tr("settings.account.aliases"))
             itemsIndexed(aliasEntries) { index, (email, name) ->
                 AliasEditorRow(
                     email = email,
@@ -452,7 +451,7 @@ internal fun SettingsAccountDetailPage(
         }
 
         if (canMoveUp || canMoveDown) {
-            item { SettingsSectionLabel(tr("settings.account.order")) }
+            section(tr("settings.account.order"))
             if (canMoveUp) {
                 item {
                     SettingsRow(
@@ -475,7 +474,7 @@ internal fun SettingsAccountDetailPage(
             }
         }
 
-        item { SettingsSectionLabel(tr("settings.dangerZone")) }
+        section(tr("settings.dangerZone"))
         item {
             SettingsRow(
                 icon = Icons.Filled.Delete,
@@ -485,7 +484,6 @@ internal fun SettingsAccountDetailPage(
                 destructive = true,
             )
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 

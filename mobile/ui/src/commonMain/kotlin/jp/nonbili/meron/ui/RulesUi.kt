@@ -32,7 +32,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -61,6 +60,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountSummary
@@ -111,6 +111,27 @@ internal class RuleEditorBar(
     val title: String,
     val close: () -> Unit,
 )
+
+private enum class ConnectedPosition {
+    Single,
+    First,
+    Middle,
+    Last,
+}
+
+private fun connectedShape(
+    position: ConnectedPosition,
+    corner: Dp = 16.dp,
+    innerCorner: Dp = 4.dp,
+): RoundedCornerShape =
+    when (position) {
+        ConnectedPosition.Single -> RoundedCornerShape(corner)
+        ConnectedPosition.First -> RoundedCornerShape(topStart = corner, topEnd = corner, bottomStart = innerCorner, bottomEnd = innerCorner)
+        ConnectedPosition.Middle -> RoundedCornerShape(innerCorner)
+        ConnectedPosition.Last -> RoundedCornerShape(topStart = innerCorner, topEnd = innerCorner, bottomStart = corner, bottomEnd = corner)
+    }
+
+private val CONNECTED_GAP = 2.dp
 
 private fun accountLabel(account: AccountSummary): String = account.displayName.ifEmpty { account.email }
 
@@ -197,7 +218,7 @@ private fun MeronMobileState.RuleTargetRow(
                 Text(
                     value,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -475,8 +496,10 @@ internal fun MeronMobileState.RulesPage(
     }
 
     Column(
-        modifier.verticalScroll(scroll).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier.verticalScroll(scroll).padding(horizontal = 16.dp).padding(top = if (formOpen) 0.dp else 8.dp, bottom = 16.dp),
+        // Connected rows supply their own thin gaps; page spacing would also
+        // be inserted on both sides of every divider Spacer.
+        verticalArrangement = Arrangement.spacedBy(if (formOpen) 0.dp else 10.dp),
     ) {
         if (!formOpen) {
             if (rules?.isEmpty() == true) {
@@ -538,18 +561,16 @@ internal fun MeronMobileState.RulesPage(
                     // is wrong instead of quietly becoming a different rule.
                     val lost = (rule.accounts + rule.copyAccount + rule.folderAccount).any { it.isNotEmpty() && !known(it) }
                     ReorderableItem {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
-                            tonalElevation = if (dragging) 6.dp else 1.dp,
-                            shadowElevation = if (dragging) 4.dp else 0.dp,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                shape = connectedShape(ConnectedPosition.First),
+                                color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
+                                tonalElevation = if (dragging) 6.dp else 1.dp,
+                                shadowElevation = if (dragging) 4.dp else 0.dp,
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 14.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
@@ -610,7 +631,7 @@ internal fun MeronMobileState.RulesPage(
                                         Text(
                                             ruleSummary(mailAccounts, rule),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
@@ -648,14 +669,19 @@ internal fun MeronMobileState.RulesPage(
                                         modifier = Modifier.padding(start = 8.dp),
                                     )
                                 }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                                )
+                            }
+                            Spacer(Modifier.height(CONNECTED_GAP))
+                            Surface(
+                                shape = connectedShape(ConnectedPosition.Last),
+                                color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface,
+                                tonalElevation = if (dragging) 6.dp else 1.dp,
+                                shadowElevation = if (dragging) 4.dp else 0.dp,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.End,
-                                    modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                                 ) {
                                     if (left != null) {
                                         TextButton(
@@ -718,71 +744,98 @@ internal fun MeronMobileState.RulesPage(
                 }
             }
 
-            OutlinedButton(
-                enabled = rules != null,
+            Surface(
                 onClick = {
                     opening?.cancel()
                     adding = true
                 },
+                enabled = rules != null,
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                shape = RoundedCornerShape(12.dp),
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(tr("rules.add"))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        tr("rules.add"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         } else {
-            SettingsSectionLabel(tr("rules.when"), hint = tr("rules.queryHint"))
+            SettingsSectionLabel(tr("rules.when"), hint = tr("rules.queryHint"), first = true)
             if (mailAccounts.size > 1 || scoped) {
+                val allPos = if (scoped) ConnectedPosition.First else ConnectedPosition.Single
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = connectedShape(allPos),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column {
-                        SettingsToggleRow(
-                            icon = Icons.Filled.Person,
-                            title = tr("kanban.allAccounts"),
-                            checked = !scoped,
-                            onToggle = {
-                                scoped = !scoped
-                                change(draft.copy(accounts = emptyList()))
-                            },
-                        )
-                        if (scoped) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                            mailAccounts.forEach { account ->
-                                val picked = account.id in draft.accounts
-                                SettingsToggleRow(
-                                    icon = Icons.Filled.Person,
-                                    title = accountLabel(account),
-                                    checked = picked,
-                                    onToggle = {
-                                        change(draft.copy(accounts = if (picked) draft.accounts - account.id else draft.accounts + account.id))
-                                    },
-                                    leading = {
-                                        AccountBadgeAvatar(
-                                            label = accountLabel(account),
-                                            avatarUrl = account.avatarUrl,
-                                            size = 24.dp,
-                                            fallbackIcon = accountAvatarFallbackIcon(account),
-                                        )
-                                    },
-                                )
-                            }
+                    SettingsToggleRow(
+                        icon = Icons.Filled.Person,
+                        title = tr("kanban.allAccounts"),
+                        checked = !scoped,
+                        onToggle = {
+                            scoped = !scoped
+                            change(draft.copy(accounts = emptyList()))
+                        },
+                    )
+                }
+                if (scoped) {
+                    mailAccounts.forEachIndexed { index, account ->
+                        Spacer(Modifier.height(CONNECTED_GAP))
+                        val picked = account.id in draft.accounts
+                        val pos = if (index == mailAccounts.lastIndex) ConnectedPosition.Last else ConnectedPosition.Middle
+                        Surface(
+                            shape = connectedShape(pos),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            SettingsToggleRow(
+                                icon = Icons.Filled.Person,
+                                title = accountLabel(account),
+                                checked = picked,
+                                onToggle = {
+                                    change(draft.copy(accounts = if (picked) draft.accounts - account.id else draft.accounts + account.id))
+                                },
+                                leading = {
+                                    AccountBadgeAvatar(
+                                        label = accountLabel(account),
+                                        avatarUrl = account.avatarUrl,
+                                        size = 24.dp,
+                                        fallbackIcon = accountAvatarFallbackIcon(account),
+                                    )
+                                },
+                            )
                         }
                     }
                 }
+                Spacer(Modifier.height(16.dp))
             }
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = connectedShape(ConnectedPosition.First),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.from"), fields.from, {}) {
                         changeFields(fields.copy(from = it))
                     }
@@ -793,44 +846,47 @@ internal fun MeronMobileState.RulesPage(
                         changeFields(fields.copy(subject = it))
                     }
                     SearchOptionsTextField(tr("search.hasWords"), fields.words, {}) { changeFields(fields.copy(words = it)) }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) }
-                                .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.AttachFile,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            tr("filters.hasAttachment"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = fields.hasAttachment,
-                            onCheckedChange = { changeFields(fields.copy(hasAttachment = it)) },
-                            colors = settingsSwitchColors(),
-                        )
-                    }
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+            Surface(
+                onClick = { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) },
+                shape = connectedShape(ConnectedPosition.Last),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.AttachFile,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        tr("filters.hasAttachment"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = fields.hasAttachment,
+                        onCheckedChange = { changeFields(fields.copy(hasAttachment = it)) },
+                        colors = settingsSwitchColors(),
+                    )
                 }
             }
 
             SettingsSectionLabel(tr("rules.timing"), hint = tr("rules.timingHint"))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = connectedShape(if (timing == "now") ConnectedPosition.Single else ConnectedPosition.First),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                     RuleTargetRow(
                         title = tr("rules.runWhen"),
                         value = tr("rules.timing.$timing"),
@@ -838,44 +894,53 @@ internal fun MeronMobileState.RulesPage(
                         options = TIMINGS.map { option -> tr("rules.timing.$option") to { pickTiming(option) } },
                         onPick = { _, _ -> },
                     )
-                    if (timing != "now") {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            OutlinedTextField(
-                                value = amount,
-                                onValueChange = {
-                                    amount = it
-                                    invalid = false
-                                },
-                                isError = delay == null,
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                label = { Text(tr(if (timing == "age") "rules.age" else "rules.wait")) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            var unitMenu by remember { mutableStateOf(false) }
-                            Box {
-                                OutlinedButton(
-                                    onClick = { unitMenu = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.height(56.dp),
-                                ) {
-                                    Text(tr("rules.unit.$unit"))
-                                    Spacer(Modifier.width(4.dp))
-                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
-                                }
-                                DropdownMenu(expanded = unitMenu, onDismissRequest = { unitMenu = false }) {
-                                    UNITS.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(tr("rules.unit.$option")) },
-                                            onClick = {
-                                                unit = option
-                                                unitMenu = false
-                                            },
-                                        )
-                                    }
+                }
+            }
+            if (timing != "now") {
+                Spacer(Modifier.height(CONNECTED_GAP))
+                Surface(
+                    shape = connectedShape(ConnectedPosition.Last),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = amount,
+                            onValueChange = {
+                                amount = it
+                                invalid = false
+                            },
+                            isError = delay == null,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            label = { Text(tr(if (timing == "age") "rules.age" else "rules.wait")) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        var unitMenu by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(
+                                onClick = { unitMenu = true },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(56.dp),
+                            ) {
+                                Text(tr("rules.unit.$unit"))
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                            }
+                            DropdownMenu(expanded = unitMenu, onDismissRequest = { unitMenu = false }) {
+                                UNITS.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(tr("rules.unit.$option")) },
+                                        onClick = {
+                                            unit = option
+                                            unitMenu = false
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -885,12 +950,12 @@ internal fun MeronMobileState.RulesPage(
 
             SettingsSectionLabel(tr("rules.then"))
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = connectedShape(ConnectedPosition.First),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.fillMaxWidth().padding(16.dp)) {
                     OutlinedTextField(
                         value = tags,
                         onValueChange = {
@@ -902,60 +967,76 @@ internal fun MeronMobileState.RulesPage(
                         placeholder = { Text(tr("rules.tags")) },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { change(draft.copy(markRead = !draft.markRead)) }
-                                .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.DoneAll,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            tr("notification.actionMarkRead"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = draft.markRead,
-                            onCheckedChange = { change(draft.copy(markRead = it)) },
-                            colors = settingsSwitchColors(),
-                        )
-                    }
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { change(draft.copy(star = !draft.star)) }
-                                .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            tr("chat.star"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = draft.star,
-                            onCheckedChange = { change(draft.copy(star = it)) },
-                            colors = settingsSwitchColors(),
-                        )
-                    }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+            Surface(
+                onClick = { change(draft.copy(markRead = !draft.markRead)) },
+                shape = connectedShape(ConnectedPosition.Middle),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.DoneAll,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        tr("notification.actionMarkRead"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = draft.markRead,
+                        onCheckedChange = { change(draft.copy(markRead = it)) },
+                        colors = settingsSwitchColors(),
+                    )
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+            Surface(
+                onClick = { change(draft.copy(star = !draft.star)) },
+                shape = connectedShape(ConnectedPosition.Middle),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        tr("chat.star"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = draft.star,
+                        onCheckedChange = { change(draft.copy(star = it)) },
+                        colors = settingsSwitchColors(),
+                    )
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+            Surface(
+                shape = connectedShape(ConnectedPosition.Middle),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                     RuleTargetRow(
                         title = tr("rules.copyTo"),
                         value =
@@ -967,6 +1048,16 @@ internal fun MeronMobileState.RulesPage(
                         accounts = mailAccounts,
                         options = listOf(tr("rules.copyNone") to { change(draft.copy(copyAccount = "", copyFolder = "")) }),
                     ) { accountId, folder -> change(draft.copy(copyAccount = accountId, copyFolder = folder)) }
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+            Surface(
+                shape = connectedShape(ConnectedPosition.Last),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                     RuleTargetRow(
                         title = tr("rules.moveTo"),
                         value = moveLabel(mailAccounts, draft),
@@ -997,7 +1088,7 @@ internal fun MeronMobileState.RulesPage(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(16.dp))
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1005,7 +1096,7 @@ internal fun MeronMobileState.RulesPage(
                 OutlinedButton(
                     onClick = ::reset,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(tr("buttons.cancel"))
                 }
@@ -1033,7 +1124,7 @@ internal fun MeronMobileState.RulesPage(
                         }, onSaved = ::reset)
                     },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(if (editing) tr("buttons.save") else tr("rules.add"))
                 }
@@ -1041,24 +1132,26 @@ internal fun MeronMobileState.RulesPage(
         }
 
         if (!formOpen && status.log.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            SettingsSectionLabel(tr("rules.activity"))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    status.log.take(ACTIVITY_SHOWN).forEachIndexed { index, entry ->
-                        if (index > 0) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            val logItems = status.log.take(ACTIVITY_SHOWN)
+            Column {
+                SettingsSectionLabel(tr("rules.activity"))
+                logItems.forEachIndexed { index, entry ->
+                    if (index > 0) Spacer(Modifier.height(CONNECTED_GAP))
+                    val pos =
+                        when {
+                            logItems.size == 1 -> ConnectedPosition.Single
+                            index == 0 -> ConnectedPosition.First
+                            index == logItems.lastIndex -> ConnectedPosition.Last
+                            else -> ConnectedPosition.Middle
                         }
+                    Surface(
+                        shape = connectedShape(pos),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
