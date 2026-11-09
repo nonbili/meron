@@ -10,11 +10,11 @@ import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
  */
 export const SIDE_PANEL_WIDTH = 340
 
-// The right-hand slot (Tasks or the calendar panel) slides in and out like the
-// board's conversation pane (KanbanConversationPane): the panel slides over
-// whatever is beside it at its full width, and the neighbour takes its new
-// width once (index.css, animate-pane-open/-close). The panel stays on screen
-// while it slides out.
+// The right-hand slot (Tasks, contacts or the calendar panel) slides in and out
+// at its full width (index.css, animate-pane-open/-close). Opening, the
+// neighbour narrows at once and the panel slides into its own place
+// (animate-pane-in-place); closing, the neighbour widens at once and the panel
+// slides out over it, as the board's conversation pane does.
 // With `animate` false, a change shows or hides the slot at once.
 export function SidePanelSlide({
   open,
@@ -34,7 +34,11 @@ export function SidePanelSlide({
   if (children != null) lastChildren.current = children
   if (phase === 'closed') return null
 
-  const animation = lifted ? ' animate-pane-open' : phase === 'exiting' ? ' animate-pane-close' : ''
+  const animation = lifted
+    ? ' animate-pane-open animate-pane-in-place'
+    : phase === 'exiting'
+      ? ' animate-pane-close'
+      : ''
 
   return (
     <div

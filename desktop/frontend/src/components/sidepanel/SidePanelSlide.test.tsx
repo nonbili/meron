@@ -39,6 +39,8 @@ describe('SidePanelSlide', () => {
     view.rerender(slide(true))
     expect(root(view)?.dataset.panePhase).toBe('entering')
     expect(root(view)?.className).toContain('animate-pane-open')
+    // In its own place: the neighbour makes room at once instead of after the slide.
+    expect(root(view)?.className).toContain('animate-pane-in-place')
     expect(view.queryByText('tasks')).not.toBeNull()
 
     act(() => {

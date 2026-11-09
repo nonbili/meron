@@ -1085,8 +1085,18 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   transform: translateX(calc(100% - 1px));
 }
 
+/* The side-panel slot opens in its own place: its neighbour (the conversation)
+   takes the narrower width at once, in the frames the panel is built and
+   painted anyway, and the panel slides into the space. Waiting to narrow the
+   conversation until the slide ends read as a late push. */
+.animate-pane-open.animate-pane-in-place {
+  position: relative;
+  z-index: auto;
+  background: none;
+}
+
 .animate-pane-close {
-  animation: paneClose 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: paneClose 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,7 +10,7 @@ import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 
 /** Matches the pane-open/pane-close keyframes in index.css. */
-export const PANE_ANIMATION_MS = 200
+export const PANE_ANIMATION_MS = 150
 
 // The board's conversation pane. It slides in from the right edge over the
 // board, which narrows once when it is in place (index.css, animate-pane-open):
