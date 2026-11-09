@@ -1053,16 +1053,17 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
    width once, at the end of opening and at the start of closing. Animating the
    pane's width instead re-wraps the neighbour's whole content (a conversation,
    the board) on every frame, which drops a slower machine to a few frames per
-   slide. The pane keeps its own width and background, so nothing shows through.
-   Each keyframe names one end only, so the other end is the pane in place.
-   The row is the containing block (position: relative). Duration matches
-   PANE_ANIMATION_MS. */
-@keyframes paneOpen {
-  from {
-    transform: translateX(100%);
-  }
-}
+   slide. The row is the containing block (position: relative).
 
+   Opening: the pane waits just off the edge, one pixel showing so its first
+   tiles get painted, and usePaneSlideIn starts the slide once it has been
+   painted (a CSS animation's clock would run while a new pane is laid out).
+   Closing: a CSS animation; the pane is already painted. Duration matches
+   PANE_ANIMATION_MS.
+
+   The panels' own surfaces can be translucent (a theme's alpha), so the lifted
+   pane gets the frame's surface underneath, as in place; a pane with its own
+   surface passes it as --pane-bg. */
 @keyframes paneClose {
   to {
     transform: translateX(100%);
@@ -1077,10 +1078,11 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   bottom: 0;
   /* Above the neighbour's floating controls (frosted bands, headers: z-30). */
   z-index: 40;
+  background: linear-gradient(var(--pane-bg, transparent), var(--pane-bg, transparent)), var(--me-bg-app);
 }
 
 .animate-pane-open {
-  animation: paneOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(calc(100% - 1px));
 }
 
 .animate-pane-close {
@@ -1091,6 +1093,7 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   .animate-pane-open,
   .animate-pane-close {
     position: static;
+    transform: none;
     animation: none;
   }
 }

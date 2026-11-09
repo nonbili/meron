@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from 'react'
+import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 
@@ -25,16 +26,19 @@ export function SidePanelSlide({
   children: ReactNode
 }) {
   const phase = usePresence(open, PANE_ANIMATION_MS, animate)
+  const frameRef = useRef<HTMLDivElement>(null)
+  const lifted = usePaneSlideIn(frameRef, phase, PANE_ANIMATION_MS)
   // Closing the slot (or deleting the last task list) takes its content away
   // in the same render; the last panel shown slides out instead of an empty frame.
   const lastChildren = useRef(children)
   if (children != null) lastChildren.current = children
   if (phase === 'closed') return null
 
-  const animation = phase === 'entering' ? ' animate-pane-open' : phase === 'exiting' ? ' animate-pane-close' : ''
+  const animation = lifted ? ' animate-pane-open' : phase === 'exiting' ? ' animate-pane-close' : ''
 
   return (
     <div
+      ref={frameRef}
       data-pane-phase={phase}
       // Hidden on a narrow window, like the panels themselves.
       className={`flex min-h-0 shrink-0 overflow-hidden max-[900px]:hidden${animation}`}

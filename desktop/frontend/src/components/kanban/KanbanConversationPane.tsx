@@ -1,4 +1,12 @@
-import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
+import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 
 /** Matches the pane-open/pane-close keyframes in index.css. */
@@ -28,6 +36,7 @@ export function KanbanConversationPane({
 }) {
   const phase = usePresence(open, PANE_ANIMATION_MS)
   const paneRef = useRef<HTMLDivElement>(null)
+  const lifted = usePaneSlideIn(paneRef, phase, PANE_ANIMATION_MS)
   const [boardWidth, setBoardWidth] = useState<number | null>(null)
   const mounted = phase !== 'closed'
   useLayoutEffect(() => {
@@ -41,7 +50,7 @@ export function KanbanConversationPane({
   }, [mounted])
   if (phase === 'closed') return null
 
-  const animation = phase === 'entering' ? 'animate-pane-open' : phase === 'exiting' ? 'animate-pane-close' : ''
+  const animation = lifted ? 'animate-pane-open' : phase === 'exiting' ? 'animate-pane-close' : ''
   const preferredWidth = `max(320px, ${widthPercent}vw)`
   const width = boardWidth === null ? preferredWidth : `min(${preferredWidth}, ${boardWidth}px)`
 
@@ -50,7 +59,9 @@ export function KanbanConversationPane({
       ref={paneRef}
       data-pane-phase={phase}
       className={`relative flex shrink-0 overflow-hidden border-l border-border/60 bg-chat shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] ${animation}`}
-      style={{ width, maxWidth: '100%' }}
+      // While lifted over the board its surface is drawn by the animation
+      // classes (index.css), over the frame's.
+      style={{ width, maxWidth: '100%', '--pane-bg': 'var(--me-bg-chat)' } as CSSProperties}
     >
       {phase !== 'exiting' && (
         <>
