@@ -82,9 +82,14 @@ describe('usePaneSlideIn', () => {
 
     view.rerender(<Probe phase="open" />)
     expect(lifted(view)).toBe('true')
+    expect(slides[0].cancelled).toBe(false)
 
     await act(async () => slides[0].finish())
     expect(lifted(view)).toBe('false')
+    // Held in place until the pane closes; then it would outrank the close animation's CSS.
+    expect(slides[0].cancelled).toBe(false)
+    view.rerender(<Probe phase="exiting" />)
+    expect(slides[0].cancelled).toBe(true)
   })
 
   it('still slides when the first frames come after the entering phase is over', async () => {

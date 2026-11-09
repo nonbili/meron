@@ -2,8 +2,6 @@ import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEve
 import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 
-/** Matches the pane-open/pane-close keyframes in index.css. */
-export const PANE_ANIMATION_MS = 200
 /**
  * The board's conversation pane opens card after card, so it slides faster
  * than the side panels. Matches the paneSlideOut keyframes in index.css.
@@ -56,6 +54,7 @@ export function KanbanConversationPane({
     <div
       ref={paneRef}
       data-pane-phase={phase}
+      data-pane-lifted={lifted || undefined}
       className={`relative flex shrink-0 overflow-hidden border-l border-border/60 bg-chat shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] ${animation}`}
       style={{ width, maxWidth: '100%' }}
     >

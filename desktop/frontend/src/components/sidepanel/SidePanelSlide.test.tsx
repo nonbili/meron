@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
-import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
+import { PANE_ANIMATION_MS } from '../../lib/usePresence'
 import { SidePanelSlide } from './SidePanelSlide'
 
 const slide = (open: boolean) => (

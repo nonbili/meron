@@ -51,9 +51,16 @@ export function usePaneSlideIn(ref: RefObject<HTMLElement | null>, phase: Presen
     })
   }, [entering, ms, ref])
 
-  // Closing (or unmounting) stops a slide that is pending or running; the close
-  // animation takes over from wherever the pane is.
-  useEffect(() => {
+  const lifted = !closing && (entering || sliding)
+
+  // Closing drops a slide that is pending, running or finished. A finished slide
+  // is kept until then on purpose: holding `transform: none` (fill: forwards)
+  // keeps the pane on its own layer, as it was while sliding. Dropping it when
+  // the pane lands would let WebKitGTK paint the board's scrolling list over
+  // the pane's edge shadow, which then flickers off in the slide's last frame.
+  // But a script animation outranks the close animation's CSS, so it goes in a
+  // layout effect, before the frame that starts the close is painted.
+  useLayoutEffect(() => {
     if (!closing) return
     stop(pending.current)
     setSliding(false)
@@ -63,7 +70,7 @@ export function usePaneSlideIn(ref: RefObject<HTMLElement | null>, phase: Presen
     return () => stop(state)
   }, [])
 
-  return !closing && (entering || sliding)
+  return lifted
 }
 
 function stop(state: { frame: number; slide: Animation | null }) {

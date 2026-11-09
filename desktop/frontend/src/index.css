@@ -1086,7 +1086,9 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
    Closing: a CSS animation; the pane is already painted.
 
    A theme's surfaces can be translucent, so the lifted pane gets the frame's
-   surface under its own, as in place. Duration: KANBAN_PANE_ANIMATION_MS. */
+   surface under its own, as in place. Duration: KANBAN_PANE_ANIMATION_MS.
+   Reduced motion needs no rule here: usePresence skips the entering and
+   exiting phases then, so neither class is ever applied. */
 @keyframes paneSlideOut {
   to {
     transform: translateX(100%);
@@ -1115,13 +1117,6 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 @media (prefers-reduced-motion: reduce) {
   .animate-pane-open,
   .animate-pane-close {
-    animation: none;
-  }
-
-  .animate-pane-slide-in,
-  .animate-pane-slide-out {
-    position: static;
-    transform: none;
     animation: none;
   }
 }
