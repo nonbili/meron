@@ -19,7 +19,7 @@ export function ReaderViewMode({
           onClick={() => onChange(value)}
           aria-pressed={mode === value}
           className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[0.6875rem] font-semibold cursor-pointer ${
-            mode === value ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:text-primary'
+            mode === value ? 'bg-chats text-accent shadow-sm dark:shadow-black/10' : 'text-secondary hover:text-primary'
           }`}
           title={t(value === 'html' ? 'chat.htmlView' : 'chat.plainView')}
         >

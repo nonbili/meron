@@ -33,7 +33,7 @@ export function AccountProviderGrid({
               onClick={() => setMode(p.mode)}
               className={`group flex min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-center transition-all cursor-pointer max-[640px]:justify-start max-[640px]:text-left ${
                 active
-                  ? 'bg-chats text-primary shadow-sm ring-1 ring-border/80'
+                  ? 'bg-chats text-primary shadow-sm ring-1 ring-border/80 dark:shadow-black/10'
                   : 'text-secondary hover:bg-chats/60 hover:text-primary'
               }`}
             >

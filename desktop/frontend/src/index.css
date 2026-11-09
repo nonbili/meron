@@ -177,7 +177,9 @@
    on dark ones. Dark mode gets the same shapes at about four times the alpha.
    An explicit shadow colour (shadow-accent/15, dark:shadow-black/45, the tab
    fade) still wins through --tw-shadow-color. Unlayered, so it beats the
-   utilities layer. */
+   utilities layer. A segmented control's selected pill keeps main's faint
+   dark:shadow-black/10: in its 2px track a dark drop shadow reads as part of the
+   pill and fills the gap below it. */
 .dark .shadow-xs {
   --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.2));
 }
