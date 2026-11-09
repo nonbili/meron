@@ -160,13 +160,12 @@
   --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.35);
   --me-float-shadow:
     0 6px 20px -4px rgba(0, 0, 0, 0.45), 0 1px 4px -2px rgba(0, 0, 0, 0.3), 0 -2px 8px -4px rgba(0, 0, 0, 0.3);
-  /* Light's frame shadow, darker: on the near-black frame it is subtle, so the
-     hairline stays as well. */
+  /* Light's frame shadow, darker, and like light no hairline: the shadow marks the edge. */
   --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   /* Black can only darken a near-black surface by a few levels, so dark shadows
      need several times the light alpha to show as much (as --me-float-shadow). */
   --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.5);
-  --me-frame-border-width: 1px;
+  --me-frame-border-width: 0px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
 
   color-scheme: dark;
@@ -567,9 +566,8 @@ textarea,
   overflow: hidden;
   margin: 0 4px 4px 0;
   background: var(--me-bg-app);
-  /* Light themes lift the surface with a shadow and no border, so the panels
-     inside meet the shadow directly; dark ones add the hairline, as a dark shadow
-     shows only faintly on the darker frame. The light shadow is wide, faint and centred,
+  /* The surface is lifted with a shadow and no border, so the panels inside
+     meet the shadow directly; dark themes use a darker one. The light shadow is wide, faint and centred,
      like Slack's on macOS. */
   border: var(--me-frame-border-width) solid color-mix(in srgb, var(--me-border) 70%, transparent);
   border-radius: 12px;
