@@ -160,7 +160,9 @@
   --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.35);
   --me-float-shadow:
     0 6px 20px -4px rgba(0, 0, 0, 0.45), 0 1px 4px -2px rgba(0, 0, 0, 0.3), 0 -2px 8px -4px rgba(0, 0, 0, 0.3);
-  --me-frame-shadow: none;
+  /* Light's frame shadow, darker: on the near-black frame it is subtle, so the
+     hairline stays as well. */
+  --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   /* Black can only darken a near-black surface by a few levels, so dark shadows
      need several times the light alpha to show as much (as --me-float-shadow). */
   --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.5);
@@ -397,6 +399,52 @@ textarea,
     0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
 }
 
+/* The controls' slate shadows at about four times the alpha in dark mode, as
+   the shadow scale above. A checked box keeps its accent glow. */
+.dark .app-checkbox:not(:checked, :indeterminate) {
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.12),
+    0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.dark .app-checkbox:not(:checked, :indeterminate):focus-visible {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--me-accent) 18%, transparent),
+    inset 0 1px 1px rgba(0, 0, 0, 0.12);
+}
+
+.dark .app-range::-webkit-slider-runnable-track {
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dark .app-range::-moz-range-track {
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dark .app-range::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
+}
+
+.dark .app-range::-moz-range-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
+}
+
+.dark .app-range:hover::-webkit-slider-thumb {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.7),
+    0 0 0 4px color-mix(in srgb, var(--me-accent) 14%, transparent);
+}
+
+.dark .app-range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--me-accent) 20%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
 .selectable-text {
   -webkit-user-select: text;
   user-select: text;
@@ -518,8 +566,8 @@ textarea,
   margin: 0 4px 4px 0;
   background: var(--me-bg-app);
   /* Light themes lift the surface with a shadow and no border, so the panels
-     inside meet the shadow directly; dark ones keep the hairline, as a dark shadow
-     hardly shows on the darker frame. The light shadow is wide, faint and centred,
+     inside meet the shadow directly; dark ones add the hairline, as a dark shadow
+     shows only faintly on the darker frame. The light shadow is wide, faint and centred,
      like Slack's on macOS. */
   border: var(--me-frame-border-width) solid color-mix(in srgb, var(--me-border) 70%, transparent);
   border-radius: 12px;

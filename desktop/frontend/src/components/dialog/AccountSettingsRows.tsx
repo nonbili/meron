@@ -43,7 +43,7 @@ export function SettingsGroup({
     <section>
       <h3 className="mb-2 px-1 text-[0.75rem] font-semibold text-secondary">{title}</h3>
       <div
-        className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/10 ${
+        className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/30 ${
           overflowVisible ? '' : 'overflow-hidden'
         }`}
       >
