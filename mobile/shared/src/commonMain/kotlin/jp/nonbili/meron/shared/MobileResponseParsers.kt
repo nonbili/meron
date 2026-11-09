@@ -791,6 +791,7 @@ fun parseReplacedQueries(responseJson: String): List<String> = responseJson.topL
 /** The rules a `mail.rules` or `mail.setRules` answer lists. */
 fun parseRulesResponse(responseJson: String): List<Rule> =
     responseJson
+        .ruleResponseBody()
         .jsonObjectEntries()
         .firstOrNull { it.first == "rules" }
         ?.second
@@ -816,7 +817,7 @@ fun parseRulesResponse(responseJson: String): List<Rule> =
         }.orEmpty()
 
 fun parseRuleStatusResponse(responseJson: String): RuleStatus {
-    val entries = responseJson.jsonObjectEntries()
+    val entries = responseJson.ruleResponseBody().jsonObjectEntries()
 
     fun property(name: String) = entries.firstOrNull { it.first == name }?.second
     return RuleStatus(
@@ -842,6 +843,14 @@ fun parseRuleStatusResponse(responseJson: String): RuleStatus {
                 .orEmpty(),
     )
 }
+
+/** JNI returns a protocol envelope; tests and other callers may pass the result directly. */
+private fun String.ruleResponseBody(): String =
+    jsonObjectEntries()
+        .firstOrNull { it.first == "result" }
+        ?.second
+        ?.takeIf { it.startsWith("{") }
+        ?: this
 
 /** The `count` answering `mail.ruleMatches` and `mail.runRule`. */
 fun parseRuleCountResponse(responseJson: String): Int = responseJson.findJsonLongProperty("count")?.toInt() ?: 0

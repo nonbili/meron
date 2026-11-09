@@ -850,6 +850,16 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parsesRulesAndStatusInsideNativeProtocolEnvelope() {
+        val rule = Rule(id = "saved", query = "from:sender@example.com", star = true)
+        val result = """{"rules":[${rule.toJson()}]}"""
+        assertEquals(listOf(rule), parseRulesResponse("""{"id":1,"result":$result}"""))
+        assertEquals(emptyList(), parseRulesResponse("""{"id":1,"result":{"rules":[]}}"""))
+        val status = """{"log":[{"at":5,"rule_id":"saved","subject":"Invoice"}],"running":{"saved":40}}"""
+        assertEquals(parseRuleStatusResponse(status), parseRuleStatusResponse("""{"id":1,"result":$status}"""))
+    }
+
+    @Test
     fun ruleTimingDefaultsAndRoundTrips() {
         val old = parseRulesResponse("""{"rules":[{"id":"old","query":"","star":true}]}""").single()
         assertEquals("arrival", old.trigger)
