@@ -34,6 +34,20 @@ const account = (id: string, signatureHtml: string): Account => ({
   signature: { mode: 'custom', html: signatureHtml },
 })
 
+function mockPlatform(platform: string) {
+  const descriptors = ['platform', 'userAgent'].map(
+    (key) => [key, Object.getOwnPropertyDescriptor(navigator, key)] as const,
+  )
+  Object.defineProperty(navigator, 'platform', { configurable: true, value: platform })
+  Object.defineProperty(navigator, 'userAgent', { configurable: true, value: platform })
+  return () => {
+    for (const [key, descriptor] of descriptors) {
+      if (descriptor) Object.defineProperty(navigator, key, descriptor)
+      else delete (navigator as any)[key]
+    }
+  }
+}
+
 type Call = { command: string; payload: any }
 
 describe('Composer', () => {
@@ -113,6 +127,129 @@ describe('Composer', () => {
   const draftOf = (tabId: string) => compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose
   const bodyHtml = () => document.querySelector('.tiptap-body')?.innerHTML ?? ''
   const savedDraftIds = () => calls.filter((c) => c.command === 'mail.saveDraft').map((c) => c.payload.draft_id)
+
+  for (const rich of [false, true]) {
+    it(`keeps the Linux ${rich ? 'rich' : 'plain'} paste-event fallback for image markup without files`, async () => {
+      const restorePlatform = mockPlatform('Linux x86_64')
+      const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([
+        {
+          types: ['image/png'],
+          presentationStyle: 'unspecified',
+          getType: async () => new Blob(['image'], { type: 'image/png' }),
+        },
+      ])
+      const bridge = spyOn((window as any).go.main.App, 'Invoke').mockImplementation(async (command: string) => {
+        if (command === 'composer.writeMediaFile') return '/media/pasted.png'
+        return {}
+      })
+      try {
+        const id = openComposeTab({ to: 'friend@example.com', rich })!
+        const view = render(<Composer tabId={id} />)
+        const body = view.container.querySelector(rich ? '.tiptap-body' : 'textarea')!
+        const pasted = fireEvent.paste(body, {
+          clipboardData: {
+            files: [],
+            items: [],
+            types: ['text/html'],
+            getData: (type: string) => (type === 'text/html' ? '<img src="file:///clipboard.png">' : ''),
+          },
+        })
+        expect(pasted).toBe(false)
+        expect(read).toHaveBeenCalledTimes(1)
+        await waitFor(() => expect(draftOf(id)?.attachments).toHaveLength(1))
+        expect(!!draftOf(id)?.attachments[0].inlineId).toBe(rich)
+        if (rich) await waitFor(() => expect(bodyHtml()).toContain('/media/pasted.png'))
+      } finally {
+        bridge.mockRestore()
+        read.mockRestore()
+        restorePlatform()
+      }
+    })
+
+    it(`keeps macOS ${rich ? 'rich' : 'plain'} text paste out of the asynchronous image fallback`, async () => {
+      const restorePlatform = mockPlatform('MacIntel')
+      const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([])
+      try {
+        const id = openComposeTab({ to: 'friend@example.com', rich })!
+        const view = render(<Composer tabId={id} />)
+        const body = view.container.querySelector(rich ? '.tiptap-body' : 'textarea')!
+        fireEvent.keyDown(body, { key: 'v', metaKey: true })
+        const html = '<p>Copied email text<img src="https://example.com/logo.png"></p>'
+        const pasted = fireEvent.paste(body, {
+          clipboardData: {
+            files: [],
+            items: [],
+            types: ['text/plain', 'text/html'],
+            getData: (type: string) => (type === 'text/html' ? html : type === 'text/plain' ? 'Copied email text' : ''),
+          },
+        })
+        await act(async () => {})
+
+        expect(read).not.toHaveBeenCalled()
+        expect(calls.some((call) => call.command === 'composer.readClipboardImage')).toBe(false)
+        expect(draftOf(id)?.attachments).toEqual([])
+        if (rich) expect(bodyHtml()).toContain('Copied email text')
+        else expect(pasted).toBe(true) // The browser handles the textarea's default paste.
+      } finally {
+        read.mockRestore()
+        restorePlatform()
+      }
+    })
+
+    it(`pastes macOS image files ${rich ? 'inline' : 'as attachments'} without reading the clipboard`, async () => {
+      const restorePlatform = mockPlatform('MacIntel')
+      const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([])
+      const bridge = spyOn((window as any).go.main.App, 'Invoke').mockImplementation(async (command: string) => {
+        if (command === 'composer.writeMediaFile') return '/media/pasted.png'
+        return {}
+      })
+      try {
+        const id = openComposeTab({ to: 'friend@example.com', rich })!
+        const view = render(<Composer tabId={id} />)
+        const body = view.container.querySelector(rich ? '.tiptap-body' : 'textarea')!
+        fireEvent.keyDown(body, { key: 'v', metaKey: true })
+        fireEvent.paste(body, {
+          clipboardData: {
+            files: [new File(['image'], 'pasted.png', { type: 'image/png' })],
+            items: [],
+            types: ['Files'],
+            getData: () => '',
+          },
+        })
+        await waitFor(() => expect(draftOf(id)?.attachments).toHaveLength(1))
+        expect(draftOf(id)?.attachments[0].filename).toBe('pasted.png')
+        expect(!!draftOf(id)?.attachments[0].inlineId).toBe(rich)
+        if (rich) await waitFor(() => expect(bodyHtml()).toContain('/media/pasted.png'))
+        expect(read).not.toHaveBeenCalled()
+      } finally {
+        bridge.mockRestore()
+        read.mockRestore()
+        restorePlatform()
+      }
+    })
+  }
+
+  it('keeps the Linux image paste fallback when the paste event has no files', async () => {
+    const restorePlatform = mockPlatform('Linux x86_64')
+    const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([
+      {
+        types: ['image/png'],
+        presentationStyle: 'unspecified',
+        getType: async () => new Blob(['image'], { type: 'image/png' }),
+      },
+    ])
+    try {
+      const id = openComposeTab({ to: 'friend@example.com', rich: false })!
+      const view = render(<Composer tabId={id} />)
+      fireEvent.keyDown(view.container.querySelector('textarea')!, { key: 'v', ctrlKey: true })
+      await waitFor(() => expect(draftOf(id)?.attachments).toHaveLength(1))
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(draftOf(id)?.attachments[0].mime).toBe('image/png')
+    } finally {
+      read.mockRestore()
+      restorePlatform()
+    }
+  })
 
   it('rearms the pending autosave after a cancelled window move without requiring another edit', async () => {
     const originalTimeout = globalThis.setTimeout

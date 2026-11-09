@@ -30,6 +30,7 @@ import {
 import { settings$, isSendKey } from '../../states/settings'
 import type { ComposerAttachment } from '../../types'
 import { pickFiles } from '../../lib/nativeFilePicker'
+import { needsClipboardImageFallback } from '../composer/composerHelpers'
 import {
   extractClipboardImages,
   logComposerPaste,
@@ -262,7 +263,7 @@ export function useQuickReply() {
   }
 
   // WebKitGTK frequently leaves the synchronous paste event without image
-  // data. Fall back to the async Clipboard API on Ctrl/Cmd+V.
+  // data. Fall back to the async Clipboard API on Ctrl/Cmd+V only on Linux.
   const handleComposerKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (isSendKey(e, sendShortcut)) {
       e.preventDefault()
@@ -288,7 +289,7 @@ export function useQuickReply() {
         target: e.currentTarget.tagName,
       })
     }
-    if (!isPaste) return
+    if (!isPaste || !needsClipboardImageFallback()) return
 
     const pasteStartedAt = Date.now()
     void readClipboardImages()

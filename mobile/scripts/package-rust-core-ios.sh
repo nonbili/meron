@@ -38,7 +38,13 @@ export "CC_${TARGET//-/_}=$IOS_CLANG"
 export "CFLAGS_${TARGET//-/_}=-isysroot $IOS_SDKROOT $MIN_VER_FLAG"
 export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=$RUST_LINK_MIN_VER_FLAG"
 
+CARGO=(cargo)
 if command -v rustup >/dev/null 2>&1; then
+  # Keep dependency rust-toolchain files from selecting a different compiler
+  # when Cargo invokes rustc from a dependency's source directory.
+  RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | awk '{print $1}')"
+  export RUSTUP_TOOLCHAIN
+  CARGO=(rustup run "$RUSTUP_TOOLCHAIN" cargo)
   rustup target add "$TARGET" >/dev/null
 fi
 
@@ -51,7 +57,7 @@ elif [[ "$PROFILE" != "debug" ]]; then
 fi
 
 echo "Building meron-core ($PROFILE) for $TARGET"
-cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"
+"${CARGO[@]}" build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"
 
 LIB_PATH="$CORE_DIR/target/$TARGET/$PROFILE/libmeron_core.a"
 if [[ ! -f "$LIB_PATH" ]]; then

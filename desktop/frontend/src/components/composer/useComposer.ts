@@ -45,6 +45,7 @@ import {
   createInlineId,
   extractClipboardImages,
   inlineRichStyles,
+  needsClipboardImageFallback,
   prepareInlineImages,
   readClipboardImages,
   readNativeClipboardImage,
@@ -226,7 +227,7 @@ export function useComposer(tabId: string) {
       handlePaste: (_view, event) => {
         const imageFiles = extractClipboardImages(event.clipboardData)
         if (imageFiles.length === 0) {
-          if (!clipboardHasImageMarkup(event.clipboardData)) return false
+          if (!needsClipboardImageFallback() || !clipboardHasImageMarkup(event.clipboardData)) return false
           event.preventDefault()
           pasteImageFromClipboard(Date.now(), { inline: true })
           return true
@@ -653,18 +654,19 @@ export function useComposer(tabId: string) {
       e.preventDefault()
       lastImagePasteAtRef.current = Date.now()
       addFiles(imageFiles)
-    } else if (clipboardHasImageMarkup(e.clipboardData)) {
+    } else if (needsClipboardImageFallback() && clipboardHasImageMarkup(e.clipboardData)) {
       e.preventDefault()
       pasteImageFromClipboard(Date.now(), { inline: false })
     }
   }
 
   // WebKitGTK often doesn't expose pasted images via the synchronous paste
-  // event's clipboardData. As a fallback, intercept Ctrl/Cmd+V and read the
-  // clipboard asynchronously.
-  const handleKeyDown = async (e: React.KeyboardEvent) => {
+  // event's clipboardData. Only Linux needs the asynchronous fallback: reading
+  // the clipboard on macOS triggers WebKit's Paste permission prompt and can
+  // swallow normal text/HTML pastes that happen to contain an image.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')
-    if (!isPaste) return
+    if (!isPaste || !needsClipboardImageFallback()) return
 
     pasteImageFromClipboard(Date.now(), { inline: !!draft?.rich })
   }

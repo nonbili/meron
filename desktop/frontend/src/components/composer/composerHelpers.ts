@@ -1,5 +1,12 @@
 import type { ComposerAttachment } from '../../types'
 import { invoke } from '../../lib/bridge'
+import { isLinuxPlatform } from '../../lib/platform'
+
+// WebKitGTK can omit image files from paste events. Other platforms use those
+// events directly so script clipboard reads don't trigger a Paste prompt.
+export function needsClipboardImageFallback(): boolean {
+  return isLinuxPlatform(navigator.userAgent, navigator.platform)
+}
 
 export function textToHtml(text: string): string {
   if (!text.trim()) return ''
