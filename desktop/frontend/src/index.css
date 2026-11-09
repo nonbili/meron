@@ -44,6 +44,7 @@
   --shadow-bubble-out: var(--me-bubble-shadow-out);
   --shadow-float: var(--me-float-shadow);
   --shadow-card: var(--me-card-shadow);
+  --shadow-pane: var(--me-pane-shadow);
 
   /* Inter has no CJK glyphs, so CJK codepoints fall through to --font-cjk. That
      var is switched per active locale via :lang() below — naming the regional
@@ -121,6 +122,8 @@
     0 1px 3px -1px color-mix(in srgb, var(--me-text-primary) 6%, transparent),
     0 -2px 8px -4px color-mix(in srgb, var(--me-text-primary) 6%, transparent);
   --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.11);
+  /* The board's conversation pane, cast left onto the columns it slides over. */
+  --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.08);
   --me-frame-border-width: 0px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 50%, transparent);
 
@@ -154,14 +157,59 @@
   --me-composer-border: #29352f;
   --me-bubble-shadow-in: 0 4px 12px -3px rgba(0, 0, 0, 0.3), 0 1px 4px -2px rgba(0, 0, 0, 0.2);
   --me-bubble-shadow-out: 0 4px 12px -3px rgba(0, 0, 0, 0.4), 0 1px 4px -2px rgba(0, 0, 0, 0.3);
-  --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.35);
   --me-float-shadow:
     0 6px 20px -4px rgba(0, 0, 0, 0.45), 0 1px 4px -2px rgba(0, 0, 0, 0.3), 0 -2px 8px -4px rgba(0, 0, 0, 0.3);
   --me-frame-shadow: none;
+  /* Black can only darken a near-black surface by a few levels, so dark shadows
+     need several times the light alpha to show as much (as --me-float-shadow). */
+  --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.5);
   --me-frame-border-width: 1px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
 
   color-scheme: dark;
+}
+
+/* Tailwind's shadow scale (menus, popovers, dialogs, cards, buttons) is one
+   value for both modes, 5-25% black: it shows on light surfaces and disappears
+   on dark ones. Dark mode gets the same shapes at about four times the alpha.
+   An explicit shadow colour (shadow-accent/15, dark:shadow-black/45, the tab
+   fade) still wins through --tw-shadow-color. Unlayered, so it beats the
+   utilities layer. */
+.dark .shadow-xs {
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.2));
+}
+.dark .shadow-sm,
+.dark .shadow {
+  --tw-shadow:
+    0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-md,
+.dark .hover\:shadow-md:hover {
+  --tw-shadow:
+    0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-lg,
+.dark .hover\:shadow-lg:hover {
+  --tw-shadow:
+    0 10px 15px -3px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 4px 6px -4px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-xl {
+  --tw-shadow:
+    0 20px 25px -5px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 8px 10px -6px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-2xl {
+  --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, rgb(0 0 0 / 0.6));
+}
+.dark .shadow-inner {
+  --tw-shadow: inset 0 2px 4px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.2));
+}
+/* These rules outrank variant utilities, so a variant that removes the shadow
+   needs its own dark rule (the details panel, docked on wide windows). */
+@media (min-width: 1100px) {
+  .dark .min-\[1100px\]\:shadow-none {
+    --tw-shadow: 0 0 #0000;
+  }
 }
 
 html,
