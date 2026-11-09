@@ -1,0 +1,8 @@
+- Support OpenPGP end-to-end encrypted email with Autocrypt and key management
+- Support opening threads and moving tabs into separate windows
+- Open EML files in standalone reader windows
+- Open standalone composer from the system tray menu
+- Keep background conversation tabs alive to preserve state when switching tabs
+- Add link insertion dialog in composer and unify draft menus
+- Organize thread actions and add shortcut to mark all messages in a board column as read
+- Support PolicyKit authorization for Linux updates
