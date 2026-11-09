@@ -37,7 +37,6 @@ import {
 } from './useConversationScroll'
 import { COMPOSER_OVERLAP_VAR } from './conversationScroll'
 import { ArrowRight } from 'lucide-react'
-import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 import { wallpaperCss } from '../../lib/wallpapers'
@@ -222,8 +221,6 @@ function ConversationPane({
   // Slides open and shut beside the conversation on a wide window (index.css,
   // .details-slide), like the board's conversation pane.
   const detailsPhase = usePresence(detailsOpen, PANE_ANIMATION_MS)
-  const detailsRef = useRef<HTMLDivElement>(null)
-  const detailsLifted = usePaneSlideIn(detailsRef, detailsPhase, PANE_ANIMATION_MS)
 
   const activeAccount = activeThread
     ? accounts.find((account) => account.id === activeThread.account_id)
@@ -460,10 +457,13 @@ function ConversationPane({
 
         {activeThread && detailsPhase !== 'closed' && (
           <div
-            ref={detailsRef}
             data-pane-phase={detailsPhase}
             className={`details-slide${
-              detailsLifted ? ' animate-pane-open' : detailsPhase === 'exiting' ? ' animate-pane-close' : ''
+              detailsPhase === 'entering'
+                ? ' animate-pane-open'
+                : detailsPhase === 'exiting'
+                  ? ' animate-pane-close'
+                  : ''
             }`}
           >
             <ConversationDetailsPanel

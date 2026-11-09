@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { PresencePhase } from './usePresence'
 
-// Matches the pane keyframes in index.css.
+// Matches the paneSlideOut keyframes in index.css.
 const PANE_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
 /**
@@ -11,9 +11,8 @@ const PANE_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
  * it out and painting it takes several frames, and a CSS animation's clock runs
  * meanwhile, so the first frame on screen showed the pane nearly in place: it
  * popped open. Here the pane waits just off the edge (index.css,
- * `animate-pane-open`; one pixel showing, so its first tiles get
- * painted) for two frames,
- * and only then starts its slide.
+ * `animate-pane-slide-in`; one pixel showing, so its first tiles get painted)
+ * for two frames, and only then starts its slide.
  *
  * Returns whether the pane is still lifted over its neighbour: from `entering`
  * until the slide has finished, which can run past the presence phase. The

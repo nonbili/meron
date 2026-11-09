@@ -1,22 +1,17 @@
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from 'react'
+import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 
 /** Matches the pane-open/pane-close keyframes in index.css. */
-export const PANE_ANIMATION_MS = 150
-// The board's conversation pane is opened and closed card after card, so it
-// slides faster than the side panels.
+export const PANE_ANIMATION_MS = 200
+/**
+ * The board's conversation pane opens card after card, so it slides faster
+ * than the side panels. Matches the paneSlideOut keyframes in index.css.
+ */
 export const KANBAN_PANE_ANIMATION_MS = 100
 
 // The board's conversation pane. It slides in from the right edge over the
-// board, which narrows once when it is in place (index.css, animate-pane-open):
+// board, which narrows once when it is in place (index.css, animate-pane-slide-in):
 // the board is not reflowed on every frame. The preferred width is in `vw`,
 // capped at the board row's measured width so Tasks and narrow windows cannot
 // push the conversation outside the board. Measuring avoids a CSS size container,
@@ -53,7 +48,7 @@ export function KanbanConversationPane({
   }, [mounted])
   if (phase === 'closed') return null
 
-  const animation = lifted ? 'animate-pane-open' : phase === 'exiting' ? 'animate-pane-close' : ''
+  const animation = lifted ? 'animate-pane-slide-in' : phase === 'exiting' ? 'animate-pane-slide-out' : ''
   const preferredWidth = `max(320px, ${widthPercent}vw)`
   const width = boardWidth === null ? preferredWidth : `min(${preferredWidth}, ${boardWidth}px)`
 
@@ -62,17 +57,7 @@ export function KanbanConversationPane({
       ref={paneRef}
       data-pane-phase={phase}
       className={`relative flex shrink-0 overflow-hidden border-l border-border/60 bg-chat shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] ${animation}`}
-      // While lifted over the board its surface is drawn by the animation
-      // classes (index.css), over the frame's.
-      // The close keyframes default to the side panels' duration.
-      style={
-        {
-          width,
-          maxWidth: '100%',
-          '--pane-bg': 'var(--me-bg-chat)',
-          animationDuration: `${KANBAN_PANE_ANIMATION_MS}ms`,
-        } as CSSProperties
-      }
+      style={{ width, maxWidth: '100%' }}
     >
       {phase !== 'exiting' && (
         <>

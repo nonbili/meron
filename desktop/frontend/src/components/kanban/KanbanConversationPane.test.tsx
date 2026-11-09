@@ -35,14 +35,14 @@ describe('KanbanConversationPane', () => {
 
     view.rerender(pane(true))
     expect(root(view)?.dataset.panePhase).toBe('entering')
-    expect(root(view)?.className).toContain('animate-pane-open')
+    expect(root(view)?.className).toContain('animate-pane-slide-in')
     expect(view.queryByText('conversation')).not.toBeNull()
 
     act(() => {
       jest.advanceTimersByTime(KANBAN_PANE_ANIMATION_MS)
     })
     expect(root(view)?.dataset.panePhase).toBe('open')
-    expect(root(view)?.className).not.toContain('animate-pane')
+    expect(root(view)?.className).not.toContain('animate-pane-slide')
   })
 
   it('collapses as an empty pane, then unmounts', () => {
@@ -61,7 +61,7 @@ describe('KanbanConversationPane', () => {
     // cleared conversation's empty state never paints.
     expect(renderedWhileClosed).toBe(false)
     expect(root(view)?.dataset.panePhase).toBe('exiting')
-    expect(root(view)?.className).toContain('animate-pane-close')
+    expect(root(view)?.className).toContain('animate-pane-slide-out')
     // The closed conversation has already been cleared from state; the pane
     // collapses without it rather than sliding out an empty-state message.
     expect(view.queryByText('conversation')).toBeNull()

@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from 'react'
 import { usePresence } from '../../lib/usePresence'
+import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
 
 /**
  * Fixed, like the panels it is modelled on. The thread list and conversation
@@ -8,13 +9,9 @@ import { usePresence } from '../../lib/usePresence'
  */
 export const SIDE_PANEL_WIDTH = 340
 
-// The slot keeps the original width animation (index.css, animate-slot-*): it
-// opens and closes rarely, and its neighbour making room gradually reads better
-// here than the board pane's slide over the content.
-export const SIDE_PANEL_ANIMATION_MS = 200
-
-// The right-hand slot (Tasks, contacts or the calendar panel) slides in and
-// out: the frame grows from and narrows to zero width while the panel inside keeps its full width, so it is
+// The right-hand slot (Tasks or the calendar panel) slides in and out like the
+// board's conversation pane (KanbanConversationPane): the frame grows from and
+// narrows to zero width while the panel inside keeps its full width, so it is
 // revealed rather than reflowed every frame. The panel stays on screen while
 // it slides out.
 // With `animate` false, a change shows or hides the slot at once.
@@ -27,14 +24,14 @@ export function SidePanelSlide({
   animate?: boolean
   children: ReactNode
 }) {
-  const phase = usePresence(open, SIDE_PANEL_ANIMATION_MS, animate)
+  const phase = usePresence(open, PANE_ANIMATION_MS, animate)
   // Closing the slot (or deleting the last task list) takes its content away
   // in the same render; the last panel shown slides out instead of an empty frame.
   const lastChildren = useRef(children)
   if (children != null) lastChildren.current = children
   if (phase === 'closed') return null
 
-  const animation = phase === 'entering' ? ' animate-slot-open' : phase === 'exiting' ? ' animate-slot-close' : ''
+  const animation = phase === 'entering' ? ' animate-pane-open' : phase === 'exiting' ? ' animate-pane-close' : ''
 
   return (
     <div
