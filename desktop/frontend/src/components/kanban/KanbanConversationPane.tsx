@@ -1,17 +1,22 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { usePaneSlideIn } from '../../lib/usePaneSlideIn'
 import { usePresence } from '../../lib/usePresence'
 
-/** Matches the pane-open/pane-close keyframes in index.css. */
-export const PANE_ANIMATION_MS = 200
+/**
+ * The board's conversation pane opens card after card, so it slides faster
+ * than the side panels. Matches the paneSlideOut keyframes in index.css.
+ */
+export const KANBAN_PANE_ANIMATION_MS = 100
 
-// The board's conversation pane. It slides open by growing from zero width
-// while its content keeps the final width. The preferred width is in `vw`,
+// The board's conversation pane. It slides in from the right edge over the
+// board, which narrows once when it is in place (index.css, animate-pane-slide-in):
+// the board is not reflowed on every frame. The preferred width is in `vw`,
 // capped at the board row's measured width so Tasks and narrow windows cannot
 // push the conversation outside the board. Measuring avoids a CSS size container,
 // which would trap fixed-position menus and dialogs. The conversation — HTML
-// frames included — is laid out once and revealed instead of reflowed every frame.
+// frames included — is laid out once at its final width and slides in whole.
 // Closing clears the conversation from state before the pane goes, so the
-// pane collapses as an empty panel instead of sliding out an empty-state view.
+// pane slides out as an empty panel instead of an empty-state view.
 export function KanbanConversationPane({
   open,
   widthPercent,
@@ -25,8 +30,9 @@ export function KanbanConversationPane({
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void
   children: ReactNode
 }) {
-  const phase = usePresence(open, PANE_ANIMATION_MS)
+  const phase = usePresence(open, KANBAN_PANE_ANIMATION_MS)
   const paneRef = useRef<HTMLDivElement>(null)
+  const lifted = usePaneSlideIn(paneRef, phase, KANBAN_PANE_ANIMATION_MS)
   const [boardWidth, setBoardWidth] = useState<number | null>(null)
   const mounted = phase !== 'closed'
   useLayoutEffect(() => {
@@ -40,7 +46,7 @@ export function KanbanConversationPane({
   }, [mounted])
   if (phase === 'closed') return null
 
-  const animation = phase === 'entering' ? 'animate-pane-open' : phase === 'exiting' ? 'animate-pane-close' : ''
+  const animation = lifted ? 'animate-pane-slide-in' : phase === 'exiting' ? 'animate-pane-slide-out' : ''
   const preferredWidth = `max(320px, ${widthPercent}vw)`
   const width = boardWidth === null ? preferredWidth : `min(${preferredWidth}, ${boardWidth}px)`
 
@@ -48,6 +54,7 @@ export function KanbanConversationPane({
     <div
       ref={paneRef}
       data-pane-phase={phase}
+      data-pane-lifted={lifted || undefined}
       className={`relative flex shrink-0 overflow-hidden border-l border-border/60 bg-chat shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)] ${animation}`}
       style={{ width, maxWidth: '100%' }}
     >

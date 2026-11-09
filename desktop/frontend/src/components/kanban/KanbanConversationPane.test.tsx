@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
-import { KanbanConversationPane, PANE_ANIMATION_MS } from './KanbanConversationPane'
+import { KANBAN_PANE_ANIMATION_MS, KanbanConversationPane } from './KanbanConversationPane'
 
 const pane = (open: boolean) => (
   <KanbanConversationPane open={open} widthPercent={40} resizeTitle="Resize" onResizeStart={() => {}}>
@@ -35,14 +35,14 @@ describe('KanbanConversationPane', () => {
 
     view.rerender(pane(true))
     expect(root(view)?.dataset.panePhase).toBe('entering')
-    expect(root(view)?.className).toContain('animate-pane-open')
+    expect(root(view)?.className).toContain('animate-pane-slide-in')
     expect(view.queryByText('conversation')).not.toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(KANBAN_PANE_ANIMATION_MS)
     })
     expect(root(view)?.dataset.panePhase).toBe('open')
-    expect(root(view)?.className).not.toContain('animate-pane')
+    expect(root(view)?.className).not.toContain('animate-pane-slide')
   })
 
   it('collapses as an empty pane, then unmounts', () => {
@@ -61,13 +61,13 @@ describe('KanbanConversationPane', () => {
     // cleared conversation's empty state never paints.
     expect(renderedWhileClosed).toBe(false)
     expect(root(view)?.dataset.panePhase).toBe('exiting')
-    expect(root(view)?.className).toContain('animate-pane-close')
+    expect(root(view)?.className).toContain('animate-pane-slide-out')
     // The closed conversation has already been cleared from state; the pane
     // collapses without it rather than sliding out an empty-state message.
     expect(view.queryByText('conversation')).toBeNull()
 
     act(() => {
-      jest.advanceTimersByTime(PANE_ANIMATION_MS)
+      jest.advanceTimersByTime(KANBAN_PANE_ANIMATION_MS)
     })
     expect(root(view)).toBeNull()
   })

@@ -1046,9 +1046,9 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* The kanban conversation pane, the Tasks panel and (on a wide window) the
-   details panel grow from / collapse to zero width; their content keeps the
-   final width meanwhile (KanbanConversationPane, SidePanelSlide, .details-slide).
+/* The Tasks panel and (on a wide window) the details panel grow from /
+   collapse to zero width; their content keeps the final width meanwhile
+   (SidePanelSlide, .details-slide).
    Each keyframe names one end only, so the other end is the pane's own width.
    Closing only narrows: a fade would show the window's background through the
    panel while it goes. Duration matches PANE_ANIMATION_MS. */
@@ -1070,6 +1070,48 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
 
 .animate-pane-close {
   animation: paneClose 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* The board's conversation pane (KanbanConversationPane) slides in from and
+   out to the right edge of its row instead: it opens card after card, and
+   growing its width re-wraps the whole board on every frame, which drops a
+   slower machine to a few frames per slide. While it slides, the pane is
+   lifted out of the row and over the board, which takes its new width once,
+   at the end of opening and at the start of closing. The row is the
+   containing block and clips the slide (KanbanView).
+
+   Opening: the pane waits just off the edge, one pixel showing so its first
+   tiles get painted, and usePaneSlideIn starts the slide once it has been
+   painted (a CSS animation's clock would run while the new pane is laid out).
+   Closing: a CSS animation; the pane is already painted.
+
+   A theme's surfaces can be translucent, so the lifted pane gets the frame's
+   surface under its own, as in place. Duration: KANBAN_PANE_ANIMATION_MS.
+   Reduced motion needs no rule here: usePresence skips the entering and
+   exiting phases then, so neither class is ever applied. */
+@keyframes paneSlideOut {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-pane-slide-in,
+.animate-pane-slide-out {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Above the board's floating controls. */
+  z-index: 40;
+  background: linear-gradient(var(--me-bg-chat), var(--me-bg-chat)), var(--me-bg-app);
+}
+
+.animate-pane-slide-in {
+  transform: translateX(calc(100% - 1px));
+}
+
+.animate-pane-slide-out {
+  animation: paneSlideOut 0.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

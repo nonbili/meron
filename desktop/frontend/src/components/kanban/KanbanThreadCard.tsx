@@ -14,7 +14,10 @@ import { isRssAccount } from '../../lib/threadActions'
 import type { Message } from '../../types'
 import { ThreadListItem } from '../threads/ThreadListItem'
 import type { ThreadContextMenuController } from '../threads/ThreadContextMenu'
-import { PANE_ANIMATION_MS } from './KanbanConversationPane'
+import { KANBAN_PANE_ANIMATION_MS } from './KanbanConversationPane'
+
+// The longest the selected card is followed while the conversation pane opens.
+const FOLLOW_CAP_MS = 2000
 
 export function KanbanThreadCard({
   boardId,
@@ -76,16 +79,21 @@ export function KanbanThreadCard({
     ? activeTab === thread.id || keyboardSelected
     : thread.thread_id === paneThreadId || keyboardSelected
 
-  // Follow the card for as long as the pane slides open: the pane narrows the
-  // board after the card is selected, so a card that fits now can end up under it.
+  // Follow the card until the pane is in place: the board narrows only when
+  // the pane has slid open (KanbanConversationPane drops data-pane-lifted),
+  // and the slide waits for the pane's first paint (usePaneSlideIn), which a
+  // slow machine can take a while over. A card that fits now can end up under
+  // the pane. Capped, so a pane that never settles cannot pin the scroll.
   useEffect(() => {
     if (!active) return
     const keepInView = () => selectedItemRef.current?.scrollIntoView({ block: 'nearest' })
     keepInView()
-    const until = performance.now() + PANE_ANIMATION_MS
+    const start = performance.now()
+    const settled = (now: number) =>
+      now - start >= KANBAN_PANE_ANIMATION_MS && !document.querySelector('[data-pane-lifted]')
     let frame = requestAnimationFrame(function follow(now) {
       keepInView()
-      if (now < until) frame = requestAnimationFrame(follow)
+      if (!settled(now) && now - start < FOLLOW_CAP_MS) frame = requestAnimationFrame(follow)
     })
     return () => cancelAnimationFrame(frame)
   }, [active])

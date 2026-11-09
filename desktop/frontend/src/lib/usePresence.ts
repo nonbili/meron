@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 
+/**
+ * The side panels (SidePanelSlide) and the details panel grow from and collapse
+ * to zero width in this long. Matches the pane-open/pane-close keyframes in index.css.
+ */
+export const PANE_ANIMATION_MS = 200
+
 export type PresencePhase = 'closed' | 'entering' | 'open' | 'exiting'
 
 function prefersReducedMotion() {

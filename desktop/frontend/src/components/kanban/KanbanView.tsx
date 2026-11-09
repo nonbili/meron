@@ -267,7 +267,10 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
           onCreateFolder={createDialogFolder}
         />
       )}
-      <div className="flex min-h-0 flex-1">
+      {/* The conversation pane slides over the board from this row's right edge
+      (relative), and only within the row (overflow-hidden): with Tasks or the
+      contacts or the calendar open beside the board it must not cover them. */}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col">
           <DndContext
             sensors={sensors}

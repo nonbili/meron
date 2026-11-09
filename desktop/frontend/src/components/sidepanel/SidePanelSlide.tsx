@@ -1,6 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import { usePresence } from '../../lib/usePresence'
-import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
+import { PANE_ANIMATION_MS, usePresence } from '../../lib/usePresence'
 
 /**
  * Fixed, like the panels it is modelled on. The thread list and conversation
@@ -9,11 +8,11 @@ import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'
  */
 export const SIDE_PANEL_WIDTH = 340
 
-// The right-hand slot (Tasks or the calendar panel) slides in and out like the
-// board's conversation pane (KanbanConversationPane): the frame grows from and
-// narrows to zero width while the panel inside keeps its full width, so it is
-// revealed rather than reflowed every frame. The panel stays on screen while
-// it slides out.
+// The right-hand slot (Tasks or the calendar panel) slides in and out: the
+// frame grows from and narrows to zero width while the panel inside keeps its
+// full width, so the panel is revealed rather than reflowed every frame. The
+// panel stays on screen while it slides out. (The board's conversation pane
+// slides by transform instead, as it opens far more often: usePaneSlideIn.)
 // With `animate` false, a change shows or hides the slot at once.
 export function SidePanelSlide({
   open,
