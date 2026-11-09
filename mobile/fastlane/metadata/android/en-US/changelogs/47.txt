@@ -1,0 +1,5 @@
+- Add a Contacts directory with contact details, message history, pinned contacts, and Markdown notes
+- Redesign rules management and editor screens with support for delayed rules after reading and by message age
+- Paste or type spreadsheet and space-separated recipient lists into the composer
+- Save remote images from RSS feeds and HTML messages to device storage
+- Unify settings section spacing and add Russian localization
