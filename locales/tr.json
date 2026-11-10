@@ -1595,5 +1595,8 @@
   "wallpaper.uploading": "Yükleniyor...",
   "window.maximize": "Büyüt",
   "window.minimize": "Simge durumuna küçült",
-  "window.restore": "Geri yükle"
+  "window.restore": "Geri yükle",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }

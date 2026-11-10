@@ -1595,5 +1595,8 @@
   "crypto.lookup.updatedRevoked": "The key Meron had for this address has been revoked by its owner. Meron no longer uses it.",
   "crypto.lookup.updatedRenewed": "The key Meron had for this address was updated (renewed or changed by its owner).",
   "crypto.verify.pastedOwn": "That's your own fingerprint. Paste {sender}'s here: the one {sender} sent you.",
-  "mcp.sendsEncrypted": "Replies to encrypted mail: it will be sent end-to-end encrypted, and only if every recipient has a key."
+  "mcp.sendsEncrypted": "Replies to encrypted mail: it will be sent end-to-end encrypted, and only if every recipient has a key.",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }

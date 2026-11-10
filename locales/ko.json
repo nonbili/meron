@@ -1595,5 +1595,8 @@
   "wallpaper.uploading": "업로드 중...",
   "window.maximize": "최대화",
   "window.minimize": "최소화",
-  "window.restore": "복원"
+  "window.restore": "복원",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }

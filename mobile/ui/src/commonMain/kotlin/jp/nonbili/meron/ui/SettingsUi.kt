@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -247,6 +248,7 @@ internal fun SettingsScreen(
             SettingsRoutes.KanbanBoardWallpaper -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardWallpaper(it) } ?: SettingsPage.Root
             SettingsRoutes.SyncLog -> SettingsPage.SyncLog
             SettingsRoutes.RemoteSenders -> SettingsPage.RemoteSenders
+            SettingsRoutes.Encryption -> SettingsPage.Encryption
             SettingsRoutes.Theme -> SettingsPage.Theme
             else -> SettingsPage.Root
         }
@@ -328,6 +330,7 @@ internal fun SettingsScreen(
                             is SettingsPage.KanbanBoardWallpaper -> tr("settings.account.chatBackground")
                             SettingsPage.SyncLog -> tr("settings.viewSyncLog")
                             SettingsPage.RemoteSenders -> tr("settings.privacy.remoteSenders")
+                            SettingsPage.Encryption -> tr("crypto.peers.nav")
                             SettingsPage.Theme -> tr("common.theme")
                         },
                     )
@@ -461,6 +464,10 @@ internal fun SettingsScreen(
                     onRemoveSender = onRemoveRemoteImageSender,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+
+            composable(SettingsRoutes.Encryption) {
+                EncryptionSettingsPage(Modifier.fillMaxSize())
             }
 
             composable(SettingsRoutes.Account) {
@@ -652,6 +659,14 @@ internal fun SettingsScreen(
                             onClick = { settingsNavController.navigate(SettingsRoutes.Rules) },
                         )
                     }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Lock,
+                            title = tr("crypto.peers.nav"),
+                            subtitle = null,
+                            onClick = { settingsNavController.navigate(SettingsRoutes.Encryption) },
+                        )
+                    }
                     section(tr("settings.sections.kanbanBoards"))
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
@@ -792,6 +807,8 @@ private sealed class SettingsPage {
 
     data object RemoteSenders : SettingsPage()
 
+    data object Encryption : SettingsPage()
+
     data object Theme : SettingsPage()
 
     data class AccountDetail(
@@ -825,6 +842,7 @@ private object SettingsRoutes {
     const val KanbanBoardWallpaper = "settings/kanban-board-wallpaper"
     const val SyncLog = "settings/sync-log"
     const val RemoteSenders = "settings/remote-senders"
+    const val Encryption = "settings/encryption"
     const val Theme = "settings/theme"
 }
 
@@ -1500,7 +1518,7 @@ internal fun SettingsToggleRow(
 }
 
 @Composable
-private fun SettingsHeadline(
+internal fun SettingsHeadline(
     title: String,
     hint: String?,
     color: Color = MaterialTheme.colorScheme.onSurface,

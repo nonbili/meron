@@ -184,6 +184,10 @@ internal fun SettingsAccountDetailPage(
             },
         )
     }
+    // Held, and its dialogs shown, outside the list: a row that opens one may
+    // be scrolled far from any other row that could host it.
+    val encryption = if (isRss) null else rememberAccountEncryption(account.id, account.email)
+    encryption?.Dialogs()
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy && !isRss) 9 else 0)
     SettingsList(modifier.appScrollbar(listState), state = listState) {
         item {
@@ -231,7 +235,6 @@ internal fun SettingsAccountDetailPage(
             )
         }
         if (!isRss) {
-            item { AccountEncryptionSettings(account.id) }
             item {
                 SettingsTextRow(
                     value = senderName,
@@ -315,6 +318,8 @@ internal fun SettingsAccountDetailPage(
                     onSave = onSaveProxy,
                 )
             }
+
+            AccountEncryptionSection(encryption)
         }
 
         section(tr("settings.account.notificationsSync"))

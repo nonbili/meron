@@ -44,6 +44,11 @@ internal class SettingsListScope {
         values.forEachIndexed { index, value -> item { content(index, value) } }
     }
 
+    /** Free-standing content between groups, such as a page's introduction. */
+    fun plain(content: @Composable () -> Unit) {
+        entries += Entry(null, false, content)
+    }
+
     fun section(title: String) {
         val first = entries.isEmpty()
         entries += Entry(null, false) { SettingsSectionLabel(title, first = first) }

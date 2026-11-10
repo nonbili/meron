@@ -1595,5 +1595,8 @@
   "wallpaper.uploading": "جاري الرفع...",
   "window.maximize": "تكبير",
   "window.minimize": "تصغير",
-  "window.restore": "استعادة"
+  "window.restore": "استعادة",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }

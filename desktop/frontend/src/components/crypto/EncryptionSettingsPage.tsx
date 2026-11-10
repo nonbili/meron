@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, FileKey, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import { BadgeCheck, ChevronDown, ChevronUp, FileKey, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { shortFingerprint } from '../../lib/crypto'
@@ -23,6 +23,10 @@ import { KeySourcesSection, LookupRow } from './KeySourcesSection'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 
+/** Keys listed before "Show all": enough to recognise the list, few enough
+ *  that lookup and the key sources under it stay in view. */
+const COLLAPSED_KEYS = 4
+
 /**
  * Settings → Encryption: everyone's keys in one place. Keys arrive by
  * themselves (Autocrypt, attachments); this is where a user imports an
@@ -33,6 +37,7 @@ export function EncryptionSettingsPage() {
   const version = useValue(crypto$.version)
   const [peers, setPeers] = useState<PeerRow[] | null>(null)
   const [filter, setFilter] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const [importing, setImporting] = useState<{ file: KeyFile; preview: ImportPreview } | null>(null)
   const [error, setError] = useState('')
   const encryptWhenPossible = useValue(settings$.encryptWhenPossible)
@@ -50,6 +55,11 @@ export function EncryptionSettingsPage() {
       (p) => !q || p.addr.includes(q) || p.info.user_ids.some((u) => u.toLowerCase().includes(q)),
     )
   }, [peers, filter])
+
+  // A long keyring would push lookup and the key sources far down the page,
+  // so it starts collapsed; a filter searches all of it.
+  const collapsible = !filter.trim() && (peers?.length ?? 0) > COLLAPSED_KEYS
+  const listed = collapsible && !showAll ? shown.slice(0, COLLAPSED_KEYS) : shown
 
   const startImport = async () => {
     setError('')
@@ -108,9 +118,22 @@ export function EncryptionSettingsPage() {
       )}
       {shown.length > 0 && (
         <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80">
-          {shown.map((peer) => (
+          {listed.map((peer) => (
             <PeerRowItem key={`${peer.addr}/${peer.info.fingerprint}`} peer={peer} />
           ))}
+          {collapsible && (
+            <li>
+              <button
+                type="button"
+                aria-expanded={showAll}
+                onClick={() => setShowAll((v) => !v)}
+                className="flex w-full cursor-pointer items-center justify-center gap-1.5 px-3.5 py-2 text-[0.6875rem] font-semibold text-accent hover:bg-hover"
+              >
+                {showAll ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                <span>{showAll ? t('common.showLess') : t('crypto.peers.showAll', { count: peers?.length ?? 0 })}</span>
+              </button>
+            </li>
+          )}
         </ul>
       )}
 

@@ -1595,5 +1595,8 @@
   "wallpaper.uploading": "正在上传...",
   "window.maximize": "最大化",
   "window.minimize": "最小化",
-  "window.restore": "还原"
+  "window.restore": "还原",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }

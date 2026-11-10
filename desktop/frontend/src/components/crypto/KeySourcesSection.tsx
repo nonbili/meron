@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Search, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { sourceLabel } from '../../lib/crypto'
@@ -6,6 +6,7 @@ import type { KeySource } from '../../lib/crypto'
 import { crypto$, keySources, setKeySources } from '../../states/crypto'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { Switch } from '../dialog/AccountSettingsRows'
 import { InfoTip } from '../tooltip/InfoTip'
 
 const input =
@@ -64,13 +65,31 @@ export function KeySourcesSection() {
       .catch((err) => setError(String(err)))
   }, [])
 
-  const save = async (next: KeySource[]) => {
+  // The whole list is saved at once, so each edit builds on the one before it
+  // (shown at once, sent in order) rather than on a list the previous save has
+  // yet to answer with.
+  const latest = useRef<KeySource[] | null>(null)
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const save = (next: KeySource[]) => {
     setError('')
-    try {
-      setSources(await setKeySources(next))
-    } catch (err) {
-      setError(String(err))
-    }
+    latest.current = next
+    setSources(next)
+    queue.current = queue.current.then(async () => {
+      try {
+        const saved = await setKeySources(next)
+        if (latest.current === next) setSources(saved)
+      } catch (err) {
+        setError(String(err))
+        if (latest.current !== next) return
+        // Show what the core actually holds, not the edit it refused.
+        await keySources()
+          .then((r) => {
+            if (latest.current === next) setSources(r.sources)
+          })
+          .catch(() => {})
+      }
+    })
+    return queue.current
   }
   if (!sources) return null
   const add = async () => {
@@ -88,27 +107,19 @@ export function KeySourcesSection() {
       <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80">
         {sources.map((source, i) => (
           <li key={`${source.kind}:${source.url}`} className="flex items-center gap-3 px-3.5 py-2">
-            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
-              <input
-                type="checkbox"
-                checked={source.enabled}
-                onChange={() => void save(sources.map((s, j) => (j === i ? { ...s, enabled: !s.enabled } : s)))}
-                className="cursor-pointer accent-accent"
-              />
-              <span className="min-w-0">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-[0.75rem] font-semibold">{sourceLabel(source)}</span>
-                  {isDefault(source) && <InfoTip hint={t(`crypto.sources.why.${source.kind}`)} />}
-                </span>
-                <span
-                  className={`block text-[0.625rem] ${
-                    source.kind === 'hkp' ? 'text-amber-700 dark:text-amber-300' : 'text-secondary'
-                  }`}
-                >
-                  {t(`crypto.sources.kind.${source.kind}`)}
-                </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-[0.75rem] font-semibold">{sourceLabel(source)}</span>
+                {isDefault(source) && <InfoTip hint={t(`crypto.sources.why.${source.kind}`)} />}
+              </div>
+              <span
+                className={`block text-[0.625rem] ${
+                  source.kind === 'hkp' ? 'text-amber-700 dark:text-amber-300' : 'text-secondary'
+                }`}
+              >
+                {t(`crypto.sources.kind.${source.kind}`)}
               </span>
-            </label>
+            </div>
             {!isDefault(source) && (
               <IconButton
                 icon={Trash2}
@@ -118,6 +129,11 @@ export function KeySourcesSection() {
                 onClick={() => void save(sources.filter((_, j) => j !== i))}
               />
             )}
+            <Switch
+              checked={source.enabled}
+              label={sourceLabel(source)}
+              onChange={() => void save(sources.map((s, j) => (j === i ? { ...s, enabled: !s.enabled } : s)))}
+            />
           </li>
         ))}
       </ul>

@@ -1595,5 +1595,8 @@
   "wallpaper.uploading": "Augšupielādē...",
   "window.maximize": "Maksimizēt",
   "window.minimize": "Minimizēt",
-  "window.restore": "Atjaunot"
+  "window.restore": "Atjaunot",
+  "crypto.account.previousKey": "Earlier key",
+  "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
+  "crypto.peers.showAll": "Show all {count} keys"
 }
