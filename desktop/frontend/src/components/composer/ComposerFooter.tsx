@@ -106,6 +106,7 @@ export function ComposerFooter({
           iconSize={16}
           label={t('composer.actions.attachFiles')}
           radius="xl"
+          size="md"
           onClick={onPickFiles}
         />
         {rich && (
@@ -114,6 +115,7 @@ export function ComposerFooter({
             iconSize={16}
             label={t('composer.actions.insertInlineImage')}
             radius="xl"
+            size="md"
             onClick={onPickInlineImages}
           />
         )}

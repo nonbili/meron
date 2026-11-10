@@ -89,14 +89,14 @@ export function QuickReplyComposer() {
         <div className="-mb-1 flex w-full min-w-0 items-center gap-1">
           <button
             onClick={() => void pickAttachmentFiles()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
             title={t('composer.actions.attachFiles')}
           >
             <Paperclip size={15} />
           </button>
           <button
             onClick={() => openReplyInFullEditor()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
             title={t('composer.actions.openFullEditor')}
           >
             <Maximize2 size={14} />
