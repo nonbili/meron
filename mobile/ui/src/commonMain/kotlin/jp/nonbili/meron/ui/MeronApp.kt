@@ -1091,6 +1091,7 @@ private fun MeronMobileScreenContent(
                                 attachments = attachments.filter { it.id != draftAttachment.id }
                             },
                             sendShortcutMode = sendShortcutMode,
+                            isReply = composeInReplyTo.isNotBlank(),
                             onSaveDraft = ::saveComposeDraft,
                             onAutoSaveDraft = ::autoSaveComposeDraft,
                             onDiscardDraft = ::discardComposeDraft,

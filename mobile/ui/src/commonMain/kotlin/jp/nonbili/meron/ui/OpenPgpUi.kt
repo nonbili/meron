@@ -115,7 +115,14 @@ internal fun ComposeEncryptionControl() {
             Icon(
                 if (state.composeEncrypt == true) Icons.Default.Lock else Icons.Default.LockOpen,
                 tr(if (state.composeEncrypt == true) "crypto.toggle.on" else "crypto.toggle.off"),
-                tint = if (missing.isNotEmpty() || !enabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                // Red only for what would stop a send: most mail goes to people
+                // with no key, and an open lock there is not an error.
+                tint =
+                    when {
+                        !enabled || (state.composeEncrypt == true && missing.isNotEmpty()) -> MaterialTheme.colorScheme.error
+                        state.composeEncrypt == true -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
     }
