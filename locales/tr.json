@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Bir mesaj yazın...",
   "composer.placeholders.recipient": "recipient@example.com",
   "composer.removeQuotedText": "Alıntılanan metni kaldır",
+  "composer.signature.off": "İmza yok. Eklemek için tıklayın.",
+  "composer.signature.on": "İmza gönderilirken eklenir. Eklememek için tıklayın.",
   "composer.status.addRecipientBeforeSending": "Göndermeden önce bir alıcı ekleyin",
   "composer.status.chooseAvailableAccount": "Kullanılabilir bir posta hesabı seçin",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Önceki hesabın taslağı temizlenemedi",

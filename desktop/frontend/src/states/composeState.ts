@@ -4,7 +4,6 @@ import { observable } from '@legendapp/state'
 import { t } from '../lib/i18n'
 import type { ComposeDraft, ComposerAttachment, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
-import type { SignatureMark } from '../lib/signature'
 
 // Compose/reader-tab + draft state. Reader tabs open using the account's
 // conversation view preference; compose tabs hold a full-editor draft. The
@@ -165,14 +164,11 @@ export const compose$ = observable({
   // addresses. Reset like quickReplyFrom on a thread switch, and after a send
   // or an escalation to the full editor.
   quickReplyAdded: [] as string[],
-  // The signature this app seeded into the quick reply, or null when there is
-  // none to account for — the account sends none, or the body was hydrated from
-  // a saved draft that already carries its own.
-  //
-  // Unlike the full composer's tracking (see lib/signature's SignatureTracking)
-  // this needs no third "inserted nothing, but managed" state: a quick reply
-  // cannot change sending account, since its From picker only offers aliases of
-  // the one account and those all share a signature. With nothing to swap, the
-  // only question ever asked of this is which part of the box is the user's.
-  quickReplySignature: null as SignatureMark | null,
+  // The user switched the signature off for this quick reply. The box holds
+  // only what they write; the replying account's signature is added below it
+  // on save and send while this is false (see quickReplyOutgoingText). A
+  // quick reply cannot change sending account (its From picker only offers
+  // aliases of the one account, which share a signature), so on/off is all
+  // there is to track.
+  quickReplySignatureOff: false,
 })

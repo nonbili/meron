@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Γράψτε ένα μήνυμα...",
   "composer.placeholders.recipient": "recipient@example.com",
   "composer.removeQuotedText": "Αφαίρεση κειμένου παράθεσης",
+  "composer.signature.off": "Χωρίς υπογραφή. Κάντε κλικ για να την προσθέσετε.",
+  "composer.signature.on": "Η υπογραφή προστίθεται κατά την αποστολή. Κάντε κλικ για να την παραλείψετε.",
   "composer.status.addRecipientBeforeSending": "Προσθέστε έναν παραλήπτη πριν από την αποστολή",
   "composer.status.chooseAvailableAccount": "Επιλέξτε έναν διαθέσιμο λογαριασμό email",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Δεν ήταν δυνατή η εκκαθάριση του προσχεδίου του προηγούμενου λογαριασμού",

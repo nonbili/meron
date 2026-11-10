@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Viết một tin nhắn...",
   "composer.placeholders.recipient": "recipient@example.com",
   "composer.removeQuotedText": "Xóa văn bản trích dẫn",
+  "composer.signature.off": "Không có chữ ký. Nhấp để thêm.",
+  "composer.signature.on": "Chữ ký sẽ được thêm khi gửi. Nhấp để bỏ qua.",
   "composer.status.addRecipientBeforeSending": "Thêm người nhận trước khi gửi",
   "composer.status.chooseAvailableAccount": "Chọn một tài khoản thư khả dụng",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Không thể dọn bản nháp của tài khoản trước",

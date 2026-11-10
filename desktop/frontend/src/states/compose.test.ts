@@ -47,7 +47,9 @@ import {
   quickReplyDraftBelongsToThread,
   saveQuickReplyDraft,
   scheduleQuickReplyDraftSave,
-  seedQuickReplySignature,
+  startFreshQuickReply,
+  quickReplySignature,
+  quickReplyOutgoingText,
   withoutHydratedQuickReplyDraft,
 } from './quickReply'
 import { retrySend, sendReply } from './quickReplySend'
@@ -852,7 +854,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Hello there')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -1084,7 +1086,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Hello there')
     compose$.quickReplyDraftId.set('reply-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -1124,7 +1126,7 @@ describe('quick reply draft sharing', () => {
       ui$.selectedThread.set('t-1')
       compose$.composer.set('Secret reply')
       compose$.quickReplyEncrypt.set({ threadId: 't-1', on })
-      compose$.quickReplySignature.set(null)
+      compose$.quickReplySignatureOff.set(false)
       settings$.signature.set('')
       ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
         calls.push({ command, payload })
@@ -1211,7 +1213,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -1257,7 +1259,7 @@ describe('quick reply draft sharing', () => {
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
     compose$.quickReplyDraftThreadId.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     await sendReply()
@@ -1297,7 +1299,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Consumed reply')
     compose$.quickReplyDraftId.set('reply-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let releaseDiscard!: () => void
@@ -1364,7 +1366,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Consumed reply')
     compose$.quickReplyDraftId.set('reply-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let discardFails = true
@@ -1473,7 +1475,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('sent-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     await sendReply()
@@ -1523,7 +1525,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Consumed reply')
     compose$.quickReplyDraftId.set('reply-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -1568,7 +1570,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Racing the autosave')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveStarted!: () => void
@@ -1626,7 +1628,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Reply text')
     compose$.quickReplyDraftId.set('safety-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveStarted!: () => void
@@ -1673,7 +1675,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('First reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -1721,7 +1723,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Escalate me')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveStarted!: () => void
@@ -1773,7 +1775,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Reply text')
     compose$.quickReplyDraftId.set('safety-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let failSend = true
@@ -1834,7 +1836,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Escalate me')
     compose$.quickReplyDraftId.set('escalated-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     openReplyInFullEditor()
@@ -1871,7 +1873,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Racing reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveStarted!: () => void
@@ -1935,7 +1937,7 @@ describe('quick reply draft sharing', () => {
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
     compose$.quickReplyDraftThreadId.set('t-1')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -1996,7 +1998,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Racing reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveStarted!: () => void
@@ -2054,7 +2056,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Never sent')
     compose$.quickReplyDraftId.set('unsent-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2095,7 +2097,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('First reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2143,7 +2145,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread, other])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Reply in the first thread')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2187,7 +2189,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2244,7 +2246,7 @@ describe('quick reply draft sharing', () => {
     compose$.composerAttachments.set([
       { id: 'a1', filename: 'first.pdf', mime: 'application/pdf', size: 10, data: 'AA==' },
     ])
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2289,7 +2291,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Typed then sent')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2339,7 +2341,7 @@ describe('quick reply draft sharing', () => {
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
     compose$.quickReplyDraftThreadId.set('t-1')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2390,7 +2392,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2436,7 +2438,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never saved anywhere')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2480,7 +2482,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Instant reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2540,7 +2542,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([headerOnly])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Follow up')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -2576,7 +2578,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -2607,7 +2609,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2657,7 +2659,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Only copy')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let autosaveFails = true
@@ -2729,7 +2731,7 @@ describe('quick reply draft sharing', () => {
     ui$.selectedThread.set('t-1')
     compose$.quickReplyEncrypt.set(null)
     compose$.composer.set('Secret reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2776,7 +2778,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let backendDown = true
@@ -2843,7 +2845,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let backendDown = true
@@ -2908,7 +2910,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -2971,7 +2973,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Never left')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let saveGateUsed = false
@@ -3036,7 +3038,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('First reply')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -3097,7 +3099,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let identityStarted!: () => void
@@ -3155,7 +3157,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -3207,7 +3209,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -3287,7 +3289,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let discardStarted!: () => void
@@ -3346,7 +3348,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('claimed-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -3422,7 +3424,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('First reply')
     compose$.quickReplyDraftId.set('draft-row-uid-42')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -3492,7 +3494,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('')
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -3536,7 +3538,7 @@ describe('quick reply draft sharing', () => {
     mail$.threads.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     mail$.messages.set([thread, envelopeOnly])
@@ -3578,7 +3580,7 @@ describe('quick reply draft sharing', () => {
     })
     mail$.threads.set([thread])
     ui$.selectedThread.set('t-1')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
       calls.push({ command, payload })
@@ -3632,7 +3634,7 @@ describe('quick reply draft sharing', () => {
     mail$.threads.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     mail$.messages.set([thread, envelopeOnly])
@@ -3673,7 +3675,7 @@ describe('quick reply draft sharing', () => {
     compose$.composer.set('Consumed reply')
     compose$.quickReplyDraftId.set('reply-draft@example.com')
     compose$.quickReplyDraftSaved.set(true)
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
 
     let sendStarted!: () => void
@@ -4238,7 +4240,7 @@ describe('signature in the quick reply', () => {
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
     compose$.quickReplyFrom.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     mail$.messages.set([])
     mail$.threads.set([])
     mail$.folders.set([])
@@ -4260,78 +4262,10 @@ describe('signature in the quick reply', () => {
     }
   })
 
-  it('seeds the box with the signature, under a blank line to type in', () => {
-    setUpThread()
-    seedQuickReplySignature()
+  const savedBody = () =>
+    (calls.filter((c) => c.command === 'mail.saveDraft').at(-1)?.payload as { body?: string } | undefined)?.body
 
-    expect(compose$.composer.get()).toBe('\n\nfrom u2')
-    expect(compose$.quickReplySignature.get()?.text).toBe('from u2')
-  })
-
-  it('honours a per-account override', () => {
-    accounts$.set([{ ...sendable, signature: { mode: 'none', html: '' } }])
-    setUpThread()
-    seedQuickReplySignature()
-
-    expect(compose$.composer.get()).toBe('')
-    expect(compose$.quickReplySignature.get()).toBeNull()
-  })
-
-  it('counts a box holding only the signature as blank, and does not save a draft for it', async () => {
-    setUpThread()
-    seedQuickReplySignature()
-
-    expect(isQuickReplyBlank()).toBe(true)
-    await saveQuickReplyDraft()
-    expect(calls.filter((c) => c.command === 'mail.saveDraft')).toHaveLength(0)
-  })
-
-  it('counts typing above the signature as content', async () => {
-    setUpThread()
-    seedQuickReplySignature()
-    compose$.composer.set('t2\n\nfrom u2')
-
-    expect(isQuickReplyBlank()).toBe(false)
-    await saveQuickReplyDraft()
-
-    const saved = calls.find((c) => c.command === 'mail.saveDraft')?.payload as { body?: string }
-    expect(saved.body).toBe('t2\n\nfrom u2')
-  })
-
-  it("sends the user's own whitespace exactly as written", async () => {
-    setUpThread()
-    seedQuickReplySignature()
-    compose$.composer.set('    indented start\n\nand a trailing blank line\n\n\nfrom u2')
-
-    await saveQuickReplyDraft()
-
-    const saved = calls.find((c) => c.command === 'mail.saveDraft')?.payload as { body?: string }
-    expect(saved.body).toBe('    indented start\n\nand a trailing blank line\n\n\nfrom u2')
-  })
-
-  it('drops the seeded blank line when nothing was typed above it', async () => {
-    setUpThread()
-    seedQuickReplySignature()
-    // Attachment-only: the body is the untouched signature, which must not go
-    // out with the leading newlines it was seeded under.
-    compose$.composerAttachments.set([{ id: 'a1', filename: 'x.png', mime: 'image/png', size: 1, data: 'AA==' }])
-
-    await saveQuickReplyDraft()
-
-    const saved = calls.find((c) => c.command === 'mail.saveDraft')?.payload as { body?: string }
-    expect(saved.body).toBe('from u2')
-  })
-
-  it('puts the caret at the end of the user text, above the signature', () => {
-    setUpThread()
-    seedQuickReplySignature()
-    expect(quickReplyCaretOffset()).toBe(0)
-
-    compose$.composer.set('t2\n\nfrom u2')
-    expect(quickReplyCaretOffset()).toBe(2)
-  })
-
-  it('leaves a hydrated draft body alone', () => {
+  const hydrate = (body: string) => {
     const thread = message({
       id: 'root',
       account_id: 'acc-1',
@@ -4355,62 +4289,220 @@ describe('signature in the quick reply', () => {
         subject: 'Re: Notification thread',
         outgoing: true,
         message_id: 'draft@example.com',
-        body: 'half typed\n\nfrom u2',
+        body,
         date: thread.date + 60,
       }),
     ])
+  }
 
-    // The saved body already carries its own signature: nothing is appended,
-    // and none of it is discounted as "not content".
-    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2')
-    expect(compose$.quickReplySignature.get()).toBeNull()
-    expect(isQuickReplyBlank()).toBe(false)
+  it('starts with an empty box, with the signature on', () => {
+    setUpThread()
+    compose$.composer.set('left over')
+    compose$.quickReplySignatureOff.set(true)
+    startFreshQuickReply()
+
+    expect(compose$.composer.get()).toBe('')
+    expect(compose$.quickReplySignatureOff.get()).toBe(false)
+    expect(quickReplySignature().text).toBe('from u2')
   })
 
-  it('hands the full editor a stripped body so it inserts and tracks its own', () => {
+  it('counts an untouched box as blank, and does not save a draft for it', async () => {
     setUpThread()
-    seedQuickReplySignature()
-    compose$.composer.set('t2\n\nfrom u2')
+    startFreshQuickReply()
+
+    expect(isQuickReplyBlank()).toBe(true)
+    await saveQuickReplyDraft()
+    expect(calls.filter((c) => c.command === 'mail.saveDraft')).toHaveLength(0)
+  })
+
+  it('saves and sends the reply with the signature under it', async () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+
+    expect(quickReplyOutgoingText()).toBe('t2\n\nfrom u2')
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('t2\n\nfrom u2')
+  })
+
+  it("sends the user's own whitespace exactly as written", async () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('    indented start\n\nand a trailing blank line\n')
+
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('    indented start\n\nand a trailing blank line\n\n\nfrom u2')
+  })
+
+  it('sends the signature alone with an attachment-only reply', async () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composerAttachments.set([{ id: 'a1', filename: 'x.png', mime: 'image/png', size: 1, data: 'AA==' }])
+
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('from u2')
+  })
+
+  it('leaves the signature off when the user switched it off', async () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+    compose$.quickReplySignatureOff.set(true)
+
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('t2')
+  })
+
+  it('adds nothing for an account that sends no signature', async () => {
+    accounts$.set([{ ...sendable, signature: { mode: 'none', html: '' } }])
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+
+    expect(quickReplySignature().text).toBe('')
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('t2')
+  })
+
+  it('signs with the signature as it is now, not as it was when the box opened', async () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+    settings$.signature.set('<p>changed</p>')
+
+    await saveQuickReplyDraft()
+    expect(savedBody()).toBe('t2\n\nchanged')
+  })
+
+  it('puts the caret at the end of the text', () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+    expect(quickReplyCaretOffset()).toBe(2)
+  })
+
+  // A saved draft holds the reply as it goes out, signature included. Loading it
+  // back takes off only a signature this app can recognise, so sending it again
+  // never adds a second one (#149).
+  it('takes the signature off a hydrated draft that ends in it, and puts it back on send', async () => {
+    hydrate('half typed\n\nfrom u2')
+
+    expect(compose$.composer.get()).toBe('half typed')
+    expect(compose$.quickReplySignatureOff.get()).toBe(false)
+    expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2')
+  })
+
+  it('leaves a hydrated draft without the signature alone, and adds none on send', () => {
+    hydrate('sent with it off')
+
+    expect(compose$.composer.get()).toBe('sent with it off')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    expect(quickReplyOutgoingText()).toBe('sent with it off')
+  })
+
+  it('leaves a hydrated draft alone when text follows the signature', () => {
+    hydrate('reply\n\nfrom u2\n\n> quoted')
+
+    expect(compose$.composer.get()).toBe('reply\n\nfrom u2\n\n> quoted')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    expect(quickReplyOutgoingText()).toBe('reply\n\nfrom u2\n\n> quoted')
+  })
+
+  it('leaves a hydrated draft alone when its signature has since changed', () => {
+    settings$.signature.set('<p>new one</p>')
+    hydrate('half typed\n\nfrom u2')
+
+    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2')
+  })
+
+  it('recognises the signature of a draft hydrated before the signature loaded', () => {
+    settings$.signature.set('')
+    hydrate('half typed\n\nfrom u2')
+    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2')
+
+    settings$.signature.set('<p>from u2</p>')
+    expect(compose$.composer.get()).toBe('half typed')
+    expect(compose$.quickReplySignatureOff.get()).toBe(false)
+    expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2')
+  })
+
+  it('does not touch a hydrated draft the user has typed into when the signature arrives', () => {
+    settings$.signature.set('')
+    hydrate('half typed\n\nfrom u2')
+    compose$.composer.set('half typed\n\nfrom u2 and more')
+
+    settings$.signature.set('<p>from u2</p>')
+    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2 and more')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+  })
+
+  it('gives the full editor the text, which inserts and tracks its own signature', () => {
+    setUpThread()
+    startFreshQuickReply()
+    compose$.composer.set('t2')
 
     openReplyInFullEditor()
 
     const draft = compose$.tabs.get()[0].compose
     expect(draft?.text).toBe('t2\n\nfrom u2')
     expect(draft?.signature).toEqual({ html: '<p>from u2</p>', text: 'from u2', placement: 'belowText' })
-    // And the box behind the new tab is a fresh quick reply, not an empty one.
-    expect(compose$.composer.get()).toBe('\n\nfrom u2')
+    // And the box behind the new tab is a fresh quick reply.
+    expect(compose$.composer.get()).toBe('')
+    expect(compose$.quickReplySignatureOff.get()).toBe(false)
   })
 
-  it('does not give the full editor a second copy of an edited signature', () => {
+  it('gives the full editor no signature when it was switched off', () => {
     setUpThread()
-    seedQuickReplySignature()
-    compose$.composer.set('t2\n\nfrom u2, but edited')
+    startFreshQuickReply()
+    compose$.composer.set('t2')
+    compose$.quickReplySignatureOff.set(true)
 
     openReplyInFullEditor()
 
     const draft = compose$.tabs.get()[0].compose
-    expect(draft?.text).toBe('t2\n\nfrom u2, but edited')
+    expect(draft?.text).toBe('t2')
     expect(draft?.signature).toBeUndefined()
   })
 
-  it('re-seeds an untouched box when the app signature arrives late', () => {
-    settings$.signature.set('')
+  it('puts the switch back with the reply when the send dies before going out', async () => {
     setUpThread()
-    seedQuickReplySignature()
-    expect(compose$.composer.get()).toBe('')
+    startFreshQuickReply()
+    compose$.composer.set('Never left')
+    compose$.quickReplySignatureOff.set(true)
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') throw new Error('offline')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
 
-    settings$.signature.set('<p>from u2</p>')
-    expect(compose$.composer.get()).toBe('\n\nfrom u2')
+    await expect(sendReply()).rejects.toThrow('offline')
+
+    expect(compose$.composer.get()).toBe('Never left')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
   })
 
-  it('does not re-seed over something the user typed', () => {
+  it('switches the signature back on for the next reply after a send', async () => {
     setUpThread()
-    seedQuickReplySignature()
-    compose$.composer.set('t2\n\nfrom u2')
+    startFreshQuickReply()
+    compose$.composer.set('Went out')
+    compose$.quickReplySignatureOff.set(true)
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent@example.com' }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
 
-    settings$.signature.set('<p>different</p>')
+    await sendReply()
 
-    expect(compose$.composer.get()).toBe('t2\n\nfrom u2')
+    expect((calls.find((c) => c.command === 'mail.send')?.payload as { body?: string }).body).toBe('Went out')
+    expect(compose$.composer.get()).toBe('')
+    expect(compose$.quickReplySignatureOff.get()).toBe(false)
   })
 })
 
@@ -4652,7 +4744,7 @@ describe('adding people to the quick reply', () => {
     compose$.quickReplyDraftThreadId.set('')
     compose$.quickReplyFrom.set('')
     compose$.quickReplyAdded.set([])
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     settings$.signature.set('')
     mail$.messages.set([])
     mail$.threads.set([])
@@ -4860,7 +4952,7 @@ describe('quoting the original in replies', () => {
     compose$.quickReplyDraftId.set('')
     compose$.quickReplyDraftSaved.set(false)
     compose$.quickReplyFrom.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     mail$.messages.set([])
     mail$.threads.set([])
     mail$.folders.set([])

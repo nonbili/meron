@@ -12,7 +12,7 @@ import {
   saveQuickReplyDraft,
   saveQuickReplyDraftNow,
   scheduleQuickReplyDraftSave,
-  seedQuickReplySignature,
+  startFreshQuickReply,
 } from '../../states/quickReply'
 import { sendReply } from '../../states/quickReplySend'
 import { confirmKeyChanges } from '../../states/crypto'
@@ -139,10 +139,8 @@ export function useQuickReply() {
     textarea.style.height = `${Math.min(textarea.scrollHeight, QUICK_REPLY_MAX_HEIGHT_PX)}px`
   }, [composer, fontScale, messageFontScale])
 
-  // Focus the box when the "r" shortcut fires (ignore the initial 0 value).
-  // The caret goes to the end of the user's own text, not the end of the box —
-  // the seeded signature sits below it, and typing into that is not what "r"
-  // should hand you.
+  // Focus the box when the "r" shortcut fires (ignore the initial 0 value),
+  // with the caret at the end of the text.
   useEffect(() => {
     if (replyFocus === 0) return
     const textarea = textareaRef.current
@@ -177,9 +175,9 @@ export function useQuickReply() {
     clearQuickReplyDraftOwnership()
     compose$.quickReplyFrom.set('')
     compose$.quickReplyAdded.set([])
-    // Starts the new thread's box on the replying account's signature rather
-    // than blank — the box is what gets sent, so it shows what will go out.
-    seedQuickReplySignature()
+    // The signature isn't in the box: it is added on send (see
+    // quickReplyOutgoingText), and the box's signature button shows it.
+    startFreshQuickReply()
   }, [selectedThreadId])
 
   // Save or discard the current quick reply after text changes. Keyed on

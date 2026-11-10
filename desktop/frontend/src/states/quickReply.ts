@@ -13,7 +13,12 @@ import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
 import { discardSavedDraftCopy } from './mailMoves'
 import { getPendingSend, getUnsentRescue, unsentRescues } from './pendingSends'
-import { bodyWithSignature, bodyWithSwappedSignature, signatureForms, type ComposeBody } from '../lib/signature'
+import {
+  signatureForms,
+  textWithTrailingSignature,
+  textWithoutTrailingSignature,
+  type Signature,
+} from '../lib/signature'
 import { settings$ } from './settings'
 import {
   draftIdOfFailedSave,
@@ -69,75 +74,61 @@ ui$.selectedThread.onChange(({ value }) => {
 })
 
 /**
- * Seed the quick reply with the replying account's signature, as the box the
- * user starts typing into rather than something stapled on at send time — the
- * rule the full composer follows, and what every other mail client shows.
- *
- * Replaces whatever the box holds, so it is only ever called on a fresh quick
- * reply: a thread switch, or the clear after a send or an escalation.
+ * The signature the quick reply goes out with: the replying account's, as it
+ * is now. It is not in the box: the box holds only what the user writes, and
+ * the signature is added below it when the reply is saved or sent, unless the
+ * user switched it off for this reply (`compose$.quickReplySignatureOff`).
+ * Accounts that can't send have none.
  */
-export function seedQuickReplySignature() {
-  watchQuickReplySignatureSources()
+export function quickReplySignature(): Signature {
   const thread = getActiveThread()
   const accountId = thread?.account_id || ui$.selectedAccount.peek()
   const account = accounts$.peek().find((acc) => acc.id === accountId)
-  const signature = isSendableAccount(account) ? resolveSignatureFor(account) : signatureForms('')
-  compose$.composer.set(signature.text ? bodyWithSignature(EMPTY_PLAIN_BODY, signature).text : '')
-  compose$.quickReplySignature.set(signature.text ? { ...signature, placement: 'belowText' } : null)
+  return isSendableAccount(account) ? resolveSignatureFor(account) : signatureForms('')
 }
 
-/** An empty plaintext body, for seeding and for stripping back to. */
-const EMPTY_PLAIN_BODY: ComposeBody = { rich: false, html: '', text: '' }
-
 /**
- * The quick reply with the signature this app seeded taken back out, and
- * whether it was still there to take. A signature the user has typed into can
- * no longer be identified (see `bodyWithSwappedSignature`), which is the same
- * answer as "this text is theirs now".
+ * Start a fresh quick reply: an empty box, with the signature on. Called on a
+ * thread switch, and after a send or an escalation took the box's reply.
  */
-export function quickReplyWithoutSignature(): { text: string; found: boolean } {
-  const text = compose$.composer.peek()
-  const mark = compose$.quickReplySignature.peek()
-  if (!mark?.text) return { text, found: false }
-  const swapped = bodyWithSwappedSignature({ ...EMPTY_PLAIN_BODY, text }, mark, signatureForms(''))
-  return swapped.tracking === undefined ? { text, found: false } : { text: swapped.body.text, found: true }
+export function startFreshQuickReply() {
+  watchQuickReplySignatureSources()
+  hydratedWithoutSignature = null
+  compose$.composer.set('')
+  compose$.quickReplySignatureOff.set(false)
 }
 
 /**
- * Whether the quick reply holds nothing the user put there. A seeded signature
- * does not count as content: it is not something they wrote, and treating it as
- * such would save a draft for every thread they merely open, and let an
- * untouched box be "sent".
+ * Whether the quick reply holds nothing the user put there. Such a box saves no
+ * draft and can't be sent; the signature alone is not a reply.
  */
 export function isQuickReplyBlank(): boolean {
-  return !quickReplyWithoutSignature().text.trim() && compose$.composerAttachments.peek().length === 0
+  return !compose$.composer.peek().trim() && compose$.composerAttachments.peek().length === 0
 }
 
 /**
- * The quick reply as it should be saved and sent: what the box holds, minus
- * only the blank line the signature was seeded under.
- *
- * That padding is dropped just when nothing was typed above it — an
- * attachment-only reply, whose body is the untouched signature and would
- * otherwise go out with leading newlines. Whitespace anywhere else is the
- * user's (an indented first line, trailing blank lines they left) and is sent
- * exactly as written, so this is never a blanket trim.
+ * The quick reply as it is saved and sent: what the box holds, exactly as
+ * written, with the signature below it while it is on. A saved draft is thus
+ * the reply as it would go out, and `hydrateQuickReplyFromTailDraft` takes the
+ * signature back off when it loads it.
  */
 export function quickReplyOutgoingText(): string {
   const text = compose$.composer.peek()
-  const withoutSignature = quickReplyWithoutSignature()
-  if (!withoutSignature.found || withoutSignature.text.trim()) return text
-  return text.replace(/^\n+/, '')
+  if (compose$.quickReplySignatureOff.peek()) return text
+  return textWithTrailingSignature(text, quickReplySignature().text)
 }
 
-/**
- * How far into the box the user's own text runs — where the caret belongs when
- * the reply shortcut focuses a box whose last lines are the signature.
- */
+/** Switch the signature on or off for this reply; a saved draft follows. */
+export function setQuickReplySignatureOff(off: boolean) {
+  if (compose$.quickReplySignatureOff.peek() === off) return
+  compose$.quickReplySignatureOff.set(off)
+  hydratedWithoutSignature = null
+  if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+}
+
+/** Where the caret belongs when the reply shortcut focuses the box. */
 export function quickReplyCaretOffset(): number {
-  const { text, found } = quickReplyWithoutSignature()
-  if (!found) return compose$.composer.peek().length
-  return text.replace(/\n+$/, '').length
+  return compose$.composer.peek().length
 }
 
 // The one in-flight (or queued) quick-reply save. Saves are chained onto it so
@@ -532,7 +523,8 @@ ui$.selectedThread.onChange(({ value }) => {
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])
-  compose$.quickReplySignature.set(null)
+  compose$.quickReplySignatureOff.set(false)
+  hydratedWithoutSignature = null
 })
 
 const addressesOf = (raw: string | undefined) =>
@@ -623,7 +615,6 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   unconfirmedDraftIds.delete(normalizedTailDraftId)
   publishSendingDraftIds()
 
-  compose$.composer.set(tail.body ?? '')
   compose$.composerAttachments.set([])
   // A draft saved encrypted comes back encrypted, whatever the conversation's
   // default: its text must not go out (or be saved again) in the clear.
@@ -631,9 +622,7 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
   compose$.quickReplyAdded.set(holds.added)
-  // The saved body already carries whatever signature it was written with, so
-  // none of it is this app's to strip, re-seed, or discount as "not content".
-  compose$.quickReplySignature.set(null)
+  loadDraftBodyIntoQuickReply(activeThreadId, tail.body ?? '')
 
   if (tail.has_attachments) {
     void readComposerAttachments(tail.attachments ?? [], tail.body_html ?? '').then((valid) => {
@@ -875,28 +864,51 @@ function restoreUnsentRescueBubbles(messages: Message[]) {
   })
 }
 
-// The app signature is read out of the prefs table after the first render, and
-// an account's override can be rewritten from the settings dialog while a
-// thread is open behind it. Re-seed a quick reply the user hasn't written in
-// yet, so it isn't left sitting there without the signature it should have had.
-// A box with anything of theirs in it — text, an attachment, a hydrated draft —
-// is never rewritten.
-function reseedUntouchedQuickReply() {
-  if (!ui$.selectedThread.peek()) return
-  if (compose$.quickReplyDraftSaved.peek() || compose$.quickReplyDraftId.peek()) return
-  if (!isQuickReplyBlank()) return
-  seedQuickReplySignature()
+/**
+ * Put a saved draft's body in the box. The body is the reply as it would go
+ * out, so it may end in a signature: when that is the replying account's
+ * signature, exactly and as the last block, it is taken off and the switch is
+ * on, so sending adds the same signature back where it was. Anything else (a
+ * draft saved with the signature off, an edited or older signature, text after
+ * it) is left as written with the switch off: a signature is only ever added
+ * where one was taken off, so no reply goes out with two (#149).
+ */
+function loadDraftBodyIntoQuickReply(threadId: string, body: string) {
+  watchQuickReplySignatureSources()
+  const text = textWithoutTrailingSignature(body, quickReplySignature().text)
+  compose$.composer.set(text ?? body)
+  compose$.quickReplySignatureOff.set(text === null)
+  hydratedWithoutSignature = text === null ? { threadId, body } : null
 }
 
-// Subscribed on the first seed rather than at module scope: this module and
-// ./accounts import each other, so `accounts$` is still in its temporal dead
-// zone while this file's body runs. Nothing can have seeded a quick reply
-// before both modules are live, which makes first-seed the earliest safe point.
+// A draft loaded with no signature recognised, while the box still holds it as
+// loaded. The app signature is read out of the prefs table after the first
+// render, and an account's override can change in Settings, so a draft opened
+// before either lands is looked at again when they do.
+let hydratedWithoutSignature: { threadId: string; body: string } | null = null
+
+function recheckHydratedDraftSignature() {
+  const hydrated = hydratedWithoutSignature
+  if (!hydrated) return
+  if (ui$.selectedThread.peek() !== hydrated.threadId || compose$.composer.peek() !== hydrated.body) {
+    hydratedWithoutSignature = null
+    return
+  }
+  const text = textWithoutTrailingSignature(hydrated.body, quickReplySignature().text)
+  if (text === null) return
+  hydratedWithoutSignature = null
+  compose$.composer.set(text)
+  compose$.quickReplySignatureOff.set(false)
+}
+
+// Subscribed on the first fresh box rather than at module scope: this module
+// and ./accounts import each other, so `accounts$` is still in its temporal
+// dead zone while this file's body runs.
 let quickReplySignatureSourcesWatched = false
 
 function watchQuickReplySignatureSources() {
   if (quickReplySignatureSourcesWatched) return
   quickReplySignatureSourcesWatched = true
-  settings$.signature.onChange(reseedUntouchedQuickReply)
-  accounts$.onChange(reseedUntouchedQuickReply)
+  settings$.signature.onChange(recheckHydratedDraftSignature)
+  accounts$.onChange(recheckHydratedDraftSignature)
 }

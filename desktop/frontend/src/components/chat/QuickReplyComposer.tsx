@@ -9,6 +9,7 @@ import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 import { QuickReplyFrom } from './QuickReplyFrom'
 import { QuickReplyRecipients } from './QuickReplyRecipients'
+import { QuickReplySignatureToggle } from './QuickReplySignatureToggle'
 import {
   quickReplyEncrypts,
   quickReplyHoldsEncryptedDraft,
@@ -32,9 +33,8 @@ export function QuickReplyComposer() {
     handleComposerKeyDown,
   } = useQuickReply()
 
-  // A box holding only its seeded signature counts as empty. The check peeks
-  // rather than subscribing, but `composer` is rendered below, so every
-  // keystroke re-renders this and re-evaluates it.
+  // Whether the box is blank is peeked rather than subscribed, but `composer`
+  // is rendered below, so every keystroke re-renders this and re-evaluates it.
   const target = useValue(quickReplyTarget)
   const { to, cc } = useValue(quickReplyRecipients)
   const encrypt = useValue(quickReplyEncrypts)
@@ -117,6 +117,7 @@ export function QuickReplyComposer() {
               }
             />
           )}
+          <QuickReplySignatureToggle />
           <QuickReplyFrom />
           <div className="ml-auto flex min-w-0 shrink items-center">
             <QuickReplyRecipients />

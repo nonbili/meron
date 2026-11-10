@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "اكتب رسالة...",
   "composer.placeholders.recipient": "recipient@example.com",
   "composer.removeQuotedText": "إزالة النص المقتبس",
+  "composer.signature.off": "بلا توقيع. انقر لإضافته.",
+  "composer.signature.on": "سيُضاف التوقيع عند الإرسال. انقر لإزالته.",
   "composer.status.addRecipientBeforeSending": "أضف مستلمًا قبل الإرسال",
   "composer.status.chooseAvailableAccount": "اختر حساب بريد متاحًا",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "تعذر تنظيف مسودة الحساب السابق",

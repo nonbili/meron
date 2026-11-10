@@ -7,10 +7,13 @@ import type { Account, AccountSignature } from '../types'
 // delete the text like any other content — rather than being stapled on at send
 // time, so what the composer shows is what goes out.
 //
-// The thread's quick reply is seeded the same way. It renders as a chat bubble,
-// but what it sends is an ordinary mail that its recipient reads in an ordinary
-// client, so leaving it unsigned reads as inconsistency rather than brevity.
-// Its tracking is simpler — see compose$.quickReplySignature.
+// The thread's quick reply is signed too. It renders as a chat bubble, but what
+// it sends is an ordinary mail that its recipient reads in an ordinary client,
+// so leaving it unsigned reads as inconsistency rather than brevity. Its box is
+// kept to what the user writes, though: the signature is added on save and send
+// (`textWithTrailingSignature`), a button in the box shows it and switches it
+// off, and a saved draft loaded back has it taken off again
+// (`textWithoutTrailingSignature`) — see compose$.quickReplySignatureOff.
 
 /** Whether signature HTML carries any visible content (text or an image). */
 export function isBlankSignature(html: string): boolean {
@@ -342,6 +345,35 @@ function joinAcrossRemoval(prefix: string, suffix: string): string {
   // line is not part of the signature, so it stays.
   if (!head) return tail ? `\n\n${tail}` : ''
   return tail ? `${head}\n\n${tail}` : head
+}
+
+/**
+ * A quick reply as it goes out: what the user typed, then the signature under
+ * one blank line. Only the join is added: the user's own whitespace is sent
+ * exactly as written, so `textWithoutTrailingSignature` gets it back verbatim
+ * from a saved draft. A box with nothing typed (an attachment-only reply) sends
+ * the signature alone.
+ */
+export function textWithTrailingSignature(text: string, signatureText: string): string {
+  if (!signatureText) return text
+  if (!text.trim()) return signatureText
+  return `${text}\n\n${signatureText}`
+}
+
+/**
+ * The text of a saved plaintext draft without its signature, or null when the
+ * draft doesn't end in it. Only an exact copy that is the draft's last block
+ * counts: one with text after it (a quote) or written into is the user's, and
+ * a draft with no recognisable signature is left alone. Adding the signature
+ * back on send then never gives a draft a second one.
+ */
+export function textWithoutTrailingSignature(body: string, signatureText: string): string | null {
+  if (!signatureText) return null
+  // A blank line a server or client appended after the signature is not text.
+  const text = body.replace(/\n+$/, '')
+  if (text === signatureText) return ''
+  const join = `\n\n${signatureText}`
+  return text.endsWith(join) ? text.slice(0, -join.length) : null
 }
 
 /** The empty paragraph that separates the signature from the body above it. */

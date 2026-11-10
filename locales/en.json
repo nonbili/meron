@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Write a message...",
   "composer.placeholders.recipient": "recipient@example.com",
   "composer.removeQuotedText": "Remove quoted text",
+  "composer.signature.off": "No signature. Click to add it.",
+  "composer.signature.on": "Signature added when sent. Click to leave it off.",
   "composer.status.addRecipientBeforeSending": "Add a recipient before sending",
   "composer.status.chooseAvailableAccount": "Choose an available mail account",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Couldn't clean up the previous account's draft",

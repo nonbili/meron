@@ -70,7 +70,7 @@ describe('useQuickReply Escape in the kanban pane', () => {
     compose$.quickReplyDraftSaved.set(false)
     compose$.quickReplyDraftThreadId.set('')
     compose$.quickReplyFrom.set('')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     kanban$.activeBoardId.set('board-1')
     kanban$.paneThreadId.set('t-1')
     kanban$.paneColumnKey.set('board-1:acc-1:INBOX')

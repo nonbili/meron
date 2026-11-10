@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Rakstiet ziņojumu...",
   "composer.placeholders.recipient": "saņēmējs@example.com",
   "composer.removeQuotedText": "Noņemt citēto tekstu",
+  "composer.signature.off": "Bez paraksta. Noklikšķiniet, lai to pievienotu.",
+  "composer.signature.on": "Paraksts tiks pievienots, sūtot. Noklikšķiniet, lai to izlaistu.",
   "composer.status.addRecipientBeforeSending": "Pirms sūtīšanas pievienojiet saņēmēju",
   "composer.status.chooseAvailableAccount": "Izvēlieties pieejamu pasta kontu",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Neizdevās notīrīt iepriekšējā konta melnrakstu",

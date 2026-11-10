@@ -10,6 +10,8 @@ import {
   isBlankSignature,
   resolveSignature,
   savedSignatureHtml,
+  textWithoutTrailingSignature,
+  textWithTrailingSignature,
   unsupportedSignatureMarkup,
 } from './signature'
 
@@ -329,5 +331,61 @@ describe('savedSignatureHtml', () => {
       { html: '<p>B</p>', text: 'B' },
     )
     expect(swapped.body.html).toBe('<p>Hi</p><p></p><p>B</p><p></p>')
+  })
+})
+
+describe('the quick reply signature, added on send', () => {
+  it('goes below the text, under one blank line', () => {
+    expect(textWithTrailingSignature('Thanks', 'Me')).toBe('Thanks\n\nMe')
+  })
+
+  it("keeps the user's own whitespace exactly as written", () => {
+    expect(textWithTrailingSignature('  indented\n\ntrailing line\n', 'Me')).toBe('  indented\n\ntrailing line\n\n\nMe')
+  })
+
+  it('is the whole body when nothing was typed (an attachment-only reply)', () => {
+    expect(textWithTrailingSignature('', 'Me')).toBe('Me')
+    expect(textWithTrailingSignature('\n \n', 'Me')).toBe('Me')
+  })
+
+  it('adds nothing for an account without a signature', () => {
+    expect(textWithTrailingSignature('Thanks', '')).toBe('Thanks')
+  })
+})
+
+describe('the quick reply signature, found in a saved draft', () => {
+  it('takes the last block off when it is the signature', () => {
+    expect(textWithoutTrailingSignature('Thanks\n\nMe\nPhone', 'Me\nPhone')).toBe('Thanks')
+  })
+
+  it('round-trips whatever was sent, whitespace included', () => {
+    for (const typed of ['Thanks', '  indented\n\ntrailing line\n', '']) {
+      expect(textWithoutTrailingSignature(textWithTrailingSignature(typed, 'Me'), 'Me')).toBe(typed.trim() ? typed : '')
+    }
+  })
+
+  it('ignores blank lines a server added after it', () => {
+    expect(textWithoutTrailingSignature('Thanks\n\nMe\n\n', 'Me')).toBe('Thanks')
+  })
+
+  it('leaves a draft with no signature alone', () => {
+    expect(textWithoutTrailingSignature('Thanks', 'Me')).toBeNull()
+  })
+
+  it('leaves a signature with text after it alone (a quote below, say)', () => {
+    expect(textWithoutTrailingSignature('Thanks\n\nMe\n\n> quoted', 'Me')).toBeNull()
+  })
+
+  it('leaves an edited signature alone', () => {
+    expect(textWithoutTrailingSignature('Thanks\n\nMe, edited', 'Me')).toBeNull()
+    expect(textWithoutTrailingSignature('Thanks\n\nNot Me', 'Me')).toBeNull()
+  })
+
+  it('leaves a signature that is not a block of its own alone', () => {
+    expect(textWithoutTrailingSignature('Thanks\nMe', 'Me')).toBeNull()
+  })
+
+  it('finds nothing for an account without a signature', () => {
+    expect(textWithoutTrailingSignature('Thanks', '')).toBeNull()
   })
 })

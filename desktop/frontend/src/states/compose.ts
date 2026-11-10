@@ -82,10 +82,9 @@ import {
   quickReplyAbandonedSaves,
   nextQuickReplyOwnershipTick,
   quickReplyDraftSaveInFlight,
-  quickReplyWithoutSignature,
   reserveOpeningDraft,
   unconfirmedQuickReplyDraftId,
-  seedQuickReplySignature,
+  startFreshQuickReply,
 } from './quickReply'
 
 // Reader and compose tabs: opening threads and drafts, the full editor, forwarding,
@@ -814,12 +813,11 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     quickReplyAbandonedSaves.set(t.thread_id, nextQuickReplyOwnershipTick())
   }
   cancelQuickReplyDraftSave()
-  // The seeded signature is handed over stripped, so the full composer inserts
-  // and tracks its own copy — the account is the same, so this is the identical
-  // text, now swappable if the draft later changes identity. When it can't be
-  // found the user has written into it: it stays in the body as theirs, and the
-  // composer is told not to add a second.
-  const carried = quickReplyWithoutSignature()
+  // The box holds only the user's text. With the signature on, the full
+  // composer inserts and tracks its own copy (the account is the same, so this
+  // is the identical text, now swappable if the draft changes identity); with
+  // it off, the composer adds none.
+  const carried = compose$.composer.peek()
   // A bar holding a saved quoted reply already carries its quote.
   const quote = replyQuote(target)
   openComposeTab({
@@ -829,8 +827,8 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     cc,
     showCcBcc: !!cc.trim(),
     subject,
-    text: carried.text,
-    noSignature: !carried.found && !!compose$.quickReplySignature.peek()?.text,
+    text: carried,
+    noSignature: compose$.quickReplySignatureOff.peek(),
     attachments: compose$.composerAttachments.get(),
     inReplyTo: in_reply_to,
     references,
@@ -846,15 +844,15 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     encryptedDraft: quickReplyHoldsEncryptedDraft(t.thread_id) || undefined,
     quoteWithheld: replyQuoteWithheld(target),
     threadId: t.thread_id,
-    quote: quote && !bodyHasReplyQuote(carried.text, quote) ? quote : undefined,
+    quote: quote && !bodyHasReplyQuote(carried, quote) ? quote : undefined,
   })
   compose$.composerAttachments.set([])
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])
   // The thread stays open behind the new tab, so the box the user comes back to
-  // is a fresh quick reply — signature and all.
-  seedQuickReplySignature()
+  // is a fresh quick reply.
+  startFreshQuickReply()
 }
 
 export function openMailtoCompose(raw: string) {

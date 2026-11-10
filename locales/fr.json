@@ -363,6 +363,8 @@
   "composer.placeholders.quickMessage": "Écrivez un message...",
   "composer.placeholders.recipient": "destinataire@example.com",
   "composer.removeQuotedText": "Supprimer le texte cité",
+  "composer.signature.off": "Sans signature. Cliquez pour l’ajouter.",
+  "composer.signature.on": "Signature ajoutée à l’envoi. Cliquez pour l’omettre.",
   "composer.status.addRecipientBeforeSending": "Ajoutez un destinataire avant l'envoi",
   "composer.status.chooseAvailableAccount": "Choisissez un compte de messagerie disponible",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Impossible de supprimer le brouillon du compte précédent",
