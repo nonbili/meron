@@ -72,6 +72,14 @@ describe('ownSignatureText', () => {
     expect(ownSignatureText(message('x', false))).toBe('')
   })
 
+  it('counts the bubble shown while my message is still being sent', () => {
+    // The optimistic bubble isn't marked outgoing (its Sent copy is), but only my
+    // own sends carry a local send status.
+    for (const send_status of ['sending', 'sent', 'failed'] as const) {
+      expect(ownSignatureText({ ...message('x', false), send_status })).toBe('Me\nPhone 123')
+    }
+  })
+
   it('follows a per-account override', () => {
     accounts$.set([{ ...account, signature: { mode: 'none', html: '' } }])
     expect(ownSignatureText(message('x', true))).toBe('')
@@ -161,6 +169,15 @@ describe('MessageBubbleBody with my own signature', () => {
     expect(toggle.getAttribute('aria-label')).toBe('Show signature')
     fireEvent.click(toggle)
     expect(container.textContent).toContain('Phone 123')
+  })
+
+  it('folds my signature from the first render of a bubble still sending', () => {
+    const { container } = renderBody({
+      ...message('On its way (sending)\n\nMe\nPhone 123', false),
+      send_status: 'sending',
+    })
+    expect(container.textContent).toContain('On its way (sending)')
+    expect(container.textContent).not.toContain('Phone 123')
   })
 
   it('shows the signature in a message from someone else', () => {

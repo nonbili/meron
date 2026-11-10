@@ -11,9 +11,14 @@ import { settings$ } from '../../states/settings'
 import { resolveSignature, signatureToText, textWithoutTrailingSignature } from '../../lib/signature'
 import { HTML_QUOTE_SELECTOR } from './quoteFold'
 
-/** My signature as plain text when `message` is one I sent, else ''. */
+/**
+ * My signature as plain text when `message` is one I sent, else ''. That
+ * includes the bubble shown while it is being sent: only its Sent copy is
+ * marked outgoing, but a local send status is set on my own sends alone, and
+ * without it the signature would show until the Sent copy replaced the bubble.
+ */
 export function ownSignatureText(message: Message): string {
-  if (!message.outgoing) return ''
+  if (!message.outgoing && !message.send_status) return ''
   const account = accounts$.peek().find((acc) => acc.id === message.account_id)
   if (!account) return ''
   return signatureToText(resolveSignature(account, settings$.signature.peek()))
