@@ -395,31 +395,34 @@ export function prepareBubbleHtml(
       html.${QUOTE_FOLDED_CLASS} [data-meron-quote] {
         display: none !important;
       }
+      /* The same chip as a plain body's (MessageBubbleBody): a faint fill with
+         a softened border, darker on hover, and lit while open. */
       .${QUOTE_TOGGLE_CLASS} {
         display: flex;
         align-items: center;
         justify-content: center;
         width: 28px;
         height: 14px;
-        margin: 8px 0;
+        margin: 6px 0;
         padding: 0;
-        border: 1px solid var(${v('border')}, ${DEFAULT_BUBBLE_THEME.border});
-        border-radius: 7px;
-        background: var(${v('surface')}, ${DEFAULT_BUBBLE_THEME.surface});
+        border: 1px solid color-mix(in srgb, var(${v('border')}, ${DEFAULT_BUBBLE_THEME.border}) 70%, transparent);
+        border-radius: 9999px;
+        background: var(${v('chip')}, ${CHIP_LIGHT.rest});
         color: var(${v('muted')}, ${DEFAULT_BUBBLE_THEME.muted});
         font: 700 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         letter-spacing: 1px;
         cursor: pointer;
       }
       .${QUOTE_TOGGLE_CLASS}::before { content: '•••'; }
-      .${QUOTE_TOGGLE_CLASS}:hover,
-      .${QUOTE_TOGGLE_CLASS}[aria-expanded="true"] {
-        background: var(${v('raised-hover')}, ${DEFAULT_BUBBLE_THEME.raisedHover});
+      .${QUOTE_TOGGLE_CLASS}:hover {
+        background: var(${v('chip-hover')}, ${CHIP_LIGHT.hover});
         color: var(${v('text')}, ${DEFAULT_BUBBLE_THEME.text});
       }
       /* Open: the chip stays lit, so it reads as the state, not a bare hover. */
       .${QUOTE_TOGGLE_CLASS}[aria-expanded="true"] {
+        background: var(${v('chip-open')}, ${CHIP_LIGHT.open});
         border-color: var(${v('muted')}, ${DEFAULT_BUBBLE_THEME.muted});
+        color: var(${v('text')}, ${DEFAULT_BUBBLE_THEME.text});
       }
       /* In-thread search hits, applied to the live document by BubbleHtmlFrame. */
       mark.meron-search-hit {
@@ -525,6 +528,9 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
     [v('raised'), palette.raised],
     [v('raised-hover'), palette.raisedHover],
     [v('muted'), palette.muted],
+    // The quote chip's fills, as the plain body's chip (MessageBubbleBody) draws
+    // them: a faint shade on light, a faint light on dark.
+    ...chipFills(v, palette.appearance === 'dark'),
     [v('highlight-text'), palette.highlightText],
     [v('darkened-backdrop'), theme.darkenedBackdrop],
     [v('darkened-floor'), darkenedFloor(theme.darkenedBackdrop)],
@@ -542,6 +548,25 @@ export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanv
 }
 
 /** Theme large documents in small batches before the first visible measurement. */
+/** The quote chip's fills: MessageBubbleBody's `bg-black/5`, `hover:bg-black/10`,
+ * `aria-expanded:bg-black/15` on light, and their `white/10`, `/15`, `/25` on dark. */
+const CHIP_LIGHT = { rest: 'rgba(0, 0, 0, 0.05)', hover: 'rgba(0, 0, 0, 0.1)', open: 'rgba(0, 0, 0, 0.15)' }
+const CHIP_DARK = {
+  rest: 'rgba(255, 255, 255, 0.1)',
+  hover: 'rgba(255, 255, 255, 0.15)',
+  open: 'rgba(255, 255, 255, 0.25)',
+}
+
+/** The chip's fill variables for a light or dark palette, named through the frame's `v`. */
+function chipFills(v: (name: string) => string, dark: boolean): Array<[string, string]> {
+  const fills = dark ? CHIP_DARK : CHIP_LIGHT
+  return [
+    [v('chip'), fills.rest],
+    [v('chip-hover'), fills.hover],
+    [v('chip-open'), fills.open],
+  ]
+}
+
 export async function applyBubbleThemeAsync(doc: Document, theme: BubbleTheme, cancelled: () => boolean) {
   await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
   if (cancelled()) return
