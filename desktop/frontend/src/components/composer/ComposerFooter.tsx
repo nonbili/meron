@@ -135,7 +135,7 @@ export function ComposerFooter({
         )}
         <button
           onClick={onToggleRich}
-          className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer ${
+          className={`flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer ${
             rich ? 'bg-accent/10 text-accent' : 'text-secondary hover:bg-hover'
           }`}
           title={rich ? t('composer.actions.switchToPlainText') : t('composer.actions.switchToRichText')}

@@ -208,7 +208,8 @@ export function EncryptToggle({
     onChange(false)
   }
 
-  const box = size === 'md' ? 'h-8 w-8' : 'h-7 w-7'
+  // In the full composer, the Send button's corners; the quick reply's small ones.
+  const box = size === 'md' ? 'h-8 w-8 rounded-xl' : 'h-7 w-7 rounded-lg'
   const tone = on
     ? unavailable || changed.length > 0
       ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10'
@@ -225,7 +226,7 @@ export function EncryptToggle({
       title={title}
       disabled={!on && keys.own_key_unusable}
       onClick={() => void click()}
-      className={`flex ${box} shrink-0 items-center justify-center rounded-lg transition-colors cursor-pointer ${tone}`}
+      className={`flex ${box} shrink-0 items-center justify-center transition-colors cursor-pointer ${tone}`}
     >
       {on ? <Lock size={15} strokeWidth={2.4} /> : <LockOpen size={15} />}
     </button>
