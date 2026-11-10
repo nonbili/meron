@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -353,11 +354,13 @@ internal fun SettingsScreen(
         NavHost(
             navController = settingsNavController,
             startDestination = SettingsRoutes.Root,
+            // The settings lists scroll on under the navigation bar; the pages
+            // that are not one stop at it themselves.
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .consumeWindowInsets(innerPadding)
+                    .padding(innerPadding.withoutBottom())
+                    .consumeWindowInsets(innerPadding.withoutBottom())
                     .imePadding(),
         ) {
             composable(SettingsRoutes.General) {
@@ -430,7 +433,7 @@ internal fun SettingsScreen(
             }
 
             composable(SettingsRoutes.Rules) {
-                rulesPage(Modifier.fillMaxSize()) { ruleEditor = it }
+                rulesPage(Modifier.fillMaxSize().navigationBarsPadding()) { ruleEditor = it }
             }
 
             composable(SettingsRoutes.Composer) {
@@ -454,7 +457,7 @@ internal fun SettingsScreen(
                     onImportCustomTheme = onImportCustomTheme,
                     onDeleteCustomTheme = onDeleteCustomTheme,
                     onShareCustomTheme = onShareCustomTheme,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 )
             }
 
@@ -462,7 +465,7 @@ internal fun SettingsScreen(
                 RemoteSendersPage(
                     senders = remoteImageSenders,
                     onRemoveSender = onRemoveRemoteImageSender,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 )
             }
 
@@ -586,7 +589,7 @@ internal fun SettingsScreen(
                             )
                         },
                         onUpload = { onPickAccountWallpaper(account) },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                     )
                 }
             }
@@ -604,7 +607,7 @@ internal fun SettingsScreen(
                             onSaveKanbanBoard(board, board.name, board.avatarUrl, presetId, "")
                         },
                         onUpload = { onPickKanbanBoardWallpaper(board) },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                     )
                 }
             }
@@ -616,7 +619,7 @@ internal fun SettingsScreen(
                 }
                 SettingsSyncLogPage(
                     logLines = logLines,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 )
             }
 

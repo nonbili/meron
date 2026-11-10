@@ -130,8 +130,9 @@ internal suspend fun MeronMobileState.addInviteToCalendar(message: MessageBody) 
         }
 }
 
-/** What tapping a task in the calendar does: show it in its list. */
+/** What tapping a task in the calendar does: open it, in its list. */
 internal suspend fun MeronMobileState.openCalendarTask(item: CalendarItem) {
+    pendingTaskEditId = item.id
     openTasks(item.listId)
 }
 

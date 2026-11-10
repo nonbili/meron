@@ -3,6 +3,11 @@ package jp.nonbili.meron.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
@@ -32,6 +37,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -622,3 +628,39 @@ internal fun List<ThreadSummary>.forStarredView(
     accountId: String,
     folderId: String,
 ): List<ThreadSummary> = if (accountId == UNIFIED_ACCOUNT_ID && isUnifiedStarredFolder(folderId)) filter { it.starred } else this
+
+/**
+ * A Scaffold's content padding less its bottom, for a screen whose list runs
+ * on under the system navigation bar instead of stopping short of it. The list
+ * then ends its content [navigationBarInset] clear of the bar.
+ */
+@Composable
+internal fun PaddingValues.withoutBottom(): PaddingValues {
+    val direction = androidx.compose.ui.platform.LocalLayoutDirection.current
+    return PaddingValues(
+        start = calculateStartPadding(direction),
+        top = calculateTopPadding(),
+        end = calculateEndPadding(direction),
+    )
+}
+
+/** The height of the system navigation bar: what the last of a list that
+ *  scrolls under the bar must clear. */
+@Composable
+internal fun navigationBarInset(): androidx.compose.ui.unit.Dp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+/**
+ * The bar of a screen of cards on the canvas: the canvas's own color at rest,
+ * as Material 3 has it, tinted once content has [scrolled] under it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun canvasAppBarColors(scrolled: Boolean): androidx.compose.material3.TopAppBarColors {
+    val defaults =
+        androidx.compose.material3.TopAppBarDefaults
+            .topAppBarColors()
+    val container by androidx.compose.animation.animateColorAsState(
+        if (scrolled) defaults.scrolledContainerColor else MaterialTheme.colorScheme.background,
+    )
+    return defaults.copy(containerColor = container)
+}

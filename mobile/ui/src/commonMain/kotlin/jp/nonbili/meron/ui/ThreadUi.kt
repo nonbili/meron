@@ -1461,10 +1461,12 @@ internal fun ConversationDetailsScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(innerPadding.withoutBottom())
                     .appScrollbar(detailsListState)
                     .padding(horizontal = 16.dp),
             state = detailsListState,
+            // The details scroll on under the navigation bar.
+            contentPadding = PaddingValues(bottom = navigationBarInset()),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             // Section 0: Subject

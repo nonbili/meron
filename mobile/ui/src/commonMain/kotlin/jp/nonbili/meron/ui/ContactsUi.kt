@@ -226,8 +226,9 @@ internal fun ContactsScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .consumeWindowInsets(padding)
+                // Both lists scroll on under the navigation bar.
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding.withoutBottom())
                 .imePadding(),
         ) {
             if (state.pinsError) {
@@ -255,7 +256,7 @@ internal fun ContactsScreen(
                 LazyColumn(
                     Modifier.fillMaxSize().appScrollbar(directoryListState),
                     state = directoryListState,
-                    contentPadding = PaddingValues(vertical = 6.dp),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + navigationBarInset()),
                 ) {
                     if (matchingPins.isNotEmpty()) {
                         item(key = "section:pinned") { ContactSectionTitle(tr("contacts.pinned")) }
@@ -653,7 +654,7 @@ private fun ContactDetails(
     LazyColumn(
         Modifier.fillMaxSize().appScrollbar(listState),
         state = listState,
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 24.dp + navigationBarInset()),
     ) {
         item(key = "header:${contact.addr}") {
             Row(

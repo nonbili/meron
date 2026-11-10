@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -402,100 +403,105 @@ internal fun MailList(
     LazyColumn(
         Modifier.fillMaxSize().appScrollbar(listState),
         state = listState,
-        contentPadding = PaddingValues(bottom = 88.dp),
+        // Rows are cards on the canvas, a hair apart, the first and last
+        // rounding the group off. The list scrolls on under the navigation bar.
+        contentPadding =
+            PaddingValues(start = ViewCardMargin, end = ViewCardMargin, top = 4.dp, bottom = 88.dp + navigationBarInset()),
+        verticalArrangement = Arrangement.spacedBy(GroupedRowGap),
     ) {
-        items(threads, key = { it.id }) { thread ->
-            if (selectionActive) {
-                MailRow(
-                    thread = thread,
-                    account = accountsById[thread.accountId].takeIf { showAccountBadge },
-                    showSenderImages = showSenderImages,
-                    selected = thread.id in selectedThreadIds,
-                    selectionActive = true,
-                    onOpen = { onToggleSelected(thread) },
-                    onLongPress = { onLongPress(thread) },
-                    onToggleStar = { onToggleStar(thread) },
-                )
-            } else {
-                val isRss = threadIdIsRss(thread.id)
-                val isRssItem = isRss && thread.threadId.isNotBlank() && thread.threadId != thread.id
-                val dismissState = rememberSwipeToDismissBoxState()
-                var dismissHandled by remember(thread.id) { mutableStateOf(false) }
-                LaunchedEffect(dismissState.currentValue) {
-                    if (dismissHandled) return@LaunchedEffect
-                    when (dismissState.currentValue) {
-                        SwipeToDismissBoxValue.StartToEnd -> {
-                            dismissHandled = true
-                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            onArchive(thread)
-                        }
-
-                        SwipeToDismissBoxValue.EndToStart -> {
-                            dismissHandled = true
-                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            if (isRss) pendingFeedRemoval = thread else onDelete(thread)
-                        }
-
-                        SwipeToDismissBoxValue.Settled -> {
-                            dismissHandled = false
-                        }
-                    }
-                }
-                SwipeToDismissBox(
-                    state = dismissState,
-                    enableDismissFromStartToEnd = !isRss,
-                    enableDismissFromEndToStart = !isRssItem,
-                    backgroundContent = {
-                        val direction = dismissState.dismissDirection
-                        val deleting = direction == SwipeToDismissBoxValue.EndToStart
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .background(
-                                    if (deleting) {
-                                        MaterialTheme.colorScheme.errorContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    },
-                                ).padding(horizontal = 24.dp),
-                            contentAlignment =
-                                if (deleting) {
-                                    Alignment.CenterEnd
-                                } else {
-                                    Alignment.CenterStart
-                                },
-                        ) {
-                            Icon(
-                                if (deleting || isRss) Icons.Filled.Delete else Icons.Filled.Archive,
-                                contentDescription =
-                                    when {
-                                        deleting -> tr("buttons.delete")
-                                        isRss -> tr("mobile.actions.removeFeed")
-                                        else -> tr("notification.actionArchive")
-                                    },
-                                tint =
-                                    if (deleting) {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    },
-                            )
-                        }
-                    },
-                ) {
+        itemsIndexed(threads, key = { _, thread -> thread.id }) { index, thread ->
+            Box(Modifier.clip(groupedRowShape(index, threads.size))) {
+                if (selectionActive) {
                     MailRow(
                         thread = thread,
                         account = accountsById[thread.accountId].takeIf { showAccountBadge },
                         showSenderImages = showSenderImages,
-                        selected = false,
-                        selectionActive = false,
-                        onOpen = { onOpen(thread) },
+                        selected = thread.id in selectedThreadIds,
+                        selectionActive = true,
+                        onOpen = { onToggleSelected(thread) },
                         onLongPress = { onLongPress(thread) },
                         onToggleStar = { onToggleStar(thread) },
                     )
+                } else {
+                    val isRss = threadIdIsRss(thread.id)
+                    val isRssItem = isRss && thread.threadId.isNotBlank() && thread.threadId != thread.id
+                    val dismissState = rememberSwipeToDismissBoxState()
+                    var dismissHandled by remember(thread.id) { mutableStateOf(false) }
+                    LaunchedEffect(dismissState.currentValue) {
+                        if (dismissHandled) return@LaunchedEffect
+                        when (dismissState.currentValue) {
+                            SwipeToDismissBoxValue.StartToEnd -> {
+                                dismissHandled = true
+                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                                onArchive(thread)
+                            }
+
+                            SwipeToDismissBoxValue.EndToStart -> {
+                                dismissHandled = true
+                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                                if (isRss) pendingFeedRemoval = thread else onDelete(thread)
+                            }
+
+                            SwipeToDismissBoxValue.Settled -> {
+                                dismissHandled = false
+                            }
+                        }
+                    }
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = !isRss,
+                        enableDismissFromEndToStart = !isRssItem,
+                        backgroundContent = {
+                            val direction = dismissState.dismissDirection
+                            val deleting = direction == SwipeToDismissBoxValue.EndToStart
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        if (deleting) {
+                                            MaterialTheme.colorScheme.errorContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        },
+                                    ).padding(horizontal = 24.dp),
+                                contentAlignment =
+                                    if (deleting) {
+                                        Alignment.CenterEnd
+                                    } else {
+                                        Alignment.CenterStart
+                                    },
+                            ) {
+                                Icon(
+                                    if (deleting || isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                                    contentDescription =
+                                        when {
+                                            deleting -> tr("buttons.delete")
+                                            isRss -> tr("mobile.actions.removeFeed")
+                                            else -> tr("notification.actionArchive")
+                                        },
+                                    tint =
+                                        if (deleting) {
+                                            MaterialTheme.colorScheme.onErrorContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        },
+                                )
+                            }
+                        },
+                    ) {
+                        MailRow(
+                            thread = thread,
+                            account = accountsById[thread.accountId].takeIf { showAccountBadge },
+                            showSenderImages = showSenderImages,
+                            selected = false,
+                            selectionActive = false,
+                            onOpen = { onOpen(thread) },
+                            onLongPress = { onLongPress(thread) },
+                            onToggleStar = { onToggleStar(thread) },
+                        )
+                    }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
         if (canLoadMore || loadingMore) {
             item {

@@ -285,6 +285,7 @@ internal fun KanbanRouteContent(
             Scaffold(
                 topBar = {
                     TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         title = {
                             if (mailSelectionActive) {
                                 MailSelectionTitle(selectedMailThreads.size, height = 52.dp)
@@ -702,7 +703,8 @@ internal fun MailRouteContent(
         val listScrolled by remember(mailListPosition) { derivedStateOf { mailListPosition.listState.canScrollBackward } }
         val appBarColors = TopAppBarDefaults.topAppBarColors()
         val appBarColor by animateColorAsState(
-            targetValue = if (listScrolled) appBarColors.scrolledContainerColor else appBarColors.containerColor,
+            // At rest the bar is the canvas the list's cards sit on.
+            targetValue = if (listScrolled) appBarColors.scrolledContainerColor else MaterialTheme.colorScheme.background,
         )
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -1307,7 +1309,7 @@ internal fun MailRouteContent(
                 },
                 snackbarHost = { SnackbarHost(snackbarHost) },
             ) { innerPadding ->
-                Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                Column(Modifier.fillMaxSize().padding(innerPadding.withoutBottom())) {
                     val reconnectAccount2 = selectedAccount?.takeIf { it.needsReconnect }
                     when {
                         reconnectAccount2 != null -> {

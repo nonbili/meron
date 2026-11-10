@@ -405,6 +405,10 @@ internal class MeronMobileState(
     var activeTaskListId by mutableStateOf("")
     var tasks by mutableStateOf(emptyList<TaskSummary>())
     var tasksLoading by mutableStateOf(false)
+
+    /** A task the Tasks screen should open for editing once its list is on
+     *  screen: the one tapped in the calendar. */
+    var pendingTaskEditId by mutableStateOf("")
     var showSenderImages by mutableStateOf(loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false))
     var darkMailBodies by mutableStateOf(loadAppBoolean(prefs, DARK_MAIL_BODIES_PREF, false))
     var autoFitMessages by mutableStateOf(loadAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, false))

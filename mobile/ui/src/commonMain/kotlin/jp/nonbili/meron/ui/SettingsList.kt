@@ -67,7 +67,7 @@ internal fun SettingsList(
     LazyColumn(
         modifier,
         state = state,
-        contentPadding = PaddingValues(top = if (entries.firstOrNull()?.grouped == true) 8.dp else 0.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = if (entries.firstOrNull()?.grouped == true) 8.dp else 0.dp, bottom = 24.dp + navigationBarInset()),
     ) {
         entries.forEachIndexed { index, entry ->
             item(key = entry.key) {

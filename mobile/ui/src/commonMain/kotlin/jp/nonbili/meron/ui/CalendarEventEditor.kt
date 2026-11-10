@@ -1,26 +1,33 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -29,21 +36,29 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -132,7 +147,6 @@ internal fun CalendarEventEditor(
     var startMinutes by remember { mutableStateOf(item?.takeUnless { it.allDay }?.let { minutesOf(it.start) } ?: (9 * 60)) }
     var endMinutes by remember { mutableStateOf(item?.takeUnless { it.allDay }?.let { minutesOf(maxOf(it.start, it.end)) } ?: (10 * 60)) }
     var picking by remember { mutableStateOf<Picking?>(null) }
-    var repeatMenu by remember { mutableStateOf(false) }
     var alert by remember { mutableStateOf(firstAlert(item?.alerts)) }
     var secondAlert by remember { mutableStateOf(item?.alerts?.getOrNull(1) ?: NO_ALERT) }
 
@@ -166,144 +180,168 @@ internal fun CalendarEventEditor(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                when {
-                    item == null -> tr("calendar.newEvent")
-                    invite -> item.title.ifBlank { tr("invite.untitled") }
-                    else -> tr("calendar.editEvent")
+    val colors = MaterialTheme.colorScheme
+    val busy by rememberUpdatedState(saving)
+    // Swiping the sheet away with changes in it asks first: there is no
+    // Cancel, and an event half written is not one to save unasked.
+    val opened = remember { params() }
+    val dirty by rememberUpdatedState(params() != opened)
+    var confirmDiscard by remember { mutableStateOf(false) }
+    ModalBottomSheet(
+        // Back gets here even when the sheet refused to hide, so the question
+        // is asked here too.
+        onDismissRequest = { if (dirty && !busy) confirmDiscard = true else onDismiss() },
+        // A save in flight keeps the sheet up, as it keeps the editor.
+        sheetState =
+            rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = {
+                    if (it == SheetValue.Hidden && dirty && !busy) confirmDiscard = true
+                    it != SheetValue.Hidden || !(busy || dirty)
                 },
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (item != null && invite) {
+            ),
+        containerColor = colors.surface,
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
+            if (item != null && invite) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(item.title.ifBlank { tr("invite.untitled") }, style = MaterialTheme.typography.titleLarge)
                     Text(
                         formatEventRange(item.start, item.end, item.allDay) + if (item.allDay) " · ${tr("invite.allDay")}" else "",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.onSurfaceVariant,
                     )
                     if (item.location.isNotBlank()) InviteLocation(item.location)
-                } else {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        placeholder = { Text(tr("calendar.fields.title")) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(tr("invite.allDay"), modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = allDay,
-                            onCheckedChange = {
-                                allDay = it
-                                // Leads mean minutes for a timed event and days
-                                // for an all-day one: start over from the default.
-                                alert = null
-                                secondAlert = NO_ALERT
-                            },
-                        )
-                    }
-                    DateTimeRow(
-                        label = tr("calendar.fields.starts"),
-                        day = startDay,
-                        minutes = startMinutes.takeUnless { allDay },
-                        onPickDate = { picking = Picking.StartDate },
-                        onPickTime = { picking = Picking.StartTime },
-                    )
-                    DateTimeRow(
-                        label = tr("calendar.fields.ends"),
-                        day = endDay,
-                        minutes = endMinutes.takeUnless { allDay },
-                        onPickDate = { picking = Picking.EndDate },
-                        onPickTime = { picking = Picking.EndTime },
-                    )
-                    Box {
-                        AssistChip(
-                            onClick = { repeatMenu = true },
-                            label = { Text(tr(repeats.first { it.first == repeat }.second)) },
-                            leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null, Modifier.size(18.dp)) },
-                        )
-                        DropdownMenu(expanded = repeatMenu, onDismissRequest = { repeatMenu = false }) {
-                            repeats.forEach { (value, key) ->
-                                DropdownMenuItem(
-                                    text = { Text(tr(key)) },
-                                    onClick = {
-                                        repeat = value
-                                        repeatMenu = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    OutlinedTextField(
-                        value = location,
-                        onValueChange = { location = it },
-                        placeholder = { Text(tr("calendar.fields.location")) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
-                // An invitation's alerts belong to its series, whose kind one
-                // occurrence can differ from.
-                val alertsAllDay = if (invite) item?.alertsAllDay ?: item?.allDay ?: false else allDay
-                val defaultLabel =
-                    tr(
-                        "calendar.alert.default",
-                        mapOf("value" to alertLabel(if (alertsAllDay) defaultAllDayAlertDays else defaultAlertMinutes, alertsAllDay)),
-                    )
-                val first = alert
-                AlertChip(
-                    label = tr("calendar.alert.label"),
-                    value = first?.let { alertLabel(it, alertsAllDay) } ?: defaultLabel,
-                    options = listOf<Int?>(null, NO_ALERT) + alertOptions(alertsAllDay),
-                    optionLabel = { it?.let { lead -> alertLabel(lead, alertsAllDay) } ?: defaultLabel },
-                    onPick = { alert = it },
+            } else {
+                TextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    placeholder = {
+                        Text(tr("calendar.fields.title"), style = MaterialTheme.typography.titleLarge, color = colors.onSurfaceVariant)
+                    },
+                    textStyle = MaterialTheme.typography.titleLarge,
+                    singleLine = true,
+                    colors = bareFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 )
-                if (first != null && first != NO_ALERT) {
-                    AlertChip(
-                        label = tr("calendar.alert.second"),
-                        value = alertLabel(secondAlert, alertsAllDay),
-                        options = listOf<Int?>(NO_ALERT) + alertOptions(alertsAllDay).filter { it != first },
-                        optionLabel = { alertLabel(it ?: NO_ALERT, alertsAllDay) },
-                        onPick = { secondAlert = it ?: NO_ALERT },
+                EditorRow(Icons.Filled.Schedule) {
+                    Text(tr("invite.allDay"), modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = allDay,
+                        onCheckedChange = {
+                            allDay = it
+                            // Leads mean minutes for a timed event and days
+                            // for an all-day one: start over from the default.
+                            alert = null
+                            secondAlert = NO_ALERT
+                        },
                     )
                 }
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    placeholder = { Text(tr("calendar.fields.notes")) },
-                    minLines = if (invite) 8 else 3,
-                    maxLines = if (invite) 12 else 6,
-                    modifier = Modifier.fillMaxWidth(),
+                DateTimeRow(
+                    label = tr("calendar.fields.starts"),
+                    day = startDay,
+                    minutes = startMinutes.takeUnless { allDay },
+                    onPickDate = { picking = Picking.StartDate },
+                    onPickTime = { picking = Picking.StartTime },
                 )
-                if (item != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onDelete(item.id) }) {
-                            Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = if (invite) tr("calendar.removeFromCalendar") else tr("buttons.delete"),
-                            )
-                        }
-                        if (item.threadId.isNotBlank()) {
-                            TextButton(onClick = { onOpenMail(item) }, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                                Icon(Icons.Outlined.Email, contentDescription = null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(tr("calendar.openMail"))
-                            }
-                        }
-                    }
-                }
+                DateTimeRow(
+                    label = tr("calendar.fields.ends"),
+                    day = endDay,
+                    minutes = endMinutes.takeUnless { allDay },
+                    onPickDate = { picking = Picking.EndDate },
+                    onPickTime = { picking = Picking.EndTime },
+                )
+                PickerRow(
+                    icon = Icons.Filled.Repeat,
+                    value = tr(repeats.first { it.first == repeat }.second),
+                    options = repeats,
+                    optionLabel = { tr(it.second) },
+                    onPick = { repeat = it.first },
+                )
+                FieldRow(
+                    icon = Icons.Outlined.Place,
+                    value = location,
+                    onValueChange = { location = it },
+                    placeholder = tr("calendar.fields.location"),
+                    singleLine = true,
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = { onSave(params()) }, enabled = !saving) { Text(tr("buttons.save")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) } },
-    )
+            // An invitation's alerts belong to its series, whose kind one
+            // occurrence can differ from.
+            val alertsAllDay = if (invite) item?.alertsAllDay ?: item?.allDay ?: false else allDay
+            val defaultLabel =
+                tr(
+                    "calendar.alert.default",
+                    mapOf("value" to alertLabel(if (alertsAllDay) defaultAllDayAlertDays else defaultAlertMinutes, alertsAllDay)),
+                )
+            val first = alert
+            PickerRow(
+                icon = Icons.Filled.Notifications,
+                value = first?.let { alertLabel(it, alertsAllDay) } ?: defaultLabel,
+                options = listOf<Int?>(null, NO_ALERT) + alertOptions(alertsAllDay),
+                optionLabel = { it?.let { lead -> alertLabel(lead, alertsAllDay) } ?: defaultLabel },
+                onPick = { alert = it },
+            )
+            if (first != null && first != NO_ALERT) {
+                PickerRow(
+                    icon = null,
+                    label = tr("calendar.alert.second"),
+                    value = alertLabel(secondAlert, alertsAllDay),
+                    options = listOf<Int?>(NO_ALERT) + alertOptions(alertsAllDay).filter { it != first },
+                    optionLabel = { alertLabel(it ?: NO_ALERT, alertsAllDay) },
+                    onPick = { secondAlert = it ?: NO_ALERT },
+                )
+            }
+            FieldRow(
+                icon = Icons.AutoMirrored.Filled.Notes,
+                value = notes,
+                onValueChange = { notes = it },
+                placeholder = tr("calendar.fields.notes"),
+                minLines = if (invite) 6 else 2,
+                maxLines = if (invite) 12 else 6,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (item != null) {
+                    IconButton(onClick = { onDelete(item.id) }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = if (invite) tr("calendar.removeFromCalendar") else tr("buttons.delete"),
+                            tint = colors.error,
+                        )
+                    }
+                    if (item.threadId.isNotBlank()) {
+                        TextButton(onClick = { onOpenMail(item) }) {
+                            Icon(Icons.Outlined.Email, contentDescription = null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(tr("calendar.openMail"))
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = { onSave(params()) }, enabled = !saving) { Text(tr("buttons.save")) }
+            }
+        }
+    }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text(tr("contacts.notesDiscard")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    onDismiss()
+                }) { Text(tr("buttons.discard")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text(tr("mobile.compose.keepEditing")) } },
+        )
+    }
 
     when (val current = picking) {
         Picking.StartDate, Picking.EndDate -> {
@@ -337,7 +375,7 @@ internal fun CalendarEventEditor(
 
         Picking.StartTime, Picking.EndTime -> {
             val initial = if (current == Picking.StartTime) startMinutes else endMinutes
-            val pickerState = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
+            val pickerState = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60)
             AlertDialog(
                 onDismissRequest = { picking = null },
                 text = { TimePicker(state = pickerState) },
@@ -365,24 +403,86 @@ internal fun CalendarEventEditor(
     }
 }
 
-/** One of the alert pickers: a chip naming its choice, opening a menu. */
+/** The editor's text fields sit bare on the sheet, as the task editor's do. */
 @Composable
-private fun AlertChip(
-    label: String,
+private fun bareFieldColors() =
+    TextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        focusedIndicatorColor = Color.Transparent,
+        unfocusedIndicatorColor = Color.Transparent,
+    )
+
+/** Where a row's content starts: the icon column, then the gap a bare text
+ *  field pads its own text by, so rows and fields share a left edge. */
+private val EditorIconColumn = 38.dp
+
+/** One line of the editor: an icon naming it (or the gap of one), then what
+ *  it holds. */
+@Composable
+private fun EditorRow(
+    icon: ImageVector?,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 24.dp, end = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(EditorIconColumn)) {
+            if (icon != null) Icon(icon, contentDescription = null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        content()
+    }
+}
+
+/** A row that is a text field. The icon stays by the first line as the field
+ *  grows. */
+@Composable
+private fun FieldRow(
+    icon: ImageVector,
     value: String,
-    options: List<Int?>,
-    optionLabel: @Composable (Int?) -> String,
-    onPick: (Int?) -> Unit,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = false,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 4.dp)) {
+        Icon(icon, contentDescription = null, Modifier.padding(top = 17.dp).size(22.dp), tint = muted)
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder, color = muted) },
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
+            colors = bareFieldColors(),
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** A row naming its choice, opening a menu of the others when tapped. */
+@Composable
+private fun <T> PickerRow(
+    icon: ImageVector?,
+    value: String,
+    options: List<T>,
+    optionLabel: @Composable (T) -> String,
+    onPick: (T) -> Unit,
+    label: String? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box {
-            AssistChip(
-                onClick = { menu = true },
-                label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                leadingIcon = { Icon(Icons.Filled.Notifications, contentDescription = null, Modifier.size(18.dp)) },
-            )
+    EditorRow(icon, modifier = Modifier.clickable { menu = true }) {
+        Box(Modifier.weight(1f)) {
+            Column {
+                if (label != null) {
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -439,6 +539,8 @@ private fun InviteLocation(location: String) {
     }
 }
 
+/** A start or an end: its day and, unless the event lasts all day, its time,
+ *  each opening its picker. */
 @Composable
 private fun DateTimeRow(
     label: String,
@@ -447,24 +549,40 @@ private fun DateTimeRow(
     onPickDate: () -> Unit,
     onPickTime: () -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, modifier = Modifier.width(56.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        // At phone width inside the dialog the full date leaves the time chip
-        // no room, wrapping "09:00" a character a line: the time keeps its width
-        // and the date gives way, ellipsized.
-        AssistChip(
-            onClick = onPickDate,
-            label = {
-                Text(
-                    formatDate(localMidnight(day) * 1000, DateStyle.WeekdayDate),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (minutes != null) {
-            AssistChip(onClick = onPickTime, label = { Text(formatMinutes(minutes), softWrap = false) })
+    EditorRow(icon = null) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        // On a narrow screen or with large text the time keeps its width and
+        // the date gives way, ellipsized, rather than pushing it off the row.
+        Row(
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
+            PickerValue(
+                formatDate(localMidnight(day) * 1000, DateStyle.WeekdayDate),
+                onPickDate,
+                Modifier.weight(1f, fill = false),
+            )
+            if (minutes != null) PickerValue(formatMinutes(minutes), onPickTime)
         }
     }
+}
+
+@Composable
+private fun PickerValue(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
 }
