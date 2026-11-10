@@ -18,9 +18,6 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-//go:embed build/appicon.png
-var appIconPNG []byte
-
 //go:embed build/tray-color.png
 var trayIconPNG []byte
 

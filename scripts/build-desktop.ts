@@ -110,7 +110,7 @@ if (os === 'darwin') {
   await mkdir(`${bundle}/Resources`, { recursive: true })
   await copyFile(binary, `${bundle}/MacOS/meron`)
   await run(
-    ['wails3', 'generate', 'icons', '-input', 'build/appicon.png', '-macfilename', `${bundle}/Resources/iconfile.icns`],
+    ['wails3', 'generate', 'icons', '-input', 'build/darwin/appicon.png', '-macfilename', `${bundle}/Resources/iconfile.icns`],
     desktop,
     process.env,
   )
