@@ -20,7 +20,8 @@ import { bodyContentKey, mediaKeyFromSrc } from './messageHelpers'
 import { applyFrameHighlights, clearFrameHighlights } from './frameSearchHighlight'
 import { frameMetrics, measureFrameHeight } from './frameHeight'
 import { useMessageFrameFont } from './useMessageFrameFont'
-import { installFrameQuoteFold, isInFoldedQuote } from './quoteFold'
+import { HTML_QUOTE_SELECTOR, installFrameQuoteFold, isInFoldedQuote } from './quoteFold'
+import { markOwnSignature } from './ownSignatureFold'
 import { useBubbleTheme } from './useFrameTheme'
 import { fitMediaBox } from './mediaSize'
 import type { FrameSurface } from './frameTheme'
@@ -51,6 +52,7 @@ export function BubbleHtmlFrame({
   onLinkHover,
   onUserScrollIntent,
   onNaturalWidth,
+  ownSignature = '',
 }: {
   html: string
   attachments?: Attachment[]
@@ -70,6 +72,8 @@ export function BubbleHtmlFrame({
   onUserScrollIntent?: () => void
   /** Reports the width a text-only document needs, or null for one that should fill the bubble. */
   onNaturalWidth?: (width: number | null) => void
+  /** My signature as plain text, when this is a message I sent: it folds with the quote. */
+  ownSignature?: string
 }) {
   const { active } = useConversationView()
   const activeRef = useRef(active)
@@ -88,8 +92,9 @@ export function BubbleHtmlFrame({
   // document taller, and fitting wide tables, which makes it shorter. A change
   // here reloads the frame.
   const documentKey = useMemo(
-    () => `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${autoFit}:${bodyContentKey(html)}`,
-    [html, messageFont, allowRemote, autoFit],
+    () =>
+      `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${autoFit}:${bodyContentKey(ownSignature)}:${bodyContentKey(html)}`,
+    [html, messageFont, allowRemote, autoFit, ownSignature],
   )
   // What this document is called while it is the current one. The frame is wired
   // as soon as its srcDoc changes — while the document it replaces is still
@@ -239,11 +244,17 @@ export function BubbleHtmlFrame({
       // still installed, and the load event wires this one again.
       if (doc.documentElement.getAttribute(FRAME_GENERATION_MARKER) !== generation) return
 
-      // Before the first measurement, so a folded quote never flashes open.
-      const foldQuote = installFrameQuoteFold(doc, quoteKey, {
-        show: t('chat.showQuotedText'),
-        hide: t('chat.hideQuotedText'),
-      })
+      // Before the first measurement, so a folded quote never flashes open. My
+      // own signature folds with it (or alone, named as such).
+      const hadQuote = !!doc.querySelector(HTML_QUOTE_SELECTOR)
+      const signatureOnly = markOwnSignature(doc, ownSignature) && !hadQuote
+      const foldQuote = installFrameQuoteFold(
+        doc,
+        quoteKey,
+        signatureOnly
+          ? { show: t('chat.showSignature'), hide: t('chat.hideSignature') }
+          : { show: t('chat.showQuotedText'), hide: t('chat.hideQuotedText') },
+      )
       foldQuoteRef.current = foldQuote
 
       let animationFrame = 0
@@ -495,7 +506,7 @@ export function BubbleHtmlFrame({
         cleanupFns.forEach((cleanup) => cleanup())
       }
     },
-    [documentKey, generation, quoteKey],
+    [documentKey, generation, quoteKey, ownSignature],
   )
 
   // Repaint a live frame when the theme changes under it: the document isn't

@@ -18,6 +18,10 @@ import {
 import { BubbleHtmlFrame } from './BubbleHtmlFrame'
 import { matchRanges } from './frameSearchHighlight'
 import { isQuoteUnfolded, setQuoteUnfolded, splitQuotedBody } from './quoteFold'
+import { foldStartWithOwnSignature, ownSignatureText } from './ownSignatureFold'
+import { useValue } from '@legendapp/state/react'
+import { accounts$ } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import { ConversationScrollIntentContext } from './useConversationScroll'
 import type { FrameSurface } from './frameTheme'
 
@@ -76,6 +80,12 @@ export function MessageBubbleBody({
   const [quoteUnfolded, setQuoteUnfoldedState] = useState(() => isQuoteUnfolded(quoteKey))
   useEffect(() => setQuoteUnfoldedState(isQuoteUnfolded(quoteKey)), [quoteKey])
 
+  // My own signature folds with the quote; ownSignatureText peeks, so subscribe
+  // to what it reads.
+  useValue(accounts$)
+  useValue(settings$.signature)
+  const ownSignature = ownSignatureText(message)
+
   const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
   const boxClass = fullHeight ? 'relative' : 'relative overflow-y-auto'
   if (useHtmlBody) {
@@ -95,12 +105,16 @@ export function MessageBubbleBody({
           // one scrolls itself and leaves the pane where it is.
           onUserScrollIntent={fullHeight ? releasePinForUserScroll : undefined}
           onNaturalWidth={onNaturalWidth}
+          ownSignature={ownSignature}
         />
       </div>
     )
   }
 
-  const { reply, quote } = splitQuotedBody(message.body, message.body_quote_start)
+  const foldStart = foldStartWithOwnSignature(message.body, message.body_quote_start, ownSignature)
+  const { reply, quote } = splitQuotedBody(message.body, foldStart)
+  // Named for what it hides: just my signature, or the quote (with it).
+  const signatureOnly = !!quote && !splitQuotedBody(message.body, message.body_quote_start).quote
   // A search parked on a match inside the folded quote opens it: the reply's
   // matches come first in the count, so any later occurrence is in the quote.
   const replyHits =
@@ -229,7 +243,13 @@ export function MessageBubbleBody({
     })
   }
 
-  const quoteLabel = showQuote ? t('chat.hideQuotedText') : t('chat.showQuotedText')
+  const quoteLabel = signatureOnly
+    ? showQuote
+      ? t('chat.hideSignature')
+      : t('chat.showSignature')
+    : showQuote
+      ? t('chat.hideQuotedText')
+      : t('chat.showQuotedText')
   return (
     <div
       ref={bodyRef}
