@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { scrollbarHitWidth } from '../../lib/nativeScrollbars'
-import { loadMoreMessages } from '../../states/mail'
+import { loadMoreMessages, messageRenderKey } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
 import { threadView } from '../../states/threadView'
@@ -321,7 +321,8 @@ export function ConversationMessageList({
               const expanded = isExpanded(message)
               return (
                 <div
-                  key={message.id}
+                  // A Sent copy keeps the key of the bubble it replaced: no remount.
+                  key={messageRenderKey(message.id)}
                   data-message-id={message.id}
                   data-unread={message.unread ? 'true' : undefined}
                   data-search-match-id={isSearchMatch ? message.id : undefined}

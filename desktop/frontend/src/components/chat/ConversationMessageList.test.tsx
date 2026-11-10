@@ -8,6 +8,7 @@ import '../../states/compose'
 import { settings$ } from '../../states/settings'
 import { setAllMessagesExpanded, thread$ } from '../../states/thread'
 import { forgetThreadViews } from '../../states/threadView'
+import { mergeRefreshedThreadMessages } from '../../states/mail'
 import type { Message } from '../../types'
 import { ConversationMessageList } from './ConversationMessageList'
 import { ConversationScrollContext, type ConversationScroll } from './useConversationScroll'
@@ -282,5 +283,51 @@ describe('ConversationMessageList expand all', () => {
     fireEvent.contextMenu(view.container.querySelector('[data-message-id="newest"]')!)
     expect(thread$.conversationMenu.peek()).toBeNull()
     thread$.messageContextMenu.set(null)
+  })
+})
+
+describe('ConversationMessageList when a Sent copy replaces a sent bubble', () => {
+  const list = (messages: Message[]) => (
+    <ConversationMessageList
+      messages={messages}
+      showThreadLoading={false}
+      showThreadError={false}
+      onRetryThreadLoad={() => undefined}
+      messagesCursor=""
+      messagesLoadingMore={false}
+      activeThreadId="thread-1"
+      searchMatches={[]}
+      activeSearchId=""
+      jumpMessageId=""
+      galleryOffsets={new Map<string, number>()}
+      wallpaperClassName=""
+    />
+  )
+
+  it('updates the bubble in place instead of mounting it again', () => {
+    const local = {
+      ...message('sent-swap-1', 'On its way'),
+      message_id: 'swap-1@example.com',
+      send_status: 'sent' as const,
+      date: 100,
+    }
+    const copy = {
+      ...message('sent:swap-1', 'On its way'),
+      message_id: '<swap-1@example.com>',
+      outgoing: true,
+      date: 100,
+    }
+    const view = render(withScroll({}, list([local])))
+    const before = view.container.querySelector('[data-message-id="sent-swap-1"]')
+    expect(before).not.toBeNull()
+
+    // What a refresh hands the list once the Sent copy has synced.
+    const merged = mergeRefreshedThreadMessages([local], [copy], 'thread-1')
+    view.rerender(withScroll({}, list(merged)))
+
+    // The same element, now showing the copy: nothing remounted, so its
+    // entrance animation doesn't play a second time.
+    const after = view.container.querySelector('[data-message-id="sent:swap-1"]')
+    expect(after).toBe(before)
   })
 })

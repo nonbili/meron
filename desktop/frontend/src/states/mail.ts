@@ -1063,6 +1063,17 @@ export async function loadThread(threadId: string) {
   }
 }
 
+// The key a message renders under in the conversation. A server copy that
+// replaces an optimistic bubble takes the bubble's, so React updates that bubble
+// in place: under its own id it would be a new element, mounted again with its
+// entrance animation, and the reply would blink and jump as its copy arrived.
+const sentCopyRenderKeys = new Map<string, string>()
+
+/** The key to render `id` under (see sentCopyRenderKeys). */
+export function messageRenderKey(id: string): string {
+  return sentCopyRenderKeys.get(id) ?? id
+}
+
 /**
  * Keep optimistic sends visible while the server's Sent copy catches up. Some
  * providers expose it over IMAP only after SMTP has returned (Proton Bridge can
@@ -1079,6 +1090,14 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
     const messageId = normalizeMessageId(message.message_id)
     return !messageId || !canonicalMessageIds.has(messageId)
   })
+  // Bubbles whose copy came back under the Message-ID we sent it with.
+  for (const local of current) {
+    if (local.thread_id !== threadId || !isLocalSendId(local.id)) continue
+    const messageId = normalizeMessageId(local.message_id)
+    if (!messageId || !canonicalMessageIds.has(messageId)) continue
+    const copy = refreshed.find((message) => normalizeMessageId(message.message_id) === messageId)
+    if (copy) sentCopyRenderKeys.set(copy.id, messageRenderKey(local.id))
+  }
   // Fallback candidates: outgoing, non-draft rows this refresh newly revealed.
   // A message we were already showing before the send cannot be its server
   // copy, and a draft — even one holding this very reply — is not a sent copy.
@@ -1095,6 +1114,7 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
   // that happens to look alike, which must not swallow it.
   const dispatched = unresolved.filter((message) => !!message.message_id || message.send_status !== 'sending')
   const paired = pairLocalSendsWithServerCopies(dispatched, candidates)
+  for (const [localId, copyId] of paired) sentCopyRenderKeys.set(copyId, messageRenderKey(localId))
   const optimistic = unresolved.filter((message) => !paired.has(message.id))
   if (optimistic.length === 0) return refreshed
   return [...refreshed, ...optimistic].sort((a, b) => a.date - b.date)
@@ -1120,9 +1140,9 @@ const SENT_COPY_MATCH_WINDOW_SECONDS = 600
  * twice — while still settling on time alone when a server reflows the body it
  * stored and no content match exists.
  *
- * Returns the ids of the bubbles that found a copy.
+ * Returns each bubble that found a copy, with the id of that copy.
  */
-function pairLocalSendsWithServerCopies(locals: Message[], candidates: Message[]): Set<string> {
+function pairLocalSendsWithServerCopies(locals: Message[], candidates: Message[]): Map<string, string> {
   const pairs: { localId: string; candidateId: string; contentMismatch: number; skew: number }[] = []
   for (const local of locals) {
     for (const candidate of candidates) {
@@ -1137,11 +1157,11 @@ function pairLocalSendsWithServerCopies(locals: Message[], candidates: Message[]
   }
   pairs.sort((a, b) => a.contentMismatch - b.contentMismatch || a.skew - b.skew)
 
-  const pairedLocals = new Set<string>()
+  const pairedLocals = new Map<string, string>()
   const claimed = new Set<string>()
   for (const pair of pairs) {
     if (pairedLocals.has(pair.localId) || claimed.has(pair.candidateId)) continue
-    pairedLocals.add(pair.localId)
+    pairedLocals.set(pair.localId, pair.candidateId)
     claimed.add(pair.candidateId)
   }
   return pairedLocals
