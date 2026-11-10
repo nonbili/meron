@@ -34,6 +34,9 @@ export function SignatureToggle({
         : t('composer.signature.off')
   const box = size === 'md' ? 'h-9 w-9 rounded-xl' : 'h-7 w-7 rounded-lg'
   const iconSize = size === 'md' ? 16 : 15
+  // On looks like the lock when it's on (EncryptToggle); off and not switchable
+  // take the grey of the attachment and full-editor buttons beside it.
+  const tone = on ? 'text-accent bg-accent/10' : 'text-secondary enabled:hover:bg-active enabled:hover:text-primary'
   return (
     <button
       type="button"
@@ -44,9 +47,9 @@ export function SignatureToggle({
       title={signature ? `${label}\n\n${signature}` : label}
       disabled={state === 'unmanaged'}
       onClick={() => onChange(!on)}
-      className={`flex ${box} shrink-0 items-center justify-center text-secondary transition-colors enabled:cursor-pointer enabled:hover:bg-active enabled:hover:text-primary disabled:opacity-50`}
+      className={`flex ${box} shrink-0 items-center justify-center transition-colors enabled:cursor-pointer disabled:opacity-50 ${tone}`}
     >
-      {on ? <PenLine size={iconSize} /> : <PenOff size={iconSize} />}
+      {on ? <PenLine size={iconSize} strokeWidth={2.4} /> : <PenOff size={iconSize} />}
     </button>
   )
 }
