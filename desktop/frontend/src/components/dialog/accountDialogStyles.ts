@@ -12,7 +12,7 @@ export type DialogClasses = {
 export function dialogClasses(isSetup: boolean): DialogClasses {
   return {
     panelClass: isSetup
-      ? 'm-auto w-full max-w-[640px] rounded-3xl border border-border/80 bg-chats p-10 text-primary shadow-[0_1px_2px_rgba(15,23,42,0.04),0_24px_64px_rgba(15,23,42,0.08)] animate-slide-up flex flex-col gap-7 max-[640px]:rounded-2xl max-[640px]:p-6 max-[640px]:gap-6'
+      ? 'm-auto w-full max-w-[640px] rounded-3xl border border-border/80 bg-chats p-10 text-primary shadow-[0_1px_2px_rgba(15,23,42,0.04),0_24px_64px_rgba(15,23,42,0.08)] dark:shadow-black/35 animate-slide-up flex flex-col gap-7 max-[640px]:rounded-2xl max-[640px]:p-6 max-[640px]:gap-6'
       : 'bg-chats border border-border text-primary max-w-md w-full rounded-3xl p-6 shadow-2xl animate-slide-up flex flex-col gap-4.5',
     scrollClass: isSetup
       ? 'flex flex-col gap-5 overflow-y-auto px-0.5 py-0.5'

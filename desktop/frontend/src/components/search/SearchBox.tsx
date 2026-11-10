@@ -63,8 +63,10 @@ export function SearchBox({
         // transform there would trap the options form's z-index under the
         // board header when the box sits in the title bar.
         'group relative flex min-w-0 items-center gap-2 border border-transparent transition-colors focus-within:bg-chats',
+        // Dark mode's white ink stands out more on the near-black title bar than
+        // light's dark ink on grey, so its fill is lighter to blend in as much.
         compact
-          ? 'h-full rounded-lg bg-sidenav-ink/4 px-2.5 hover:not-focus-within:bg-sidenav-ink/8 focus-within:border-accent'
+          ? 'h-full rounded-lg bg-sidenav-ink/4 px-2.5 hover:not-focus-within:bg-sidenav-ink/8 focus-within:border-accent dark:bg-sidenav-ink/[0.025] dark:hover:not-focus-within:bg-sidenav-ink/5'
           : 'h-9 rounded-xl bg-hover px-3 focus-within:border-accent/40',
         className,
       )}

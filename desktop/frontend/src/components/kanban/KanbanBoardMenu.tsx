@@ -68,7 +68,9 @@ export function FilterSwitch({ value, onChange }: { value: FilterMode; onChange:
         <button
           key={mode}
           className={`flex items-center gap-1.5 rounded-md px-3 text-xs font-semibold cursor-pointer transition-all duration-200 ${
-            value === mode ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:bg-hover hover:text-primary'
+            value === mode
+              ? 'bg-chats text-accent shadow-sm dark:shadow-black/10'
+              : 'text-secondary hover:bg-hover hover:text-primary'
           }`}
           onClick={() => onChange(mode)}
           title={t('kanban.actions.showFilterInAllColumns', { filter: label.toLowerCase() })}

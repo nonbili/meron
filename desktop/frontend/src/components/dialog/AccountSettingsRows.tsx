@@ -43,7 +43,7 @@ export function SettingsGroup({
     <section>
       <h3 className="mb-2 px-1 text-[0.75rem] font-semibold text-secondary">{title}</h3>
       <div
-        className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/10 ${
+        className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/30 ${
           overflowVisible ? '' : 'overflow-hidden'
         }`}
       >
@@ -129,7 +129,9 @@ export function SegmentedRow<T extends string>({
               type="button"
               onClick={() => onChange(opt.value)}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
-                value === opt.value ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:text-primary'
+                value === opt.value
+                  ? 'bg-chats text-accent shadow-sm dark:shadow-black/10'
+                  : 'text-secondary hover:text-primary'
               }`}
             >
               {opt.label}

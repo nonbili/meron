@@ -44,6 +44,7 @@
   --shadow-bubble-out: var(--me-bubble-shadow-out);
   --shadow-float: var(--me-float-shadow);
   --shadow-card: var(--me-card-shadow);
+  --shadow-pane: var(--me-pane-shadow);
 
   /* Inter has no CJK glyphs, so CJK codepoints fall through to --font-cjk. That
      var is switched per active locale via :lang() below — naming the regional
@@ -121,6 +122,8 @@
     0 1px 3px -1px color-mix(in srgb, var(--me-text-primary) 6%, transparent),
     0 -2px 8px -4px color-mix(in srgb, var(--me-text-primary) 6%, transparent);
   --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.11);
+  /* The board's conversation pane, cast left onto the columns it slides over. */
+  --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.08);
   --me-frame-border-width: 0px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 50%, transparent);
 
@@ -154,14 +157,62 @@
   --me-composer-border: #29352f;
   --me-bubble-shadow-in: 0 4px 12px -3px rgba(0, 0, 0, 0.3), 0 1px 4px -2px rgba(0, 0, 0, 0.2);
   --me-bubble-shadow-out: 0 4px 12px -3px rgba(0, 0, 0, 0.4), 0 1px 4px -2px rgba(0, 0, 0, 0.3);
-  --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --me-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.35);
   --me-float-shadow:
     0 6px 20px -4px rgba(0, 0, 0, 0.45), 0 1px 4px -2px rgba(0, 0, 0, 0.3), 0 -2px 8px -4px rgba(0, 0, 0, 0.3);
-  --me-frame-shadow: none;
-  --me-frame-border-width: 1px;
+  /* Light's frame shadow, darker, and like light no hairline: the shadow marks the edge. */
+  --me-frame-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  /* Black can only darken a near-black surface by a few levels, so dark shadows
+     need several times the light alpha to show as much (as --me-float-shadow). */
+  --me-pane-shadow: -4px 0 6px -2px rgba(0, 0, 0, 0.5);
+  --me-frame-border-width: 0px;
   --me-wallpaper-overlay: color-mix(in srgb, var(--me-bg-chat) 55%, transparent);
 
   color-scheme: dark;
+}
+
+/* Tailwind's shadow scale (menus, popovers, dialogs, cards, buttons) is one
+   value for both modes, 5-25% black: it shows on light surfaces and disappears
+   on dark ones. Dark mode gets the same shapes at about four times the alpha.
+   An explicit shadow colour (shadow-accent/15, dark:shadow-black/45, the tab
+   fade) still wins through --tw-shadow-color. Unlayered, so it beats the
+   utilities layer. A segmented control's selected pill keeps main's faint
+   dark:shadow-black/10: in its 2px track a dark drop shadow reads as part of the
+   pill and fills the gap below it. */
+.dark .shadow-xs {
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.2));
+}
+.dark .shadow-sm,
+.dark .shadow {
+  --tw-shadow:
+    0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-md,
+.dark .hover\:shadow-md:hover {
+  --tw-shadow:
+    0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-lg,
+.dark .hover\:shadow-lg:hover {
+  --tw-shadow:
+    0 10px 15px -3px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 4px 6px -4px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-xl {
+  --tw-shadow:
+    0 20px 25px -5px var(--tw-shadow-color, rgb(0 0 0 / 0.4)), 0 8px 10px -6px var(--tw-shadow-color, rgb(0 0 0 / 0.4));
+}
+.dark .shadow-2xl {
+  --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, rgb(0 0 0 / 0.6));
+}
+.dark .shadow-inner {
+  --tw-shadow: inset 0 2px 4px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.2));
+}
+/* These rules outrank variant utilities, so a variant that removes the shadow
+   needs its own dark rule (the details panel, docked on wide windows). */
+@media (min-width: 1100px) {
+  .dark .min-\[1100px\]\:shadow-none {
+    --tw-shadow: 0 0 #0000;
+  }
 }
 
 html,
@@ -349,6 +400,52 @@ textarea,
     0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
 }
 
+/* The controls' slate shadows at about four times the alpha in dark mode, as
+   the shadow scale above. A checked box keeps its accent glow. */
+.dark .app-checkbox:not(:checked, :indeterminate) {
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.12),
+    0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.dark .app-checkbox:not(:checked, :indeterminate):focus-visible {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--me-accent) 18%, transparent),
+    inset 0 1px 1px rgba(0, 0, 0, 0.12);
+}
+
+.dark .app-range::-webkit-slider-runnable-track {
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dark .app-range::-moz-range-track {
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dark .app-range::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
+}
+
+.dark .app-range::-moz-range-thumb {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 42%, transparent);
+}
+
+.dark .app-range:hover::-webkit-slider-thumb {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.7),
+    0 0 0 4px color-mix(in srgb, var(--me-accent) 14%, transparent);
+}
+
+.dark .app-range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--me-accent) 20%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
 .selectable-text {
   -webkit-user-select: text;
   user-select: text;
@@ -469,9 +566,8 @@ textarea,
   overflow: hidden;
   margin: 0 4px 4px 0;
   background: var(--me-bg-app);
-  /* Light themes lift the surface with a shadow and no border, so the panels
-     inside meet the shadow directly; dark ones keep the hairline, as a dark shadow
-     hardly shows on the darker frame. The light shadow is wide, faint and centred,
+  /* The surface is lifted with a shadow and no border, so the panels inside
+     meet the shadow directly; dark themes use a darker one. The light shadow is wide, faint and centred,
      like Slack's on macOS. */
   border: var(--me-frame-border-width) solid color-mix(in srgb, var(--me-border) 70%, transparent);
   border-radius: 12px;

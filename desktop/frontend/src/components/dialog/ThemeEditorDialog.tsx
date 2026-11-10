@@ -135,7 +135,9 @@ export function ThemeEditorDialog({
                 type="button"
                 onClick={() => setAppearance(mode)}
                 className={`rounded-md px-2.5 py-1 text-[0.65625rem] font-bold capitalize transition-colors cursor-pointer ${
-                  input.appearance === mode ? 'bg-chats text-accent shadow-sm' : 'text-secondary hover:text-primary'
+                  input.appearance === mode
+                    ? 'bg-chats text-accent shadow-sm dark:shadow-black/10'
+                    : 'text-secondary hover:text-primary'
                 }`}
               >
                 {mode}
