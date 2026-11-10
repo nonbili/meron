@@ -32,8 +32,9 @@ export function SignatureToggle({
       : on
         ? t('composer.signature.on')
         : t('composer.signature.off')
-  const box = size === 'md' ? 'h-9 w-9 rounded-xl' : 'h-7 w-7 rounded-lg'
-  const iconSize = size === 'md' ? 16 : 15
+  // The lock's box beside it (EncryptToggle), at either size.
+  const box = size === 'md' ? 'h-8 w-8 rounded-lg' : 'h-7 w-7 rounded-lg'
+  const iconSize = 15
   // On looks like the lock when it's on (EncryptToggle); off and not switchable
   // take the grey of the attachment and full-editor buttons beside it.
   const tone = on ? 'text-accent bg-accent/10' : 'text-secondary enabled:hover:bg-active enabled:hover:text-primary'
