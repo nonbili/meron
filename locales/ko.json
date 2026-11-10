@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "활성화",
   "mobile.mail.notificationsBannerText": "새 메일이 도착하면 알림을 받습니다.",
   "mobile.mail.searchMail": "메일 검색",
+  "mobile.mail.selectedCount": "{count, number}개 선택됨",
   "mobile.mail.syncMailbox": "사서함 동기화",
   "mobile.refresh.failed": "{failed, plural, one {계정 1개를 새로 고치지 못했습니다} other {계정 {failed}개를 새로 고치지 못했습니다}}",
   "mobile.refresh.noAccounts": "설정된 계정이 없습니다",

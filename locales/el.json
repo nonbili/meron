@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Ενεργοποίηση",
   "mobile.mail.notificationsBannerText": "Λάβετε ειδοποίηση όταν φτάνει νέα αλληλογραφία.",
   "mobile.mail.searchMail": "Αναζήτηση αλληλογραφίας",
+  "mobile.mail.selectedCount": "{count, number} επιλεγμένα",
   "mobile.mail.syncMailbox": "Συγχρονισμός γραμματοκιβωτίου",
   "mobile.refresh.failed": "{failed, plural, one {Η ανανέωση 1 λογαριασμού απέτυχε} other {Η ανανέωση {failed} λογαριασμών απέτυχε}}",
   "mobile.refresh.noAccounts": "Δεν έχουν διαμορφωθεί λογαριασμοί",

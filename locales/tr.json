@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Etkinleştir",
   "mobile.mail.notificationsBannerText": "Yeni posta geldiğinde bildirim alın.",
   "mobile.mail.searchMail": "Postada ara",
+  "mobile.mail.selectedCount": "{count, number} seçildi",
   "mobile.mail.syncMailbox": "Posta kutusunu senkronize et",
   "mobile.refresh.failed": "{failed, plural, one {1 hesap yenilenemedi} other {{failed} hesap yenilenemedi}}",
   "mobile.refresh.noAccounts": "Yapılandırılmış hesap yok",

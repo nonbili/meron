@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Aktivera",
   "mobile.mail.notificationsBannerText": "Få aviseringar när ny e-post kommer.",
   "mobile.mail.searchMail": "Sök i e-post",
+  "mobile.mail.selectedCount": "{count, number} markerade",
   "mobile.mail.syncMailbox": "Synkronisera brevlåda",
   "mobile.refresh.failed": "{failed, plural, one {1 konto kunde inte uppdateras} other {{failed} konton kunde inte uppdateras}}",
   "mobile.refresh.noAccounts": "Inga konton har konfigurerats",

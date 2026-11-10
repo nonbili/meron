@@ -174,7 +174,6 @@ internal fun ContactsScreen(
                         Text(
                             tr("contacts.title"),
                             fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

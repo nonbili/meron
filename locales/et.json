@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Luba",
   "mobile.mail.notificationsBannerText": "Saa märguanne, kui saabub uus kiri.",
   "mobile.mail.searchMail": "Otsi kirju",
+  "mobile.mail.selectedCount": "{count, number} valitud",
   "mobile.mail.syncMailbox": "Sünkrooni postkast",
   "mobile.refresh.failed": "{failed, plural, one {1 konto värskendamine ebaõnnestus} other {{failed} konto värskendamine ebaõnnestus}}",
   "mobile.refresh.noAccounts": "Ühtegi kontot pole konfigureeritud",

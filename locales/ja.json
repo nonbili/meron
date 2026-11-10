@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "有効にする",
   "mobile.mail.notificationsBannerText": "新着メールが届いたら通知を受け取ります。",
   "mobile.mail.searchMail": "メールを検索",
+  "mobile.mail.selectedCount": "{count, number}件を選択中",
   "mobile.mail.syncMailbox": "メールボックスを同期する",
   "mobile.refresh.failed": "{failed, plural, one {1 件のアカウントを更新できませんでした} other {{failed} 件のアカウントを更新できませんでした}}",
   "mobile.refresh.noAccounts": "アカウントが設定されていません",

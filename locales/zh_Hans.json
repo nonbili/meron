@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "启用",
   "mobile.mail.notificationsBannerText": "新邮件到达时接收通知。",
   "mobile.mail.searchMail": "搜索邮件",
+  "mobile.mail.selectedCount": "已选择 {count, number} 项",
   "mobile.mail.syncMailbox": "同步邮箱",
   "mobile.refresh.failed": "{failed, plural, one {1 个账户刷新失败} other {{failed} 个账户刷新失败}}",
   "mobile.refresh.noAccounts": "未配置任何账户",

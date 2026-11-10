@@ -748,6 +748,7 @@
   "mobile.mail.notificationsBannerEnable": "Включить",
   "mobile.mail.notificationsBannerText": "Получайте уведомления о новых письмах.",
   "mobile.mail.searchMail": "Поиск почты",
+  "mobile.mail.selectedCount": "Выбрано: {count, number}",
   "mobile.mail.syncMailbox": "Синхронизировать почту",
   "mobile.refresh.failed": "{failed, plural, one {Не удалось обновить {failed} аккаунт} few {Не удалось обновить {failed} аккаунта} many {Не удалось обновить {failed} аккаунтов} other {Не удалось обновить {failed} аккаунта}}",
   "mobile.refresh.noAccounts": "Нет настроенных аккаунтов",

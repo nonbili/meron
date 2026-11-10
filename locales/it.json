@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Abilita",
   "mobile.mail.notificationsBannerText": "Ricevi una notifica all'arrivo di nuove email.",
   "mobile.mail.searchMail": "Cerca nella posta",
+  "mobile.mail.selectedCount": "{count, number} selezionati",
   "mobile.mail.syncMailbox": "Sincronizza la casella di posta",
   "mobile.refresh.failed": "{failed, plural, one {Impossibile aggiornare 1 account} other {Impossibile aggiornare {failed} account}}",
   "mobile.refresh.noAccounts": "Nessun account configurato",

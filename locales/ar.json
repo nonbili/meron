@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "تمكين",
   "mobile.mail.notificationsBannerText": "احصل على إشعار عند وصول بريد جديد.",
   "mobile.mail.searchMail": "البحث في البريد",
+  "mobile.mail.selectedCount": "تم تحديد {count, number}",
   "mobile.mail.syncMailbox": "مزامنة صندوق البريد",
   "mobile.refresh.failed": "{failed, plural, one {فشل تحديث حساب واحد} other {فشل تحديث {failed} حسابات}}",
   "mobile.refresh.noAccounts": "لا توجد حسابات مهيأة",

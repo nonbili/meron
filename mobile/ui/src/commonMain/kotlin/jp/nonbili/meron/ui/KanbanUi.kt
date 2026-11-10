@@ -437,19 +437,24 @@ internal fun KanbanScreen(
         }
         Column(Modifier.fillMaxSize()) {
             if (boardColumns.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Filled.ViewKanban,
-                    title = tr("empty.noColumns"),
-                    text = tr("empty.noColumnsText"),
-                    actionLabel = tr("kanban.actions.addColumn"),
-                    onAction = onAddColumn,
-                )
+                // Centred in what shows above the navigation bar.
+                Box(Modifier.fillMaxSize().padding(bottom = navigationBarInset())) {
+                    EmptyState(
+                        icon = Icons.Filled.ViewKanban,
+                        title = tr("empty.noColumns"),
+                        text = tr("empty.noColumnsText"),
+                        actionLabel = tr("kanban.actions.addColumn"),
+                        onAction = onAddColumn,
+                    )
+                }
             } else {
                 val boardRowState = rememberLazyListState()
                 LazyRow(
-                    Modifier.fillMaxSize().appScrollbar(boardRowState, Orientation.Horizontal),
+                    // The columns run off the bottom of the screen, under the
+                    // navigation bar; the board's own scrollbar stays clear of it.
+                    Modifier.fillMaxSize().appScrollbar(boardRowState, Orientation.Horizontal, endOffset = -navigationBarInset()),
                     state = boardRowState,
-                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 16.dp),
+                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(boardColumns, key = { kanbanColumnKey(it) }) { column ->
@@ -572,6 +577,10 @@ internal fun FilterModeButton(
     }
 }
 
+/** A column is a card that runs off the bottom of the screen, under the
+ *  navigation bar, so only its top corners round. */
+private val KanbanColumnShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+
 @Composable
 internal fun KanbanColumn(
     column: KanbanColumnSpec,
@@ -618,9 +627,9 @@ internal fun KanbanColumn(
             Modifier
                 .width(kanbanColumnWidth)
                 .fillMaxSize()
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, KanbanColumnShape),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(8.dp),
+        shape = KanbanColumnShape,
     ) {
         Column(Modifier.fillMaxSize()) {
             KanbanColumnHeader(
@@ -666,7 +675,7 @@ internal fun KanbanColumn(
             }
             if (!state.loading && visibleThreads.isEmpty()) {
                 Column(
-                    Modifier.fillMaxSize().padding(18.dp),
+                    Modifier.fillMaxSize().padding(18.dp).padding(bottom = navigationBarInset()),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -715,7 +724,8 @@ internal fun KanbanColumn(
                 LazyColumn(
                     Modifier.fillMaxSize().appScrollbar(columnListState),
                     state = columnListState,
-                    contentPadding = PaddingValues(bottom = 8.dp),
+                    // The last rows clear the compose button as well as the bar.
+                    contentPadding = PaddingValues(bottom = 88.dp + navigationBarInset()),
                 ) {
                     items(visibleThreads, key = { it.id }) { thread ->
                         MailRow(
@@ -1034,9 +1044,9 @@ internal fun KanbanMinimizedColumn(
                 .width(58.dp)
                 .fillMaxSize()
                 .clickable(onClick = onRestore)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, KanbanColumnShape),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(8.dp),
+        shape = KanbanColumnShape,
     ) {
         Column(
             Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 8.dp),

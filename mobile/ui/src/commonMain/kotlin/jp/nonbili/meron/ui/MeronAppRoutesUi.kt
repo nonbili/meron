@@ -116,8 +116,7 @@ internal fun MailSelectionTitle(
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(
-            "$selectedCount selected",
-            fontWeight = FontWeight.SemiBold,
+            tr("mobile.mail.selectedCount", mapOf("count" to selectedCount)),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -293,7 +292,6 @@ internal fun KanbanRouteContent(
                                 Text(
                                     activeKanbanBoard?.name.orEmpty(),
                                     fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -541,7 +539,8 @@ internal fun KanbanRouteContent(
                 snackbarHost = { SnackbarHost(snackbarHost) },
             ) { innerPadding ->
                 KanbanScreen(
-                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    // The board and its columns run on under the navigation bar.
+                    modifier = Modifier.fillMaxSize().padding(innerPadding.withoutBottom()),
                     accounts = coreAccounts.filterNot { it.id in hiddenNavigationAccountIds },
                     accountsLoading = !initialAccountsLoaded || accountsLoading,
                     board = activeKanbanBoard,
@@ -825,6 +824,8 @@ internal fun MailRouteContent(
                                                     foldersByAccount[selectedCoreAccountId].orEmpty()
                                                 },
                                             currentFolderId = selectedCoreFolder,
+                                            // The bar's title, at a title's weight.
+                                            fontWeight = FontWeight.Normal,
                                             onRequestFolders = {
                                                 if (!unifiedMailbox) ensureAccountFolders(selectedCoreAccountId)
                                             },
@@ -856,7 +857,6 @@ internal fun MailRouteContent(
                                         Text(
                                             selectedAccount?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
                                             fontSize = 18.sp,
-                                            fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )

@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Bật",
   "mobile.mail.notificationsBannerText": "Nhận thông báo khi có thư mới.",
   "mobile.mail.searchMail": "Tìm kiếm thư",
+  "mobile.mail.selectedCount": "Đã chọn {count, number}",
   "mobile.mail.syncMailbox": "Đồng bộ hộp thư",
   "mobile.refresh.failed": "{failed, plural, one {1 tài khoản làm mới thất bại} other {{failed} tài khoản làm mới thất bại}}",
   "mobile.refresh.noAccounts": "Chưa định cấu hình tài khoản nào",

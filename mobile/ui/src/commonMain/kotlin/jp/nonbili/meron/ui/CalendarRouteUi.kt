@@ -135,7 +135,6 @@ internal fun CalendarRouteContent(
                             Text(
                                 formatDate(epochSecondsForLocalDate(calendarYear, calendarMonth, 1) * 1000, DateStyle.MonthYear),
                                 fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

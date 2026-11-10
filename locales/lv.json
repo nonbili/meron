@@ -936,6 +936,7 @@
   "mobile.mail.notificationsBannerEnable": "Iespējot",
   "mobile.mail.notificationsBannerText": "Saņemiet paziņojumu, kad pienāk jauns pasts.",
   "mobile.mail.searchMail": "Meklēt pastā",
+  "mobile.mail.selectedCount": "Atlasīti: {count, number}",
   "mobile.mail.syncMailbox": "Sinhronizēt pastkasti",
   "mobile.refresh.failed": "{failed, plural, one {1 kontu neizdevās atsvaidzināt} other {{failed} kontus neizdevās atsvaidzināt}}",
   "mobile.refresh.noAccounts": "Nav konfigurēts neviens konts",
