@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Удалить цитируемый текст",
   "composer.signature.off": "Без подписи. Нажмите, чтобы добавить.",
   "composer.signature.on": "Подпись будет добавлена при отправке. Нажмите, чтобы не добавлять.",
+  "composer.signature.unmanaged": "Эту подпись нельзя переключить здесь: она изменена или не совпадает с текущей подписью аккаунта. Измените её в тексте письма.",
   "composer.status.addRecipientBeforeSending": "Добавьте получателя перед отправкой",
   "composer.status.chooseAvailableAccount": "Выберите доступный почтовый аккаунт",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Не удалось удалить черновик из предыдущего аккаунта",

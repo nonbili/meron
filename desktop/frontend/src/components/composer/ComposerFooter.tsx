@@ -4,6 +4,8 @@ import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 import type { RecipientKeys } from '../../lib/crypto'
 import { EncryptToggle } from '../crypto/EncryptToggle'
+import type { SignatureSwitch } from '../../lib/signature'
+import { SignatureToggle } from './SignatureToggle'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -48,6 +50,7 @@ export function ComposerFooter({
   saveError,
   canSend,
   encryption,
+  signature,
   onPickFiles,
   onPickInlineImages,
   onToggleRich,
@@ -71,6 +74,13 @@ export function ComposerFooter({
     /** Switched off by the user before (in the quick reply). */
     offByUser?: boolean
     hasRecipients?: boolean
+    onChange: (on: boolean) => void
+  }
+  /** The signature switch, when the account sends a signature (or the body still holds one). */
+  signature?: {
+    state: SignatureSwitch
+    /** The account's signature as plain text, for the tooltip. */
+    text: string
     onChange: (on: boolean) => void
   }
   onPickFiles: () => void
@@ -119,6 +129,9 @@ export function ComposerFooter({
             hasRecipients={encryption.hasRecipients}
             onChange={encryption.onChange}
           />
+        )}
+        {signature && (
+          <SignatureToggle size="md" state={signature.state} signature={signature.text} onChange={signature.onChange} />
         )}
         <button
           onClick={onToggleRich}

@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "移除引用的文本",
   "composer.signature.off": "无签名。点击以添加。",
   "composer.signature.on": "发送时将添加签名。点击可不添加。",
+  "composer.signature.unmanaged": "此处无法切换此签名：签名已被编辑，或不是账户当前的签名。请在邮件正文中修改。",
   "composer.status.addRecipientBeforeSending": "发送前请添加收件人",
   "composer.status.chooseAvailableAccount": "请选择可用的邮件帐户",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "无法清理上一个账户的草稿",

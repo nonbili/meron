@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "引用テキストを削除",
   "composer.signature.off": "署名なし。クリックで追加します。",
   "composer.signature.on": "送信時に署名が追加されます。クリックで省略します。",
+  "composer.signature.unmanaged": "この署名はここでは切り替えられません。編集されているか、アカウントの現在の署名ではありません。本文で変更してください。",
   "composer.status.addRecipientBeforeSending": "送信前に宛先を追加してください",
   "composer.status.chooseAvailableAccount": "利用可能なメールアカウントを選択してください",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "以前のアカウントの下書きを削除できませんでした",

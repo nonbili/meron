@@ -348,6 +348,61 @@ function joinAcrossRemoval(prefix: string, suffix: string): string {
 }
 
 /**
+ * What a body this app did not just compose (a reopened draft, "Edit as New
+ * Message") knows about the account's signature: tracked when the body ends in
+ * it exactly as the composer inserts it below the text, unmanaged (`undefined`)
+ * otherwise. Only that position is recognised: a signature with anything after
+ * it (a quote, a forward) could not be switched back on in the same place.
+ */
+export function trailingSignatureTracking(body: ComposeBody, signature: Signature): SignatureTracking {
+  if (!signature.html) return undefined
+  const mark: SignatureMark = { ...signature, placement: 'belowText' }
+  // Blank lines (empty paragraphs) after the signature are not content.
+  const trimmed = body.rich
+    ? { ...body, html: body.html.replace(/(<p><\/p>)+$/, '') }
+    : { ...body, text: body.text.replace(/\n+$/, '') }
+  const removed = bodyWithSwappedSignature(trimmed, mark, { html: '', text: '' })
+  if (removed.tracking === undefined) return undefined
+  const restored = bodyWithSignature(removed.body, signature, 'belowText')
+  const same = trimmed.rich
+    ? restored.html === trimmed.html || restored.html.replace(/^<p><\/p>/, '') === trimmed.html
+    : restored.text === trimmed.text || restored.text.replace(/^\n+/, '') === trimmed.text
+  return same ? mark : undefined
+}
+
+/** Where the composer's signature switch stands for a body and its tracking. */
+export type SignatureSwitch = 'on' | 'off' | 'unmanaged'
+
+/**
+ * The composer's signature switch: on while the tracked signature is in the
+ * body as inserted, off when the draft deliberately has none, and unmanaged
+ * when the body's signature is not this app's to take out (a reopened draft
+ * whose signature wasn't recognised, or one the user has written into).
+ */
+export function signatureSwitch(body: ComposeBody, tracking: SignatureTracking): SignatureSwitch {
+  if (tracking === undefined) return 'unmanaged'
+  if (!tracking?.html) return 'off'
+  return bodyWithSwappedSignature(body, tracking, { html: '', text: '' }).tracking === undefined ? 'unmanaged' : 'on'
+}
+
+/**
+ * The body with its signature switched on or off, through the same swap as a
+ * change of From account: off takes the tracked signature out, on puts the
+ * account's signature back where this draft's goes. Null when the body's
+ * signature can't be switched (see `signatureSwitch`).
+ */
+export function switchedSignature(
+  body: ComposeBody,
+  tracking: SignatureTracking,
+  signature: Signature,
+  on: boolean,
+): { body: ComposeBody; tracking: SignatureTracking } | null {
+  if (signatureSwitch(body, tracking) === 'unmanaged') return null
+  const swapped = bodyWithSwappedSignature(body, tracking, on ? signature : { html: '', text: '' })
+  return swapped.tracking === undefined ? null : swapped
+}
+
+/**
  * A quick reply as it goes out: what the user typed, then the signature under
  * one blank line. Only the join is added: the user's own whitespace is sent
  * exactly as written, so `textWithoutTrailingSignature` gets it back verbatim

@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Quitar el texto citado",
   "composer.signature.off": "Sin firma. Haz clic para añadirla.",
   "composer.signature.on": "La firma se añade al enviar. Haz clic para omitirla.",
+  "composer.signature.unmanaged": "Esta firma no se puede activar o desactivar aquí: se ha editado o no es la actual de la cuenta. Cámbiala en el mensaje.",
   "composer.status.addRecipientBeforeSending": "Añade un destinatario antes de enviar",
   "composer.status.chooseAvailableAccount": "Elige una cuenta de correo disponible",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "No se pudo limpiar el borrador de la cuenta anterior",

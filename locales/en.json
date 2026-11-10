@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Remove quoted text",
   "composer.signature.off": "No signature. Click to add it.",
   "composer.signature.on": "Signature added when sent. Click to leave it off.",
+  "composer.signature.unmanaged": "This signature can't be switched here: it was edited, or isn't the account's current one. Change it in the message.",
   "composer.status.addRecipientBeforeSending": "Add a recipient before sending",
   "composer.status.chooseAvailableAccount": "Choose an available mail account",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Couldn't clean up the previous account's draft",

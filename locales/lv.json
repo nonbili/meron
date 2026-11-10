@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Noņemt citēto tekstu",
   "composer.signature.off": "Bez paraksta. Noklikšķiniet, lai to pievienotu.",
   "composer.signature.on": "Paraksts tiks pievienots, sūtot. Noklikšķiniet, lai to izlaistu.",
+  "composer.signature.unmanaged": "Šo parakstu šeit nevar pārslēgt: tas ir rediģēts vai nav konta pašreizējais paraksts. Mainiet to ziņojumā.",
   "composer.status.addRecipientBeforeSending": "Pirms sūtīšanas pievienojiet saņēmēju",
   "composer.status.chooseAvailableAccount": "Izvēlieties pieejamu pasta kontu",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Neizdevās notīrīt iepriekšējā konta melnrakstu",

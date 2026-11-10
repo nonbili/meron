@@ -21,7 +21,9 @@ import {
   composedContent,
   closeComposeTabKeepingDraft,
   announceSavedDrafts,
+  resolveSignatureFor,
 } from '../../states/compose'
+import { signatureSwitch, switchedSignature, type ComposeBody, type SignatureSwitch } from '../../lib/signature'
 import { warnUndelivered } from '../../states/undelivered'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
@@ -515,6 +517,29 @@ export function useComposer(tabId: string) {
     }
   }
 
+  // The signature switch takes the tracked signature out of the body or puts
+  // the account's back, through the same swap as a change of From account. A
+  // rich editor holds its own copy of the document, so it is re-seeded, with the
+  // caret kept where the user was when the new document still holds it.
+  const account = useValue(() => accounts$.get().find((acc) => acc.id === draft?.accountId))
+  useValue(settings$.signature)
+  const accountSignature = resolveSignatureFor(account)
+  // The draft's html follows every edit (the editor's onUpdate), as the From
+  // swap relies on too.
+  const body: ComposeBody | null = draft ? { rich: draft.rich, html: draft.html, text: draft.text } : null
+  const signatureState: SignatureSwitch | null = body ? signatureSwitch(body, draft?.signature) : null
+  const switchSignature = (on: boolean) => {
+    if (!draft || !body) return
+    const switched = switchedSignature(body, draft.signature, accountSignature, on)
+    if (!switched) return
+    if (draft.rich && editor) {
+      const { from, to } = editor.state.selection
+      editor.commands.setContent(switched.body.html || '<p></p>', { emitUpdate: false })
+      if (to <= editor.state.doc.content.size) editor.commands.setTextSelection({ from, to })
+    }
+    update({ html: switched.body.html, text: switched.body.text, signature: switched.tracking })
+  }
+
   // A folded quote is unfolded into the end of the body, where the user can trim
   // it like any other text; from then on it is part of the body.
   const expandQuote = () => {
@@ -844,6 +869,9 @@ export function useComposer(tabId: string) {
     encryptionKeys,
     update,
     toggleRich,
+    signatureState,
+    accountSignature,
+    switchSignature,
     expandQuote,
     removeQuote,
     addFiles,

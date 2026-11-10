@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Remover texto citado",
   "composer.signature.off": "Sem assinatura. Clique para adicioná-la.",
   "composer.signature.on": "A assinatura é adicionada ao enviar. Clique para omiti-la.",
+  "composer.signature.unmanaged": "Esta assinatura não pode ser ativada ou desativada aqui: foi editada ou não é a atual da conta. Altere-a na mensagem.",
   "composer.status.addRecipientBeforeSending": "Adicione um destinatário antes de enviar",
   "composer.status.chooseAvailableAccount": "Escolha uma conta de e-mail disponível",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Não foi possível limpar o rascunho da conta anterior",

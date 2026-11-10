@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Αφαίρεση κειμένου παράθεσης",
   "composer.signature.off": "Χωρίς υπογραφή. Κάντε κλικ για να την προσθέσετε.",
   "composer.signature.on": "Η υπογραφή προστίθεται κατά την αποστολή. Κάντε κλικ για να την παραλείψετε.",
+  "composer.signature.unmanaged": "Αυτή η υπογραφή δεν μπορεί να αλλάξει εδώ: έχει τροποποιηθεί ή δεν είναι η τρέχουσα του λογαριασμού. Αλλάξτε την μέσα στο μήνυμα.",
   "composer.status.addRecipientBeforeSending": "Προσθέστε έναν παραλήπτη πριν από την αποστολή",
   "composer.status.chooseAvailableAccount": "Επιλέξτε έναν διαθέσιμο λογαριασμό email",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Δεν ήταν δυνατή η εκκαθάριση του προσχεδίου του προηγούμενου λογαριασμού",

@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Alıntılanan metni kaldır",
   "composer.signature.off": "İmza yok. Eklemek için tıklayın.",
   "composer.signature.on": "İmza gönderilirken eklenir. Eklememek için tıklayın.",
+  "composer.signature.unmanaged": "Bu imza burada açılıp kapatılamaz: düzenlenmiş ya da hesabın geçerli imzası değil. İletinin içinde değiştirin.",
   "composer.status.addRecipientBeforeSending": "Göndermeden önce bir alıcı ekleyin",
   "composer.status.chooseAvailableAccount": "Kullanılabilir bir posta hesabı seçin",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Önceki hesabın taslağı temizlenemedi",

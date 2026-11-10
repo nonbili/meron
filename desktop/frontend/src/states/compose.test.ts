@@ -4463,7 +4463,24 @@ describe('signature in the quick reply', () => {
 
     const draft = compose$.tabs.get()[0].compose
     expect(draft?.text).toBe('t2')
-    expect(draft?.signature).toBeUndefined()
+    // Off, but switchable back on in the full composer.
+    expect(draft?.signature).toEqual({ html: '', text: '', placement: 'belowText' })
+  })
+
+  it('tracks the signature a reopened draft ends in, so it can be switched', () => {
+    setUpThread()
+    openComposeTab({ accountId: 'acc-1', text: 'Saved\n\nfrom u2', noSignature: true })
+
+    const draft = compose$.tabs.get()[0].compose
+    expect(draft?.text).toBe('Saved\n\nfrom u2')
+    expect(draft?.signature).toEqual({ html: '<p>from u2</p>', text: 'from u2', placement: 'belowText' })
+  })
+
+  it('leaves a reopened draft unmanaged when its signature is not the current one at the end', () => {
+    setUpThread()
+    openComposeTab({ accountId: 'acc-1', text: 'Saved\n\nold signature', noSignature: true })
+    expect(compose$.tabs.get()[0].compose?.signature).toBeUndefined()
+    expect(compose$.tabs.get()[0].compose?.text).toBe('Saved\n\nold signature')
   })
 
   it('puts the switch back with the reply when the send dies before going out', async () => {

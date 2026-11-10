@@ -31,6 +31,9 @@ export function Composer({ tabId }: { tabId: string }) {
     encryptionKeys,
     update,
     toggleRich,
+    signatureState,
+    accountSignature,
+    switchSignature,
     expandQuote,
     removeQuote,
     pickAttachmentFiles,
@@ -209,6 +212,13 @@ export function Composer({ tabId }: { tabId: string }) {
                 hasRecipients: !!(draft.to + draft.cc + draft.bcc).trim(),
                 onChange: (on: boolean) => update({ encrypt: on }),
               }
+            : undefined
+        }
+        signature={
+          // No switch for an account without a signature, unless the body still
+          // holds one this app tracks (a From change takes that out anyway).
+          signatureState && (accountSignature.text || signatureState === 'on')
+            ? { state: signatureState, text: accountSignature.text, onChange: switchSignature }
             : undefined
         }
         onPickFiles={() => void pickAttachmentFiles()}

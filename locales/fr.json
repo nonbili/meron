@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Supprimer le texte cité",
   "composer.signature.off": "Sans signature. Cliquez pour l’ajouter.",
   "composer.signature.on": "Signature ajoutée à l’envoi. Cliquez pour l’omettre.",
+  "composer.signature.unmanaged": "Cette signature ne peut pas être activée ou désactivée ici : elle a été modifiée ou n’est pas celle du compte. Modifiez-la dans le message.",
   "composer.status.addRecipientBeforeSending": "Ajoutez un destinataire avant l'envoi",
   "composer.status.chooseAvailableAccount": "Choisissez un compte de messagerie disponible",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Impossible de supprimer le brouillon du compte précédent",

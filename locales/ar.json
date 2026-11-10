@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "إزالة النص المقتبس",
   "composer.signature.off": "بلا توقيع. انقر لإضافته.",
   "composer.signature.on": "سيُضاف التوقيع عند الإرسال. انقر لإزالته.",
+  "composer.signature.unmanaged": "لا يمكن تبديل هذا التوقيع هنا: فقد عُدِّل، أو ليس توقيع الحساب الحالي. غيّره في نص الرسالة.",
   "composer.status.addRecipientBeforeSending": "أضف مستلمًا قبل الإرسال",
   "composer.status.chooseAvailableAccount": "اختر حساب بريد متاحًا",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "تعذر تنظيف مسودة الحساب السابق",

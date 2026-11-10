@@ -1305,6 +1305,62 @@ describe('Composer', () => {
     expect(bodyHtml()).not.toContain('From A')
   })
 
+  it('switches the signature off and back on, in the editor too', async () => {
+    const tabId = openComposeTab()!
+    const view = render(<Composer tabId={tabId} />)
+    await act(async () => {
+      updateComposeDraft(tabId, { html: `<p>Hello there</p>${draftOf(tabId)!.html}` })
+    })
+    const toggle = () => view.getByRole('switch', { name: /signature/i })
+    expect(toggle().getAttribute('aria-checked')).toBe('true')
+    expect(toggle().getAttribute('title')).toContain('From A')
+
+    await act(async () => {
+      fireEvent.click(toggle())
+    })
+    expect(bodyHtml()).toContain('Hello there')
+    expect(bodyHtml()).not.toContain('From A')
+    expect(draftOf(tabId)!.html).not.toContain('From A')
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+
+    await act(async () => {
+      fireEvent.click(toggle())
+    })
+    expect(bodyHtml()).toContain('From A')
+    expect(draftOf(tabId)!.html).toContain('Hello there')
+    expect(toggle().getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('switches the signature of a plaintext draft', async () => {
+    const tabId = openComposeTab({ text: 'Hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+    expect(draftOf(tabId)!.text).toBe('Hi\n\nFrom A')
+
+    await act(async () => {
+      fireEvent.click(view.getByRole('switch', { name: /signature/i }))
+    })
+    expect(draftOf(tabId)!.text).toBe('Hi')
+  })
+
+  it('cannot switch a signature the user has written into', async () => {
+    const tabId = openComposeTab({ text: 'Hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+    await act(async () => {
+      updateComposeDraft(tabId, { text: 'Hi\n\nFrom A, edited' })
+    })
+
+    const toggle = view.getByRole('switch', { name: /signature/i }) as HTMLButtonElement
+    expect(toggle.disabled).toBe(true)
+  })
+
+  it('shows no signature switch for an account without a signature', () => {
+    accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
+    const tabId = openComposeTab()!
+    const view = render(<Composer tabId={tabId} />)
+
+    expect(view.queryByRole('switch', { name: /signature/i })).toBeNull()
+  })
+
   it('keeps what the user typed when the signature is swapped under it', async () => {
     const tabId = openComposeTab()!
     render(<Composer tabId={tabId} />)

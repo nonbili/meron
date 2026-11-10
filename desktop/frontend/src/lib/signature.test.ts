@@ -10,6 +10,9 @@ import {
   isBlankSignature,
   resolveSignature,
   savedSignatureHtml,
+  signatureSwitch,
+  switchedSignature,
+  trailingSignatureTracking,
   textWithoutTrailingSignature,
   textWithTrailingSignature,
   unsupportedSignatureMarkup,
@@ -389,3 +392,73 @@ describe('the quick reply signature, found in a saved draft', () => {
     expect(textWithoutTrailingSignature('Thanks', '')).toBeNull()
   })
 })
+
+describe("a reopened draft's signature", () => {
+  const sig = { html: '<p>Me</p>', text: 'Me' }
+  const plain = (text: string) => ({ rich: false, html: '', text })
+  const rich = (html: string) => ({ rich: true, html, text: '' })
+
+  it('is tracked when it is the last block, as the composer inserts it', () => {
+    expect(trailingSignatureTracking(plain('Hi\n\nMe'), sig)).toEqual({ ...sig, placement: 'belowText' })
+    expect(trailingSignatureTracking(plain('Hi\n\nMe\n\n'), sig)).toEqual({ ...sig, placement: 'belowText' })
+    expect(trailingSignatureTracking(plain('\n\nMe'), sig)).toEqual({ ...sig, placement: 'belowText' })
+    expect(trailingSignatureTracking(rich('<p>Hi</p><p></p><p>Me</p>'), sig)).toEqual({
+      ...sig,
+      placement: 'belowText',
+    })
+    expect(trailingSignatureTracking(rich('<p>Hi</p><p></p><p>Me</p><p></p>'), sig)).toEqual({
+      ...sig,
+      placement: 'belowText',
+    })
+  })
+
+  it('stays unmanaged when anything follows it, or it is not there as inserted', () => {
+    expect(trailingSignatureTracking(plain('Hi\n\nMe\n\n> quoted'), sig)).toBeUndefined()
+    expect(trailingSignatureTracking(plain('Hi\n\nMe, edited'), sig)).toBeUndefined()
+    expect(trailingSignatureTracking(plain('Hi'), sig)).toBeUndefined()
+    expect(
+      trailingSignatureTracking(rich('<p>Hi</p><p></p><p>Me</p><blockquote><p>q</p></blockquote>'), sig),
+    ).toBeUndefined()
+  })
+
+  it('is never invented for an account without a signature', () => {
+    expect(trailingSignatureTracking(plain('Hi'), { html: '', text: '' })).toBeUndefined()
+  })
+})
+
+describe("switching the composer's signature", () => {
+  const sig = { html: '<p>Me</p>', text: 'Me' }
+  const on = { ...sig, placement: 'belowText' as const }
+
+  it('reports on, off, or not switchable', () => {
+    expect(signatureSwitch({ rich: false, html: '', text: 'Hi\n\nMe' }, on)).toBe('on')
+    expect(signatureSwitch({ rich: false, html: '', text: 'Hi' }, noSignature)).toBe('off')
+    expect(signatureSwitch({ rich: false, html: '', text: 'Hi\n\nMe' }, undefined)).toBe('unmanaged')
+    // Written into: no longer ours to take out.
+    expect(signatureSwitch({ rich: false, html: '', text: 'Hi\n\nMe, edited' }, on)).toBe('unmanaged')
+  })
+
+  it('takes the signature out and puts it back where it goes', () => {
+    const off = switchedSignature({ rich: false, html: '', text: 'Hi\n\nMe' }, on, sig, false)
+    expect(off?.body.text).toBe('Hi')
+    expect(off?.tracking).toEqual(noSignature)
+
+    const back = switchedSignature(off!.body, off!.tracking, sig, true)
+    expect(back?.body.text).toBe('Hi\n\nMe')
+    expect(back?.tracking).toEqual(on)
+  })
+
+  it('works on a rich body', () => {
+    const off = switchedSignature({ rich: true, html: '<p>Hi</p><p></p><p>Me</p>', text: '' }, on, sig, false)
+    expect(off?.body.html).toBe('<p>Hi</p>')
+    const back = switchedSignature(off!.body, off!.tracking, sig, true)
+    expect(back?.body.html).toBe('<p>Hi</p><p></p><p>Me</p>')
+  })
+
+  it('leaves an unmanaged or edited body alone', () => {
+    expect(switchedSignature({ rich: false, html: '', text: 'Hi\n\nMe' }, undefined, sig, false)).toBeNull()
+    expect(switchedSignature({ rich: false, html: '', text: 'Hi\n\nMe, edited' }, on, sig, false)).toBeNull()
+  })
+})
+
+const noSignature = { html: '', text: '', placement: 'belowText' as const }

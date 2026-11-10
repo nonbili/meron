@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Eemalda tsiteeritud tekst",
   "composer.signature.off": "Allkirjata. Klõpsa, et see lisada.",
   "composer.signature.on": "Allkiri lisatakse saatmisel. Klõpsa, et see ära jätta.",
+  "composer.signature.unmanaged": "Seda allkirja ei saa siin sisse ega välja lülitada: seda on muudetud või see pole konto praegune allkiri. Muuda seda kirjas.",
   "composer.status.addRecipientBeforeSending": "Lisa enne saatmist saaja",
   "composer.status.chooseAvailableAccount": "Vali saadaval olev meilikonto",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Eelmise konto mustandit ei õnnestunud eemaldada",

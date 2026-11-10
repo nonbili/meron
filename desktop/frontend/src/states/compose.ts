@@ -30,11 +30,13 @@ import {
   bodyWithSwappedSignature,
   type ComposeBody,
   isBodyBlankWithoutSignature,
+  noSignatureMark,
   resolveSignature,
   signatureForms,
   type Signature,
   type SignaturePlacement,
   type SignatureTracking,
+  trailingSignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
 import { undeliveredOf } from './undelivered'
@@ -700,6 +702,11 @@ type ComposeSeed = Partial<ComposeDraft> & {
    * signature it was written with, and a second copy is not wanted.
    */
   noSignature?: boolean
+  /**
+   * Insert no signature, but keep it switchable: the user turned it off where
+   * this draft came from (the quick reply), and may turn it back on here.
+   */
+  signatureOff?: boolean
 }
 
 export function openComposeTab(seed?: ComposeSeed): string | undefined {
@@ -728,14 +735,20 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
     quote?.rich && !rich
       ? { rich: true, html: seed?.html || textToHtml(seed?.text ?? ''), text: '' }
       : { rich, html: seed?.html ?? '', text: seed?.text ?? '' }
-  // A body this app did not compose (a saved draft, "Edit as New Message") may
-  // already carry a signature, so it stays unmanaged: `undefined`, not `null`.
   const placement = seed?.signaturePlacement ?? 'belowText'
-  const signature = seed?.noSignature ? undefined : resolveSignatureFor(account)
+  const accountSignature = resolveSignatureFor(account)
+  const signature = seed?.noSignature || seed?.signatureOff ? undefined : accountSignature
   // The placement is recorded even when the account sends no signature, so a
   // forward that later moves to an account with one still puts it above the
-  // quote rather than after it.
-  const tracking: SignatureTracking = signature ? { ...signature, placement } : undefined
+  // quote rather than after it. A body this app did not compose (a saved draft,
+  // "Edit as New Message") may already carry a signature: the account's, ending
+  // the body as the composer inserts it, is tracked (and switchable); anything
+  // else stays unmanaged, `undefined`, so nothing adds a second.
+  const tracking: SignatureTracking = signature
+    ? { ...signature, placement }
+    : seed?.signatureOff
+      ? noSignatureMark(placement)
+      : trailingSignatureTracking(seeded, accountSignature)
   const body = signature ? bodyWithSignature(seeded, signature, placement) : seeded
 
   const draft: ComposeDraft = {
@@ -828,7 +841,7 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     showCcBcc: !!cc.trim(),
     subject,
     text: carried,
-    noSignature: compose$.quickReplySignatureOff.peek(),
+    signatureOff: compose$.quickReplySignatureOff.peek(),
     attachments: compose$.composerAttachments.get(),
     inReplyTo: in_reply_to,
     references,

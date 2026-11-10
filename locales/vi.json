@@ -365,6 +365,7 @@
   "composer.removeQuotedText": "Xóa văn bản trích dẫn",
   "composer.signature.off": "Không có chữ ký. Nhấp để thêm.",
   "composer.signature.on": "Chữ ký sẽ được thêm khi gửi. Nhấp để bỏ qua.",
+  "composer.signature.unmanaged": "Không thể bật/tắt chữ ký này ở đây: chữ ký đã được sửa hoặc không phải chữ ký hiện tại của tài khoản. Hãy sửa trong thư.",
   "composer.status.addRecipientBeforeSending": "Thêm người nhận trước khi gửi",
   "composer.status.chooseAvailableAccount": "Chọn một tài khoản thư khả dụng",
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Không thể dọn bản nháp của tài khoản trước",
