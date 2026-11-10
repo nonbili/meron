@@ -104,6 +104,8 @@ export function QuickReplyComposer() {
           {target && (
             <EncryptToggle
               key={target.thread_id}
+              // The full composer's size, so the two look alike.
+              size="md"
               keys={keys}
               hasRecipients={!!(to || cc).trim()}
               on={encrypt}

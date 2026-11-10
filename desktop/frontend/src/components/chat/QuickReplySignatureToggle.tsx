@@ -23,6 +23,7 @@ export function QuickReplySignatureToggle() {
   if (!signature) return null
   return (
     <SignatureToggle
+      size="md"
       state={off ? 'off' : 'on'}
       signature={signature}
       onChange={(on) => setQuickReplySignatureOff(!on)}
