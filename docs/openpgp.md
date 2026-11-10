@@ -24,9 +24,41 @@ document disagree, the code is right and this document is the bug.
 ## 1. Scope and decisions
 
 Meron reads and writes OpenPGP mail (PGP/MIME, RFC 3156) in its Rust core, so desktop and mobile share one
-implementation; this build wires up the desktop UI only. The maintainer asked for rPGP ("i'm inclined to rpgp, since
+implementation. Android and iOS expose account keys, peer-key import and fingerprint verification, message
+crypto status, and the full composer's encryption lock through shared Compose UI. The maintainer asked for rPGP ("i'm inclined to rpgp, since
 our imap/smtp libs are also used by delta chat", #46). Product decisions, with Delta Chat as the UX
 model:
+
+Mobile native contract tests cover key creation, protected export, disable and import through the packaged
+JNI/C ABI. The opt-in local mail lab tests send encrypted mail to the lab account itself, save an encrypted
+draft, then sync and check decrypted content and crypto status. After building the app and test targets, run
+`python3 mobile/scripts/verify-openpgp-lab.py android`, or use `ios --derived-data <Xcode-derived-data>`.
+The runner reads credentials from `~/repo/mservers/dashboard/data/accounts.json`; it does not embed them
+in source. Android forwards localhost IMAP/SMTP with `adb reverse`. These tests use isolated temporary
+profiles rather than changing the installed app's accounts or keys.
+Android crypto tests require `jp.nonbili.meron.IsolatedCoreTestRunner`, which uses a plain
+Application without reminder/widget listeners that could reconfigure the global core. They skip under
+the regular runner. Build the test APK with `-PtestRunner=jp.nonbili.meron.IsolatedCoreTestRunner`.
+Hosted iOS XCTest launches suppress the real Engine and shared UI for the same reason.
+Manual UI verification on 2026-11-10 passed on the connected Android phone and iPhone 17
+simulator: create an account key, compose encrypted self-mail, send, sync, and read the
+decrypted body with encrypted/verified-signature status. Read-only IMAP inspection of
+both UI messages confirmed `multipart/encrypted` with no plaintext test body. The iOS
+message (`PGP-UI-iOS-20261110`, Message-ID
+`<meron-2e3a1a0784a74adbb46abbc608f2e2a5@mail.localhost>`) also hid the outer subject
+and remained decryptable after terminating and relaunching the app. These are self-mail
+round trips, not an Android-to-iOS key-exchange/interoperability test.
+Use a simulator build with signing enabled so Keychain access works. The iOS database-key
+loader now propagates Keychain/random-generation failures, checks persistence, never
+deletes an existing key, and refuses to mint a replacement for an existing encrypted store.
+The mobile quick-reply bar preserves mandatory encryption for replies to encrypted mail, but does not
+yet expose the full editor's lock or opportunistic-encryption default; open the full editor to choose
+encryption on a reply to plaintext mail.
+
+Mobile decrypted attachments live in the app-private `secure-media` directory, separate from ordinary
+attachments. Crash leftovers are removed on the first core configuration in a process, and Clear cache
+removes both caches. This is sandboxed disk storage, not tmpfs; files can survive while the process is
+backgrounded. Explicit export/share still hands plaintext to the platform or the app the user chooses.
 
 | Topic | Decision |
 |---|---|

@@ -243,7 +243,25 @@ data class MessageBody(
     // The calendar event when the message is an invitation (or an update,
     // cancellation or reply to one).
     val invite: MessageInvite? = null,
+    val crypto: MessageCrypto? = null,
 )
+
+data class MessageCrypto(
+    val encrypted: Boolean = false,
+    val signed: Boolean = false,
+    val trust: String = "unconfirmed",
+    val signer: String = "",
+    val problem: String = "",
+    val partial: Boolean = false,
+    val weakHash: Boolean = false,
+    val keyChanged: Boolean = false,
+    val verifiedConflict: Boolean = false,
+)
+
+fun MessageBody.mayQuoteOriginal(): Boolean =
+    crypto?.let {
+        !it.encrypted || (it.signed && it.trust in setOf("known", "verified") && it.problem.isBlank() && !it.partial && !it.weakHash && !it.verifiedConflict)
+    } ?: true
 
 data class DraftAttachment(
     val id: String,

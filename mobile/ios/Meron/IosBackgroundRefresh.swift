@@ -501,7 +501,13 @@ enum IosBackgroundRefresh {
     }
 
     private static func refreshNow() -> RefreshResult {
-        _ = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory(), dbKey: IosDbKey.get())
+        do {
+            let key = try IosDbKey.get()
+            _ = RustCoreBridge.initJson(dataDirectory: IosAppPaths.mobileDataDirectory(), dbKey: key)
+        } catch {
+            IosSyncDiagnosticLog.append("Database key unavailable: \(error.localizedDescription)")
+            return RefreshResult(refreshed: 0, skipped: 0, failed: 1)
+        }
         defer { IosReminders.refresh() }
         let accountList = invoke(id: 1, method: "account.list", params: [:])
         guard let accounts = accountList["result"] as? [String: Any],
@@ -783,7 +789,7 @@ enum IosReminders {
     ) -> Selection {
         // Keep an extra day beyond core's look-back to cover fractional seconds
         // and the delay between fetching a plan and reconciling native requests.
-        let history = history.filter { $0.value >= now - 2 * 86_400 }
+        let history = history.filter { $0.value >= now - 2 * 86400 }
         var retained = Set<String>()
         for reminder in reminders {
             guard let key = reminder["key"] as? String,
@@ -874,10 +880,13 @@ enum IosReminders {
                         logFailure()
                         return
                     }
-                    for key in finished { scheduled.removeValue(forKey: key) }
+                    for key in finished {
+                        scheduled.removeValue(forKey: key)
+                    }
                 }
                 guard let result = invoke("reminders.list"),
-                      let reminders = result["reminders"] as? [[String: Any]] else {
+                      let reminders = result["reminders"] as? [[String: Any]]
+                else {
                     logFailure()
                     return
                 }

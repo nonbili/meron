@@ -825,6 +825,7 @@ fn configure_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Va
         return serde_json::json!({ "error": { "message": "data_dir is required" } });
     }
     let db_key = db_key.map(str::trim).unwrap_or_default();
+    crate::parse::configure_mobile_secure_media(std::path::Path::new(data_dir));
     *MOBILE_CONFIG.lock().unwrap() = Some(MobileConfig {
         data_dir: data_dir.to_string(),
         db_key: db_key.to_string(),

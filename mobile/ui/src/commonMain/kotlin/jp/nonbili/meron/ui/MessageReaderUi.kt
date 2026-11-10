@@ -239,6 +239,7 @@ internal fun MessageReaderScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MessageCryptoStatus(message)
                             // The From chip already names the sender, so there is no
                             // separate sender line. Tapping any chip copies the full
                             // `Name <addr>`.

@@ -701,6 +701,9 @@ class MobileResponseParsersTest {
         )
         // Success payloads have no top-level error object.
         assertNull(coreErrorMessage("""{"ok":true,"deleted":1,"trash":"trash"}"""))
+        assertNull(coreErrorMessage("""{"result":{"error":{"message":"not an envelope"}}}"""))
+        assertNull(coreErrorMessage("""{"result":{"defaults":"${"x".repeat(100_000)}"}}"""))
+        assertEquals("line\n\"quoted\"", coreErrorMessage("""{"error":{"message":"line\n\"quoted\""}}"""))
     }
 
     @Test

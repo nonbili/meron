@@ -59,8 +59,12 @@ pub(crate) fn read_mobile_attachment_file(data_dir: &str, params: &Value) -> Res
     {
         return Err("invalid attachment key".to_string());
     }
-    let root = Path::new(data_dir).join("attachments");
-    let path = root.join(relative);
+    let root = if key.starts_with(crate::parse::SECURE_MEDIA_PREFIX) {
+        crate::parse::secure_media_root()
+    } else {
+        Path::new(data_dir).join("attachments")
+    };
+    let path = crate::parse::media_file(&Path::new(data_dir).join("attachments"), &key);
     let root = root.canonicalize().map_err(|err| err.to_string())?;
     let path = path.canonicalize().map_err(|err| err.to_string())?;
     if !path.starts_with(&root) {
@@ -76,7 +80,8 @@ pub(crate) fn mobile_storage_usage(data_dir: &str) -> Result<Value, String> {
         return Err("mobile core is not initialized".to_string());
     }
     Ok(json!({
-        "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|err| err.to_string())?,
+        "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|err| err.to_string())?
+            + path_size_bytes(&root.join("secure-media")).map_err(|err| err.to_string())?,
         "dbBytes": path_size_bytes(&root.join("meron.db")).map_err(|err| err.to_string())?,
     }))
 }
@@ -87,6 +92,11 @@ pub(crate) fn clear_mobile_storage_cache(data_dir: &str) -> Result<Value, String
         std::fs::remove_dir_all(&cache_dir).map_err(|err| err.to_string())?;
     }
     std::fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    let secure_dir = Path::new(data_dir).join("secure-media");
+    if secure_dir.exists() {
+        std::fs::remove_dir_all(&secure_dir).map_err(|err| err.to_string())?;
+    }
+    std::fs::create_dir_all(&secure_dir).map_err(|err| err.to_string())?;
     mobile_storage_usage(data_dir)
 }
 

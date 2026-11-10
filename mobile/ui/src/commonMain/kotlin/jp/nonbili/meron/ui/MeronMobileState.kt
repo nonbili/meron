@@ -283,6 +283,9 @@ internal class MeronMobileState(
     val readLedger = MessageReadLedger()
 
     var composeInReplyTo by mutableStateOf("")
+    var composeEncrypt by mutableStateOf<Boolean?>(null)
+    var composeCryptoLocked by mutableStateOf(false)
+    var cryptoKeyChangeQuestion by mutableStateOf<Pair<String, CompletableDeferred<Boolean>>?>(null)
     var composeReferences by mutableStateOf("")
 
     // The quoted original of a forward or a quoted reply, as HTML, plus the

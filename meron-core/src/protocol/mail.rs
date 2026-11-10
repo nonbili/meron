@@ -224,26 +224,92 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
         let conn = engine.db.lock().unwrap();
         resolve_mobile_send_from(&conn, &account_id, &creds, &requested_from)?
     };
-    let raw = crate::ffi::engine_block_on(smtp::send(
-        &creds,
-        &from_addr,
-        &sender_name,
-        &to,
-        &cc,
-        &bcc,
-        &subject,
-        &body,
-        &html,
-        &attachments,
-        &in_reply_to,
-        &references,
-        &reply_to,
-        &message_id,
-        &[],
-    ))?;
+    let (encrypt, implicit) = {
+        let conn = engine.db.lock().unwrap();
+        crate::openpgp::store::reply_protection(
+            &conn,
+            &account_id,
+            &in_reply_to,
+            params
+                .get("encrypt")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            params
+                .get("plain")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        )
+        .map_err(|err| format!("{err:#}"))?
+    };
+    let ring = crate::openpgp::keyring::current();
+    let mut undelivered = Vec::new();
+    let raw = if encrypt {
+        let keys = crate::openpgp::outgoing::resolve(
+            &ring,
+            &account_id,
+            &from_addr,
+            &to,
+            &cc,
+            &bcc,
+        )
+        .map_err(|err| {
+            if implicit {
+                format!("this replies to encrypted mail, so it can only be sent encrypted: {err:#}")
+            } else {
+                format!("{err:#}")
+            }
+        })?;
+        let sent = crate::ffi::engine_block_on(smtp::send_encrypted(
+            &creds,
+            &from_addr,
+            &sender_name,
+            &to,
+            &cc,
+            &bcc,
+            &subject,
+            &body,
+            &html,
+            &attachments,
+            &in_reply_to,
+            &references,
+            &reply_to,
+            &message_id,
+            &keys,
+        ))?;
+        let recipients = [&to, &cc, &bcc]
+            .iter()
+            .flat_map(|field| crate::openpgp::outgoing::split_recipients(field))
+            .collect::<Vec<_>>();
+        let used = crate::openpgp::outgoing::chosen_peer_keys(&ring, &recipients);
+        // Delivery already succeeded: a bookkeeping error must not invite a resend.
+        let _ = crate::openpgp::store::record_used(&engine.db.lock().unwrap(), &used);
+        undelivered = sent.undelivered;
+        sent.raw
+    } else {
+        let extra = crate::openpgp::outgoing::autocrypt_for(&ring, &account_id, &from_addr)
+            .map(|value| vec![("Autocrypt", value)])
+            .unwrap_or_default();
+        crate::ffi::engine_block_on(smtp::send(
+            &creds,
+            &from_addr,
+            &sender_name,
+            &to,
+            &cc,
+            &bcc,
+            &subject,
+            &body,
+            &html,
+            &attachments,
+            &in_reply_to,
+            &references,
+            &reply_to,
+            &message_id,
+            &extra,
+        ))?
+    };
     let sent_bytes = raw.len();
     finish_mobile_sent(&engine, &account_id, &raw);
-    Ok(json!({ "ok": true, "sent_bytes": sent_bytes }))
+    Ok(json!({ "ok": true, "sent_bytes": sent_bytes, "undelivered": undelivered }))
 }
 
 /// File the Sent copy of a message that just went out, shared by every
@@ -343,6 +409,40 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             &draft_id,
         )
         .map_err(|err| format!("{err:#}"))?;
+        let encrypt = params
+            .get("encrypt")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let plain = params
+            .get("plain")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let (encrypt, _) = crate::openpgp::store::reply_protection(
+            &conn,
+            &account_id,
+            &in_reply_to,
+            encrypt,
+            plain,
+        )
+        .map_err(|err| format!("{err:#}"))?;
+        let encrypted_draft = !plain
+            && crate::openpgp::store::answers_encrypted(&conn, &account_id, &draft_id)
+                .map_err(|err| format!("{err:#}"))?;
+        let raw = if encrypt || encrypted_draft {
+            let ring = crate::openpgp::keyring::current();
+            let own = ring.default_key(&account_id).ok_or_else(|| {
+                "can't save this draft encrypted: this account has no encryption key".to_string()
+            })?;
+            let autocrypt = crate::openpgp::autocrypt::header_value(
+                &crate::openpgp::outgoing::bare_addr(&from_addr),
+                &own.public,
+            )
+            .map_err(|err| format!("{err:#}"))?;
+            crate::openpgp::outgoing::wrap(&raw, &[&own.public], &own.secret, &autocrypt)
+                .map_err(|err| format!("{err:#}"))?
+        } else {
+            raw
+        };
         let saved_id = draft_id.clone();
         let local_draft_id = draft_id.clone();
         let saved_bytes = raw.len();

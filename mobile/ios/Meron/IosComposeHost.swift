@@ -36,6 +36,14 @@ private final class IosCoreEventStream: CoreEventStream {
     }
 }
 
+func iosCoreResponseError(_ response: String) -> NSError? {
+    guard let data = response.data(using: .utf8),
+          let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let error = envelope["error"] as? [String: Any],
+          let message = error["message"] as? String else { return nil }
+    return NSError(domain: "MeronCore", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+}
+
 final class IosMeronCore: MeronCore {
     private let eventStream = IosCoreEventStream()
 
@@ -45,7 +53,12 @@ final class IosMeronCore: MeronCore {
 
     func invoke(command: String, payloadJson: String, completionHandler: @escaping (String?, Error?) -> Void) {
         let request = CoreRequest(id: 1, method: command, paramsJson: payloadJson)
-        completionHandler(RustCoreBridge.invokeJson(request.toJson()), nil)
+        let response = RustCoreBridge.invokeJson(request.toJson())
+        if let error = iosCoreResponseError(response) {
+            completionHandler(nil, error)
+            return
+        }
+        completionHandler(response, nil)
         if IosUnreadWidgets.commandChangesSnapshot(command) {
             IosUnreadWidgets.refresh()
         }

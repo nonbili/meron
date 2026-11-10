@@ -10,6 +10,7 @@
 //! - [`outgoing`]: encrypted sending (RFC 3156 + RFC 9788 protected headers)
 
 pub mod autocrypt;
+pub mod commands;
 pub mod crypt;
 pub mod keyring;
 pub mod keys;

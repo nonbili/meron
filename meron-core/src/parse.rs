@@ -47,10 +47,31 @@ pub fn media_root() -> PathBuf {
 /// again, like any pruned attachment.
 pub const SECURE_MEDIA_PREFIX: &str = "e2ee/";
 
+static MOBILE_SECURE_MEDIA: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Mobile uses its private sandbox, never the desktop's cache fallback. Wipe
+/// crash leftovers once per process, not on foreground/background reconfigure.
+pub(crate) fn configure_mobile_secure_media(data_dir: &Path) {
+    MOBILE_SECURE_MEDIA.get_or_init(|| {
+        let root = data_dir.join("secure-media");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::create_dir_all(&root);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700));
+        }
+        root
+    });
+}
+
 /// Where decrypted attachments go. The bridge sets `MERON_SECURE_MEDIA_DIR`
 /// (on Linux `$XDG_RUNTIME_DIR/meron…`); the fallback keeps the sidecar
 /// usable when run alone.
 pub fn secure_media_root() -> PathBuf {
+    if let Some(root) = MOBILE_SECURE_MEDIA.get() {
+        return root.clone();
+    }
     if let Ok(path) = std::env::var("MERON_SECURE_MEDIA_DIR") {
         return PathBuf::from(path);
     }

@@ -889,10 +889,13 @@ data class SendMailParams(
     val references: String = "",
     val messageId: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
+    val encrypt: Boolean? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "account_id" to accountId.jsonString(),
+            "encrypt" to encrypt?.toString(),
+            "plain" to encrypt?.not()?.toString(),
             "from" to from.jsonString(),
             "to" to to.jsonString(),
             "cc" to cc.jsonString(),
@@ -922,10 +925,13 @@ data class SaveDraftParams(
     val inReplyTo: String = "",
     val references: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
+    val encrypt: Boolean? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "account_id" to accountId.jsonString(),
+            "encrypt" to encrypt?.toString(),
+            "plain" to encrypt?.not()?.toString(),
             "draft_id" to draftId.jsonString(),
             "from" to from.jsonString(),
             "to" to to.jsonString(),

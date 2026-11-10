@@ -414,11 +414,14 @@ fn mobile_protocol_reports_and_clears_storage_cache() {
     std::fs::create_dir_all(&attachment_dir).unwrap();
     std::fs::write(attachment_dir.join("one.txt"), b"Hi").unwrap();
     std::fs::write(attachment_dir.join("two.txt"), b"There").unwrap();
+    let secure_dir = data_dir.join("secure-media");
+    std::fs::create_dir_all(&secure_dir).unwrap();
+    std::fs::write(secure_dir.join("secret.txt"), b"Secret").unwrap();
 
     let usage =
         invoke_mobile_protocol_json(r#"{"id":92,"method":"storage.usage"}"#, Some(data_dir_str));
     assert_eq!(usage["id"], 92);
-    assert_eq!(usage["result"]["cacheBytes"], 7);
+    assert_eq!(usage["result"]["cacheBytes"], 13);
     assert!(usage["result"]["dbBytes"].as_u64().unwrap() > 0, "{usage}");
 
     let cleared = invoke_mobile_protocol_json(
@@ -432,6 +435,7 @@ fn mobile_protocol_reports_and_clears_storage_cache() {
         "{cleared}"
     );
     assert!(data_dir.join("attachments").exists());
+    assert!(!secure_dir.join("secret.txt").exists());
     assert!(data_dir.join("meron.db").exists());
 
     let _ = std::fs::remove_dir_all(data_dir);

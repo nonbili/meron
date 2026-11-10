@@ -2,14 +2,19 @@ package jp.nonbili.meron.shared
 
 // The core reports failures as a {"error":{"message":...}} JSON payload rather
 // than throwing, so a raw invoke "succeeds" even when the action failed.
-private val coreErrorMessageRegex =
-    Regex("\"error\"\\s*:\\s*\\{[^{}]*\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
 
 /** The error message from a core `{"error":{"message":...}}` payload, or null. */
 fun coreErrorMessage(responseJson: String): String? =
-    coreErrorMessageRegex.find(responseJson)?.groupValues?.getOrNull(1)?.let { raw ->
-        raw.replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\")
-    }
+    runCatching {
+        val error = responseJson.jsonObjectEntries().firstOrNull { it.first == "error" }?.second
+        error
+            ?.jsonObjectEntries()
+            ?.firstOrNull { it.first == "message" }
+            ?.second
+            ?.takeIf { it.startsWith('"') }
+            ?.readJsonString(0)
+            ?.value
+    }.getOrNull()
 
 /**
  * Throws when [responseJson] is a core error payload, so a caller's
@@ -489,6 +494,20 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 subject = item.findJsonStringProperty("subject").orEmpty(),
                 body = item.findJsonStringProperty("body").orEmpty(),
                 bodyHtml = item.findJsonStringProperty("body_html").orEmpty(),
+                crypto =
+                    entries.firstOrNull { it.first == "crypto" }?.second?.takeIf { it.startsWith("{") }?.let { crypto ->
+                        MessageCrypto(
+                            encrypted = crypto.findJsonBooleanProperty("encrypted") ?: false,
+                            signed = crypto.findJsonBooleanProperty("signed") ?: false,
+                            trust = crypto.findJsonStringProperty("trust") ?: "unconfirmed",
+                            signer = crypto.findJsonStringProperty("signer").orEmpty(),
+                            problem = crypto.findJsonStringProperty("problem").orEmpty(),
+                            partial = crypto.findJsonBooleanProperty("partial") ?: false,
+                            weakHash = crypto.findJsonBooleanProperty("weak_hash") ?: false,
+                            keyChanged = crypto.findJsonBooleanProperty("key_changed") ?: false,
+                            verifiedConflict = crypto.findJsonBooleanProperty("verified_conflict") ?: false,
+                        )
+                    },
                 mediaMissing = item.findJsonLongProperty("media_missing")?.toInt()?.coerceAtLeast(0) ?: 0,
                 bodyQuoteStart = bodyQuoteStart,
                 dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,

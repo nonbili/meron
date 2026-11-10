@@ -503,6 +503,8 @@ internal fun MeronMobileState.openQuickReplyInFullEditor(replyAll: Boolean = fal
         composeDraftSaved = quickReplyDraftSaved
         composeDraftAccountId = if (quickReplyDraftSaved) accountId else ""
         composeInReplyTo = params.inReplyTo
+        composeEncrypt = if (parent.crypto?.encrypted == true) true else null
+        composeCryptoLocked = parent.crypto?.encrypted == true && alreadyQuoted
         composeReferences = params.references
         quickReplyAutosaveJob?.cancel()
         quickReplyAttachments = emptyList()
@@ -721,6 +723,22 @@ internal fun MeronMobileState.retryQuickReplySend(pending: PendingQuickReplySend
 }
 
 private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuickReplySend) {
+    val encryptedReply =
+        runCatching { repliesToEncryptedMail(pending.accountId, pending.params.inReplyTo) }.getOrElse {
+            pending.draftOwner?.let { quickReplyConsumedDraftIds -= it.draftId.normalizedComposeDraftId() }
+            quickReplySendInFlight = false
+            quickReplySendThreadId = ""
+            quickReplyFailure = it.message.orEmpty()
+            messages = messages.map { message -> if (message.id == pending.tempMessageId) message.copy(sendStatus = SendStatus.Failed) else message }
+            return
+        }
+    if (encryptedReply && !runCatching { confirmChangedRecipientKeys(pending.accountId, pending.params.to, pending.params.cc, pending.params.bcc) }.getOrDefault(false)) {
+        pending.draftOwner?.let { quickReplyConsumedDraftIds -= it.draftId.normalizedComposeDraftId() }
+        quickReplySendInFlight = false
+        quickReplySendThreadId = ""
+        messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.Failed) else it }
+        return
+    }
     // Claim the draft this reply consumed for as long as the send is settling,
     // so reopening the conversation before the discard returns cannot hydrate
     // the sent text back into the reply bar.
@@ -735,7 +753,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
             val client = MobileMailCommandClient(core)
             withManagedGoogleAuth(client, pending.accountId) { client.send(pending.params) }
         }
-    }.onSuccess {
+    }.onSuccess { response ->
         val sameEditorGeneration = quickReplyGeneration == pending.quickReplyGeneration
         // The bar has carried on writing into this same draft — it moved on but
         // kept the id — so it holds the user's next reply now, not the text that
@@ -794,6 +812,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
             messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.None) else it }
         }
         errorBanner = null
+        warnUndelivered(response)
         syncCoreThreads(syncFirst = false)
         refreshKanbanColumnsHoldingThread(pending.threadId)
         if (threadStillOpen) {

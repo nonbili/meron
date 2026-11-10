@@ -444,6 +444,7 @@ private fun MeronMobileScreenContent(
         var contactToOpen by remember { mutableStateOf<ContactSuggestion?>(null) }
         val contactsState = rememberContactsScreenState(core)
         androidx.compose.runtime.CompositionLocalProvider(
+            LocalCryptoState provides state,
             LocalOpenContact provides { contact: ContactSuggestion ->
                 contactToOpen = contact
                 flushQuickReplyAutosave()
@@ -452,6 +453,7 @@ private fun MeronMobileScreenContent(
             },
         ) {
             MailTaskListPicker(state)
+            CryptoKeyChangeQuestion(state)
             val navController = rememberNavController()
             val currentBackStackEntry by navController.currentBackStackEntryAsState()
             val startRoute = remember { screen.route() }
@@ -1106,6 +1108,7 @@ private fun MeronMobileScreenContent(
                             }
                         }
                         AddAccountScreen(
+                            snackbarHost = { SnackbarHost(snackbarHost) },
                             onBack = popAppBack,
                             initialSection = addSection,
                             // Reconnect pre-fills the address of an account core can no

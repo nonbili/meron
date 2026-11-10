@@ -79,7 +79,7 @@ android {
         targetSdk 36
         versionCode releaseVersionCode
         versionName releaseVersionName
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner project.findProperty("testRunner") ?: "androidx.test.runner.AndroidJUnitRunner"
         // googleOauthScheme / MERON_GOOGLE_REDIRECT_URI are set per buildType
         // below, since each build type embeds a different Google client id.
         buildConfigField "String", "MERON_OUTLOOK_CLIENT_ID", javaString(outlookClientId)

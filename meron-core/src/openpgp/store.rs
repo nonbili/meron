@@ -1209,15 +1209,7 @@ pub fn backup_collect(conn: &Connection, include_secrets: bool) -> Result<Vec<Ba
 /// onto a profile that already made its own key). Returns accounts whose
 /// secret keys were not in the backup.
 pub fn backup_apply(conn: &Connection, entries: &[BackupKeys]) -> Result<Vec<String>> {
-    // Mobile has no OpenPGP UI yet. Restoring secret keys there would let the
-    // core silently decrypt mail with no indicator and persist decrypted
-    // attachments in the app cache: nothing on the phone would show
-    // a message was encrypted, and no screen could verify a key. Until a mobile
-    // crypto UI exists, a mobile build restores no OpenPGP secret keys — every
-    // account is reported as missing its secret, so the keyring holds no
-    // decryption key and encrypted mail stays locked ("encrypted, no key").
-    let restore_secrets = !cfg!(any(target_os = "android", target_os = "ios"));
-    backup_apply_with(conn, entries, restore_secrets)
+    backup_apply_with(conn, entries, true)
 }
 
 fn backup_apply_with(
@@ -2261,11 +2253,9 @@ mod tests {
         );
     }
 
-    // A build without an OpenPGP UI (mobile) restores no secret keys,
-    // so a desktop backup moved to a phone can't silently decrypt. The host
-    // exercises both the gated (mobile) and ungated (desktop) restore directly.
+    // Mobile and desktop both expose crypto state and restore protected backups.
     #[test]
-    fn a_mobile_restore_keeps_no_secret_keys() {
+    fn backup_restore_keeps_secret_keys_on_all_platforms() {
         let conn = db();
         create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
         let backup = backup_collect(&conn, true).unwrap();
@@ -2274,29 +2264,21 @@ mod tests {
             "the backup carries a secret key"
         );
 
-        // restore_secrets = false: the mobile gate.
         let phone = db();
-        let missing = super::backup_apply_with(&phone, &backup, false).unwrap();
+        let missing = super::backup_apply(&phone, &backup).unwrap();
+        assert!(missing.is_empty());
         assert!(
-            missing.contains(&"acc".to_string()),
-            "account reported missing its secret: {missing:?}"
+            !load(&phone).unwrap().own.is_empty(),
+            "secret key restored on mobile"
         );
         assert!(
-            load(&phone).unwrap().own.is_empty(),
-            "no secret key restored on mobile"
-        );
-        assert!(
-            !load(&phone).unwrap().is_enabled("acc"),
-            "encryption not enabled on mobile"
+            load(&phone).unwrap().is_enabled("acc"),
+            "encryption enabled on mobile"
         );
 
-        // restore_secrets = true: the desktop path still restores it.
+        // The same public restore entry point is used on desktop.
         let desktop = db();
-        assert!(
-            super::backup_apply_with(&desktop, &backup, true)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(super::backup_apply(&desktop, &backup).unwrap().is_empty());
         assert!(
             !load(&desktop).unwrap().own.is_empty(),
             "desktop restores the key"

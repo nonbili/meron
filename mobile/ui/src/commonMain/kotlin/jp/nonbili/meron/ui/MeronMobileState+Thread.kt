@@ -100,6 +100,8 @@ internal fun MeronMobileState.openDraftCompose(
             // the wrong conversation. The draft's own headers are restored just
             // below — a reply draft has to keep threading where it belongs.
             clearComposeDraftState()
+            composeEncrypt = if (message.crypto?.encrypted == true) true else null
+            composeCryptoLocked = message.crypto?.encrypted == true
             to = message.to
             cc = message.cc
             bcc = message.bcc

@@ -123,6 +123,7 @@ internal fun AddAccountScreen(
     onRssDisplayNameChange: (String) -> Unit,
     rssAccountAdding: Boolean,
     onAddRss: () -> Unit,
+    snackbarHost: @Composable () -> Unit = {},
 ) {
     val pagerState = rememberPagerState(initialPage = initialSection) { 3 }
     val coroutineScope = rememberCoroutineScope()
@@ -144,6 +145,7 @@ internal fun AddAccountScreen(
     }
 
     Scaffold(
+        snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
                 title = {

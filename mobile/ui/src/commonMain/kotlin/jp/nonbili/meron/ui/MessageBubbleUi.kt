@@ -691,6 +691,7 @@ internal fun ColumnScope.MessageBodyContent(
     // or two images, and sizes itself to them (see bubbleWidth).
     imageColumns: Int = 3,
 ) {
+    MessageCryptoStatus(message)
     if (showSubject && message.subject.isNotBlank()) {
         Text(
             text = highlightedMessageText(message.subject, searchQuery, activeSearchMatch),

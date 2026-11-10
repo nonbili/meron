@@ -382,6 +382,7 @@ internal fun ComposeScreen(
                     }
                 },
                 actions = {
+                    ComposeEncryptionControl()
                     IconButton(onClick = onAttach) {
                         Icon(Icons.Filled.AttachFile, contentDescription = tr("composer.actions.attachFiles"))
                     }

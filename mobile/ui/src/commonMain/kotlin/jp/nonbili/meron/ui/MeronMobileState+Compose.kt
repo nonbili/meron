@@ -35,6 +35,7 @@ import jp.nonbili.meron.shared.forwardInlineImages
 import jp.nonbili.meron.shared.forwardableAttachments
 import jp.nonbili.meron.shared.hasReplyQuote
 import jp.nonbili.meron.shared.inlineImageToDraftAttachment
+import jp.nonbili.meron.shared.mayQuoteOriginal
 import jp.nonbili.meron.shared.messageEditAsNewDraft
 import jp.nonbili.meron.shared.messageForwardDraft
 import jp.nonbili.meron.shared.newDraftMessageId
@@ -165,6 +166,8 @@ internal fun MeronMobileState.clearComposeDraftState() {
     composeDraftSaved = false
     composeDraftAccountId = ""
     composeInReplyTo = ""
+    composeEncrypt = null
+    composeCryptoLocked = false
     composeReferences = ""
     composeForwardHtml = ""
     composeForwardInlineAttachments = emptyList()
@@ -223,7 +226,7 @@ private fun recipientEntries(value: String): List<String> {
 // inline images it references. A reply whose quote the user has edited goes out
 // plain: the cached HTML quote would no longer say what the plain one does.
 private fun MeronMobileState.currentComposeDraft(): ComposeDraft {
-    composeFoldedQuote?.let { quote ->
+    composeFoldedQuote?.takeUnless { composeEncrypt == false }?.let { quote ->
         // A folded quote goes out under whatever the body holds.
         val own = body.trim()
         val html = if (quote.html.isBlank()) "" else plainTextToHtml(own) + quote.html
@@ -317,6 +320,9 @@ internal fun MeronMobileState.sendMail() {
         status = trs("mobile.status.completeBeforeSending")
         return
     }
+    val inReplyTo = composeInReplyTo
+    val references = composeReferences
+    val encrypt = composeEncrypt
     composeSendInFlight = true
     pendingComposeSend = null
     pendingCertificateRetry = null
@@ -336,8 +342,9 @@ internal fun MeronMobileState.sendMail() {
                     withContext(ioDispatcher) {
                         val client = MobileMailCommandClient(core)
                         draft.toSendMailParams(accountId = accountId, from = identity?.email.orEmpty()).copy(
-                            inReplyTo = composeInReplyTo,
-                            references = composeReferences,
+                            inReplyTo = inReplyTo,
+                            references = references,
+                            encrypt = encrypt,
                             messageId = allocateCoreMessageId(client = client, accountId = accountId, draft = false),
                         )
                     }
@@ -363,13 +370,26 @@ internal fun MeronMobileState.sendMail() {
 private suspend fun MeronMobileState.dispatchComposeSend(
     pending: PendingComposeSend,
 ) {
+    if (!runCatching {
+            val encrypt = pending.params.encrypt ?: repliesToEncryptedMail(pending.accountId, pending.params.inReplyTo)
+            !encrypt || confirmChangedRecipientKeys(pending.accountId, pending.params.to, pending.params.cc, pending.params.bcc)
+        }.getOrElse {
+            failComposeSend(pending, it)
+            return
+        }
+    ) {
+        composeSendInFlight = false
+        pendingComposeSend = null
+        return
+    }
     runCatching {
         withContext(ioDispatcher) {
             val client = MobileMailCommandClient(core)
             withManagedGoogleAuth(client, pending.accountId) { client.send(pending.params) }
         }
-    }.onSuccess {
+    }.onSuccess { response ->
         finishComposeSend(pending)
+        warnUndelivered(response)
     }.onFailure {
         failComposeSend(pending, it)
     }
@@ -548,6 +568,7 @@ private suspend fun MeronMobileState.saveComposeDraft(
         val draftThreadId = composeDraftThreadId().ifBlank { null }
         val inReplyTo = composeInReplyTo
         val references = composeReferences
+        val encrypt = composeEncrypt
         if (showStatus) status = trs("composer.status.savingDraft")
         var resolvedDraftId = draftId
         var allocatedRemoteDraft = false
@@ -570,6 +591,7 @@ private suspend fun MeronMobileState.saveComposeDraft(
                             ).copy(
                                 inReplyTo = inReplyTo,
                                 references = references,
+                                encrypt = encrypt,
                             )
                     withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
                     resolvedDraftId
@@ -688,6 +710,7 @@ internal fun MeronMobileState.replyToMessage(
         composeFromAccountId = accountId
         composeFromEmail = replyFrom
         composeInReplyTo = params.inReplyTo
+        composeEncrypt = if (message.crypto?.encrypted == true) true else null
         composeReferences = params.references
         composeReturnScreen = Screen.Thread
         rememberComposeSeed()
@@ -739,7 +762,7 @@ internal suspend fun MeronMobileState.buildReplyQuote(
     message: MessageBody,
     accountId: String,
 ): ReplyQuote? {
-    if (!hasReplyQuote(message)) return null
+    if (!hasReplyQuote(message) || !message.mayQuoteOriginal()) return null
     val dateLabel = formatMessageFullTimestamp(message.dateEpochSeconds)
     val images =
         if (message.bodyHtml.isBlank()) {
@@ -761,6 +784,7 @@ internal suspend fun MeronMobileState.buildReplyQuote(
  *  like any other text; from then on it is part of the body. */
 internal fun MeronMobileState.expandComposeQuote() {
     val quote = composeFoldedQuote ?: return
+    if (composeEncrypt == true) composeCryptoLocked = true
     body = body.trimEnd('\n') + quote.text
     applyReplyQuote(quote)
     composeFoldedQuote = null
@@ -954,6 +978,10 @@ internal fun MeronMobileState.openMessageCompose(
         status = coreUnavailableMessage
         return
     }
+    // Both forwarding and editing as new re-publish the original body and
+    // attachments. Apply the reply-quote authentication policy before copying
+    // any decrypted data or changing the active composer.
+    if (!message.mayQuoteOriginal()) return
     val generation = ++composeSessionGeneration
     scope.launch {
         awaitAppSignatureLoaded()
@@ -990,6 +1018,8 @@ internal fun MeronMobileState.openMessageCompose(
             // previous draft left behind goes, threading headers included, or
             // they would thread themselves under the last reply's parent.
             clearComposeDraftState()
+            composeCryptoLocked = message.crypto?.encrypted == true
+            composeEncrypt = if (composeCryptoLocked) true else null
             to = draft.to
             cc = draft.cc
             bcc = draft.bcc

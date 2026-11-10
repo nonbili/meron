@@ -231,6 +231,7 @@ internal fun SettingsAccountDetailPage(
             )
         }
         if (!isRss) {
+            item { AccountEncryptionSettings(account.id) }
             item {
                 SettingsTextRow(
                     value = senderName,

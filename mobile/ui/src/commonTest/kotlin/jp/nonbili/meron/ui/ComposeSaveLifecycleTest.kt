@@ -24,6 +24,70 @@ import kotlin.test.assertTrue
 
 class ComposeSaveLifecycleTest {
     @Test
+    fun unauthenticatedEncryptedMailCannotBeForwardedOrEditedAsNew() =
+        runBlocking {
+            val state = state(SaveCore(), this)
+            state.body = "Current composer"
+            val generation = state.composeSessionGeneration
+            val message =
+                MessageBody(
+                    "untrusted",
+                    from = "sender",
+                    to = "me",
+                    subject = "s",
+                    body = "unauthenticated secret",
+                    crypto =
+                        jp.nonbili.meron.shared
+                            .MessageCrypto(encrypted = true),
+                )
+            for (forward in listOf(true, false)) {
+                state.openMessageCompose(message, forward)
+                assertEquals(generation, state.composeSessionGeneration)
+                assertEquals("Current composer", state.body)
+            }
+        }
+
+    @Test
+    fun openPgpUnwrapsNativeResponseEnvelope() =
+        runBlocking {
+            val result = state(SaveCore(), this).pgp("pgp.account.state", kotlinx.serialization.json.buildJsonObject {})
+            assertEquals("true", result["enabled"].toString())
+            assertEquals(null, result["result"])
+        }
+
+    @Test
+    fun partialDeliveryWarnsWithoutOfferingAResend() =
+        runBlocking {
+            val state = state(SaveCore(), this)
+            state.warnUndelivered("""{"ok":true,"undelivered":["blind@example.com"]}""")
+            assertTrue(state.errorBanner.orEmpty().contains("blind@example.com"))
+            assertEquals(null, state.pendingComposeSend)
+            state.errorBanner = null
+            state.warnUndelivered("""{"id":1,"result":{"ok":true,"undelivered":["native@example.com"]}}""")
+            assertTrue(state.errorBanner.orEmpty().contains("native@example.com"))
+            assertEquals(null, state.pendingComposeSend)
+        }
+
+    @Test
+    fun encryptedSaveKeepsItsPolicyWhenAnotherComposerOpens() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            state.openCompose()
+            state.to = "you@example.com"
+            state.subject = "Encrypted draft"
+            state.body = "Secret${state.body}"
+            state.composeEncrypt = true
+            state.autoSaveComposeDraft()
+            core.firstSaveStarted.await()
+            state.openCompose()
+            state.composeEncrypt = false
+            core.releaseFirstSave.complete(Unit)
+            core.firstSaveFinished.await()
+            assertTrue(core.savedPayloads.single().contains("\"encrypt\":true"))
+        }
+
+    @Test
     fun fullComposeSavesAreSerialized() =
         runBlocking {
             val core = SaveCore()
@@ -1189,6 +1253,10 @@ class ComposeSaveLifecycleTest {
             payloadJson: String,
         ): String =
             when (command) {
+                "pgp.account.state" -> {
+                    """{"id":1,"result":{"enabled":true,"key":null,"previous":[]}}"""
+                }
+
                 MobileCommand.AllocateIdentity -> {
                     allocationCalls++
                     if (allocationFails) throw RuntimeException("allocation failed")

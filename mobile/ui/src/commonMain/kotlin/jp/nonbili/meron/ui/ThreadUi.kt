@@ -275,7 +275,8 @@ internal fun ThreadScreen(
     // The gallery and the shared-media panel follow the same policy the bodies
     // do, so a blocked image has no tile to open and no slide to land on.
     val remoteAllowed: (MessageBody) -> Boolean = { message ->
-        remoteContentPolicy.allows(message.fromAddr.ifBlank { message.from }) || message.id in revealedRemote
+        message.crypto?.encrypted != true &&
+            (remoteContentPolicy.allows(message.fromAddr.ifBlank { message.from }) || message.id in revealedRemote)
     }
     val galleryImages =
         remember(messages, remoteContentPolicy, revealedRemote) { buildThreadGalleryImages(messages, remoteAllowed) }
@@ -700,6 +701,7 @@ internal fun ThreadScreen(
     }
 
     fun remoteContentFor(message: MessageBody): MessageRemoteContent {
+        if (message.crypto?.encrypted == true) return MessageRemoteContent(allowRemote = false)
         val sender = normalizeSenderAddr(message.fromAddr.ifBlank { message.from })
         return MessageRemoteContent(
             allowRemote = remoteAllowed(message),
