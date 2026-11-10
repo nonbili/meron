@@ -7,6 +7,11 @@
     <!-- Gmail via on-device Google account (AccountManager). -->
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
+    <queries>
+        <!-- Detect the com.google account authenticator (Play services or microG). -->
+        <package android:name="com.google.android.gms" />
+    </queries>
+
     <application
         android:name=".MeronApplication"
         android:allowBackup="false"

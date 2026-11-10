@@ -88,6 +88,16 @@ object GoogleAccountManagerAuth {
         val pictureUrl: String = "",
     )
 
+    /**
+     * Whether any installed app can authenticate `com.google` accounts. False
+     * on devices without Play services. The manifest `<queries>` entry keeps
+     * the authenticator's package visible to this lookup.
+     */
+    fun hasAuthenticator(context: Context): Boolean =
+        runCatching {
+            AccountManager.get(context).authenticatorTypes.any { it.type == ACCOUNT_TYPE }
+        }.getOrDefault(false)
+
     /** Intent that lets the user pick a `com.google` account on the device. */
     fun chooseAccountIntent() =
         AccountManager.newChooseAccountIntent(

@@ -415,7 +415,15 @@ class AndroidMobileHost(
     override val googleClientId: String = BuildConfig.MERON_GOOGLE_CLIENT_ID
     override val googleRedirectUri: String = BuildConfig.MERON_GOOGLE_REDIRECT_URI
     override val googleTokenUrl: String = BuildConfig.MERON_GOOGLE_TOKEN_URL
-    override val supportsGoogleDeviceAuth: Boolean = true
+
+    /**
+     * Only when a `com.google` authenticator is installed (Play services or
+     * microG). Without one the system account picker finishes at once with
+     * RESULT_CANCELED, which is indistinguishable from the user backing out,
+     * so sign-in must start in the browser instead.
+     */
+    override val supportsGoogleDeviceAuth: Boolean
+        get() = GoogleAccountManagerAuth.hasAuthenticator(activity)
     override var lastGoogleDeviceAuthError: String = ""
         private set
     override val packageName: String = activity.packageName
