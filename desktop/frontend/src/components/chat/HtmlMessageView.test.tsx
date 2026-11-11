@@ -61,6 +61,20 @@ describe('reader videos', () => {
     expect(scroller.contains(view.getByText('Subject'))).toBe(true)
   })
 
+  it("leaves the plain body's gap between the header and an HTML body", () => {
+    const props = { scrollKey: 'gap', title: 'Feed', html: '<p>Caption</p>', text: 'Caption' }
+    const html = render(<HtmlMessageView {...props} viewMode="html" header={<h1>Subject</h1>} />)
+    const gap = html.container.querySelector('iframe')!.previousElementSibling!
+    expect(gap.textContent).toBe('')
+    expect(gap.className).toContain('h-6')
+    expect(html.getByText('Subject').nextElementSibling).toBe(gap)
+    cleanup()
+
+    // Without a header (the conversation's own bodies) the frame starts at the top.
+    const bare = render(<HtmlMessageView {...props} viewMode="html" />)
+    expect(bare.container.querySelector('iframe')!.previousElementSibling).toBeNull()
+  })
+
   it('anchors hovered URLs outside the attachment scroll container', () => {
     const view = render(
       <HtmlMessageView

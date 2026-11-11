@@ -336,6 +336,9 @@ export function HtmlMessageView({
       >
         <div ref={contentRef} className="flex flex-col">
           {header}
+          {/* The same gap the plain body leaves under the header (its pt-6), so the
+              message's own background doesn't start against the sender card. */}
+          {header && <div aria-hidden className="h-6 shrink-0" />}
           <HtmlFrame
             ref={iframeRef}
             html={sanitizedHtml ?? ''}
