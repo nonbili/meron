@@ -124,6 +124,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -632,6 +633,15 @@ internal fun MailRow(
     val senderLabel = thread.sender.ifBlank { thread.accountId }
     val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
     val draftBadge = tr("chat.draft")
+    val primaryText = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    // A read subject sits a step darker than its sender, so the line worth
+    // scanning still leads once the row has gone quiet.
+    val subjectText =
+        if (unread) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            lerp(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.onSurface, 0.5f)
+        }
     val rowSurface = MaterialTheme.colorScheme.surface
     val rowBackground =
         when {
@@ -641,12 +651,9 @@ internal fun MailRow(
                     .compositeOver(rowSurface)
             }
 
-            unread -> {
-                MaterialTheme.colorScheme.primary
-                    .copy(alpha = 0.07f)
-                    .compositeOver(rowSurface)
-            }
-
+            // Every other row keeps the plain card, Gmail-style: unread
+            // reads from the type (bold, full-strength) rather than a tint,
+            // which would sink the row into the canvas.
             else -> {
                 rowSurface
             }
@@ -698,11 +705,11 @@ internal fun MailRow(
                             senderLabel.substringBefore('@')
                         },
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = primaryText,
                     )
                     // Gmail-style thread size, shown only once a thread has a
                     // reply. It rides beside the sender so it never competes
@@ -755,7 +762,7 @@ internal fun MailRow(
                         }
                         withStyle(
                             SpanStyle(
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = subjectText,
                                 fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
                             ),
                         ) {
