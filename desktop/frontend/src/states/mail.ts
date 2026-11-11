@@ -1,5 +1,5 @@
 import { threadWindowSession } from '../lib/windowSession'
-import { ensureThreadData, threadData$, threadRequests } from './threadData'
+import { ensureThreadData, messageRenderKey, setSentCopyRenderKey, threadData$, threadRequests } from './threadData'
 import { attachmentSaveFilename } from '../lib/attachmentFilename'
 import type { Folder, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
@@ -1063,16 +1063,7 @@ export async function loadThread(threadId: string) {
   }
 }
 
-// The key a message renders under in the conversation. A server copy that
-// replaces an optimistic bubble takes the bubble's, so React updates that bubble
-// in place: under its own id it would be a new element, mounted again with its
-// entrance animation, and the reply would blink and jump as its copy arrived.
-const sentCopyRenderKeys = new Map<string, string>()
-
-/** The key to render `id` under (see sentCopyRenderKeys). */
-export function messageRenderKey(id: string): string {
-  return sentCopyRenderKeys.get(id) ?? id
-}
+export { messageRenderKey } from './threadData'
 
 /**
  * Keep optimistic sends visible while the server's Sent copy catches up. Some
@@ -1096,7 +1087,7 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
     const messageId = normalizeMessageId(local.message_id)
     if (!messageId || !canonicalMessageIds.has(messageId)) continue
     const copy = refreshed.find((message) => normalizeMessageId(message.message_id) === messageId)
-    if (copy) sentCopyRenderKeys.set(copy.id, messageRenderKey(local.id))
+    if (copy) setSentCopyRenderKey(threadId, copy.id, messageRenderKey(local.id))
   }
   // Fallback candidates: outgoing, non-draft rows this refresh newly revealed.
   // A message we were already showing before the send cannot be its server
@@ -1114,7 +1105,7 @@ export function mergeRefreshedThreadMessages(current: Message[], refreshed: Mess
   // that happens to look alike, which must not swallow it.
   const dispatched = unresolved.filter((message) => !!message.message_id || message.send_status !== 'sending')
   const paired = pairLocalSendsWithServerCopies(dispatched, candidates)
-  for (const [localId, copyId] of paired) sentCopyRenderKeys.set(copyId, messageRenderKey(localId))
+  for (const [localId, copyId] of paired) setSentCopyRenderKey(threadId, copyId, messageRenderKey(localId))
   const optimistic = unresolved.filter((message) => !paired.has(message.id))
   if (optimistic.length === 0) return refreshed
   return [...refreshed, ...optimistic].sort((a, b) => a.date - b.date)

@@ -22,6 +22,7 @@ import {
   toggleStarWithUndo,
 } from './mailFlags'
 import { deletableFolder, deleteFolder, ensureAccountFolders } from './mailFolders'
+import { retainThreadData } from './threadData'
 import {
   archiveThread,
   bulkArchiveSelected,
@@ -144,6 +145,30 @@ describe('thread message refresh reconciliation', () => {
 
     expect(messageRenderKey('sent:key-1')).toBe('sent-key-1')
     expect(messageRenderKey('m1')).toBe('m1')
+  })
+
+  // #154 review, point 4: the keys are dropped with the thread's page.
+  it("forgets a thread's render keys when its conversation is let go", async () => {
+    const optimistic = thread({
+      id: 'sent-key-9',
+      thread_id: 't9',
+      message_id: 'key-9@example.com',
+      send_status: 'sent',
+    })
+    const canonical = thread({
+      id: 'sent:key-9',
+      folder_id: 'Sent',
+      thread_id: 't9',
+      message_id: '<key-9@example.com>',
+    })
+    const release = retainThreadData('t9')
+
+    mergeRefreshedThreadMessages([optimistic], [canonical], 't9')
+    expect(messageRenderKey('sent:key-9')).toBe('sent-key-9')
+
+    release()
+    await Promise.resolve()
+    expect(messageRenderKey('sent:key-9')).toBe('sent:key-9')
   })
 
   it("carries the bubble's key to a copy found by its envelope", () => {
