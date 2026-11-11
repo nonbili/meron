@@ -414,6 +414,12 @@ describe("a reopened draft's signature", () => {
     })
   })
 
+  it('is tracked in a rich draft whose separator was typed into', () => {
+    // A new message starts as `<p></p>` + signature; the first words go into
+    // that empty paragraph, so the saved draft has none left.
+    expect(trailingSignatureTracking(rich('<p>Hi</p><p>Me</p>'), sig)).toEqual({ ...sig, placement: 'belowText' })
+  })
+
   it('stays unmanaged when anything follows it, or it is not there as inserted', () => {
     expect(trailingSignatureTracking(plain('Hi\n\nMe\n\n> quoted'), sig)).toBeUndefined()
     expect(trailingSignatureTracking(plain('Hi\n\nMe, edited'), sig)).toBeUndefined()

@@ -4174,14 +4174,26 @@ describe('signature on a change of From account', () => {
 
   it('leaves a reopened draft body alone, rather than giving it two signatures', () => {
     // "Edit as New Message" and saved drafts come with a body this app did not
-    // compose; it may already end in a signature.
-    const id = openComposeTab({ rich: true, html: '<p>hello</p><p>A</p>', noSignature: true })!
+    // compose; it may already hold a signature, here with a line added below.
+    const id = openComposeTab({ rich: true, html: '<p>hello</p><p>A</p><p>PS</p>', noSignature: true })!
     expect(draftOf(id)?.signature).toBeUndefined()
 
     updateComposeDraft(id, { accountId: 'b' })
 
-    expect(draftOf(id)?.html).toBe('<p>hello</p><p>A</p>')
+    expect(draftOf(id)?.html).toBe('<p>hello</p><p>A</p><p>PS</p>')
     expect(draftOf(id)?.signature).toBeUndefined()
+  })
+
+  // A saved new message keeps no empty paragraph above its signature: the first
+  // words were typed into it. Ending in the account's signature, it is tracked,
+  // so a From change swaps it for the other account's rather than adding one.
+  it("swaps the signature a reopened draft ends in, as a composed one's", () => {
+    const id = openComposeTab({ rich: true, html: '<p>hello</p><p>A</p>', noSignature: true })!
+    expect(draftOf(id)?.signature).toEqual({ html: '<p>A</p>', text: 'A', placement: 'belowText' })
+
+    updateComposeDraft(id, { accountId: 'b' })
+
+    expect(draftOf(id)?.html).toBe('<p>hello</p><p>B</p>')
   })
 
   it('leaves the body alone once the signature has been edited', () => {
@@ -5163,6 +5175,37 @@ describe('quoting the original in replies', () => {
     await sendReply()
     const sent = calls.find((call) => call.command === 'mail.send')?.payload as { body: string }
     expect(sent.body).toBe(saved)
+  })
+
+  // #154 test 1 on the Linux build: a new rich message keeps its signature on
+  // the server as `<p>typed</p><p>signature</p>` (typing fills the separator
+  // paragraph), and the core hands the body back as a whole document.
+  it('reopens a rich draft that ends in the signature with the switch on', async () => {
+    settings$.signature.set('<p>-- <br><em>Studio</em><br>Signal: x.01</p>')
+    const saved = message({
+      id: 'acc-1#Drafts#7#1',
+      account_id: 'acc-1',
+      folder_id: 'Drafts',
+      thread_id: 'acc-1#Drafts#7',
+      message_id: 'draft-sig@example.com',
+      body: 'Testing this.\n\n--\nStudio\nSignal: x.01',
+      body_html:
+        '<!doctype html><html><head><meta charset="utf-8"><style>img{max-width:100%}</style></head><body><p>Testing this. </p><p>-- <br><em>Studio</em><br>Signal: x.01</p></body></html>',
+    })
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+      calls.push({ command, payload })
+      if (command === 'mail.threadRead') return { messages: [saved] }
+      return {}
+    }
+
+    await openDraftCompose(saved)
+
+    expect(draft()?.html).toBe('<p>Testing this. </p><p>-- <br><em>Studio</em><br>Signal: x.01</p>')
+    expect(draft()?.signature).toEqual({
+      html: '<p>-- <br><em>Studio</em><br>Signal: x.01</p>',
+      text: '--\nStudio\nSignal: x.01',
+      placement: 'belowText',
+    })
   })
 
   it('folds the quote of a reopened draft away again', async () => {

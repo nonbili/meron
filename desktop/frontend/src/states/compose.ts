@@ -216,7 +216,9 @@ function foldDraftQuote(message: Message): ComposeBody & { quote?: ComposeDraft[
     // level, inside a wrapper the reply shares with it, or (Outlook) running on
     // past that wrapper. The range splits whatever wrappers it crosses.
     const first = doc.body.querySelector('[data-meron-quote]')
-    if (!first) return { rich: true, html: message.body_html, text: '' }
+    // The core hands the body back as a whole document (doctype, CSP, styles):
+    // the composer edits only what is in its body.
+    if (!first) return { rich: true, html: doc.body.innerHTML, text: '' }
     const from = (node: Node) => {
       const siblings: Node[] = []
       for (let at: Node | null = node; at; at = at.nextSibling) siblings.push(at)

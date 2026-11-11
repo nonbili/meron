@@ -350,8 +350,8 @@ function joinAcrossRemoval(prefix: string, suffix: string): string {
 /**
  * What a body this app did not just compose (a reopened draft, "Edit as New
  * Message") knows about the account's signature: tracked when the body ends in
- * it exactly as the composer inserts it below the text, unmanaged (`undefined`)
- * otherwise. Only that position is recognised: a signature with anything after
+ * it exactly as the composer inserts it below the text (in a rich body, with or
+ * without the empty paragraph above it), unmanaged (`undefined`) otherwise. Only that position is recognised: a signature with anything after
  * it (a quote, a forward) could not be switched back on in the same place.
  */
 export function trailingSignatureTracking(body: ComposeBody, signature: Signature): SignatureTracking {
@@ -364,8 +364,12 @@ export function trailingSignatureTracking(body: ComposeBody, signature: Signatur
   const removed = bodyWithSwappedSignature(trimmed, mark, { html: '', text: '' })
   if (removed.tracking === undefined) return undefined
   const restored = bodyWithSignature(removed.body, signature, 'belowText')
+  // In a rich draft the empty paragraph inserted above the signature is where
+  // a new message's first words go, so a saved one often has none left.
   const same = trimmed.rich
-    ? restored.html === trimmed.html || restored.html.replace(/^<p><\/p>/, '') === trimmed.html
+    ? restored.html === trimmed.html ||
+      restored.html.replace(/^<p><\/p>/, '') === trimmed.html ||
+      removed.body.html + signature.html === trimmed.html
     : restored.text === trimmed.text || restored.text.replace(/^\n+/, '') === trimmed.text
   return same ? mark : undefined
 }
