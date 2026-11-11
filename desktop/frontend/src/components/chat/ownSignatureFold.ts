@@ -5,6 +5,7 @@
 // signatures have no reliable edge, and a guess would hide what they wrote.
 // Nothing is removed; the fold's toggle shows it again.
 
+import { useValue } from '@legendapp/state/react'
 import type { Message } from '../../types'
 import { accounts$ } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
@@ -19,9 +20,17 @@ import { HTML_QUOTE_SELECTOR } from './quoteFold'
  */
 export function ownSignatureText(message: Message): string {
   if (!message.outgoing && !message.send_status) return ''
-  const account = accounts$.peek().find((acc) => acc.id === message.account_id)
+  const account = accounts$.get().find((acc) => acc.id === message.account_id)
   if (!account) return ''
-  return signatureToText(resolveSignature(account, settings$.signature.peek()))
+  return signatureToText(resolveSignature(account, settings$.signature.get()))
+}
+
+/**
+ * `ownSignatureText` for a component. Every bubble in a thread reads it, so it
+ * renders again only when this text changes, not on every change to an account.
+ */
+export function useOwnSignatureText(message: Message): string {
+  return useValue(() => ownSignatureText(message))
 }
 
 /**

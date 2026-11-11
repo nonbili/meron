@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react'
 // Initialize this side of the mail/compose cycle before the body pulls both
 // modules in through its native/link helpers (see quoteFold.test).
 import '../../states/compose'
@@ -7,7 +7,7 @@ import type { Account, Message } from '../../types'
 import { accounts$ } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
 import { MessageBubbleBody } from './MessageBubbleBody'
-import { foldStartWithOwnSignature, markOwnSignature, ownSignatureText } from './ownSignatureFold'
+import { foldStartWithOwnSignature, markOwnSignature, ownSignatureText, useOwnSignatureText } from './ownSignatureFold'
 import { messageMatchCount } from './threadSearchMatches'
 
 const account: Account = {
@@ -83,6 +83,31 @@ describe('ownSignatureText', () => {
   it('follows a per-account override', () => {
     accounts$.set([{ ...account, signature: { mode: 'none', html: '' } }])
     expect(ownSignatureText(message('x', true))).toBe('')
+  })
+})
+
+// #154 review, point 5: every bubble in a thread reads this.
+describe('useOwnSignatureText', () => {
+  it('renders again when my signature changes, not for any other account change', () => {
+    const other = { ...account, id: 'account-2', email: 'other@example.com' }
+    accounts$.set([account, other])
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useOwnSignatureText(message('x', true))
+    })
+    expect(result.current).toBe('Me\nPhone 123')
+    const before = renders
+
+    act(() => accounts$.set([account, { ...other, display_name: 'Renamed' }]))
+    act(() => accounts$.set([{ ...account, display_name: 'Me, renamed' }, other]))
+    expect(renders).toBe(before)
+
+    act(() => accounts$.set([{ ...account, signature: { mode: 'custom', html: '<p>New</p>' } }, other]))
+    expect(result.current).toBe('New')
+    act(() => settings$.signature.set('<p>Global</p>'))
+    act(() => accounts$.set([account, other]))
+    expect(result.current).toBe('Global')
   })
 })
 

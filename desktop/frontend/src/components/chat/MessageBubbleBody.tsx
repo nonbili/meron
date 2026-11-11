@@ -18,10 +18,7 @@ import {
 import { BubbleHtmlFrame } from './BubbleHtmlFrame'
 import { matchRanges } from './frameSearchHighlight'
 import { isQuoteUnfolded, setQuoteUnfolded, splitQuotedBody } from './quoteFold'
-import { foldStartWithOwnSignature, ownSignatureText } from './ownSignatureFold'
-import { useValue } from '@legendapp/state/react'
-import { accounts$ } from '../../states/accounts'
-import { settings$ } from '../../states/settings'
+import { foldStartWithOwnSignature, useOwnSignatureText } from './ownSignatureFold'
 import { ConversationScrollIntentContext } from './useConversationScroll'
 import type { FrameSurface } from './frameTheme'
 
@@ -80,11 +77,8 @@ export function MessageBubbleBody({
   const [quoteUnfolded, setQuoteUnfoldedState] = useState(() => isQuoteUnfolded(quoteKey))
   useEffect(() => setQuoteUnfoldedState(isQuoteUnfolded(quoteKey)), [quoteKey])
 
-  // My own signature folds with the quote; ownSignatureText peeks, so subscribe
-  // to what it reads.
-  useValue(accounts$)
-  useValue(settings$.signature)
-  const ownSignature = ownSignatureText(message)
+  // My own signature folds with the quote.
+  const ownSignature = useOwnSignatureText(message)
 
   const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
   const boxClass = fullHeight ? 'relative' : 'relative overflow-y-auto'
