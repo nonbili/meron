@@ -269,8 +269,20 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
       )}
       {/* The conversation pane slides over the board from this row's right edge
       (relative), and only within the row (overflow-hidden): with Tasks or the
-      contacts or the calendar open beside the board it must not cover them. */}
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      contacts or the calendar open beside the board it must not cover them.
+      The row must never scroll (index.css, .kanban-row): the composer takes
+      focus while its pane still waits off the edge, and the browser scrolls the
+      row to reveal it, pushing the columns left. The slide then lands that far
+      past its place, and all of it jumps back when the pane settles into the
+      row. The handler covers older WebKit, which has no `overflow: clip`. */}
+      <div
+        className="kanban-row relative flex min-h-0 flex-1"
+        onScroll={(event) => {
+          if (event.target !== event.currentTarget) return
+          event.currentTarget.scrollLeft = 0
+          event.currentTarget.scrollTop = 0
+        }}
+      >
         <div className="flex min-w-0 flex-1 flex-col">
           <DndContext
             sensors={sensors}

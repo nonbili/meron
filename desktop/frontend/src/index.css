@@ -1191,6 +1191,13 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   }
 }
 
+/* The row the pane slides in. Clipped rather than hidden where the engine can:
+   a hidden box still scrolls when something inside it takes focus. */
+.kanban-row {
+  overflow: hidden;
+  overflow: clip;
+}
+
 .animate-pane-slide-in,
 .animate-pane-slide-out {
   position: absolute;
