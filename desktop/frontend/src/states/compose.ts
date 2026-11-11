@@ -14,7 +14,7 @@ import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { ui$, showToast, showUndoToast } from './ui'
 import { contextualErrorMessage } from '../lib/errors'
-import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
+import { inlineRichStyles, prepareInlineImages, withoutInlineRichStyles } from '../components/composer/composerHelpers'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { getActiveThread, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
@@ -29,12 +29,15 @@ import {
   bodyWithSignature,
   bodyWithSwappedSignature,
   type ComposeBody,
+  FORWARDED_MESSAGE_MARKER,
   isBodyBlankWithoutSignature,
+  optedOutMark,
   resolveSignature,
   signatureForms,
   type Signature,
   type SignaturePlacement,
   type SignatureTracking,
+  reopenedSignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
 import { undeliveredOf } from './undelivered'
@@ -82,10 +85,9 @@ import {
   quickReplyAbandonedSaves,
   nextQuickReplyOwnershipTick,
   quickReplyDraftSaveInFlight,
-  quickReplyWithoutSignature,
   reserveOpeningDraft,
   unconfirmedQuickReplyDraftId,
-  seedQuickReplySignature,
+  startFreshQuickReply,
 } from './quickReply'
 
 // Reader and compose tabs: opening threads and drafts, the full editor, forwarding,
@@ -120,7 +122,7 @@ function forwardedSubject(subject: string): string {
 
 function forwardedPlainBody(message: Message): string {
   const header = [
-    '---------- Forwarded message ---------',
+    FORWARDED_MESSAGE_MARKER,
     headerLine('From', formatMessageFrom(message)),
     headerLine('Date', formatFullTimestamp(message.date)),
     headerLine('Subject', message.subject || '(no subject)'),
@@ -143,7 +145,7 @@ function forwardedHtmlBody(message: Message): string {
     .map(([label, value]) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
     .join('')
   const body = message.body_html || textToHtml(message.body ?? '')
-  return `<p><br></p><div class="meron-forwarded-message"><p>---------- Forwarded message ---------</p>${header}<br>${body}</div>`
+  return `<p><br></p><div class="meron-forwarded-message"><p>${FORWARDED_MESSAGE_MARKER}</p>${header}<br>${body}</div>`
 }
 
 /**
@@ -215,7 +217,9 @@ function foldDraftQuote(message: Message): ComposeBody & { quote?: ComposeDraft[
     // level, inside a wrapper the reply shares with it, or (Outlook) running on
     // past that wrapper. The range splits whatever wrappers it crosses.
     const first = doc.body.querySelector('[data-meron-quote]')
-    if (!first) return { rich: true, html: message.body_html, text: '' }
+    // The core hands the body back as a whole document (doctype, CSP, styles):
+    // the composer edits only what is in its body.
+    if (!first) return { rich: true, html: doc.body.innerHTML, text: '' }
     const from = (node: Node) => {
       const siblings: Node[] = []
       for (let at: Node | null = node; at; at = at.nextSibling) siblings.push(at)
@@ -701,6 +705,11 @@ type ComposeSeed = Partial<ComposeDraft> & {
    * signature it was written with, and a second copy is not wanted.
    */
   noSignature?: boolean
+  /**
+   * Insert no signature, but keep it switchable: the user turned it off where
+   * this draft came from (the quick reply), and may turn it back on here.
+   */
+  signatureOff?: boolean
 }
 
 export function openComposeTab(seed?: ComposeSeed): string | undefined {
@@ -729,14 +738,21 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
     quote?.rich && !rich
       ? { rich: true, html: seed?.html || textToHtml(seed?.text ?? ''), text: '' }
       : { rich, html: seed?.html ?? '', text: seed?.text ?? '' }
-  // A body this app did not compose (a saved draft, "Edit as New Message") may
-  // already carry a signature, so it stays unmanaged: `undefined`, not `null`.
   const placement = seed?.signaturePlacement ?? 'belowText'
-  const signature = seed?.noSignature ? undefined : resolveSignatureFor(account)
+  const accountSignature = resolveSignatureFor(account)
+  const signature = seed?.noSignature || seed?.signatureOff ? undefined : accountSignature
   // The placement is recorded even when the account sends no signature, so a
   // forward that later moves to an account with one still puts it above the
-  // quote rather than after it.
-  const tracking: SignatureTracking = signature ? { ...signature, placement } : undefined
+  // quote rather than after it. A body this app did not compose (a saved draft,
+  // "Edit as New Message") may already carry a signature: the account's, ending
+  // the body as the composer inserts it, is tracked (and switchable); a body
+  // with no trace of it is off (and switchable); anything else stays unmanaged,
+  // `undefined`, so nothing adds a second (reopenedSignatureTracking).
+  const tracking: SignatureTracking = signature
+    ? { ...signature, placement }
+    : seed?.signatureOff
+      ? optedOutMark(placement)
+      : reopenedSignatureTracking(seeded, accountSignature)
   const body = signature ? bodyWithSignature(seeded, signature, placement) : seeded
 
   const draft: ComposeDraft = {
@@ -814,12 +830,11 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     quickReplyAbandonedSaves.set(t.thread_id, nextQuickReplyOwnershipTick())
   }
   cancelQuickReplyDraftSave()
-  // The seeded signature is handed over stripped, so the full composer inserts
-  // and tracks its own copy — the account is the same, so this is the identical
-  // text, now swappable if the draft later changes identity. When it can't be
-  // found the user has written into it: it stays in the body as theirs, and the
-  // composer is told not to add a second.
-  const carried = quickReplyWithoutSignature()
+  // The box holds only the user's text. With the signature on, the full
+  // composer inserts and tracks its own copy (the account is the same, so this
+  // is the identical text, now swappable if the draft changes identity); with
+  // it off, the composer adds none.
+  const carried = compose$.composer.peek()
   // A bar holding a saved quoted reply already carries its quote.
   const quote = replyQuote(target)
   openComposeTab({
@@ -829,8 +844,12 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     cc,
     showCcBcc: !!cc.trim(),
     subject,
-    text: carried.text,
-    noSignature: !carried.found && !!compose$.quickReplySignature.peek()?.text,
+    text: carried,
+    // A box holding a signature it can't switch hands it over as found, for
+    // the full composer to look at the same way.
+    ...(compose$.quickReplySignatureUnmanaged.peek()
+      ? { noSignature: true }
+      : { signatureOff: compose$.quickReplySignatureOff.peek() }),
     attachments: compose$.composerAttachments.get(),
     inReplyTo: in_reply_to,
     references,
@@ -846,15 +865,15 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     encryptedDraft: quickReplyHoldsEncryptedDraft(t.thread_id) || undefined,
     quoteWithheld: replyQuoteWithheld(target),
     threadId: t.thread_id,
-    quote: quote && !bodyHasReplyQuote(carried.text, quote) ? quote : undefined,
+    quote: quote && !bodyHasReplyQuote(carried, quote) ? quote : undefined,
   })
   compose$.composerAttachments.set([])
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])
   // The thread stays open behind the new tab, so the box the user comes back to
-  // is a fresh quick reply — signature and all.
-  seedQuickReplySignature()
+  // is a fresh quick reply.
+  startFreshQuickReply()
 }
 
 export function openMailtoCompose(raw: string) {
@@ -946,7 +965,9 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     showCcBcc: hasExtraComposeHeaders({ cc: message.cc ?? '', bcc: message.bcc ?? '' }),
     subject: message.subject ?? '',
     rich: body.rich,
-    html: body.html,
+    // As the editor wrote it, without the styles a save adds: a signature
+    // holding a link is recognised (and tracked) only in that form.
+    html: withoutInlineRichStyles(body.html),
     text: body.text,
     quote: body.quote && { rich: body.rich, ...body.quote },
     inReplyTo: '',

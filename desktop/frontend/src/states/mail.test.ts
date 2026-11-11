@@ -9,6 +9,7 @@ import {
   loadThreads,
   mail$,
   mergeRefreshedThreadMessages,
+  messageRenderKey,
   requestThreadReselect,
   threadListViewKey,
 } from './mail'
@@ -21,6 +22,7 @@ import {
   toggleStarWithUndo,
 } from './mailFlags'
 import { deletableFolder, deleteFolder, ensureAccountFolders } from './mailFolders'
+import { retainThreadData } from './threadData'
 import {
   archiveThread,
   bulkArchiveSelected,
@@ -120,6 +122,81 @@ describe('thread message refresh reconciliation', () => {
     })
 
     expect(mergeRefreshedThreadMessages([optimistic], [canonical], 't1')).toEqual([canonical])
+  })
+
+  it('renders the Sent copy under the bubble it replaces, so the bubble is not mounted again', () => {
+    const original = thread({ id: 'm1', thread_id: 't1', message_id: 'root@example.com', date: 100 })
+    const optimistic = thread({
+      id: 'sent-key-1',
+      thread_id: 't1',
+      message_id: 'key-1@example.com',
+      send_status: 'sent',
+      date: 200,
+    })
+    const canonical = thread({
+      id: 'sent:key-1',
+      folder_id: 'Sent',
+      thread_id: 't1',
+      message_id: '<key-1@example.com>',
+      date: 200,
+    })
+
+    mergeRefreshedThreadMessages([original, optimistic], [original, canonical], 't1')
+
+    expect(messageRenderKey('sent:key-1')).toBe('sent-key-1')
+    expect(messageRenderKey('m1')).toBe('m1')
+  })
+
+  // #154 review, point 4: the keys are dropped with the thread's page.
+  it("forgets a thread's render keys when its conversation is let go", async () => {
+    const optimistic = thread({
+      id: 'sent-key-9',
+      thread_id: 't9',
+      message_id: 'key-9@example.com',
+      send_status: 'sent',
+    })
+    const canonical = thread({
+      id: 'sent:key-9',
+      folder_id: 'Sent',
+      thread_id: 't9',
+      message_id: '<key-9@example.com>',
+    })
+    const release = retainThreadData('t9')
+
+    mergeRefreshedThreadMessages([optimistic], [canonical], 't9')
+    expect(messageRenderKey('sent:key-9')).toBe('sent-key-9')
+
+    release()
+    await Promise.resolve()
+    expect(messageRenderKey('sent:key-9')).toBe('sent:key-9')
+  })
+
+  it("carries the bubble's key to a copy found by its envelope", () => {
+    const optimistic = thread({
+      id: 'sent-key-2',
+      thread_id: 't1',
+      from_addr: 'me@example.com',
+      to: 'sender@example.com',
+      subject: 'Re: Subject',
+      message_id: 'key-2@example.com',
+      send_status: 'sent',
+      date: 1000,
+    })
+    const canonical = thread({
+      id: 'sent:key-2',
+      folder_id: 'Sent',
+      thread_id: 't1',
+      from_addr: 'me@example.com',
+      to: 'sender@example.com',
+      subject: 'Re: Subject',
+      message_id: 'key-2@protonmail.internalid',
+      outgoing: true,
+      date: 1003,
+    })
+
+    mergeRefreshedThreadMessages([optimistic], [canonical], 't1')
+
+    expect(messageRenderKey('sent:key-2')).toBe('sent-key-2')
   })
 
   it('collapses two identical replies onto two server copies, not one', () => {

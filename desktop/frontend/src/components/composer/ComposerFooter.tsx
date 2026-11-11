@@ -4,6 +4,8 @@ import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 import type { RecipientKeys } from '../../lib/crypto'
 import { EncryptToggle } from '../crypto/EncryptToggle'
+import type { SignatureSwitch } from '../../lib/signature'
+import { SignatureToggle } from './SignatureToggle'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -48,6 +50,7 @@ export function ComposerFooter({
   saveError,
   canSend,
   encryption,
+  signature,
   onPickFiles,
   onPickInlineImages,
   onToggleRich,
@@ -73,6 +76,13 @@ export function ComposerFooter({
     hasRecipients?: boolean
     onChange: (on: boolean) => void
   }
+  /** The signature switch, when the account sends a signature (or the body still holds one). */
+  signature?: {
+    state: SignatureSwitch
+    /** The account's signature as plain text, for the tooltip. */
+    text: string
+    onChange: (on: boolean) => void
+  }
   onPickFiles: () => void
   onPickInlineImages: () => void
   onToggleRich: () => void
@@ -96,6 +106,7 @@ export function ComposerFooter({
           iconSize={16}
           label={t('composer.actions.attachFiles')}
           radius="xl"
+          size="md"
           onClick={onPickFiles}
         />
         {rich && (
@@ -104,6 +115,7 @@ export function ComposerFooter({
             iconSize={16}
             label={t('composer.actions.insertInlineImage')}
             radius="xl"
+            size="md"
             onClick={onPickInlineImages}
           />
         )}
@@ -120,9 +132,12 @@ export function ComposerFooter({
             onChange={encryption.onChange}
           />
         )}
+        {signature && (
+          <SignatureToggle size="md" state={signature.state} signature={signature.text} onChange={signature.onChange} />
+        )}
         <button
           onClick={onToggleRich}
-          className={`flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer ${
+          className={`flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-[0.6875rem] font-semibold transition-colors cursor-pointer ${
             rich ? 'bg-accent/10 text-accent' : 'text-secondary hover:bg-hover'
           }`}
           title={rich ? t('composer.actions.switchToPlainText') : t('composer.actions.switchToRichText')}

@@ -60,7 +60,7 @@ describe('useQuickReply draft ownership', () => {
     compose$.quickReplyDraftSaved.set(true)
     compose$.quickReplyDraftThreadId.set('t-1')
     compose$.quickReplyFrom.set('me@example.com')
-    compose$.quickReplySignature.set(null)
+    compose$.quickReplySignatureOff.set(false)
     ;(window as any).go = {
       main: {
         App: {

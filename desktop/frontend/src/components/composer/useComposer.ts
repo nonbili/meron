@@ -21,7 +21,16 @@ import {
   composedContent,
   closeComposeTabKeepingDraft,
   announceSavedDrafts,
+  resolveSignatureFor,
 } from '../../states/compose'
+import {
+  signatureSwitch,
+  switchedSignature,
+  withConvertedRestoreAnchor,
+  withRestoreAnchor,
+  type ComposeBody,
+  type SignatureSwitch,
+} from '../../lib/signature'
 import { warnUndelivered } from '../../states/undelivered'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
@@ -49,6 +58,7 @@ import {
   prepareInlineImages,
   readClipboardImages,
   readNativeClipboardImage,
+  replaceEditorContentDiff,
   textToHtml,
   type NativeClipboardImage,
 } from './composerHelpers'
@@ -504,15 +514,46 @@ export function useComposer(tabId: string) {
     if (draft.rich) {
       // Rich -> plaintext: capture text fallback.
       const html = editor?.getHTML() ?? draft.html
-      const signature = mark ? { ...mark, text: htmlToText(mark.html).trim() } : mark
-      update({ rich: false, html, text: htmlToText(html), signature })
+      const text = htmlToText(html)
+      const signature = mark
+        ? withConvertedRestoreAnchor({ ...mark, text: htmlToText(mark.html).trim() }, text, (tail) =>
+            htmlToText(tail).replace(/^\n+/, ''),
+          )
+        : mark
+      update({ rich: false, html, text, signature })
     } else {
       // Plaintext -> rich: seed editor from the plaintext content.
       const html = textToHtml(draft.text)
-      const signature = mark ? { ...mark, html: textToHtml(mark.text) } : mark
+      const signature = mark
+        ? withConvertedRestoreAnchor({ ...mark, html: textToHtml(mark.text) }, html, textToHtml)
+        : mark
       editor?.commands.setContent(html || '<p></p>')
       update({ rich: true, html, signature })
     }
+  }
+
+  // The signature switch takes the tracked signature out of the body or puts
+  // the account's back, through the same swap as a change of From account. A
+  // rich editor holds its own copy of the document, so it is re-seeded, with the
+  // caret kept where the user was when the new document still holds it.
+  const account = useValue(() => accounts$.get().find((acc) => acc.id === draft?.accountId))
+  useValue(settings$.signature)
+  const accountSignature = resolveSignatureFor(account)
+  // The draft's html follows every edit (the editor's onUpdate), as the From
+  // swap relies on too.
+  const body: ComposeBody | null = draft ? { rich: draft.rich, html: draft.html, text: draft.text } : null
+  const signatureState: SignatureSwitch | null = body ? signatureSwitch(body, draft?.signature) : null
+  const switchSignature = (on: boolean) => {
+    if (!draft || !body) return
+    const switched = switchedSignature(body, draft.signature, accountSignature, on)
+    if (!switched) return
+    if (draft.rich && editor) {
+      // Only the signature's part of the document, outside the undo history:
+      // what was typed before stays undoable, and Undo can't bring back a
+      // signature the tracking says is gone (the switch would add a second).
+      replaceEditorContentDiff(editor, switched.body.html || '<p></p>')
+    }
+    update({ html: switched.body.html, text: switched.body.text, signature: switched.tracking })
   }
 
   // A folded quote is unfolded into the end of the body, where the user can trim
@@ -525,10 +566,16 @@ export function useComposer(tabId: string) {
     // draft can only go out (and be saved) encrypted.
     const decrypted = draft.sensitiveSource ? { decryptedInBody: true } : {}
     if (draft.rich && editor) {
+      const before = editor.getHTML()
       editor.chain().insertContentAt(editor.state.doc.content.size, `<p></p>${quote.html}`).run()
-      update({ html: editor.getHTML(), quote: undefined, ...decrypted })
+      const html = editor.getHTML()
+      // A signature switched off goes back above the quote, not under it.
+      const signature = withRestoreAnchor(draft.signature, html.startsWith(before) ? html.slice(before.length) : '')
+      update({ html, quote: undefined, signature, ...decrypted })
     } else {
-      update({ text: composedContent(draft), quote: undefined, ...decrypted })
+      const text = composedContent(draft)
+      const signature = withRestoreAnchor(draft.signature, text.endsWith(quote.text) ? quote.text : '')
+      update({ text, quote: undefined, signature, ...decrypted })
     }
   }
 
@@ -844,6 +891,9 @@ export function useComposer(tabId: string) {
     encryptionKeys,
     update,
     toggleRich,
+    signatureState,
+    accountSignature,
+    switchSignature,
     expandQuote,
     removeQuote,
     addFiles,

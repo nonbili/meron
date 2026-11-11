@@ -1,5 +1,6 @@
 import { DOMParser as SchemaParser, type Schema } from '@tiptap/pm/model'
 import type { Account, AccountSignature } from '../types'
+import { inertHtmlToText } from './html'
 
 // Signatures are stored as HTML: one app-wide signature in settings, plus an
 // optional per-account override (see states/settings.ts and types.ts). They are
@@ -7,10 +8,13 @@ import type { Account, AccountSignature } from '../types'
 // delete the text like any other content — rather than being stapled on at send
 // time, so what the composer shows is what goes out.
 //
-// The thread's quick reply is seeded the same way. It renders as a chat bubble,
-// but what it sends is an ordinary mail that its recipient reads in an ordinary
-// client, so leaving it unsigned reads as inconsistency rather than brevity.
-// Its tracking is simpler — see compose$.quickReplySignature.
+// The thread's quick reply is signed too. It renders as a chat bubble, but what
+// it sends is an ordinary mail that its recipient reads in an ordinary client,
+// so leaving it unsigned reads as inconsistency rather than brevity. Its box is
+// kept to what the user writes, though: the signature is added on save and send
+// (`textWithTrailingSignature`), a button in the box shows it and switches it
+// off, and a saved draft loaded back has it taken off again
+// (`textWithoutTrailingSignature`) — see compose$.quickReplySignatureOff.
 
 /** Whether signature HTML carries any visible content (text or an image). */
 export function isBlankSignature(html: string): boolean {
@@ -145,7 +149,21 @@ export function signatureForms(html: string): Signature {
 export type SignaturePlacement = 'aboveQuote' | 'belowText'
 
 /** A signature this app put in a draft body, and where it put it. */
-export type SignatureMark = Signature & { placement: SignaturePlacement }
+export type SignatureMark = Signature & {
+  placement: SignaturePlacement
+  /**
+   * The user switched the signature off for this message. Unlike an account
+   * that sends none, that is a choice about the message: a change of From
+   * account leaves it without one.
+   */
+  optedOut?: boolean
+  /**
+   * What followed the signature when it was switched off (an unfolded quote,
+   * a forwarded message), so switching it back on puts it above that again
+   * rather than at the placement's edge of the whole body.
+   */
+  restoreBefore?: string
+}
 
 /**
  * What a draft knows about the signature in its body — three states, not two:
@@ -170,6 +188,11 @@ export function noSignatureMark(placement: SignaturePlacement): SignatureMark {
   return { html: '', text: '', placement }
 }
 
+/** The tracking for a draft whose signature the user switched off. */
+export function optedOutMark(placement: SignaturePlacement, restoreBefore?: string): SignatureMark {
+  return { html: '', text: '', placement, optedOut: true, ...(restoreBefore ? { restoreBefore } : {}) }
+}
+
 /**
  * Move a draft body to another account's signature, and report what the draft
  * now knows about it (see [[SignatureTracking]]).
@@ -192,6 +215,8 @@ export function bodyWithSwappedSignature(
   // goes where this draft's signature belongs — which a forward opened under an
   // account with no signature of its own still remembers.
   if (!tracking?.html) {
+    // Switched off by the user: another account's signature isn't wanted either.
+    if (tracking?.optedOut) return { body, tracking }
     const placement = tracking?.placement ?? 'belowText'
     return { body: bodyWithSignature(body, next, placement), tracking: markFor(placement) }
   }
@@ -342,6 +367,256 @@ function joinAcrossRemoval(prefix: string, suffix: string): string {
   // line is not part of the signature, so it stays.
   if (!head) return tail ? `\n\n${tail}` : ''
   return tail ? `${head}\n\n${tail}` : head
+}
+
+/**
+ * What a body this app did not just compose (a reopened draft, "Edit as New
+ * Message") knows about the account's signature: tracked when the body ends in
+ * it exactly as the composer inserts it below the text (in a rich body, with or
+ * without the empty paragraph above it), unmanaged (`undefined`) otherwise. Only that position is recognised: a signature with anything after
+ * it (a quote, a forward) could not be switched back on in the same place.
+ */
+export function trailingSignatureTracking(body: ComposeBody, signature: Signature): SignatureTracking {
+  if (!signature.html) return undefined
+  const tracked = trailingTrackingOf(body, signature)
+  if (tracked || body.rich) return tracked
+  // A draft switched from rich to plaintext holds the signature as that
+  // conversion wrote it (`htmlToText`: a blank line between paragraphs), which
+  // is also the text its tracking held then (see the composer's toggleRich).
+  const converted = inertHtmlToText(signature.html).trim()
+  return converted && converted !== signature.text
+    ? trailingTrackingOf(body, { ...signature, text: converted })
+    : undefined
+}
+
+function trailingTrackingOf(body: ComposeBody, signature: Signature): SignatureTracking {
+  const mark: SignatureMark = { ...signature, placement: 'belowText' }
+  // Blank lines (empty paragraphs) after the signature are not content.
+  const trimmed = body.rich
+    ? { ...body, html: body.html.replace(/(<p><\/p>)+$/, '') }
+    : { ...body, text: body.text.replace(/\n+$/, '') }
+  const removed = bodyWithSwappedSignature(trimmed, mark, { html: '', text: '' })
+  if (removed.tracking === undefined) return undefined
+  const restored = bodyWithSignature(removed.body, signature, 'belowText')
+  // In a rich draft the empty paragraph inserted above the signature is where
+  // a new message's first words go, so a saved one often has none left.
+  const same = trimmed.rich
+    ? restored.html === trimmed.html ||
+      restored.html.replace(/^<p><\/p>/, '') === trimmed.html ||
+      removed.body.html + signature.html === trimmed.html
+    : restored.text === trimmed.text || restored.text.replace(/^\n+/, '') === trimmed.text
+  return same ? mark : undefined
+}
+
+/** Where the composer's signature switch stands for a body and its tracking. */
+export type SignatureSwitch = 'on' | 'off' | 'unmanaged'
+
+/**
+ * What a reopened draft knows about the account's signature. A draft only
+ * says what it holds, not what the switch was, so three cases are told apart
+ * by what is in the body:
+ *
+ *   ends in it, as inserted    tracked: the switch is on
+ *   holds no trace of it       the draft was saved with it off: off, switchable
+ *   holds part of it           an edited or older copy: unmanaged, so switching
+ *                              it on can't put a second one under it
+ *
+ * A trace is a whole line of the signature, or one of its images, outside a
+ * quote. An older signature that shares no line with the current one can't be
+ * told from none: switching that on adds the current one below it.
+ *
+ * A body holding a forwarded message stays unmanaged whatever else it holds:
+ * a signature belongs above the forwarded message, and "below the text" of a
+ * reopened forward is under it.
+ */
+export function reopenedSignatureTracking(body: ComposeBody, signature: Signature): SignatureTracking {
+  if (!signature.html) return undefined
+  // Before the trailing check: a forward of my own message ends in my
+  // signature, and that one is the forwarded message's, not this draft's.
+  if ((body.rich ? body.html : body.text).includes(FORWARDED_MESSAGE_MARKER)) return undefined
+  const trailing = trailingSignatureTracking(body, signature)
+  if (trailing) return trailing
+  return hasSignatureTrace(body, signature) ? undefined : optedOutMark('belowText')
+}
+
+/** The line that opens a forwarded message in a body this app composed. */
+export const FORWARDED_MESSAGE_MARKER = '---------- Forwarded message ---------'
+
+/**
+ * A saved quick reply's text for the box, and where its signature switch
+ * stands (see `reopenedSignatureTracking`): on with the signature taken off
+ * when the draft ends in it, off when none of it is there, and unmanaged, the
+ * text left as saved, when an edited or older copy is.
+ */
+export function quickReplyDraftSignature(
+  body: string,
+  signatureText: string,
+  /** The signature's HTML, to also recognise it as the full composer writes it into a plaintext draft. */
+  signatureHtml = '',
+): { text: string; state: SignatureSwitch } {
+  // A draft switched from rich to plaintext in the full composer holds the
+  // signature with a blank line between its paragraphs (`htmlToText`). It is
+  // the same signature: taken off, and sent again in the quick reply's form.
+  for (const candidate of [signatureText, signatureText ? inertHtmlToText(signatureHtml).trim() : '']) {
+    const text = textWithoutTrailingSignature(body, candidate)
+    if (text !== null) return { text, state: 'on' }
+  }
+  const traced = hasSignatureTrace({ rich: false, html: '', text: body }, { html: '', text: signatureText })
+  return { text: body, state: traced ? 'unmanaged' : 'off' }
+}
+
+/** Whether any whole line or image of the signature is in the body, quotes aside. */
+function hasSignatureTrace(body: ComposeBody, signature: Signature): boolean {
+  const lines = new Set(
+    signature.text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  )
+  const unquoted = body.rich ? withoutBlockquotes(body.html) : body.text
+  const text = body.rich ? signatureToText(unquoted) : unquoted
+  if (text.split('\n').some((line) => lines.has(line.trim()))) return true
+  if (!body.rich) return false
+  return imageSources(signature.html).some((src) => imageSources(unquoted).includes(src))
+}
+
+function withoutBlockquotes(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  for (const quote of Array.from(doc.querySelectorAll('blockquote'))) quote.remove()
+  return doc.body.innerHTML
+}
+
+function imageSources(html: string): string[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Array.from(doc.querySelectorAll('img')).flatMap((img) => {
+    const src = img.getAttribute('src')
+    return src ? [src] : []
+  })
+}
+
+/**
+ * The composer's signature switch: on while the tracked signature is in the
+ * body as inserted, off when the draft deliberately has none, and unmanaged
+ * when the body's signature is not this app's to take out (a reopened draft
+ * whose signature wasn't recognised, or one the user has written into).
+ */
+export function signatureSwitch(body: ComposeBody, tracking: SignatureTracking): SignatureSwitch {
+  if (tracking === undefined) return 'unmanaged'
+  if (!tracking?.html) return 'off'
+  return bodyWithSwappedSignature(body, tracking, { html: '', text: '' }).tracking === undefined ? 'unmanaged' : 'on'
+}
+
+/**
+ * The body with its signature switched on or off, through the same swap as a
+ * change of From account: off takes the tracked signature out, on puts the
+ * account's signature back where this draft's goes. Null when the body's
+ * signature can't be switched (see `signatureSwitch`).
+ */
+export function switchedSignature(
+  body: ComposeBody,
+  tracking: SignatureTracking,
+  signature: Signature,
+  on: boolean,
+): { body: ComposeBody; tracking: SignatureTracking } | null {
+  if (signatureSwitch(body, tracking) === 'unmanaged') return null
+  if (!on) {
+    if (!tracking?.html) return null
+    const at = trackedIndex(body, tracking)
+    const swapped = bodyWithSwappedSignature(body, tracking, { html: '', text: '' })
+    if (at < 0 || swapped.tracking === undefined) return null
+    // What follows the signature, as the removal leaves it in the body.
+    const after = body.rich
+      ? body.html.slice(at + tracking.html.length)
+      : body.text.slice(at + tracking.text.length).replace(/^\n+/, '')
+    const restoreBefore = isBlankFragment(after, body.rich) ? undefined : after
+    return { body: swapped.body, tracking: optedOutMark(tracking.placement, restoreBefore) }
+  }
+  const placement = tracking?.placement ?? 'belowText'
+  if (!signature.html) return { body, tracking: noSignatureMark(placement) }
+  return {
+    body:
+      bodyWithSignatureBefore(body, signature, tracking?.restoreBefore) ??
+      bodyWithSignature(body, signature, placement),
+    tracking: { ...signature, placement },
+  }
+}
+
+/**
+ * A switched-off mark after its body changed format (rich to plaintext or
+ * back): what followed the signature goes through the same conversion as the
+ * body, so switching back on still finds it. Dropped when the converted body
+ * doesn't end in it, which leaves the placement to decide.
+ */
+export function withConvertedRestoreAnchor(
+  mark: SignatureMark,
+  converted: string,
+  convert: (tail: string) => string,
+): SignatureMark {
+  if (!mark.restoreBefore) return mark
+  const { restoreBefore, ...rest } = mark
+  const tail = convert(restoreBefore)
+  return tail && converted.endsWith(tail) ? { ...rest, restoreBefore: tail } : rest
+}
+
+/**
+ * A mark after `tail` (an unfolded quote) was added to the end of its body.
+ * With the signature switched off, that is what it goes back above; a mark
+ * that already remembers its place, or holds a signature, is left as it is.
+ */
+export function withRestoreAnchor(tracking: SignatureTracking, tail: string): SignatureTracking {
+  if (!tracking?.optedOut || tracking.html || tracking.restoreBefore || !tail) return tracking
+  return { ...tracking, restoreBefore: tail }
+}
+
+/**
+ * The body with the signature put back above `tail`, the content that followed
+ * it when it was switched off. Null when the body no longer ends in that
+ * content (it was edited since), or the body can't carry this signature.
+ */
+function bodyWithSignatureBefore(
+  body: ComposeBody,
+  signature: Signature,
+  tail: string | undefined,
+): ComposeBody | null {
+  if (!tail) return null
+  if (body.rich) {
+    if (!body.html.endsWith(tail)) return null
+    const head = body.html.slice(0, -tail.length)
+    const separator = head.endsWith(RICH_SEPARATOR) ? '' : RICH_SEPARATOR
+    return { ...body, html: `${head}${separator}${signature.html}${tail}` }
+  }
+  if (!signature.text || !body.text.endsWith(tail)) return null
+  const head = body.text.slice(0, -tail.length).replace(/\n+$/, '')
+  return { ...body, text: `${head}\n\n${signature.text}\n\n${tail}` }
+}
+
+/**
+ * A quick reply as it goes out: what the user typed, then the signature under
+ * one blank line. Only the join is added: the user's own whitespace is sent
+ * exactly as written, so `textWithoutTrailingSignature` gets it back verbatim
+ * from a saved draft. A box with nothing typed (an attachment-only reply) sends
+ * the signature alone.
+ */
+export function textWithTrailingSignature(text: string, signatureText: string): string {
+  if (!signatureText) return text
+  if (!text.trim()) return signatureText
+  return `${text}\n\n${signatureText}`
+}
+
+/**
+ * The text of a saved plaintext draft without its signature, or null when the
+ * draft doesn't end in it. Only an exact copy that is the draft's last block
+ * counts: one with text after it (a quote) or written into is the user's, and
+ * a draft with no recognisable signature is left alone. Adding the signature
+ * back on send then never gives a draft a second one.
+ */
+export function textWithoutTrailingSignature(body: string, signatureText: string): string | null {
+  if (!signatureText) return null
+  // A blank line a server or client appended after the signature is not text.
+  const text = body.replace(/\n+$/, '')
+  if (text === signatureText) return ''
+  const join = `\n\n${signatureText}`
+  return text.endsWith(join) ? text.slice(0, -join.length) : null
 }
 
 /** The empty paragraph that separates the signature from the body above it. */

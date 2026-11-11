@@ -1,3 +1,4 @@
+import { createDocument, type Editor } from '@tiptap/core'
 import type { ComposerAttachment } from '../../types'
 import { invoke } from '../../lib/bridge'
 import { isLinuxPlatform } from '../../lib/platform'
@@ -43,6 +44,28 @@ export function inlineRichStyles(html: string): string {
       // Preserve any existing inline styles; only prepend our defaults.
       const existing = el.getAttribute('style')
       el.setAttribute('style', existing ? `${style} ${existing}` : style)
+    }
+  }
+  return doc.body.innerHTML
+}
+
+/**
+ * A saved body without the styles `inlineRichStyles` put on it when it was
+ * saved. The editor drops them anyway, and until it does they keep the body
+ * from reading as the editor wrote it: a signature holding a link would not
+ * be recognised in a reopened draft. Styles of any other origin are kept.
+ */
+export function withoutInlineRichStyles(html: string): string {
+  if (!html.includes('style=')) return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  for (const [selector, style] of Object.entries(RICH_INLINE_STYLES)) {
+    for (const el of Array.from(doc.querySelectorAll(selector))) {
+      let rest = el.getAttribute('style') ?? ''
+      if (!rest.startsWith(style)) continue
+      // A draft saved more than once without an edit carries them repeated.
+      while (rest.startsWith(style)) rest = rest.slice(style.length).trimStart()
+      if (rest) el.setAttribute('style', rest)
+      else el.removeAttribute('style')
     }
   }
   return doc.body.innerHTML
@@ -207,4 +230,28 @@ export type NativeClipboardImage = {
 
 export async function readNativeClipboardImage(): Promise<NativeClipboardImage | null> {
   return invoke<NativeClipboardImage | null>('composer.readClipboardImage', {})
+}
+
+/**
+ * Make the editor's document `html` by replacing only the part that differs,
+ * outside the undo history. For a change the app makes to the body (the
+ * signature switch): replacing the whole document would leave nothing typed
+ * before it undoable, and a step in the history would let Undo bring back a
+ * signature the draft's tracking says is gone.
+ */
+export function replaceEditorContentDiff(editor: Editor, html: string) {
+  const current = editor.state.doc
+  const next = createDocument(html, editor.schema, editor.options.parseOptions)
+  const start = current.content.findDiffStart(next.content)
+  if (start === null) return
+  let { a: endCurrent, b: endNext } = current.content.findDiffEnd(next.content)!
+  // The same content on both sides of the change (a repeated paragraph) makes
+  // the two ends overlap the start: widen them back out.
+  const overlap = start - Math.min(endCurrent, endNext)
+  if (overlap > 0) {
+    endCurrent += overlap
+    endNext += overlap
+  }
+  const tr = editor.state.tr.replace(start, endCurrent, next.slice(start, endNext))
+  editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true))
 }

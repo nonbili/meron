@@ -9,6 +9,7 @@ import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
 import { QuickReplyFrom } from './QuickReplyFrom'
 import { QuickReplyRecipients } from './QuickReplyRecipients'
+import { QuickReplySignatureToggle } from './QuickReplySignatureToggle'
 import {
   quickReplyEncrypts,
   quickReplyHoldsEncryptedDraft,
@@ -32,9 +33,8 @@ export function QuickReplyComposer() {
     handleComposerKeyDown,
   } = useQuickReply()
 
-  // A box holding only its seeded signature counts as empty. The check peeks
-  // rather than subscribing, but `composer` is rendered below, so every
-  // keystroke re-renders this and re-evaluates it.
+  // Whether the box is blank is peeked rather than subscribed, but `composer`
+  // is rendered below, so every keystroke re-renders this and re-evaluates it.
   const target = useValue(quickReplyTarget)
   const { to, cc } = useValue(quickReplyRecipients)
   const encrypt = useValue(quickReplyEncrypts)
@@ -89,14 +89,14 @@ export function QuickReplyComposer() {
         <div className="-mb-1 flex w-full min-w-0 items-center gap-1">
           <button
             onClick={() => void pickAttachmentFiles()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
             title={t('composer.actions.attachFiles')}
           >
             <Paperclip size={15} />
           </button>
           <button
             onClick={() => openReplyInFullEditor()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-secondary hover:bg-active hover:text-primary transition-colors cursor-pointer"
             title={t('composer.actions.openFullEditor')}
           >
             <Maximize2 size={14} />
@@ -104,6 +104,8 @@ export function QuickReplyComposer() {
           {target && (
             <EncryptToggle
               key={target.thread_id}
+              // The full composer's size, so the two look alike.
+              size="md"
               keys={keys}
               hasRecipients={!!(to || cc).trim()}
               on={encrypt}
@@ -117,6 +119,7 @@ export function QuickReplyComposer() {
               }
             />
           )}
+          <QuickReplySignatureToggle />
           <QuickReplyFrom />
           <div className="ml-auto flex min-w-0 shrink items-center">
             <QuickReplyRecipients />

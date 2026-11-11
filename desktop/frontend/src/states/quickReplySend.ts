@@ -54,7 +54,7 @@ import {
   type QuickReplySendClaim,
   quickReplySendHydrationGuards,
   releaseUnsentQuickReplyClaim,
-  seedQuickReplySignature,
+  startFreshQuickReply,
   unconfirmedDraftIds,
   unconfirmedQuickReplyDraftId,
 } from './quickReply'
@@ -238,15 +238,15 @@ export async function sendReply() {
     attachments,
     from: compose$.quickReplyFrom.peek(),
     added,
-    signature: compose$.quickReplySignature.peek(),
+    signatureOff: compose$.quickReplySignatureOff.peek(),
+    signatureUnmanaged: compose$.quickReplySignatureUnmanaged.peek(),
   }
   compose$.composerAttachments.set([])
   // The next reply in this thread starts as a plain one.
   compose$.quickReplyAdded.set([])
   clearQuickReplyDraftOwnership()
-  // Back to a fresh quick reply rather than an empty box: the next reply in
-  // this thread gets a signature just like the one just sent did.
-  seedQuickReplySignature()
+  // The next reply in this thread starts fresh, with the signature on.
+  startFreshQuickReply()
   const clearedGeneration = quickReplyBoxGeneration
 
   const dropUnsentBubble = () => {
@@ -338,7 +338,8 @@ export async function sendReply() {
       compose$.composerAttachments.set(box.attachments)
       compose$.quickReplyFrom.set(box.from)
       compose$.quickReplyAdded.set(box.added)
-      compose$.quickReplySignature.set(box.signature)
+      compose$.quickReplySignatureOff.set(box.signatureOff)
+      compose$.quickReplySignatureUnmanaged.set(box.signatureUnmanaged)
       // The box holds the claim's reply again, so releasing hands it back.
       claim.generation = quickReplyBoxGeneration
       dropUnsentBubble()

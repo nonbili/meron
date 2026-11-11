@@ -87,6 +87,23 @@ export function htmlToText(html: string): string {
   return out.replace(/\n+$/g, '').trimStart()
 }
 
+/**
+ * [htmlToText] with the same result, for HTML that may hold remote images (a
+ * signature) converted outside the composer: `htmlToText` builds elements in
+ * the live document, where an `<img>` fetches its source even detached. Here
+ * the images lose their source first (their alt text is all the text takes),
+ * and what else fetches is dropped.
+ */
+export function inertHtmlToText(source: string): string {
+  const html = new DOMParser().parseFromString(source, 'text/html')
+  html.querySelectorAll('script, style, iframe, object, embed, link, video, audio, source').forEach((el) => el.remove())
+  html.querySelectorAll('img').forEach((img) => {
+    img.removeAttribute('src')
+    img.removeAttribute('srcset')
+  })
+  return htmlToText(html.body.innerHTML)
+}
+
 /** [htmlToText] for a received mail's HTML, which must not load anything:
  * parsed in an inert document, stripped of what fetches before the text is taken. */
 export function mailHtmlToText(source: string): string {

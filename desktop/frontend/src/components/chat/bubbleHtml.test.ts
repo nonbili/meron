@@ -634,3 +634,29 @@ it('restores authored dimensions and priorities after a failed image recovers', 
     expect(dimensions(image)).toEqual(before)
   }
 })
+
+describe('the quote chip in a frame', () => {
+  // The same chip as a plain body's (MessageBubbleBody): bg-white/10, /15, /25
+  // on dark, bg-black/5, /10, /15 on light.
+  it('takes the plain chip’s faint light fills in a dark bubble', () => {
+    const style = themedFrame('<p>Hi</p>', DARK_OUT)
+    expect(style.getPropertyValue('chip')).toBe('rgba(255, 255, 255, 0.1)')
+    expect(style.getPropertyValue('chip-hover')).toBe('rgba(255, 255, 255, 0.15)')
+    expect(style.getPropertyValue('chip-open')).toBe('rgba(255, 255, 255, 0.25)')
+  })
+
+  it('takes its faint dark fills on a light bubble, or a message’s own light card', () => {
+    expect(themedFrame('<p>Hi</p>', DEFAULT_BUBBLE_THEME).getPropertyValue('chip')).toBe('rgba(0, 0, 0, 0.05)')
+    const card = '<body style="background:#ffffff;color:#111111"><p>Newsletter</p></body>'
+    expect(themedFrame(card, DARK_IN).getPropertyValue('chip')).toBe('rgba(0, 0, 0, 0.05)')
+  })
+
+  it('draws the chip as a pill with the plain chip’s spacing and states', () => {
+    const css = frameStyle(prepareBubbleHtml('<p>Hi</p>'))
+    const rule = (selector: string) => css.slice(css.indexOf(selector)).split('}')[0]
+    expect(rule('.meron-quote-toggle {')).toContain('margin: 6px 0')
+    expect(rule('.meron-quote-toggle {')).toContain('border-radius: 9999px')
+    expect(rule('.meron-quote-toggle:hover')).toContain('chip-hover')
+    expect(rule('.meron-quote-toggle[aria-expanded="true"]')).toContain('chip-open')
+  })
+})
