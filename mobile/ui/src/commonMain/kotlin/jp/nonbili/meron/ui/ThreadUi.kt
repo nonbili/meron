@@ -327,6 +327,12 @@ internal fun ThreadScreen(
     // unread or matched by the in-thread search; everything older collapses to
     // a summary line until the user taps it.
     val lastMessageId = messages.lastOrNull()?.id.orEmpty()
+    // Messages that have been the newest while the thread was showing. A reply
+    // arriving must not collapse the one it displaced, which the reader may be
+    // in the middle of. Emptied by an expand-all or collapse-all, which starts
+    // over from the newest.
+    val wasNewest = remember(thread?.id) { mutableSetOf<String>() }
+    if (lastMessageId.isNotEmpty()) wasNewest += lastMessageId
 
     fun isMessageExpanded(message: MessageBody): Boolean {
         // The match the user navigated to always shows its body: landing on a
@@ -336,8 +342,8 @@ internal fun ThreadScreen(
             // Collapsing all still leaves the newest open: a thread of nothing
             // but summary lines has nothing to read, and it is the one a reply
             // answers.
-            ?: expandAll?.let { it || message.id == lastMessageId }
-            ?: (message.id == lastMessageId || message.id in unreadOnArrival || searchMatches.contains(message.id))
+            ?: expandAll?.let { it || message.id in wasNewest }
+            ?: (message.id in wasNewest || message.id in unreadOnArrival || searchMatches.contains(message.id))
     }
     // What the menu's expand-all / collapse-all item would do now: true to
     // expand, false to collapse, null where there is nothing to offer.
@@ -841,6 +847,7 @@ internal fun ThreadScreen(
                                                 // reader at the end, the end.
                                                 if (!listState.canScrollForward) endHoldRequest += 1
                                                 expandOverrides = emptyMap()
+                                                wasNewest.clear()
                                                 expandAll = expand
                                             },
                                         )

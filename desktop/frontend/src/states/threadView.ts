@@ -26,6 +26,11 @@ export interface ThreadView {
    *  marking clears the live flag while the reader reads, so a default derived
    *  from it would collapse open messages out from under them. */
   unreadOnArrival: Set<string>
+  /** Messages that have been the newest one while the thread was showing, and
+   *  so open by default. A reply arriving must not collapse the message it
+   *  displaced, which the reader may be in the middle of. Emptied by an
+   *  expand-all / collapse-all, which starts over from the newest. */
+  wasNewest: Set<string>
   /** Where the reader was, last time the view was measured. */
   scroll: SavedScrollAnchor | null
   /** Whether opening the thread should go back to `scroll`. Set when the
@@ -38,6 +43,7 @@ export interface ThreadViewSnapshot {
   overrides: Record<string, boolean>
   expandAll: { expanded: boolean } | null
   unreadOnArrival: string[]
+  wasNewest: string[]
   scroll: SavedScrollAnchor | null
   /** Messages whose blocked remote content the reader revealed. */
   revealedRemote: string[]
@@ -96,7 +102,14 @@ export function forgetThreadView(key: string) {
 }
 
 function emptyView(): ThreadView {
-  return { overrides: {}, expandAll: null, unreadOnArrival: new Set(), scroll: null, restoreScroll: false }
+  return {
+    overrides: {},
+    expandAll: null,
+    unreadOnArrival: new Set(),
+    wasNewest: new Set(),
+    scroll: null,
+    restoreScroll: false,
+  }
 }
 
 /** The thread's view state, created on first use. */
@@ -118,6 +131,7 @@ export function snapshotThreadView(threadId: string, messageIds: readonly string
     overrides: { ...view.overrides },
     expandAll: view.expandAll ? { ...view.expandAll } : null,
     unreadOnArrival: [...view.unreadOnArrival],
+    wasNewest: [...view.wasNewest],
     scroll: view.scroll ? { ...view.scroll } : null,
     revealedRemote: messageIds.filter((id) => revealed[id]),
   }
@@ -129,6 +143,7 @@ export function restoreThreadView(threadId: string, snapshot: ThreadViewSnapshot
   view.overrides = { ...snapshot.overrides }
   view.expandAll = snapshot.expandAll ? { ...snapshot.expandAll } : null
   view.unreadOnArrival = new Set(snapshot.unreadOnArrival)
+  view.wasNewest = new Set(snapshot.wasNewest)
   view.scroll = snapshot.scroll ? { ...snapshot.scroll } : null
   view.restoreScroll = !!snapshot.scroll
   for (const id of snapshot.revealedRemote) thread$.revealedRemote[id].set(true)

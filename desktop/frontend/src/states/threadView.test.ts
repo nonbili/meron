@@ -17,6 +17,7 @@ describe('threadView', () => {
     view.overrides = { a: true, b: false }
     view.expandAll = { expanded: true }
     view.unreadOnArrival.add('c')
+    view.wasNewest.add('b')
     view.scroll = { messageId: 'b', offset: 12, atBottom: false }
     revealRemote('a')
     revealRemote('elsewhere')
@@ -30,6 +31,7 @@ describe('threadView', () => {
     expect(restored.overrides).toEqual({ a: true, b: false })
     expect(restored.expandAll).toEqual({ expanded: true })
     expect([...restored.unreadOnArrival]).toEqual(['c'])
+    expect([...restored.wasNewest]).toEqual(['b'])
     expect(restored.scroll).toEqual({ messageId: 'b', offset: 12, atBottom: false })
     // Opening the thread goes back to where it was left.
     expect(restored.restoreScroll).toBe(true)

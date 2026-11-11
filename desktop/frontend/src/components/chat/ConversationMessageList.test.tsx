@@ -199,6 +199,22 @@ describe('ConversationMessageList expand all', () => {
     expect(held).toEqual([false, true])
   })
 
+  it('keeps the message being read open when a reply arrives after it', () => {
+    settings$.conversationLayout.set('traditional')
+    const messages = [message('first', 'First'), message('second', 'Second')]
+    const view = render(withScroll({}, list(messages)))
+    expect(collapsed(view.container)).toEqual(['first'])
+
+    view.rerender(withScroll({}, list([...messages, message('arrived', 'Arrived')])))
+    expect(collapsed(view.container)).toEqual(['first'])
+
+    // Collapsing all starts over from the newest.
+    act(() => setAllMessagesExpanded(false))
+    expect(collapsed(view.container)).toEqual(['first', 'second'])
+    view.rerender(withScroll({}, list([...messages, message('arrived', 'Arrived'), message('later', 'Later')])))
+    expect(collapsed(view.container)).toEqual(['first', 'second'])
+  })
+
   it('overrides messages toggled one by one, and applies to ones loaded later', () => {
     settings$.conversationLayout.set('traditional')
     const messages = [message('first', 'First'), message('second', 'Second'), message('newest', 'Newest')]

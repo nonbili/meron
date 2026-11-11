@@ -109,6 +109,7 @@ beforeEach(() => {
                   overrides: { m1: true },
                   expandAll: null,
                   unreadOnArrival: [],
+                  wasNewest: [],
                   scroll,
                   revealedRemote: [],
                 },

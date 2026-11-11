@@ -126,6 +126,7 @@ export function ConversationMessageList({
         const target = threadView(viewScope || activeThreadIdRef.current)
         target.expandAll = { expanded: value.expanded }
         target.overrides = {}
+        target.wasNewest.clear()
         rerender()
       }),
     [onHoldTopMessage, thread$, viewScope],
@@ -161,7 +162,11 @@ export function ConversationMessageList({
   // or matched by the in-thread search; everything older collapses to a summary
   // line until the user clicks it.
   const searchMatchSet = useMemo(() => new Set(searchMatches), [searchMatches])
-  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : ''
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null
+  const lastMessageId = lastMessage?.id ?? ''
+  // The newest message stays open once a reply arrives after it: the reader may
+  // be in the middle of it, and it would otherwise collapse under them.
+  if (lastMessage && lastMessage.thread_id === activeThreadId) expansion.wasNewest.add(lastMessage.id)
   const isExpanded = (message: Message) => {
     // The match the user navigated to always shows its body: landing on a
     // collapsed summary would hide the very text that was searched for.
@@ -170,8 +175,9 @@ export function ConversationMessageList({
     if (override !== undefined) return override
     // Collapsing all still leaves the newest open: a thread of nothing but
     // summary lines has nothing to read, and it is the one a reply answers.
-    if (expandAll) return expandAll.expanded || message.id === lastMessageId
-    return message.id === lastMessageId || expansion.unreadOnArrival.has(message.id) || searchMatchSet.has(message.id)
+    const newest = message.id === lastMessageId || expansion.wasNewest.has(message.id)
+    if (expandAll) return expandAll.expanded || newest
+    return newest || expansion.unreadOnArrival.has(message.id) || searchMatchSet.has(message.id)
   }
   const expandAllAction =
     !traditional || showThreadLoading
