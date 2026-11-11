@@ -6,6 +6,7 @@ import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.TaskSummary
 import jp.nonbili.meron.shared.ThreadSummary
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
@@ -98,14 +99,22 @@ class TasksStateTest {
             assertEquals("Already in Tasks", state.status)
         }
 
+    // The first tap is held inside its existing-task check, so the second one
+    // lands while it is in flight; otherwise a fast core can finish the first tap
+    // before the second starts, and this fake never reports the task it created.
     @Test
     fun aDoubleTapFilesTheThreadOnce() =
         runBlocking {
             val core = RecordingCore()
             core.lists = """[{"id":"only","title":"Only"}]"""
+            core.forThreadGate = CompletableDeferred()
             val state = testState(core, this)
             val thread = ThreadSummary(id = "thread", accountId = "account", folder = "INBOX", subject = "Follow up", sender = "sender")
-            listOf(launch { state.requestAddMailToTasks(thread) }, launch { state.requestAddMailToTasks(thread) }).joinAll()
+            val first = launch { state.requestAddMailToTasks(thread) }
+            val second = launch { state.requestAddMailToTasks(thread) }
+            withTimeout(5_000) { second.join() }
+            core.forThreadGate?.complete(Unit)
+            first.join()
             assertEquals(1, core.commands.count { it == "tasks.create" })
         }
 
@@ -226,6 +235,7 @@ class TasksStateTest {
         var lists = """[{"id":"list-1","title":"First"},{"id":"list-2","title":"Second"}]"""
         var threadMessages = "[]"
         var threadTasks = "[]"
+        var forThreadGate: CompletableDeferred<Unit>? = null
 
         override suspend fun invoke(
             command: String,
@@ -235,7 +245,10 @@ class TasksStateTest {
             if (command == "tasks.lists") return """{"lists":$lists,"default_list_id":"list-1"}"""
             if (command == "tasks.create") createdPayload = payloadJson
             if (command == "mail.threadRead") return """{"messages":$threadMessages}"""
-            if (command == "tasks.forThread") return """{"tasks":$threadTasks}"""
+            if (command == "tasks.forThread") {
+                forThreadGate?.await()
+                return """{"tasks":$threadTasks}"""
+            }
             return "{}"
         }
 
