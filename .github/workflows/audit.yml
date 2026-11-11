@@ -36,5 +36,3 @@ jobs:
           tool: cargo-audit@0.22.2
       - run: cargo audit
         working-directory: meron-core
-      - name: Audit patched SQLite binding against released baseline
-        run: python3 scripts/check-sqlcipher.py --audit-patched-binding

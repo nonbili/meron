@@ -1,9 +1,7 @@
 # cargo audit configuration (https://github.com/rustsec/rustsec/tree/main/cargo-audit).
 # Every ignored advisory names why it can't be fixed yet and what would fix it.
-# The temporary libsqlite3-sys Git patch is skipped by cargo-audit. CI's
-# scripts/check-sqlcipher.py also audits its reviewed released baseline (0.39.1).
-# Remove the patch once a release includes rusqlite/rusqlite#1932; the script
-# accepts a crates.io source and then leaves coverage to ordinary cargo audit.
+# CI's scripts/check-sqlcipher.py separately checks the bundled SQLCipher
+# source, which RustSec's libsqlite3-sys version ranges don't capture.
 [advisories]
 ignore = [
   # rsa 0.9.10, via rPGP: Marvin timing attack, no fixed release exists. Meron
