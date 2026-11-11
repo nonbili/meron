@@ -1353,6 +1353,33 @@ describe('Composer', () => {
     expect(toggle.disabled).toBe(true)
   })
 
+  // #154 review, point 2: an image-only signature has html but no text.
+  it('keeps the switch of an image-only signature after switching it off', async () => {
+    accounts$.set([account('a', '<p><img src="https://example.com/logo.png"></p>')])
+    const tabId = openComposeTab()!
+    const view = render(<Composer tabId={tabId} />)
+    const toggle = () => view.getByRole('switch', { name: /signature/i })
+
+    await act(async () => {
+      fireEvent.click(toggle())
+    })
+    expect(draftOf(tabId)!.html).not.toContain('logo.png')
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+
+    await act(async () => {
+      fireEvent.click(toggle())
+    })
+    expect(draftOf(tabId)!.html).toContain('logo.png')
+  })
+
+  it('shows no switch for an image-only signature in a plaintext draft, which cannot carry it', () => {
+    accounts$.set([account('a', '<p><img src="https://example.com/logo.png"></p>')])
+    const tabId = openComposeTab({ text: 'Hi', rich: false })!
+    const view = render(<Composer tabId={tabId} />)
+
+    expect(view.queryByRole('switch', { name: /signature/i })).toBeNull()
+  })
+
   it('shows no signature switch for an account without a signature', () => {
     accounts$.set([{ ...account('a', ''), signature: { mode: 'none', html: '' } }])
     const tabId = openComposeTab()!
