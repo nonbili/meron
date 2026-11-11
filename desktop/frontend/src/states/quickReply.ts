@@ -873,7 +873,8 @@ function restoreUnsentRescueBubbles(messages: Message[]) {
  */
 function loadDraftBodyIntoQuickReply(threadId: string, body: string) {
   watchQuickReplySignatureSources()
-  const { text, state } = quickReplyDraftSignature(body, quickReplySignature().text)
+  const signature = quickReplySignature()
+  const { text, state } = quickReplyDraftSignature(body, signature.text, signature.html)
   compose$.composer.set(text)
   setHydratedSignatureState(state)
   hydratedWithoutSignature = state === 'on' ? null : { threadId, body }
@@ -897,7 +898,8 @@ function recheckHydratedDraftSignature() {
     hydratedWithoutSignature = null
     return
   }
-  const { text, state } = quickReplyDraftSignature(hydrated.body, quickReplySignature().text)
+  const signature = quickReplySignature()
+  const { text, state } = quickReplyDraftSignature(hydrated.body, signature.text, signature.html)
   setHydratedSignatureState(state)
   if (state !== 'on') return
   hydratedWithoutSignature = null

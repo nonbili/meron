@@ -18,7 +18,7 @@ import {
 import { BubbleHtmlFrame } from './BubbleHtmlFrame'
 import { matchRanges } from './frameSearchHighlight'
 import { isQuoteUnfolded, setQuoteUnfolded, splitQuotedBody } from './quoteFold'
-import { foldStartWithOwnSignature, useOwnSignatureText } from './ownSignatureFold'
+import { foldStartWithOwnSignature, useOwnSignatureComposerText, useOwnSignatureText } from './ownSignatureFold'
 import { ConversationScrollIntentContext } from './useConversationScroll'
 import type { FrameSurface } from './frameTheme'
 
@@ -79,6 +79,7 @@ export function MessageBubbleBody({
 
   // My own signature folds with the quote.
   const ownSignature = useOwnSignatureText(message)
+  const ownComposerSignature = useOwnSignatureComposerText(message)
 
   const boxStyle = fullHeight ? undefined : { maxHeight: MESSAGE_BODY_MAX_HEIGHT }
   const boxClass = fullHeight ? 'relative' : 'relative overflow-y-auto'
@@ -105,7 +106,12 @@ export function MessageBubbleBody({
     )
   }
 
-  const foldStart = foldStartWithOwnSignature(message.body, message.body_quote_start, ownSignature)
+  const foldStart = foldStartWithOwnSignature(
+    message.body,
+    message.body_quote_start,
+    ownSignature,
+    ownComposerSignature,
+  )
   const { reply, quote } = splitQuotedBody(message.body, foldStart)
   // Named for what it hides: just my signature, or the quote (with it).
   const signatureOnly = !!quote && !splitQuotedBody(message.body, message.body_quote_start).quote

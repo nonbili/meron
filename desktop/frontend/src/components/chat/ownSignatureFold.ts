@@ -10,6 +10,7 @@ import type { Message } from '../../types'
 import { accounts$ } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
 import { resolveSignature, signatureToText, textWithoutTrailingSignature } from '../../lib/signature'
+import { inertHtmlToText } from '../../lib/html'
 import { HTML_QUOTE_SELECTOR } from './quoteFold'
 
 /**
@@ -34,6 +35,24 @@ export function useOwnSignatureText(message: Message): string {
 }
 
 /**
+ * My signature as the full composer writes it into a plain body: `htmlToText`
+ * puts a blank line between paragraphs where `signatureToText` (the quick
+ * reply's form) puts a line break, so a signature of several paragraphs reads
+ * differently in the two. '' when the message isn't mine.
+ */
+export function ownSignatureComposerText(message: Message): string {
+  if (!message.outgoing && !message.send_status) return ''
+  const account = accounts$.get().find((acc) => acc.id === message.account_id)
+  if (!account) return ''
+  return inertHtmlToText(resolveSignature(account, settings$.signature.get())).replace(/^\n+|\s+$/g, '')
+}
+
+/** `ownSignatureComposerText` for a component (see `useOwnSignatureText`). */
+export function useOwnSignatureComposerText(message: Message): string {
+  return useValue(() => ownSignatureComposerText(message))
+}
+
+/**
  * Where a plain body's fold starts once my signature folds with it: at the
  * signature when it is the last block above the quote (or of the message),
  * else where the quote starts. A message that is nothing but the signature
@@ -43,13 +62,18 @@ export function foldStartWithOwnSignature(
   body: string,
   quoteStart: number | null | undefined,
   signatureText: string,
+  /** The same signature in the full composer's plain form, when it differs. */
+  composerSignatureText = '',
 ): number | null | undefined {
-  if (!signatureText) return quoteStart
   const hasQuote = !!quoteStart && quoteStart > 0 && quoteStart < body.length
   const reply = hasQuote ? body.slice(0, quoteStart!) : body
-  const text = textWithoutTrailingSignature(reply, signatureText)
-  if (text === null || !text.trim()) return quoteStart
-  return text.length
+  for (const signature of [signatureText, composerSignatureText]) {
+    if (!signature) continue
+    const text = textWithoutTrailingSignature(reply, signature)
+    if (text === null) continue
+    return text.trim() ? text.length : quoteStart
+  }
+  return quoteStart
 }
 
 const BLOCK_TAGS = new Set(['P', 'DIV', 'LI', 'TR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE'])
@@ -76,8 +100,10 @@ function linesOf(nodes: Node[]): string {
     .replace(/^\n+|\n+$/g, '')
 }
 
-const isBlank = (node: Node) =>
-  !linesOf([node]) && !(node.nodeType === Node.ELEMENT_NODE && (node as Element).querySelector('img'))
+const hasImage = (node: Node) =>
+  node.nodeType === Node.ELEMENT_NODE && ((node as Element).matches('img') || !!(node as Element).querySelector('img'))
+
+const isBlank = (node: Node) => !linesOf([node]) && !hasImage(node)
 
 /**
  * Mark the blocks of my signature in a bubble's HTML document so they fold
@@ -113,6 +139,9 @@ export function markOwnSignature(doc: Document, signatureText: string): boolean 
     const text = linesOf(above.slice(start, end))
     if (text.length > signatureText.length) return false
     if (text !== signatureText) continue
+    // The match is on text alone, which can't tell the signature's own image
+    // from a picture the message ends in: one that might be content stays.
+    if (above.slice(start, end).some(hasImage)) return false
     // The signature alone is the message: nothing to fold it away from.
     if (!above.slice(0, start).some((node) => !isBlank(node))) return false
     // The blank lines around it go too, or they stay behind as space.

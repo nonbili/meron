@@ -18,6 +18,8 @@ import {
   textWithoutTrailingSignature,
   textWithTrailingSignature,
   unsupportedSignatureMarkup,
+  withConvertedRestoreAnchor,
+  withRestoreAnchor,
 } from './signature'
 
 const account = (overrides: Partial<Account> = {}): Account => ({
@@ -445,9 +447,28 @@ describe("a reopened draft's signature switch (#154 review)", () => {
 
   it('is off and switchable when the draft holds no trace of it', () => {
     // A draft saved with the switch off: nothing of the signature in it.
-    expect(reopenedSignatureTracking(plain('Hi'), sig)).toEqual({ html: '', text: '', placement: 'belowText' })
-    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), sig)).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(reopenedSignatureTracking(plain('Hi'), sig)).toEqual({
+      html: '',
+      text: '',
+      placement: 'belowText',
+      optedOut: true,
+    })
+    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), sig)).toEqual({
+      html: '',
+      text: '',
+      placement: 'belowText',
+      optedOut: true,
+    })
     expect(signatureSwitch(plain('Hi'), reopenedSignatureTracking(plain('Hi'), sig))).toBe('off')
+  })
+
+  it('tracks the signature of a draft switched from rich to plaintext, a blank line between its paragraphs', () => {
+    const two = { html: '<p>Me</p><p>Phone 123</p>', text: 'Me\nPhone 123' }
+    expect(reopenedSignatureTracking(plain('Hi\n\nMe\n\nPhone 123'), two)).toEqual({
+      html: two.html,
+      text: 'Me\n\nPhone 123',
+      placement: 'belowText',
+    })
   })
 
   it('stays unmanaged when part of it is there but not as inserted', () => {
@@ -463,15 +484,33 @@ describe("a reopened draft's signature switch (#154 review)", () => {
       html: '',
       text: '',
       placement: 'belowText',
+      optedOut: true,
     })
     expect(reopenedSignatureTracking(rich('<p>Hi</p><blockquote><p>Me</p><p>Phone 123</p></blockquote>'), sig)).toEqual(
-      { html: '', text: '', placement: 'belowText' },
+      { html: '', text: '', placement: 'belowText', optedOut: true },
     )
+  })
+
+  it('stays unmanaged for a reopened forward, where below the text is under the forwarded message', () => {
+    const forwarded = '---------- Forwarded message ---------'
+    expect(reopenedSignatureTracking(plain(`FYI\n\n${forwarded}\nFrom: Jane\n\nLunch?`), sig)).toBeUndefined()
+    expect(
+      reopenedSignatureTracking(rich(`<p>FYI</p><div><p>${forwarded}</p><div>From: Jane</div>Lunch?</div>`), sig),
+    ).toBeUndefined()
+    // A forward of my own message ends in my signature: it is the forwarded message's.
+    expect(
+      reopenedSignatureTracking(plain(`FYI\n\n${forwarded}\nFrom: Me\n\nOriginal\n\nMe\nPhone 123`), sig),
+    ).toBeUndefined()
   })
 
   it("finds an image-only signature's image", () => {
     const image = { html: '<p><img src="https://example.com/logo.png"></p>', text: '' }
-    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), image)).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), image)).toEqual({
+      html: '',
+      text: '',
+      placement: 'belowText',
+      optedOut: true,
+    })
     expect(
       reopenedSignatureTracking(rich('<p>Hi</p><p><img src="https://example.com/logo.png" width="80"></p>'), image),
     ).toBeUndefined()
@@ -484,6 +523,12 @@ describe("a reopened draft's signature switch (#154 review)", () => {
 
 describe("a saved quick reply's signature switch (#154 review)", () => {
   const sig = 'Me\nPhone 123'
+
+  it("is on for the full composer's plaintext form of it, a blank line between paragraphs", () => {
+    const body = 'Hi\n\nMe\n\nPhone 123'
+    expect(quickReplyDraftSignature(body, sig).state).toBe('unmanaged')
+    expect(quickReplyDraftSignature(body, sig, '<p>Me</p><p>Phone 123</p>')).toEqual({ text: 'Hi', state: 'on' })
+  })
 
   it('is on, with the signature taken off, when the draft ends in it', () => {
     expect(quickReplyDraftSignature('Thanks\n\nMe\nPhone 123', sig)).toEqual({ text: 'Thanks', state: 'on' })
@@ -521,7 +566,7 @@ describe("switching the composer's signature", () => {
   it('takes the signature out and puts it back where it goes', () => {
     const off = switchedSignature({ rich: false, html: '', text: 'Hi\n\nMe' }, on, sig, false)
     expect(off?.body.text).toBe('Hi')
-    expect(off?.tracking).toEqual(noSignature)
+    expect(off?.tracking).toEqual({ ...noSignature, optedOut: true })
 
     const back = switchedSignature(off!.body, off!.tracking, sig, true)
     expect(back?.body.text).toBe('Hi\n\nMe')
@@ -533,6 +578,46 @@ describe("switching the composer's signature", () => {
     expect(off?.body.html).toBe('<p>Hi</p>')
     const back = switchedSignature(off!.body, off!.tracking, sig, true)
     expect(back?.body.html).toBe('<p>Hi</p><p></p><p>Me</p>')
+  })
+
+  it('puts it back above an unfolded quote or forwarded message, not under it', () => {
+    const plain = { rich: false, html: '', text: 'Reply\n\nMe\n\n> original' }
+    const off = switchedSignature(plain, on, sig, false)
+    expect(off?.body.text).toBe('Reply\n\n> original')
+    expect(switchedSignature(off!.body, off!.tracking, sig, true)?.body.text).toBe(plain.text)
+
+    const rich = { rich: true, html: '<p>FYI</p><p></p><p>Me</p><div><p>Forwarded</p></div>', text: '' }
+    const richOff = switchedSignature(rich, { ...on, placement: 'aboveQuote' }, sig, false)
+    expect(richOff?.body.html).toBe('<p>FYI</p><div><p>Forwarded</p></div>')
+    expect(switchedSignature(richOff!.body, richOff!.tracking, sig, true)?.body.html).toBe(rich.html)
+  })
+
+  it('carries the place to put it back through a change of format', () => {
+    const mark = { html: '', text: '', placement: 'belowText' as const, optedOut: true, restoreBefore: '> original' }
+    expect(
+      withConvertedRestoreAnchor(mark, '<p>Reply</p><p>&gt; original</p>', (t) => `<p>${t.replace('>', '&gt;')}</p>`),
+    ).toEqual({ ...mark, restoreBefore: '<p>&gt; original</p>' })
+    // Not found in the converted body: the placement decides again.
+    const { restoreBefore: _, ...plain } = mark
+    expect(withConvertedRestoreAnchor(mark, '<p>Reply</p>', (t) => `<p>${t}</p>`)).toEqual(plain)
+  })
+
+  it('goes back above a quote unfolded while it was off', () => {
+    const off = switchedSignature({ rich: false, html: '', text: 'Reply\n\nMe' }, on, sig, false)!
+    const tracking = withRestoreAnchor(off.tracking, '> original')
+    expect(switchedSignature({ ...off.body, text: 'Reply\n\n> original' }, tracking, sig, true)?.body.text).toBe(
+      'Reply\n\nMe\n\n> original',
+    )
+    // A mark holding a signature, or none by the account's choice, is left alone.
+    expect(withRestoreAnchor(on, '> original')).toBe(on)
+    expect(withRestoreAnchor(noSignature, '> original')).toBe(noSignature)
+  })
+
+  it('keeps a switched-off signature off across a change of From account', () => {
+    const off = switchedSignature({ rich: false, html: '', text: 'Hi\n\nMe' }, on, sig, false)!
+    const moved = bodyWithSwappedSignature(off.body, off.tracking, { html: '<p>Other</p>', text: 'Other' })
+    expect(moved.body.text).toBe('Hi')
+    expect(moved.tracking).toEqual(off.tracking)
   })
 
   it('leaves an unmanaged or edited body alone', () => {

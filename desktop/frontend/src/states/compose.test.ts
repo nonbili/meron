@@ -4514,7 +4514,7 @@ describe('signature in the quick reply', () => {
     const draft = compose$.tabs.get()[0].compose
     expect(draft?.text).toBe('t2')
     // Off, but switchable back on in the full composer.
-    expect(draft?.signature).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(draft?.signature).toEqual({ html: '', text: '', placement: 'belowText', optedOut: true })
   })
 
   it('tracks the signature a reopened draft ends in, so it can be switched', () => {
@@ -4538,7 +4538,12 @@ describe('signature in the quick reply', () => {
   it('reopens a draft with no trace of the signature with the switch off, not disabled', () => {
     setUpThread()
     openComposeTab({ accountId: 'acc-1', text: 'Saved without it', noSignature: true })
-    expect(compose$.tabs.get()[0].compose?.signature).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(compose$.tabs.get()[0].compose?.signature).toEqual({
+      html: '',
+      text: '',
+      placement: 'belowText',
+      optedOut: true,
+    })
     expect(compose$.tabs.get()[0].compose?.text).toBe('Saved without it')
   })
 

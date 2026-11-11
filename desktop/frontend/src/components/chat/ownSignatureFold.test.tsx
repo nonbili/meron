@@ -136,6 +136,12 @@ describe('foldStartWithOwnSignature', () => {
     expect(foldStartWithOwnSignature('Me\nPhone 123', null, sig)).toBeNull()
   })
 
+  it("recognises the full composer's plain form, a blank line between paragraphs", () => {
+    const body = 'Thanks\n\nMe\n\nPhone 123'
+    expect(foldStartWithOwnSignature(body, null, sig)).toBeNull()
+    expect(foldStartWithOwnSignature(body, null, sig, 'Me\n\nPhone 123')).toBe('Thanks'.length)
+  })
+
   it('changes nothing without a signature', () => {
     expect(foldStartWithOwnSignature('Thanks\n\nMe', 7, '')).toBe(7)
   })
@@ -173,6 +179,8 @@ describe('markOwnSignature', () => {
 
   it('leaves a message alone when it does not end in the signature, or is only the signature', () => {
     for (const html of [
+      // A picture after the signature is content, not a blank line.
+      '<p>Thanks</p><p>Me</p><p>Phone 123</p><img src="photo.jpg">',
       '<p>Thanks</p><p>Me</p><p>Phone 123</p><p>PS: more</p>',
       '<p>Thanks</p><p>Me</p><p>Phone 456</p>',
       '<p>Me</p><p>Phone 123</p>',

@@ -14,7 +14,7 @@ import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { ui$, showToast, showUndoToast } from './ui'
 import { contextualErrorMessage } from '../lib/errors'
-import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
+import { inlineRichStyles, prepareInlineImages, withoutInlineRichStyles } from '../components/composer/composerHelpers'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { getActiveThread, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
@@ -29,8 +29,9 @@ import {
   bodyWithSignature,
   bodyWithSwappedSignature,
   type ComposeBody,
+  FORWARDED_MESSAGE_MARKER,
   isBodyBlankWithoutSignature,
-  noSignatureMark,
+  optedOutMark,
   resolveSignature,
   signatureForms,
   type Signature,
@@ -121,7 +122,7 @@ function forwardedSubject(subject: string): string {
 
 function forwardedPlainBody(message: Message): string {
   const header = [
-    '---------- Forwarded message ---------',
+    FORWARDED_MESSAGE_MARKER,
     headerLine('From', formatMessageFrom(message)),
     headerLine('Date', formatFullTimestamp(message.date)),
     headerLine('Subject', message.subject || '(no subject)'),
@@ -144,7 +145,7 @@ function forwardedHtmlBody(message: Message): string {
     .map(([label, value]) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
     .join('')
   const body = message.body_html || textToHtml(message.body ?? '')
-  return `<p><br></p><div class="meron-forwarded-message"><p>---------- Forwarded message ---------</p>${header}<br>${body}</div>`
+  return `<p><br></p><div class="meron-forwarded-message"><p>${FORWARDED_MESSAGE_MARKER}</p>${header}<br>${body}</div>`
 }
 
 /**
@@ -750,7 +751,7 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
   const tracking: SignatureTracking = signature
     ? { ...signature, placement }
     : seed?.signatureOff
-      ? noSignatureMark(placement)
+      ? optedOutMark(placement)
       : reopenedSignatureTracking(seeded, accountSignature)
   const body = signature ? bodyWithSignature(seeded, signature, placement) : seeded
 
@@ -964,7 +965,9 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     showCcBcc: hasExtraComposeHeaders({ cc: message.cc ?? '', bcc: message.bcc ?? '' }),
     subject: message.subject ?? '',
     rich: body.rich,
-    html: body.html,
+    // As the editor wrote it, without the styles a save adds: a signature
+    // holding a link is recognised (and tracked) only in that form.
+    html: withoutInlineRichStyles(body.html),
     text: body.text,
     quote: body.quote && { rich: body.rich, ...body.quote },
     inReplyTo: '',
