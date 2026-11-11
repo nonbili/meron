@@ -641,6 +641,14 @@ private fun ContactDetails(
     var copied by remember(contact.addr) { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
+    val ownAccount =
+        remember(accounts, contact.addr) {
+            val addr = contact.addr.trim()
+            accounts.firstOrNull { account ->
+                account.email.trim().equals(addr, ignoreCase = true) ||
+                    account.aliases.any { it.email.trim().equals(addr, ignoreCase = true) }
+            }
+        }
     val inboxLabel = tr("folders.roles.inbox")
     val displayName = contact.name.ifBlank { contact.addr }
     val hasDistinctName = contact.name.isNotBlank() && !contact.name.equals(contact.addr, ignoreCase = true)
@@ -663,12 +671,23 @@ private fun ContactDetails(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                SenderAvatar(
-                    formatContactSuggestion(contact),
-                    enabled = showSenderImages,
-                    size = 48.dp,
-                    fallbackName = displayName,
-                )
+                // Our own address is drawn as the account, not as whatever the
+                // address resolves to (the favicon of our own domain, say).
+                if (ownAccount != null) {
+                    AccountBadgeAvatar(
+                        label = ownAccount.displayName.ifBlank { displayName },
+                        avatarUrl = ownAccount.avatarUrl,
+                        size = 48.dp,
+                        fallbackIcon = accountAvatarFallbackIcon(ownAccount),
+                    )
+                } else {
+                    SenderAvatar(
+                        formatContactSuggestion(contact),
+                        enabled = showSenderImages,
+                        size = 48.dp,
+                        fallbackName = displayName,
+                    )
+                }
                 Column(
                     Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),

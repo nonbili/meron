@@ -1149,7 +1149,7 @@ async fn mobile_idle_once(
     if account_needs_reconnect(&creds) {
         anyhow::bail!("account needs reconnect: {account}");
     }
-    let mut session = crate::imap::connect(&creds).await?;
+    let mut session = engine.connect(account, &creds).await?;
     session.select(folder).await?;
     mobile_sync_and_notify(data_dir, account, folder).await?;
 

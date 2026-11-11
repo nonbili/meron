@@ -14,6 +14,7 @@ import {
   activateConversationTab,
   moveMessageTab,
 } from '../../states/compose'
+import { accountOwning, accounts$ } from '../../states/accounts'
 import { compose$ } from '../../states/composeState'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
@@ -219,6 +220,9 @@ function SortableTab({
 }) {
   const { t } = useTranslation()
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id })
+  // A tab on our own message shows the account's avatar, as the message does.
+  const accounts = useValue(accounts$)
+  const own = tab.feedIcon ? undefined : accountOwning(accounts, tab.fromAddr, tab.accountId)
 
   return (
     <div
@@ -245,9 +249,9 @@ function SortableTab({
         <SquarePen size={12} className="shrink-0" />
       ) : (
         <Avatar
-          name={tab.from}
-          email={tab.fromAddr}
-          src={tab.feedIcon ? `/media/${tab.feedIcon}` : undefined}
+          name={own?.display_name || tab.from}
+          email={own ? undefined : tab.fromAddr}
+          src={tab.feedIcon ? `/media/${tab.feedIcon}` : own?.avatar_url}
           size={18}
         />
       )}

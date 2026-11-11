@@ -234,6 +234,21 @@ mod tests {
     }
 
     #[test]
+    fn only_a_refused_oauth_login_asks_for_an_early_token_renewal() {
+        use async_imap::error::Error;
+        let refused = crate::imap::oauth_login_error(Error::No(
+            "[AUTHENTICATIONFAILED] Invalid credentials".to_string(),
+        ))
+        .context("sync INBOX");
+        assert!(crate::imap::oauth_login_rejected(&refused));
+        assert!(format!("{refused:#}").contains("oauth login failed: "));
+        // A connection lost mid-login is not the server's verdict on the token.
+        let dropped = crate::imap::oauth_login_error(Error::ConnectionLost);
+        assert!(!crate::imap::oauth_login_rejected(&dropped));
+        assert!(dropped.to_string().starts_with("oauth login failed: "));
+    }
+
+    #[test]
     fn socks_host_unreachable_is_transient() {
         let error = anyhow::anyhow!("SOCKS5 connect failed: host unreachable");
         assert!(is_transient_sync_error(&error));

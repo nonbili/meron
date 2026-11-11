@@ -351,7 +351,7 @@ pub(crate) async fn idle_once(
         _ = wait_for_watch_stop(engine, account, &key) => return Ok(()),
         result = async {
             let creds = engine.ensure_valid_creds(account).await?;
-            let mut session = imap::connect(&creds).await?;
+            let mut session = engine.connect(account, &creds).await?;
             session.select(folder).await.with_context(|| format!("SELECT {folder}"))?;
             Ok::<_, anyhow::Error>(session)
         } => result?,

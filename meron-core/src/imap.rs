@@ -200,6 +200,36 @@ impl OmittedSettings {
     }
 }
 
+/// The server answered an XOAUTH2 login with NO: it refused the access token.
+/// Displays like any other failed OAuth login.
+#[derive(Debug)]
+pub struct OAuthLoginRejected(String);
+
+impl std::fmt::Display for OAuthLoginRejected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "oauth login failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for OAuthLoginRejected {}
+
+/// The error for a failed XOAUTH2 login. Only the server's own NO is a refused
+/// token; a connection that dropped or stalled mid-login says nothing about it.
+pub(crate) fn oauth_login_error(error: async_imap::error::Error) -> anyhow::Error {
+    match error {
+        async_imap::error::Error::No(_) => {
+            anyhow::Error::new(OAuthLoginRejected(error.to_string()))
+        }
+        other => anyhow!("oauth login failed: {other}"),
+    }
+}
+
+/// Whether a failed [`connect`] is the server refusing the access token, as
+/// opposed to the login timing out or the connection failing.
+pub fn oauth_login_rejected(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| cause.is::<OAuthLoginRejected>())
+}
+
 impl Creds {
     /// Whether the provider has refused the refresh token these credentials
     /// hold, so that nothing short of signing in again will work.
@@ -707,7 +737,7 @@ async fn connect_inner(creds: &Creds) -> Result<Session> {
         )
         .await
         .map_err(|_| anyhow!("oauth login timed out"))?
-        .map_err(|(e, _)| anyhow!("oauth login failed: {e}"))
+        .map_err(|(e, _)| oauth_login_error(e))
     } else {
         tokio::time::timeout(
             imap_protocol_timeout(),

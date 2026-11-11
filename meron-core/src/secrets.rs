@@ -394,6 +394,9 @@ fn delete_entry(account: &str) -> Result<()> {
 struct ServiceFailure {
     error: anyhow::Error,
     unavailable: bool,
+    /// Worth one retry before it counts (see [`service_call`]). A timeout is
+    /// not: a wedged service would only cost the wait twice.
+    transient: bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -402,6 +405,7 @@ impl ServiceFailure {
         Self {
             error: anyhow::anyhow!(message),
             unavailable: true,
+            transient: false,
         }
     }
 
@@ -410,9 +414,11 @@ impl ServiceFailure {
             error,
             keyring::Error::NoStorageAccess(_) | keyring::Error::PlatformFailure(_)
         );
+        let transient = matches!(error, keyring::Error::PlatformFailure(_));
         Self {
             error: anyhow::Error::new(error).context(format!("Secret Service {what}")),
             unavailable,
+            transient,
         }
     }
 }
@@ -424,8 +430,29 @@ impl ServiceFailure {
 #[cfg(target_os = "linux")]
 const SERVICE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+///
+/// A platform failure is tried once more before it counts: the service
+/// encrypts each reply for a per-call session, and that exchange fails now and
+/// then ("Unpad Error") against a keychain that is otherwise healthy. Demoting
+/// on one such hiccup would strand every secret the service holds.
 #[cfg(target_os = "linux")]
 fn service_call<T: Send + 'static>(
+    what: &str,
+    call: impl Fn() -> std::result::Result<T, keyring::Error> + Send + Sync + 'static,
+) -> std::result::Result<T, ServiceFailure> {
+    let call = std::sync::Arc::new(call);
+    let first = {
+        let call = call.clone();
+        service_call_once(what, move || call())
+    };
+    match first {
+        Err(failure) if failure.transient => service_call_once(what, move || call()),
+        other => other,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn service_call_once<T: Send + 'static>(
     what: &str,
     call: impl FnOnce() -> std::result::Result<T, keyring::Error> + Send + 'static,
 ) -> std::result::Result<T, ServiceFailure> {
@@ -480,11 +507,47 @@ pub fn db_key() -> Result<Option<String>> {
         Some(key) if is_hex_key(&key) => Ok(Some(key)),
         // Missing (first run) or a malformed entry: mint and persist a fresh key.
         Some(_) | None => {
+            #[cfg(target_os = "linux")]
+            if let Some(key) = service_key_behind_stale_local_keyring() {
+                return Ok(Some(key));
+            }
             let key = generate_db_key();
             backend_store(DB_KEY_ACCOUNT, &key).context("store db key in keychain")?;
             Ok(Some(key))
         }
     }
+}
+
+/// The store key still held by the Secret Service when a local file keyring
+/// without one is shadowing it.
+///
+/// A local keyring on disk normally means the profile committed to it, store
+/// key included (see `secrets_portal::local_keyring_exists`). But a run that
+/// read its key from the service and was demoted afterwards leaves a local
+/// keyring holding no store key, and the next launch would mint a fresh one
+/// there and lock itself out of the database. Finding the real key in the
+/// service proves that is what happened, so the service takes over again.
+#[cfg(target_os = "linux")]
+fn service_key_behind_stale_local_keyring() -> Option<String> {
+    let shadowed = !use_portal_keyring()
+        && !keyring_forced_to("file")
+        && !crate::secrets_portal::local_forced()
+        && crate::secrets_portal::local_keyring_exists();
+    if !shadowed {
+        return None;
+    }
+    let key = service_call("read", || {
+        match Entry::new(SERVICE, DB_KEY_ACCOUNT)?.get_password() {
+            Ok(key) => Ok(Some(key)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(error),
+        }
+    })
+    .ok()
+    .flatten()
+    .filter(|key| is_hex_key(key))?;
+    crate::secrets_portal::prefer_service();
+    Some(key)
 }
 
 /// 32 random bytes (two v4 UUIDs' worth) rendered as 64 lowercase hex chars.

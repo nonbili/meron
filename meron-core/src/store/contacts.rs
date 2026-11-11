@@ -78,6 +78,11 @@ pub fn contact_thread_page(
     for (account, header) in contact_messages(conn, addr)? {
         accounts.entry(account).or_default().push(header);
     }
+    // Same correspondent identity as every other thread list: a thread whose
+    // newest message is the user's own reply still shows the other party.
+    for (account, headers) in &mut accounts {
+        super::apply_card_identity(conn, account, "INBOX", headers);
+    }
     let identity = |account: &str, folder: &str, key: &str| {
         if key.starts_with("uid:") {
             format!("{account}\n{folder}\n{key}")

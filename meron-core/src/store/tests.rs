@@ -2639,6 +2639,9 @@ fn contact_history_matches_exact_participants_across_accounts_and_folders() {
         second["threads"][0]["thread_id"]
     );
     assert_eq!(second["threads"][0]["date"], 20);
+    // That card's only message is the user's own Sent copy: it still shows the
+    // correspondent, not the user.
+    assert_eq!(second["threads"][0]["from_addr"], "alice@example.com");
     assert!(
         contact_messages(&conn, "nobody@example.com")
             .unwrap()

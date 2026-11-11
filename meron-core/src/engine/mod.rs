@@ -100,6 +100,9 @@ pub struct Engine {
     /// open would re-open an IMAP connection to re-search for them. Cleared on
     /// restart, which lets a genuinely-late ancestor be retried.
     pub gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
+    /// When each account's access token was last renewed ahead of its expiry
+    /// because the server refused it (see [`Engine::connect`]).
+    early_renewals: std::sync::Mutex<HashMap<String, std::time::Instant>>,
     /// Messages with an in-flight background body fetch, keyed by
     /// [`message_key`], so re-reads cannot duplicate a download while other
     /// pages and new messages in the thread remain independently fetchable.
@@ -310,6 +313,9 @@ const TRANSFER_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 /// reconnecting or retrying by hand reaches the server again.
 const BODY_FAILURE_TTL: Duration = Duration::from_secs(60);
 
+/// How often one account may have its access token renewed ahead of expiry.
+const EARLY_RENEWAL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(600);
+
 impl Engine {
     /// Note that a background fetch could not deliver `key`'s body.
     pub(crate) fn record_body_failure(&self, key: String, error: String) {
@@ -424,6 +430,7 @@ impl Engine {
             watched: std::sync::Mutex::new(HashSet::new()),
             syncing: std::sync::Mutex::new(HashSet::new()),
             gap_attempts: std::sync::Mutex::new(HashMap::new()),
+            early_renewals: std::sync::Mutex::new(HashMap::new()),
             body_fetches: std::sync::Mutex::new(HashSet::new()),
             body_fetch_failures: std::sync::Mutex::new(HashMap::new()),
             body_fetch_done: Notify::new(),
@@ -449,6 +456,65 @@ impl Engine {
     /// Whether desktop notifications are suppressed for an account.
     pub fn is_muted(&self, account: &str) -> bool {
         store::account_muted(&self.db.lock().unwrap(), account).unwrap_or(false)
+    }
+
+    /// Open an IMAP session with `creds`, the account's current credentials.
+    ///
+    /// A server that refuses an access token we believed good gets one renewed
+    /// token before the failure stands. The token lives in the keychain and its
+    /// expiry in the store, so the two can disagree (a keychain entry restored
+    /// or replaced under us) and the stored expiry would otherwise keep a dead
+    /// token in use until it lapsed.
+    pub async fn connect(
+        &self,
+        account: &str,
+        creds: &imap::Creds,
+    ) -> anyhow::Result<imap::Session> {
+        match imap::connect(creds).await {
+            Err(err)
+                if imap::oauth_login_rejected(&err)
+                    && self.expire_access_token(account, creds).await =>
+            {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "net",
+                    "access token for {account} refused before its expiry, renewing it"
+                );
+                let creds = self.ensure_valid_creds(account).await?;
+                imap::connect(&creds).await
+            }
+            other => other,
+        }
+    }
+
+    /// Mark the access token in `refused` as expired so the next
+    /// [`Engine::ensure_valid_creds`] renews it. `false` when there is nothing
+    /// to renew, or the account was renewed this way within
+    /// [`EARLY_RENEWAL_INTERVAL`]: a server that refuses fresh tokens too (IMAP
+    /// switched off for the account, say) must not cost a token request per sync.
+    async fn expire_access_token(&self, account: &str, refused: &imap::Creds) -> bool {
+        let mut accounts = self.accounts.lock().await;
+        let Some(creds) = accounts.get_mut(account) else {
+            return false;
+        };
+        let renewable = creds.is_oauth()
+            && creds.refresh_token.as_deref().is_some_and(|t| !t.is_empty())
+            // Someone else already replaced the refused token: just use theirs.
+            && creds.access_token == refused.access_token;
+        if !renewable {
+            return creds.access_token != refused.access_token;
+        }
+        let now = std::time::Instant::now();
+        let mut renewals = self.early_renewals.lock().unwrap();
+        if renewals
+            .get(account)
+            .is_some_and(|last| now.duration_since(*last) < EARLY_RENEWAL_INTERVAL)
+        {
+            return false;
+        }
+        renewals.insert(account.to_string(), now);
+        creds.token_expires_at = 0;
+        true
     }
 
     /// Refresh and persist credentials in an owned task. Dropping a read or
@@ -765,11 +831,11 @@ impl Engine {
             // Not `TransferTimedOut`: no transfer started, and callers read
             // that one as the message being too slow to download.
             SessionUse::Transfer { deadline, .. } => {
-                tokio::time::timeout_at(deadline, imap::connect(&creds))
+                tokio::time::timeout_at(deadline, self.connect(account, &creds))
                     .await
                     .map_err(|_| anyhow::anyhow!("IMAP connect timed out"))??
             }
-            SessionUse::Write | SessionUse::Read => imap::connect(&creds).await?,
+            SessionUse::Write | SessionUse::Read => self.connect(account, &creds).await?,
         };
         let connect_ms = connect_started.elapsed().as_millis();
         if connect_ms > 2_000 {
@@ -1086,7 +1152,7 @@ impl Engine {
         }
         let creds = self.ensure_valid_creds(account).await?;
         let connect_started = std::time::Instant::now();
-        let mut session = imap::connect(&creds).await?;
+        let mut session = self.connect(account, &creds).await?;
         let connect_ms = connect_started.elapsed().as_millis();
         if connect_ms > 2_000 {
             crate::mlog!(

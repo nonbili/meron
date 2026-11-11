@@ -77,6 +77,17 @@ export function accountIdentities(acc: Account): Alias[] {
   ]
 }
 
+// The account an address belongs to, as its own address or one of its aliases.
+// Mail from such an address is us, so it is drawn with the account's avatar
+// rather than whatever the address resolves to (a Gravatar, or the favicon of
+// our own domain). `preferId` settles an address two accounts both send as.
+export function accountOwning(accounts: Account[], email: string | undefined, preferId?: string): Account | undefined {
+  const addr = email?.trim().toLowerCase()
+  if (!addr) return undefined
+  const owns = (acc: Account) => accountIdentities(acc).some((identity) => identity.email.trim().toLowerCase() === addr)
+  return accounts.find((acc) => acc.id === preferId && owns(acc)) ?? accounts.find(owns)
+}
+
 // Optimistically flip a boolean account field in local state, persist it via the
 // given bridge method, and revert if the call fails. Backs the per-account
 // toggles (images, unified-inbox inclusion, mute, pause).

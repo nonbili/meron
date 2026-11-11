@@ -57,6 +57,22 @@ pub fn force_local(reason: &str) {
     }
 }
 
+/// Set when the local keyring on disk turned out to be a leftover that lacks
+/// the store key the Secret Service still holds, so it no longer claims the
+/// profile (see `secrets::service_key_behind_stale_local_keyring`).
+static LOCAL_STALE: AtomicBool = AtomicBool::new(false);
+
+/// Stop treating the local keyring on disk as this profile's backend.
+pub fn prefer_service() {
+    if !LOCAL_STALE.swap(true, Ordering::SeqCst) {
+        crate::mlog!(
+            Level::Warn,
+            "keyring",
+            "local file keyring has no store key but the Secret Service does; using the Secret Service"
+        );
+    }
+}
+
 /// Whether the local file keyring is already the active backend.
 pub fn local_forced() -> bool {
     LOCAL_ONLY.load(Ordering::SeqCst)
@@ -66,7 +82,8 @@ pub fn local_forced() -> bool {
 /// database key has been stored here, silently returning to Secret Service on a
 /// later launch would mint a different key and make the database unreadable.
 pub fn local_keyring_exists() -> bool {
-    local_keyring_exists_in(&crate::store::app_dir().join("keyring"))
+    !LOCAL_STALE.load(Ordering::SeqCst)
+        && local_keyring_exists_in(&crate::store::app_dir().join("keyring"))
 }
 
 fn local_keyring_exists_in(dir: &Path) -> bool {

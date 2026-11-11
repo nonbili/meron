@@ -6,7 +6,7 @@ import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
 import { formatContact } from '../../lib/contacts'
 import { folderLabel } from '../../lib/kanbanData'
-import { accounts$, isSendableAccount } from '../../states/accounts'
+import { accountOwning, accounts$, isSendableAccount } from '../../states/accounts'
 import { openComposeTab, openThreadTab } from '../../states/compose'
 import type { Contact, Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
@@ -50,6 +50,8 @@ export function ContactsView() {
   const [limit, setLimit] = useState(100)
   const [contacts, setContacts] = useState<Contact[]>([])
   const selected = useValue(contacts$.selected)
+  // Our own address is drawn as the account, as the reader draws our messages.
+  const ownAccount = accountOwning(accounts, selected?.addr)
   const selectedAddr = selected?.addr ?? ''
   const pinned = useValue(contacts$.pinned)
   const [threads, setThreads] = useState<Message[]>([])
@@ -296,7 +298,12 @@ export function ContactsView() {
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-3 px-4 pt-4 pb-2">
-            <Avatar name={selected.name || selected.addr} email={selected.addr} size={48} />
+            <Avatar
+              name={ownAccount?.display_name || selected.name || selected.addr}
+              email={ownAccount ? undefined : selected.addr}
+              src={ownAccount?.avatar_url}
+              size={48}
+            />
             <div className="group min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1">
                 <h2 className="truncate text-base font-semibold">{selected.name || selected.addr}</h2>
