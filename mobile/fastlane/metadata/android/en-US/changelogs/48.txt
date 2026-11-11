@@ -1,0 +1,4 @@
+- Add OpenPGP end-to-end encryption with key management, Autocrypt discovery, and encrypted composing
+- Redesign tasks and calendar views, card-style mail list, and edge-to-edge navigation bar layout
+- Tidy the composer with expandable Cc/Bcc toggle, compact recipient chips, and attachment cards
+- Draw kanban boards edge-to-edge under the navigation bar with normal-weight titles
