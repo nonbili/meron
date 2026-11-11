@@ -8,7 +8,6 @@ import { HtmlMessageView } from './components/chat/HtmlMessageView'
 import { ReaderCorrespondents } from './components/chat/ReaderCorrespondents'
 import { ReaderViewMode } from './components/chat/ReaderViewMode'
 import { BlockedRemoteButton } from './components/chat/BlockedRemoteButton'
-import { FrostedBand } from './components/chat/FrostedBand'
 import { htmlHasRemoteMedia } from './components/chat/messageHelpers'
 import { useValue } from '@legendapp/state/react'
 import type { Attachment } from './types'
@@ -120,7 +119,6 @@ export function EmlReader({ session }: { session: string }) {
 
   return (
     <main className="relative flex h-full flex-col bg-chat text-primary">
-      <FrostedBand fade="bottom" className="left-0 right-3 top-0 h-16" />
       <div className="absolute right-5 top-3 z-10 flex items-center gap-1 rounded-full border border-border/40 bg-chats p-1 shadow-float select-none">
         {message?.body_html && <ReaderViewMode mode={mode} onChange={setMode} />}
         <button

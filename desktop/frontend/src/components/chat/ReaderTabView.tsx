@@ -158,8 +158,6 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         // Room for the body's end to scroll clear of the floating actions.
         footer={actionBar && <div className="h-12" />}
       />
-      {/* Frosted under the floating bar, through its bottom edge. */}
-      <FrostedBand fade="bottom" className="left-0 right-3 top-0 h-16" />
       <div className="absolute right-5 top-3 z-10 flex items-center gap-1 rounded-full border border-border/40 bg-chats p-1 shadow-float select-none">
         <ReaderViewMode mode={tab.viewMode} onChange={(mode) => setTabViewMode(tab.id, mode)} />
         {tab.message && (
