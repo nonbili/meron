@@ -2,6 +2,7 @@ import { createDocument, type Editor } from '@tiptap/core'
 import type { ComposerAttachment } from '../../types'
 import { invoke } from '../../lib/bridge'
 import { isLinuxPlatform } from '../../lib/platform'
+import { linkifyTextNodes } from '../../lib/linkify'
 
 // WebKitGTK can omit image files from paste events. Other platforms use those
 // events directly so script clipboard reads don't trigger a Paste prompt.
@@ -35,10 +36,14 @@ const RICH_INLINE_STYLES: Record<string, string> = {
   code: 'background: rgba(127, 127, 127, 0.16); border-radius: 4px; padding: 0.1em 0.3em; font-size: 0.9em;',
 }
 
-export function inlineRichStyles(html: string): string {
+// `linkify` wraps bare URLs the editor's autolink left as text (one ending a
+// paragraph, say) in links. Only for a send: a saved draft keeps the body as the
+// editor wrote it, or a signature holding a URL would not be recognised in it.
+export function inlineRichStyles(html: string, { linkify = false } = {}): string {
   if (!html) return html
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
+  if (linkify) linkifyTextNodes(doc.body)
   for (const [selector, style] of Object.entries(RICH_INLINE_STYLES)) {
     for (const el of Array.from(doc.querySelectorAll(selector))) {
       // Preserve any existing inline styles; only prepend our defaults.

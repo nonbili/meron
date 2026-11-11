@@ -13,6 +13,7 @@ pub mod eml;
 pub mod engine;
 pub mod ffi;
 pub mod imap;
+pub mod linkify;
 pub mod log;
 pub mod mail_model;
 pub mod mcp_mail;

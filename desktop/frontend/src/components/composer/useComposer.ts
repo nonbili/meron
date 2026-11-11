@@ -818,7 +818,7 @@ export function useComposer(tabId: string) {
       let attachments = current.attachments
       if (current.rich) {
         const prepared = await prepareInlineImages(content, attachments)
-        content = inlineRichStyles(prepared.html)
+        content = inlineRichStyles(prepared.html, { linkify: true })
         attachments = prepared.attachments
       }
       const undelivered = await sendComposed({

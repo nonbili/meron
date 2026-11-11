@@ -1225,9 +1225,10 @@ pub fn prepare_message_html(source: &str, load_remote_images: bool, subject: &st
     // CSP allows `style-src 'unsafe-inline'`); only script vectors are removed.
     let raw_source = source;
     // Marked after sanitizing, which drops every sender `data-*` attribute, so
-    // the quote marker the frames fold on is always ours.
+    // the quote marker the frames fold on is always ours. Bare URLs become
+    // links on the sanitized markup, which the linkifier's scan relies on.
     let source = &crate::quote::mark_html_quote(
-        &sanitize_email_html(source),
+        &crate::linkify::linkify_html(&sanitize_email_html(source)),
         crate::quote::is_forward_subject(subject),
     );
     let (img, media) = if load_remote_images {

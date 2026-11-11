@@ -23,6 +23,7 @@ import {
   sendComposed,
   editAsNewMessage,
   forwardMessage,
+  textToHtml,
 } from './compose'
 import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import { ownSentCrypto } from '../lib/crypto'
@@ -5295,5 +5296,25 @@ describe('quoting the original in replies', () => {
     expect(sent.html).toStartWith(`<p>Sounds good</p><p>${htmlAttribution(m)}</p><blockquote `)
     expect(sent.html).toContain('type="cite"')
     expect(sent.html).toContain('<p>Lunch on <b>Friday</b>?</p></blockquote>')
+  })
+})
+
+describe('textToHtml', () => {
+  it('links bare URLs, leaving trailing punctuation outside', () => {
+    expect(textToHtml('same as https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0')).toBe(
+      '<p>same as <a href="https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0">https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0</a></p>',
+    )
+    expect(textToHtml('(see www.example.com/a?x=1&y=2.)')).toBe(
+      '<p>(see <a href="http://www.example.com/a?x=1&amp;y=2">www.example.com/a?x=1&amp;y=2</a>.)</p>',
+    )
+    expect(textToHtml('<https://x.example/(a)>')).toBe(
+      '<p>&lt;<a href="https://x.example/(a)">https://x.example/(a)</a>&gt;</p>',
+    )
+  })
+
+  it('leaves non-URLs as escaped text', () => {
+    expect(textToHtml('https:// and www.nodot and me@www.example.com <b>')).toBe(
+      '<p>https:// and www.nodot and me@www.example.com &lt;b&gt;</p>',
+    )
   })
 })

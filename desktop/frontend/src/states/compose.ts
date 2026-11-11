@@ -8,6 +8,7 @@ import {
 import { forgetThreadView } from './threadView'
 import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
+import { linkifyLine } from '../lib/linkify'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
@@ -101,7 +102,7 @@ export function textToHtml(text: string): string {
   if (!text.trim()) return ''
   return text
     .split(/\n{2,}/)
-    .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
+    .map((para) => `<p>${para.split('\n').map(linkifyLine).join('<br>')}</p>`)
     .join('')
 }
 
