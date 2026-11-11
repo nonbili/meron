@@ -239,6 +239,7 @@ export async function sendReply() {
     from: compose$.quickReplyFrom.peek(),
     added,
     signatureOff: compose$.quickReplySignatureOff.peek(),
+    signatureUnmanaged: compose$.quickReplySignatureUnmanaged.peek(),
   }
   compose$.composerAttachments.set([])
   // The next reply in this thread starts as a plain one.
@@ -338,6 +339,7 @@ export async function sendReply() {
       compose$.quickReplyFrom.set(box.from)
       compose$.quickReplyAdded.set(box.added)
       compose$.quickReplySignatureOff.set(box.signatureOff)
+      compose$.quickReplySignatureUnmanaged.set(box.signatureUnmanaged)
       // The box holds the claim's reply again, so releasing hands it back.
       claim.generation = quickReplyBoxGeneration
       dropUnsentBubble()

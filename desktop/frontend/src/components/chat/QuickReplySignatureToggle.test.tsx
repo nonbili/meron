@@ -42,6 +42,7 @@ const reset = () => {
   cleanup()
   compose$.composer.set('')
   compose$.quickReplySignatureOff.set(false)
+  compose$.quickReplySignatureUnmanaged.set(false)
   mail$.threads.set([])
   mail$.messages.set([])
   ui$.selectedThread.set('')
@@ -79,6 +80,16 @@ describe('QuickReplySignatureToggle', () => {
 
     fireEvent.click(getByRole('switch'))
     expect(compose$.quickReplySignatureOff.get()).toBe(false)
+  })
+
+  it("can't be switched on while the box holds another copy of the signature", () => {
+    compose$.quickReplySignatureOff.set(true)
+    compose$.quickReplySignatureUnmanaged.set(true)
+    const { getByRole } = render(<QuickReplySignatureToggle />)
+    const button = getByRole('switch') as HTMLButtonElement
+
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-checked')).toBe('false')
   })
 
   it('is not there when the account sends no signature', () => {

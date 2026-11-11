@@ -374,6 +374,72 @@ export function trailingSignatureTracking(body: ComposeBody, signature: Signatur
 export type SignatureSwitch = 'on' | 'off' | 'unmanaged'
 
 /**
+ * What a reopened draft knows about the account's signature. A draft only
+ * says what it holds, not what the switch was, so three cases are told apart
+ * by what is in the body:
+ *
+ *   ends in it, as inserted    tracked: the switch is on
+ *   holds no trace of it       the draft was saved with it off: off, switchable
+ *   holds part of it           an edited or older copy: unmanaged, so switching
+ *                              it on can't put a second one under it
+ *
+ * A trace is a whole line of the signature, or one of its images, outside a
+ * quote. An older signature that shares no line with the current one can't be
+ * told from none: switching that on adds the current one below it.
+ */
+export function reopenedSignatureTracking(body: ComposeBody, signature: Signature): SignatureTracking {
+  if (!signature.html) return undefined
+  const trailing = trailingSignatureTracking(body, signature)
+  if (trailing) return trailing
+  return hasSignatureTrace(body, signature) ? undefined : noSignatureMark('belowText')
+}
+
+/**
+ * A saved quick reply's text for the box, and where its signature switch
+ * stands (see `reopenedSignatureTracking`): on with the signature taken off
+ * when the draft ends in it, off when none of it is there, and unmanaged, the
+ * text left as saved, when an edited or older copy is.
+ */
+export function quickReplyDraftSignature(
+  body: string,
+  signatureText: string,
+): { text: string; state: SignatureSwitch } {
+  const text = textWithoutTrailingSignature(body, signatureText)
+  if (text !== null) return { text, state: 'on' }
+  const traced = hasSignatureTrace({ rich: false, html: '', text: body }, { html: '', text: signatureText })
+  return { text: body, state: traced ? 'unmanaged' : 'off' }
+}
+
+/** Whether any whole line or image of the signature is in the body, quotes aside. */
+function hasSignatureTrace(body: ComposeBody, signature: Signature): boolean {
+  const lines = new Set(
+    signature.text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  )
+  const unquoted = body.rich ? withoutBlockquotes(body.html) : body.text
+  const text = body.rich ? signatureToText(unquoted) : unquoted
+  if (text.split('\n').some((line) => lines.has(line.trim()))) return true
+  if (!body.rich) return false
+  return imageSources(signature.html).some((src) => imageSources(unquoted).includes(src))
+}
+
+function withoutBlockquotes(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  for (const quote of Array.from(doc.querySelectorAll('blockquote'))) quote.remove()
+  return doc.body.innerHTML
+}
+
+function imageSources(html: string): string[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Array.from(doc.querySelectorAll('img')).flatMap((img) => {
+    const src = img.getAttribute('src')
+    return src ? [src] : []
+  })
+}
+
+/**
  * The composer's signature switch: on while the tracked signature is in the
  * body as inserted, off when the draft deliberately has none, and unmanaged
  * when the body's signature is not this app's to take out (a reopened draft

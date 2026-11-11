@@ -171,4 +171,9 @@ export const compose$ = observable({
   // aliases of the one account, which share a signature), so on/off is all
   // there is to track.
   quickReplySignatureOff: false,
+  // The box holds a saved draft's signature that isn't the account's current
+  // one as inserted (an edited or older copy). The switch is then off and
+  // can't be turned on, which would put a second signature under that one
+  // (see quickReplyDraftSignature). Cleared with the reply.
+  quickReplySignatureUnmanaged: false,
 })

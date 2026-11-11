@@ -13,12 +13,7 @@ import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
 import { discardSavedDraftCopy } from './mailMoves'
 import { getPendingSend, getUnsentRescue, unsentRescues } from './pendingSends'
-import {
-  signatureForms,
-  textWithTrailingSignature,
-  textWithoutTrailingSignature,
-  type Signature,
-} from '../lib/signature'
+import { quickReplyDraftSignature, signatureForms, textWithTrailingSignature, type Signature } from '../lib/signature'
 import { settings$ } from './settings'
 import {
   draftIdOfFailedSave,
@@ -96,6 +91,7 @@ export function startFreshQuickReply() {
   hydratedWithoutSignature = null
   compose$.composer.set('')
   compose$.quickReplySignatureOff.set(false)
+  compose$.quickReplySignatureUnmanaged.set(false)
 }
 
 /**
@@ -524,6 +520,7 @@ ui$.selectedThread.onChange(({ value }) => {
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])
   compose$.quickReplySignatureOff.set(false)
+  compose$.quickReplySignatureUnmanaged.set(false)
   hydratedWithoutSignature = null
 })
 
@@ -868,17 +865,23 @@ function restoreUnsentRescueBubbles(messages: Message[]) {
  * Put a saved draft's body in the box. The body is the reply as it would go
  * out, so it may end in a signature: when that is the replying account's
  * signature, exactly and as the last block, it is taken off and the switch is
- * on, so sending adds the same signature back where it was. Anything else (a
- * draft saved with the signature off, an edited or older signature, text after
- * it) is left as written with the switch off: a signature is only ever added
- * where one was taken off, so no reply goes out with two (#149).
+ * on, so sending adds the same signature back where it was. Anything else is
+ * left as written with the switch off: switchable when the draft holds no
+ * trace of the signature (it was saved with it off), not when it holds an
+ * edited or older copy, which switching on would put a second one under
+ * (#149; quickReplyDraftSignature).
  */
 function loadDraftBodyIntoQuickReply(threadId: string, body: string) {
   watchQuickReplySignatureSources()
-  const text = textWithoutTrailingSignature(body, quickReplySignature().text)
-  compose$.composer.set(text ?? body)
-  compose$.quickReplySignatureOff.set(text === null)
-  hydratedWithoutSignature = text === null ? { threadId, body } : null
+  const { text, state } = quickReplyDraftSignature(body, quickReplySignature().text)
+  compose$.composer.set(text)
+  setHydratedSignatureState(state)
+  hydratedWithoutSignature = state === 'on' ? null : { threadId, body }
+}
+
+function setHydratedSignatureState(state: 'on' | 'off' | 'unmanaged') {
+  compose$.quickReplySignatureOff.set(state !== 'on')
+  compose$.quickReplySignatureUnmanaged.set(state === 'unmanaged')
 }
 
 // A draft loaded with no signature recognised, while the box still holds it as
@@ -894,11 +897,11 @@ function recheckHydratedDraftSignature() {
     hydratedWithoutSignature = null
     return
   }
-  const text = textWithoutTrailingSignature(hydrated.body, quickReplySignature().text)
-  if (text === null) return
+  const { text, state } = quickReplyDraftSignature(hydrated.body, quickReplySignature().text)
+  setHydratedSignatureState(state)
+  if (state !== 'on') return
   hydratedWithoutSignature = null
   compose$.composer.set(text)
-  compose$.quickReplySignatureOff.set(false)
 }
 
 // Subscribed on the first fresh box rather than at module scope: this module

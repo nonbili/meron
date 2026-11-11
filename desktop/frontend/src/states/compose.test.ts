@@ -4241,6 +4241,7 @@ describe('signature in the quick reply', () => {
     compose$.quickReplyDraftSaved.set(false)
     compose$.quickReplyFrom.set('')
     compose$.quickReplySignatureOff.set(false)
+    compose$.quickReplySignatureUnmanaged.set(false)
     mail$.messages.set([])
     mail$.threads.set([])
     mail$.folders.set([])
@@ -4397,6 +4398,8 @@ describe('signature in the quick reply', () => {
 
     expect(compose$.composer.get()).toBe('sent with it off')
     expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    // No trace of the signature: off, and switchable back on.
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(false)
     expect(quickReplyOutgoingText()).toBe('sent with it off')
   })
 
@@ -4405,6 +4408,8 @@ describe('signature in the quick reply', () => {
 
     expect(compose$.composer.get()).toBe('reply\n\nfrom u2\n\n> quoted')
     expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    // Its signature is in the box: switching the current one on would add a second.
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(true)
     expect(quickReplyOutgoingText()).toBe('reply\n\nfrom u2\n\n> quoted')
   })
 
@@ -4417,6 +4422,28 @@ describe('signature in the quick reply', () => {
     expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2')
   })
 
+  it('leaves a hydrated draft with an edited signature unmanaged, so none is added under it', () => {
+    settings$.signature.set('<p>from u2</p><p>Phone 1</p>')
+    hydrate('half typed\n\nfrom u2\nPhone 2')
+
+    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2\nPhone 2')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(true)
+    expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2\nPhone 2')
+  })
+
+  it('gives the full editor an unmanaged signature when the box holds an edited one', () => {
+    settings$.signature.set('<p>from u2</p><p>Phone 1</p>')
+    hydrate('half typed\n\nfrom u2\nPhone 2')
+
+    openReplyInFullEditor()
+
+    const draft = compose$.tabs.get()[0].compose
+    expect(draft?.text).toBe('half typed\n\nfrom u2\nPhone 2')
+    expect(draft?.signature).toBeUndefined()
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(false)
+  })
+
   it('recognises the signature of a draft hydrated before the signature loaded', () => {
     settings$.signature.set('')
     hydrate('half typed\n\nfrom u2')
@@ -4426,6 +4453,17 @@ describe('signature in the quick reply', () => {
     expect(compose$.composer.get()).toBe('half typed')
     expect(compose$.quickReplySignatureOff.get()).toBe(false)
     expect(quickReplyOutgoingText()).toBe('half typed\n\nfrom u2')
+  })
+
+  it('locks the switch of a draft hydrated before the signature loaded, once it shows an edited copy', () => {
+    settings$.signature.set('')
+    hydrate('half typed\n\nfrom u2\nPhone 2')
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(false)
+
+    settings$.signature.set('<p>from u2</p><p>Phone 1</p>')
+    expect(compose$.composer.get()).toBe('half typed\n\nfrom u2\nPhone 2')
+    expect(compose$.quickReplySignatureOff.get()).toBe(true)
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(true)
   })
 
   it('does not touch a hydrated draft the user has typed into when the signature arrives', () => {
@@ -4476,11 +4514,20 @@ describe('signature in the quick reply', () => {
     expect(draft?.signature).toEqual({ html: '<p>from u2</p>', text: 'from u2', placement: 'belowText' })
   })
 
-  it('leaves a reopened draft unmanaged when its signature is not the current one at the end', () => {
+  it('leaves a reopened draft unmanaged when its signature is there but not as inserted', () => {
     setUpThread()
-    openComposeTab({ accountId: 'acc-1', text: 'Saved\n\nold signature', noSignature: true })
+    openComposeTab({ accountId: 'acc-1', text: 'Saved\n\nfrom u2\n\nPS', noSignature: true })
     expect(compose$.tabs.get()[0].compose?.signature).toBeUndefined()
-    expect(compose$.tabs.get()[0].compose?.text).toBe('Saved\n\nold signature')
+    expect(compose$.tabs.get()[0].compose?.text).toBe('Saved\n\nfrom u2\n\nPS')
+  })
+
+  // #154 review, point 1: a draft saved with the switch off holds no signature,
+  // and reopened it must stay switchable, as the quick reply's is.
+  it('reopens a draft with no trace of the signature with the switch off, not disabled', () => {
+    setUpThread()
+    openComposeTab({ accountId: 'acc-1', text: 'Saved without it', noSignature: true })
+    expect(compose$.tabs.get()[0].compose?.signature).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(compose$.tabs.get()[0].compose?.text).toBe('Saved without it')
   })
 
   it('puts the switch back with the reply when the send dies before going out', async () => {
@@ -4500,6 +4547,23 @@ describe('signature in the quick reply', () => {
 
     expect(compose$.composer.get()).toBe('Never left')
     expect(compose$.quickReplySignatureOff.get()).toBe(true)
+  })
+
+  it('puts an unmanaged switch back with the reply when the send dies before going out', async () => {
+    settings$.signature.set('<p>from u2</p><p>Phone 1</p>')
+    hydrate('Never left\n\nfrom u2\nPhone 2')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') throw new Error('offline')
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    await expect(sendReply()).rejects.toThrow('offline')
+
+    expect(compose$.composer.get()).toBe('Never left\n\nfrom u2\nPhone 2')
+    expect(compose$.quickReplySignatureUnmanaged.get()).toBe(true)
   })
 
   it('switches the signature back on for the next reply after a send', async () => {

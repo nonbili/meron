@@ -36,7 +36,7 @@ import {
   type Signature,
   type SignaturePlacement,
   type SignatureTracking,
-  trailingSignatureTracking,
+  reopenedSignatureTracking,
 } from '../lib/signature'
 import { settings$ } from './settings'
 import { undeliveredOf } from './undelivered'
@@ -742,13 +742,14 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
   // forward that later moves to an account with one still puts it above the
   // quote rather than after it. A body this app did not compose (a saved draft,
   // "Edit as New Message") may already carry a signature: the account's, ending
-  // the body as the composer inserts it, is tracked (and switchable); anything
-  // else stays unmanaged, `undefined`, so nothing adds a second.
+  // the body as the composer inserts it, is tracked (and switchable); a body
+  // with no trace of it is off (and switchable); anything else stays unmanaged,
+  // `undefined`, so nothing adds a second (reopenedSignatureTracking).
   const tracking: SignatureTracking = signature
     ? { ...signature, placement }
     : seed?.signatureOff
       ? noSignatureMark(placement)
-      : trailingSignatureTracking(seeded, accountSignature)
+      : reopenedSignatureTracking(seeded, accountSignature)
   const body = signature ? bodyWithSignature(seeded, signature, placement) : seeded
 
   const draft: ComposeDraft = {
@@ -841,7 +842,11 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     showCcBcc: !!cc.trim(),
     subject,
     text: carried,
-    signatureOff: compose$.quickReplySignatureOff.peek(),
+    // A box holding a signature it can't switch hands it over as found, for
+    // the full composer to look at the same way.
+    ...(compose$.quickReplySignatureUnmanaged.peek()
+      ? { noSignature: true }
+      : { signatureOff: compose$.quickReplySignatureOff.peek() }),
     attachments: compose$.composerAttachments.get(),
     inReplyTo: in_reply_to,
     references,

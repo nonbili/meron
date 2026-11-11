@@ -12,6 +12,8 @@ import {
   savedSignatureHtml,
   signatureSwitch,
   switchedSignature,
+  quickReplyDraftSignature,
+  reopenedSignatureTracking,
   trailingSignatureTracking,
   textWithoutTrailingSignature,
   textWithTrailingSignature,
@@ -423,6 +425,78 @@ describe("a reopened draft's signature", () => {
 
   it('is never invented for an account without a signature', () => {
     expect(trailingSignatureTracking(plain('Hi'), { html: '', text: '' })).toBeUndefined()
+  })
+})
+
+describe("a reopened draft's signature switch (#154 review)", () => {
+  const sig = { html: '<p>Me</p><p>Phone 123</p>', text: 'Me\nPhone 123' }
+  const plain = (text: string) => ({ rich: false, html: '', text })
+  const rich = (html: string) => ({ rich: true, html, text: '' })
+
+  it('is on when the draft ends in the signature as inserted', () => {
+    expect(reopenedSignatureTracking(plain('Hi\n\nMe\nPhone 123'), sig)).toEqual({ ...sig, placement: 'belowText' })
+  })
+
+  it('is off and switchable when the draft holds no trace of it', () => {
+    // A draft saved with the switch off: nothing of the signature in it.
+    expect(reopenedSignatureTracking(plain('Hi'), sig)).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), sig)).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(signatureSwitch(plain('Hi'), reopenedSignatureTracking(plain('Hi'), sig))).toBe('off')
+  })
+
+  it('stays unmanaged when part of it is there but not as inserted', () => {
+    // An edited signature: one line changed, the other still there.
+    expect(reopenedSignatureTracking(plain('Hi\n\nMe\nPhone 456'), sig)).toBeUndefined()
+    // Text after it.
+    expect(reopenedSignatureTracking(plain('Hi\n\nMe\nPhone 123\n\nPS'), sig)).toBeUndefined()
+    expect(reopenedSignatureTracking(rich('<p>Hi</p><p></p><p>Me</p><p>Phone 456</p>'), sig)).toBeUndefined()
+  })
+
+  it('ignores the signature inside a quote', () => {
+    expect(reopenedSignatureTracking(plain('Hi\n\n> Me\n> Phone 123'), sig)).toEqual({
+      html: '',
+      text: '',
+      placement: 'belowText',
+    })
+    expect(reopenedSignatureTracking(rich('<p>Hi</p><blockquote><p>Me</p><p>Phone 123</p></blockquote>'), sig)).toEqual(
+      { html: '', text: '', placement: 'belowText' },
+    )
+  })
+
+  it("finds an image-only signature's image", () => {
+    const image = { html: '<p><img src="https://example.com/logo.png"></p>', text: '' }
+    expect(reopenedSignatureTracking(rich('<p>Hi</p>'), image)).toEqual({ html: '', text: '', placement: 'belowText' })
+    expect(
+      reopenedSignatureTracking(rich('<p>Hi</p><p><img src="https://example.com/logo.png" width="80"></p>'), image),
+    ).toBeUndefined()
+  })
+
+  it('stays unmanaged for an account without a signature', () => {
+    expect(reopenedSignatureTracking(plain('Hi'), { html: '', text: '' })).toBeUndefined()
+  })
+})
+
+describe("a saved quick reply's signature switch (#154 review)", () => {
+  const sig = 'Me\nPhone 123'
+
+  it('is on, with the signature taken off, when the draft ends in it', () => {
+    expect(quickReplyDraftSignature('Thanks\n\nMe\nPhone 123', sig)).toEqual({ text: 'Thanks', state: 'on' })
+  })
+
+  it('is off when the draft holds none of it', () => {
+    expect(quickReplyDraftSignature('Thanks', sig)).toEqual({ text: 'Thanks', state: 'off' })
+  })
+
+  it('is unmanaged, the box as saved, when an older or edited copy is there', () => {
+    // Switching it on would put the current signature under the old one.
+    expect(quickReplyDraftSignature('Thanks\n\nMe\nPhone 456', sig)).toEqual({
+      text: 'Thanks\n\nMe\nPhone 456',
+      state: 'unmanaged',
+    })
+  })
+
+  it('is off for an account without a signature', () => {
+    expect(quickReplyDraftSignature('Thanks', '')).toEqual({ text: 'Thanks', state: 'off' })
   })
 })
 
