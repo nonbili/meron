@@ -1,11 +1,11 @@
-type SendBoolean = (value: boolean) => Promise<unknown>
+type Send<T> = (value: T) => Promise<unknown>
 
 // Wails calls are asynchronous and may otherwise reach Go out of order. Keep
 // one tray update in flight and, if state changes while it is running, send the
 // newest value immediately afterwards. Intermediate values can be coalesced:
-// only the final value matters. Used for both unread state and tray style.
-export function createLatestBooleanUpdater(send: SendBoolean, { deduplicate = true } = {}) {
-  let desired: boolean | undefined
+// only the final value matters. Used for the unread count and tray style.
+export function createLatestValueUpdater<T>(send: Send<T>, { deduplicate = true } = {}) {
+  let desired: T | undefined
   let failed = false
   let version = 0
   let running = false
@@ -41,7 +41,7 @@ export function createLatestBooleanUpdater(send: SendBoolean, { deduplicate = tr
     }
   }
 
-  return (value: boolean) => {
+  return (value: T) => {
     if (deduplicate && desired === value && !failed) return
     desired = value
     version += 1

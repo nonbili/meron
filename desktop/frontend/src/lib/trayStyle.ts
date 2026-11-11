@@ -1,8 +1,8 @@
 import { invoke } from './bridge'
-import { createLatestBooleanUpdater } from './latestBooleanUpdater'
+import { createLatestValueUpdater } from './latestValueUpdater'
 
 export function createTrayStyleUpdater(send = (monochrome: boolean) => invoke('tray.setStyle', { monochrome })) {
-  return createLatestBooleanUpdater(send)
+  return createLatestValueUpdater(send)
 }
 
 export const setTrayStyle = createTrayStyleUpdater()

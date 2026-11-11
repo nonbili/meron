@@ -160,6 +160,10 @@ func (a *App) traySetUnread(payload map[string]any) (any, error) {
 		unread = value > 0
 	}
 	a.setTrayUnread(unread)
+	// The inbox unread count, for the macOS Dock badge.
+	if count, ok := payload["count"]; ok {
+		setDockBadge(count)
+	}
 	return map[string]any{"ok": true}, nil
 }
 

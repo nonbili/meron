@@ -456,7 +456,8 @@ export function useAppEffects() {
     // inbox is read. Use the exact per-account cache that renders the sidebar;
     // launching separate folder queries here allowed a slow, stale result to
     // overwrite a newer unread event and leave the two indicators disagreeing.
-    const unread = accounts.some((account) => inboxUnread(foldersByAccount[account.id]) > 0)
+    // The count, summed over accounts, is the macOS Dock badge.
+    const unread = accounts.reduce((sum, account) => sum + inboxUnread(foldersByAccount[account.id]), 0)
     setTrayUnread(unread)
   }, [accounts, foldersByAccount])
 
