@@ -62,6 +62,11 @@ pub struct Rule {
     /// Kept, but not run.
     #[serde(default)]
     pub disabled: bool,
+    /// Runs on mail the user sent, as its copy shows up in the Sent folder,
+    /// instead of on mail that arrives. Such a rule runs right away and leaves
+    /// the copy where it is: it can tag, star and copy it.
+    #[serde(default)]
+    pub sent: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -133,6 +138,14 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
         anyhow::ensure!(
             rule.copy_folder.is_empty() == rule.copy_account.is_empty(),
             "a rule's copy needs an account and a folder"
+        );
+        anyhow::ensure!(
+            !rule.sent || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0),
+            "a rule for sent mail runs right away"
+        );
+        anyhow::ensure!(
+            !rule.sent || (!rule.mark_read && rule.move_to.is_empty()),
+            "a rule for sent mail can't move it or mark it read"
         );
         anyhow::ensure!(rule.has_action(), "a rule needs an action");
         if rule.id.is_empty() {
@@ -305,7 +318,8 @@ fn rule_copy(account: &str, folder: &str, rule: &Rule) -> Option<RuleCopy> {
 
 /// Run the rules over mail that has just arrived in `folder`: never seen on this
 /// account, in any folder. Only then, so undoing what a rule did by hand sticks.
-/// Mail the user wrote or threw away has not arrived in that sense.
+/// Mail the user wrote or threw away has not arrived in that sense: what they
+/// sent has rules of its own, in [`apply_sent_rules`].
 ///
 /// Tags are saved here; what must reach the server first waits in the queue for
 /// [`crate::engine::run_rule_actions`]. Several rules can match one message:
@@ -339,9 +353,83 @@ pub fn apply_rules(
     if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
         return Ok(());
     }
+    run_immediate_rules(&tx, account, folder, uidvalidity, uids, rules, false)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Run the rules for sent mail over copies that have just shown up in
+/// `folder`, the account's Sent folder: see [`new_sent_uids`]. The caller
+/// vouches for the folder, which a provider may name anything.
+pub fn apply_sent_rules(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+    uids: &[u32],
+) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let rules = rules(&tx)?;
+    run_immediate_rules(&tx, account, folder, uidvalidity, uids, rules, true)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Whether any rule for sent mail would run on `account`.
+pub fn has_sent_rules(conn: &Connection, account: &str) -> Result<bool> {
+    Ok(rules(conn)?.iter().any(|rule| {
+        rule.sent
+            && !rule.disabled
+            && (rule.accounts.is_empty() || rule.accounts.iter().any(|item| item == account))
+    }))
+}
+
+/// The mail in `messages` that `folder` gained since it was last read: what a
+/// Sent folder has to show for the user sending something, from here or from
+/// another client. Call it before the read is stored.
+///
+/// Not [`super::first_seen_messages`]: the copy of mail the user sent to
+/// themselves, or the one Gmail also lists under All Mail, may already have
+/// been seen elsewhere on the account, and is no less sent for it. Nothing on
+/// a first read, when all of the folder is new to the store.
+pub fn new_sent_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+    uid_next: u32,
+    messages: &[crate::imap::MessageHeader],
+) -> Result<Vec<u32>> {
+    let Some((validity, before)) = super::get_folder_state(conn, account, folder)? else {
+        return Ok(Vec::new());
+    };
+    if validity != uidvalidity || before == 0 {
+        return Ok(Vec::new());
+    }
+    Ok(messages
+        .iter()
+        .map(|message| message.uid)
+        .filter(|uid| (before..uid_next).contains(uid))
+        .collect())
+}
+
+/// The rules that act at once, for received mail or for `sent`, over `uids`.
+fn run_immediate_rules(
+    tx: &Connection,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+    uids: &[u32],
+    rules: Vec<Rule>,
+    sent: bool,
+) -> Result<()> {
     let mut actions: BTreeMap<u32, RuleAction> = BTreeMap::new();
     for rule in rules {
-        if rule.trigger != RuleTrigger::Arrival
+        if rule.sent != sent
+            || rule.trigger != RuleTrigger::Arrival
             || rule.delay_seconds != 0
             || rule.disabled
             || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|item| item == account))
@@ -351,14 +439,14 @@ pub fn apply_rules(
         let matched = if rule.query.is_empty() {
             uids.to_vec()
         } else {
-            super::matching_uids(&tx, account, folder, &rule.query, uids)?
+            super::matching_uids(tx, account, folder, &rule.query, uids)?
         };
         for uid in &matched {
-            let subject = rule_message_subject(&tx, account, folder, *uid)?;
-            log_rule(&tx, &rule.id, account, &subject, 1, None)?;
+            let subject = rule_message_subject(tx, account, folder, *uid)?;
+            log_rule(tx, &rule.id, account, &subject, 1, None)?;
         }
         add_rule_effects(
-            &tx,
+            tx,
             account,
             folder,
             uidvalidity,
@@ -367,9 +455,8 @@ pub fn apply_rules(
             &mut actions,
         )?;
     }
-    queue_rule_actions(&tx, account, &actions, 0)?;
-    trim_rule_log(&tx)?;
-    tx.commit()?;
+    queue_rule_actions(tx, account, &actions, 0)?;
+    trim_rule_log(tx)?;
     Ok(())
 }
 
@@ -391,6 +478,7 @@ pub fn apply_due_rules(
     let mut actions = BTreeMap::new();
     for rule in rules(&tx)? {
         if rule.disabled
+            || rule.sent
             || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0)
             || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|id| id == account))
             || (rule.trigger == RuleTrigger::Age && folder != EXISTING_RULE_FOLDER)
@@ -716,6 +804,20 @@ fn queue_rule_actions(
 /// already filed, on purpose.
 pub const EXISTING_RULE_FOLDER: &str = "INBOX";
 
+/// Where running `rule` by hand looks on `account`: the Inbox, or for a rule
+/// for sent mail the Sent folder, if the account's folders are known.
+fn existing_rule_folder(conn: &Connection, account: &str, rule: &Rule) -> Option<String> {
+    if !rule.sent {
+        return Some(EXISTING_RULE_FOLDER.to_string());
+    }
+    crate::engine::sent_folder_from_db(conn, account, EXISTING_RULE_FOLDER)
+}
+
+/// [`existing_rule_folder`] for a saved rule.
+pub fn saved_rule_folder(conn: &Connection, id: &str, account: &str) -> Result<Option<String>> {
+    Ok(existing_rule_folder(conn, account, &saved_rule(conn, id)?))
+}
+
 /// The accounts `rule` can run on: its own, or every account with a server.
 fn rule_accounts(conn: &Connection, rule: &Rule) -> Result<Vec<String>> {
     let field = |account: &serde_json::Value, name: &str| {
@@ -742,9 +844,13 @@ pub fn saved_rule_accounts(conn: &Connection, id: &str) -> Result<Vec<String>> {
     rule_accounts(conn, &saved_rule(conn, id)?)
 }
 
-/// What `rule` matches among the mail cached in `account`'s Inbox.
-fn existing_rule_matches(conn: &Connection, account: &str, rule: &Rule) -> Result<Vec<u32>> {
-    let folder = EXISTING_RULE_FOLDER;
+/// What `rule` matches among the mail cached in `account`'s `folder`.
+fn existing_rule_matches(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    rule: &Rule,
+) -> Result<Vec<u32>> {
     let mut stmt =
         conn.prepare("SELECT uid FROM messages WHERE account = ?1 AND folder = ?2 AND uid <> 0")?;
     let uids = stmt
@@ -761,19 +867,21 @@ pub fn count_existing_rule_matches(conn: &Connection, id: &str) -> Result<usize>
     let rule = saved_rule(conn, id)?;
     let mut count = 0;
     for account in rule_accounts(conn, &rule)? {
-        count += existing_rule_matches(conn, &account, &rule)?.len();
+        if let Some(folder) = existing_rule_folder(conn, &account, &rule) {
+            count += existing_rule_matches(conn, &account, &folder, &rule)?.len();
+        }
     }
     Ok(count)
 }
 
-/// Run a saved rule over mail already in the Inbox, for
+/// Run a saved rule over mail already in the Inbox, or in Sent for a rule for
+/// sent mail, for
 /// [`crate::engine::run_rule_on_existing`] to carry out. Answers with the
 /// accounts and how many messages each queued. Mail this rule already has work
 /// queued for keeps that work; other rules' work runs alongside, under its own
 /// run. And [`crate::engine`] asks the target before each copy, so
 /// running a rule twice doesn't double what it did.
 pub fn queue_existing_rule(conn: &Connection, id: &str) -> Result<Vec<(String, usize)>> {
-    let folder = EXISTING_RULE_FOLDER;
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let rule = saved_rule(&tx, id)?;
     anyhow::ensure!(!rule.disabled, "the rule is turned off");
@@ -782,11 +890,15 @@ pub fn queue_existing_rule(conn: &Connection, id: &str) -> Result<Vec<(String, u
         .as_micros() as i64;
     let mut queued = Vec::new();
     for account in rule_accounts(&tx, &rule)? {
+        let Some(folder) = existing_rule_folder(&tx, &account, &rule) else {
+            continue;
+        };
+        let folder = folder.as_str();
         let Some((uidvalidity, _)) = super::get_folder_state(&tx, &account, folder)? else {
             continue;
         };
         let pending = pending_rule_actions(&tx, &account, folder)?;
-        let matched: Vec<u32> = existing_rule_matches(&tx, &account, &rule)?
+        let matched: Vec<u32> = existing_rule_matches(&tx, &account, folder, &rule)?
             .into_iter()
             .filter(|uid| {
                 !pending
@@ -1386,5 +1498,205 @@ mod timing_tests {
         assert!(running_rules(&conn).unwrap().is_empty());
         stop_rule(&conn, "timed").unwrap();
         assert_eq!(pending_rule_actions(&conn, "a", "INBOX").unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod sent_tests {
+    use super::*;
+    use crate::imap::MessageHeader;
+
+    fn db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::store::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    fn header(uid: u32) -> MessageHeader {
+        MessageHeader {
+            uid,
+            seen: true,
+            subject: "quote".into(),
+            message_id: format!("<{uid}@example.com>"),
+            ..Default::default()
+        }
+    }
+
+    fn sent_rule() -> Rule {
+        Rule {
+            id: "sent".into(),
+            sent: true,
+            star: true,
+            tags: vec!["client".into()],
+            ..Default::default()
+        }
+    }
+
+    fn received_rule() -> Rule {
+        Rule {
+            id: "received".into(),
+            mark_read: true,
+            ..Default::default()
+        }
+    }
+
+    /// One read of `folder` that finds `uids`, as a sync or the read after a
+    /// send does it. Answers with what it took for newly sent.
+    fn read(conn: &Connection, folder: &str, uids: &[u32], uid_next: u32) -> Vec<u32> {
+        let batch: Vec<MessageHeader> = uids.iter().map(|uid| header(*uid)).collect();
+        let sent = new_sent_uids(conn, "a", folder, 7, uid_next, &batch).unwrap();
+        crate::store::upsert_messages(conn, "a", folder, &batch).unwrap();
+        apply_sent_rules(conn, "a", folder, 7, &sent).unwrap();
+        crate::store::set_folder_state(conn, "a", folder, 7, uid_next).unwrap();
+        sent
+    }
+
+    #[test]
+    fn old_rules_are_for_received_mail_and_sent_rules_are_limited() {
+        let old: Rule = serde_json::from_str(r#"{"id":"old","star":true}"#).unwrap();
+        assert!(!old.sent);
+        let conn = db();
+        let refused = [
+            Rule {
+                mark_read: true,
+                ..sent_rule()
+            },
+            Rule {
+                move_to: "trash".into(),
+                ..sent_rule()
+            },
+            Rule {
+                trigger: RuleTrigger::Age,
+                delay_seconds: 60,
+                ..sent_rule()
+            },
+            Rule {
+                delay_seconds: 60,
+                ..sent_rule()
+            },
+        ];
+        for rule in refused {
+            assert!(set_rules(&conn, vec![rule.clone()]).is_err(), "{rule:?}");
+        }
+        assert!(set_rules(&conn, vec![sent_rule()]).unwrap()[0].sent);
+    }
+
+    #[test]
+    fn sent_rules_run_once_on_copies_the_sent_folder_gains() {
+        let conn = db();
+        set_rules(&conn, vec![sent_rule(), received_rule()]).unwrap();
+        // The first read is the mailbox as it was, not mail just sent.
+        assert!(read(&conn, "Sent", &[1, 2], 3).is_empty());
+        assert!(pending_rule_actions(&conn, "a", "Sent").unwrap().is_empty());
+
+        assert_eq!(read(&conn, "Sent", &[2, 3], 4), vec![3]);
+        let actions = pending_rule_actions(&conn, "a", "Sent").unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].uid, 3);
+        assert!(actions[0].star);
+        // Only the rule for sent mail: the other would have marked it read.
+        assert!(!actions[0].mark_read);
+        assert_eq!(actions[0].rule_ids, vec!["sent".to_string()]);
+        let tagged: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM message_tags WHERE tag = 'client' AND tag_key = '3@example.com'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tagged, 1);
+
+        // Reading the same tail again finds nothing new.
+        finish_rule_actions(&conn, "a", "Sent", &[3], 0).unwrap();
+        assert!(read(&conn, "Sent", &[2, 3], 4).is_empty());
+        assert!(pending_rule_actions(&conn, "a", "Sent").unwrap().is_empty());
+    }
+
+    #[test]
+    fn only_live_sent_rules_for_the_account_count() {
+        let conn = db();
+        set_rules(&conn, vec![received_rule()]).unwrap();
+        assert!(!has_sent_rules(&conn, "a").unwrap());
+        let mut rule = Rule {
+            accounts: vec!["b".into()],
+            ..sent_rule()
+        };
+        set_rules(&conn, vec![rule.clone()]).unwrap();
+        assert!(!has_sent_rules(&conn, "a").unwrap());
+        assert!(has_sent_rules(&conn, "b").unwrap());
+        rule.disabled = true;
+        set_rules(&conn, vec![rule]).unwrap();
+        assert!(!has_sent_rules(&conn, "b").unwrap());
+    }
+
+    #[test]
+    fn a_copy_already_seen_elsewhere_on_the_account_is_still_sent() {
+        let conn = db();
+        set_rules(&conn, vec![sent_rule()]).unwrap();
+        read(&conn, "Sent", &[1], 2);
+        // Mail to oneself, in the Inbox before its Sent copy is read.
+        crate::store::upsert_messages(&conn, "a", "INBOX", &[header(2)]).unwrap();
+        assert_eq!(read(&conn, "Sent", &[2], 3), vec![2]);
+        assert_eq!(pending_rule_actions(&conn, "a", "Sent").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn sent_rules_leave_received_mail_alone_and_the_other_way_round() {
+        let conn = db();
+        set_rules(&conn, vec![sent_rule(), received_rule()]).unwrap();
+        crate::store::upsert_messages(&conn, "a", "INBOX", &[header(1)]).unwrap();
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        apply_due_rules(&conn, "a", "INBOX", 7, i64::MAX / 2).unwrap();
+        let actions = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(actions.len(), 1);
+        assert!(actions[0].mark_read && !actions[0].star);
+        assert_eq!(actions[0].rule_ids, vec!["received".to_string()]);
+    }
+
+    #[test]
+    fn a_sent_rule_run_by_hand_looks_in_the_sent_folder() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO accounts(id, engine, provider, email, display_name, avatar_url, config, created_at, updated_at)
+             VALUES('a', 'imap', 'imap', 'a', '', '', '{}', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let folder = |name: &str, special_use: Option<&str>| crate::imap::Folder {
+            name: name.into(),
+            display_name: name.into(),
+            special_use: special_use.map(str::to_string),
+            ..Default::default()
+        };
+        crate::store::upsert_folders(
+            &conn,
+            "a",
+            &[folder("INBOX", None), folder("Sent Items", Some("sent"))],
+        )
+        .unwrap();
+        let id = set_rules(&conn, vec![sent_rule()]).unwrap()[0].id.clone();
+        read(&conn, "Sent Items", &[1, 2], 3);
+        crate::store::upsert_messages(&conn, "a", "INBOX", &[header(9)]).unwrap();
+        crate::store::set_folder_state(&conn, "a", "INBOX", 7, 10).unwrap();
+        assert_eq!(
+            saved_rule_folder(&conn, &id, "a").unwrap().as_deref(),
+            Some("Sent Items")
+        );
+        assert_eq!(count_existing_rule_matches(&conn, &id).unwrap(), 2);
+        assert_eq!(
+            queue_existing_rule(&conn, &id).unwrap(),
+            vec![("a".to_string(), 2)]
+        );
+        assert_eq!(
+            pending_rule_actions(&conn, "a", "Sent Items")
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

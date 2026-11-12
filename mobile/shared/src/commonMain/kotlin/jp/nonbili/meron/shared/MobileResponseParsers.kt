@@ -833,6 +833,7 @@ fun parseRulesResponse(responseJson: String): List<Rule> =
                 copyFolder = rule.findJsonStringProperty("copy_folder").orEmpty(),
                 copyAccount = rule.findJsonStringProperty("copy_account").orEmpty(),
                 disabled = rule.findJsonBooleanProperty("disabled") ?: false,
+                sent = rule.findJsonBooleanProperty("sent") ?: false,
             )
         }.orEmpty()
 

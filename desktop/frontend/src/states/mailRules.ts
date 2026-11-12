@@ -23,6 +23,8 @@ export type Rule = {
   copy_account: string
   /** Kept, but not run. */
   disabled: boolean
+  /** Runs on mail the user sent, as it shows up in Sent, instead of on mail that arrives. */
+  sent?: boolean
 }
 
 export type RuleLogEntry = {
@@ -55,7 +57,7 @@ export async function ruleQuery(fields: SearchFields): Promise<string> {
   return query
 }
 
-/** How many messages already in the Inbox a saved rule would run on. */
+/** How many messages already in the Inbox, or in Sent for a rule for sent mail, a saved rule would run on. */
 export async function ruleMatches(id: string): Promise<number> {
   const { count } = await invoke<{ count: number }>('mail.ruleMatches', { id })
   return count

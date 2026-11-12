@@ -1194,3 +1194,76 @@ fn live_hits_need_files_only_for_has_attachment() {
         &header(Some(vec![]))
     ));
 }
+
+#[test]
+fn the_read_after_a_send_widens_only_when_it_stops_short_of_other_new_sent_mail() {
+    let tail = |uids: std::ops::Range<u32>, uid_next: u32| imap::RecentBatch {
+        uidvalidity: 7,
+        uid_next,
+        messages: uids
+            .map(|uid| imap::MessageHeader {
+                uid,
+                ..Default::default()
+            })
+            .collect(),
+    };
+    use super::append::sent_catchup_limit as limit;
+    // The tail reaches back to where the folder was: nothing is missed.
+    assert_eq!(limit(100, &tail(95..115, 115), 20), None);
+    assert_eq!(limit(100, &tail(100..120, 120), 20), None);
+    // Thirty arrived and the tail took twenty: read all thirty.
+    assert_eq!(limit(100, &tail(110..130, 130), 20), Some(30));
+    // Bounded, however long this device was away.
+    assert_eq!(limit(100, &tail(9980..10000, 10000), 20), Some(500));
+    // A short batch is the whole folder; a first read has no "since".
+    assert_eq!(limit(100, &tail(125..130, 130), 20), None);
+    assert_eq!(limit(0, &tail(110..130, 130), 20), None);
+    assert_eq!(limit(100, &tail(0..0, 130), 20), None);
+}
+
+#[test]
+fn a_send_before_sent_was_ever_read_still_gets_its_rules_and_old_mail_does_not() {
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let header = |uid: u32, id: &str| imap::MessageHeader {
+        uid,
+        message_id: id.to_string(),
+        ..Default::default()
+    };
+    let batch = imap::RecentBatch {
+        uidvalidity: 7,
+        uid_next: 4,
+        messages: vec![
+            header(1, "old-1"),
+            header(2, "old-2"),
+            header(3, "just-sent"),
+        ],
+    };
+    let sent = parse::SentEnvelope {
+        message_id: "just-sent".to_string(),
+        ..Default::default()
+    };
+    use super::append::sent_uids_for_rules as due;
+    assert_eq!(due(&conn, "acct", "Sent", &batch, &sent).unwrap(), vec![3]);
+    // A provider that hasn't filed its copy yet: nothing now, and the read
+    // that finds it later has this one to compare against.
+    let early = imap::RecentBatch {
+        uidvalidity: 7,
+        uid_next: 3,
+        messages: vec![header(1, "old-1"), header(2, "old-2")],
+    };
+    assert!(
+        due(&conn, "acct", "Sent", &early, &sent)
+            .unwrap()
+            .is_empty()
+    );
+    store_folder_tail(&conn, "acct", "Sent", &early).unwrap();
+    assert_eq!(due(&conn, "acct", "Sent", &batch, &sent).unwrap(), vec![3]);
+    // Once stored, reading the same tail again finds nothing due.
+    store_folder_tail(&conn, "acct", "Sent", &batch).unwrap();
+    assert!(
+        due(&conn, "acct", "Sent", &batch, &sent)
+            .unwrap()
+            .is_empty()
+    );
+}

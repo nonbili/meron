@@ -1213,6 +1213,8 @@ data class Rule(
     val copyAccount: String = "",
     /** Kept, but not run. */
     val disabled: Boolean = false,
+    /** Runs on mail the user sent, as it shows up in Sent, instead of on mail that arrives. */
+    val sent: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -1230,6 +1232,7 @@ data class Rule(
             "copy_folder" to copyFolder.jsonString(),
             "copy_account" to copyAccount.jsonString(),
             "disabled" to disabled.toString(),
+            "sent" to sent.toString(),
         )
 }
 

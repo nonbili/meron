@@ -842,14 +842,17 @@ class MobileResponseParsersTest {
     fun parsesRulesWithTheirScopeAndTargets() {
         val rule =
             parseRulesResponse(
-                """{"rules":[{"id":"r","query":"","tags":[],"mark_read":false,"star":true,"move_to":"folder","folder":"Saved","folder_account":"b","accounts":["a","b"],"copy_folder":"Kept","copy_account":"c","disabled":true}]}""",
+                """{"rules":[{"id":"r","query":"","tags":[],"mark_read":false,"star":true,"move_to":"folder","folder":"Saved","folder_account":"b","accounts":["a","b"],"copy_folder":"Kept","copy_account":"c","disabled":true,"sent":true}]}""",
             ).single()
         assertEquals("b", rule.folderAccount)
         assertEquals(listOf("a", "b"), rule.accounts)
         assertEquals("Kept", rule.copyFolder)
         assertEquals("c", rule.copyAccount)
         assertEquals(true, rule.disabled)
+        assertEquals(true, rule.sent)
         assertEquals(rule, parseRulesResponse("""{"rules":[${rule.toJson()}]}""").single())
+        // Rules saved before there were any for sent mail are for received mail.
+        assertEquals(false, parseRulesResponse("""{"rules":[{"id":"old","query":"","star":true}]}""").single().sent)
     }
 
     @Test

@@ -95,7 +95,7 @@ pub(super) const SENT_COPY_RETRY_DELAYS: [Duration; 3] = [
 pub async fn await_sent_copy(engine: &Arc<Engine>, account: &str, copy: &SentCopy) -> bool {
     for delay in SENT_COPY_RETRY_DELAYS {
         tokio::time::sleep(delay).await;
-        match refresh_sent_copy(engine, account, copy).await {
+        match refresh_sent_copy(engine, account, copy, None).await {
             Ok(true) => return true,
             Ok(false) => {}
             // A refresh that fails (a dropped session, a network blip) has not
@@ -106,18 +106,122 @@ pub async fn await_sent_copy(engine: &Arc<Engine>, account: &str, copy: &SentCop
     false
 }
 
+/// How much of the Sent folder the read after a send takes.
+const SENT_TAIL: u32 = 20;
+
+/// The most that read goes back for mail sent from elsewhere since the folder
+/// was last read. Past this, the oldest of it goes without its rules, as mail
+/// that arrives faster than a sync reads it does.
+const SENT_CATCHUP_MAX: u32 = 500;
+
+/// How far a tail read of `tail` messages has to be widened to take in all the
+/// mail the folder gained since its UIDNEXT was `before`; `None` when it already
+/// does. UIDs can have gaps, so this is an upper bound on what there is.
+pub(super) fn sent_catchup_limit(before: u32, batch: &imap::RecentBatch, tail: u32) -> Option<u32> {
+    let lowest = batch.messages.iter().map(|message| message.uid).min()?;
+    let gained = batch.uid_next.saturating_sub(before);
+    let short =
+        before != 0 && lowest > before && gained > tail && batch.messages.len() as u32 >= tail;
+    short.then(|| gained.min(SENT_CATCHUP_MAX))
+}
+
+/// The mail in a tail read of the Sent folder that rules for sent mail are due
+/// on: what the folder gained since it was last read. With no earlier read to
+/// compare against, as on a send before Sent was ever synced, the rest of the
+/// folder is old mail, but the copy of what was just sent is known to be new.
+/// Call it before the read is stored.
+pub(super) fn sent_uids_for_rules(
+    db: &Connection,
+    account: &str,
+    folder: &str,
+    batch: &imap::RecentBatch,
+    sent: &parse::SentEnvelope,
+) -> anyhow::Result<Vec<u32>> {
+    let compared = store::get_folder_state(db, account, folder)?
+        .is_some_and(|(validity, before)| validity == batch.uidvalidity && before != 0);
+    if compared {
+        return store::new_sent_uids(
+            db,
+            account,
+            folder,
+            batch.uidvalidity,
+            batch.uid_next,
+            &batch.messages,
+        );
+    }
+    Ok(batch
+        .messages
+        .iter()
+        .filter(|candidate| sent_copy_landed(sent, candidate))
+        .map(|candidate| candidate.uid)
+        .max()
+        .into_iter()
+        .collect())
+}
+
 /// Re-read the tail of the Sent folder into the cache, reporting whether the
 /// copy is now there.
+///
+/// `appended` is the bytes of the copy when Meron APPENDed it itself, which are
+/// then exactly what the server stored: see [`cache_encrypted_sent_copy`]. A
+/// provider-filed copy is not these bytes.
 pub(super) async fn refresh_sent_copy(
     engine: &Arc<Engine>,
     account: &str,
     copy: &SentCopy,
+    appended: Option<&[u8]>,
 ) -> anyhow::Result<bool> {
     let folder = copy.folder.as_str();
     let _snapshot_guard = MessageSyncGuard::begin(engine)?;
-    let batch = fetch_recent_resilient(engine, account, folder, 20).await?;
-    let db = engine.db.lock().unwrap();
-    store_folder_tail(&db, account, folder, &batch)?;
+    let mut batch = fetch_recent_resilient(engine, account, folder, SENT_TAIL).await?;
+    // Storing this tail moves the folder on past everything it gained, so mail
+    // sent from elsewhere that the tail stops short of would never get its rules.
+    let catchup = {
+        let db = engine.db.lock().unwrap();
+        match store::get_folder_state(&db, account, folder)? {
+            Some((validity, before))
+                if validity == batch.uidvalidity && store::has_sent_rules(&db, account)? =>
+            {
+                sent_catchup_limit(before, &batch, SENT_TAIL)
+            }
+            _ => None,
+        }
+    };
+    if let Some(limit) = catchup {
+        batch = fetch_recent_resilient(engine, account, folder, limit).await?;
+    }
+    let ruled = {
+        let db = engine.db.lock().unwrap();
+        // This read, not a sync, is what first caches a copy sent from here, so
+        // it is also where the rules for sent mail get to see it.
+        let sent = sent_uids_for_rules(&db, account, folder, &batch, &copy.envelope)?;
+        store_folder_tail(&db, account, folder, &batch)?;
+        // Before the rules: an encrypted copy's envelope has a placeholder for
+        // a subject, and a rule gets one look at a message.
+        if let Some(raw) = appended {
+            cache_encrypted_sent_copy(
+                &db,
+                account,
+                folder,
+                &copy.envelope.message_id,
+                raw,
+                |raw, media| parse::parse_message(raw, Some(media)),
+            );
+        }
+        if let Err(err) = store::apply_sent_rules(&db, account, folder, batch.uidvalidity, &sent) {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.rules",
+                "account={account} folder={folder}: rules for sent mail skipped: {err:#}"
+            );
+        }
+        !sent.is_empty()
+    };
+    if ruled {
+        // Tags are already saved; the rest must not hold up the send.
+        spawn_tag_push(engine, account);
+        spawn_rule_worker(engine, account, folder);
+    }
     Ok(batch
         .messages
         .iter()
@@ -287,21 +391,11 @@ pub async fn append_to_sent(
     // A refresh that fails is not a failed send, and must not be reported as
     // one: the message is on its way and the copy is merely unobserved, which
     // is exactly the state the caller's watcher is for.
-    match refresh_sent_copy(engine, account, &copy).await {
+    // Only our own APPEND: a provider-filed copy is not these bytes.
+    let appended = should_append.then_some(raw);
+    match refresh_sent_copy(engine, account, &copy, appended).await {
         Ok(observed) => copy.observed = observed,
         Err(err) => eprintln!("meron-core: Sent refresh for {account}: {err:#}"),
-    }
-    // Only our own APPEND: a provider-filed copy is not these bytes.
-    if should_append && copy.observed {
-        let db = engine.db.lock().unwrap();
-        cache_encrypted_sent_copy(
-            &db,
-            account,
-            &copy.folder,
-            &copy.envelope.message_id,
-            raw,
-            |raw, media| parse::parse_message(raw, Some(media)),
-        );
     }
 
     Ok(copy)

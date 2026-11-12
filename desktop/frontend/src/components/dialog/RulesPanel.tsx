@@ -68,6 +68,7 @@ type Draft = {
   copy_folder: string
   copy_account: string
   disabled: boolean
+  sent: boolean
 }
 
 /** The draft's delay in seconds, or null while the amount isn't a usable one. */
@@ -97,6 +98,7 @@ const EMPTY_DRAFT: Draft = {
   copy_folder: '',
   copy_account: '',
   disabled: false,
+  sent: false,
 }
 
 type RuleRowProps = {
@@ -225,13 +227,16 @@ export function RulesPanel() {
     try {
       const count = await ruleMatches(rule.id)
       if (count === 0) {
-        showToast(t('rules.runNothing'))
+        showToast(t(rule.sent ? 'rules.runSentNothing' : 'rules.runNothing'))
         return
       }
       const removes = rule.move_to === 'trash' || (rule.move_to === 'folder' && rule.folder_account !== '')
       const confirmed = await confirmAction({
         title: t('rules.run'),
-        message: t(rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm', { count }),
+        message: t(
+          rule.sent ? 'rules.runSentConfirm' : rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm',
+          { count },
+        ),
         confirmLabel: t('rules.runAction'),
         cancelLabel: t('buttons.cancel'),
         tone: removes ? 'danger' : 'default',
@@ -278,6 +283,15 @@ export function RulesPanel() {
   const chosenAccounts = draft.accounts.filter(known)
 
   const pickMove = (move_to: RuleMove, folder = '', folder_account = '') => change({ move_to, folder, folder_account })
+
+  // Sent mail stays in Sent and is acted on at once: what such a rule can't
+  // do is dropped from the draft, not just hidden, or the core refuses the save.
+  const pickSent = (sent: boolean) =>
+    change(
+      sent
+        ? { sent, timing: 'now', amount: '', mark_read: false, move_to: '', folder: '', folder_account: '' }
+        : { sent },
+    )
 
   const changeFields = (patch: Partial<SearchFields>) => change({ fields: { ...draft.fields, ...patch } })
 
@@ -329,13 +343,14 @@ export function RulesPanel() {
 
   const edit = async (rule: Rule) => {
     const request = ++formRequest.current
-    const { query: _, id: __, trigger = 'arrival', delay_seconds: delay = 0, ...actions } = rule
+    const { query: _, id: __, trigger = 'arrival', delay_seconds: delay = 0, sent = false, ...actions } = rule
     const fields = await ruleFields(rule.query)
     if (request !== formRequest.current) return
     const timing = trigger === 'arrival' && delay === 0 ? 'now' : trigger
     const { amount, unit } = splitDelay(delay)
     setDraft({
       ...actions,
+      sent,
       timing,
       amount: timing === 'now' ? '' : String(amount),
       unit,
@@ -407,6 +422,7 @@ export function RulesPanel() {
 
   const summary = (rule: Rule) =>
     [
+      rule.sent && t('rules.sentMail'),
       timingSummary(rule),
       rule.tags.length > 0 && t('rules.summaryTags', { tags: rule.tags.join(', ') }),
       rule.mark_read && t('notification.actionMarkRead'),
@@ -441,6 +457,16 @@ export function RulesPanel() {
         </div>
         {/* The address suggestions open below their field, past the card when it is the last. */}
         <SettingsGroup title={t('rules.when')} overflowVisible>
+          <SegmentedRow
+            title={t('rules.direction')}
+            value={draft.sent ? 'sent' : 'received'}
+            options={[
+              { value: 'received', label: t('rules.direction.received') },
+              { value: 'sent', label: t('rules.direction.sent') },
+            ]}
+            onChange={(value) => pickSent(value === 'sent')}
+          />
+          {draft.sent && <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.sentHint')}</p>}
           {(mailAccounts.length > 1 || scoped) && (
             <>
               <SegmentedRow
@@ -530,58 +556,60 @@ export function RulesPanel() {
           </div>
         </SettingsGroup>
 
-        <SettingsGroup title={t('rules.timing')}>
-          <SettingRow
-            title={t('rules.runWhen')}
-            control={
-              <SelectInput
-                aria-label={t('rules.timing')}
-                value={draft.timing}
-                onChange={(event) => pickTiming(event.target.value as Timing)}
-                className="w-48 rounded-xl py-1.5 pl-3 font-semibold"
-              >
-                {TIMINGS.map((timing) => (
-                  <option key={timing} value={timing} className="bg-chats text-primary">
-                    {t(`rules.timing.${timing}`)}
-                  </option>
-                ))}
-              </SelectInput>
-            }
-          />
-          {draft.timing !== 'now' && (
+        {!draft.sent && (
+          <SettingsGroup title={t('rules.timing')}>
             <SettingRow
-              title={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
+              title={t('rules.runWhen')}
               control={
-                <div className="flex items-center gap-2">
-                  <TextInput
-                    aria-label={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={draft.amount}
-                    invalid={delay === null}
-                    aria-invalid={delay === null}
-                    onChange={(event) => change({ amount: event.target.value })}
-                    className="w-20 font-semibold"
-                  />
-                  <SelectInput
-                    aria-label={t('rules.unit')}
-                    value={draft.unit}
-                    onChange={(event) => change({ unit: event.target.value as Unit })}
-                    className="w-28 rounded-xl py-1.5 pl-3 font-semibold"
-                  >
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit} className="bg-chats text-primary">
-                        {t(`rules.unit.${unit}`)}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </div>
+                <SelectInput
+                  aria-label={t('rules.timing')}
+                  value={draft.timing}
+                  onChange={(event) => pickTiming(event.target.value as Timing)}
+                  className="w-48 rounded-xl py-1.5 pl-3 font-semibold"
+                >
+                  {TIMINGS.map((timing) => (
+                    <option key={timing} value={timing} className="bg-chats text-primary">
+                      {t(`rules.timing.${timing}`)}
+                    </option>
+                  ))}
+                </SelectInput>
               }
             />
-          )}
-          <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.timingHint')}</p>
-        </SettingsGroup>
+            {draft.timing !== 'now' && (
+              <SettingRow
+                title={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
+                control={
+                  <div className="flex items-center gap-2">
+                    <TextInput
+                      aria-label={t(draft.timing === 'age' ? 'rules.age' : 'rules.wait')}
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={draft.amount}
+                      invalid={delay === null}
+                      aria-invalid={delay === null}
+                      onChange={(event) => change({ amount: event.target.value })}
+                      className="w-20 font-semibold"
+                    />
+                    <SelectInput
+                      aria-label={t('rules.unit')}
+                      value={draft.unit}
+                      onChange={(event) => change({ unit: event.target.value as Unit })}
+                      className="w-28 rounded-xl py-1.5 pl-3 font-semibold"
+                    >
+                      {UNITS.map((unit) => (
+                        <option key={unit} value={unit} className="bg-chats text-primary">
+                          {t(`rules.unit.${unit}`)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </div>
+                }
+              />
+            )}
+            <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.timingHint')}</p>
+          </SettingsGroup>
+        )}
 
         {/* The tag suggestions open below their row, past the card when it is the last. */}
         <SettingsGroup title={t('rules.then')} overflowVisible>
@@ -589,11 +617,13 @@ export function RulesPanel() {
             <span className="shrink-0 text-xs font-normal text-primary">{t('rules.addTags')}</span>
             <TagInput value={draft.tags} onChange={(tags) => change({ tags })} />
           </div>
-          <ToggleRow
-            title={t('notification.actionMarkRead')}
-            checked={draft.mark_read}
-            onChange={() => change({ mark_read: !draft.mark_read })}
-          />
+          {!draft.sent && (
+            <ToggleRow
+              title={t('notification.actionMarkRead')}
+              checked={draft.mark_read}
+              onChange={() => change({ mark_read: !draft.mark_read })}
+            />
+          )}
           <ToggleRow title={t('chat.star')} checked={draft.star} onChange={() => change({ star: !draft.star })} />
           <SettingRow
             title={t('rules.copyTo')}
@@ -606,21 +636,23 @@ export function RulesPanel() {
               />
             }
           />
-          <SettingRow
-            title={t('rules.moveTo')}
-            control={
-              <RuleFolderPicker
-                label={t('rules.moveTo')}
-                value={draft.move_to ? moveLabel(draft) : t('rules.moveNone')}
-                options={[
-                  { label: t('rules.moveNone'), onPick: () => pickMove('') },
-                  { label: t('folders.roles.archive'), onPick: () => pickMove('archive') },
-                  { label: t('folders.roles.trash'), onPick: () => pickMove('trash') },
-                ]}
-                onPick={({ accountId, folderId }) => pickMove('folder', folderId, accountId)}
-              />
-            }
-          />
+          {!draft.sent && (
+            <SettingRow
+              title={t('rules.moveTo')}
+              control={
+                <RuleFolderPicker
+                  label={t('rules.moveTo')}
+                  value={draft.move_to ? moveLabel(draft) : t('rules.moveNone')}
+                  options={[
+                    { label: t('rules.moveNone'), onPick: () => pickMove('') },
+                    { label: t('folders.roles.archive'), onPick: () => pickMove('archive') },
+                    { label: t('folders.roles.trash'), onPick: () => pickMove('trash') },
+                  ]}
+                  onPick={({ accountId, folderId }) => pickMove('folder', folderId, accountId)}
+                />
+              }
+            />
+          )}
           {draft.move_to === 'trash' && (
             <p className="px-3.5 py-2.5 text-[0.6875rem] font-medium text-rose-500">
               {t(fieldsEmpty(draft.fields) ? 'rules.trashAllHint' : 'rules.trashHint')}

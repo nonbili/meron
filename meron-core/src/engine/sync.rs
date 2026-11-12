@@ -919,6 +919,12 @@ async fn sync_messages_with_policy(
         }
         _ => Vec::new(),
     };
+    // Mail sent from another client: this sync is the first to see its copy.
+    let sent: Vec<u32> = if store::folder_role(&db, account, folder)? == "sent" {
+        store::new_sent_uids(&db, account, folder, batch.uidvalidity, batch.uid_next, &batch.messages)?
+    } else {
+        Vec::new()
+    };
     let persist_started = std::time::Instant::now();
     let phase_started = std::time::Instant::now();
     if prior_validity != 0 && prior_validity != batch.uidvalidity {
@@ -986,6 +992,13 @@ async fn sync_messages_with_policy(
             crate::log::Level::Warn,
             "mail.rules",
             "account={account} folder={folder}: rules skipped: {err:#}"
+        );
+    }
+    if let Err(err) = store::apply_sent_rules(&db, account, folder, batch.uidvalidity, &sent) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={account} folder={folder}: rules for sent mail skipped: {err:#}"
         );
     }
     if let Err(err) = store::apply_due_rules(&db, account, folder, batch.uidvalidity, store::now_unix()) {

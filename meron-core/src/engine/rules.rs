@@ -22,7 +22,8 @@ const RULE_RUN_START_WAIT: Duration = Duration::from_secs(3);
 /// which is why a sync leaves what it can't finish to a worker.
 const RULE_COPY_BUDGET: Duration = Duration::from_secs(600);
 
-/// Run a saved rule over mail already in the Inbox. Answers with how many
+/// Run a saved rule over mail already in the Inbox, or in Sent for a rule for
+/// sent mail. Answers with how many
 /// messages it took on once they are queued; the server work goes on in the
 /// background, and whatever an interruption leaves is done by the next sync.
 pub async fn run_rule_on_existing(engine: &Arc<Engine>, id: &str) -> anyhow::Result<usize> {
@@ -52,10 +53,12 @@ pub async fn run_rule_on_existing(engine: &Arc<Engine>, id: &str) -> anyhow::Res
     drop(turns);
     let total = queued.iter().map(|(_, count)| count).sum();
     for (account, _) in queued {
+        let folder = store::saved_rule_folder(&engine.db.lock().unwrap(), id, &account)?
+            .unwrap_or_else(|| store::EXISTING_RULE_FOLDER.to_string());
         // Tags are already saved, and a run of nothing else queues no turns.
-        report_rule_progress(engine, &account, store::EXISTING_RULE_FOLDER);
+        report_rule_progress(engine, &account, &folder);
         spawn_tag_push(engine, &account);
-        spawn_rule_worker(engine, &account, store::EXISTING_RULE_FOLDER);
+        spawn_rule_worker(engine, &account, &folder);
     }
     Ok(total)
 }

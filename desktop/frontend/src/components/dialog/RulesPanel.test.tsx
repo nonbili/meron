@@ -402,3 +402,40 @@ it('shows an age rule in days and blocks saving an empty age', async () => {
   await waitFor(() => expect(saved.length).toBe(1))
   expect(saved[0][0].delay_seconds).toBe(7200)
 })
+
+it('turns a rule into one for sent mail, dropping what sent mail cannot have done to it', async () => {
+  const saved = stubCore([{ ...bills, trigger: 'read', delay_seconds: 300 }])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Edit rule' }))
+  await waitFor(() => expect(view.getByLabelText('When to run')).toBeTruthy())
+  expect(view.getByRole('button', { name: 'Move to' })).toBeTruthy()
+
+  fireEvent.click(view.getByRole('button', { name: 'Mail I send' }))
+  expect(view.getByText(/stays in Sent/)).toBeTruthy()
+  expect(view.queryByLabelText('When to run')).toBeNull()
+  expect(view.queryByRole('button', { name: 'Move to' })).toBeNull()
+  expect(view.queryByText('Mark as read')).toBeNull()
+  expect(view.getByRole('button', { name: 'Copy to' })).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0]).toMatchObject({
+    sent: true,
+    trigger: 'arrival',
+    delay_seconds: 0,
+    mark_read: false,
+    move_to: '',
+    tags: ['finance'],
+  })
+  await waitFor(() => expect(view.getByText('Sent mail · Tag finance')).toBeTruthy())
+})
+
+it('asks about Sent, not the Inbox, before running a rule for sent mail on existing mail', async () => {
+  stubCore([{ ...bills, mark_read: false, move_to: '', sent: true }])
+  matches = 3
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Run on existing mail' }))
+  await waitFor(() => expect(ui$.confirm.get()?.message).toMatch(/already in Sent\? Matching messages: 3/))
+})
