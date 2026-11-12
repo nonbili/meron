@@ -10,6 +10,8 @@ import { EncryptToggle, encryptionBlocksSend, recipientAddresses } from './Encry
 import { VerifyKeyDialog } from './VerifyKeyDialog'
 import { KeyLookupDialog } from './KeyLookupDialog'
 import { KeyChangeNote } from './KeyChangeNote'
+import { EnableEncryptionDialog } from './EnableEncryptionDialog'
+import { SignToggle } from './SignToggle'
 
 const FPR = '8E9BCE8647564E257A411B71969BC97D064D88D5'
 const base: MessageCrypto = {
@@ -683,5 +685,56 @@ describe('KeyLookupDialog', () => {
     const { findByText } = render(<KeyLookupDialog />)
     act(() => crypto$.lookup.set({ addrs: ['nobody@example.org'] }))
     expect(await findByText('No key found (WKD, keys.openpgp.org).')).toBeTruthy()
+  })
+})
+
+describe('EnableEncryptionDialog', () => {
+  test('a backup file asks for its code, then imports with it', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+      calls.push({ command, payload })
+      if (command === 'system.pickFiles') return { files: [{ name: 'backup.sec.pgp', data: 'data:;base64,QUJD' }] }
+      if (command === 'pgp.account.importKey') {
+        if (!payload.backup_code) return { result: { status: 'needs_backup_code', wrong: false } }
+        if (payload.backup_code === 'nope') return { result: { status: 'needs_backup_code', wrong: true } }
+        return {
+          result: {
+            status: 'imported',
+            key: { fingerprint: FPR, user_ids: ['<me@example.org>'], emails: ['me@example.org'] },
+            address_matches: true,
+          },
+        }
+      }
+      return {}
+    }
+    const { findByLabelText, findByText, getByText } = render(<EnableEncryptionDialog />)
+    act(() => crypto$.enableFor.set({ accountId: 'acc', address: 'me@example.org' }))
+    await act(async () => fireEvent.click(getByText('Use my existing key…')))
+    const input = await findByLabelText('Backup code')
+    fireEvent.change(input, { target: { value: 'nope' } })
+    await act(async () => fireEvent.click(getByText('Use key')))
+    expect(await findByText("That code didn't open the backup.")).toBeTruthy()
+    fireEvent.change(input, { target: { value: '1234-5678' } })
+    await act(async () => fireEvent.click(getByText('Use key')))
+    await waitFor(() => expect(crypto$.enableFor.get()).toBe(null))
+    const imports = calls.filter((c) => c.command === 'pgp.account.importKey')
+    expect(imports.map((c) => c.payload.backup_code)).toEqual(['', 'nope', '1234-5678'])
+    expect(imports.every((c) => c.payload.data_b64 === 'QUJD')).toBe(true)
+  })
+})
+
+describe('SignToggle', () => {
+  test('switches signing for this message, and is fixed on when encrypting', () => {
+    const changes: boolean[] = []
+    const view = render(<SignToggle on={false} encrypted={false} onChange={(on) => changes.push(on)} />)
+    const off = view.getByRole('switch')
+    expect(off.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(off)
+    expect(changes).toEqual([true])
+
+    view.rerender(<SignToggle on={false} encrypted onChange={(on) => changes.push(on)} />)
+    const locked = view.getByRole('switch') as HTMLButtonElement
+    expect(locked.getAttribute('aria-checked')).toBe('true')
+    expect(locked.disabled).toBe(true)
+    expect(locked.title).toBe('Encrypted mail is always signed with your key.')
   })
 })

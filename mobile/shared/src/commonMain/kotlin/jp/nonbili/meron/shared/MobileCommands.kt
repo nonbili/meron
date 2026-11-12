@@ -890,12 +890,15 @@ data class SendMailParams(
     val messageId: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
     val encrypt: Boolean? = null,
+    /** OpenPGP-sign a message that isn't encrypted; null leaves it to the account's default. */
+    val sign: Boolean? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "account_id" to accountId.jsonString(),
             "encrypt" to encrypt?.toString(),
             "plain" to encrypt?.not()?.toString(),
+            "sign" to sign?.toString(),
             "from" to from.jsonString(),
             "to" to to.jsonString(),
             "cc" to cc.jsonString(),
@@ -926,12 +929,15 @@ data class SaveDraftParams(
     val references: String = "",
     val attachments: List<MobileAttachmentInput> = emptyList(),
     val encrypt: Boolean? = null,
+    /** The composer's sign switch, recorded with the draft so reopening it keeps the choice. */
+    val sign: Boolean? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "account_id" to accountId.jsonString(),
             "encrypt" to encrypt?.toString(),
             "plain" to encrypt?.not()?.toString(),
+            "sign" to sign?.toString(),
             "draft_id" to draftId.jsonString(),
             "from" to from.jsonString(),
             "to" to to.jsonString(),

@@ -12,6 +12,7 @@ import {
   enableExisting,
   exportPublicKey,
   exportSecretKey,
+  setSignPlain,
 } from '../../states/crypto'
 import { confirmAction, showToast } from '../../states/ui'
 import type { Account } from '../../types'
@@ -67,6 +68,14 @@ export function AccountEncryptionCard({ account }: { account: Account }) {
         checked={!!state?.enabled}
         onChange={() => void toggle()}
       />
+      {key && state?.enabled && (
+        <ToggleRow
+          title={t('crypto.account.signPlain')}
+          hint={t('crypto.account.signPlainHint')}
+          checked={!!state.sign_plain}
+          onChange={() => void setSignPlain(account.id, !state.sign_plain)}
+        />
+      )}
       {key && (
         <>
           <SettingRow

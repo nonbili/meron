@@ -1439,8 +1439,9 @@ describe('Composer', () => {
       view.getByTitle('Show quoted text').click()
     })
     expect(draftOf(tabId)?.decryptedInBody).toBe(true)
+    // The lock; the sign switch beside it is a switch too.
     await waitFor(() =>
-      expect(view.getByRole('switch').getAttribute('title')).toBe(
+      expect(view.getAllByRole('switch')[0].getAttribute('title')).toBe(
         'This message contains decrypted text, so it can only be sent encrypted.',
       ),
     )

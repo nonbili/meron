@@ -161,6 +161,11 @@ pub(crate) async fn dispatch(
                     meron_core::openpgp::outgoing::autocrypt_for(&ring, &account, &from_addr)
                         .map(|v| vec![("Autocrypt", v)])
                         .unwrap_or_default();
+                let signer = meron_core::openpgp::outgoing::plain_signer(
+                    &ring,
+                    &account,
+                    p.get("sign").and_then(Value::as_bool),
+                )?;
                 smtp::send(
                     &creds,
                     &from_addr,
@@ -177,6 +182,7 @@ pub(crate) async fn dispatch(
                     &reply_to,
                     &message_id,
                     &extra,
+                    signer,
                 )
                 .await?
             };
@@ -244,6 +250,12 @@ pub(crate) async fn dispatch(
                 &reply_to,
                 &draft_id,
             )?;
+            // The composer's sign switch travels with the draft, so a draft
+            // reopened later is sent the way it was set.
+            let raw = meron_core::openpgp::outgoing::with_draft_sign(
+                &raw,
+                p.get("sign").and_then(Value::as_bool),
+            );
             // A draft of an encrypted message is itself encrypted (to us
             // only), or its text would sit on the server in the clear. So is a
             // draft replying to encrypted mail that didn't say "plain"; that

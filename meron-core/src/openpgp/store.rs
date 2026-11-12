@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS openpgp_key_used (
   fingerprint TEXT NOT NULL,
   used_at     INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS openpgp_sign_plain (
+  account_id TEXT PRIMARY KEY
+);
 ";
 
 fn now_secs() -> i64 {
@@ -264,6 +267,10 @@ pub fn load(conn: &Connection) -> Result<Keyring> {
     ring.enabled_accounts = stmt
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
+    let mut stmt = conn.prepare("SELECT account_id FROM openpgp_sign_plain")?;
+    ring.sign_plain_accounts = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
     let mut stmt = conn.prepare("SELECT account_id, addr FROM openpgp_offer_dismissed")?;
     ring.dismissed = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -275,6 +282,8 @@ pub fn load(conn: &Connection) -> Result<Keyring> {
 #[derive(Debug, Serialize)]
 pub struct AccountState {
     pub enabled: bool,
+    /// Mail that isn't encrypted goes out signed (`set_sign_plain`).
+    pub sign_plain: bool,
     /// The key used for signing and Autocrypt.
     pub key: Option<KeyInfo>,
     /// Older own keys, kept so earlier mail still opens.
@@ -311,6 +320,7 @@ pub fn account_state(conn: &Connection, account_id: &str) -> Result<AccountState
     }
     Ok(AccountState {
         enabled,
+        sign_plain: sign_plain(conn, account_id)?,
         key,
         previous,
     })
@@ -323,6 +333,32 @@ fn set_enabled(conn: &Connection, account_id: &str, enabled: bool) -> Result<()>
         params![account_id, enabled],
     )?;
     Ok(())
+}
+
+fn sign_plain(conn: &Connection, account_id: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM openpgp_sign_plain WHERE account_id = ?1)",
+        [account_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// "Sign unencrypted mail": whether the account's mail that isn't encrypted
+/// goes out signed (PGP/MIME `multipart/signed`). Encrypted mail is always
+/// signed; this only speaks to the rest.
+pub fn set_sign_plain(conn: &Connection, account_id: &str, sign: bool) -> Result<()> {
+    if sign {
+        conn.execute(
+            "INSERT OR IGNORE INTO openpgp_sign_plain (account_id) VALUES (?1)",
+            [account_id],
+        )?;
+    } else {
+        conn.execute(
+            "DELETE FROM openpgp_sign_plain WHERE account_id = ?1",
+            [account_id],
+        )?;
+    }
+    reload(conn)
 }
 
 /// Stores `secret` as the account's default key (earlier keys stay for
@@ -417,22 +453,41 @@ pub enum ImportOwn {
     NeedsPassphrase {
         key: KeyInfo,
     },
+    /// The file is a backup encrypted with a code (OpenKeychain's "Backup
+    /// keys", an Autocrypt Setup Message): the UI asks for it. `wrong` when
+    /// the code given didn't open it.
+    NeedsBackupCode {
+        wrong: bool,
+    },
     OnCard,
     NoSecretKey,
 }
 
-/// "Use my existing key": parses `data`, unlocks the chosen key with
-/// `passphrase`, self-tests and stores it as the account's default.
+/// "Use my existing key": parses `data` (a key file, or a backup opened with
+/// `backup_code`), unlocks the chosen key with `passphrase`, self-tests and
+/// stores it as the account's default.
 pub fn import_own(
     conn: &Connection,
     account_id: &str,
     account_addrs: &[String],
     data: &[u8],
     passphrase: Option<&str>,
+    backup_code: Option<&str>,
     fingerprint: Option<&str>,
 ) -> Result<ImportOwn> {
-    let parsed = keys::parse_keys(data)?;
-    let mut secrets = parsed.secret;
+    let mut secrets = keys::parse_keys(data)?.secret;
+    if secrets.is_empty() {
+        // Not a key file: perhaps a backup encrypted with a code.
+        match super::crypt::open_backup(data, backup_code) {
+            super::crypt::Backup::NotOne => {}
+            super::crypt::Backup::NeedsCode => {
+                return Ok(ImportOwn::NeedsBackupCode {
+                    wrong: backup_code.is_some(),
+                });
+            }
+            super::crypt::Backup::Opened(plain) => secrets = keys::parse_keys(&plain)?.secret,
+        }
+    }
     if secrets.is_empty() {
         return Ok(ImportOwn::NoSecretKey);
     }
@@ -456,14 +511,6 @@ pub fn import_own(
         keys::Unlock::NeedsPassphrase => Ok(ImportOwn::NeedsPassphrase { key: info }),
         keys::Unlock::OnCard => Ok(ImportOwn::OnCard),
         keys::Unlock::Ok(secret) => {
-            // Meron signs with the primary key; a key whose primary can't sign
-            // (offline primary + signing subkey) would make signatures strict
-            // verifiers reject, so refuse it rather than sign invalid mail.
-            if !keys::primary_can_sign(&secret.to_public_key()) {
-                bail!(
-                    "this key's primary key cannot make signatures; Meron signs with the primary key, so this key can't be used"
-                );
-            }
             store_default_key(conn, account_id, &secret)?;
             // Our own mail signed with it (sent from another device, say) was
             // checked without it: read it again.
@@ -1153,6 +1200,9 @@ pub fn offer_dismissed(conn: &Connection, account_id: &str, addr: &str) -> bool 
 pub struct BackupKeys {
     pub account_id: String,
     pub enabled: bool,
+    /// "Sign unencrypted mail" (absent in backups made before it existed).
+    #[serde(default)]
+    pub sign_plain: bool,
     /// Armored public keys of the account's own keys (always included).
     pub public: Vec<String>,
     /// Base64 of the stored secret keys; only in backups that include secrets.
@@ -1184,6 +1234,7 @@ pub fn backup_collect(conn: &Connection, include_secrets: bool) -> Result<Vec<Ba
             Some(e) => e,
             None => {
                 out.push(BackupKeys {
+                    sign_plain: sign_plain(conn, &account_id)?,
                     account_id: account_id.clone(),
                     enabled,
                     public: Vec::new(),
@@ -1258,6 +1309,12 @@ fn backup_apply_with(
         if entry.enabled && !has_default {
             set_enabled(conn, &entry.account_id, true)?;
         }
+        if entry.sign_plain && !has_default {
+            conn.execute(
+                "INSERT OR IGNORE INTO openpgp_sign_plain (account_id) VALUES (?1)",
+                [&entry.account_id],
+            )?;
+        }
     }
     // Mail already cached that these keys open or signed is read again.
     if restored.is_empty() {
@@ -1329,11 +1386,20 @@ mod tests {
         let conn = db();
         let data = fixture("bob-secret-protected.asc");
         assert!(matches!(
-            import_own(&conn, "acc", &["bob@example.net".into()], &data, None, None).unwrap(),
+            import_own(
+                &conn,
+                "acc",
+                &["bob@example.net".into()],
+                &data,
+                None,
+                None,
+                None
+            )
+            .unwrap(),
             ImportOwn::NeedsPassphrase { .. }
         ));
         assert!(matches!(
-            import_own(&conn, "acc", &[], &data, Some("nope"), None).unwrap(),
+            import_own(&conn, "acc", &[], &data, Some("nope"), None, None).unwrap(),
             ImportOwn::NeedsPassphrase { .. }
         ));
         let ImportOwn::Imported {
@@ -1344,6 +1410,7 @@ mod tests {
             &["Bob@Example.net".into()],
             &data,
             Some("correct horse battery staple"),
+            None,
             None,
         )
         .unwrap()
@@ -1358,7 +1425,8 @@ mod tests {
     fn a_file_with_two_keys_asks_which_one() {
         let conn = db();
         let data = fixture("two-secret-keys.asc");
-        let ImportOwn::Choose { keys } = import_own(&conn, "acc", &[], &data, None, None).unwrap()
+        let ImportOwn::Choose { keys } =
+            import_own(&conn, "acc", &[], &data, None, None, None).unwrap()
         else {
             panic!()
         };
@@ -1368,7 +1436,16 @@ mod tests {
             .find(|k| k.emails.contains(&"alice@example.org".to_string()))
             .unwrap();
         assert!(matches!(
-            import_own(&conn, "acc", &[], &data, None, Some(&pick.fingerprint)).unwrap(),
+            import_own(
+                &conn,
+                "acc",
+                &[],
+                &data,
+                None,
+                None,
+                Some(&pick.fingerprint)
+            )
+            .unwrap(),
             ImportOwn::Imported { .. }
         ));
     }
@@ -1382,6 +1459,7 @@ mod tests {
                 "acc",
                 &[],
                 &fixture("alice-secret-subkeys-only.asc"),
+                None,
                 None,
                 None
             )
@@ -1769,6 +1847,7 @@ mod tests {
             "acct",
             &["alice@example.com".into()],
             &data,
+            None,
             None,
             None,
         )
@@ -2283,5 +2362,86 @@ mod tests {
             !load(&desktop).unwrap().own.is_empty(),
             "desktop restores the key"
         );
+    }
+
+    // OpenKeychain's key layout: a certify-only primary with signing and
+    // encryption subkeys. It imports, and signs with the subkey.
+    #[test]
+    fn a_key_with_a_certify_only_primary_imports() {
+        let conn = db();
+        let key = crate::openpgp::crypt::tests::certify_only_primary("me@example.org");
+        let data = key.to_armored_string(Default::default()).unwrap();
+        let ImportOwn::Imported {
+            address_matches, ..
+        } = import_own(
+            &conn,
+            "acc",
+            &["me@example.org".into()],
+            data.as_bytes(),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        else {
+            panic!("not imported");
+        };
+        assert!(address_matches);
+        let ring = load(&conn).unwrap();
+        assert!(
+            ring.default_key("acc").is_some(),
+            "passes the load self-test"
+        );
+    }
+
+    // OpenKeychain's "Backup keys" file: the keys, encrypted with the backup
+    // code. The code is asked for, then the key inside is imported.
+    #[test]
+    fn an_openkeychain_backup_imports_with_its_code() {
+        let conn = db();
+        let key = crate::openpgp::crypt::tests::certify_only_primary("me@example.org");
+        let inner = format!(
+            "{}{}",
+            keys::armored_public(&key.to_public_key()).unwrap(),
+            key.to_armored_string(Default::default()).unwrap()
+        );
+        let code = "1234-5678-9012-3456-7890-1234-5678-9012-3456";
+        let file = crate::openpgp::crypt::tests::password_encrypted(inner.as_bytes(), code);
+        let import = |code: Option<&str>| {
+            import_own(&conn, "acc", &[], file.as_bytes(), None, code, None).unwrap()
+        };
+        assert!(matches!(
+            import(None),
+            ImportOwn::NeedsBackupCode { wrong: false }
+        ));
+        assert!(matches!(
+            import(Some("1111-2222")),
+            ImportOwn::NeedsBackupCode { wrong: true }
+        ));
+        let ImportOwn::Imported { key: info, .. } = import(Some(&code.replace('-', " "))) else {
+            panic!("not imported");
+        };
+        assert_eq!(info.fingerprint, fingerprint_hex(&key.primary_key));
+    }
+
+    #[test]
+    fn signing_unencrypted_mail_is_a_per_account_setting() {
+        let conn = db();
+        create_key(&conn, "acc", &["me@example.org".into()]).unwrap();
+        assert!(!account_state(&conn, "acc").unwrap().sign_plain);
+        assert!(!load(&conn).unwrap().signs_plain("acc"));
+
+        set_sign_plain(&conn, "acc", true).unwrap();
+        assert!(account_state(&conn, "acc").unwrap().sign_plain);
+        assert!(load(&conn).unwrap().signs_plain("acc"));
+        assert!(backup_collect(&conn, true).unwrap()[0].sign_plain);
+
+        // Only with the key in use: encryption off means nothing is signed.
+        disable(&conn, "acc").unwrap();
+        assert!(!load(&conn).unwrap().signs_plain("acc"));
+
+        enable_existing(&conn, "acc").unwrap();
+        set_sign_plain(&conn, "acc", false).unwrap();
+        assert!(!load(&conn).unwrap().signs_plain("acc"));
     }
 }

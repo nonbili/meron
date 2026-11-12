@@ -1168,6 +1168,7 @@ pub fn get_cached_message(
             .get("crypto")
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok()),
+        draft_sign: extra["draft_sign"].as_bool(),
         found_keys: Default::default(),
         preview: String::new(),
         attachments,
@@ -1276,6 +1277,7 @@ pub fn save_cached_message(
         "attachments": attachments_json,
         "invite": message.invite,
         "crypto": message.crypto,
+        "draft_sign": message.draft_sign,
     })
     .to_string();
 

@@ -4,6 +4,7 @@ import { sendShortcutLabel } from '../../states/settings'
 import { IconButton } from '../button/IconButton'
 import type { RecipientKeys } from '../../lib/crypto'
 import { EncryptToggle } from '../crypto/EncryptToggle'
+import { SignToggle } from '../crypto/SignToggle'
 import type { SignatureSwitch } from '../../lib/signature'
 import { SignatureToggle } from './SignatureToggle'
 
@@ -50,6 +51,7 @@ export function ComposerFooter({
   saveError,
   canSend,
   encryption,
+  signing,
   signature,
   onPickFiles,
   onPickInlineImages,
@@ -76,6 +78,8 @@ export function ComposerFooter({
     hasRecipients?: boolean
     onChange: (on: boolean) => void
   }
+  /** The OpenPGP sign switch, when the account's key is in use. */
+  signing?: { on: boolean; encrypted: boolean; onChange: (on: boolean) => void }
   /** The signature switch, when the account sends a signature (or the body still holds one). */
   signature?: {
     state: SignatureSwitch
@@ -132,6 +136,7 @@ export function ComposerFooter({
             onChange={encryption.onChange}
           />
         )}
+        {signing && <SignToggle size="md" on={signing.on} encrypted={signing.encrypted} onChange={signing.onChange} />}
         {signature && (
           <SignatureToggle size="md" state={signature.state} signature={signature.text} onChange={signature.onChange} />
         )}

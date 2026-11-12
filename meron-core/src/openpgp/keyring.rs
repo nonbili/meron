@@ -93,6 +93,8 @@ pub struct Keyring {
     pub peers: Vec<PeerKey>,
     /// Accounts with end-to-end encryption switched on.
     pub enabled_accounts: Vec<String>,
+    /// Accounts whose unencrypted mail goes out signed.
+    pub sign_plain_accounts: Vec<String>,
     /// Dismissed "turn it on" offers: (account, sender or `*`).
     pub dismissed: Vec<(String, String)>,
 }
@@ -110,6 +112,12 @@ impl Keyring {
 
     pub fn is_enabled(&self, account_id: &str) -> bool {
         self.enabled_accounts.iter().any(|a| a == account_id)
+    }
+
+    /// Whether the account's unencrypted mail is signed: asked for, and
+    /// end-to-end encryption (so the key) is switched on.
+    pub fn signs_plain(&self, account_id: &str) -> bool {
+        self.is_enabled(account_id) && self.sign_plain_accounts.iter().any(|a| a == account_id)
     }
 
     pub fn offer_dismissed(&self, account_id: &str, addr: &str) -> bool {

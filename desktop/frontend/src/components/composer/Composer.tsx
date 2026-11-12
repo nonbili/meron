@@ -214,6 +214,16 @@ export function Composer({ tabId }: { tabId: string }) {
               }
             : undefined
         }
+        signing={
+          // Only an account whose key is in use can sign.
+          encryptionKeys?.enabled && !encryptionKeys.own_key_unusable
+            ? {
+                on: draft.sign ?? !!encryptionKeys.sign_plain,
+                encrypted: !!draft.encrypt,
+                onChange: (on: boolean) => update({ sign: on }),
+              }
+            : undefined
+        }
         signature={
           // No switch for an account without a signature this body can carry
           // (an image-only one has no plaintext form), unless the body still

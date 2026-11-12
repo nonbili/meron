@@ -494,6 +494,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 subject = item.findJsonStringProperty("subject").orEmpty(),
                 body = item.findJsonStringProperty("body").orEmpty(),
                 bodyHtml = item.findJsonStringProperty("body_html").orEmpty(),
+                draftSign = item.findJsonBooleanProperty("draft_sign"),
                 crypto =
                     entries.firstOrNull { it.first == "crypto" }?.second?.takeIf { it.startsWith("{") }?.let { crypto ->
                         MessageCrypto(

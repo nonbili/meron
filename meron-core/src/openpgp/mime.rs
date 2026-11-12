@@ -782,7 +782,7 @@ mod tests {
             own: vec![keyring::own_key("alice", secret, true)],
             peers: Vec::new(),
             enabled_accounts: vec!["alice".into()],
-            dismissed: Vec::new(),
+            ..Default::default()
         }
     }
 

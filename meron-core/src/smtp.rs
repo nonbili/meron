@@ -362,11 +362,18 @@ pub async fn send(
     // Header fields added on top (the Autocrypt header of an account with
     // end-to-end encryption on).
     extra_headers: &[(&str, String)],
+    // The account's key when its unencrypted mail goes out signed
+    // (`openpgp::outgoing::plain_signer`): PGP/MIME `multipart/signed`.
+    signer: Option<&pgp::composed::SignedSecretKey>,
 ) -> Result<Vec<u8>> {
-    let with_extra = |raw: Vec<u8>| {
-        extra_headers.iter().fold(raw, |raw, (name, value)| {
+    let with_extra = |raw: Vec<u8>| -> Result<Vec<u8>> {
+        let raw = match signer {
+            Some(key) => crate::openpgp::outgoing::sign_wrap(&raw, key)?,
+            None => raw,
+        };
+        Ok(extra_headers.iter().fold(raw, |raw, (name, value)| {
             crate::openpgp::outgoing::add_header(&raw, name, value)
-        })
+        }))
     };
     // Caller passes the chosen send-as address (primary or a verified alias),
     // already validated against the account; fall back to the IMAP login.
@@ -399,6 +406,15 @@ pub async fn send(
         }
     };
 
+    // A signed message names its Message-ID inside the signed part, so it
+    // can't be left to the SMTP library.
+    let message_id = if message_id.is_empty() && signer.is_some() {
+        let domain = from.rsplit('@').next().unwrap_or("localhost");
+        format!("{}@{}", uuid::Uuid::new_v4(), domain)
+    } else {
+        message_id
+    };
+
     let raw = with_extra(build_message(
         sender_name,
         from,
@@ -414,7 +430,7 @@ pub async fn send(
         references,
         reply_to,
         &message_id,
-    )?);
+    )?)?;
 
     submit(creds, from, &to_list, &cc_list, &bcc_list, &raw).await?;
 
@@ -440,7 +456,7 @@ pub async fn send(
             reply_to,
             &message_id,
         )
-        .map(with_extra)
+        .and_then(with_extra)
     }
 }
 

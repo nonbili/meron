@@ -167,6 +167,7 @@ internal fun MeronMobileState.clearComposeDraftState() {
     composeDraftAccountId = ""
     composeInReplyTo = ""
     composeEncrypt = null
+    composeSign = null
     composeCryptoLocked = false
     composeReferences = ""
     composeForwardHtml = ""
@@ -323,6 +324,8 @@ internal fun MeronMobileState.sendMail() {
     val inReplyTo = composeInReplyTo
     val references = composeReferences
     val encrypt = composeEncrypt
+    // Encrypted mail is always signed; the switch speaks to the rest.
+    val sign = composeSign.takeUnless { encrypt == true }
     composeSendInFlight = true
     pendingComposeSend = null
     pendingCertificateRetry = null
@@ -345,6 +348,7 @@ internal fun MeronMobileState.sendMail() {
                             inReplyTo = inReplyTo,
                             references = references,
                             encrypt = encrypt,
+                            sign = sign,
                             messageId = allocateCoreMessageId(client = client, accountId = accountId, draft = false),
                         )
                     }
@@ -569,6 +573,7 @@ private suspend fun MeronMobileState.saveComposeDraft(
         val inReplyTo = composeInReplyTo
         val references = composeReferences
         val encrypt = composeEncrypt
+        val sign = composeSign
         if (showStatus) status = trs("composer.status.savingDraft")
         var resolvedDraftId = draftId
         var allocatedRemoteDraft = false
@@ -592,6 +597,7 @@ private suspend fun MeronMobileState.saveComposeDraft(
                                 inReplyTo = inReplyTo,
                                 references = references,
                                 encrypt = encrypt,
+                                sign = sign,
                             )
                     withManagedGoogleAuth(client, accountId) { client.saveDraft(params) }
                     resolvedDraftId

@@ -179,10 +179,7 @@ fn read_bounded(msg: &mut Message<'_>) -> Result<Vec<u8>, DecryptError> {
 }
 
 /// Every key that may have made a data signature: the primary and any
-/// subkey with a valid binding that carries the sign flag and the subkey's own
-/// back-signature (RFC 9580 §5.2.3.34). Without that, anyone could bind
-/// someone else's signing key under their own primary and have that person's
-/// signatures count as theirs.
+/// signing subkey (`keys::signing_subkey_bound`).
 fn signing_keys(key: &SignedPublicKey) -> Vec<(String, SigningPart<'_>)> {
     // A primary flagged not to sign makes no valid data signatures.
     let mut out = Vec::new();
@@ -193,24 +190,7 @@ fn signing_keys(key: &SignedPublicKey) -> Vec<(String, SigningPart<'_>)> {
         ));
     }
     for sub in &key.public_subkeys {
-        // Judged by its newest binding (an older one with the sign flag
-        // doesn't count once a newer one dropped it), which must pass the
-        // hash policy, as must the back-signature.
-        let bindings = sub.signatures.iter().filter(|s| {
-            s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok()
-                && s.typ() != Some(pgp::packet::SignatureType::SubkeyRevocation)
-        });
-        let newest = bindings.max_by_key(|s| s.created().map(|t| t.as_secs()).unwrap_or(0));
-        let bound = newest.is_some_and(|s| {
-            s.key_flags().sign()
-                && keys::binding_hash_ok(s)
-                && s.embedded_signature().is_some_and(|back| {
-                    keys::binding_hash_ok(back)
-                        && back
-                            .verify_primary_key_binding(&sub.key, &key.primary_key)
-                            .is_ok()
-                })
-        });
+        let bound = keys::signing_subkey_bound(key, sub);
         if bound {
             out.push((fingerprint_hex(&sub.key), SigningPart::Sub(sub)));
         }
@@ -477,7 +457,8 @@ pub(crate) fn encrypt_to(
     let v2 = recipients.iter().all(|k| keys::supports_seipd_v2(k));
     let mut rng = rand::thread_rng();
     let ts = pgp::types::Timestamp::now();
-    let subpackets = signature_subpackets(ts, signer, intended)?;
+    let signer = keys::signer(signer, Some(now)).context("your key has no valid signing key")?;
+    let subpackets = signature_subpackets(ts, &signer, intended)?;
     let builder = MessageBuilder::from_bytes("", plain.to_vec());
     let armored = if v2 {
         let mut msg = builder.seipd_v2(
@@ -490,7 +471,7 @@ pub(crate) fn encrypt_to(
             msg.encrypt_to_key(&mut rng, sub)?;
         }
         msg.sign_with_subpackets(
-            &signer.primary_key,
+            signer.as_dyn(),
             Password::empty(),
             HashAlgorithm::Sha256,
             subpackets,
@@ -503,7 +484,7 @@ pub(crate) fn encrypt_to(
             msg.encrypt_to_key(&mut rng, sub)?;
         }
         msg.sign_with_subpackets(
-            &signer.primary_key,
+            signer.as_dyn(),
             Password::empty(),
             HashAlgorithm::Sha256,
             subpackets,
@@ -515,18 +496,19 @@ pub(crate) fn encrypt_to(
 }
 
 /// Hashed subpackets for our data signatures: creation time, issuer
-/// fingerprint and the intended recipients (RFC 9580 §5.2.3.36), which lets a
-/// recipient see the message was not re-encrypted to them by someone else.
+/// fingerprint (of the part that signs, the primary or a signing subkey) and
+/// the intended recipients (RFC 9580 §5.2.3.36), which lets a recipient see
+/// the message was not re-encrypted to them by someone else.
 fn signature_subpackets(
     now: pgp::types::Timestamp,
-    signer: &SignedSecretKey,
+    signer: &keys::Signer<'_>,
     recipients: &[&SignedPublicKey],
 ) -> anyhow::Result<SubpacketConfig> {
     let mut hashed = vec![Subpacket::critical(SubpacketData::SignatureCreationTime(
         now,
     ))?];
     hashed.push(Subpacket::regular(SubpacketData::IssuerFingerprint(
-        signer.primary_key.fingerprint(),
+        signer.fingerprint(),
     ))?);
     for key in recipients {
         hashed.push(Subpacket::regular(
@@ -534,23 +516,113 @@ fn signature_subpackets(
         )?);
     }
     let unhashed = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
-        signer.primary_key.legacy_key_id(),
+        signer.legacy_key_id(),
     ))?];
     Ok(SubpacketConfig::UserDefined { hashed, unhashed })
 }
 
-/// A detached signature over `content` (for tests and possible sign-only use).
-#[cfg(test)]
+/// An armored detached signature over `content` (PGP/MIME `multipart/signed`),
+/// made with the key's signing part: the primary, or a signing subkey.
 pub fn sign_detached(content: &[u8], signer: &SignedSecretKey) -> anyhow::Result<String> {
-    let mut rng = rand::thread_rng();
-    let sig = DetachedSignature::sign_binary_data(
-        &mut rng,
-        &signer.primary_key,
-        &Password::empty(),
-        HashAlgorithm::Sha256,
-        content,
-    )?;
+    use anyhow::Context as _;
+    let signer =
+        keys::signer(signer, Some(keys::now())).context("your key has no valid signing key")?;
+    let subpackets = signature_subpackets(pgp::types::Timestamp::now(), &signer, &[])?;
+    let sig = signer.sign_detached(content, Some(subpackets))?;
     Ok(sig.to_armored_string(Default::default())?)
+}
+
+/// What a key file turned out to be when read as a backup.
+pub enum Backup {
+    /// Not a password-encrypted OpenPGP message: read it as a key file.
+    NotOne,
+    /// Password-encrypted, and no code (or a wrong one) was given.
+    NeedsCode,
+    /// The decrypted content: the keys, armored or binary.
+    Opened(zeroize::Zeroizing<Vec<u8>>),
+}
+
+/// Opens a key backup that is an OpenPGP message encrypted with a password:
+/// OpenKeychain's "Backup keys" file (`.sec.pgp`, protected by its backup
+/// code) and the Autocrypt Setup Message (same format, the setup code).
+pub fn open_backup(data: &[u8], code: Option<&str>) -> Backup {
+    let Some(message) = backup_message(data) else {
+        return Backup::NotOne;
+    };
+    let run = AssertUnwindSafe(|| {
+        let parse = || {
+            let reader = BufReader::new(Cursor::new(message));
+            if is_armored(message) {
+                Message::from_armor(reader).map(|(m, _)| m)
+            } else {
+                Message::from_bytes(reader)
+            }
+        };
+        let has_password = |msg: &Message<'_>| match msg {
+            Message::Encrypted { esk, .. } => esk
+                .iter()
+                .any(|e| matches!(e, pgp::composed::Esk::SymKeyEncryptedSessionKey(_))),
+            _ => false,
+        };
+        if !parse().is_ok_and(|msg| has_password(&msg)) {
+            return Backup::NotOne;
+        }
+        for candidate in code.map(backup_code_forms).unwrap_or_default() {
+            let Ok(msg) = parse() else { break };
+            let Ok(msg) = msg.decrypt_with_password(&Password::from(candidate.as_str())) else {
+                continue;
+            };
+            let Ok(mut msg) = msg.decompress() else {
+                continue;
+            };
+            if let Ok(plain) = read_bounded(&mut msg) {
+                return Backup::Opened(zeroize::Zeroizing::new(plain));
+            }
+        }
+        Backup::NeedsCode
+    });
+    std::panic::catch_unwind(run).unwrap_or(Backup::NotOne)
+}
+
+/// The encrypted message inside a backup file: the armored block (which an
+/// Autocrypt Setup Message wraps in HTML), or the whole file when it is a
+/// binary message starting with a password-encrypted session key packet.
+fn backup_message(data: &[u8]) -> Option<&[u8]> {
+    const BEGIN: &[u8] = b"-----BEGIN PGP MESSAGE-----";
+    const END: &[u8] = b"-----END PGP MESSAGE-----";
+    if data.len() > MAX_CIPHERTEXT_BYTES {
+        return None;
+    }
+    let find = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).position(|w| w == needle);
+    if let Some(start) = find(data, BEGIN) {
+        let end = find(&data[start..], END)? + start + END.len();
+        return Some(&data[start..end]);
+    }
+    // Packet tag 3 (SKESK), new and old header formats.
+    matches!(data.first(), Some(0xC3 | 0x8C | 0x8D | 0x8E)).then_some(data)
+}
+
+/// The ways a typed backup code may have been meant. OpenKeychain and
+/// Autocrypt show groups of four separated by dashes, and the dashes are part
+/// of the password; users type them with spaces, without separators, or in
+/// lower case.
+fn backup_code_forms(code: &str) -> Vec<zeroize::Zeroizing<String>> {
+    let typed = code.trim().to_string();
+    let bare: String = typed.chars().filter(|c| c.is_alphanumeric()).collect();
+    let grouped = bare
+        .chars()
+        .collect::<Vec<_>>()
+        .chunks(4)
+        .map(|g| g.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("-");
+    let mut out: Vec<zeroize::Zeroizing<String>> = Vec::new();
+    for form in [typed, grouped.clone(), grouped.to_uppercase()] {
+        if !form.is_empty() && !out.iter().any(|f| **f == form) {
+            out.push(zeroize::Zeroizing::new(form));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -576,6 +648,55 @@ pub(crate) mod tests {
             Unlock::Ok(k) => k,
             other => panic!("{other:?}"),
         }
+    }
+
+    /// The layout OpenKeychain generates (and GnuPG users with an offline
+    /// primary keep): a primary that only certifies, a signing subkey and an
+    /// encryption subkey.
+    pub(crate) fn certify_only_primary(addr: &str) -> SignedSecretKey {
+        use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
+        use pgp::crypto::ecc_curve::ECCCurve;
+        SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Ed25519Legacy)
+            .can_certify(true)
+            .can_sign(false)
+            .primary_user_id(format!("<{addr}>"))
+            .passphrase(None)
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::Ed25519Legacy)
+                    .can_sign(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
+                    .can_encrypt(EncryptionCaps::All)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()
+            .generate(rand::thread_rng())
+            .unwrap()
+    }
+
+    /// `content` encrypted with a password only, armored: what OpenKeychain's
+    /// "Backup keys" and an Autocrypt Setup Message are.
+    pub(crate) fn password_encrypted(content: &[u8], password: &str) -> String {
+        use pgp::types::StringToKey;
+        let mut rng = rand::thread_rng();
+        let mut msg = MessageBuilder::from_bytes("", content.to_vec())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+        msg.encrypt_with_password(
+            StringToKey::new_default(&mut rng),
+            &Password::from(password),
+        )
+        .unwrap();
+        msg.to_armored_string(&mut rng, Default::default()).unwrap()
     }
 
     /// A key with a signing subkey, as rPGP builds it (binding plus the
@@ -1022,5 +1143,106 @@ pub(crate) mod tests {
         let end =
             text.find("-----END PGP SIGNATURE-----").unwrap() + "-----END PGP SIGNATURE-----".len();
         text[start..end].replace("\r\n", "\n")
+    }
+
+    // A key whose primary only certifies signs with its signing subkey: the
+    // signature names the subkey and verifies as the key owner's.
+    #[test]
+    fn a_certify_only_primary_signs_with_its_signing_subkey() {
+        let me = certify_only_primary("me@example.org");
+        let public = me.to_public_key();
+        assert!(!keys::primary_can_sign(&public));
+        let peer = keys::generate(&["peer@example.org".into()]).unwrap();
+        let armored = encrypt(b"hello", &[&peer.to_public_key()], &me).unwrap();
+        let opened = decrypt(armored.as_bytes(), &[&peer], &[&public]).unwrap();
+        assert_eq!(opened.plaintext, b"hello");
+        let check = &opened.signatures[0];
+        assert!(check.valid, "{check:?}");
+        assert_eq!(check.signer, Some(fingerprint_hex(&public.primary_key)));
+        let subkey = fingerprint_hex(&public.public_subkeys[0].key);
+        assert_eq!(check.signing_key.as_deref(), Some(subkey.as_str()));
+        assert_eq!(check.issuer.as_deref(), Some(subkey.as_str()));
+
+        let sig = sign_detached(b"signed content", &me).unwrap();
+        let checks = verify_detached(b"signed content", sig.as_bytes(), &[&public]);
+        assert!(checks[0].valid, "{checks:?}");
+        assert_eq!(checks[0].signing_key.as_deref(), Some(subkey.as_str()));
+    }
+
+    #[test]
+    fn a_backup_opens_with_its_code_however_it_is_typed() {
+        let key = keys::generate(&["me@example.org".into()]).unwrap();
+        let inner = key.to_armored_string(Default::default()).unwrap();
+        let code = "1234-5678-9012-3456-7890-1234-5678-9012-3456";
+        let file = password_encrypted(inner.as_bytes(), code);
+
+        assert!(matches!(
+            open_backup(file.as_bytes(), None),
+            Backup::NeedsCode
+        ));
+        assert!(matches!(
+            open_backup(file.as_bytes(), Some("0000-0000")),
+            Backup::NeedsCode
+        ));
+        for typed in [
+            code.to_string(),
+            code.replace('-', ""),
+            code.replace('-', " "),
+            format!("  {code}\n"),
+        ] {
+            let Backup::Opened(plain) = open_backup(file.as_bytes(), Some(&typed)) else {
+                panic!("{typed:?} didn't open the backup");
+            };
+            assert_eq!(plain.as_slice(), inner.as_bytes());
+        }
+        // An Autocrypt Setup Message carries the same block inside HTML.
+        let html = format!("<html><body><pre>\n{file}</pre></body></html>");
+        assert!(matches!(
+            open_backup(html.as_bytes(), Some(code)),
+            Backup::Opened(_)
+        ));
+        // Letter codes (older OpenKeychain) are upper case with dashes.
+        let file = password_encrypted(inner.as_bytes(), "ABCD-EFGH-IJKL");
+        assert!(matches!(
+            open_backup(file.as_bytes(), Some("abcdefghijkl")),
+            Backup::Opened(_)
+        ));
+    }
+
+    #[test]
+    fn key_files_and_mail_to_a_key_are_not_backups() {
+        let key = keys::generate(&["me@example.org".into()]).unwrap();
+        let armored = key.to_armored_string(Default::default()).unwrap();
+        assert!(matches!(
+            open_backup(armored.as_bytes(), Some("code")),
+            Backup::NotOne
+        ));
+        let to_key = encrypt(b"mail", &[&key.to_public_key()], &key).unwrap();
+        assert!(matches!(
+            open_backup(to_key.as_bytes(), Some("code")),
+            Backup::NotOne
+        ));
+        assert!(matches!(open_backup(b"junk", Some("code")), Backup::NotOne));
+    }
+
+    #[test]
+    fn a_gnupg_password_encrypted_backup_opens() {
+        let Some(home) = gpg_home() else {
+            return;
+        };
+        let key = keys::generate(&["me@example.org".into()]).unwrap();
+        let inner = key.to_armored_string(Default::default()).unwrap();
+        let code = "1234-5678-9012";
+        let (ok, file, err) = gpg(
+            home.path(),
+            &["--passphrase", code, "--armor", "--symmetric"],
+            inner.as_bytes(),
+        )
+        .unwrap();
+        assert!(ok, "{err}");
+        let Backup::Opened(plain) = open_backup(&file, Some("123456789012")) else {
+            panic!("the gpg backup didn't open");
+        };
+        assert_eq!(plain.as_slice(), inner.as_bytes());
     }
 }

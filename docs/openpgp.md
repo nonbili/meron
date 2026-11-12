@@ -68,6 +68,7 @@ backgrounded. Explicit export/share still hands plaintext to the platform or the
 | Decrypted mail | Stored like ordinary mail (SQLCipher body, full-text index, previews, notifications, MCP) |
 | Correspondents' keys | Trust on first use (Autocrypt, attachments, lookup, import); explicit verification by fingerprint |
 | When to encrypt | Composer lock; on by default when every recipient has a key (preference), sticky on replies to encrypted mail; off whenever a recipient lacks a key, except forwards of encrypted mail |
+| When to sign | Encrypted mail always; unencrypted mail by the composer's sign switch, which starts from the per-account "Sign unencrypted mail" setting (off by default) |
 | Key lookup | Only on click; WKD and keys.openpgp.org by default, HKP keyservers addable |
 | Indicator | Icon = encrypted (lock) or signed only (signature mark); colour = key trust; nothing on plain mail |
 
@@ -168,6 +169,11 @@ upstream `main`'s advisories (17 at `901712bc`, none from this branch). Re-run o
 - Always signed by the account's default key, SHA-256, with hashed subpackets: signature creation time (critical),
   issuer fingerprint, and one **intended recipient fingerprint** per recipient key (RFC 9580 §5.2.3.36); unhashed
   issuer key ID.
+- **Which part signs** (`keys::signer`): the primary key when it is flagged to sign (`primary_can_sign`), otherwise
+  the newest signing subkey (`keys::signing_subkey_bound`: sign flag on its newest binding, hash policy,
+  back-signature) that is valid now (not revoked, binding not expired). The issuer subpackets name that part.
+  This is what a key from OpenKeychain, or a GnuPG key with a certify-only primary, needs. A key with no such
+  part can't send (`outgoing::resolve`, `outgoing::plain_signer`) and is reported as `own_key_unusable`.
 - Compression: ZLIB inside the encryption.
 - Output armored.
 
@@ -239,9 +245,16 @@ The archive database runs the same migrations, so these tables also exist (empty
   failure returns `NeedsPassphrase` (no lockout, no counter). GnuPG stubs (secret part on a smartcard, or exported with
   `--export-secret-subkeys`) are detected as `OnCard` by recognising rPGP's private S2K type in the encrypted
   parameters (`keys::is_stub`, a string match on the debug representation; see §13).
+- **Backup files** (`crypt::open_backup`, tried by `store::import_own` when the file holds no secret key): an
+  OpenPGP message encrypted with a password is opened with the code the user types and its content read as the
+  key file. That is OpenKeychain's "Backup keys" file (`.sec.pgp`, backup code) and the Autocrypt Setup Message
+  (setup code; the armored block is found inside its HTML too). The code is tried as typed, regrouped into
+  dash-separated groups of four, and that in upper case (`crypt::backup_code_forms`); no code or a wrong one
+  returns `NeedsBackupCode`. The key inside may still need its own passphrase.
 - Every load runs `keys::self_test`: `verify_bindings`, then a SHA-256 detached signature over a random UUID with the
-  primary secret key, verified with the public key. A key that fails to parse or self-test is skipped (left in the
-  table, never used).
+  part of the key that signs (`keys::signer`, without the validity check, so a key whose signing subkey has expired
+  still loads and opens old mail), verified with that part's public key. A key that fails to parse or self-test,
+  or has no signing part at all, is skipped (left in the table, never used) and refused on import.
 - Several keys per account; one `is_default` (signs, Autocrypt). Replaced keys stay for decryption.
 - Buffers holding serialized secret keys are `zeroize::Zeroizing`; rPGP's own types handle the key material in memory.
   Secret keys never leave the core except as a passphrase-protected export.
@@ -506,6 +519,21 @@ flowchart TD
 - **Outer message** (`outgoing::wrap`): only From, To, Cc, Bcc, Reply-To, Date, Message-ID, In-Reply-To, References
   are copied; Subject is `[...]`; plus `MIME-Version`, `Autocrypt` and RFC 3156 `multipart/encrypted` with
   `Version: 1` and the armored data as `encrypted.asc`.
+- **Signed, not encrypted** (`outgoing::sign_wrap`, `smtp::send`): with "Sign unencrypted mail" on for the account
+  (`openpgp_sign_plain`, `pgp.account.setSignPlain`, off by default; `Keyring::signs_plain` also requires
+  encryption to be switched on), every send that isn't encrypted goes out as RFC 3156 `multipart/signed`
+  (`micalg=pgp-sha256`, detached armored signature as `signature.asc`). That setting is the default: the full
+  composer's sign switch (`SignToggle` beside the lock on desktop, the pen in `ComposeEncryptionControl` on mobile)
+  starts from it (`sign_plain` in `pgp.keys.forRecipients`) and sends `sign: true|false` for that message once
+  touched. A send that says nothing (the quick reply, MCP) gets the account default, decided in the core
+  (`outgoing::plain_signer`); `sign: true` on an account without a usable key is refused. A saved draft records a touched
+  switch in an `X-Meron-Sign: yes|no` header (`outgoing::with_draft_sign`, `sign` on `save_draft`); the draft
+  itself is not signed, the header never goes on sent mail, and reopening the draft restores the switch
+  (`draft_sign` on the message). The signed part is the built
+  message's content with a copy of its headers (`protected-headers="v1"`; `Bcc` and `MIME-Version` left out), lines
+  canonicalised to CRLF; the outer headers are unchanged, so the subject stays readable everywhere. With a Bcc the
+  Sent copy is signed separately (same Message-ID) and keeps the outer `Bcc:`. Drafts are not signed. A key that
+  can't sign any more fails the send (`outgoing::plain_signer`) rather than dropping the signature silently.
 - **Audiences** (`smtp::send_encrypted`): one message to To + Cc; a separate message per Bcc recipient (encrypted to
   that recipient and the sender), so no recipient sees Bcc key IDs or intended-recipient fingerprints; the Sent copy is
   rebuilt with the `Bcc:` header and encrypted to the sender only. All copies share one Message-ID.
@@ -612,11 +640,12 @@ third-party certifications are not imported.
 ## 10. Bridge, desktop host and UI
 
 **Sidecar commands** (`sidecar/dispatch/openpgp.rs`, run on the blocking pool): `pgp.account.state`,
-`pgp.account.create`, `pgp.account.enable`, `pgp.account.disable`, `pgp.account.importKey`,
+`pgp.account.create`, `pgp.account.enable`, `pgp.account.disable`, `pgp.account.importKey` (`backup_code` for
+backup files), `pgp.account.setSignPlain`,
 `pgp.account.exportPublic`, `pgp.account.exportSecret`, `pgp.account.deleteKey`, `pgp.peers.list`,
 `pgp.peers.importPreview`, `pgp.peers.import`, `pgp.peers.setVerified`, `pgp.peers.remove`, `pgp.offer.dismiss`,
 `pgp.keys.forRecipients`, `pgp.lookup`, `pgp.lookup.add`, `pgp.lookup.sources`, `pgp.lookup.setSources`, `pgp.reply.encrypted` (MCP preview). Plus
-`encrypt` and `plain` on `send` and `save_draft`.
+`encrypt`, `plain` and `sign` on `send` and `save_draft`.
 
 **Logging:** the sidecar's error path (`main.rs::handle`) prints the method and the error chain to stderr; error
 messages in this code name addresses and fingerprints, never key material or passphrases. The Go host logs only command
@@ -714,10 +743,15 @@ message iframe.
 - Secret-key **exports** use CFB S2K without AEAD integrity (`keys::export`), the v4 default GnuPG/Thunderbird/
   OpenKeychain read. The file is user-held and passphrase-protected, so the risk is low; it is the shape the Key
   Overwriting attack needs. A deliberate interop choice; AEAD S2K becomes an option once GnuPG 2.4 reads it.
-- Supporting a key whose primary is flagged not to sign (offline-primary + signing-subkey) is a possible future
-  feature; such a key is refused on import for now, since Meron signs with the primary. The flags come from the newest
-  verified self-signature that carries a key-flags subpacket; a key with none is judged by its algorithm
-  (`primary_can_sign`), as GnuPG does.
+- A key whose primary is flagged not to sign signs with a signing subkey (§4). Whether the primary may sign comes
+  from the newest verified self-signature that carries a key-flags subpacket; a key with none is judged by its
+  algorithm (`primary_can_sign`), as GnuPG does. A key whose *secret* primary is missing (GnuPG
+  `--export-secret-subkeys`, smartcard) is still refused as `OnCard`, signing subkey or not.
+- OpenKeychain backups are tested against files built with rPGP and GnuPG (`gpg --symmetric`), not against a file
+  made by OpenKeychain itself.
+- The per-message sign switch is in the full composers only; the quick reply follows the account default.
+  Signed text parts are
+  sent as built (7bit, quoted-printable or base64); a relay that rewrites a 7bit body breaks the signature.
 
 **Suggestions for CI (maintainer's call):**
 - A `cargo audit` / `cargo deny` gate would need upstream's existing advisories triaged first.

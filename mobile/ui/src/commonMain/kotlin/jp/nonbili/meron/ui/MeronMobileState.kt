@@ -284,6 +284,9 @@ internal class MeronMobileState(
 
     var composeInReplyTo by mutableStateOf("")
     var composeEncrypt by mutableStateOf<Boolean?>(null)
+
+    /** The composer's OpenPGP sign switch for mail that isn't encrypted; null: the account's default. */
+    var composeSign by mutableStateOf<Boolean?>(null)
     var composeCryptoLocked by mutableStateOf(false)
     var cryptoKeyChangeQuestion by mutableStateOf<Pair<String, CompletableDeferred<Boolean>>?>(null)
     var composeReferences by mutableStateOf("")

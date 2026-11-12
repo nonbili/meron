@@ -260,6 +260,8 @@ export type Message = {
   /** End-to-end encryption status (OpenPGP), decided by the core
    * (meron-core/src/openpgp/mime.rs `view_json`). Absent on ordinary mail. */
   crypto?: MessageCrypto | null
+  /** On a draft: the composer's sign switch as it was saved. */
+  draft_sign?: boolean | null
   /** On a thread card: its newest message is encrypted, with the trust of
    * its signature (null when not encrypted). */
   encrypted?: Trust | null
@@ -317,6 +319,9 @@ export type ComposeDraft = {
   /** The user switched encryption off (in the quick reply this came from):
    * the toggle doesn't turn it back on by itself. */
   encryptOffByUser?: boolean
+  /** The OpenPGP sign switch for a message that isn't encrypted. Unset: the
+   * account's "Sign unencrypted mail" default. */
+  sign?: boolean
   /** The reply has no quote because its original is decrypted mail its sender
    * isn't shown to have written (`replyQuoteWithheld`): the composer says why. */
   quoteWithheld?: boolean

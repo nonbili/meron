@@ -247,23 +247,143 @@ fn is_stub(key: &SignedSecretKey) -> bool {
     matches!(s2k, StringToKey::Private { .. })
 }
 
-/// Signs a nonce with every signing-capable secret part and verifies it with
-/// the matching public part. Catches a corrupted key, or one whose public half
-/// was swapped (the "key overwriting" attack), before it is ever used.
+/// The secret part of a key that makes its data signatures: the primary key,
+/// or a signing subkey when the primary is flagged not to sign (the common
+/// "certify-only primary + signing subkey" layout of OpenKeychain and of
+/// GnuPG users who keep the primary for certifying).
+#[derive(Clone, Copy)]
+pub enum Signer<'a> {
+    Primary(&'a pgp::packet::SecretKey),
+    Sub(&'a pgp::packet::SecretSubkey),
+}
+
+impl<'a> Signer<'a> {
+    pub fn as_dyn(&self) -> &'a dyn pgp::types::SigningKey {
+        match *self {
+            Signer::Primary(k) => k,
+            Signer::Sub(k) => k,
+        }
+    }
+
+    /// Fingerprint of the part that signs (what a signature names as issuer).
+    pub fn fingerprint(&self) -> pgp::types::Fingerprint {
+        match self {
+            Signer::Primary(k) => k.fingerprint(),
+            Signer::Sub(k) => k.fingerprint(),
+        }
+    }
+
+    pub fn legacy_key_id(&self) -> pgp::types::KeyId {
+        match self {
+            Signer::Primary(k) => k.legacy_key_id(),
+            Signer::Sub(k) => k.legacy_key_id(),
+        }
+    }
+
+    /// A detached SHA-256 signature over `content`, with `subpackets` when
+    /// given (rPGP's defaults otherwise).
+    pub fn sign_detached(
+        &self,
+        content: &[u8],
+        subpackets: Option<pgp::composed::SubpacketConfig>,
+    ) -> pgp::errors::Result<pgp::composed::DetachedSignature> {
+        use pgp::composed::DetachedSignature;
+        let rng = rand::thread_rng();
+        let pw = Password::empty();
+        let hash = HashAlgorithm::Sha256;
+        match (*self, subpackets) {
+            (Signer::Primary(k), None) => {
+                DetachedSignature::sign_binary_data(rng, k, &pw, hash, content)
+            }
+            (Signer::Sub(k), None) => {
+                DetachedSignature::sign_binary_data(rng, k, &pw, hash, content)
+            }
+            (Signer::Primary(k), Some(sp)) => {
+                DetachedSignature::sign_binary_data_with_subpackets(rng, k, &pw, hash, content, sp)
+            }
+            (Signer::Sub(k), Some(sp)) => {
+                DetachedSignature::sign_binary_data_with_subpackets(rng, k, &pw, hash, content, sp)
+            }
+        }
+    }
+
+    /// Checks `sig` over `content` against this part's public half.
+    fn verify(
+        &self,
+        sig: &pgp::composed::DetachedSignature,
+        content: &[u8],
+    ) -> pgp::errors::Result<()> {
+        match self {
+            Signer::Primary(k) => sig.verify(k.public_key(), content),
+            Signer::Sub(k) => sig.verify(k.public_key(), content),
+        }
+    }
+}
+
+/// Whether `sub` is a signing subkey of `key`: its newest binding (an older
+/// one with the sign flag doesn't count once a newer one dropped it) carries
+/// the sign flag, passes the hash policy, and embeds the subkey's own
+/// back-signature (RFC 9580 §5.2.3.34). Without that, anyone could bind
+/// someone else's signing key under their own primary and have that person's
+/// signatures count as theirs.
+pub(crate) fn signing_subkey_bound(key: &SignedPublicKey, sub: &SignedPublicSubKey) -> bool {
+    let bindings = sub.signatures.iter().filter(|s| {
+        s.verify_subkey_binding(&key.primary_key, &sub.key).is_ok()
+            && s.typ() != Some(pgp::packet::SignatureType::SubkeyRevocation)
+    });
+    let newest = bindings.max_by_key(|s| s.created().map(|t| t.as_secs()).unwrap_or(0));
+    newest.is_some_and(|s| {
+        s.key_flags().sign()
+            && binding_hash_ok(s)
+            && s.embedded_signature().is_some_and(|back| {
+                binding_hash_ok(back)
+                    && back
+                        .verify_primary_key_binding(&sub.key, &key.primary_key)
+                        .is_ok()
+            })
+    })
+}
+
+/// The part of `key` Meron signs with. The primary when it is flagged to
+/// sign; otherwise the newest signing subkey. With `at`, a subkey must also be
+/// valid then (not revoked, binding not expired), so mail is never signed
+/// with a key verifiers reject; without it, any bound signing subkey counts
+/// (loading a key whose signing subkey has since expired must still work, the
+/// key opens old mail). `None`: the key can't sign at all.
+pub fn signer(key: &SignedSecretKey, at: Option<u32>) -> Option<Signer<'_>> {
+    let public = key.to_public_key();
+    if primary_can_sign(&public) {
+        return Some(Signer::Primary(&key.primary_key));
+    }
+    let chosen = public
+        .public_subkeys
+        .iter()
+        .filter(|sub| signing_subkey_bound(&public, sub))
+        .filter(|sub| at.is_none_or(|when| subkey_valid_at(&public, sub, when).is_ok()))
+        .max_by_key(|sub| sub.key.created_at().as_secs())?
+        .key
+        .fingerprint();
+    key.secret_subkeys
+        .iter()
+        .find(|sub| sub.key.fingerprint() == chosen)
+        .map(|sub| Signer::Sub(&sub.key))
+}
+
+/// Signs a nonce with the part of the key Meron signs with ([`signer`]) and
+/// verifies it with the matching public part. Catches a corrupted key, or one
+/// whose public half was swapped (the "key overwriting" attack), before it is
+/// ever used.
 pub fn self_test(key: &SignedSecretKey) -> Result<()> {
     key.verify_bindings().context("key bindings")?;
-    let public = key.to_public_key();
+    let signer = signer(key, None).context(
+        "this key can't make signatures: neither its primary key nor a subkey is meant for signing",
+    )?;
     let nonce = uuid::Uuid::new_v4();
-    let mut rng = rand::thread_rng();
-    let sig = pgp::composed::DetachedSignature::sign_binary_data(
-        &mut rng,
-        &key.primary_key,
-        &Password::empty(),
-        HashAlgorithm::Sha256,
-        nonce.as_bytes().as_slice(),
-    )
-    .context("self-test signature")?;
-    sig.verify(&public, nonce.as_bytes().as_slice())
+    let sig = signer
+        .sign_detached(nonce.as_bytes().as_slice(), None)
+        .context("self-test signature")?;
+    signer
+        .verify(&sig, nonce.as_bytes().as_slice())
         .context("self-test signature didn't verify: the key is damaged")?;
     Ok(())
 }
@@ -440,11 +560,9 @@ fn self_signatures(key: &SignedPublicKey) -> impl Iterator<Item = &Signature> {
 /// newest verified self-signature that carries key flags. A self-signature
 /// without a key-flags subpacket (a later direct-key signature naming a
 /// revoker, say) says nothing about them, and a key with no key flags at all
-/// can do what its algorithm can, as GnuPG reads it. Meron signs with the
-/// primary key, so a key whose primary is flagged not to sign (an
-/// offline-primary + signing-subkey setup) would produce signatures strict
-/// verifiers reject; such a key is refused on import rather than used to sign
-/// silently-invalid mail.
+/// can do what its algorithm can, as GnuPG reads it. A primary flagged not to
+/// sign (an offline-primary + signing-subkey setup) makes no valid data
+/// signatures: Meron signs with a signing subkey then ([`signer`]).
 pub fn primary_can_sign(key: &SignedPublicKey) -> bool {
     match newest(self_signatures(key).filter(|s| has_key_flags(s))) {
         Some(sig) => sig.key_flags().sign(),
@@ -1804,5 +1922,31 @@ pub(crate) mod tests {
         assert!(!data_hash_ok(Some(HashAlgorithm::Sha1)));
         assert!(!data_hash_ok(Some(HashAlgorithm::Md5)));
         assert!(data_hash_ok(Some(HashAlgorithm::Sha256)));
+    }
+
+    #[test]
+    fn the_signer_is_the_primary_or_else_a_valid_signing_subkey() {
+        let own = generate(&["me@example.org".into()]).unwrap();
+        assert!(matches!(
+            signer(&own, Some(now())),
+            Some(Signer::Primary(_))
+        ));
+
+        let split = crate::openpgp::crypt::tests::certify_only_primary("me@example.org");
+        let Some(Signer::Sub(sub)) = signer(&split, Some(now())) else {
+            panic!("expected the signing subkey");
+        };
+        assert_eq!(
+            sub.fingerprint(),
+            split.secret_subkeys[0].key.fingerprint(),
+            "the signing subkey, not the encryption subkey"
+        );
+        self_test(&split).unwrap();
+
+        // Nothing that signs at all: refused by the self-test every import runs.
+        let mut none = split.clone();
+        none.secret_subkeys.remove(0);
+        assert!(signer(&none, None).is_none());
+        assert!(self_test(&none).is_err());
     }
 }

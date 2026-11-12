@@ -14,6 +14,7 @@ import { IconButton } from '../button/IconButton'
 type Step =
   | { kind: 'choose' }
   | { kind: 'passphrase'; file: KeyFile; key: KeyInfo; fingerprint?: string; wrong: boolean }
+  | { kind: 'backupCode'; file: KeyFile; wrong: boolean }
   | { kind: 'pick'; file: KeyFile; keys: KeyInfo[] }
 
 /**
@@ -28,11 +29,14 @@ export function EnableEncryptionDialog() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [passphrase, setPassphrase] = useState('')
+  // The code of a backup file, kept while its key is chosen and unlocked.
+  const [backupCode, setBackupCode] = useState('')
 
   useEffect(() => {
     setStep({ kind: 'choose' })
     setError('')
     setPassphrase('')
+    setBackupCode('')
   }, [target?.accountId])
 
   if (!target) return null
@@ -57,11 +61,11 @@ export function EnableEncryptionDialog() {
     }
   }
 
-  const tryImport = async (file: KeyFile, pass?: string, fingerprint?: string) => {
+  const tryImport = async (file: KeyFile, pass?: string, fingerprint?: string, code = backupCode) => {
     setBusy(true)
     setError('')
     try {
-      const { result } = await importOwnKey(target.accountId, file, pass, fingerprint)
+      const { result } = await importOwnKey(target.accountId, file, pass, fingerprint, code)
       switch (result.status) {
         case 'imported':
           done(result.key, result.address_matches)
@@ -69,6 +73,9 @@ export function EnableEncryptionDialog() {
         case 'needs_passphrase':
           setPassphrase('')
           setStep({ kind: 'passphrase', file, key: result.key, fingerprint, wrong: pass !== undefined })
+          break
+        case 'needs_backup_code':
+          setStep({ kind: 'backupCode', file, wrong: result.wrong })
           break
         case 'choose':
           setStep({ kind: 'pick', file, keys: result.keys })
@@ -91,7 +98,9 @@ export function EnableEncryptionDialog() {
 
   const useExisting = async () => {
     const file = await pickKeyFile(t('crypto.enable.pickTitle'))
-    if (file) await tryImport(file)
+    if (!file) return
+    setBackupCode('')
+    await tryImport(file, undefined, undefined, '')
   }
 
   return (
@@ -168,6 +177,40 @@ export function EnableEncryptionDialog() {
               disabled={busy || !passphrase}
               onClick={() => void tryImport(step.file, passphrase, step.fingerprint ?? step.key.fingerprint)}
             >
+              {busy && <RefreshCw size={11} className="animate-spin" />}
+              <span>{t('crypto.enable.unlock')}</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step.kind === 'backupCode' && (
+        <div className="flex flex-col gap-3">
+          <p className="text-[0.75rem] leading-relaxed">{t('crypto.enable.backupCodeFor')}</p>
+          <input
+            autoFocus
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={backupCode}
+            aria-label={t('crypto.enable.backupCode')}
+            onChange={(event) => setBackupCode(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && backupCode.trim()) void tryImport(step.file)
+            }}
+            className="w-full rounded-xl border border-transparent bg-hover px-3.5 py-2.5 font-mono text-[0.8125rem] text-primary transition-all duration-150 focus:bg-chats focus:ring-1 focus:ring-accent"
+          />
+          {step.wrong && (
+            <p role="alert" className="px-1 text-[0.6875rem] font-medium text-rose-500">
+              {t('crypto.enable.wrongBackupCode')}
+            </p>
+          )}
+          <p className="px-1 text-[0.65625rem] leading-relaxed text-secondary">{t('crypto.enable.backupCodeHint')}</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setStep({ kind: 'choose' })} disabled={busy}>
+              {t('buttons.cancel')}
+            </Button>
+            <Button variant="primary" disabled={busy || !backupCode.trim()} onClick={() => void tryImport(step.file)}>
               {busy && <RefreshCw size={11} className="animate-spin" />}
               <span>{t('crypto.enable.unlock')}</span>
             </Button>

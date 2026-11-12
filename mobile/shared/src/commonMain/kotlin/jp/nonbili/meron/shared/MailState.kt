@@ -244,6 +244,8 @@ data class MessageBody(
     // cancellation or reply to one).
     val invite: MessageInvite? = null,
     val crypto: MessageCrypto? = null,
+    /** On a draft: the composer's sign switch as it was saved. */
+    val draftSign: Boolean? = null,
 )
 
 data class MessageCrypto(

@@ -289,6 +289,9 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
         let extra = crate::openpgp::outgoing::autocrypt_for(&ring, &account_id, &from_addr)
             .map(|value| vec![("Autocrypt", value)])
             .unwrap_or_default();
+        let sign = params.get("sign").and_then(Value::as_bool);
+        let signer = crate::openpgp::outgoing::plain_signer(&ring, &account_id, sign)
+            .map_err(|err| format!("{err:#}"))?;
         crate::ffi::engine_block_on(smtp::send(
             &creds,
             &from_addr,
@@ -305,6 +308,7 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
             &reply_to,
             &message_id,
             &extra,
+            signer,
         ))?
     };
     let sent_bytes = raw.len();
@@ -409,6 +413,11 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             &draft_id,
         )
         .map_err(|err| format!("{err:#}"))?;
+        // The composer's sign switch travels with the draft.
+        let raw = crate::openpgp::outgoing::with_draft_sign(
+            &raw,
+            params.get("sign").and_then(Value::as_bool),
+        );
         let encrypt = params
             .get("encrypt")
             .and_then(Value::as_bool)

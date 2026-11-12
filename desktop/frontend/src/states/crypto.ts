@@ -76,15 +76,28 @@ export async function disableEncryption(accountId: string) {
   changed()
 }
 
-export async function importOwnKey(accountId: string, file: KeyFile, passphrase?: string, fingerprint?: string) {
+export async function importOwnKey(
+  accountId: string,
+  file: KeyFile,
+  passphrase?: string,
+  fingerprint?: string,
+  backupCode?: string,
+) {
   const res = await invoke<{ result: ImportOwnResult; refetch?: number }>('pgp.account.importKey', {
     account: accountId,
     data_b64: file.data_b64,
     passphrase: passphrase ?? '',
+    backup_code: backupCode ?? '',
     fingerprint,
   })
   if (res.result.status === 'imported') changed()
   return res
+}
+
+/** "Sign unencrypted mail" for one account. */
+export async function setSignPlain(accountId: string, sign: boolean) {
+  await invoke('pgp.account.setSignPlain', { account: accountId, sign })
+  changed()
 }
 
 /** Exports go straight to a file the user picks (Go writes it, owner-only),

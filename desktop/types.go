@@ -241,6 +241,10 @@ type SendMailRequest struct {
 	// Plain: the composer chose no encryption. Without it, a reply to encrypted
 	// mail is encrypted by the core whatever Encrypt says.
 	Plain bool `json:"plain"`
+	// Sign: the composer's sign switch for a message that isn't encrypted.
+	// Nil leaves it to the account's "Sign unencrypted mail" default.
+	// On a draft it is only recorded, so the reopened draft keeps the choice.
+	Sign *bool `json:"sign,omitempty"`
 }
 
 type ExchangedProfile struct {

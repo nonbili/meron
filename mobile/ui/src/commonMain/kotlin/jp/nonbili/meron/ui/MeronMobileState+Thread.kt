@@ -101,6 +101,7 @@ internal fun MeronMobileState.openDraftCompose(
             // below — a reply draft has to keep threading where it belongs.
             clearComposeDraftState()
             composeEncrypt = if (message.crypto?.encrypted == true) true else null
+            composeSign = message.draftSign
             composeCryptoLocked = message.crypto?.encrypted == true
             to = message.to
             cc = message.cc

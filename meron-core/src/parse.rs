@@ -245,6 +245,11 @@ pub struct Message {
     /// OpenPGP facts (encrypted, signed, problems), when there are any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crypto: Option<crate::openpgp::mime::CryptoStatus>,
+    /// The composer's sign switch as a saved draft recorded it
+    /// (`openpgp::outgoing::DRAFT_SIGN_HEADER`); only read when a draft is
+    /// reopened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft_sign: Option<bool>,
     /// Keys this message announced or carried, for the store to record.
     /// Never persisted: the store keeps them in its own tables.
     #[serde(skip)]
@@ -705,6 +710,11 @@ pub(crate) fn parse_message_with(
         attachments,
         invite,
         crypto: opened.status,
+        // An encrypted draft keeps it inside the encryption.
+        draft_sign: inner_mail
+            .as_ref()
+            .and_then(|inner| crate::openpgp::outgoing::draft_sign(&inner.headers))
+            .or_else(|| crate::openpgp::outgoing::draft_sign(headers)),
         found_keys: FoundKeys {
             announced: opened.announced,
             attached: opened.attached,

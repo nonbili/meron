@@ -87,6 +87,12 @@ pub fn dispatch(engine: &Arc<Engine>, method: &str, p: &Value) -> anyhow::Result
                 .and_then(Value::as_str)
                 .filter(|s| !s.is_empty())
                 .map(|s| zeroize::Zeroizing::new(s.to_string()));
+            // The code of a backup file (OpenKeychain, Autocrypt Setup Message).
+            let backup_code = p
+                .get("backup_code")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| zeroize::Zeroizing::new(s.to_string()));
             let fingerprint = p.get("fingerprint").and_then(Value::as_str);
             let addrs = account_addrs(&conn, &account);
             let result = pgp_store::import_own(
@@ -95,6 +101,7 @@ pub fn dispatch(engine: &Arc<Engine>, method: &str, p: &Value) -> anyhow::Result
                 &addrs,
                 &data,
                 passphrase.as_deref().map(String::as_str),
+                backup_code.as_deref().map(String::as_str),
                 fingerprint,
             )?;
             if matches!(result, pgp_store::ImportOwn::Imported { .. }) {
@@ -102,6 +109,12 @@ pub fn dispatch(engine: &Arc<Engine>, method: &str, p: &Value) -> anyhow::Result
                 return Ok(json!({ "result": result, "refetch": refetch }));
             }
             Ok(json!({ "result": result }))
+        }
+        "pgp.account.setSignPlain" => {
+            let account = req_str(&p, "account")?;
+            let sign = p.get("sign").and_then(Value::as_bool).unwrap_or(false);
+            pgp_store::set_sign_plain(&conn, &account, sign)?;
+            Ok(json!({ "ok": true }))
         }
         "pgp.account.exportPublic" => {
             let account = req_str(&p, "account")?;
@@ -233,12 +246,16 @@ pub fn dispatch(engine: &Arc<Engine>, method: &str, p: &Value) -> anyhow::Result
                 .default_key(&account)
                 .filter(|_| ring.is_enabled(&account));
             let own_unusable = own.is_some_and(|k| {
-                crate::openpgp::keys::check(&k.public, crate::openpgp::keys::now()).is_some()
+                let now = crate::openpgp::keys::now();
+                crate::openpgp::keys::check(&k.public, now).is_some()
+                    || crate::openpgp::keys::signer(&k.secret, Some(now)).is_none()
             });
             let missing = outgoing::missing_keys(&ring, &addrs);
             Ok(json!({
                 "enabled": own.is_some(),
                 "own_key_unusable": own_unusable,
+                // The account's default for the composer's sign switch.
+                "sign_plain": ring.signs_plain(&account),
                 "missing": missing,
                 "changed": changed,
             }))

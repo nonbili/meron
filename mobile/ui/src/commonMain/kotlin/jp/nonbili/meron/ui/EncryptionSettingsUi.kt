@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Domain
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Fingerprint
@@ -45,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -116,6 +118,11 @@ private sealed interface EnableStep {
         val wrong: Boolean,
     ) : EnableStep
 
+    /** The picked file is a backup encrypted with a code (OpenKeychain, Autocrypt Setup Message). */
+    data class BackupCode(
+        val wrong: Boolean,
+    ) : EnableStep
+
     data class Pick(
         val keys: List<JsonObject>,
     ) : EnableStep
@@ -153,10 +160,16 @@ internal class AccountEncryption(
     private var dialog by mutableStateOf<AccountEncryptionDialog?>(null)
     private var step by mutableStateOf<EnableStep>(EnableStep.Choose)
     private var file: ByteArray? = null
+
+    /** The code of a backup file, kept while its key is chosen and unlocked. */
+    private var backupCode = ""
     private val params = buildJsonObject { put("account", account) }
 
     val loaded get() = info != null
     val enabled get() = info?.flag("enabled") == true
+
+    /** Mail that isn't encrypted goes out signed. */
+    val signPlain get() = info?.flag("sign_plain") == true
     val key get() = info?.get("key") as? JsonObject
     val previous get() = info?.objects("previous").orEmpty()
 
@@ -196,10 +209,24 @@ internal class AccountEncryption(
         }
     }
 
+    fun toggleSignPlain() {
+        val sign = !signPlain
+        run {
+            state.pgp(
+                "pgp.account.setSignPlain",
+                buildJsonObject {
+                    put("account", account)
+                    put("sign", sign)
+                },
+            )
+        }
+    }
+
     fun openEnable() {
         error = ""
         step = EnableStep.Choose
         file = null
+        backupCode = ""
         dialog = AccountEncryptionDialog.Enable
     }
 
@@ -228,6 +255,7 @@ internal class AccountEncryption(
     private fun close() {
         dialog = null
         file = null
+        backupCode = ""
         step = EnableStep.Choose
     }
 
@@ -241,6 +269,7 @@ internal class AccountEncryption(
         services.pickFile(listOf("*/*")) { picked ->
             if (picked != null) {
                 file = picked.bytes
+                backupCode = ""
                 tryImport(null, null)
             }
         }
@@ -258,6 +287,7 @@ internal class AccountEncryption(
                     put("account", account)
                     put("data_b64", Base64.encode(data))
                     put("passphrase", passphrase.orEmpty())
+                    put("backup_code", backupCode)
                     if (!fingerprint.isNullOrBlank()) put("fingerprint", fingerprint)
                 },
             )["result"] as? JsonObject ?: JsonObject(emptyMap())
@@ -274,6 +304,10 @@ internal class AccountEncryption(
                         fingerprint = fingerprint,
                         wrong = passphrase != null,
                     )
+            }
+
+            "needs_backup_code" -> {
+                step = EnableStep.BackupCode(wrong = result.flag("wrong"))
             }
 
             "choose" -> {
@@ -378,6 +412,7 @@ internal class AccountEncryption(
     @Composable
     private fun EnableDialog() {
         var passphrase by remember(step) { mutableStateOf("") }
+        var code by remember(step) { mutableStateOf("") }
         val current = step
         AlertDialog(
             onDismissRequest = { if (!busy) close() },
@@ -433,6 +468,22 @@ internal class AccountEncryption(
                             )
                         }
 
+                        is EnableStep.BackupCode -> {
+                            Text(tr("crypto.enable.backupCodeFor"))
+                            OutlinedTextField(
+                                code,
+                                { code = it },
+                                label = { Text(tr("crypto.enable.backupCode")) },
+                                isError = current.wrong && code.isEmpty(),
+                                supportingText = {
+                                    Text(tr(if (current.wrong) "crypto.enable.wrongBackupCode" else "crypto.enable.backupCodeHint"))
+                                },
+                                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                                keyboardOptions = nativeTextKeyboardOptions.copy(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+
                         is EnableStep.Pick -> {
                             Text(tr("crypto.enable.pickKey"))
                             current.keys.forEach { candidate ->
@@ -470,6 +521,15 @@ internal class AccountEncryption(
                     TextButton(
                         enabled = !busy && passphrase.isNotEmpty(),
                         onClick = { tryImport(passphrase, current.fingerprint ?: current.key.text("fingerprint")) },
+                    ) { Text(tr("crypto.enable.unlock")) }
+                }
+                if (current is EnableStep.BackupCode) {
+                    TextButton(
+                        enabled = !busy && code.isNotBlank(),
+                        onClick = {
+                            backupCode = code
+                            tryImport(null, null)
+                        },
                     ) { Text(tr("crypto.enable.unlock")) }
                 }
             },
@@ -521,6 +581,26 @@ internal fun SettingsListScope.AccountEncryptionSection(encryption: AccountEncry
         item { WarningRow(encryption.rowError) }
     }
     val key = encryption.key
+    if (key != null && encryption.enabled) {
+        item {
+            ListItem(
+                headlineContent = { Text(tr("crypto.account.signPlain")) },
+                supportingContent = { Text(tr("crypto.account.signPlainHint")) },
+                leadingContent = {
+                    Icon(Icons.Filled.Draw, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = encryption.signPlain,
+                        enabled = !encryption.busy,
+                        onCheckedChange = { encryption.toggleSignPlain() },
+                        colors = settingsSwitchColors(),
+                    )
+                },
+                modifier = Modifier.heightIn(min = 56.dp).clickable(enabled = !encryption.busy) { encryption.toggleSignPlain() },
+            )
+        }
+    }
     if (key != null) CurrentKeyRows(encryption, key)
     // Earlier keys outlive the current one: deleting it promotes none of them.
     encryption.previous.forEach { earlier ->

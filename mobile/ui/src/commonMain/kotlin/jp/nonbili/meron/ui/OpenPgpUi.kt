@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.AlertDialog
@@ -56,6 +57,7 @@ internal fun ComposeEncryptionControl() {
     val state = LocalCryptoState.current ?: return
     val account = state.selectedComposeIdentity()?.accountId ?: state.defaultSendAccountId()
     var enabled by remember { mutableStateOf(false) }
+    var signDefault by remember { mutableStateOf(false) }
     var missing by remember { mutableStateOf<List<String>>(emptyList()) }
     var error by remember { mutableStateOf("") }
     var offConfirm by remember { mutableStateOf(false) }
@@ -76,6 +78,7 @@ internal fun ComposeEncryptionControl() {
                     },
                 )
             enabled = result.flag("enabled") && !result.flag("own_key_unusable")
+            signDefault = result.flag("sign_plain")
             missing =
                 (result["missing"] as? JsonArray).orEmpty().map { element ->
                     (element as? JsonObject)?.text("addr") ?: element.jsonPrimitive.content
@@ -89,6 +92,36 @@ internal fun ComposeEncryptionControl() {
             throw e
         } catch (e: Exception) {
             error = e.message.orEmpty()
+        }
+    }
+    // The sign switch: whether this message, when it isn't encrypted, goes out
+    // signed with the account's key. Encrypted mail is always signed.
+    if (enabled) {
+        val encrypting = state.composeEncrypt == true
+        val signing = encrypting || (state.composeSign ?: signDefault)
+        IconButton(
+            enabled = !encrypting,
+            onClick = {
+                state.composeSign = !signing
+                state.autoSaveComposeDraft()
+            },
+        ) {
+            Icon(
+                Icons.Filled.Draw,
+                tr(
+                    when {
+                        encrypting -> "crypto.sign.encrypted"
+                        signing -> "crypto.sign.on"
+                        else -> "crypto.sign.off"
+                    },
+                ),
+                tint =
+                    if (signing) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    },
+            )
         }
     }
     if (enabled || state.composeEncrypt == true) {

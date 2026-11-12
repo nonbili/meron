@@ -412,6 +412,7 @@ export function useComposer(tabId: string) {
           attachments,
           encrypt: current.encrypt,
           decryptedInBody: current.decryptedInBody,
+          sign: current.sign,
         })
         // A tab closed mid-save lands here too (no latest draft): nothing will
         // adopt the id, so a freshly allocated copy has to go now.
@@ -496,6 +497,8 @@ export function useComposer(tabId: string) {
     // Switched on after a plain autosave: the copy on the server is replaced
     // by an encrypted one rather than left there in the clear.
     draft?.encrypt,
+    // The sign switch is recorded with the draft.
+    draft?.sign,
     sending,
     closingWindow,
     editor,
@@ -836,6 +839,7 @@ export function useComposer(tabId: string) {
         attachments,
         encrypt: current.encrypt,
         decryptedInBody: current.decryptedInBody,
+        sign: current.sign,
       })
       // When this tab is a reply to the open conversation, drop the sent message
       // into the thread immediately so it shows without waiting for the next sync.

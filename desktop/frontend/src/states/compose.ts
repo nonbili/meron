@@ -777,6 +777,7 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
     signature: tracking,
     quote: quote ? { html: quote.html, text: quote.text } : undefined,
     encrypt: seed?.encrypt,
+    sign: seed?.sign,
     sensitiveSource: seed?.sensitiveSource,
     decryptedInBody: seed?.decryptedInBody || undefined,
     encryptedDraft: seed?.encryptedDraft || undefined,
@@ -989,6 +990,8 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     // An encrypted draft reopens encrypted, and its quote (if any) came from
     // an encrypted conversation, so it stays guarded the same way.
     encrypt: message.crypto?.encrypted || undefined,
+    // The sign switch as it stood when the draft was saved.
+    sign: message.draft_sign ?? undefined,
     sensitiveSource: message.crypto?.encrypted && body.quote ? 'reply' : undefined,
     // Its body may hold decrypted text (a quote unfolded and answered inline,
     // a forward): it stays encrypted unless switched off on purpose.
@@ -1510,6 +1513,7 @@ export function closeComposeTabKeepingDraft(
           attachments,
           encrypt: current.encrypt,
           decryptedInBody: current.decryptedInBody,
+          sign: current.sign,
         })
         if (standaloneCompose || threadWindowSession) finishClosingMessageTab(tabId)
         return { draftMessageId, reopen: () => reopenComposeTab(closed, { ...closing, draftMessageId }) }
@@ -1671,11 +1675,15 @@ export async function sendComposed(args: {
   encrypt?: boolean
   /** The body holds decrypted text (an unfolded quote): always encrypted. */
   decryptedInBody?: boolean
+  /** The composer's sign switch (unencrypted mail only). Unset: the account's
+   * default, decided by the core. */
+  sign?: boolean
 }) {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
   const encrypt = args.decryptedInBody ? true : args.encrypt
   const result = await invoke('mail.send', {
+    ...(args.sign === undefined || encrypt ? {} : { sign: args.sign }),
     encrypt: !!encrypt,
     // Plain only when encryption was switched off (`false`), never because the
     // flag is missing: the core encrypts a reply to encrypted mail that says
@@ -1784,6 +1792,9 @@ export async function saveComposedDraft(args: {
   encrypt?: boolean
   /** The body holds decrypted text (an unfolded quote): always encrypted. */
   decryptedInBody?: boolean
+  /** The composer's sign switch, recorded with the draft (the draft itself
+   * isn't signed) so reopening it keeps the choice. */
+  sign?: boolean
 }): Promise<string> {
   const html = args.rich ? args.content : ''
   const body = args.rich ? htmlToText(args.content) : args.content
@@ -1799,6 +1810,7 @@ export async function saveComposedDraft(args: {
     })
   const encrypt = args.decryptedInBody ? true : args.encrypt
   const request = invoke('mail.saveDraft', {
+    ...(args.sign === undefined ? {} : { sign: args.sign }),
     encrypt: !!encrypt,
     // Plain only when encryption was switched off (`false`), never because the
     // flag is missing: the core encrypts a reply to encrypted mail that says

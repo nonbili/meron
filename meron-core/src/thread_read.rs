@@ -935,6 +935,7 @@ pub fn thread_message_json(
             .map(|message| serde_json::to_value(&message.attachments).unwrap_or_else(|_| json!([])))
             .unwrap_or_else(|| json!([])),
         "reply": reply,
+        "draft_sign": cached.and_then(|message| message.draft_sign),
         "crypto": cached.and_then(|message| message.crypto.as_ref()).map(|status| {
             let outgoing = store::account_message_is_outgoing(
                 account_id,

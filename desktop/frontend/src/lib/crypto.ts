@@ -174,6 +174,8 @@ export type KeyInfo = {
 
 export type AccountEncryptionState = {
   enabled: boolean
+  /** Mail that isn't encrypted goes out signed. */
+  sign_plain?: boolean
   key?: KeyInfo | null
   previous: KeyInfo[]
 }
@@ -205,6 +207,8 @@ export type ImportOwnResult =
   | { status: 'imported'; key: KeyInfo; address_matches: boolean }
   | { status: 'choose'; keys: KeyInfo[] }
   | { status: 'needs_passphrase'; key: KeyInfo }
+  /** A backup encrypted with a code (OpenKeychain, Autocrypt Setup Message). */
+  | { status: 'needs_backup_code'; wrong: boolean }
   | { status: 'on_card' }
   | { status: 'no_secret_key' }
 
@@ -216,6 +220,8 @@ export type KeyChange = { addr: string; previous: string; current: string }
 export type RecipientKeys = {
   enabled: boolean
   own_key_unusable: boolean
+  /** The account signs its unencrypted mail by default. */
+  sign_plain?: boolean
   missing: MissingKey[]
   /** Keys that changed since the last encrypted mail to that address. */
   changed?: KeyChange[]

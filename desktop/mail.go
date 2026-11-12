@@ -1095,7 +1095,7 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	res, err := a.sidecar.Call("send", map[string]any{
+	params := map[string]any{
 		"account":     req.AccountID,
 		"to":          req.To,
 		"cc":          req.Cc,
@@ -1111,7 +1111,11 @@ func (a *App) mailSend(payload map[string]any) (any, error) {
 		"attachments": req.Attachments,
 		"encrypt":     req.Encrypt,
 		"plain":       req.Plain,
-	})
+	}
+	if req.Sign != nil {
+		params["sign"] = *req.Sign
+	}
+	res, err := a.sidecar.Call("send", params)
 	if err != nil {
 		return nil, err
 	}
@@ -1141,7 +1145,7 @@ func (a *App) mailSaveDraft(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	if _, err := a.sidecar.Call("save_draft", map[string]any{
+	params := map[string]any{
 		"account":     req.AccountID,
 		"to":          req.To,
 		"cc":          req.Cc,
@@ -1157,7 +1161,11 @@ func (a *App) mailSaveDraft(payload map[string]any) (any, error) {
 		"attachments": req.Attachments,
 		"encrypt":     req.Encrypt,
 		"plain":       req.Plain,
-	}); err != nil {
+	}
+	if req.Sign != nil {
+		params["sign"] = *req.Sign
+	}
+	if _, err := a.sidecar.Call("save_draft", params); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true}, nil
